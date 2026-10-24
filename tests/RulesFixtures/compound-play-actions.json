@@ -30,5 +30,6 @@
   { "action": "companionSetHitPoints", "compound": false },
   { "action": "companionSetTemporaryHitPoints", "compound": false },
   { "action": "startEncounter", "compound": true },
-  { "action": "endEncounter", "compound": true }
+  { "action": "endEncounter", "compound": true },
+  { "action": "useAction", "compound": true }
 ]

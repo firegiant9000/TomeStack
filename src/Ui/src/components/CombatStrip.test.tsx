@@ -116,6 +116,107 @@ it('Start encounter and End encounter send their actions, and only the one that 
   expect(act).toHaveBeenLastCalledWith({ action: 'endEncounter' });
 });
 
+it('End encounter lists each counting-up pool above 0 as an unticked Clear choice and sends only the ticked ones', async () => {
+  const user = userEvent.setup();
+  const act = vi.fn();
+  const other = { contentId: 'c2', revisionId: 'r2' };
+  const resources = [
+    pool('strain', { countsUp: true, spent: 3, current: 2 }),
+    pool('heat', { countsUp: true, spent: 1, current: 4, content: other }),
+    pool('calm', { countsUp: true, spent: 0, current: 5 }),
+    pool('focus', { spent: 2, current: 3 }),
+  ];
+  strip(view({ round: 2, resources }), { act });
+  await user.click(screen.getByRole('button', { name: 'End encounter' }));
+  expect(act).not.toHaveBeenCalled();
+  const group = screen.getByRole('group', { name: 'End encounter' });
+  const boxes = within(group).getAllByRole<HTMLInputElement>('checkbox');
+  expect(boxes.map((b) => b.closest('label')!.textContent)).toEqual(['Clear Fixture strain (3 built up)', 'Clear Fixture heat (1 built up)']);
+  expect(boxes.every((b) => !b.checked)).toBe(true);
+  expect(document.activeElement).toBe(boxes[0]);
+  await user.click(boxes[1]!);
+  await user.click(within(group).getByRole('button', { name: 'End encounter' }));
+  expect(act).toHaveBeenCalledTimes(1);
+  expect(act).toHaveBeenLastCalledWith({ action: 'endEncounter', clear: ['c2/heat'] });
+});
+
+it('End encounter with nothing ticked omits clear, and Cancel sends nothing and returns focus', async () => {
+  const user = userEvent.setup();
+  const act = vi.fn();
+  strip(view({ round: 2, resources: [pool('strain', { countsUp: true, spent: 3, current: 2 })] }), { act });
+  await user.click(screen.getByRole('button', { name: 'End encounter' }));
+  await user.click(within(screen.getByRole('group', { name: 'End encounter' })).getByRole('button', { name: 'Cancel' }));
+  expect(act).not.toHaveBeenCalled();
+  expect(screen.queryByRole('group', { name: 'End encounter' })).toBeNull();
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'End encounter' }));
+  await user.click(screen.getByRole('button', { name: 'End encounter' }));
+  await user.click(within(screen.getByRole('group', { name: 'End encounter' })).getByRole('button', { name: 'End encounter' }));
+  expect(act).toHaveBeenCalledTimes(1);
+  expect(act.mock.calls[0]![0]).toEqual({ action: 'endEncounter' });
+});
+
+it('an encounter that ends closes an open confirmation, so the next one starts without it', async () => {
+  const user = userEvent.setup();
+  const act = vi.fn();
+  const resources = [pool('strain', { countsUp: true, spent: 3, current: 2 })];
+  const { rerender } = strip(view({ round: 2, resources }), { act });
+  await user.click(screen.getByRole('button', { name: 'End encounter' }));
+  expect(screen.getByRole('group', { name: 'End encounter' })).toBeTruthy();
+  rerender(<CombatStrip view={view({ resources })} act={act} busy={false} onTurn={vi.fn()} />);
+  expect(screen.queryByRole('group', { name: 'End encounter' })).toBeNull();
+  rerender(<CombatStrip view={view({ round: 1, resources })} act={act} busy={false} onTurn={vi.fn()} />);
+  expect(screen.queryByRole('group', { name: 'End encounter' })).toBeNull();
+  expect(screen.getByRole('button', { name: 'End encounter' })).toBeTruthy();
+});
+
+it('a confirmation hidden because nothing is built up does not come back with stale ticks or steal focus', async () => {
+  const user = userEvent.setup();
+  const act = vi.fn();
+  const at = (spent: number) => view({ round: 2, resources: [pool('strain', { countsUp: true, spent, current: 5 - spent })] });
+  const { rerender } = strip(at(3), { act });
+  await user.click(screen.getByRole('button', { name: 'End encounter' }));
+  await user.click(within(screen.getByRole('group', { name: 'End encounter' })).getByRole('checkbox'));
+  rerender(<CombatStrip view={at(0)} act={act} busy={false} onTurn={vi.fn()} />);
+  expect(screen.queryByRole('group', { name: 'End encounter' })).toBeNull();
+  const end = screen.getByRole<HTMLButtonElement>('button', { name: 'End encounter' });
+  end.focus();
+  rerender(<CombatStrip view={at(1)} act={act} busy={false} onTurn={vi.fn()} />);
+  expect(screen.queryByRole('group', { name: 'End encounter' })).toBeNull();
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'End encounter' }));
+  await user.click(screen.getByRole('button', { name: 'End encounter' }));
+  expect(within(screen.getByRole('group', { name: 'End encounter' })).getByRole<HTMLInputElement>('checkbox').checked).toBe(false);
+});
+
+it('a refused End encounter keeps the confirmation open with the ticks and focus in the group; an applied one closes it', async () => {
+  const user = userEvent.setup();
+  const act = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+  const other = { contentId: 'c2', revisionId: 'r2' };
+  strip(view({ round: 2, resources: [pool('strain', { countsUp: true, spent: 3, current: 2 }), pool('heat', { countsUp: true, spent: 1, current: 4, content: other })] }), { act });
+  await user.click(screen.getByRole('button', { name: 'End encounter' }));
+  const group = screen.getByRole('group', { name: 'End encounter' });
+  await user.click(within(group).getAllByRole('checkbox')[1]!);
+  await user.click(within(group).getByRole('button', { name: 'End encounter' }));
+  expect(act).toHaveBeenCalledTimes(1);
+  const still = screen.getByRole('group', { name: 'End encounter' });
+  const stillBoxes = within(still).getAllByRole<HTMLInputElement>('checkbox');
+  expect(stillBoxes.map((b) => b.checked)).toEqual([false, true]);
+  expect(document.activeElement).toBe(stillBoxes[0]); // the first checkbox, not the one that was ticked
+  await user.click(within(still).getByRole('button', { name: 'End encounter' }));
+  expect(act).toHaveBeenCalledTimes(2);
+  expect(act).toHaveBeenLastCalledWith({ action: 'endEncounter', clear: ['c2/heat'] });
+  expect(screen.queryByRole('group', { name: 'End encounter' })).toBeNull();
+});
+
+it('End encounter stays one click when no counting-up pool has built up', async () => {
+  const user = userEvent.setup();
+  const act = vi.fn();
+  strip(view({ round: 2, resources: [pool('strain', { countsUp: true, spent: 0, current: 5 }), pool('focus', { spent: 2, current: 3 })] }), { act });
+  await user.click(screen.getByRole('button', { name: 'End encounter' }));
+  expect(screen.queryByRole('group', { name: 'End encounter' })).toBeNull();
+  expect(act).toHaveBeenCalledTimes(1);
+  expect(act.mock.calls[0]![0]).toEqual({ action: 'endEncounter' });
+});
+
 it('opens the turn panel for the start or the end of the turn, and busy disables the encounter and turn buttons', async () => {
   const user = userEvent.setup();
   const onTurn = vi.fn();
@@ -186,6 +287,12 @@ it("a pool's amount box spends the chosen amount, bounded to what is left, and t
 it('hides the amount box for a pool tracked by hand', () => {
   render(<ResourcesPanel view={view({ resources: [pool('hand', { maximum: undefined, current: undefined })] })} act={vi.fn()} />);
   expect(screen.queryByRole('spinbutton')).toBeNull();
+});
+
+it('renders for a sheet whose only combat content is a counting-up pool, so an encounter can be started and ended', () => {
+  strip(view({ resources: [pool('charge', { countsUp: true, maximum: 4 })] }));
+  expect(screen.getByRole('button', { name: 'Start encounter' })).toBeTruthy();
+  expect(screen.getByText(/Fixture charge: built up 0 of 4/)).toBeTruthy();
 });
 
 it('renders for a sheet whose only D43 content is a toggle with a duration, so an encounter can be started', () => {

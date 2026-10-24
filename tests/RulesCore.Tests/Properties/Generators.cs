@@ -206,6 +206,10 @@ internal static class Generators
                 from perUnit in Gen.Elements(false, false, true)
                 from perUnitDice in Gen.Elements("1d6", "2d8")
                 from maxUnits in OptionalValue(Gen.Choose(1, 100))
+                from alsoChange in Gen.Elements(false, false, true)
+                from alsoChangeKind in Gen.Elements("spend", "regain")
+                from alsoChangeAmount in Formulas
+                from drawsDown in Gen.Elements<bool?>(null, null, true, false)
                 select new JsonObject { ["rollId"] = id, ["label"] = label }.With("dice", noDice ? null : dice).With("resourceId", noDice ? "pool" : resource)
                     .With("activation", v >= SpellcastingEffect.SchemaVersion ? activation : null)
                     .With("cost", noDice ? "1" : v >= ToggleEffect.SchemaVersion ? cost : null)
@@ -215,7 +219,9 @@ internal static class Generators
                     .With("save", save ? new JsonObject { ["ability"] = saveAbility, ["dc"] = saveDc } : null)
                     .With("area", area ? new JsonObject { ["shape"] = shape, ["size"] = size }.With("width", shape == "line" ? width : null) : null)
                     .With("range", range).With("targets", targets)
-                    .With("perUnit", perUnit ? new JsonObject { ["dice"] = perUnitDice }.With("maxUnits", maxUnits) : null)),
+                    .With("perUnit", perUnit ? new JsonObject { ["dice"] = perUnitDice }.With("maxUnits", maxUnits) : null)
+                    .With("alsoChange", alsoChange ? new JsonArray(new JsonObject { ["resourceId"] = "pool", ["change"] = alsoChangeKind, ["amount"] = alsoChangeAmount }) : null)
+                    .With("drawsDown", drawsDown)),
             Common(RestrictionEffect.TypeName,
                 from field in Gen.Elements(FieldIds.Score(Ability.Str), FieldIds.Score(Ability.Wis))
                 from min in Gen.Choose(1, 20)

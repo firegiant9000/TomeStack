@@ -209,6 +209,18 @@ public sealed partial class TomeStackApp
     }
 
     /// <summary>
+    /// D43 S5/S8: the one range check of a per-unit amount, shared by the roll command and <c>useAction</c>: from the base cost up to
+    /// base cost plus <c>maxUnits</c> (or the pool's maximum when there is no cap). Null when the amount is in range.
+    /// </summary>
+    internal static Diagnostic? PerUnitRangeProblem(string effectId, ContentReference reference, int amount, int baseCost, RollPerUnit perUnit, int? poolMaximum)
+    {
+        var cap = perUnit.MaxUnits is { } units ? baseCost + units : poolMaximum;
+        return amount < baseCost || (cap is { } limit && amount > limit)
+            ? new("roll.amount-out-of-range", $"'{effectId}' takes an amount from {baseCost} to {cap?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "the pool's maximum"}, not {amount}.", reference, effectId)
+            : null;
+    }
+
+    /// <summary>
     /// D43 S5: the amount of a roll effect's pool the roll implies spending (the request's amount, else the evaluated cost; informational,
     /// the Spend button sends it later), and, for a per-unit amount, the formula with the extra dice. Every check runs before any die is rolled.
     /// Messages name ids and numbers only.
@@ -226,14 +238,19 @@ public sealed partial class TomeStackApp
                 throw new AppValidationException([new(failure!.Code, $"'{effect.Id}' cannot be rolled with an amount: {failure.Message}", reference, effect.Id)], failure.Code);
             var baseCost = cost ?? 0;
             var pool = effect.ResourceId is null ? null : sheet.Resources?.FirstOrDefault(r => r.Content.ContentId == poolContent && r.ResourceId == effect.ResourceId);
-            var cap = perUnit.MaxUnits is { } units ? baseCost + units : pool?.Maximum;
-            if (amount < baseCost || (cap is { } limit && amount > limit))
-                throw new AppValidationException([new("roll.amount-out-of-range", $"'{effect.Id}' takes an amount from {baseCost} to {cap?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "the pool's maximum"}, not {amount}.", reference, effect.Id)], "roll.amount-out-of-range");
+            if (PerUnitRangeProblem(effect.Id, reference, amount, baseCost, perUnit, pool?.Maximum) is { } outOfRange)
+                throw new AppValidationException([outOfRange], outOfRange.Code);
             if (effect.ResourceId is not null)
             {
                 if (pool?.Current is not { } current)
                     throw new AppValidationException([new("roll.amount-unaffordable", $"Pool '{effect.ResourceId}' is untracked, so {amount} cannot be paid from it.", reference, effect.Id)], "roll.amount-unaffordable");
-                if (amount > current)
+                // D43 S8: a roll that draws a counting-up pool down pays from what is built up, not from the room left.
+                if (effect.DrawsDown == true)
+                {
+                    if (amount > pool.Spent)
+                        throw new AppValidationException([new("roll.amount-unaffordable", $"Pool '{effect.ResourceId}' has {pool.Spent} built up; {amount} cannot be drawn down.", reference, effect.Id)], "roll.amount-unaffordable");
+                }
+                else if (amount > current)
                     throw new AppValidationException([new("roll.amount-unaffordable", $"Pool '{effect.ResourceId}' has {current} left; {amount} cannot be paid.", reference, effect.Id)], "roll.amount-unaffordable");
             }
             // Unreachable for validated content; stored content with a per-unit die this cannot add is refused, never rolled as the base dice.
@@ -244,7 +261,7 @@ public sealed partial class TomeStackApp
         if (effect.ResourceId is null)
             return null;
         var spent = command.Amount ?? cost ?? (effect.Cost is null ? 1 : null);
-        return spent is { } uses ? new RollSpend(poolContent, effect.ResourceId, uses) : null;
+        return spent is { } uses ? new RollSpend(poolContent, effect.ResourceId, uses, effect.DrawsDown == true) : null;
     }
 
     /// <summary>

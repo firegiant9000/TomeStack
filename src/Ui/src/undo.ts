@@ -12,13 +12,14 @@ export interface UndoEntry {
 /**
  * D44: a compound play change decides several writes from one view (a form switch also turns the other form and its overlays off).
  * It must name the stored `updatedAt` (`expectedUpdatedAt`) and is undone by the service, never by a client inverse.
- * D43 S3 adds starting and ending an encounter; slice 7 adds damage with responses. The server's switch
+ * D43 S3 adds starting and ending an encounter; slice 7 adds damage with responses; slice 8 adds `useAction`. The server's switch
  * (`CompoundUndo` in Play.cs) and this one are checked against `tests/RulesFixtures/compound-play-actions.json`.
  */
 export const isCompound = (action: PlayAction): boolean =>
   (action.action === 'toggleOn' && !!action.replace) ||
   action.action === 'startEncounter' ||
   action.action === 'endEncounter' ||
+  action.action === 'useAction' ||
   (action.action === 'damage' && (action.responses?.length ?? 0) > 0);
 
 const hp = (view: CharacterView) => view.sheet.hitPoints;

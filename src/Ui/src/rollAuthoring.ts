@@ -14,6 +14,8 @@ export interface PoolChoice {
   label: string;
   /** The entry that declares it, for a pool of another entry. */
   entryName?: string;
+  /** The pool counts up (what has built up is `spent`); a roll can draw down only such a pool. */
+  countsUp?: boolean;
 }
 
 /** The value of a pool option: the plain resource id for this revision's own, `content::resource` for another entry's. */

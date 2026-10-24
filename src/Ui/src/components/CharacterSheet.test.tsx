@@ -261,6 +261,26 @@ it('Start encounter and End encounter send the stamp of the view on screen, not 
   expect(vi.mocked(client.play).mock.calls[0]?.[1]).toEqual({ action: 'endEncounter', expectedUpdatedAt: '2026-10-03T00:00:00Z' });
 });
 
+it('Use on an action with alsoChange sends useAction stamped with the view (D43 S8)', async () => {
+  const user = userEvent.setup();
+  const ref = { contentId: 'c-gather', revisionId: 'r-gather' };
+  const pools = [
+    { content: ref, contentName: 'Fixture Gatherer', effectId: 'e-focus', resourceId: 'focus', label: 'Fixture focus', maximum: 5, spent: 0, current: 5, trace: [], warnings: [], automation: 'automatic', recoveries: [] },
+    { content: ref, contentName: 'Fixture Gatherer', effectId: 'e-charge', resourceId: 'charge', label: 'Fixture charge', maximum: 4, spent: 0, current: 4, countsUp: true, trace: [], warnings: [], automation: 'automatic', recoveries: [] },
+  ];
+  const gatherEffect = {
+    id: 'gather', rollId: 'gather-roll', type: 'roll', automation: 'automatic', label: 'Gather', activation: 'action', resourceId: 'focus', cost: 1, available: true,
+    alsoChange: [{ resourceContent: 'c-gather', resourceId: 'charge', change: 'spend', amount: 1 }],
+  };
+  const shown = view({ resources: pools, features: [{ content: ref, name: 'Fixture Gatherer', kind: 'feature', origin: {}, automation: 'automatic', diagnostics: [], effects: [gatherEffect] }] } as never);
+  vi.mocked(client.play).mockReset();
+  vi.mocked(client.play).mockResolvedValue(shown);
+  render(<CharacterSheet view={shown} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+  await user.click(screen.getByRole('button', { name: 'Use Gather (1 Fixture focus, +1 Fixture charge)' }));
+  await waitFor(() => expect(client.play).toHaveBeenCalledTimes(1));
+  expect(vi.mocked(client.play).mock.calls[0]?.[1]).toEqual({ action: 'useAction', contentId: 'c-gather', rollId: 'gather-roll', expectedUpdatedAt: '2026-10-03T00:00:00Z' });
+});
+
 it('says what the reply noticed after a play change (here, ending an encounter), in the status line (D43 S3)', async () => {
   const user = userEvent.setup();
   const onStatus = vi.fn();

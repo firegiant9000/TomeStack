@@ -230,9 +230,10 @@ public sealed record RollRecord(
 
 /// <summary>
 /// D43 S5: the uses a roll implies spending from a pool (informational: rolling never spends; the Spend button sends
-/// <c>character.play</c>). <see cref="ContentId"/> is the content that defines the pool.
+/// <c>character.play</c>). <see cref="ContentId"/> is the content that defines the pool. D43 S8: <see cref="DrawsDown"/> is true for a
+/// roll that draws a counting-up pool down: applying it takes <see cref="Amount"/> off the pool's built-up value instead of adding to it.
 /// </summary>
-public sealed record RollSpend(Guid ContentId, string ResourceId, int Amount);
+public sealed record RollSpend(Guid ContentId, string ResourceId, int Amount, bool DrawsDown = false);
 
 /// <summary>Rolls dice. Pure apart from the injected <see cref="IRandomSource"/>; takes no character or resource state.</summary>
 public static class DiceRoller

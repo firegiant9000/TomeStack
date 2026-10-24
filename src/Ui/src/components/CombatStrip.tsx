@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import type { CharacterView, PlayAction, ResourceValue, ToggleValue, TurnMoment } from '../api/types';
 import { FormGroups } from './FormGroups';
 
@@ -6,7 +7,7 @@ function hasCombat(view: CharacterView): boolean {
   const { sheet, character } = view;
   return (
     (sheet.toggles ?? []).some((t) => t.group || t.duration != null) ||
-    (sheet.resources ?? []).some((r) => r.allowance) ||
+    (sheet.resources ?? []).some((r) => r.allowance || r.countsUp) ||
     (sheet.upkeeps ?? []).length > 0 ||
     character.play?.encounter !== undefined
   );
@@ -43,10 +44,37 @@ export function CombatStrip({
   busy: boolean;
   onTurn: (at: TurnMoment) => void;
 }) {
+  // D43 S8: ending an encounter asks which built-up counting-up pools to clear, when there are any.
+  const encounter = view.character.play?.encounter;
+  const resources = view.sheet.resources ?? [];
+  const builtUp = resources.filter((r) => r.countsUp && r.spent > 0);
+  const [confirming, setConfirming] = useState(false);
+  const [ticked, setTicked] = useState<string[]>([]);
+  // The confirmation is open only while there is an encounter with something built up; an encounter that ends (from anywhere), or
+  // nothing left built up, closes it for good, so it never comes back with stale ticks.
+  const open = confirming && encounter !== undefined && builtUp.length > 0;
+  if (confirming && (encounter === undefined || builtUp.length === 0)) {
+    setConfirming(false);
+    setTicked([]);
+  }
+  const firstBox = useRef<HTMLInputElement>(null);
+  const endButton = useRef<HTMLButtonElement>(null);
+  const focusEnd = useRef(false);
+  useEffect(() => {
+    if (open) firstBox.current?.focus();
+    else if (focusEnd.current) {
+      focusEnd.current = false;
+      endButton.current?.focus();
+    }
+  }, [open]);
   if (!hasCombat(view)) return null;
   const toggles = view.sheet.toggles ?? [];
-  const resources = view.sheet.resources ?? [];
-  const encounter = view.character.play?.encounter;
+  const clearKey = (r: ResourceValue) => `${r.content.contentId}/${r.resourceId}`;
+  const closeConfirm = (returnFocus: boolean) => {
+    focusEnd.current = returnFocus;
+    setConfirming(false);
+    setTicked([]);
+  };
   const timed = toggles.filter((t) => t.on && t.duration != null);
   const pools = resources.filter((r) => r.countsUp || r.allowance);
   return (
@@ -70,9 +98,51 @@ export function CombatStrip({
             <button type="button" id="turn-open-turnEnd" disabled={busy} onClick={() => onTurn('turnEnd')}>
               End my turn
             </button>
-            <button type="button" disabled={busy} onClick={() => void act({ action: 'endEncounter' })}>
-              End encounter
-            </button>
+            {open ? (
+              <fieldset className="field-group">
+                <legend>End encounter</legend>
+                {builtUp.map((r, i) => (
+                  <label key={clearKey(r)} className="choice">
+                    <input
+                      ref={i === 0 ? firstBox : undefined}
+                      type="checkbox"
+                      checked={ticked.includes(clearKey(r))}
+                      onChange={(e) => setTicked((t) => (e.target.checked ? [...t, clearKey(r)] : t.filter((k) => k !== clearKey(r))))}
+                    />
+                    {`Clear ${r.label} (${r.spent} built up)`}
+                  </label>
+                ))}
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    const clear = builtUp.map(clearKey).filter((k) => ticked.includes(k));
+                    // Closed only once the change is applied; a refusal keeps the choices and the focus in the group.
+                    void Promise.resolve(act(clear.length > 0 ? { action: 'endEncounter', clear } : { action: 'endEncounter' }))
+                      .then((applied) => applied !== false)
+                      .catch(() => false)
+                      .then((applied) => {
+                        if (applied) closeConfirm(false);
+                        else firstBox.current?.focus();
+                      });
+                  }}
+                >
+                  End encounter
+                </button>
+                <button type="button" onClick={() => closeConfirm(true)}>
+                  Cancel
+                </button>
+              </fieldset>
+            ) : (
+              <button
+                ref={endButton}
+                type="button"
+                disabled={busy}
+                onClick={() => (builtUp.length > 0 ? setConfirming(true) : void act({ action: 'endEncounter' }))}
+              >
+                End encounter
+              </button>
+            )}
           </>
         ) : (
           <button type="button" disabled={busy} onClick={() => void act({ action: 'startEncounter' })}>

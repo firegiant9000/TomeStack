@@ -310,6 +310,19 @@ export interface FeatureEffect {
   targets?: string;
   /** Content v11 (D43): extra dice for each unit spent beyond the base cost. */
   perUnit?: RollPerUnit;
+  /** Content v11 (D43): the other pools a use also changes, each amount evaluated for this character (null when it could not be). */
+  alsoChange?: AlsoChangeValue[];
+  /** Content v11 (D43): the cost and per-unit amount use up the counting-up pool's built-up value. */
+  drawsDown?: boolean;
+  /** The roll's content `rollId` (what `useAction` names); it can differ from `id`. */
+  rollId?: string;
+}
+
+export interface AlsoChangeValue {
+  resourceContent: string;
+  resourceId: string;
+  change: 'spend' | 'regain';
+  amount?: number | null;
 }
 
 export type AreaShape = 'line' | 'cone' | 'sphere' | 'cube' | 'cylinder' | 'emanation';
@@ -711,7 +724,8 @@ export type PlayActionKind =
   | 'companionSetHitPoints'
   | 'companionSetTemporaryHitPoints'
   | 'startEncounter'
-  | 'endEncounter';
+  | 'endEncounter'
+  | 'useAction';
 
 export interface PlayAction {
   action: PlayActionKind;
@@ -729,6 +743,10 @@ export interface PlayAction {
   damageType?: string;
   /** With `damage` (D43 S7): the damage responses chosen for this hit. A non-empty list makes the change compound (it needs `expectedUpdatedAt`). */
   responses?: { contentId: string; responseId: string }[];
+  /** With `useAction` (D43 S8, with `contentId`): the roll to use, by its `rollId`. Compound (needs `expectedUpdatedAt`); `amount` is the units of a per-unit roll. */
+  rollId?: string;
+  /** With `endEncounter` (D43 S8): counting-up pools to reset to 0 in the same change, as `{contentId}/{resourceId}` (at most 64). Any other action, or a pool that does not count up, is `play.clear-invalid`. */
+  clear?: string[];
   /** With `spendCharge` or `regainCharge`: the equipment entry, by its id, or by `entryIndex` and `contentId` while it has none. */
   entryId?: string;
   entryIndex?: number;
@@ -867,6 +885,8 @@ export interface RollSpend {
   contentId: string;
   resourceId: string;
   amount: number;
+  /** D43 S8: the pool counts up and this roll draws it down; the record's Spend is a `useAction`, never a plain `spend`. */
+  drawsDown?: boolean;
 }
 
 /** A content roll effect (`content` + `effectId`) or a sheet field as a d20 test (`field`). */
@@ -1650,6 +1670,10 @@ export type Effect =
       targets?: string;
       /** Content v11: extra dice for each unit spent beyond the base cost. */
       perUnit?: { dice: string; maxUnits?: number };
+      /** Content v11 (D43 S8): other pool changes made in the same use, at most 4; `amount` is a formula. */
+      alsoChange?: { resourceId: string; resourceContent?: string; change: 'spend' | 'regain'; amount: string }[];
+      /** Content v11 (D43 S8): the roll draws down the built-up charge of its pool (a pool that counts up). */
+      drawsDown?: boolean;
     })
   // Content v11 (D43, slice 5): a named formula, read as VALUE.<valueId>.
   | (EffectBase & { type: 'value'; valueId: string; formula: string })

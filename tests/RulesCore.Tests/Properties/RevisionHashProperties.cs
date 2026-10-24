@@ -31,7 +31,7 @@ public class RevisionHashProperties
     internal static readonly string[] ModifierV11Keys = ["toggleContent"];
 
     /// <summary>The roll key content v11 adds (D43, slice 4). Written out here on purpose, like <see cref="ToggleV11Keys"/>.</summary>
-    internal static readonly string[] RollV11Keys = ["whileToggle", "save", "area", "range", "targets", "perUnit"];
+    internal static readonly string[] RollV11Keys = ["whileToggle", "save", "area", "range", "targets", "perUnit", "alsoChange", "drawsDown"];
 
     /// <summary>The grant key content v11 adds (D43, slice 6). Written out here on purpose, like <see cref="ToggleV11Keys"/>.</summary>
     internal static readonly string[] GrantV11Keys = ["whileToggle"];

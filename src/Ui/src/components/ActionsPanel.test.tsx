@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // Item 18: the character's own hand-typed attacks are listed in "Attacks and actions" and rolled from there. There is no
 // editing on Play (that is on Inventory).
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { CharacterView, CustomAttack, RollTarget } from '../api/types';
@@ -544,4 +544,206 @@ it('the Points to spend box is aria-invalid and described by its reason only whi
   await userEvent.type(box, '3');
   expect(box.getAttribute('aria-invalid')).toBeNull();
   expect(box.getAttribute('aria-describedby')).toBeNull();
+});
+
+// D43 S8: charging. Gather spends focus and builds charge; Release draws the built-up charge down.
+const chargePool = (spent: number, maximum = 4) => ({
+  content: ref, contentName: 'Testy Source', effectId: 'e-charge', resourceId: 'charge', label: 'Testy charge', maximum, spent, current: maximum - spent, countsUp: true,
+  trace: [], warnings: [], automation: 'automatic', recoveries: [],
+});
+const chargingView = (effects: object[], pools: object[]) =>
+  ({ character: { id: 'fixture' }, sheet: { attacks: [], toggles: [], resources: pools, features: [{ content: ref, name: 'Testy Source', kind: 'feature', effects }] } }) as unknown as CharacterView;
+const gather = {
+  id: 'gather', rollId: 'gather-roll', type: 'roll', label: 'Gather', activation: 'action', resourceId: 'focus', cost: 1, available: true,
+  alsoChange: [{ resourceContent: 'c1', resourceId: 'charge', change: 'spend', amount: 1 }],
+};
+const release = {
+  id: 'release', rollId: 'release-roll', type: 'roll', label: 'Release', dice: '2d6', activation: 'action', resourceId: 'charge', cost: 0, drawsDown: true,
+  available: true, perUnit: { dice: '1d6' },
+};
+
+it('Use on an action with alsoChange sends useAction with the basis', async () => {
+  const act = vi.fn();
+  render(<ActionsPanel view={chargingView([gather], [focusPool(4), chargePool(0)])} roll={() => {}} act={act} />);
+  await userEvent.click(screen.getByRole('button', { name: 'Use Gather (1 Testy focus, +1 Testy charge)' }));
+  expect(act).toHaveBeenCalledWith({ action: 'useAction', contentId: 'c1', rollId: 'gather-roll' });
+  expect(act).not.toHaveBeenCalledWith(expect.objectContaining({ action: 'spend' }));
+});
+
+it('a dice-less Use with no alsoChange and no drawsDown still sends spend', async () => {
+  const act = vi.fn();
+  const plain = { id: 'plain', rollId: 'plain-roll', type: 'roll', label: 'Plain', activation: 'action', resourceId: 'focus', cost: 1, available: true };
+  render(<ActionsPanel view={chargingView([plain], [focusPool(4)])} roll={() => {}} act={act} />);
+  await userEvent.click(screen.getByRole('button', { name: 'Use Plain (1 Testy focus)' }));
+  expect(act).toHaveBeenCalledWith({ action: 'spend', amount: 1, contentId: 'c1', resourceId: 'focus' });
+});
+
+it('a regain entry reads with a minus sign', () => {
+  const calm = { ...gather, id: 'calm', label: 'Calm', alsoChange: [{ resourceContent: 'c1', resourceId: 'charge', change: 'regain', amount: 2 }] };
+  render(<ActionsPanel view={chargingView([calm], [focusPool(4), chargePool(3)])} roll={() => {}} act={() => {}} />);
+  expect(screen.getByRole('button', { name: 'Use Calm (1 Testy focus, −2 Testy charge)' })).toBeTruthy();
+});
+
+it('Use is disabled with a linked reason when the charge is full, the focus is short or an amount is unavailable', () => {
+  render(<ActionsPanel view={chargingView([gather], [focusPool(4), chargePool(4)])} roll={() => {}} act={() => {}} />);
+  const button = screen.getByRole('button', { name: /^Use Gather/ }) as HTMLButtonElement;
+  expect(button.disabled).toBe(true);
+  expect(document.getElementById(button.getAttribute('aria-describedby')!)!.textContent).toMatch(/Testy charge is full/);
+  cleanup();
+
+  render(<ActionsPanel view={chargingView([gather], [focusPool(0), chargePool(0)])} roll={() => {}} act={() => {}} />);
+  expect((screen.getByRole('button', { name: /^Use Gather/ }) as HTMLButtonElement).disabled).toBe(true);
+  cleanup();
+
+  const unknown = { ...gather, alsoChange: [{ resourceContent: 'c1', resourceId: 'charge', change: 'spend', amount: null }] };
+  render(<ActionsPanel view={chargingView([unknown], [focusPool(4), chargePool(0)])} roll={() => {}} act={() => {}} />);
+  const b = screen.getByRole('button', { name: /^Use Gather/ }) as HTMLButtonElement;
+  expect(b.disabled).toBe(true);
+  expect(document.getElementById(b.getAttribute('aria-describedby')!)!.textContent).toMatch(/Cost unavailable/);
+});
+
+it("release's amount box is limited to the built-up charge", async () => {
+  const roll = vi.fn();
+  render(<ActionsPanel view={chargingView([release], [chargePool(2)])} roll={roll} act={() => {}} />);
+  const box = screen.getByRole('spinbutton', { name: /Points to spend/ }) as HTMLInputElement;
+  expect(box.max).toBe('2');
+  await userEvent.clear(box);
+  await userEvent.type(box, '2');
+  expect((screen.getByRole('button', { name: 'Roll Release (2d6)' }) as HTMLButtonElement).disabled).toBe(false);
+  await userEvent.clear(box);
+  await userEvent.type(box, '3');
+  expect((screen.getByRole('button', { name: 'Roll Release (2d6)' }) as HTMLButtonElement).disabled).toBe(true);
+});
+
+it("the record's Spend for a drawsDown release sends useAction with the record's amount, never a plain spend", async () => {
+  const act = vi.fn();
+  const rec = recordFor({
+    provenance: { rollId: 'release-roll', label: 'Release', content: ref, effectId: 'release', linkedResourceId: 'charge', linkedResourceContent: 'c1' },
+    spend: { contentId: 'c1', resourceId: 'charge', amount: 2, drawsDown: true },
+  });
+  const features = [{ content: ref, name: 'Testy Source', kind: 'feature', effects: [release] }] as never;
+  render(<RollResult record={rec} resources={[chargePool(3)] as never} features={features} act={act} />);
+  await userEvent.click(screen.getByRole('button', { name: /^Spend 2 Testy charge/ }));
+  expect(act).toHaveBeenCalledTimes(1);
+  expect(act).toHaveBeenCalledWith({ action: 'useAction', contentId: 'c1', rollId: 'release-roll', amount: 2 });
+  cleanup();
+
+  // Bounded by what has built up, not by what is left under the maximum.
+  render(<RollResult record={rec} resources={[chargePool(1)] as never} features={features} act={act} />);
+  expect((screen.getByRole('button', { name: /^Spend 2 Testy charge/ }) as HTMLButtonElement).disabled).toBe(true);
+});
+
+it("a compound roll with no rollId is never spent as a plain spend: Use and the record's Spend are held with a reason", async () => {
+  const act = vi.fn();
+  const noId = { ...gather, rollId: undefined };
+  render(<ActionsPanel view={chargingView([noId], [focusPool(4), chargePool(0)])} roll={() => {}} act={act} />);
+  const use = screen.getByRole('button', { name: /^Use Gather/ }) as HTMLButtonElement;
+  expect(use.disabled).toBe(true);
+  expect(document.getElementById(use.getAttribute('aria-describedby')!)!.textContent).toMatch(/Can't be used here/);
+  await userEvent.click(use);
+  cleanup();
+
+  const noRoll = { ...release, rollId: undefined };
+  const base = {
+    provenance: { rollId: undefined, label: 'Release', content: ref, effectId: 'release', linkedResourceId: 'charge', linkedResourceContent: 'c1' },
+    spend: { contentId: 'c1', resourceId: 'charge', amount: 2, drawsDown: true },
+  };
+  render(<RollResult record={recordFor(base)} resources={[chargePool(3)] as never} features={[{ content: ref, name: 'Testy Source', kind: 'feature', effects: [noRoll] }] as never} act={act} />);
+  const spendBtn = screen.getByRole('button', { name: /^Spend 2 Testy charge/ }) as HTMLButtonElement;
+  expect(spendBtn.disabled).toBe(true);
+  expect(document.getElementById(spendBtn.getAttribute('aria-describedby')!)!.textContent).toMatch(/Can't be used here/);
+  cleanup();
+
+  // The effect cannot be found at all: still held, never a plain spend.
+  render(<RollResult record={recordFor(base)} resources={[chargePool(3)] as never} features={[]} act={act} />);
+  expect((screen.getByRole('button', { name: /^Spend 2 Testy charge/ }) as HTMLButtonElement).disabled).toBe(true);
+  expect(act).not.toHaveBeenCalled();
+});
+
+it("a refused useAction gives the record's Spend back", async () => {
+  const act = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+  const rec = recordFor({
+    provenance: { rollId: 'release-roll', label: 'Release', content: ref, effectId: 'release', linkedResourceId: 'charge', linkedResourceContent: 'c1' },
+    spend: { contentId: 'c1', resourceId: 'charge', amount: 2, drawsDown: true },
+  });
+  render(<RollResult record={rec} resources={[chargePool(3)] as never} features={[{ content: ref, name: 'Testy Source', kind: 'feature', effects: [release] }] as never} act={act} />);
+  const spendBtn = () => screen.getByRole('button', { name: /^Spend 2 Testy charge/ }) as HTMLButtonElement;
+  await userEvent.click(spendBtn());
+  await waitFor(() => expect(spendBtn().disabled).toBe(false));
+  await userEvent.click(spendBtn());
+  expect(act).toHaveBeenCalledTimes(2);
+  expect(spendBtn().disabled).toBe(true);
+});
+
+// Slice review fixes.
+it('a pool another pool change names that the sheet does not track holds Use with that reason', () => {
+  render(<ActionsPanel view={chargingView([gather], [focusPool(4)])} roll={() => {}} act={() => {}} />);
+  const use = screen.getByRole('button', { name: /^Use Gather/ }) as HTMLButtonElement;
+  expect(use.disabled).toBe(true);
+  expect(document.getElementById(use.getAttribute('aria-describedby')!)!.textContent).toMatch(/^ · charge is not tracked on this sheet\.$/);
+  cleanup();
+
+  const untracked = { ...chargePool(0), current: undefined };
+  render(<ActionsPanel view={chargingView([gather], [focusPool(4), untracked])} roll={() => {}} act={() => {}} />);
+  const again = screen.getByRole('button', { name: /^Use Gather/ }) as HTMLButtonElement;
+  expect(again.disabled).toBe(true);
+  expect(document.getElementById(again.getAttribute('aria-describedby')!)!.textContent).toMatch(/^ · Testy charge is not tracked on this sheet\.$/);
+});
+
+it('the sign follows the pool direction: a spend on a normal pool reads minus, a regain on it plus', () => {
+  const swap = (change: string) => ({ ...gather, alsoChange: [{ resourceContent: 'c1', resourceId: 'focus', change, amount: 2 }] });
+  const normal = { ...gather, resourceId: 'charge', alsoChange: [{ resourceContent: 'c1', resourceId: 'focus', change: 'spend', amount: 2 }] };
+  render(<ActionsPanel view={chargingView([normal], [focusPool(4), chargePool(0)])} roll={() => {}} act={() => {}} />);
+  expect(screen.getByRole('button', { name: 'Use Gather (1 Testy charge, −2 Testy focus)' })).toBeTruthy();
+  cleanup();
+  render(<ActionsPanel view={chargingView([{ ...normal, alsoChange: swap('regain').alsoChange }], [focusPool(4), chargePool(0)])} roll={() => {}} act={() => {}} />);
+  expect(screen.getByRole('button', { name: 'Use Gather (1 Testy charge, +2 Testy focus)' })).toBeTruthy();
+});
+
+it('a compound use whose own cost is 0 is still usable', async () => {
+  const act = vi.fn();
+  const free = { ...gather, cost: 0 };
+  render(<ActionsPanel view={chargingView([free], [focusPool(4), chargePool(0)])} roll={() => {}} act={act} />);
+  const use = screen.getByRole('button', { name: /^Use Gather/ }) as HTMLButtonElement;
+  expect(use.disabled).toBe(false);
+  await userEvent.click(use);
+  expect(act).toHaveBeenCalledWith({ action: 'useAction', contentId: 'c1', rollId: 'gather-roll' });
+});
+
+it("the record's Spend for a compound roll with a cost of 0 is still offered", async () => {
+  const act = vi.fn();
+  const free = { ...gather, cost: 0, dice: '1d6' };
+  const rec = recordFor({
+    provenance: { rollId: 'gather-roll', label: 'Gather', content: ref, effectId: 'gather', linkedResourceId: 'focus', linkedResourceContent: 'c1' },
+    spend: { contentId: 'c1', resourceId: 'focus', amount: 0 },
+  });
+  render(<RollResult record={rec} resources={[focusPool(4), chargePool(0)] as never} features={[{ content: ref, name: 'Testy Source', kind: 'feature', effects: [free] }] as never} act={act} />);
+  const spendBtn = screen.getByRole('button', { name: /^Spend 0 Testy focus/ }) as HTMLButtonElement;
+  expect(spendBtn.disabled).toBe(false);
+  await userEvent.click(spendBtn);
+  expect(act).toHaveBeenCalledWith({ action: 'useAction', contentId: 'c1', rollId: 'gather-roll' });
+});
+
+it("a content roll's record whose effect left the sheet holds the Spend, never a plain spend", () => {
+  const act = vi.fn();
+  const rec = recordFor({
+    provenance: { rollId: 'gather-roll', label: 'Gather', content: ref, effectId: 'gather', linkedResourceId: 'focus', linkedResourceContent: 'c1' },
+    spend: { contentId: 'c1', resourceId: 'focus', amount: 1 },
+  });
+  render(<RollResult record={rec} resources={[focusPool(4)] as never} features={[]} act={act} />);
+  const spendBtn = screen.getByRole('button', { name: /^Spend 1 Testy focus/ }) as HTMLButtonElement;
+  expect(spendBtn.disabled).toBe(true);
+  expect(document.getElementById(spendBtn.getAttribute('aria-describedby')!)!.textContent).toMatch(/Can't be used here/);
+  expect(act).not.toHaveBeenCalled();
+});
+
+it('a drawsDown dice-less Use is disabled with its reason when less has built up than it costs', () => {
+  const draw = { id: 'vent', rollId: 'vent-roll', type: 'roll', label: 'Vent', activation: 'action', resourceId: 'charge', cost: 2, drawsDown: true, available: true };
+  render(<ActionsPanel view={chargingView([draw], [chargePool(1)])} roll={() => {}} act={() => {}} />);
+  const use = screen.getByRole('button', { name: 'Use Vent (2 Testy charge)' }) as HTMLButtonElement;
+  expect(use.disabled).toBe(true);
+  expect(document.getElementById(use.getAttribute('aria-describedby')!)!.textContent).toMatch(/Not enough Testy charge built up \(1\)/);
+  cleanup();
+  render(<ActionsPanel view={chargingView([draw], [chargePool(2)])} roll={() => {}} act={() => {}} />);
+  expect((screen.getByRole('button', { name: 'Use Vent (2 Testy charge)' }) as HTMLButtonElement).disabled).toBe(false);
 });
