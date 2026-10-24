@@ -73,6 +73,19 @@ Time is the mean; P95 and allocations are per operation. "Spread" compares the t
 - treat a time change below about 40 % on this machine as noise;
 - treat a change in allocations as real.
 
+## Play mechanics (D43 slice 7, measured 2026-10-24)
+
+`PlayMechanicsBenchmarks` (case 6): the case 1 character for SRD 5.2.1 with one original feature pinned, built in code. The feature has nine forms in one exclusive group (form 1 on), sixteen techniques (rolls offered while a form is on), a rider and an upkeep for each form, and five damage responses of all three phases. The sheet has 59 fields. The two previews go through the real SQLite store: `Turn_preview` is `character.turnPreview` in an encounter, `Damage_preview_with_responses` is `character.damagePreview` for a hit that drops a character with 10 hit points to 0, with a reduction, a survival and two thresholds chosen. Raw results: [`performance/raw/2026-10-24/`](performance/raw/2026-10-24/), one run of the Calculation and PlayMechanics cases together.
+
+| Case | Mean | P95 | Allocated | Budget |
+|---|---:|---:|---:|---|
+| 1. Calculate, SRD 5.2.1 (same run, the comparison) | 1.094 ms | 1.115 ms | 1.42 MB | none |
+| 6. Calculate with nine forms and sixteen techniques | 1.172 ms | 1.179 ms | 1.48 MB | pass |
+| 6. Turn preview | 16.617 ms | 16.825 ms | 8.02 MB | none (recorded) |
+| 6. Damage preview with responses | 33.119 ms | 33.486 ms | 15.8 MB | none (recorded) |
+
+**Budget (owner, ruling R15):** the calculation case is held to the P95 of "Calculate, SRD 5.2.1" **in the same run** plus 40 % (the noise band above), which is 1.561 ms, and to that run's allocations plus 10 % (1.56 MB). It measured 1.179 ms and 1.48 MB, so it passes: +5.7 % on P95 and +4 % on allocations over the same-run comparison. The two previews have no budget; they are recorded so a later change can be compared.
+
 ## First paint (owed: owner, by hand)
 
 Not measured yet. Method, so the result can be compared later:
