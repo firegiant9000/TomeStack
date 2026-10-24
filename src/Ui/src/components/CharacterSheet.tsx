@@ -17,6 +17,7 @@ import type {
 import { downloadBase64 } from '../files';
 import { ArchivePanel } from './ArchivePanel';
 import { CombatStrip } from './CombatStrip';
+import { DamagePanel } from './DamagePanel';
 import { TurnPanel } from './TurnPanel';
 import { SnapshotsPanel } from './SnapshotsPanel';
 import { ActionsPanel, ClassColumnsPanel, ConcentrationPanel, ConditionsPanel, DeathSavesPanel, FeaturesPanel, HitPointsPanel, ResourcesPanel } from './PlayPanels';
@@ -309,8 +310,21 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
     turnOpener.current = undefined;
   }, [turning]);
   const [undo, setUndo] = useState<UndoEntry>();
+  // D43 S7: the open damage panel (the hit as entered), when the sheet has damage responses. It sits above the tabs: the summary opens it too.
+  const [damaging, setDamaging] = useState<{ amount: number; type: string; n: number }>();
+  const hasResponses = (sheet.responses ?? []).length > 0;
+  // The sheet lost its responses (a different build of the character): the panel's choices mean nothing now (adjusting state during render, guarded).
+  if (damaging && !hasResponses) setDamaging(undefined);
   // Wave 3 item 21: the Hit points damage type; a weapon's damage roll pre-fills it. '' is untyped.
   const [damageType, setDamageType] = useState('');
+  // Each press reopens the panel fresh (the counter is in its key), also while it shows "Damage applied".
+  const damageCount = useRef(0);
+  const openDamageN = useRef<number | undefined>(undefined); // the open panel's counter; a replaced panel's callbacks compare against it
+  const openDamage = (amount: number, type: string) => {
+    const n = ++damageCount.current;
+    openDamageN.current = n;
+    setDamaging({ amount, type, n });
+  };
   const compactToggle = useRef<HTMLInputElement>(null);
   const [gapAbout, setGapAbout] = useState('');
   const gapText = useRef<HTMLTextAreaElement>(null);
@@ -437,7 +451,11 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   }, [view]);
   /** D43 S3: what the reply noticed (an encounter's durations to track by hand, a pool that filled) goes to the sheet's one status line. */
   function say(reply: CharacterView) {
-    const message = reply.notices?.map((n) => n.message).join(' · ');
+    // D43 S7: the damage panel and the Hit points panel show their own notices (rolls to make, responses not chosen) by label, not by id.
+    const message = reply.notices
+      ?.filter((n) => n.code !== 'damage.roll-offered' && n.code !== 'damage.responses-skipped')
+      .map((n) => n.message)
+      .join(' · ');
     if (message && mounted.current) onStatus(message);
   }
   /** D43 S3: a turn confirm counts as a running change (the strip and both Undos wait for it) and withdraws a client Undo at once. */
@@ -452,6 +470,33 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
       running.current -= 1;
       setInFlight(running.current > 0);
     }
+  }
+  /** A damage confirm whose reply did not arrive may have been applied: reload the stored character, close the panel and say so. */
+  async function damageTimedOut(n: number) {
+    closeDamage(n);
+    let reloaded = false;
+    try {
+      // Through the save queue, behind any apply queued meanwhile: a late reload reply must not roll back a later change. The queue
+      // takes the reply as the latest stored copy (what `adopt` did).
+      const fresh = await runQueued(() => client.getCharacter(characterId), (reply) => reply.character);
+      onChanged(fresh);
+      reloaded = true;
+    } catch (error) {
+      onError(error);
+    }
+    if (mounted.current)
+      onStatus(
+        reloaded
+          ? 'The reply did not arrive. The sheet was reloaded; check hit points before trying again.'
+          : 'The reply did not arrive and the sheet could not be reloaded. Reload before trying again.',
+      );
+  }
+  /** Closes the damage panel opened as `n`; a call from a panel that a newer press has replaced does nothing (it must not close the new one). */
+  function closeDamage(n: number): boolean {
+    if (openDamageN.current !== n) return false;
+    openDamageN.current = undefined;
+    setDamaging(undefined);
+    return true;
   }
   /** Resolves true when the play change was applied or timed out (outcome unknown), and false when it was refused or failed (the error has gone to `onError`). */
   async function act(action: PlayAction): Promise<boolean> {
@@ -681,7 +726,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
         </button>
       </header>
 
-      <SheetSummary view={view} rollMode={rollMode} onRollMode={setRollMode} lastRoll={lastRoll} rollLog={rollLog} act={act} spellsTab={showSpells} onRoll={(f) => roll({ field: f, mode: rollMode })} onRollDice={rollDice} />
+      <SheetSummary view={view} rollMode={rollMode} onRollMode={setRollMode} lastRoll={lastRoll} rollLog={rollLog} act={act} onDamage={openDamage} spellsTab={showSpells} onRoll={(f) => roll({ field: f, mode: rollMode })} onRollDice={rollDice} />
 
       {resting && (
         <div className="rest-sheet" id="rest-panel">
@@ -706,6 +751,30 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
             }}
           />
         </div>
+      )}
+
+      {damaging && hasResponses && (
+        <DamagePanel
+          key={damaging.n}
+          view={view}
+          amount={damaging.amount}
+          type={damaging.type}
+          onError={onError}
+          onTimeout={() => damageTimedOut(damaging.n)}
+          act={act}
+          onRoll={roll}
+          run={runTurn}
+          onCancel={() => {
+            if (!closeDamage(damaging.n)) return;
+            // WCAG 2.4.3: back to the hit points (the Play tab's heading, else the summary's button).
+            (document.getElementById('hp-heading') ?? document.querySelector<HTMLElement>('[aria-label="Lose 1 hit point"]'))?.focus();
+          }}
+          onDone={(done) => {
+            setUndo(undefined); // the service holds the one undo of a compound damage (`undoLabel`)
+            onChanged(done);
+            say(done);
+          }}
+        />
       )}
 
       {printing && (
@@ -819,7 +888,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
         )}
         {/* Investigation 2026-10-06 item 8: two plain wrappers, side by side at 60rem and up, stacked below it. Visual order is DOM order. */}
         <div className="play-column">
-          <HitPointsPanel view={view} act={act} damageType={damageType} onDamageType={setDamageType} />
+          <HitPointsPanel view={view} act={act} damageType={damageType} onDamageType={setDamageType} onDamage={openDamage} panelOpen={damaging !== undefined} />
           <DeathSavesPanel view={view} act={act} roll={roll} lastRoll={lastRoll} />
           <ConcentrationPanel view={view} act={act} roll={roll} />
           <ConditionsPanel view={view} act={act} />

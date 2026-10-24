@@ -2,6 +2,7 @@
   { "action": "spend", "compound": false },
   { "action": "regain", "compound": false },
   { "action": "damage", "compound": false },
+  { "action": "damage", "responses": true, "compound": true },
   { "action": "heal", "compound": false },
   { "action": "setTemporaryHitPoints", "compound": false },
   { "action": "setHitPoints", "compound": false },

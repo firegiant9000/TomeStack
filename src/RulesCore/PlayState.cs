@@ -111,6 +111,15 @@ public sealed record PlayState
         ],
     };
 
+    /// <summary>
+    /// The same state with <paramref name="current"/> hit points stored: <c>null</c> (at the maximum) from <paramref name="maximum"/> up.
+    /// The one place the null-at-maximum rule lives.
+    /// </summary>
+    public PlayState WithCurrentHitPoints(int current, int maximum) => this with { CurrentHitPoints = current >= maximum ? null : current };
+
+    /// <summary>The same state with <paramref name="current"/> (stored as in <see cref="WithCurrentHitPoints"/>) and <paramref name="temporary"/> hit points.</summary>
+    public PlayState WithHitPoints(int current, int temporary, int maximum) => WithCurrentHitPoints(current, maximum) with { TemporaryHitPoints = temporary };
+
     public int HitDiceSpentOf(int die) => HitDiceSpent.LastOrDefault(h => h.Die == die)?.Spent ?? 0;
 
     /// <summary>The same state with <paramref name="spent"/> hit dice of size <paramref name="die"/> spent (0 removes the entry).</summary>

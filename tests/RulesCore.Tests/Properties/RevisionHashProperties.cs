@@ -201,6 +201,8 @@ public class RevisionHashProperties
                 members = [.. members ?? [], .. GrantV11Keys];
             if (version >= ContentRevision.PlayMechanicsSchemaVersion && type == RollModeEffect.TypeName)
                 members = ["against", "toggle", "toggleContent"];
+            if (version >= ContentRevision.PlayMechanicsSchemaVersion && type == ResponseEffect.TypeName)
+                members = ["amount", "when", "resourceId", "resourceContent", "cost", "toggle", "outcomes"];
             if (version >= ContentRevision.PlayMechanicsSchemaVersion && type == RollEffect.TypeName)
                 members = [.. members ?? [], .. RollV11Keys, "dice"];
             if (members is null)

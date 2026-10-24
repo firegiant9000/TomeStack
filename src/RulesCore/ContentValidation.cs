@@ -47,6 +47,12 @@ public static class ContentValidator
     /// <summary>The most upkeep effects one revision declares (content v11); each runs every turn, so a bound keeps a turn small.</summary>
     public const int MaxUpkeepsPerRevision = 20;
 
+    /// <summary>The most response effects one revision declares (content v11); each is checked on every damage event, so a bound keeps one small.</summary>
+    public const int MaxResponsesPerRevision = 20;
+
+    /// <summary>The most outcomes one response declares (content v11).</summary>
+    public const int MaxOutcomesPerResponse = 8;
+
     /// <summary>The largest area size or line width a roll declares, in feet (content v11).</summary>
     private const int MaxAreaFeet = 1_000;
 
@@ -161,6 +167,7 @@ public static class ContentValidator
         var needsV10 = false; // content v10 (Wave 3, D42): speed/passive targets, autoWhen, activation, damage grants, item
         var needsV11 = false; // content v11 (D43): toggleGroup and upkeep effects, the toggle's group, layer, cost, level and duration keys, and the resource's counts, resourceFull and allowance keys
         var upkeeps = 0;
+        var responses = 0;
         var diceLessRoll = false; // an untyped roll with no dice: publishing it needs v11, where a roll may omit them
         var usedScales = new HashSet<string>(StringComparer.Ordinal); // SCALE.<id> in any formula (content v9)
         var usedValues = new HashSet<string>(StringComparer.Ordinal); // VALUE.<id> in any formula (content v11)
@@ -223,6 +230,13 @@ public static class ContentValidator
                 case UnknownEffect { DeclaredType: RollModeEffect.TypeName } unknownMode when revision.SchemaVersion >= RollModeEffect.SchemaVersion:
                     needsV11 = true;
                     Error("validate.effect-malformed", $"Effect '{unknownMode.Id}' has type '{unknownMode.DeclaredType}' but a value or field that does not read (its mode must be advantage or disadvantage; it needs a target; against is a list of condition keys; toggleContent is an id); fix it before publishing.", unknownMode.Id);
+                    break;
+                // Content v11 (D43): from v11 a response is typed; one that stays unknown did not match the shape (a phase or an outcome
+                // kind that names no member, no responseId, label or phase, a toggle or content that is not an id), so the response would
+                // silently not exist. Published at a lower version it would be an unsupported effect, so it blocks.
+                case UnknownEffect { DeclaredType: ResponseEffect.TypeName } unknownResponse when revision.SchemaVersion >= ResponseEffect.SchemaVersion:
+                    needsV11 = true;
+                    Error("validate.effect-malformed", $"Effect '{unknownResponse.Id}' has type '{unknownResponse.DeclaredType}' but a value or field that does not read (it needs a responseId, a label and a phase of damageReduction, hitPointOutcome or threshold; each outcome needs a kind of spend, regain, toggleOn, offerRoll, regainHitPoints or temporaryHitPoints; a content is an id); fix it before publishing.", unknownResponse.Id);
                     break;
                 case UnknownEffect unknown:
                     // Content v11 (D43): a roll with no dice is typed only from v11, so below it the roll stays reference-only as it
@@ -470,6 +484,11 @@ public static class ContentValidator
                         Error("validate.toggle-unknown", $"Roll mode '{rollMode.Id}' names the content that declares its toggle but names no toggle; add the toggle, or remove toggleContent.", rollMode.Id);
                     }
                     break;
+                case ResponseEffect response:
+                    needsV11 = true;
+                    responses++;
+                    CheckResponse(response);
+                    break;
                 case RecoveryEffect recovery:
                     if (!string.Equals(recovery.Amount, "all", StringComparison.Ordinal))
                         CheckFormula(recovery.Amount, recovery.Id, "amount");
@@ -594,6 +613,10 @@ public static class ContentValidator
             Error("validate.toggle-group-duplicate", $"Toggle group '{group.Key}' is declared {group.Count()} times; declare each group once.", group.Skip(1).First().Id);
         foreach (var group in revision.Effects.OfType<ValueEffect>().GroupBy(v => v.ValueId).Where(g => g.Count() > 1))
             Error("validate.value-duplicate", $"Value id '{group.Key}' is declared {group.Count()} times in this revision; declare each value once.", group.Skip(1).First().Id);
+        foreach (var group in revision.Effects.OfType<ResponseEffect>().GroupBy(r => r.ResponseId).Where(g => g.Count() > 1))
+            Error("validate.response-duplicate", $"Response id '{group.Key}' is declared {group.Count()} times in this revision; declare each response once.", group.Skip(1).First().Id);
+        if (responses > MaxResponsesPerRevision)
+            Error("validate.response-too-many", $"This revision declares {responses} response effects; the most is {MaxResponsesPerRevision}.");
         if (upkeeps > MaxUpkeepsPerRevision)
             Error("validate.upkeep-too-many", $"This revision declares {upkeeps} upkeep effects; the most is {MaxUpkeepsPerRevision}.");
         foreach (var allowance in revision.Effects.OfType<ResourceEffect>().Where(r => r.Allowance == true))
@@ -621,7 +644,7 @@ public static class ContentValidator
         // revision built in code can still declare an older version, and an older build would ignore or refuse them.
         needsV11 |= usedValues.Count > 0;
         if (needsV11 && revision.SchemaVersion < ContentRevision.PlayMechanicsSchemaVersion)
-            Error("validate.requires-v11", $"This revision uses content schema v11 features (toggle groups, toggle layers, costs, levels or durations, upkeeps, counting-up pools or allowances, attacks, attack riders, a toggle of another content or a resource target, roll saves, areas, ranges, targets or per-unit dice, a roll with no dice, named values or VALUE in a formula, roll modes, fly speed, form-only defences) but declares v{revision.SchemaVersion}; an older build would ignore, misread or refuse them.");
+            Error("validate.requires-v11", $"This revision uses content schema v11 features (toggle groups, toggle layers, costs, levels or durations, upkeeps, counting-up pools or allowances, attacks, attack riders, a toggle of another content or a resource target, roll saves, areas, ranges, targets or per-unit dice, a roll with no dice, named values or VALUE in a formula, roll modes, damage responses, fly speed, form-only defences) but declares v{revision.SchemaVersion}; an older build would ignore, misread or refuse them.");
         if (needsV10 && revision.SchemaVersion < ContentRevision.PlayDetailsSchemaVersion)
             Error("validate.requires-v10", $"This revision uses content schema v10 features (passive or speed targets, autoWhen, activation, damage defence grants, an item effect) but declares v{revision.SchemaVersion}; an older build would ignore, misread or refuse them.");
         needsV9 |= usedScales.Count > 0;
@@ -682,9 +705,9 @@ public static class ContentValidator
         // (validate.requires-v9) rather than as an unknown value. Every formula field goes through here: modifier value,
         // resource maximum, recovery amount, roll cost and bonus, and spellsFormula (ADR-010).
         // Likewise VALUE (content v11) is parsed as known, so a VALUE in an older revision is named as needing v11.
-        void CheckFormula(string source, string effectId, string what, string code = "validate.formula-invalid")
+        void CheckFormula(string source, string effectId, string what, string code = "validate.formula-invalid", FormulaFeatures features = AllFormulaFeatures)
         {
-            if (!Formula.TryParse(source, AllFormulaFeatures, out var formula, out var error))
+            if (!Formula.TryParse(source, features, out var formula, out var error))
                 Error(code, $"Effect '{effectId}' {what} '{source}': {error!.Message} ({error.Code})", effectId);
             else
                 NoteUsed(formula!);
@@ -854,6 +877,104 @@ public static class ContentValidator
                 Warn("validate.toggle-content-missing", $"Effect '{effectId}' follows toggle '{toggleId}' of content {holder}, which is not installed; it is unchecked until that content is.", effectId);
             else if (!declarers.SelectMany(r => r.Effects.OfType<ToggleEffect>()).Any(t => t.ToggleId == toggleId))
                 Error(errorCode, $"Effect '{effectId}' follows toggle '{toggleId}', which content {holder} does not define.", effectId);
+        }
+
+        // Content v11 (D43): a damage-time response. Messages name ids and counts, never the label. A reference with no content
+        // names this revision's; a pool or roll in content that is not installed is an error (unlike a toggle, which warns).
+        void CheckResponse(ResponseEffect response)
+        {
+            var id = response.Id;
+            var rid = response.ResponseId;
+            if (string.IsNullOrWhiteSpace(response.ResponseId) || string.IsNullOrWhiteSpace(response.Label))
+                Error("validate.response-incomplete", $"Response '{id}' needs a responseId and a label.", id);
+            if (response.Cost is not null && string.IsNullOrWhiteSpace(response.ResourceId))
+                Error("validate.response-incomplete", $"Response '{rid}' has a cost but names no resourceId to spend it from.", id);
+            if (!string.IsNullOrWhiteSpace(response.ResourceId) && FindResource(response.ResourceContent, response.ResourceId) is null)
+                Error("validate.response-incomplete", $"Response '{rid}' spends pool '{response.ResourceId}', which content {response.ResourceContent ?? revision.ContentId} does not define.", id);
+            if (response.Cost is { } cost)
+                CheckFormula(cost, id, "cost");
+
+            if (response.Phase == ResponsePhase.Threshold)
+            {
+                if (response.Amount is not null)
+                    Error("validate.response-amount", $"Response '{rid}' is a threshold and takes no amount; its outcomes carry the amounts.", id);
+                var when = response.When;
+                if (when is null)
+                    Error("validate.response-when", $"Response '{rid}' is a threshold and needs a when (atOrBelow or survived).", id);
+                else
+                {
+                    if ((when.AtOrBelow is null) == (when.Survived is null))
+                        Error("validate.response-when", $"Response '{rid}' when needs exactly one of atOrBelow and survived.", id);
+                    if (when.Survived == false)
+                        Error("validate.response-when", $"Response '{rid}' when.survived can only be true.", id);
+                    if (when.AtOrBelow is { } atOrBelow)
+                        CheckFormula(atOrBelow, id, "when.atOrBelow", features: AllFormulaFeatures | FormulaFeatures.HitPointMaximum);
+                }
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(response.Amount))
+                    Error("validate.response-amount", $"Response '{rid}' ({response.Phase.ToString().ToLowerInvariant()}) needs an amount.", id);
+                else
+                    CheckFormula(response.Amount, id, "amount");
+                if (response.When is not null)
+                    Error("validate.response-when", $"Response '{rid}' has a when, which only a threshold response takes.", id);
+            }
+
+            if (response.Toggle is { } toggle)
+                CheckToggleReference(toggle.ContentId, toggle.ToggleId, id, "validate.while-toggle-unknown");
+
+            var outcomes = response.Outcomes ?? [];
+            if (outcomes.Count > MaxOutcomesPerResponse)
+                Error("validate.response-too-many", $"Response '{rid}' declares {outcomes.Count} outcomes; the most is {MaxOutcomesPerResponse}.", id);
+            var hitPointOutcomes = 0;
+            foreach (var outcome in outcomes)
+            {
+                switch (outcome.Kind)
+                {
+                    case ResponseOutcomeKind.Spend:
+                    case ResponseOutcomeKind.Regain:
+                        if (string.IsNullOrWhiteSpace(outcome.ResourceId) || string.IsNullOrWhiteSpace(outcome.Amount))
+                            Error("validate.response-outcome", $"Response '{rid}' outcome {outcome.Kind.ToString().ToLowerInvariant()} needs a resourceId and an amount.", id);
+                        else
+                        {
+                            if (FindResource(outcome.ResourceContent, outcome.ResourceId) is null)
+                                Error("validate.response-outcome", $"Response '{rid}' outcome names pool '{outcome.ResourceId}', which content {outcome.ResourceContent ?? revision.ContentId} does not define.", id);
+                            CheckFormula(outcome.Amount, id, "outcome amount");
+                        }
+                        break;
+                    case ResponseOutcomeKind.ToggleOn:
+                        if (outcome.Toggle is null)
+                            Error("validate.response-outcome", $"Response '{rid}' outcome toggleon needs a toggle.", id);
+                        else
+                            CheckToggleReference(outcome.Toggle.ContentId, outcome.Toggle.ToggleId, id, "validate.response-outcome");
+                        break;
+                    case ResponseOutcomeKind.OfferRoll:
+                        if (string.IsNullOrWhiteSpace(outcome.RollId))
+                            Error("validate.response-outcome", $"Response '{rid}' outcome offerroll needs a rollId.", id);
+                        else
+                        {
+                            var holder = outcome.RollContent ?? revision.ContentId;
+                            var declarers = holder == revision.ContentId
+                                ? new List<ContentRevision> { revision }
+                                : local.OfContent(holder).Concat(catalog.RevisionsOf(holder)).Where(r => r.ContentId == holder).ToList();
+                            if (!declarers.SelectMany(r => r.Effects.OfType<RollEffect>()).Any(r => r.RollId == outcome.RollId))
+                                Error("validate.response-outcome", $"Response '{rid}' offers roll '{outcome.RollId}', which content {holder} does not define.", id);
+                        }
+                        break;
+                    default:
+                        hitPointOutcomes++;
+                        if (string.IsNullOrWhiteSpace(outcome.Amount))
+                            Error("validate.response-outcome-amount", $"Response '{rid}' outcome {outcome.Kind.ToString().ToLowerInvariant()} needs an amount.", id);
+                        else
+                            CheckFormula(outcome.Amount, id, "outcome amount", "validate.response-outcome-amount");
+                        break;
+                }
+            }
+            if (hitPointOutcomes > 1)
+                Error("validate.response-outcome", $"Response '{rid}' has {hitPointOutcomes} hit point outcomes; a response changes hit points once.", id);
+            if (hitPointOutcomes > 0 && response.Phase == ResponsePhase.HitPointOutcome)
+                Error("validate.response-outcome", $"Response '{rid}' sets the hit points it leaves, so it cannot also regain hit points or give temporary hit points.", id);
         }
 
         // Content v11 (D43): a modifier on resource.<id> adds to the maximum of a pool this revision declares, as a bonus only.
@@ -1122,6 +1243,7 @@ public static class ContentValidator
         Check("effects", revision.Effects is null || revision.Effects.Any(e => e is null));
         Check("rulesFamilies", revision.RulesFamilies is null || revision.RulesFamilies.Any(f => f is null));
         Check("choice options", revision.Effects?.OfType<ChoiceEffect>().Any(c => c.Options is null || c.Options.Any(o => o is null)) == true);
+        Check("response outcomes", revision.Effects?.OfType<ResponseEffect>().Any(r => r.Outcomes?.Any(o => o is null) == true) == true);
         return problems;
     }
 }

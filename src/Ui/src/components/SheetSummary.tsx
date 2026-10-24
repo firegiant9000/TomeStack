@@ -25,6 +25,8 @@ interface Props {
   /** D28: the previous rolls of this sheet session, newest first. */
   rollLog: LoggedRoll[];
   act: (action: PlayAction) => void | Promise<boolean>;
+  /** D43 S7: opens the damage panel for the amount and type ('' is untyped); used by "Lose 1 hit point" when the sheet has damage responses. */
+  onDamage?: (amount: number, type: string) => void;
   /** Rolls a d20 test for a field id (for example `ability.str.mod`) in the current mode. */
   onRoll: (field: string) => void;
   /** Rolls typed dice (item 8); rejects with the engine's refusal, which the box shows. */
@@ -39,7 +41,7 @@ interface Props {
  * `getByRole` and confuse screen readers). Traces and overrides stay on the field cards (Stats, Spells). An overridden
  * value says so in text (WCAG 1.4.1). The d20 roll mode and the last roll live here so they are reachable from every tab.
  */
-export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, act, onRoll, onRollDice, spellsTab = false }: Props) {
+export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, act, onDamage, onRoll, onRollDice, spellsTab = false }: Props) {
   const { character, sheet } = view;
   const field = (id: string): DerivedValue | undefined => sheet.fields.find((f) => f.field === id);
   const show = (id: string): string => {
@@ -125,7 +127,9 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, ac
                 aria-disabled={loseAtLimit || undefined}
                 onClick={() => {
                   if (loseAtLimit) return;
-                  act({ action: 'damage', amount: 1 });
+                  // D43 S7: with damage responses on the sheet, even one point is previewed first (untyped).
+                  if (onDamage && (sheet.responses ?? []).length > 0) onDamage(1, '');
+                  else act({ action: 'damage', amount: 1 });
                 }}
               >
                 −

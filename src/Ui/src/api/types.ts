@@ -495,6 +495,8 @@ export interface CharacterSheet {
   levelUpAvailable?: boolean;
   /** Wave 3 item 27: the total needed for the next level while experience points are tracked and the level is 1 to 19; absent otherwise. */
   xpForNextLevel?: number;
+  /** Content v11 (D43 S7): the damage responses the active content declares; absent when there are none. */
+  responses?: ResponseValue[];
 }
 
 /** When an item's charges come back; absent `regain` means all of them. */
@@ -554,6 +556,92 @@ export interface DamageOutcome {
   absorbed: number;
   lost: number;
   warnings: Diagnostic[];
+}
+
+/** Content v11 (D43 S7): when a damage response applies. */
+export type ResponsePhase = 'damageReduction' | 'hitPointOutcome' | 'threshold';
+export type ResponseOutcomeKind = 'spend' | 'regain' | 'toggleOn' | 'offerRoll' | 'regainHitPoints' | 'temporaryHitPoints';
+
+/** What a chosen response does, evaluated. */
+export interface ResponseOutcomeValue {
+  kind: ResponseOutcomeKind;
+  resourceContent?: string;
+  resourceId?: string;
+  amount?: number;
+  toggle?: { contentId?: string; toggleId: string };
+  roll?: ContentReference;
+  rollEffectId?: string;
+  rollId?: string;
+}
+
+/** One damage response of the character, calculated (`CharacterSheet.responses`; also inside each offer). Numbers come from the server. */
+export interface ResponseValue {
+  contentId: string;
+  contentName: string;
+  responseId: string;
+  label: string;
+  phase: ResponsePhase;
+  amount?: number;
+  costResourceContent?: string;
+  resourceId?: string;
+  cost?: number;
+  available: boolean;
+  unavailableReason?: string;
+  text?: string;
+  atOrBelow?: number;
+  survived: boolean;
+  outcomes?: ResponseOutcomeValue[];
+}
+
+/** One outcome of a `response` effect as authored (content v11); which members apply depends on `kind`. */
+export interface ResponseOutcomeDef {
+  kind: ResponseOutcomeKind;
+  resourceId?: string;
+  resourceContent?: string;
+  amount?: string;
+  toggle?: { contentId?: string; toggleId: string };
+  rollId?: string;
+  rollContent?: string;
+}
+
+/** A response chosen for a hit. */
+export interface ResponseChoice {
+  contentId: string;
+  responseId: string;
+}
+
+/** A response eligible for a hit; `offered` is false (with `reason`) when it cannot be chosen now. */
+export interface ResponseOffer {
+  response: ResponseValue;
+  offered: boolean;
+  reason?: string;
+}
+
+/** A roll a chosen response offers; the confirm returns it as a `damage.roll-offered` notice carrying the same content and effect id. */
+export interface OfferedRoll {
+  content: ContentReference;
+  effectId: string;
+  rollId: string;
+  label: string;
+}
+
+/**
+ * `character.damagePreview`: one hit with the responses chosen so far. When `notes` is not empty the choices cannot be applied and
+ * `after` is the current state, not the result. `updatedAt` is the stored stamp it was planned from; the confirm sends it back.
+ */
+export interface DamagePreview {
+  characterId: string;
+  amount: number;
+  type?: string;
+  reduction: number;
+  outcome: DamageOutcome;
+  after: HitPointState;
+  concentrationDc?: number;
+  concentrationEnds: boolean;
+  offers: ResponseOffer[];
+  rolls: OfferedRoll[];
+  notes: Diagnostic[];
+  updatedAt: string;
 }
 
 export interface ScaleValue {
@@ -639,6 +727,8 @@ export interface PlayAction {
   expectedUpdatedAt?: string;
   /** With `damage`: one of the thirteen damage types (any case). Absent: untyped, so no defence applies. */
   damageType?: string;
+  /** With `damage` (D43 S7): the damage responses chosen for this hit. A non-empty list makes the change compound (it needs `expectedUpdatedAt`). */
+  responses?: { contentId: string; responseId: string }[];
   /** With `spendCharge` or `regainCharge`: the equipment entry, by its id, or by `entryIndex` and `contentId` while it has none. */
   entryId?: string;
   entryIndex?: number;
@@ -1507,6 +1597,20 @@ export type Effect =
       against?: string[];
       toggle?: string;
       toggleContent?: string;
+    })
+  // Content v11 (D43 S7): a damage-time response. `amount` belongs to a damageReduction or hitPointOutcome response, `when` to a threshold one.
+  | (EffectBase & {
+      type: 'response';
+      responseId: string;
+      label: string;
+      phase: ResponsePhase;
+      amount?: string;
+      when?: { atOrBelow?: string; survived?: true };
+      resourceId?: string;
+      resourceContent?: string;
+      cost?: string;
+      toggle?: { contentId?: string; toggleId: string };
+      outcomes?: ResponseOutcomeDef[];
     })
   | (EffectBase & {
       type: 'resource';

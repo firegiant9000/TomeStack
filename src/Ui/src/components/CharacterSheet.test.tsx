@@ -31,6 +31,7 @@ vi.mock('../api/client', () => ({
     getCharacter: vi.fn(),
     turnPreview: vi.fn(),
     turn: vi.fn(),
+    damagePreview: vi.fn(),
   },
 }));
 
@@ -1604,4 +1605,201 @@ it('keeps the strip and the Undo busy while a turn confirm is in flight, and joi
   settle(combatView(3, { notices: [{ code: 'a', message: 'First' }, { code: 'b', message: 'Second' }] }));
   await waitFor(() => expect(onStatus).toHaveBeenCalledWith('First · Second'));
   await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'End encounter' }).disabled).toBe(false));
+});
+
+// D43 S7 (Task 7.6a): damage routing at the sheet level. The preview stamp is the view's, as on a real server.
+const braceResponse = { contentId: 'c-bulwark', contentName: 'Fixture Bulwark', responseId: 'brace', label: 'Brace', phase: 'damageReduction' as const, amount: 3, available: true, survived: false };
+const respondingView = () => view({ responses: [braceResponse] });
+const hitPreview = (over: object = {}) => ({
+  characterId: 'fixture-2', amount: 1, reduction: 0, outcome: { amount: 1, effect: 'none' as const, adjusted: 1, absorbed: 0, lost: 1, warnings: [] },
+  after: { maximum: 8, current: 7, temporary: 0 }, concentrationEnds: false, offers: [{ response: braceResponse, offered: true }], rolls: [], notes: [], updatedAt: '2026-10-03T00:00:00Z', ...over,
+});
+
+it('with damage responses, Take damage opens the damage panel; without them it applies in one step', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.damagePreview).mockReset();
+  vi.mocked(client.damagePreview).mockResolvedValue(hitPreview({ amount: 4 }));
+  const first = render(sheetElement(respondingView()));
+  await user.type(screen.getByRole('spinbutton', { name: 'Amount' }), '4');
+  await user.click(screen.getByRole('button', { name: 'Take damage' }));
+  expect(await screen.findByRole('button', { name: 'Apply damage' })).toBeTruthy();
+  expect(client.damagePreview).toHaveBeenCalledWith('fixture-2', 4, undefined, []);
+  first.unmount();
+
+  vi.mocked(client.play).mockReset();
+  vi.mocked(client.play).mockResolvedValue(view());
+  render(sheetElement(view()));
+  await user.type(screen.getByRole('spinbutton', { name: 'Amount' }), '4');
+  await user.click(screen.getByRole('button', { name: 'Take damage' }));
+  await waitFor(() => expect(client.play).toHaveBeenCalledWith('fixture-2', { action: 'damage', amount: 4 }));
+  expect(screen.queryByRole('button', { name: 'Apply damage' })).toBeNull();
+});
+
+it('each press of Lose 1 hit point reopens a fresh damage panel, also over one that shows Damage applied', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.damagePreview).mockReset();
+  vi.mocked(client.damagePreview).mockResolvedValue(hitPreview());
+  render(sheetElement(respondingView()));
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' }));
+  await screen.findByRole('button', { name: 'Apply damage' });
+  expect(client.damagePreview).toHaveBeenCalledTimes(1);
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' }));
+  await waitFor(() => expect(client.damagePreview).toHaveBeenCalledTimes(2)); // a new panel asked again
+  expect(screen.getAllByRole('button', { name: 'Apply damage' })).toHaveLength(1);
+});
+
+it('Apply with nothing chosen is plain damage: Undo is offered and restores the hit points', async () => {
+  const user = userEvent.setup();
+  const v = respondingView();
+  const damaged = { ...v, sheet: { ...v.sheet, hitPoints: { maximum: 8, current: 7, temporary: 0 } } };
+  const onChanged = vi.fn();
+  const element = (shown: CharacterView) => <CharacterSheet view={shown} onChanged={onChanged} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />;
+  vi.mocked(client.damagePreview).mockReset();
+  vi.mocked(client.damagePreview).mockResolvedValue(hitPreview());
+  vi.mocked(client.play).mockReset();
+  vi.mocked(client.play).mockResolvedValueOnce(damaged).mockResolvedValue(v);
+  const { rerender } = render(element(v));
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' }));
+  const apply = await screen.findByRole('button', { name: 'Apply damage' });
+  await waitFor(() => expect(apply.getAttribute('aria-disabled')).toBe('false'));
+  await user.click(apply);
+  await waitFor(() => expect(client.play).toHaveBeenCalledWith('fixture-2', { action: 'damage', amount: 1 }));
+  await waitFor(() => expect(onChanged).toHaveBeenCalledWith(damaged));
+  rerender(element(damaged));
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Apply damage' })).toBeNull());
+  await user.click(await screen.findByRole('button', { name: 'Undo last change: damage 1' }));
+  await waitFor(() => expect(client.play).toHaveBeenLastCalledWith('fixture-2', { action: 'setHitPoints', amount: 8 }));
+});
+
+it('a timeout while applying a response reloads the stored character, closes the panel and says so', async () => {
+  const user = userEvent.setup();
+  const onStatus = vi.fn();
+  const onChanged = vi.fn();
+  const fresh = withUpdatedAt(respondingView(), '2026-10-03T00:00:09Z');
+  vi.mocked(client.damagePreview).mockReset();
+  vi.mocked(client.damagePreview).mockResolvedValue(hitPreview());
+  vi.mocked(client.play).mockReset();
+  vi.mocked(client.play).mockRejectedValue(new TomeStackError({ code: 'timeout', message: 'No answer.' }));
+  vi.mocked(client.getCharacter).mockReset();
+  vi.mocked(client.getCharacter).mockResolvedValue(fresh);
+  render(<CharacterSheet view={respondingView()} onChanged={onChanged} onError={noop} onStatus={onStatus} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' }));
+  await user.click(await screen.findByRole('checkbox', { name: /Brace/ }));
+  const apply = screen.getByRole('button', { name: 'Apply damage' });
+  await waitFor(() => expect(apply.getAttribute('aria-disabled')).toBe('false'));
+  await user.click(apply);
+  await waitFor(() => expect(onStatus).toHaveBeenCalledWith('The reply did not arrive. The sheet was reloaded; check hit points before trying again.'));
+  expect(client.getCharacter).toHaveBeenCalledWith('fixture-2');
+  expect(onChanged).toHaveBeenCalledWith(fresh);
+  expect(client.play).toHaveBeenCalledTimes(1);
+  expect(screen.queryByRole('button', { name: 'Apply damage' })).toBeNull();
+});
+
+it('a timeout whose reload also fails says the sheet could not be reloaded', async () => {
+  const user = userEvent.setup();
+  const onStatus = vi.fn();
+  const onError = vi.fn();
+  vi.mocked(client.damagePreview).mockReset();
+  vi.mocked(client.damagePreview).mockResolvedValue(hitPreview());
+  vi.mocked(client.play).mockReset();
+  vi.mocked(client.play).mockRejectedValue(new TomeStackError({ code: 'timeout', message: 'No answer.' }));
+  vi.mocked(client.getCharacter).mockReset();
+  vi.mocked(client.getCharacter).mockRejectedValue(new Error('offline'));
+  render(<CharacterSheet view={respondingView()} onChanged={noop} onError={onError} onStatus={onStatus} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' }));
+  await user.click(await screen.findByRole('checkbox', { name: /Brace/ }));
+  const apply = screen.getByRole('button', { name: 'Apply damage' });
+  await waitFor(() => expect(apply.getAttribute('aria-disabled')).toBe('false'));
+  await user.click(apply);
+  await waitFor(() => expect(onStatus).toHaveBeenCalledWith('The reply did not arrive and the sheet could not be reloaded. Reload before trying again.'));
+  expect(onStatus).not.toHaveBeenCalledWith(expect.stringContaining('was reloaded'));
+  expect(onError).toHaveBeenCalled();
+});
+
+it('the reload after a damage timeout waits its turn in the save queue, so a later apply is not rolled back by it', async () => {
+  const user = userEvent.setup();
+  const onChanged = vi.fn();
+  const v = respondingView();
+  const stale = v; // the stored copy as the reload read it, before panel 2's hit
+  const afterPanel2 = { ...v, character: { ...v.character, updatedAt: '2026-10-03T00:00:05Z' }, sheet: { ...v.sheet, hitPoints: { maximum: 8, current: 7, temporary: 0 } } };
+  const reload = pending();
+  vi.mocked(client.damagePreview).mockReset();
+  vi.mocked(client.damagePreview).mockResolvedValue(hitPreview());
+  vi.mocked(client.play).mockReset();
+  vi.mocked(client.play).mockRejectedValueOnce(new TomeStackError({ code: 'timeout', message: 'No answer.' })).mockResolvedValueOnce(afterPanel2);
+  vi.mocked(client.getCharacter).mockReset();
+  vi.mocked(client.getCharacter).mockReturnValue(reload.promise);
+  render(<CharacterSheet view={v} onChanged={onChanged} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+
+  // Panel 1: a response is applied, the reply never arrives (timeout), and the reload of the stored copy is on its way.
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' }));
+  await user.click(await screen.findByRole('checkbox', { name: /Brace/ }));
+  const first = screen.getByRole('button', { name: 'Apply damage' });
+  await waitFor(() => expect(first.getAttribute('aria-disabled')).toBe('false'));
+  await user.click(first);
+  await waitFor(() => expect(client.getCharacter).toHaveBeenCalledTimes(1));
+
+  // Panel 2: plain damage applied while that reload is still in flight.
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' }));
+  const second = await screen.findByRole('button', { name: 'Apply damage' });
+  await waitFor(() => expect(second.getAttribute('aria-disabled')).toBe('false'));
+  await user.click(second);
+  await new Promise((r) => setTimeout(r, 30)); // an unqueued apply would have finished and been shown by now
+
+  // The late reload reply must not be shown after panel 2's apply.
+  reload.settle(stale);
+  await waitFor(() => expect(onChanged).toHaveBeenCalledWith(afterPanel2));
+  expect(onChanged.mock.calls.at(-1)![0]).toBe(afterPanel2);
+});
+
+it('a timeout from the first damage panel after a second press reloads, says so, and leaves the new panel open', async () => {
+  const user = userEvent.setup();
+  const onStatus = vi.fn();
+  const fresh = withUpdatedAt(respondingView(), '2026-10-03T00:00:09Z');
+  let timeOut: (error: unknown) => void = noop;
+  const first = new Promise<CharacterView>((_resolve, reject) => {
+    timeOut = reject;
+  });
+  vi.mocked(client.damagePreview).mockReset();
+  vi.mocked(client.damagePreview).mockResolvedValue(hitPreview());
+  vi.mocked(client.play).mockReset();
+  vi.mocked(client.play).mockReturnValueOnce(first);
+  vi.mocked(client.getCharacter).mockReset();
+  vi.mocked(client.getCharacter).mockResolvedValue(fresh);
+  render(<CharacterSheet view={respondingView()} onChanged={noop} onError={noop} onStatus={onStatus} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' }));
+  await user.click(await screen.findByRole('checkbox', { name: /Brace/ }));
+  const apply = screen.getByRole('button', { name: 'Apply damage' });
+  await waitFor(() => expect(apply.getAttribute('aria-disabled')).toBe('false'));
+  await user.click(apply);
+  await waitFor(() => expect(client.play).toHaveBeenCalledTimes(1));
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' })); // a fresh panel replaces the one that is applying
+  await waitFor(() => expect(client.damagePreview).toHaveBeenCalledTimes(3));
+
+  timeOut(new TomeStackError({ code: 'timeout', message: 'No answer.' }));
+  await waitFor(() => expect(onStatus).toHaveBeenCalledWith('The reply did not arrive. The sheet was reloaded; check hit points before trying again.'));
+  expect(client.getCharacter).toHaveBeenCalledWith('fixture-2');
+  expect(screen.getByRole('button', { name: 'Apply damage' })).toBeTruthy(); // the new panel stays open
+});
+
+it('the reply of a replaced damage panel does not close the new panel', async () => {
+  const user = userEvent.setup();
+  const onChanged = vi.fn();
+  const first = pending();
+  vi.mocked(client.damagePreview).mockReset();
+  vi.mocked(client.damagePreview).mockResolvedValue(hitPreview());
+  vi.mocked(client.play).mockReset();
+  vi.mocked(client.play).mockReturnValueOnce(first.promise);
+  render(<CharacterSheet view={respondingView()} onChanged={onChanged} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' }));
+  await user.click(await screen.findByRole('checkbox', { name: /Brace/ }));
+  const apply = screen.getByRole('button', { name: 'Apply damage' });
+  await waitFor(() => expect(apply.getAttribute('aria-disabled')).toBe('false'));
+  await user.click(apply);
+  await waitFor(() => expect(client.play).toHaveBeenCalledTimes(1));
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' })); // a fresh panel replaces the one that is applying
+  await waitFor(() => expect(client.damagePreview).toHaveBeenCalledTimes(3));
+  first.settle(respondingView());
+  await waitFor(() => expect(onChanged).toHaveBeenCalled()); // the applied damage still reaches the sheet
+  expect(await screen.findByRole('button', { name: 'Apply damage' })).toBeTruthy(); // and the new panel stays open
 });
