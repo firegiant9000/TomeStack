@@ -69,6 +69,8 @@ public class ResponseContentTests
     [InlineData("""{"type":"response","id":"r","responseId":"brace","label":"Brace","phase":"threshold","when":{"survived":true},"outcomes":[{"kind":"spend, regain","resourceId":"grit","amount":"1"}]}""")]
     [InlineData("""{"type":"response","id":"r","responseId":"brace","label":"Brace","phase":"threshold","when":{"survived":true},"outcomes":[{"amount":"1"}]}""")]
     [InlineData("""{"type":"response","id":"r","responseId":"brace","label":"Brace","phase":"threshold","when":{"survived":true},"outcomes":"spend"}""")]
+    [InlineData("""{"type":"response","id":"r","responseId":"brace","label":"Brace","phase":"threshold","when":"survived"}""")]
+    [InlineData("""{"type":"response","id":"r","responseId":"brace","label":"Brace","phase":"threshold","when":{"survived":"true"}}""")]
     [InlineData("""{"type":"response","id":"r","label":"Brace","phase":"damageReduction","amount":"3"}""")]
     [InlineData("""{"type":"response","id":"r","responseId":"brace","phase":"damageReduction","amount":"3"}""")]
     [InlineData("""{"type":"response","id":"r","responseId":"brace","label":"Brace","amount":"3"}""")]

@@ -106,7 +106,8 @@ public sealed record CharacterSheet(
     IReadOnlyList<ItemUseValue>? ItemUses = null,
     bool? LevelUpAvailable = null,
     int? XpForNextLevel = null,
-    IReadOnlyList<UpkeepValue>? Upkeeps = null)
+    IReadOnlyList<UpkeepValue>? Upkeeps = null,
+    IReadOnlyList<ResponseValue>? Responses = null)
 {
     public DerivedValue Field(string field) => Fields.Single(f => f.Field == field);
 }
@@ -704,6 +705,8 @@ public static class CharacterCalculator
         var resources = CollectResources(active, character, resolved.ClassLevels, values, family, resourceBonuses);
         var rollBonuses = RollBonuses(active, character, resolved.ClassLevels, values, diagnostics);
         var rollDetails = RollDetailsOf(active, family, character, resolved.ClassLevels, values, diagnostics);
+        // Before the feature list: a response whose formula fails reports on its feature (effect.invalid-formula). HP.MAX is this sheet's own maximum.
+        var responses = CollectResponses(active, character, resolved.ClassLevels, values, resources, effective, autoOn, values[FieldIds.HitPoints], diagnostics);
         // Before the feature list: a form-only defence of absent content reports on its feature (modifier.toggle-content-missing).
         var damageDefences = CollectDamageDefences(active, character, resolved.ClassLevels, effective, autoOn, diagnostics);
         var scoped = diagnostics.Concat(warnings.Values.SelectMany(w => w)).Concat(resources.SelectMany(r => r.Warnings)).Where(d => d.Content is not null).Distinct().ToList();
@@ -800,7 +803,120 @@ public static class CharacterCalculator
             character.Id, family, fields, diagnostics, resolved.Choices, [.. active.Select(a => a.Revision.Reference)], resources, features, hitPoints, hitDice,
             spellcasting, spellSlots, pactSlots, attacks, toggles, scales.Count > 0 ? scales : null, bloodied ? true : null,
             damageDefences.Count > 0 ? damageDefences : null, null, // the item uses are added once by Calculate (WithItemUses)
-            xpForNextLevel is { } next && character.Xp >= next ? true : null, xpForNextLevel, upkeeps.Count > 0 ? upkeeps : null), active);
+            xpForNextLevel is { } next && character.Xp >= next ? true : null, xpForNextLevel, upkeeps.Count > 0 ? upkeeps : null,
+            responses.Count > 0 ? responses : null), active);
+    }
+
+    /// <summary>The most damage responses one sheet lists (risk C5); later ones are dropped in sheet order with <c>response.too-many</c>.</summary>
+    private const int MaxResponses = 64;
+
+    /// <summary>
+    /// Content v11 (D43, D45): the damage responses of the active content, in active-content order and then effect order. Reference-only
+    /// and conditional (timing) responses are not calculated. Every formula is evaluated here, once the hit point maximum is known:
+    /// <c>amount</c>, <c>cost</c>, each outcome's amount and a threshold's <c>atOrBelow</c> (the only place <c>HP.MAX</c> resolves, to
+    /// <paramref name="hitPointMaximum"/>); an evaluated amount is within 0 and <see cref="PlayState.MaxHitPoints"/>. A formula that fails, or
+    /// a roll the character does not have, makes the response unavailable and the formula failure an <c>effect.invalid-formula</c>
+    /// diagnostic. A response is also unavailable while its toggle is off or when its pool cannot pay its cost.
+    /// </summary>
+    private static List<ResponseValue> CollectResponses(
+        List<ActiveContent> active, Character character, ClassLevelMap classLevels, Dictionary<string, int> values, List<ResourceValue> resources,
+        EffectiveToggles effective, bool autoOn, int hitPointMaximum, List<Diagnostic> diagnostics)
+    {
+        var candidates = active
+            .SelectMany(item => item.Revision.Effects.OfType<ResponseEffect>()
+                .Where(r => r.Automation != AutomationStatus.Reference && r.Timing == EffectTiming.Always)
+                .Select(r => (Item: item, Effect: r)))
+            .ToList();
+        if (candidates.Count > MaxResponses)
+        {
+            AddOnce(diagnostics, new("response.too-many", $"The character has {candidates.Count} damage responses; only the first {MaxResponses} are listed."));
+            candidates = candidates.GetRange(0, MaxResponses);
+        }
+
+        ResponseValue ResponseOf(ActiveContent item, ResponseEffect response)
+        {
+            var revision = item.Revision;
+            var own = revision.ContentId;
+            var failed = false;
+            int? Evaluate(string? source, bool threshold = false)
+            {
+                if (source is null)
+                    return null;
+                var features = Formula.FeaturesFor(revision) | (threshold ? FormulaFeatures.HitPointMaximum : FormulaFeatures.None);
+                FormulaError? failure;
+                if (Formula.TryParse(source, features, out var formula, out failure)
+                    && formula!.TryEvaluate(
+                        id => threshold && id == FormulaIdentifiers.HitPointMaximum ? hitPointMaximum : Resolve(id, item, character, classLevels, values, []),
+                        out var value, out failure))
+                    return Math.Clamp(value, 0, PlayState.MaxHitPoints);
+                failed = true;
+                AddOnce(diagnostics, InvalidFormula(revision, response, failure!));
+                return null;
+            }
+
+            var amount = Evaluate(response.Amount);
+            var cost = Evaluate(response.Cost);
+            var atOrBelow = Evaluate(response.When?.AtOrBelow, threshold: true);
+            var rollMissing = false;
+            var outcomes = new List<ResponseOutcomeValue>();
+            foreach (var outcome in response.Outcomes ?? [])
+            {
+                switch (outcome.Kind)
+                {
+                    case ResponseOutcomeKind.Spend:
+                    case ResponseOutcomeKind.Regain:
+                        outcomes.Add(new(outcome.Kind, outcome.ResourceContent ?? own, outcome.ResourceId, Evaluate(outcome.Amount), null, null, null, null));
+                        break;
+                    case ResponseOutcomeKind.RegainHitPoints:
+                    case ResponseOutcomeKind.TemporaryHitPoints:
+                        outcomes.Add(new(outcome.Kind, null, null, Evaluate(outcome.Amount), null, null, null, null));
+                        break;
+                    case ResponseOutcomeKind.ToggleOn:
+                        outcomes.Add(new(outcome.Kind, null, null, null, outcome.Toggle is { } toggle ? new ToggleRef(toggle.ContentId ?? own, toggle.ToggleId) : null, null, null, null));
+                        break;
+                    default:
+                        var rollContent = outcome.RollContent ?? own;
+                        var owner = active.FirstOrDefault(a => a.Revision.ContentId == rollContent);
+                        var roll = owner?.Revision.Effects.OfType<RollEffect>().FirstOrDefault(r => r.RollId == outcome.RollId);
+                        rollMissing |= roll is null;
+                        outcomes.Add(new(outcome.Kind, null, null, null, null, roll is null ? null : owner!.Revision.Reference, roll?.Id, outcome.RollId));
+                        break;
+                }
+            }
+
+            var poolContent = response.ResourceId is null ? (Guid?)null : response.ResourceContent ?? own;
+            string? reason = null;
+            if (failed)
+            {
+                reason = "Formula failed";
+            }
+            else if (rollMissing)
+            {
+                reason = "Roll not found";
+            }
+            else if (response.Toggle is { } form)
+            {
+                var formOwner = active.FirstOrDefault(a => a.Revision.ContentId == (form.ContentId ?? own));
+                var formToggle = formOwner?.Revision.Effects.OfType<ToggleEffect>().FirstOrDefault(t => t.ToggleId == form.ToggleId);
+                if (formOwner is null || formToggle is null || !ToggleIsOn(formOwner.Revision, formToggle, effective, autoOn))
+                    reason = $"Available in {formOwner?.Revision.Name ?? form.ToggleId}";
+            }
+            if (reason is null && cost is { } needed && response.ResourceId is { } poolId)
+            {
+                var pool = resources.FirstOrDefault(r => r.Content.ContentId == poolContent && r.ResourceId == poolId);
+                if (pool is null)
+                    reason = $"Needs {needed} {poolId} (0 left)";
+                else if (pool.Current is not { } left)
+                    reason = $"Needs {needed} {pool.Label} (not tracked)";
+                else if (left < needed)
+                    reason = $"Needs {needed} {pool.Label} ({left} left)";
+            }
+            return new(
+                own, revision.Name, response.ResponseId, response.Label, response.Phase, amount, poolContent, response.ResourceId, cost,
+                reason is null, reason, response.Text, atOrBelow, response.When?.Survived == true, outcomes.Count > 0 ? outcomes : null);
+        }
+
+        return [.. candidates.Select(c => ResponseOf(c.Item, c.Effect))];
     }
 
     /// <summary>
