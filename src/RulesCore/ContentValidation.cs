@@ -53,6 +53,9 @@ public static class ContentValidator
     /// <summary>The most outcomes one response declares (content v11).</summary>
     public const int MaxOutcomesPerResponse = 8;
 
+    /// <summary>The most other pools one roll also changes (content v11, <c>alsoChange</c>).</summary>
+    public const int MaxAlsoChanges = 4;
+
     /// <summary>The largest area size or line width a roll declares, in feet (content v11).</summary>
     private const int MaxAreaFeet = 1_000;
 
@@ -507,7 +510,8 @@ public static class ContentValidator
                     {
                         Error("validate.dice-invalid", $"Roll '{roll.Id}' dice '{roll.Dice}': {diceError!.Message} ({diceError.Code})", roll.Id);
                     }
-                    needsV11 |= roll.Save is not null || roll.Area is not null || roll.Range is not null || roll.Targets is not null || roll.PerUnit is not null;
+                    needsV11 |= roll.Save is not null || roll.Area is not null || roll.Range is not null || roll.Targets is not null || roll.PerUnit is not null
+                        || roll.AlsoChange is not null || roll.DrawsDown is not null;
                     CheckRollDetails(roll);
                     needsV5 |= roll.Activation is not null;
                     needsV6 |= roll.ResourceContent is not null || roll.Cost is not null || roll.VariableCost is not null;
@@ -525,7 +529,7 @@ public static class ContentValidator
                     }
                     if ((roll.Cost is not null || roll.VariableCost == true) && roll.ResourceId is null)
                         Error("validate.roll-cost", $"Roll '{roll.Id}' has a cost but names no resource to spend.", roll.Id);
-                    if (roll.ResourceId is { } rollPool && FindResource(roll.ResourceContent, rollPool)?.Counts == ResourceCounting.Up)
+                    if (roll.ResourceId is { } rollPool && roll.DrawsDown != true && FindResource(roll.ResourceContent, rollPool)?.Counts == ResourceCounting.Up)
                         Warn("validate.cost-counts-up", $"Roll '{roll.Id}' spends from '{rollPool}', a pool that counts up; a cost fills it instead of using it up.", roll.Id);
                     if (roll.ResourceContent is { } holder && holder != revision.ContentId && roll.ResourceId is { } shared)
                     {
@@ -764,6 +768,33 @@ public static class ContentValidator
                 if (roll.VariableCost == true)
                     Error("validate.roll-per-unit", $"Roll '{id}' has both per-unit dice and a variable cost; they contradict each other. Use one.", id);
             }
+            if (roll.AlsoChange is { } alsoChange)
+            {
+                if (alsoChange.Count > MaxAlsoChanges)
+                    Error("validate.also-change", $"Roll '{id}' changes {alsoChange.Count} other pools; the limit is {MaxAlsoChanges}.", id);
+                var rollHolder = roll.ResourceContent ?? revision.ContentId;
+                for (var i = 0; i < alsoChange.Count; i++)
+                {
+                    if (alsoChange[i] is not { } entry)
+                        continue; // a null item is reported once, as validate.empty-entry
+                    var number = i + 1;
+                    if (string.IsNullOrWhiteSpace(entry.ResourceId))
+                    {
+                        Error("validate.also-change", $"Roll '{id}' also-change entry {number} names no pool.", id);
+                    }
+                    else
+                    {
+                        var holder = entry.ResourceContent ?? revision.ContentId;
+                        if (FindResource(entry.ResourceContent, entry.ResourceId) is null)
+                            Error("validate.also-change", $"Roll '{id}' also-change entry {number} changes '{entry.ResourceId}', which content {holder} does not define or is not installed.", id);
+                        if (roll.ResourceId is { } ownPool && holder == rollHolder && string.Equals(entry.ResourceId, ownPool, StringComparison.Ordinal))
+                            Error("validate.also-change", $"Roll '{id}' also-change entry {number} names the roll's own pool '{ownPool}'; its cost already changes that.", id);
+                    }
+                    CheckFormula(entry.Amount ?? "", id, $"also-change entry {number} amount", "validate.also-change");
+                }
+            }
+            if (roll.DrawsDown == true && !(roll.ResourceId is { } drawn && FindResource(roll.ResourceContent, drawn)?.Counts == ResourceCounting.Up))
+                Error("validate.draws-down", $"Roll '{id}' draws down a pool but its resource is not a pool that counts up; name one, or remove drawsDown.", id);
         }
 
         // Content v11 (D43): a VALUE.<id> the revision reads that nothing it can see declares is a warning, not an error: whether
@@ -1244,6 +1275,7 @@ public static class ContentValidator
         Check("rulesFamilies", revision.RulesFamilies is null || revision.RulesFamilies.Any(f => f is null));
         Check("choice options", revision.Effects?.OfType<ChoiceEffect>().Any(c => c.Options is null || c.Options.Any(o => o is null)) == true);
         Check("response outcomes", revision.Effects?.OfType<ResponseEffect>().Any(r => r.Outcomes?.Any(o => o is null) == true) == true);
+        Check("roll alsoChange", revision.Effects?.OfType<RollEffect>().Any(r => r.AlsoChange?.Any(a => a is null) == true) == true);
         return problems;
     }
 }

@@ -172,13 +172,22 @@ internal static class Fixtures
     private static ContentReference ResponsesRef(int n) =>
         new(Guid.Parse($"6f0dc000-0000-4000-8000-{n:X12}"), Guid.Parse($"6f0de000-0000-4000-8000-{n:X12}"));
 
+    // Play mechanics slice 8 fixtures (fixture-pack-charging.json, content v11, D43): a use that also changes another pool, and a release that draws a counting-up pool down.
+    public static readonly ContentReference ChargeAdept = ChargingRef(0x80);
+    public static readonly ContentReference GatheringBeam = ChargingRef(0x81);
+
+    public static ContentPack ChargingPack() => Load<ContentPack>("fixture-pack-charging.json");
+
+    private static ContentReference ChargingRef(int n) =>
+        new(Guid.Parse($"6f0dc000-0000-4000-8000-{n:X12}"), Guid.Parse($"6f0de000-0000-4000-8000-{n:X12}"));
+
     /// <summary>
     /// The packs of <see cref="AllCatalog"/> plus every play-mechanics pack (D43). Each slice appends its pack here;
     /// <see cref="AllCatalog"/> is left alone so existing tests keep their counts.
     /// </summary>
     public static InMemoryContentCatalog PlayMechanicsCatalog()
     {
-        ContentPack[] packs = [Pack(), M1Pack(), SpellPack(), CombatPack(), EffectsPack(), MulticlassPack(), FormsPack(), TurnsPack(), FeatureAttacksPack(), ActionDetailsPack(), RollModesPack(), ResponsesPack()];
+        ContentPack[] packs = [Pack(), M1Pack(), SpellPack(), CombatPack(), EffectsPack(), MulticlassPack(), FormsPack(), TurnsPack(), FeatureAttacksPack(), ActionDetailsPack(), RollModesPack(), ResponsesPack(), ChargingPack()];
         return new([.. packs.SelectMany(p => p.Sources)], [.. packs.SelectMany(p => p.Revisions)]);
     }
 

@@ -221,12 +221,22 @@ public sealed record FeatureEntry(
 /// <param name="Range">The roll's range, as written. Shown, never automated.</param>
 /// <param name="Targets">Who the roll affects, as written. Shown, never automated.</param>
 /// <param name="PerUnit">Extra dice per unit spent, as written; the roll command applies it (Task 5.3).</param>
+/// <param name="AlsoChange">Content v11 (D43): the other pools the use also changes, each amount evaluated for this character (never below 0). Null when the roll has none.</param>
+/// <param name="DrawsDown">Content v11 (D43): the cost and per-unit amount use up the built-up value of the counting-up pool instead of adding to it.</param>
 public sealed record FeatureEffect(
     string Id, string Type, AutomationStatus Automation, string? Text, string? Label = null, string? Dice = null, string? ResourceId = null, Activation? Activation = null,
     Guid? ResourceContent = null, int? Cost = null, bool VariableCost = false, int? Bonus = null, bool Available = true, string? UnavailableReason = null,
     Ability? SaveAbility = null, int? SaveDc = null, IReadOnlyList<TraceEntry>? SaveTrace = null,
     RollArea? Area = null, string? Range = null, string? Targets = null,
-    RollPerUnit? PerUnit = null);
+    RollPerUnit? PerUnit = null,
+    IReadOnlyList<AlsoChangeValue>? AlsoChange = null, bool DrawsDown = false);
+
+/// <summary>
+/// Content v11 (D43): one pool a use also changes, for this character. <paramref name="ResourceContent"/> is the content that
+/// defines the pool (the roll's own when the content named none); <paramref name="Amount"/> is the evaluated formula, never below 0,
+/// or null when it could not be calculated (a diagnostic; the row is assisted).
+/// </summary>
+public sealed record AlsoChangeValue(Guid ResourceContent, string ResourceId, UpkeepChange Change, int? Amount);
 
 /// <summary>
 /// Content v6 (M3 B2): a toggle the player switches on and off, and whether it is on now. <paramref name="Auto"/> (content v10,
@@ -1766,7 +1776,7 @@ public static class CharacterCalculator
     }
 
     /// <summary>What a roll's cost and save DC came to for this character (<see cref="RollDetailsOf"/>).</summary>
-    private sealed record RollDetail(int? Cost, int? SaveDc, IReadOnlyList<TraceEntry>? SaveTrace, bool Failed);
+    private sealed record RollDetail(int? Cost, int? SaveDc, IReadOnlyList<TraceEntry>? SaveTrace, bool Failed, IReadOnlyList<AlsoChangeValue>? AlsoChange = null);
 
     /// <summary>
     /// Each roll's <c>cost</c> (a number of uses, never negative; one when it has a resource and no formula) and, from content v11
@@ -1823,7 +1833,26 @@ public static class CharacterCalculator
                         AddOnce(diagnostics, InvalidFormula(revision, roll, dcFailure!));
                     }
                 }
-                details[(revision.Reference, roll.Id)] = new(cost, saveDc, saveTrace, failed);
+                List<AlsoChangeValue>? alsoChange = null;
+                if (roll.AlsoChange is { } changes)
+                {
+                    alsoChange = [];
+                    foreach (var change in changes.OfType<AlsoChange>())
+                    {
+                        int? amount = null;
+                        if (TryEvaluate(change.Amount ?? "", item, character, classLevels, values, [], out var evaluated, out var amountFailure))
+                        {
+                            amount = Math.Max(evaluated, 0);
+                        }
+                        else
+                        {
+                            failed = true;
+                            AddOnce(diagnostics, InvalidFormula(revision, roll, amountFailure!));
+                        }
+                        alsoChange.Add(new(change.ResourceContent ?? revision.ContentId, change.ResourceId, change.Change, amount));
+                    }
+                }
+                details[(revision.Reference, roll.Id)] = new(cost, saveDc, saveTrace, failed, alsoChange);
             }
         }
         return details;
@@ -1876,7 +1905,8 @@ public static class CharacterCalculator
                 roll.Id, roll.Type, automation, roll.Text, roll.Label, roll.Dice, roll.ResourceId, roll.Activation,
                 roll.ResourceContent, detail?.Cost, roll.VariableCost == true,
                 bonuses.TryGetValue((revision.Reference, roll.Id), out var bonus) ? bonus : null, reason is null, reason,
-                roll.Save?.Ability, detail?.SaveDc, detail?.SaveTrace, roll.Area, roll.Range, roll.Targets, roll.PerUnit);
+                roll.Save?.Ability, detail?.SaveDc, detail?.SaveTrace, roll.Area, roll.Range, roll.Targets, roll.PerUnit,
+                detail?.AlsoChange, roll.DrawsDown == true);
         }
         var effects = revision.Effects.Select(e => e switch
         {

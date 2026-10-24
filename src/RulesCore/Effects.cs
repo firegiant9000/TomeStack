@@ -623,11 +623,25 @@ public sealed record RollEffect : Effect
     /// <summary>Content schema v11 (D43): extra dice per additional unit of the resource spent. Needs a <see cref="Cost"/> and a <see cref="ResourceId"/>.</summary>
     public RollPerUnit? PerUnit { get; init; }
 
+    /// <summary>
+    /// Content schema v11 (D43): other pools the use also spends from or regains to, at most
+    /// <see cref="ContentValidator.MaxAlsoChanges"/>. Below v11 the key stays extension data and does nothing.
+    /// </summary>
+    public IReadOnlyList<AlsoChange>? AlsoChange { get; init; }
+
+    /// <summary>
+    /// Content schema v11 (D43): true when the cost and per-unit amount use up the built-up value of the counting-up
+    /// <see cref="ResourceId"/> pool instead of adding to it. False is accepted and does nothing.
+    /// </summary>
+    public bool? DrawsDown { get; init; }
+
     /// <summary>The longest <see cref="Range"/> or <see cref="Targets"/>.</summary>
     public const int MaxTextLength = 200;
 
+    private const string AlsoChangeProperty = "alsoChange";
+
     /// <summary>The keys content schema v11 adds to this effect; below v11 they stay extension data.</summary>
-    internal static readonly string[] V11Keys = ["whileToggle", "save", "area", "range", "targets", "perUnit"];
+    internal static readonly string[] V11Keys = ["whileToggle", "save", "area", "range", "targets", "perUnit", "alsoChange", "drawsDown"];
 
     /// <summary>
     /// Typed by the revision when the converter hands it over (see <see cref="EffectJsonConverter"/>): v11 keys, and a roll with
@@ -645,11 +659,19 @@ public sealed record RollEffect : Effect
         raw.ValueKind == JsonValueKind.Object
         && !raw.EnumerateObject().Any(p => string.Equals(p.Name, "dice", StringComparison.OrdinalIgnoreCase) && p.Value.ValueKind != JsonValueKind.Null);
 
-    /// <summary>The save ability and area shape must be exactly a member name (the serializer also binds padded or combined names, which no schema allows).</summary>
+    /// <summary>The save ability, area shape and each alsoChange change must be exactly a member name (the serializer also binds padded or combined names, which no schema allows).</summary>
     private static bool ReadsEnums(JsonElement raw)
     {
         foreach (var p in raw.EnumerateObject())
         {
+            if (string.Equals(p.Name, AlsoChangeProperty, StringComparison.OrdinalIgnoreCase) && p.Value.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var entry in p.Value.EnumerateArray())
+                {
+                    if (entry.ValueKind == JsonValueKind.Object && !VersionedEffects.NamesMember<UpkeepChange>(entry, "change"))
+                        return false;
+                }
+            }
             if (p.Value.ValueKind != JsonValueKind.Object)
                 continue;
             if (string.Equals(p.Name, "save", StringComparison.OrdinalIgnoreCase) && !VersionedEffects.NamesMember<Ability>(p.Value, "ability"))
@@ -672,6 +694,12 @@ public sealed record RollArea([property: JsonRequired] AreaShape Shape, [propert
 
 /// <summary>Content schema v11 (D43): extra dice (<c>NdM</c>) for each unit spent beyond the base cost, up to <see cref="MaxUnits"/> units.</summary>
 public sealed record RollPerUnit([property: JsonRequired] string Dice, int? MaxUnits);
+
+/// <summary>
+/// Content schema v11 (D43): another pool a use also changes: spends from or regains to <see cref="ResourceId"/> (of
+/// <see cref="ResourceContent"/>, or of the roll's own content when null) by <see cref="Amount"/>, a formula.
+/// </summary>
+public sealed record AlsoChange(string ResourceId, Guid? ResourceContent, [property: JsonRequired] UpkeepChange Change, string Amount);
 
 /// <summary>
 /// Content schema v11 (D43): a named formula a feature declares, read as <c>VALUE.&lt;valueId&gt;</c> by other formulas of the

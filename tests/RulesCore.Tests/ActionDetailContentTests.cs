@@ -163,7 +163,7 @@ public class ActionDetailContentTests
     [Fact]
     public void The_roll_v11_key_list_has_the_new_keys()
     {
-        string[] keys = ["whileToggle", "save", "area", "range", "targets", "perUnit"];
+        string[] keys = ["whileToggle", "save", "area", "range", "targets", "perUnit", "alsoChange", "drawsDown"];
 
         Assert.Equal(keys.Order(StringComparer.Ordinal), RollKeys().Order(StringComparer.Ordinal));
 
