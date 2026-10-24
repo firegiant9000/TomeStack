@@ -1694,3 +1694,46 @@ it('a timeout while applying a response reloads the stored character, closes the
   expect(client.play).toHaveBeenCalledTimes(1);
   expect(screen.queryByRole('button', { name: 'Apply damage' })).toBeNull();
 });
+
+it('a timeout whose reload also fails says the sheet could not be reloaded', async () => {
+  const user = userEvent.setup();
+  const onStatus = vi.fn();
+  const onError = vi.fn();
+  vi.mocked(client.damagePreview).mockReset();
+  vi.mocked(client.damagePreview).mockResolvedValue(hitPreview());
+  vi.mocked(client.play).mockReset();
+  vi.mocked(client.play).mockRejectedValue(new TomeStackError({ code: 'timeout', message: 'No answer.' }));
+  vi.mocked(client.getCharacter).mockReset();
+  vi.mocked(client.getCharacter).mockRejectedValue(new Error('offline'));
+  render(<CharacterSheet view={respondingView()} onChanged={noop} onError={onError} onStatus={onStatus} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' }));
+  await user.click(await screen.findByRole('checkbox', { name: /Brace/ }));
+  const apply = screen.getByRole('button', { name: 'Apply damage' });
+  await waitFor(() => expect(apply.getAttribute('aria-disabled')).toBe('false'));
+  await user.click(apply);
+  await waitFor(() => expect(onStatus).toHaveBeenCalledWith('The reply did not arrive and the sheet could not be reloaded. Reload before trying again.'));
+  expect(onStatus).not.toHaveBeenCalledWith(expect.stringContaining('was reloaded'));
+  expect(onError).toHaveBeenCalled();
+});
+
+it('the reply of a replaced damage panel does not close the new panel', async () => {
+  const user = userEvent.setup();
+  const onChanged = vi.fn();
+  const first = pending();
+  vi.mocked(client.damagePreview).mockReset();
+  vi.mocked(client.damagePreview).mockResolvedValue(hitPreview());
+  vi.mocked(client.play).mockReset();
+  vi.mocked(client.play).mockReturnValueOnce(first.promise);
+  render(<CharacterSheet view={respondingView()} onChanged={onChanged} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' }));
+  await user.click(await screen.findByRole('checkbox', { name: /Brace/ }));
+  const apply = screen.getByRole('button', { name: 'Apply damage' });
+  await waitFor(() => expect(apply.getAttribute('aria-disabled')).toBe('false'));
+  await user.click(apply);
+  await waitFor(() => expect(client.play).toHaveBeenCalledTimes(1));
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' })); // a fresh panel replaces the one that is applying
+  await waitFor(() => expect(client.damagePreview).toHaveBeenCalledTimes(3));
+  first.settle(respondingView());
+  await waitFor(() => expect(onChanged).toHaveBeenCalled()); // the applied damage still reaches the sheet
+  expect(await screen.findByRole('button', { name: 'Apply damage' })).toBeTruthy(); // and the new panel stays open
+});

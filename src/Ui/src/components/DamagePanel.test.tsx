@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // D43 S7 (Task 7.6a): the damage panel with responses. The preview is fetched on open and again on every selection change; Apply sends
 // the selection with the stamp of the preview on screen. The client is mocked; names and numbers are invented.
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { act as flush, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { client } from '../api/client';
@@ -259,8 +259,12 @@ it('an older preview reply that lands after a newer one is discarded', async () 
   await waitFor(() => expect(screen.getByRole('list', { name: 'What happens' }).textContent).toContain('Hit points after: 22 of 35'));
   // The reply for the selection that was undone lands last and must not replace what is shown.
   second.resolve(preview({ offers: [offer(brace)], after: { maximum: 35, current: 1, temporary: 0 } }));
-  await Promise.resolve();
-  await waitFor(() => expect(screen.getByRole('list', { name: 'What happens' }).textContent).toContain('Hit points after: 22 of 35'));
+  await flush(async () => {
+    await second.promise; // flush the late reply and its state updates
+  });
+  const shown = screen.getByRole('list', { name: 'What happens' }).textContent!;
+  expect(shown).not.toContain('Hit points after: 1 of 35');
+  expect(shown).toContain('Hit points after: 22 of 35');
 });
 
 it('Apply is blocked while a re-preview is in flight', async () => {
@@ -395,6 +399,9 @@ it('skipped responses after a plain damage are named', () => {
       { code: 'damage.roll-offered', message: 'not for this panel', content, effectId: 'fx' },
     ],
   });
-  render(<HitPointsPanel view={view} act={() => {}} />);
+  const { rerender } = render(<HitPointsPanel view={view} act={() => {}} />);
   expect(screen.getByText('Available and not chosen: Brace.')).toBeTruthy();
+  // While the damage panel is open it lists them itself, so this line is not repeated.
+  rerender(<HitPointsPanel view={view} act={() => {}} panelOpen />);
+  expect(screen.queryByText(/Available and not chosen/)).toBeNull();
 });

@@ -318,7 +318,13 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   // Wave 3 item 21: the Hit points damage type; a weapon's damage roll pre-fills it. '' is untyped.
   const [damageType, setDamageType] = useState('');
   // Each press reopens the panel fresh (the counter is in its key), also while it shows "Damage applied".
-  const openDamage = (amount: number, type: string) => setDamaging((d) => ({ amount, type, n: (d?.n ?? 0) + 1 }));
+  const damageCount = useRef(0);
+  const openDamageN = useRef<number | undefined>(undefined); // the open panel's counter; a replaced panel's callbacks compare against it
+  const openDamage = (amount: number, type: string) => {
+    const n = ++damageCount.current;
+    openDamageN.current = n;
+    setDamaging({ amount, type, n });
+  };
   const compactToggle = useRef<HTMLInputElement>(null);
   const [gapAbout, setGapAbout] = useState('');
   const gapText = useRef<HTMLTextAreaElement>(null);
@@ -466,16 +472,30 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
     }
   }
   /** A damage confirm whose reply did not arrive may have been applied: reload the stored character, close the panel and say so. */
-  async function damageTimedOut() {
-    setDamaging(undefined);
+  async function damageTimedOut(n: number) {
+    closeDamage(n);
+    let reloaded = false;
     try {
       const fresh = await client.getCharacter(characterId);
       adopt(fresh); // unconditionally: the stored copy is the truth
       onChanged(fresh);
+      reloaded = true;
     } catch (error) {
       onError(error);
     }
-    if (mounted.current) onStatus('The reply did not arrive. The sheet was reloaded; check hit points before trying again.');
+    if (mounted.current)
+      onStatus(
+        reloaded
+          ? 'The reply did not arrive. The sheet was reloaded; check hit points before trying again.'
+          : 'The reply did not arrive and the sheet could not be reloaded. Reload before trying again.',
+      );
+  }
+  /** Closes the damage panel opened as `n`; a call from a panel that a newer press has replaced does nothing (it must not close the new one). */
+  function closeDamage(n: number): boolean {
+    if (openDamageN.current !== n) return false;
+    openDamageN.current = undefined;
+    setDamaging(undefined);
+    return true;
   }
   /** Resolves true when the play change was applied or timed out (outcome unknown), and false when it was refused or failed (the error has gone to `onError`). */
   async function act(action: PlayAction): Promise<boolean> {
@@ -739,12 +759,12 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
           amount={damaging.amount}
           type={damaging.type}
           onError={onError}
-          onTimeout={damageTimedOut}
+          onTimeout={() => damageTimedOut(damaging.n)}
           act={act}
           onRoll={roll}
           run={runTurn}
           onCancel={() => {
-            setDamaging(undefined);
+            if (!closeDamage(damaging.n)) return;
             // WCAG 2.4.3: back to the hit points (the Play tab's heading, else the summary's button).
             (document.getElementById('hp-heading') ?? document.querySelector<HTMLElement>('[aria-label="Lose 1 hit point"]'))?.focus();
           }}
