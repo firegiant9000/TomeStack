@@ -495,6 +495,8 @@ export interface CharacterSheet {
   levelUpAvailable?: boolean;
   /** Wave 3 item 27: the total needed for the next level while experience points are tracked and the level is 1 to 19; absent otherwise. */
   xpForNextLevel?: number;
+  /** Content v11 (D43 S7): the damage responses the active content declares; absent when there are none. */
+  responses?: ResponseValue[];
 }
 
 /** When an item's charges come back; absent `regain` means all of them. */
@@ -554,6 +556,81 @@ export interface DamageOutcome {
   absorbed: number;
   lost: number;
   warnings: Diagnostic[];
+}
+
+/** Content v11 (D43 S7): when a damage response applies. */
+export type ResponsePhase = 'damageReduction' | 'hitPointOutcome' | 'threshold';
+export type ResponseOutcomeKind = 'spend' | 'regain' | 'toggleOn' | 'offerRoll' | 'regainHitPoints' | 'temporaryHitPoints';
+
+/** What a chosen response does, evaluated. */
+export interface ResponseOutcomeValue {
+  kind: ResponseOutcomeKind;
+  resourceContent?: string;
+  resourceId?: string;
+  amount?: number;
+  toggle?: { contentId?: string; toggleId: string };
+  roll?: ContentReference;
+  rollEffectId?: string;
+  rollId?: string;
+}
+
+/** One damage response of the character, calculated (`CharacterSheet.responses`; also inside each offer). Numbers come from the server. */
+export interface ResponseValue {
+  contentId: string;
+  contentName: string;
+  responseId: string;
+  label: string;
+  phase: ResponsePhase;
+  amount?: number;
+  costResourceContent?: string;
+  resourceId?: string;
+  cost?: number;
+  available: boolean;
+  unavailableReason?: string;
+  text?: string;
+  atOrBelow?: number;
+  survived: boolean;
+  outcomes?: ResponseOutcomeValue[];
+}
+
+/** A response chosen for a hit. */
+export interface ResponseChoice {
+  contentId: string;
+  responseId: string;
+}
+
+/** A response eligible for a hit; `offered` is false (with `reason`) when it cannot be chosen now. */
+export interface ResponseOffer {
+  response: ResponseValue;
+  offered: boolean;
+  reason?: string;
+}
+
+/** A roll a chosen response offers; the confirm returns it as a `damage.roll-offered` notice carrying the same content and effect id. */
+export interface OfferedRoll {
+  content: ContentReference;
+  effectId: string;
+  rollId: string;
+  label: string;
+}
+
+/**
+ * `character.damagePreview`: one hit with the responses chosen so far. When `notes` is not empty the choices cannot be applied and
+ * `after` is the current state, not the result. `updatedAt` is the stored stamp it was planned from; the confirm sends it back.
+ */
+export interface DamagePreview {
+  characterId: string;
+  amount: number;
+  type?: string;
+  reduction: number;
+  outcome: DamageOutcome;
+  after: HitPointState;
+  concentrationDc?: number;
+  concentrationEnds: boolean;
+  offers: ResponseOffer[];
+  rolls: OfferedRoll[];
+  notes: Diagnostic[];
+  updatedAt: string;
 }
 
 export interface ScaleValue {

@@ -7,11 +7,13 @@ import type {
   CharacterView,
   ContentKind,
   DamageOutcome,
+  Diagnostic,
   FeatureEffect,
   FeatureEntry,
   PageRef,
   PlayAction,
   ResourceValue,
+  ResponseValue,
   RollMode,
   RollRecord,
   RollTarget,
@@ -87,7 +89,7 @@ export const pageText =(page?: PageRef) =>
 /** `act` resolves true when the change was applied or timed out (outcome unknown) and false when it was refused; a caller that does not wait may ignore it. */
 type Act = (action: PlayAction) => void | Promise<boolean>;
 
-const effectWords: Record<DamageOutcome['effect'], string> = {
+export const effectWords: Record<DamageOutcome['effect'], string> = {
   none: 'no defence',
   immune: 'immune',
   halved: 'halved',
@@ -103,6 +105,19 @@ export function damageResultText(damage: DamageOutcome): string {
 }
 
 /**
+ * D43 S7: the labels of the responses a reply says were available for a hit and not chosen (`damage.responses-skipped`, one per
+ * response, carrying the response id in `effectId`). A response the sheet no longer lists is left out: the message holds ids only.
+ */
+export function skippedLabelsOf(notices: Diagnostic[] | undefined, responses: ResponseValue[] | undefined): string[] {
+  const labels = (notices ?? [])
+    .filter((n) => n.code === 'damage.responses-skipped')
+    .map((n) => responses?.find((r) => r.contentId === n.content?.contentId && r.responseId === n.effectId)?.label);
+  return labels.filter((l): l is string => l !== undefined);
+}
+
+const skippedResponseLabels = (view: CharacterView) => skippedLabelsOf(view.notices, view.sheet.responses);
+
+/**
  * The damage type, first option "Untyped" (no defence applies). `onDamageType` makes it controlled, so a weapon's damage
  * roll elsewhere on the Play tab can pre-fill it; alone it keeps its own value.
  */
@@ -111,11 +126,14 @@ export function HitPointsPanel({
   act,
   damageType,
   onDamageType,
+  onDamage,
 }: {
   view: CharacterView;
   act: Act;
   damageType?: string;
   onDamageType?: (type: string) => void;
+  /** D43 S7: opens the damage panel (amount, type '' for untyped). Used instead of a one-step damage when the sheet has damage responses. */
+  onDamage?: (amount: number, type: string) => void;
 }) {
   const hp = view.sheet.hitPoints;
   const [amount, setAmount] = useState('');
@@ -132,6 +150,11 @@ export function HitPointsPanel({
 
   function apply(action: PlayAction['action']) {
     if (!valid) return;
+    if (action === 'damage' && onDamage && (view.sheet.responses ?? []).length > 0) {
+      onDamage(n, type);
+      setAmount('');
+      return;
+    }
     act({ action, amount: n, ...(action === 'damage' && type ? { damageType: type } : {}) });
     setAmount('');
   }
@@ -178,6 +201,7 @@ export function HitPointsPanel({
           ))}
         </>
       )}
+      {skippedResponseLabels(view).length > 0 && <p className="hint">Available and not chosen: {skippedResponseLabels(view).join(', ')}.</p>}
       <p className="hint">
         A damage type applies the character&apos;s resistances, immunities and vulnerabilities first (Untyped ignores them). Temporary hit points absorb the
         rest. They do not stack: setting them replaces the old value.
