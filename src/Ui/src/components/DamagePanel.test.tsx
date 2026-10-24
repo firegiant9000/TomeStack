@@ -68,12 +68,19 @@ function panel(over: Partial<Parameters<typeof DamagePanel>[0]> = {}) {
     onDone: vi.fn(),
     onCancel: vi.fn(),
     onError: vi.fn(),
+    onTimeout: vi.fn(),
+    act: vi.fn().mockResolvedValue(true),
     onRoll: vi.fn(),
     ...over,
   };
   return { ...render(<DamagePanel {...props} />), props };
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((r) => (resolve = r));
+  return { promise, resolve };
+}
 const prompts = (container: HTMLElement) => container.querySelector<HTMLElement>('[aria-live="polite"]')!;
 const lastChoices = () => vi.mocked(client.damagePreview).mock.calls.at(-1)![3];
 
@@ -143,7 +150,7 @@ it('an unaffordable response is disabled with its reason', async () => {
 
 it('Apply sends the preview basis and the selection, then closes', async () => {
   const user = userEvent.setup();
-  vi.mocked(client.damagePreview).mockImplementation(async (_id, _a, _t, choices) => preview({ offers: [offer(brace)], updatedAt: choices.length > 0 ? 'stamp-2' : 'stamp-1' }));
+  vi.mocked(client.damagePreview).mockResolvedValue(preview({ offers: [offer(brace)] }));
   const reply = { character: { updatedAt: 'stamp-3' }, notices: [] } as unknown as CharacterView;
   vi.mocked(client.play).mockResolvedValue(reply);
   const { props } = panel();
@@ -157,55 +164,120 @@ it('Apply sends the preview basis and the selection, then closes', async () => {
     amount: 13,
     damageType: 'slashing',
     responses: [{ contentId: C1, responseId: 'brace' }],
-    expectedUpdatedAt: 'stamp-2',
+    expectedUpdatedAt: 'stamp-1',
   });
   await waitFor(() => expect(props.onDone).toHaveBeenCalledWith(reply));
   expect(props.onCancel).toHaveBeenCalled(); // nothing to prompt: the panel closes
 });
 
-it('sends no damage type for untyped damage', async () => {
+it('Apply with nothing chosen is the one-step damage through act, so Undo works as for any plain hit', async () => {
   const user = userEvent.setup();
   vi.mocked(client.damagePreview).mockResolvedValue(preview({ type: undefined }));
-  vi.mocked(client.play).mockResolvedValue({} as CharacterView);
-  panel({ type: '', amount: 1 });
+  const { props } = panel({ type: '', amount: 1 });
   const apply = await screen.findByRole('button', { name: 'Apply damage' });
   await waitFor(() => expect(apply.getAttribute('aria-disabled')).toBe('false'));
   await user.click(apply);
-  await waitFor(() => expect(client.play).toHaveBeenCalledWith('fixture-7', { action: 'damage', amount: 1, responses: [], expectedUpdatedAt: 'stamp-1' }));
+  await waitFor(() => expect(props.act).toHaveBeenCalledWith({ action: 'damage', amount: 1 }));
+  expect(client.play).not.toHaveBeenCalled();
   expect(client.damagePreview).toHaveBeenCalledWith('fixture-7', 1, undefined, []);
+  await waitFor(() => expect(props.onCancel).toHaveBeenCalled());
+});
+
+it('a refused one-step damage keeps the panel open and previews again', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.damagePreview).mockResolvedValue(preview());
+  const { props } = panel({ act: vi.fn().mockResolvedValue(false) });
+  const apply = await screen.findByRole('button', { name: 'Apply damage' });
+  await waitFor(() => expect(apply.getAttribute('aria-disabled')).toBe('false'));
+  await user.click(apply);
+  await waitFor(() => expect(client.damagePreview).toHaveBeenCalledTimes(2));
+  expect(props.onCancel).not.toHaveBeenCalled();
 });
 
 it('a stale reply re-previews and says the sheet changed', async () => {
   const user = userEvent.setup();
-  let stamp = 1;
-  vi.mocked(client.damagePreview).mockImplementation(async () => preview({ updatedAt: `stamp-${stamp}` }));
+  vi.mocked(client.damagePreview).mockResolvedValue(preview({ offers: [offer(brace)] }));
   vi.mocked(client.play).mockRejectedValueOnce(new TomeStackError({ code: 'character.stale', message: 'The character changed.' }));
-  const { props, container } = panel();
-  const apply = await screen.findByRole('button', { name: 'Apply damage' });
+  const { props, container, rerender } = panel();
+  await user.click(await screen.findByRole('checkbox', { name: /Brace/ }));
+  const apply = screen.getByRole('button', { name: 'Apply damage' });
   await waitFor(() => expect(apply.getAttribute('aria-disabled')).toBe('false'));
-  stamp = 2;
   await user.click(apply);
-  await waitFor(() => expect(client.damagePreview).toHaveBeenCalledTimes(2));
   await waitFor(() => expect(prompts(container).textContent).toContain('The sheet changed. Check the damage again.'));
-  expect(props.onError).toHaveBeenCalled();
+  expect(props.onError).toHaveBeenCalled(); // the sheet reloads the stored copy, which arrives as a new view with the new stamp
   expect(props.onDone).not.toHaveBeenCalled();
+  vi.mocked(client.damagePreview).mockResolvedValue(preview({ offers: [offer(brace)], updatedAt: 'stamp-2' }));
+  const fresh = viewWith([brace, stand, endure, rally, spent]);
+  fresh.character.updatedAt = 'stamp-2';
+  rerender(<DamagePanel {...props} view={fresh} />);
   await waitFor(() => expect(apply.getAttribute('aria-disabled')).toBe('false'));
   vi.mocked(client.play).mockResolvedValue({} as CharacterView);
   await user.click(apply);
   await waitFor(() => expect(client.play).toHaveBeenLastCalledWith('fixture-7', expect.objectContaining({ expectedUpdatedAt: 'stamp-2' })));
 });
 
-it('a timeout re-previews instead of re-sending', async () => {
+it('a timeout on Apply sends nothing again, reloads through the sheet and does not preview for a retry', async () => {
   const user = userEvent.setup();
-  vi.mocked(client.damagePreview).mockResolvedValue(preview());
+  vi.mocked(client.damagePreview).mockResolvedValue(preview({ offers: [offer(brace)] }));
   vi.mocked(client.play).mockRejectedValueOnce(new TomeStackError({ code: 'timeout', message: 'No answer.' }));
   const { props } = panel();
-  const apply = await screen.findByRole('button', { name: 'Apply damage' });
+  await user.click(await screen.findByRole('checkbox', { name: /Brace/ }));
+  const apply = screen.getByRole('button', { name: 'Apply damage' });
   await waitFor(() => expect(apply.getAttribute('aria-disabled')).toBe('false'));
+  const previews = vi.mocked(client.damagePreview).mock.calls.length;
   await user.click(apply);
-  await waitFor(() => expect(client.damagePreview).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(props.onTimeout).toHaveBeenCalledTimes(1));
   expect(client.play).toHaveBeenCalledTimes(1);
+  expect(client.damagePreview).toHaveBeenCalledTimes(previews);
   expect(props.onDone).not.toHaveBeenCalled();
+  expect(props.onError).not.toHaveBeenCalled();
+});
+
+it('a preview planned from a newer stamp than the sheet shows keeps Apply disabled', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.damagePreview).mockResolvedValue(preview({ updatedAt: 'stamp-2' }));
+  panel();
+  const apply = await screen.findByRole('button', { name: 'Apply damage' });
+  await screen.findByRole('list', { name: 'What happens' });
+  expect(apply.getAttribute('aria-disabled')).toBe('true');
+  await user.click(apply);
+  expect(client.play).not.toHaveBeenCalled();
+});
+
+it('an older preview reply that lands after a newer one is discarded', async () => {
+  const user = userEvent.setup();
+  const first = deferred<DamagePreview>();
+  const second = deferred<DamagePreview>();
+  const third = deferred<DamagePreview>();
+  vi.mocked(client.damagePreview).mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise).mockReturnValueOnce(third.promise);
+  panel({ amount: 13 });
+  first.resolve(preview({ offers: [offer(brace)] }));
+  const box = await screen.findByRole('checkbox', { name: /Brace/ });
+  await user.click(box); // preview 2, held
+  await user.click(box); // selection back to empty: preview 3, held
+  third.resolve(preview({ offers: [offer(brace)], after: { maximum: 35, current: 22, temporary: 0 } }));
+  await waitFor(() => expect(screen.getByRole('list', { name: 'What happens' }).textContent).toContain('Hit points after: 22 of 35'));
+  // The reply for the selection that was undone lands last and must not replace what is shown.
+  second.resolve(preview({ offers: [offer(brace)], after: { maximum: 35, current: 1, temporary: 0 } }));
+  await Promise.resolve();
+  await waitFor(() => expect(screen.getByRole('list', { name: 'What happens' }).textContent).toContain('Hit points after: 22 of 35'));
+});
+
+it('Apply is blocked while a re-preview is in flight', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.damagePreview).mockResolvedValueOnce(preview({ offers: [offer(brace)] }));
+  const held = deferred<DamagePreview>();
+  vi.mocked(client.damagePreview).mockReturnValueOnce(held.promise);
+  panel();
+  const box = await screen.findByRole('checkbox', { name: /Brace/ });
+  const apply = screen.getByRole('button', { name: 'Apply damage' });
+  await waitFor(() => expect(apply.getAttribute('aria-disabled')).toBe('false'));
+  await user.click(box);
+  await waitFor(() => expect(apply.getAttribute('aria-disabled')).toBe('true'));
+  await user.click(apply);
+  expect(client.play).not.toHaveBeenCalled();
+  held.resolve(preview({ offers: [offer(brace)] }));
+  await waitFor(() => expect(apply.getAttribute('aria-disabled')).toBe('false'));
 });
 
 it('a selection that leaves the offers is dropped and re-previewed', async () => {
@@ -243,7 +315,7 @@ it('a one-outcome note disables Apply and shows the note', async () => {
 it('an offered roll after apply is a button that rolls it, and skipped responses are named', async () => {
   const user = userEvent.setup();
   const content = { contentId: C1, revisionId: 'r1' };
-  vi.mocked(client.damagePreview).mockResolvedValue(preview({ rolls: [{ content, effectId: 'fx-roll', rollId: 'recover', label: 'Recovery die' }] }));
+  vi.mocked(client.damagePreview).mockResolvedValue(preview({ offers: [offer(brace)], rolls: [{ content, effectId: 'fx-roll', rollId: 'recover', label: 'Recovery die' }] }));
   const reply = {
     character: { updatedAt: 'stamp-3' },
     notices: [
@@ -253,10 +325,11 @@ it('an offered roll after apply is a button that rolls it, and skipped responses
   } as unknown as CharacterView;
   vi.mocked(client.play).mockResolvedValue(reply);
   const { props, container } = panel();
-  const apply = await screen.findByRole('button', { name: 'Apply damage' });
+  await user.click(await screen.findByRole('checkbox', { name: /Brace/ }));
+  const apply = screen.getByRole('button', { name: 'Apply damage' });
   await waitFor(() => expect(apply.getAttribute('aria-disabled')).toBe('false'));
   await user.click(apply);
-  const roll = await screen.findByRole('button', { name: 'Roll Recovery die' });
+  const roll =await screen.findByRole('button', { name: 'Roll Recovery die' });
   expect(props.onCancel).not.toHaveBeenCalled(); // the prompts stay until the player closes the panel
   expect(prompts(container).contains(roll)).toBe(true);
   expect(prompts(container).textContent).toContain('Brace');

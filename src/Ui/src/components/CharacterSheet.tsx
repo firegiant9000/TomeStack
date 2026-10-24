@@ -311,13 +311,14 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   }, [turning]);
   const [undo, setUndo] = useState<UndoEntry>();
   // D43 S7: the open damage panel (the hit as entered), when the sheet has damage responses. It sits above the tabs: the summary opens it too.
-  const [damaging, setDamaging] = useState<{ amount: number; type: string }>();
+  const [damaging, setDamaging] = useState<{ amount: number; type: string; n: number }>();
   const hasResponses = (sheet.responses ?? []).length > 0;
   // The sheet lost its responses (a different build of the character): the panel's choices mean nothing now (adjusting state during render, guarded).
   if (damaging && !hasResponses) setDamaging(undefined);
   // Wave 3 item 21: the Hit points damage type; a weapon's damage roll pre-fills it. '' is untyped.
   const [damageType, setDamageType] = useState('');
-  const openDamage = (amount: number, type: string) => setDamaging({ amount, type });
+  // Each press reopens the panel fresh (the counter is in its key), also while it shows "Damage applied".
+  const openDamage = (amount: number, type: string) => setDamaging((d) => ({ amount, type, n: (d?.n ?? 0) + 1 }));
   const compactToggle = useRef<HTMLInputElement>(null);
   const [gapAbout, setGapAbout] = useState('');
   const gapText = useRef<HTMLTextAreaElement>(null);
@@ -463,6 +464,18 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
       running.current -= 1;
       setInFlight(running.current > 0);
     }
+  }
+  /** A damage confirm whose reply did not arrive may have been applied: reload the stored character, close the panel and say so. */
+  async function damageTimedOut() {
+    setDamaging(undefined);
+    try {
+      const fresh = await client.getCharacter(characterId);
+      adopt(fresh); // unconditionally: the stored copy is the truth
+      onChanged(fresh);
+    } catch (error) {
+      onError(error);
+    }
+    if (mounted.current) onStatus('The reply did not arrive. The sheet was reloaded; check hit points before trying again.');
   }
   /** Resolves true when the play change was applied or timed out (outcome unknown), and false when it was refused or failed (the error has gone to `onError`). */
   async function act(action: PlayAction): Promise<boolean> {
@@ -721,11 +734,13 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
 
       {damaging && hasResponses && (
         <DamagePanel
-          key={`${damaging.amount}-${damaging.type}`}
+          key={damaging.n}
           view={view}
           amount={damaging.amount}
           type={damaging.type}
           onError={onError}
+          onTimeout={damageTimedOut}
+          act={act}
           onRoll={roll}
           run={runTurn}
           onCancel={() => {
@@ -852,7 +867,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
         )}
         {/* Investigation 2026-10-06 item 8: two plain wrappers, side by side at 60rem and up, stacked below it. Visual order is DOM order. */}
         <div className="play-column">
-          <HitPointsPanel view={view} act={act} damageType={damageType} onDamageType={setDamageType} onDamage={openDamage} />
+          <HitPointsPanel view={view} act={act} damageType={damageType} onDamageType={setDamageType} onDamage={openDamage} panelOpen={damaging !== undefined} />
           <DeathSavesPanel view={view} act={act} roll={roll} lastRoll={lastRoll} />
           <ConcentrationPanel view={view} act={act} roll={roll} />
           <ConditionsPanel view={view} act={act} />

@@ -127,6 +127,7 @@ export function HitPointsPanel({
   damageType,
   onDamageType,
   onDamage,
+  panelOpen = false,
 }: {
   view: CharacterView;
   act: Act;
@@ -134,6 +135,8 @@ export function HitPointsPanel({
   onDamageType?: (type: string) => void;
   /** D43 S7: opens the damage panel (amount, type '' for untyped). Used instead of a one-step damage when the sheet has damage responses. */
   onDamage?: (amount: number, type: string) => void;
+  /** The damage panel is open and lists the skipped responses itself, so this panel does not repeat them. */
+  panelOpen?: boolean;
 }) {
   const hp = view.sheet.hitPoints;
   const [amount, setAmount] = useState('');
@@ -201,7 +204,7 @@ export function HitPointsPanel({
           ))}
         </>
       )}
-      {skippedResponseLabels(view).length > 0 && <p className="hint">Available and not chosen: {skippedResponseLabels(view).join(', ')}.</p>}
+      {!panelOpen && skippedResponseLabels(view).length > 0 && <p className="hint">Available and not chosen: {skippedResponseLabels(view).join(', ')}.</p>}
       <p className="hint">
         A damage type applies the character&apos;s resistances, immunities and vulnerabilities first (Untyped ignores them). Temporary hit points absorb the
         rest. They do not stack: setting them replaces the old value.

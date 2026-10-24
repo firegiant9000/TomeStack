@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { client } from '../api/client';
 import { TomeStackError } from '../api/transport';
-import type { CharacterView, DamagePreview, ResponseChoice, ResponseOffer, ResponseValue, RollTarget } from '../api/types';
+import type { CharacterView, DamagePreview, ResponseChoice, ResponseOffer, PlayAction, ResponseValue, RollTarget } from '../api/types';
 import { damageTypeLabel } from './customModel';
 import { effectWords, skippedLabelsOf } from './PlayPanels';
 
@@ -15,6 +15,10 @@ interface Props {
   onDone: (view: CharacterView) => void;
   onCancel: () => void;
   onError: (error: unknown) => void;
+  /** The confirm timed out (the damage may or may not have been applied): the sheet reloads the character, says so and closes the panel. */
+  onTimeout: () => void;
+  /** The sheet's one-step play change, used when Apply is pressed with no response chosen (so Undo works as for any plain damage). */
+  act: (action: PlayAction) => void | Promise<boolean>;
   /** Rolls an offered roll through the sheet's one roll call. */
   onRoll: (target: RollTarget) => void;
   /** Runs the confirm in the sheet's save queue. Direct when absent. */
@@ -44,7 +48,7 @@ interface Fetched {
  * the confirm. When the preview carries notes the choices cannot be applied: `after` is then the current state, so Apply is off.
  * Every number is the server's.
  */
-export function DamagePanel({ view, amount, type, onDone, onCancel, onError, onRoll, run }: Props) {
+export function DamagePanel({ view, amount, type, onDone, onCancel, onError, onTimeout, onRoll, act, run }: Props) {
   const characterId = view.character.id;
   const version = view.character.updatedAt ?? '';
   const responses = view.sheet.responses ?? [];
@@ -98,7 +102,9 @@ export function DamagePanel({ view, amount, type, onDone, onCancel, onError, onR
   }
 
   const preview = fetched?.preview;
-  const ready = fetched !== undefined && fetched.version === version && fetched.refresh === refresh && fetched.selKey === selKey;
+  // The preview must also have been planned from the stamp this sheet shows: a newer stored stamp means the sheet is behind.
+  const ready =
+    fetched !== undefined && fetched.version === version && fetched.refresh === refresh && fetched.selKey === selKey && fetched.preview.updatedAt === version;
   const notes = preview?.notes ?? [];
   const canApply = ready && !busy && !failed && notes.length === 0 && !applied;
   const phaseOf = (c: ResponseChoice) => responses.find((r) => r.contentId === c.contentId && r.responseId === c.responseId)?.phase;
@@ -122,6 +128,13 @@ export function DamagePanel({ view, amount, type, onDone, onCancel, onError, onR
     const { preview: shown, selKey: shownKey } = fetched;
     setBusy(true);
     try {
+      if (shownKey === '[]') {
+        // Nothing chosen: the one-step damage, so the sheet's client Undo works as it always did. A refusal (act reports it) previews again.
+        const ok = await act({ action: 'damage', amount, ...(type ? { damageType: type } : {}) });
+        if (ok === false) setRefresh((n) => n + 1);
+        else onCancel();
+        return;
+      }
       // The stamp of the preview the player is looking at, with exactly the selection it was planned for.
       const applying = () =>
         client.play(characterId, {
@@ -137,9 +150,15 @@ export function DamagePanel({ view, amount, type, onDone, onCancel, onError, onR
       if (prompting) setApplied({ reply, shown });
       else onCancel();
     } catch (error) {
+      if (error instanceof TomeStackError && error.code === 'timeout') {
+        // The outcome is unknown: the damage may have been applied. A new preview would carry the new stored stamp and invite a second
+        // apply, so the sheet reloads the character and closes this panel instead.
+        onTimeout();
+        return;
+      }
       onError(error);
       if (error instanceof TomeStackError && error.code === 'character.stale') setMessage('The sheet changed. Check the damage again.');
-      setRefresh((n) => n + 1); // refused, or the outcome is unknown (timeout): look again; the stamp makes a resend safe
+      setRefresh((n) => n + 1); // refused: look again
     } finally {
       setBusy(false);
     }
