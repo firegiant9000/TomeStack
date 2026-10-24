@@ -791,14 +791,16 @@ function RollItem({
   const alsoName = (a: AlsoChangeValue) => alsoPool(a)?.label ?? a.resourceId;
   const alsoText = alsoChange
     .filter((a) => a.amount != null)
-    .map((a) => `, ${a.change === 'regain' ? '−' : '+'}${a.amount} ${alsoName(a)}`)
+    // The sign follows what happens to the pool's number: a spend builds a counting-up pool up and uses a normal one up.
+    .map((a) => `, ${(a.change === 'spend') === (alsoPool(a)?.countsUp === true) ? '+' : '−'}${a.amount} ${alsoName(a)}`)
     .join('');
   /** The first reason the client can already see that one of the other pools will not take the change; the service stays the authority. */
   const alsoReason = (): string | undefined => {
     for (const a of alsoChange) {
       if (a.amount == null) return 'Cost unavailable';
       const p = alsoPool(a);
-      if (!p || a.change !== 'spend' || p.current === undefined) continue;
+      if (!p || p.current === undefined) return `${alsoName(a)} is not tracked on this sheet.`;
+      if (a.change !== 'spend') continue;
       if (p.countsUp ? p.maximum !== undefined && p.spent + a.amount > p.maximum : p.current < a.amount) {
         return p.countsUp ? `${p.label} is full (${p.spent} of ${p.maximum}).` : `Not enough ${p.label} left (${p.current}).`;
       }
@@ -812,7 +814,7 @@ function RollItem({
       ? "Can't be used here"
       : costFailed
       ? 'Cost unavailable'
-      : useCost < 1
+      : useCost < 1 && alsoChange.length === 0 // a compound use is worth it for its other changes
         ? 'Costs nothing here'
         : unaffordable
           ? pool?.current === undefined
@@ -1136,7 +1138,8 @@ export function RollResult({
   const useRollId = p?.rollId ?? effect?.rollId;
   const compound = drawsDown || (effect?.alsoChange?.length ?? 0) > 0;
   // Never a plain `spend` for such a roll: without the roll's content, its id or its effect, the Spend is held with a reason.
-  const cantUse = compound && (useRollId === undefined || p?.content?.contentId === undefined || effect === undefined);
+  // A content roll's record whose effect has left the sheet cannot say whether it was compound: hold it as well.
+  const cantUse = (compound && (useRollId === undefined || p?.content?.contentId === undefined)) || (effect === undefined && featureAttack === undefined && p?.content !== undefined && p.rollId !== undefined);
   const spendAction = (amount: number, resourceContent: string, resourceId: string): PlayAction | undefined =>
     cantUse
       ? undefined
@@ -1182,7 +1185,7 @@ export function RollResult({
       {!costUnavailable && linked && linked.current !== undefined && !effect?.variableCost && (
         <button
           type="button"
-          disabled={spentAlready || cantUse || cost < 1 /* a cost formula can evaluate to 0 at some levels */ || (stock ?? 0) < cost}
+          disabled={spentAlready || cantUse || (cost < 1 && (effect?.alsoChange?.length ?? 0) === 0) /* a cost formula can evaluate to 0 at some levels */ || (stock ?? 0) < cost}
           aria-describedby={cantUse ? cantUseId : undefined}
           onClick={() => {
             const action = spendAction(cost, spend?.contentId ?? linked.content.contentId, spend?.resourceId ?? linked.resourceId);

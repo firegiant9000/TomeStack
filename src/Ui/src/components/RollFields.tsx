@@ -227,6 +227,9 @@ export function RollFields(props: {
   const countsUp = effect.resourceContent
     ? props.otherPools.find((p) => p.contentId === effect.resourceContent && p.resourceId === effect.resourceId)?.countsUp === true
     : props.resources.some((r) => r.resourceId === effect.resourceId && r.counts === 'up');
+  const isCompound = (e: Roll) => e.drawsDown === true || (e.alsoChange?.length ?? 0) > 0;
+  const variableAllowed = !isCompound(effect);
+  const onCharging = (next: Effect) => onChange(isCompound(next as Roll) ? { ...(next as Roll), variableCost: undefined } : next);
   return (
     <>
       <label className="field">
@@ -283,18 +286,23 @@ export function RollFields(props: {
             floorAtZero
             onChange={(value) => onChange({ ...effect, cost: value || undefined })}
           />
-          <label className="choice">
-            <input
-              type="checkbox"
-              checked={effect.variableCost === true}
-              onChange={(e) => onChange(e.target.checked ? { ...effect, variableCost: true, perUnit: undefined } : { ...effect, variableCost: undefined })}
-            />
-            The player chooses how much to spend (up to the cost)
-          </label>
+          {/* A compound use charges the calculated cost, so a chosen amount would be ignored: the choice is hidden while either is
+              set (a stored one stays visible so it can be cleared), and setting either clears it. */}
+          {(variableAllowed || effect.variableCost === true) && (
+            <label className="choice">
+              <input
+                type="checkbox"
+                checked={effect.variableCost === true}
+                onChange={(e) => onChange(e.target.checked ? { ...effect, variableCost: true, perUnit: undefined } : { ...effect, variableCost: undefined })}
+              />
+              The player chooses how much to spend (up to the cost)
+            </label>
+          )}
           {/* Keyed on the dice being there, so its texts start over when clearing the dice removes the per-unit dice. */}
           {effect.variableCost !== true && <PerUnitFields key={effect.dice ? 'dice' : 'no-dice'} effect={effect} onChange={onChange} onProblem={onProblem} />}
-          <AlsoChangeFields effect={effect} resources={props.resources} otherPools={props.otherPools} previewRevision={props.previewRevision} onChange={onChange} />
-          <DrawsDownField effect={effect} countsUp={countsUp} poolKnown={poolKnown} onChange={onChange} onProblem={onProblem} />        </>
+          <AlsoChangeFields effect={effect} resources={props.resources} otherPools={props.otherPools} previewRevision={props.previewRevision} onChange={onCharging} />
+          <DrawsDownField effect={effect} countsUp={countsUp} poolKnown={poolKnown} onChange={onCharging} onProblem={onProblem} />
+        </>
       )}
       <label className="field">
         Saving throw

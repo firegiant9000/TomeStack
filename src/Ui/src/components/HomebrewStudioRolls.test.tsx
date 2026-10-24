@@ -237,6 +237,7 @@ it('the roll editor edits alsoChange rows and blocks drawsDown on a pool that do
   expect(r.queryByRole('group', { name: 'Also changes' })).not.toBeNull();
   await user.click(r.getByRole('button', { name: 'Add change' }));
   const pool = r.getByRole('combobox', { name: 'Change 1: pool' }) as HTMLSelectElement;
+  expect(document.activeElement).toBe(pool); // Add puts focus on the new row's pool
   expect([...pool.options].map((o) => o.value)).toEqual(['', 'strain']);
   await user.selectOptions(pool, 'strain');
   await user.selectOptions(r.getByRole('combobox', { name: 'Change 1: spend or regain' }), 'regain');
@@ -307,6 +308,28 @@ it('removing a pool drops the alsoChange rows that name it, and a stored drawsDo
   expect(blocked('Publish')).toBe(true);
   const box = stored.rule(/^Rule 2: Roll or action/).getByRole('checkbox', { name: /^Draws down built-up charge/ });
   expect(box.getAttribute('aria-invalid')).toBe('true');
+});
+
+it('a roll that also changes a pool or draws down cannot be variable-cost, as with per-unit dice', async () => {
+  const user = userEvent.setup();
+  const variable: Raw = { ...gather, resourceId: 'charge', variableCost: true };
+  const { rule, checked } = await openDraft(user, [focus, strain, charge, variable]);
+  const r = rule(/^Rule 4: Roll or action/);
+  const box = () => r.getByRole('checkbox', { name: /^The player chooses how much to spend/ }) as HTMLInputElement;
+
+  // Drawing down clears the variable cost.
+  expect(box().checked).toBe(true);
+  await user.click(r.getByRole('checkbox', { name: /^Draws down built-up charge/ }));
+  expect(((await checked()).effect('roll-5') as Raw).variableCost).toBeUndefined();
+  expect(r.queryByRole('checkbox', { name: /^The player chooses how much to spend/ })).toBeNull();
+
+  // Untick, tick the variable cost, then add a change: the change clears it again.
+  await user.click(r.getByRole('checkbox', { name: /^Draws down built-up charge/ }));
+  expect(box().checked).toBe(false);
+  await user.click(box());
+  await user.click(r.getByRole('button', { name: 'Add change' }));
+  expect(((await checked()).effect('roll-5') as Raw).variableCost).toBeUndefined();
+  expect(r.queryByRole('checkbox', { name: /^The player chooses how much to spend/ })).toBeNull();
 });
 
 it('a named value has no Automation choice: it is always calculated', async () => {

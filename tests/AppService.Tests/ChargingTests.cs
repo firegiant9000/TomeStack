@@ -228,6 +228,34 @@ public class ChargingTests
         Assert.Equal("use.unavailable", Refused(() => Use(temp, id, "gather", Stamp(temp, id))).Code);
     }
 
+    [Fact]
+    public void A_blank_label_names_the_undo_by_the_roll_id()
+    {
+        var (temp, id) = Charger(adjust: r => r.ContentId == Beam
+            ? r with { Effects = [.. r.Effects.Select(e => e is RollEffect { Id: "gather" } roll ? roll with { Label = " " } : e)] }
+            : r);
+        using var _ = temp;
+
+        var view = Use(temp, id, "gather", Stamp(temp, id));
+
+        Assert.Equal("use gather", view.UndoLabel);
+    }
+
+    [Fact]
+    public void A_roll_id_two_rolls_share_is_not_found_rather_than_the_first_one()
+    {
+        var (temp, id) = Charger(adjust: r => r.ContentId == Beam
+            ? r with { Effects = [.. r.Effects, new RollEffect { Id = "gather-twin", RollId = "gather", Label = "Twin", Dice = "1d4" }] }
+            : r);
+        using var _ = temp;
+        var before = Stored(temp, id);
+
+        var refused = Refused(() => Use(temp, id, "gather", Stamp(temp, id)));
+
+        Assert.Equal("use.not-found", refused.Code);
+        Assert.Equal(before, Stored(temp, id));
+    }
+
     private static ContentRevision Gated(ContentRevision revision) => revision.ContentId != Beam
         ? revision
         : revision with

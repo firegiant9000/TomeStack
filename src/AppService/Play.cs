@@ -328,7 +328,9 @@ public sealed partial class TomeStackApp
         {
             if (candidate.Content.ContentId != contentId)
                 continue;
-            roll = _store.FindRevision(candidate.Content)?.Effects.OfType<RollEffect>().FirstOrDefault(e => e.RollId == command.RollId);
+            // Two rolls in one revision sharing a rollId cannot be told apart: neither is used.
+            var matches = _store.FindRevision(candidate.Content)?.Effects.OfType<RollEffect>().Where(e => e.RollId == command.RollId).Take(2).ToList() ?? [];
+            roll = matches.Count == 1 ? matches[0] : null;
             calculated = roll is null ? null : candidate.Effects.FirstOrDefault(e => e.Id == roll.Id && e.Type == RollEffect.TypeName);
             if (calculated is not null)
             {
@@ -395,7 +397,7 @@ public sealed partial class TomeStackApp
                 full.Add(filled);
         }
         notices = full.Count == 0 ? null : full;
-        label = $"use {roll.Label}";
+        label = $"use {(string.IsNullOrWhiteSpace(roll.Label) ? roll.RollId : roll.Label)}";
         return applied;
     }
 

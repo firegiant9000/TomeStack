@@ -687,17 +687,22 @@
                   }
                 }
               },
-              "description": "Content v11 (D43): other pools the use also spends from or regains to, each by a formula. At most 4; none may be the roll's own pool."
+              "description": "Content v11 (D43): other pools the use also spends from or regains to, each by a formula. At most 4; none may be the roll's own pool. Needs the roll's own resourceId (Play uses the roll through it); not with variableCost."
             },
             "drawsDown": {
               "type": "boolean",
-              "description": "Content v11 (D43): the cost and per-unit amount use up the built-up value of the counting-up resourceId pool instead of adding to it. True needs a counting-up pool; false does nothing."
+              "description": "Content v11 (D43): the cost and per-unit amount use up the built-up value of the counting-up resourceId pool instead of adding to it. True needs a counting-up pool and is not allowed with variableCost; false does nothing."
             }
           },
           "required": [
             "rollId",
             "label"
-          ]
+          ],
+          "dependentRequired": {
+            "alsoChange": [
+              "resourceId"
+            ]
+          }
         },
         {
           "properties": {

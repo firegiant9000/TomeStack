@@ -112,6 +112,26 @@ public class SchemaTests
         Assert.Equal(accepted, Validate("content-revision", document.RootElement) == "");
     }
 
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    public void The_v11_schema_needs_a_roll_with_alsoChange_to_name_its_own_pool(bool hasPool, bool accepted)
+    {
+        var copy = JsonNode.Parse(File.ReadAllText(Path.Combine(FixtureRoot, "golden", "revisions.json")))!.AsArray()[9]!.DeepClone().AsObject();
+        copy["schemaVersion"] = 11;
+        var roll = new JsonObject
+        {
+            ["type"] = "roll", ["id"] = "x", ["rollId"] = "x", ["label"] = "X",
+            ["alsoChange"] = new JsonArray(new JsonObject { ["resourceId"] = "charge", ["change"] = "spend", ["amount"] = "1" }),
+        };
+        if (hasPool)
+            roll["resourceId"] = "focus";
+        copy["effects"]!.AsArray().Add(roll);
+        using var document = JsonDocument.Parse(copy.ToJsonString());
+
+        Assert.Equal(accepted, Validate("content-revision", document.RootElement) == "");
+    }
+
     [Fact]
     public void The_v9_schema_is_not_vacuous()
     {

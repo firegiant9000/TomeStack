@@ -773,6 +773,10 @@ public static class ContentValidator
                 if (alsoChange.Count > MaxAlsoChanges)
                     Error("validate.also-change", $"Roll '{id}' changes {alsoChange.Count} other pools; the limit is {MaxAlsoChanges}.", id);
                 var rollHolder = roll.ResourceContent ?? revision.ContentId;
+                if (alsoChange.Count > 0 && string.IsNullOrWhiteSpace(roll.ResourceId))
+                    Error("validate.also-change", $"Roll '{id}' changes {alsoChange.Count} other pools but has no pool of its own to spend; Play uses the roll through that pool. Add a resource and cost, or remove alsoChange.", id);
+                if (alsoChange.Count > 0 && roll.VariableCost == true)
+                    Error("validate.also-change", $"Roll '{id}' changes {alsoChange.Count} other pools and has a variable cost; a compound use charges the calculated cost, so the chosen amount would be ignored. Remove one.", id);
                 for (var i = 0; i < alsoChange.Count; i++)
                 {
                     if (alsoChange[i] is not { } entry)
@@ -795,6 +799,8 @@ public static class ContentValidator
             }
             if (roll.DrawsDown == true && !(roll.ResourceId is { } drawn && FindResource(roll.ResourceContent, drawn)?.Counts == ResourceCounting.Up))
                 Error("validate.draws-down", $"Roll '{id}' draws down a pool but its resource is not a pool that counts up; name one, or remove drawsDown.", id);
+            if (roll.DrawsDown == true && roll.VariableCost == true)
+                Error("validate.draws-down", $"Roll '{id}' draws down a pool and has a variable cost; a draw-down charges the calculated cost, so the chosen amount would be ignored. Remove one.", id);
         }
 
         // Content v11 (D43): a VALUE.<id> the revision reads that nothing it can see declares is a warning, not an error: whether

@@ -190,18 +190,20 @@ it('a confirmation hidden because nothing is built up does not come back with st
 it('a refused End encounter keeps the confirmation open with the ticks and focus in the group; an applied one closes it', async () => {
   const user = userEvent.setup();
   const act = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
-  strip(view({ round: 2, resources: [pool('strain', { countsUp: true, spent: 3, current: 2 })] }), { act });
+  const other = { contentId: 'c2', revisionId: 'r2' };
+  strip(view({ round: 2, resources: [pool('strain', { countsUp: true, spent: 3, current: 2 }), pool('heat', { countsUp: true, spent: 1, current: 4, content: other })] }), { act });
   await user.click(screen.getByRole('button', { name: 'End encounter' }));
   const group = screen.getByRole('group', { name: 'End encounter' });
-  await user.click(within(group).getByRole('checkbox'));
+  await user.click(within(group).getAllByRole('checkbox')[1]!);
   await user.click(within(group).getByRole('button', { name: 'End encounter' }));
   expect(act).toHaveBeenCalledTimes(1);
   const still = screen.getByRole('group', { name: 'End encounter' });
-  expect(within(still).getByRole<HTMLInputElement>('checkbox').checked).toBe(true);
-  expect(document.activeElement).toBe(within(still).getByRole('checkbox'));
+  const stillBoxes = within(still).getAllByRole<HTMLInputElement>('checkbox');
+  expect(stillBoxes.map((b) => b.checked)).toEqual([false, true]);
+  expect(document.activeElement).toBe(stillBoxes[0]); // the first checkbox, not the one that was ticked
   await user.click(within(still).getByRole('button', { name: 'End encounter' }));
   expect(act).toHaveBeenCalledTimes(2);
-  expect(act).toHaveBeenLastCalledWith({ action: 'endEncounter', clear: ['c1/strain'] });
+  expect(act).toHaveBeenLastCalledWith({ action: 'endEncounter', clear: ['c2/heat'] });
   expect(screen.queryByRole('group', { name: 'End encounter' })).toBeNull();
 });
 

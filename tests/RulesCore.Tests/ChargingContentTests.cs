@@ -124,6 +124,7 @@ public class ChargingContentTests
         "also-blank-id", "also-unknown-pool", "also-unknown-pool-own-content", "also-content-not-installed",
         "also-amount-blank", "also-amount-null", "also-amount-invalid", "also-too-many", "also-names-own-pool",
         "draws-down-normal-pool", "draws-down-no-resource", "draws-down-unknown-pool",
+        "draws-down-variable-cost", "also-variable-cost", "also-no-own-pool",
     ];
 
     private static (ContentRevision Revision, string Code, string EffectId) Mistake(string variant) => variant switch
@@ -141,6 +142,11 @@ public class ChargingContentTests
         "draws-down-normal-pool" => (Change("release", r => r with { ResourceId = "focus" }), "validate.draws-down", "release"),
         "draws-down-no-resource" => (Change("release", r => r with { ResourceId = null, ResourceContent = null, Cost = null, PerUnit = null }), "validate.draws-down", "release"),
         "draws-down-unknown-pool" => (Change("release", r => r with { ResourceId = "nope" }), "validate.draws-down", "release"),
+        // The chosen amount would be dropped: a compound use charges the calculated cost.
+        "draws-down-variable-cost" => (Change("release", r => r with { VariableCost = true, PerUnit = null }), "validate.draws-down", "release"),
+        "also-variable-cost" => (Change("gather", r => r with { VariableCost = true }), "validate.also-change", "gather"),
+        // Play spends the roll's own pool to carry the other changes; with none there is nothing to use.
+        "also-no-own-pool" => (Change("gather", r => r with { ResourceId = null, ResourceContent = null, Cost = null }), "validate.also-change", "gather"),
         _ => throw new ArgumentOutOfRangeException(nameof(variant), variant, null),
     };
 
