@@ -129,11 +129,57 @@ public class DamageResponseTests
 
         Assert.Empty(plan.Notes);
         Assert.Equal(new HitPointState(68, 1, 0), plan.Final);
-        // The damage itself still took the character to 0; the result says concentration stays and carries the save the damage asks for.
-        Assert.Equal(0, plan.Result.After.Current);
+        // The result is coherent with the survival: the hit points left, the loss counted from them, concentration kept with its save.
+        Assert.Equal(plan.Final, plan.Result.After);
+        Assert.Equal(9, plan.Result.Outcome.Lost);
+        Assert.Equal(15, plan.Result.Outcome.Amount);
         Assert.False(plan.Result.ConcentrationEnds);
         Assert.Equal(10, plan.Result.ConcentrationDc);
         Assert.Equal(new DeathSaves(), character.Play.DeathSaves);
+    }
+
+    [Fact]
+    public void A_survived_threshold_is_eligible_after_a_survival_even_when_the_hit_points_did_not_change()
+    {
+        // 1 hit point and a lethal hit: the survival leaves 1, so the final hit points equal the ones before.
+        var plan = PlanFor(Stand(hp: 1), 15, null, "stand", "rebound");
+
+        Assert.Empty(plan.Notes);
+        Assert.Equal(1, plan.Final.Current);
+        Assert.Equal(plan.Final, plan.Result.After);
+        Assert.Equal(0, plan.Result.Outcome.Lost);
+        Assert.True(Offer(plan, "rebound")!.Offered);
+        Assert.Equal(ResponseOutcomeKind.OfferRoll, Assert.Single(plan.Outcomes).Kind);
+        // At or below still needs the hit points to have dropped.
+        Assert.Null(Offer(plan, "rally"));
+    }
+
+    [Fact]
+    public void Chosen_costs_are_summed_per_pool_and_the_later_response_is_refused()
+    {
+        var twin = Holder(40, """{"type":"response","id":"twin","responseId":"twin","label":"Twin","phase":"damageReduction","amount":"1","resourceId":"grit","resourceContent":"6f0dc000-0000-4000-8000-000000000070","cost":"1"}""");
+        var c = Stand(hp: 68, extra: [twin], more: p => p.WithSpent(Fixtures.Bulwark.ContentId, "grit", 4));
+
+        var one = PlanFor(c, 10, null, "brace");
+        var both = PlanFor(c, 10, null, "brace", "twin");
+
+        Assert.Empty(one.Notes);
+        var note = Assert.Single(both.Notes);
+        Assert.Equal("damage.response-unavailable", note.Code);
+        Assert.Contains("twin", note.Message, StringComparison.Ordinal);
+        Assert.Empty(both.Outcomes);
+        // With 2 grit left both fit.
+        Assert.Empty(PlanFor(Stand(hp: 68, extra: [twin], more: p => p.WithSpent(Fixtures.Bulwark.ContentId, "grit", 3)), 10, null, "brace", "twin").Notes);
+    }
+
+    [Fact]
+    public void A_pool_whose_maximum_does_not_calculate_is_not_tracked()
+    {
+        var holder = Holder(41, """{"type":"resource","id":"odd","resourceId":"odd","label":"Odd","maximum":"banana"},{"type":"response","id":"oddr","responseId":"oddr","label":"Odd","phase":"damageReduction","amount":"1","resourceId":"odd","cost":"2"}""");
+        var (_, sheet) = Stand(extra: [holder]);
+
+        Assert.Null(sheet.Resources!.Single(r => r.ResourceId == "odd").Current);
+        Assert.Equal((false, "Needs 2 Odd (not tracked)"), (On(sheet, "oddr").Available, On(sheet, "oddr").UnavailableReason));
     }
 
     [Fact]

@@ -177,8 +177,11 @@ public static class DamagePipeline
         if (survival is not null)
         {
             final = result.After with { Current = Math.Min(Math.Max(survival.Amount ?? 1, 1), Math.Max(hp.Maximum, 1)) };
+            // The result describes the hit as it ends: the survival's hit points, the loss counted from them, concentration kept with its DC.
             result = result with
             {
+                After = final,
+                Outcome = result.Outcome with { Lost = hp.Current - final.Current },
                 ConcentrationEnds = false,
                 ConcentrationDc = character.Play.Concentration is not null ? ConcentrationDc(result.Outcome.Adjusted, policy) : null,
             };
@@ -190,7 +193,8 @@ public static class DamagePipeline
         {
             ResponsePhase.DamageReduction => true,
             ResponsePhase.HitPointOutcome => drops,
-            _ => dropped && ((r.AtOrBelow is { } limit && final.Current <= limit) || (r.Survived && survival is not null)),
+            // A survival means the hit did take the hit points to 0, even when the survival leaves as many as before.
+            _ => (dropped && r.AtOrBelow is { } limit && final.Current <= limit) || (r.Survived && survival is not null),
         };
         var eligible = responses.Where(Eligible).ToList();
         var offers = eligible.Select(r => new ResponseOffer(r, r.Available, r.Available ? null : r.UnavailableReason)).ToList();
@@ -203,6 +207,26 @@ public static class DamagePipeline
         var applied = usable.Where(eligible.Contains).ToList();
         if (applied.Count(IsHitPointOutcome) > 1)
             notes.Add(new("damage.one-outcome", "At most one hit point outcome (a survival, a heal or temporary hit points) can be chosen for one hit."));
+
+        // The chosen costs together must fit each pool: in sheet order, a response whose cost no longer fits is refused.
+        var committed = new Dictionary<(Guid?, string), int>();
+        foreach (var response in applied.ToList())
+        {
+            if (response.Cost is not { } cost || response.ResourceId is not { } poolId)
+                continue;
+            var key = (response.CostResourceContent, poolId);
+            var pool = sheet.Resources?.FirstOrDefault(r => r.Content.ContentId == response.CostResourceContent && r.ResourceId == poolId);
+            var total = committed.GetValueOrDefault(key) + cost;
+            if (pool?.Current is not { } left || total > left)
+            {
+                notes.Add(Unavailable(response.ContentId, response.ResponseId));
+                applied.Remove(response);
+            }
+            else
+            {
+                committed[key] = total;
+            }
+        }
 
         // 7. The outcomes, in sheet order. Hit point and temporary hit point outcomes are applied by the caller.
         IReadOnlyList<ResponseOutcomeValue> outcomes = notes.Count > 0 ? [] : [.. applied.SelectMany(r => r.Outcomes ?? [])];

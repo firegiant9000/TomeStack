@@ -71,13 +71,28 @@ public class DamagePipelineProperties
 
     private static Gen<(int Sheet, int Current, int Temporary, int Amount, string? Type, bool Concentrating, int Mask)> ResponseCases { get; } =
         from sheet in Gen.Choose(0, ResponseSheets.Length - 1)
-        from current in Gen.Choose(0, 68)
+        from biased in Gen.Elements(true, false)
+        from current in biased ? Gen.Choose(1, 10) : Gen.Choose(0, 68)
         from temporary in Gen.Elements(0, 0, 5, 20)
-        from amount in Gen.Elements(0, 1, 5, 14, 15, 20, 60, 90, 150)
+        from amount in biased ? Gen.Elements(90, 150) : Gen.Elements(0, 1, 5, 14, 15, 20, 60, 90, 150)
         from type in Gen.Elements<string?>("fire", null, "cold")
         from concentrating in Gen.Elements(true, false)
-        from mask in Gen.Choose(0, (1 << ResponseSheets[0].Sheet.Responses!.Count) - 1)
+        // Biased cases pick any subset of the hit point outcomes (stand, endure, heal, warding) so two of them are often chosen together.
+        from mask in biased ? Gen.Choose(0, 15).Select(HitPointMask) : Gen.Choose(0, (1 << ResponseSheets[0].Sheet.Responses!.Count) - 1)
         select (sheet, current, temporary, amount, type, concentrating, mask);
+
+    private static int HitPointMask(int subset)
+    {
+        string[] ids = ["stand", "endure", "heal", "warding"];
+        var responses = ResponseSheets[0].Sheet.Responses!;
+        var mask = 0;
+        for (var i = 0; i < ids.Length; i++)
+        {
+            if ((subset & (1 << i)) != 0)
+                mask |= 1 << responses.ToList().FindIndex(r => r.ResponseId == ids[i]);
+        }
+        return mask;
+    }
 
     private static DamagePlan PlanOf((int Sheet, int Current, int Temporary, int Amount, string? Type, bool Concentrating, int Mask) c)
     {
@@ -97,10 +112,14 @@ public class DamagePipelineProperties
         Prop.ForAll(ResponseCases.ToArbitrary(), c =>
         {
             var plan = PlanOf(c);
+            var sheet = ResponseSheets[c.Sheet].Sheet;
+            var chosen = plan.Chosen.Select(x => sheet.Responses!.Single(r => r.ContentId == x.ContentId && r.ResponseId == x.ResponseId)).ToList();
+            // Two or more hit point outcomes that are each eligible and available are always refused.
+            var usableHitPointOutcomes = chosen.Count(r => IsHitPointOutcome(r) && plan.Offers.Any(o => o.Offered && o.Response == r));
+            if (usableHitPointOutcomes >= 2 && !plan.Notes.Any(n => n.Code == "damage.one-outcome"))
+                return false;
             if (plan.Notes.Count > 0)
                 return plan.Outcomes.Count == 0;
-            var sheet = ResponseSheets[c.Sheet].Sheet;
-            var chosen = plan.Chosen.Select(x => sheet.Responses!.Single(r => r.ContentId == x.ContentId && r.ResponseId == x.ResponseId));
             var healOrTemporary = plan.Outcomes.Count(o => o.Kind is ResponseOutcomeKind.RegainHitPoints or ResponseOutcomeKind.TemporaryHitPoints);
             return chosen.Count(IsHitPointOutcome) <= 1 && healOrTemporary <= 1;
         });
