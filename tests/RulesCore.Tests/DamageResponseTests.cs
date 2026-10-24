@@ -167,9 +167,25 @@ public class DamageResponseTests
         var note = Assert.Single(both.Notes);
         Assert.Equal("damage.response-unavailable", note.Code);
         Assert.Contains("twin", note.Message, StringComparison.Ordinal);
-        Assert.Empty(both.Outcomes);
+        // The refused response shapes nothing: the plan is brace's alone.
+        Assert.Equal(5, both.Reduction);
+        Assert.Equal(one.Final, both.Final);
+        Assert.Equal(JsonSerializer.Serialize(one.Result), JsonSerializer.Serialize(both.Result));
+        Assert.Equal(Offered(one), Offered(both));
         // With 2 grit left both fit.
         Assert.Empty(PlanFor(Stand(hp: 68, extra: [twin], more: p => p.WithSpent(Fixtures.Bulwark.ContentId, "grit", 3)), 10, null, "brace", "twin").Notes);
+    }
+
+    [Fact]
+    public void A_survival_amount_above_current_hit_points_loses_nothing()
+    {
+        var big = Holder(42, """{"type":"response","id":"bigstand","responseId":"bigstand","label":"Big stand","phase":"hitPointOutcome","amount":"10"}""");
+        var plan = PlanFor(Stand(hp: 3, extra: [big]), 15, null, "bigstand");
+
+        Assert.Empty(plan.Notes);
+        Assert.Equal(new HitPointState(68, 10, 0), plan.Final);
+        Assert.Equal(plan.Final, plan.Result.After);
+        Assert.Equal(0, plan.Result.Outcome.Lost);
     }
 
     [Fact]

@@ -89,7 +89,10 @@ public class DamagePipelineProperties
         for (var i = 0; i < ids.Length; i++)
         {
             if ((subset & (1 << i)) != 0)
-                mask |= 1 << responses.ToList().FindIndex(r => r.ResponseId == ids[i]);
+            {
+                var index = responses.ToList().FindIndex(r => r.ResponseId == ids[i]);
+                mask |= 1 << (index >= 0 ? index : throw new InvalidOperationException($"The test sheet has no response '{ids[i]}'."));
+            }
         }
         return mask;
     }
