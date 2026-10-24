@@ -1243,6 +1243,7 @@ public static class ContentValidator
         Check("effects", revision.Effects is null || revision.Effects.Any(e => e is null));
         Check("rulesFamilies", revision.RulesFamilies is null || revision.RulesFamilies.Any(f => f is null));
         Check("choice options", revision.Effects?.OfType<ChoiceEffect>().Any(c => c.Options is null || c.Options.Any(o => o is null)) == true);
+        Check("response outcomes", revision.Effects?.OfType<ResponseEffect>().Any(r => r.Outcomes?.Any(o => o is null) == true) == true);
         return problems;
     }
 }

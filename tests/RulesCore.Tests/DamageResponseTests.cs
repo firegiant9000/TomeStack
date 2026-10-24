@@ -502,7 +502,7 @@ public class DamageResponseTests
     }
 
     [Fact]
-    public void A_chosen_threshold_is_cost_fitted_after_the_reductions_whatever_the_sheet_order()
+    public void A_chosen_threshold_is_cost_fitted_after_a_reduction_listed_after_it()
     {
         // Sheet order: the threshold, then the reduction; one grit left; both chosen and both eligible (30 - 15 = 15 is a drop).
         var late = Holder(63, $$"""{"type":"response","id":"late","responseId":"late","label":"Late","phase":"threshold","when":{"atOrBelow":"HP.MAX"},{{GritPool}},"cost":"1"}""");
@@ -553,6 +553,36 @@ public class DamageResponseTests
         Assert.Empty(noErrors);
         Assert.Equal(0, none.SpentOf(Fixtures.Bulwark.ContentId, "grit"));
         Assert.DoesNotContain(none.Resources, r => r.ResourceId == "grit");
+    }
+
+    [Fact]
+    public void Chosen_costs_are_all_paid_before_any_outcome_runs()
+    {
+        // Sheet order: A (spends 2 grit as an outcome, no cost) then B (costs 2 grit); 3 grit left, so the plan fits B's cost.
+        var holder = Holder(66, $$"""
+            {"type":"response","id":"a","responseId":"a","label":"A","phase":"threshold","when":{"atOrBelow":"HP.MAX"},"outcomes":[{"kind":"spend",{{GritPool}},"amount":"2"}]},
+            {"type":"response","id":"b","responseId":"b","label":"B","phase":"threshold","when":{"atOrBelow":"HP.MAX"},{{GritPool}},"cost":"2"}
+            """);
+        var c = Stand(hp: 30, extra: [holder], more: p => SpentGrit(p, 2));
+        var order = c.Sheet.Responses!.Select(r => r.ResponseId).ToList();
+        Assert.True(order.IndexOf("a") < order.IndexOf("b"));
+
+        var (play, _, errors) = Run(c, 14, "a", "b");
+
+        Assert.Empty(errors);
+        Assert.Equal(5, play.SpentOf(Fixtures.Bulwark.ContentId, "grit"));
+    }
+
+    [Fact]
+    public void A_roll_two_responses_offer_is_listed_once()
+    {
+        var again = Holder(67, """{"type":"response","id":"again","responseId":"again","label":"Again","phase":"threshold","when":{"survived":true},"outcomes":[{"kind":"offerRoll","rollId":"counter","rollContent":"6f0dc000-0000-4000-8000-000000000076"}]}""");
+        var c = Stand(hp: 10, extra: [again]);
+
+        var (_, rolls, errors) = Run(c, 15, "stand", "rebound", "again");
+
+        Assert.Empty(errors);
+        Assert.Equal(new OfferedRoll(Fixtures.Rebound, "counter", "counter", "Counter"), Assert.Single(rolls));
     }
 
     [Fact]
@@ -636,11 +666,24 @@ public class DamageResponseTests
     [InlineData("""{"kind":"toggleOn","toggle":{"toggleId":"needs-form"}}""", """{"type":"toggle","id":"needs-form","toggleId":"needs-form","label":"Needs form","group":"forms","groupContent":"6f0dc000-0000-4000-8000-000000000074","layer":"overlay","allowedWith":[{"contentId":"6f0dc000-0000-4000-8000-000000000074","toggleId":"surge"}]}""")] // not allowed with no form on
     [InlineData("""{"kind":"spend","resourceId":"nope","amount":"1"}""", "")] // a pool nothing defines
     [InlineData("""{"kind":"regain","resourceId":"nope","amount":"1"}""", "")]
-    public void An_outcome_that_cannot_run_refuses_the_whole_apply_with_one_error(string outcome, string effects)
+    public void An_outcome_that_can_never_run_makes_the_response_unavailable_and_apply_still_refuses(string outcome, string effects)
     {
-        var (before, play, errors) = ApplyOutcome(effects, outcome);
+        var holder = Holder(55, effects.Length == 0 ? AtAnyDropWith.Replace("%OUTCOME%", outcome, StringComparison.Ordinal) : effects + "," + AtAnyDropWith.Replace("%OUTCOME%", outcome, StringComparison.Ordinal));
+        var c = Stand(hp: 30, extra: [holder]);
 
-        Assert.Same(before, play);
+        // The sheet does not offer it (finding 1): unavailable with a reason, and the plan lists it as not offered.
+        var response = On(c.Sheet, "go");
+        Assert.False(response.Available);
+        Assert.False(string.IsNullOrEmpty(response.UnavailableReason));
+        var plan = PlanFor(c, 14, null, "go");
+        Assert.False(Offer(plan, "go")!.Offered);
+        Assert.Contains(plan.Notes, n => n.Code == "damage.response-unavailable");
+
+        // The backstop: a plan forced to offer it is still refused whole by Apply, with one error.
+        var forced = plan with { Notes = [], Offers = [.. plan.Offers.Select(o => o with { Offered = true })] };
+        var (play, rolls, errors) = DamagePipeline.Apply(c.Character.Play, forced, c.Sheet);
+        Assert.Same(c.Character.Play, play);
+        Assert.Empty(rolls);
         var error = Assert.Single(errors);
         Assert.Equal("damage.response-unavailable", error.Code);
         Assert.Contains("'go'", error.Message, StringComparison.Ordinal);

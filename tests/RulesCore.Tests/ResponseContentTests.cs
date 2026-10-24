@@ -218,6 +218,18 @@ public class ResponseContentTests
         Assert.All(report.Errors.Where(e => e.Code.StartsWith("validate.response-", StringComparison.Ordinal)), e => Assert.DoesNotContain("Secret label", e.Message, StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData("""{"type":"response","id":"r","responseId":"x","label":"X","phase":"threshold","when":{"survived":true},"outcomes":[null]}""")]
+    [InlineData("""{"type":"response","id":"r","responseId":"x","label":"X","phase":"threshold","when":{"survived":true},"outcomes":[{"kind":"regainHitPoints","amount":"1"},null]}""")]
+    public void A_null_response_outcome_is_an_empty_entry(string effects)
+    {
+        var revision = Fixtures.RevisionWithEffect(effects, 11);
+
+        var problems = ContentValidator.EmptyEntries(revision);
+
+        Assert.Contains(problems, p => p.Code == "validate.empty-entry");
+    }
+
     [Fact]
     public void A_response_of_each_phase_with_every_outcome_kind_is_clean()
     {

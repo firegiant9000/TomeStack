@@ -1119,7 +1119,8 @@ function EntryEditor(props: {
           otherToggles={otherToggles}
           otherPools={otherPools}
           rolls={revision.effects.filter((e): e is Extract<Effect, { type: 'roll' }> => e.type === 'roll')}
-          diagnostics={[...(report?.errors ?? []), ...(report?.warnings ?? [])].filter((d) => d.effectId === effect.id)}
+          diagnostics={(report?.errors ?? []).filter((d) => d.effectId === effect.id)}
+          warnings={(report?.warnings ?? []).filter((d) => d.effectId === effect.id)}
           grantable={grantable}
           previewRevision={previewRevision}
           onChange={(e) => setEffect(index, e)}
@@ -1615,8 +1616,10 @@ function EffectEditor(props: {
   otherPools: PoolChoice[];
   /** Content v11 (D43 S7): the rolls this revision declares, which a response outcome can offer. */
   rolls: Extract<Effect, { type: 'roll' }>[];
-  /** The last check's errors and warnings for this rule (shown inside a response, whose fields cannot each carry one). */
+  /** The last check's errors for this rule (shown inside a response, whose fields cannot each carry one). */
   diagnostics: Diagnostic[];
+  /** The last check's warnings for this rule, shown apart from the errors. */
+  warnings: Diagnostic[];
   grantable: StudioEntry[];
   /** The draft the formula previews are worked out against (D61). */
   previewRevision?: ContentRevision;
@@ -2011,6 +2014,7 @@ function EffectEditor(props: {
           rolls={props.rolls}
           previewRevision={props.previewRevision}
           diagnostics={props.diagnostics}
+          warnings={props.warnings}
           onChange={onChange}
         />
       )}

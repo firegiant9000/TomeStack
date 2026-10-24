@@ -267,8 +267,8 @@ public static class DamagePipeline
     /// <list type="number">
     /// <item>the hit points the plan ended with (temporary hit points too, current stored as null at the maximum), unless the hit did nothing;</item>
     /// <item>concentration: ended, or kept with the DC the plan set, as plain damage writes it;</item>
-    /// <item>each chosen response in sheet order pays its cost from its pool first (<c>damage.response-unavailable</c> when the pool
-    /// cannot pay now), then runs its outcomes in order: spend and regain (clamped to 0 and the maximum; an untracked pool is left
+    /// <item>each chosen response in sheet order pays its cost from its pool (<c>damage.response-unavailable</c> when the pool
+    /// cannot pay now); once every cost is paid, each runs its outcomes in order: spend and regain (clamped to 0 and the maximum; an untracked pool is left
     /// as it is), toggleOn (the S1 switch, with no cost and no refund), offerRoll (listed, never rolled), regainHitPoints (up to the
     /// maximum; leaving 0 resets death saves) and temporaryHitPoints (keeps the higher).</item>
     /// </list>
@@ -350,7 +350,8 @@ public static class DamagePipeline
                     if (outcome.Roll is not { } roll || outcome.RollEffectId is not { } effectId || outcome.RollId is not { } rollId)
                         return false;
                     var label = sheet.Features?.FirstOrDefault(f => f.Content == roll)?.Effects.FirstOrDefault(e => e.Id == effectId)?.Label;
-                    rolls.Add(new(roll, effectId, rollId, label ?? rollId));
+                    if (!rolls.Any(r => r.Content == roll && r.EffectId == effectId))
+                        rolls.Add(new(roll, effectId, rollId, label ?? rollId));
                     return true;
                 case ResponseOutcomeKind.RegainHitPoints:
                     if (outcome.Amount is not { } heal)
@@ -407,10 +408,21 @@ public static class DamagePipeline
             return true;
         }
 
-        foreach (var response in responses.Where(r => chosenKeys.Contains((r.ContentId, r.ResponseId))))
+        // Plan fits the costs as one set, so every cost is paid first, in sheet order; only then do the outcomes run (a spend clamps, so it
+        // cannot fail once the costs are paid).
+        var chosenResponses = responses.Where(r => chosenKeys.Contains((r.ContentId, r.ResponseId))).ToList();
+        foreach (var response in chosenResponses)
         {
-            if (!Pay(response) || !(response.Outcomes ?? []).All(Run))
+            if (!Pay(response))
                 Refuse(response.ContentId, response.ResponseId);
+        }
+        if (errors.Count == 0)
+        {
+            foreach (var response in chosenResponses)
+            {
+                if (!(response.Outcomes ?? []).All(Run))
+                    Refuse(response.ContentId, response.ResponseId);
+            }
         }
 
         // 5. The result must be a state the play state accepts.

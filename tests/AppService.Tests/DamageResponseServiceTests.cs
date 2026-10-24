@@ -78,9 +78,11 @@ public class DamageResponseServiceTests
     {
         var (temp, id) = Bulwark(hp: 10);
         using var _ = temp;
+        var before = Stored(temp, id);
 
         var preview = Preview(temp, id, 25, "FIRE", Choice(Stand, "stand")); // halved by the fire resistance: 12, enough to drop 10 hit points
 
+        Assert.Equal(before, Stored(temp, id)); // a preview writes nothing
         Assert.Equal("fire", preview.Type);
         Assert.Equal(1, preview.After.Current);
         Assert.False(preview.ConcentrationEnds);
@@ -186,6 +188,21 @@ public class DamageResponseServiceTests
     }
 
     [Fact]
+    public void Plain_damage_that_does_nothing_after_defences_names_no_skipped_response()
+    {
+        var (temp, id) = Bulwark(hp: 10);
+        using var _ = temp;
+        var immune = temp.App.GetCharacter(id).Character with { DamageDefences = [new("cold", DamageDefenceKind.Immunity)] };
+        temp.App.SaveCharacter(immune);
+
+        var view = temp.App.Play(new(id, PlayActionKind.Damage, Confirm: true, Amount: 15, DamageType: "cold"));
+
+        Assert.Equal(0, view.Damage!.Adjusted);
+        Assert.Equal(10, view.Sheet.HitPoints!.Current);
+        Assert.DoesNotContain(view.Notices ?? [], n => n.Code == "damage.responses-skipped");
+    }
+
+    [Fact]
     public void Plain_damage_on_a_character_without_responses_has_no_notice()
     {
         using var temp = new TempApp(time: new TickingTime(TempApp.Now));
@@ -288,6 +305,75 @@ public class DamageResponseServiceTests
 
         Assert.Equal("damage.response-unavailable", Refused(() => Confirm(temp, id, 15, null, Stamp(temp, id), many)).Code);
         Assert.Equal("damage.response-unavailable", Refused(() => Preview(temp, id, 15, null, many)).Code);
+    }
+
+    [Fact]
+    public void An_empty_chosen_response_is_refused_by_the_preview_and_the_confirm()
+    {
+        var (temp, id) = Bulwark(hp: 10);
+        using var _ = temp;
+        var before = Stored(temp, id);
+        ResponseChoice[] empty = [null!];
+
+        var preview = Refused(() => Preview(temp, id, 15, null, empty));
+        var confirm = Refused(() => Confirm(temp, id, 15, null, Stamp(temp, id), empty));
+
+        Assert.Equal("damage.response-unavailable", preview.Code);
+        Assert.Equal("damage.response-unavailable", confirm.Code);
+        Assert.Equal(before, Stored(temp, id));
+    }
+
+    // Two chosen responses whose toggle outcomes conflict: the first puts the guard form on (which takes the surge form off); the second
+    // needs an overlay that is allowed only with the surge form. Each is available alone; only the apply can tell.
+    private static (TempApp Temp, Guid Id) BulwarkWithConflictingToggles()
+    {
+        var (temp, id) = Bulwark(hp: 30, surge: true);
+        var holder = JsonSerializer.Deserialize<ContentRevision>(
+            """
+            {
+              "contentId": "6f0dc000-0000-4000-8000-000000000078",
+              "revisionId": "6f0de000-0000-4000-8000-000000000078",
+              "schemaVersion": 11,
+              "kind": "feature",
+              "name": "Fixture Conflict",
+              "rulesFamilies": ["srd-5.2.1"],
+              "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000000070", "page": { "start": 9 } },
+              "status": "published",
+              "summary": "A test-local feature: two threshold responses whose toggle outcomes cannot both run.",
+              "effects": [
+                { "type": "toggle", "id": "aura", "toggleId": "aura", "label": "Aura", "group": "forms", "groupContent": "6f0dc000-0000-4000-8000-000000000074", "layer": "overlay", "allowedWith": [{ "contentId": "6f0dc000-0000-4000-8000-000000000074", "toggleId": "surge" }] },
+                { "type": "response", "id": "to-guard", "responseId": "to-guard", "label": "To guard", "phase": "threshold", "when": { "atOrBelow": "HP.MAX" }, "outcomes": [{ "kind": "toggleOn", "toggle": { "contentId": "6f0dc000-0000-4000-8000-000000000077", "toggleId": "guard" } }] },
+                { "type": "response", "id": "to-aura", "responseId": "to-aura", "label": "To aura", "phase": "threshold", "when": { "atOrBelow": "HP.MAX" }, "outcomes": [{ "kind": "toggleOn", "toggle": { "toggleId": "aura" } }] }
+              ]
+            }
+            """, RulesJson.Options)!;
+        temp.App.Store.AddRevision(holder);
+        var guard = new ContentReference(Guid.Parse("6f0dc000-0000-4000-8000-000000000077"), Guid.Parse("6f0de000-0000-4000-8000-000000000077"));
+        var character = temp.App.GetCharacter(id).Character;
+        temp.App.SaveCharacter(character with { Pins = [.. character.Pins, guard, holder.Reference] });
+        return (temp, id);
+    }
+
+    [Fact]
+    public void A_toggle_conflict_between_two_chosen_responses_is_a_note_in_the_preview_and_a_refusal_in_the_confirm()
+    {
+        var (temp, id) = BulwarkWithConflictingToggles();
+        using var _ = temp;
+        var holder = Guid.Parse("6f0dc000-0000-4000-8000-000000000078");
+        var both = new[] { Choice(holder, "to-guard"), Choice(holder, "to-aura") };
+        var before = Stored(temp, id);
+
+        var preview = Preview(temp, id, 14, null, both);
+
+        Assert.All(both, c => Assert.Contains(preview.Offers, o => o.Offered && o.Response.ResponseId == c.ResponseId));
+        Assert.Contains(preview.Notes, n => n.Code == "damage.response-unavailable");
+        Assert.Equal(30, preview.After.Current); // nothing would be written
+        Assert.Equal(before, Stored(temp, id));
+
+        var refused = Refused(() => Confirm(temp, id, 14, null, preview.UpdatedAt, both));
+
+        Assert.Equal("damage.response-unavailable", refused.Code);
+        Assert.Equal(before, Stored(temp, id));
     }
 
     [Fact]

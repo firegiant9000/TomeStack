@@ -18,6 +18,8 @@
 
 ### Fixed
 
+- **Damage responses (D43 slice 7 review):** a response whose outcome can never run (a form the character does not have, an automatic form, a form not allowed now, or a pool the character lacks) is no longer offered, so it no longer produces a refusal note on every hit. All chosen costs are paid before any outcome runs, so a set the preview accepts is not refused on confirm. A roll two responses offer is listed once. A plain hit that does nothing after defences no longer lists skipped responses. An empty entry in a response's outcomes is refused when the content is saved, and an empty chosen response is refused by the damage commands. In the studio, a check's warnings are listed apart from its errors, and focus follows an outcome that is moved or removed.
+
 ### Migration
 
 - Character schema v10 (`docs/schemas/character.v10.schema.json`): `play.encounter` and `play.toggles[].roundsLeft` (D43 slice 3). A character is written at v10 only while an encounter is running or a toggle has rounds left; otherwise it is written at v9 or v8 as before, so a character that never starts an encounter stays readable by 0.6.0. Older builds refuse such a character: a build without v10 support refuses a package or backup that carries one. Nothing changes for existing characters.

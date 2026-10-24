@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import type { ContentRevision, Diagnostic, Effect, ResponseOutcomeDef, ResponseOutcomeKind, ResponsePhase } from '../api/types';
 import { toggleValue } from '../attackAuthoring';
 import { poolValue, type PoolChoice } from '../rollAuthoring';
@@ -115,7 +116,7 @@ function OutcomeFields(props: {
   const moveButton = (by: -1 | 1) => {
     const at = by < 0 ? index === 0 : index === props.count - 1;
     return (
-      <button type="button" aria-disabled={at || undefined} onClick={() => !at && props.onMove(by)}>
+      <button type="button" data-focus={`${index}-${by < 0 ? 'up' : 'down'}`} aria-disabled={at || undefined} onClick={() => !at && props.onMove(by)}>
         {by < 0 ? `Move outcome ${n} up` : `Move outcome ${n} down`}
       </button>
     );
@@ -125,7 +126,7 @@ function OutcomeFields(props: {
       <legend>{`Outcome ${n}`}</legend>
       <label className="field">
         What it does
-        <select value={outcome.kind} onChange={(e) => props.onChange(startOutcome(e.target.value as ResponseOutcomeKind, props.resources, props.rolls, outcome))}>
+        <select data-focus={`${index}-kind`} value={outcome.kind} onChange={(e) => props.onChange(startOutcome(e.target.value as ResponseOutcomeKind, props.resources, props.rolls, outcome))}>
           {kinds.map((k) => (
             <option key={k.value} value={k.value}>
               {k.label}
@@ -221,9 +222,19 @@ export function ResponseFields(props: {
   rolls: Roll[];
   previewRevision?: ContentRevision;
   diagnostics: Diagnostic[];
+  warnings: Diagnostic[];
   onChange: (effect: Effect) => void;
 }) {
   const { effect, onChange } = props;
+  // WCAG 2.4.3: a move or a remove rebuilds the list, so focus is put back by hand once the new list is drawn.
+  const outcomesBox = useRef<HTMLFieldSetElement>(null);
+  const focusAfter = useRef<string | null>(null);
+  useEffect(() => {
+    const key = focusAfter.current;
+    if (key === null) return;
+    focusAfter.current = null;
+    outcomesBox.current?.querySelector<HTMLElement>(`[data-focus="${key}"]`)?.focus();
+  });
   const outcomes = effect.outcomes ?? [];
   const atLimit = outcomes.length >= maxOutcomes;
   const limitId = `rule-${effect.id}-outcome-limit`;
@@ -233,10 +244,15 @@ export function ResponseFields(props: {
   const setOutcomes = (next: ResponseOutcomeDef[]) => onChange({ ...effect, outcomes: next.length === 0 ? undefined : next });
   const replaceAt = (at: number, outcome: ResponseOutcomeDef) => setOutcomes(outcomes.map((o, i) => (i === at ? outcome : o)));
   const move = (at: number, by: -1 | 1) => {
+    focusAfter.current = `${at + by}-${by < 0 ? 'up' : 'down'}`; // the same button, at the outcome's new place
     const next = [...outcomes];
     const [moved] = next.splice(at, 1);
     next.splice(at + by, 0, moved!);
     setOutcomes(next);
+  };
+  const remove = (at: number) => {
+    focusAfter.current = at < outcomes.length - 1 ? `${at}-kind` : 'add'; // the next outcome, or "Add outcome" when none follows
+    setOutcomes(outcomes.filter((_, i) => i !== at));
   };
   const add = () => {
     if (atLimit) return;
@@ -310,7 +326,7 @@ export function ResponseFields(props: {
       {(effect.toggle || props.toggles.own.length > 0 || props.toggles.others.length > 0) && (
         <ToggleSelect label="Offered" alwaysLabel="Always" choices={props.toggles} current={effect.toggle} onPick={(toggle) => onChange({ ...effect, toggle })} />
       )}
-      <fieldset className="bare-fieldset">
+      <fieldset className="bare-fieldset" ref={outcomesBox}>
         <legend>{`Outcomes (at most ${maxOutcomes})`}</legend>
         {outcomes.length > 0 && (
           <ol>
@@ -328,13 +344,13 @@ export function ResponseFields(props: {
                   previewRevision={props.previewRevision}
                   onChange={(next) => replaceAt(i, next)}
                   onMove={(by) => move(i, by)}
-                  onRemove={() => setOutcomes(outcomes.filter((_, at) => at !== i))}
+                  onRemove={() => remove(i)}
                 />
               </li>
             ))}
           </ol>
         )}
-        <button type="button" aria-disabled={atLimit || undefined} aria-describedby={atLimit ? limitId : undefined} onClick={add}>
+        <button type="button" data-focus="add" aria-disabled={atLimit || undefined} aria-describedby={atLimit ? limitId : undefined} onClick={add}>
           Add outcome
         </button>
         {atLimit && (
@@ -346,6 +362,13 @@ export function ResponseFields(props: {
       {props.diagnostics.length > 0 && (
         <ul id={diagnosticsId} className="error" aria-label="Problems with this response">
           {props.diagnostics.map((d, i) => (
+            <li key={`${d.code}-${i}`}>{d.message}</li>
+          ))}
+        </ul>
+      )}
+      {props.warnings.length > 0 && (
+        <ul className="warnings" aria-label="Warnings for this response">
+          {props.warnings.map((d, i) => (
             <li key={`${d.code}-${i}`}>{d.message}</li>
           ))}
         </ul>

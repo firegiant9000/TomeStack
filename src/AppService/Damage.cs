@@ -60,6 +60,8 @@ public sealed partial class TomeStackApp
     /// <summary>The one planning step of the preview and the confirm: the type is normalised and the choice list bounded before the plan runs.</summary>
     private static (DamagePlan Plan, string? Type) PlanDamage(Character character, CharacterSheet sheet, int amount, string? written, IReadOnlyList<ResponseChoice> chosen)
     {
+        if (chosen.Any(c => c is null))
+            throw new AppValidationException([new("damage.response-unavailable", "A chosen response is empty.")], "damage.response-unavailable");
         var type = NormalizedDamageType(written);
         if (chosen.Count > CharacterCalculator.MaxResponses)
             throw new AppValidationException(
@@ -97,6 +99,8 @@ public sealed partial class TomeStackApp
         if (sheet.Responses is not { Count: > 0 })
             return null;
         var plan = DamagePipeline.Plan(new(command.Amount, NormalizedDamageType(command.DamageType)), character, sheet, [], RulesFamilies.Get(character.RulesFamily));
+        if (plan.Result.Outcome.Adjusted == 0)
+            return null; // a hit that does nothing after defences offers nothing to pass over
         var skipped = plan.Offers.Where(o => o.Offered).Select(o => o.Response).ToList();
         if (skipped.Count == 0)
             return null;

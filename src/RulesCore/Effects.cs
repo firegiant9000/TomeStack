@@ -742,7 +742,7 @@ public enum ResponsePhase
 /// <summary>
 /// Content schema v11 (D43): when a <see cref="ResponsePhase.Threshold"/> response is offered. Exactly one member is set:
 /// <paramref name="AtOrBelow"/> (a formula that may read <c>HP.MAX</c>; offered when the hit points left are at or below it) or
-/// <paramref name="Survived"/> (<c>true</c>; offered when the hit points left are above 0).
+/// <paramref name="Survived"/> (<c>true</c>; offered when a survival was chosen for the hit).
 /// </summary>
 public sealed record ResponseWhen(string? AtOrBelow, bool? Survived);
 
@@ -787,7 +787,7 @@ public sealed record ResponseOutcome(
 /// Content schema v11 (D43): a reaction the character can choose when they take damage: reduce it, survive at some hit points, or
 /// answer a threshold with outcomes. Typed only in a v11 revision: in an older revision a <c>response</c> stays an
 /// <see cref="UnknownEffect"/>, byte for byte. A phase or outcome kind that names no member stays untyped here too, and the
-/// validator reports it. This task only reads and validates it; a later task calculates it.
+/// validator reports it.
 /// </summary>
 public sealed record ResponseEffect : Effect
 {

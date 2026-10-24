@@ -189,14 +189,41 @@ it('outcomes can be reordered and removed, and every button has a name', async (
   expect(r.getByRole('button', { name: 'Move outcome 1 up' }).getAttribute('aria-disabled')).toBe('true');
   expect(r.getByRole('button', { name: 'Move outcome 3 down' }).getAttribute('aria-disabled')).toBe('true');
 
+  // WCAG 2.4.3: after a move the same button, now at the outcome's new place, keeps focus.
   await user.click(r.getByRole('button', { name: 'Move outcome 1 down' }));
+  expect(document.activeElement).toBe(r.getByRole('button', { name: 'Move outcome 2 down' }));
   expect(((await checked()).effect('response-2').outcomes as Raw[]).map((o) => o.kind)).toEqual(['spend', 'regainHitPoints', 'offerRoll']);
 
   await user.click(r.getByRole('button', { name: 'Move outcome 3 up' }));
+  expect(document.activeElement).toBe(r.getByRole('button', { name: 'Move outcome 2 up' }));
   expect(((await checked()).effect('response-2').outcomes as Raw[]).map((o) => o.kind)).toEqual(['spend', 'offerRoll', 'regainHitPoints']);
 
+  // After a remove, focus goes to the next outcome's kind select, or to "Add outcome" when there is no next one.
   await user.click(r.getByRole('button', { name: 'Remove outcome 2' }));
+  expect(document.activeElement).toBe(within(r.getByRole('group', { name: 'Outcome 2' })).getByRole('combobox', { name: 'What it does' }));
   expect(((await checked()).effect('response-2').outcomes as Raw[]).map((o) => o.kind)).toEqual(['spend', 'regainHitPoints']);
+
+  await user.click(r.getByRole('button', { name: 'Remove outcome 2' }));
+  expect(document.activeElement).toBe(r.getByRole('button', { name: 'Add outcome' }));
+});
+
+it('a check\'s warnings are listed apart from its errors', async () => {
+  const user = userEvent.setup();
+  const response: Raw = { type: 'response', id: 'response-2', responseId: 'response-2', label: 'Brace', phase: 'damageReduction', amount: '2' };
+  const { rule } = await openDraft(user, [grit, response]);
+  const r = rule(/^Rule 2: Damage response/);
+  vi.mocked(client.validateRevision).mockResolvedValue({
+    revision: { contentId: 'id-m', revisionId: 'x' },
+    errors: [],
+    warnings: [{ code: 'validate.toggle-content-missing', message: 'Response response-2 names a toggle of content that is not installed.', effectId: 'response-2' }],
+    canPublish: true,
+  });
+
+  await user.click(screen.getByRole('button', { name: 'Check' }));
+
+  const warnings = await r.findByRole('list', { name: 'Warnings for this response' });
+  expect(within(warnings).getByText(/names a toggle of content that is not installed/)).toBeTruthy();
+  expect(r.queryByRole('list', { name: 'Problems with this response' })).toBeNull();
 });
 
 it('the ninth outcome can\'t be added and says why', async () => {

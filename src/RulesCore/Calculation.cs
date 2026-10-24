@@ -755,6 +755,8 @@ public static class CharacterCalculator
                 cost, t.ResourceContent, allowed, allowed ? null : UnavailableReason(active, item, t), GroupLabelOf(active, item, t), duration, roundsLeft,
                 inGroup && t.Layer == ToggleLayer.Overlay ? t.AllowedWith : null, inGroup && t.Layer == ToggleLayer.Overlay ? t.AllowedInBase : null);
         }
+        // A response with an outcome that can never run (a form that is not on the sheet, is automatic or is not allowed now; a pool the character lacks) is not offered.
+        responses = [.. responses.Select(r => r.Available ? WithRunnableOutcomes(r, toggles, resources) : r)];
         var upkeeps = CollectUpkeeps(active, character, resolved.ClassLevels, values, diagnostics);
         var maximum = values[FieldIds.HitPoints];
         var hitPoints = new HitPointState(maximum, Math.Clamp(character.Play.CurrentHitPoints ?? maximum, 0, Math.Max(maximum, 0)), character.Play.TemporaryHitPoints);
@@ -805,6 +807,32 @@ public static class CharacterCalculator
             damageDefences.Count > 0 ? damageDefences : null, null, // the item uses are added once by Calculate (WithItemUses)
             xpForNextLevel is { } next && character.Xp >= next ? true : null, xpForNextLevel, upkeeps.Count > 0 ? upkeeps : null,
             responses.Count > 0 ? responses : null), active);
+    }
+
+    /// <summary>
+    /// A response whose toggleOn outcome names a form that is missing, automatic or unavailable, or whose spend or regain outcome names a pool
+    /// the character does not have, is unavailable. Apply checks the same again as a backstop.
+    /// </summary>
+    private static ResponseValue WithRunnableOutcomes(ResponseValue response, List<ToggleValue> toggles, List<ResourceValue> resources)
+    {
+        foreach (var outcome in response.Outcomes ?? [])
+        {
+            switch (outcome.Kind)
+            {
+                case ResponseOutcomeKind.ToggleOn:
+                    var toggle = outcome.Toggle is { ContentId: { } contentId } reference
+                        ? toggles.FirstOrDefault(t => t.Content.ContentId == contentId && t.ToggleId == reference.ToggleId)
+                        : null;
+                    if (toggle is null || toggle.Auto == true || !toggle.Available)
+                        return response with { Available = false, UnavailableReason = "Form not available" };
+                    break;
+                case ResponseOutcomeKind.Spend or ResponseOutcomeKind.Regain:
+                    if (!resources.Any(r => r.Content.ContentId == outcome.ResourceContent && r.ResourceId == outcome.ResourceId))
+                        return response with { Available = false, UnavailableReason = "Pool not found" };
+                    break;
+            }
+        }
+        return response;
     }
 
     /// <summary>The most damage responses one sheet lists (risk C5); later ones are dropped in sheet order with <c>response.too-many</c>.</summary>
