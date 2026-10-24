@@ -157,13 +157,28 @@ internal static class Fixtures
     private static ContentReference RollModesRef(int n) =>
         new(Guid.Parse($"6f0dc000-0000-4000-8000-{n:X12}"), Guid.Parse($"6f0de000-0000-4000-8000-{n:X12}"));
 
+    // Play mechanics slice 7 fixtures (fixture-pack-responses.json, content v11, D43): damage-time responses, a form that raises the hit point maximum.
+    public static readonly ContentReference Bulwark = ResponsesRef(0x70);
+    public static readonly ContentReference BraceResponse = ResponsesRef(0x71);
+    public static readonly ContentReference LastStand = ResponsesRef(0x72);
+    public static readonly ContentReference Endure = ResponsesRef(0x73);
+    public static readonly ContentReference SurgeForm = ResponsesRef(0x74);
+    public static readonly ContentReference Rally = ResponsesRef(0x75);
+    public static readonly ContentReference Rebound = ResponsesRef(0x76);
+    public static readonly ContentReference GuardForm = ResponsesRef(0x77);
+
+    public static ContentPack ResponsesPack() => Load<ContentPack>("fixture-pack-responses.json");
+
+    private static ContentReference ResponsesRef(int n) =>
+        new(Guid.Parse($"6f0dc000-0000-4000-8000-{n:X12}"), Guid.Parse($"6f0de000-0000-4000-8000-{n:X12}"));
+
     /// <summary>
     /// The packs of <see cref="AllCatalog"/> plus every play-mechanics pack (D43). Each slice appends its pack here;
     /// <see cref="AllCatalog"/> is left alone so existing tests keep their counts.
     /// </summary>
     public static InMemoryContentCatalog PlayMechanicsCatalog()
     {
-        ContentPack[] packs = [Pack(), M1Pack(), SpellPack(), CombatPack(), EffectsPack(), MulticlassPack(), FormsPack(), TurnsPack(), FeatureAttacksPack(), ActionDetailsPack(), RollModesPack()];
+        ContentPack[] packs = [Pack(), M1Pack(), SpellPack(), CombatPack(), EffectsPack(), MulticlassPack(), FormsPack(), TurnsPack(), FeatureAttacksPack(), ActionDetailsPack(), RollModesPack(), ResponsesPack()];
         return new([.. packs.SelectMany(p => p.Sources)], [.. packs.SelectMany(p => p.Revisions)]);
     }
 

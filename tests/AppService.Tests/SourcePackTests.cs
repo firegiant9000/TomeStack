@@ -212,6 +212,51 @@ public class SourcePackTests
         Assert.Contains(temp.App.PreviewSourcePack([defence.Id]).Warnings, w => w.Code == "pack.reference-outside");
     }
 
+    /// <summary>One effect of each kind that names another content's toggle, pool or roll (every toggle-style reference).</summary>
+    private static Effect NamingOtherContent(string kind, Guid holder) => kind switch
+    {
+        "modifier toggleContent" => new ModifierEffect { Id = "e", Operation = ModifierOperation.Bonus, Target = FieldIds.Initiative, Value = "1", Timing = EffectTiming.WhileActive, Toggle = "form", ToggleContent = holder },
+        "attack whileToggle" => new AttackEffect { Id = "e", AttackId = "bolt", Label = "Bolt", Kind = WeaponAttack.Ranged, Abilities = [Ability.Dex], Damage = new("1", "6"), DamageType = "force", WhileToggle = new(holder, "form") },
+        "roll whileToggle" => new RollEffect { Id = "e", RollId = "burst", Label = "Burst", Dice = "1d6", WhileToggle = new(holder, "form") },
+        "rollMode toggleContent" => new RollModeEffect { Id = "e", Target = "skill.stealth", Mode = RollMode.Disadvantage, Toggle = "form", ToggleContent = holder },
+        "grant whileToggle" => new GrantEffect { Id = "e", Grant = GrantKind.DamageResistance, DamageType = "Fire", WhileToggle = new(holder, "form") },
+        "response resourceContent" => new ResponseEffect { Id = "e", ResponseId = "brace", Label = "Brace", Phase = ResponsePhase.DamageReduction, Amount = "1", ResourceId = "grit", ResourceContent = holder, Cost = "1" },
+        "response toggle" => new ResponseEffect { Id = "e", ResponseId = "brace", Label = "Brace", Phase = ResponsePhase.DamageReduction, Amount = "1", Toggle = new(holder, "form") },
+        "response outcome resourceContent" => new ResponseEffect { Id = "e", ResponseId = "rally", Label = "Rally", Phase = ResponsePhase.Threshold, When = new(null, true), Outcomes = [new(ResponseOutcomeKind.Regain, "grit", holder, "1", null, null, null)] },
+        "response outcome toggle" => new ResponseEffect { Id = "e", ResponseId = "rally", Label = "Rally", Phase = ResponsePhase.Threshold, When = new(null, true), Outcomes = [new(ResponseOutcomeKind.ToggleOn, null, null, null, new(holder, "form"), null, null)] },
+        "response outcome rollContent" => new ResponseEffect { Id = "e", ResponseId = "rally", Label = "Rally", Phase = ResponsePhase.Threshold, When = new(null, true), Outcomes = [new(ResponseOutcomeKind.OfferRoll, null, null, null, null, "counter", holder)] },
+        _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+    };
+
+    [Theory]
+    [InlineData("modifier toggleContent")]
+    [InlineData("attack whileToggle")]
+    [InlineData("roll whileToggle")]
+    [InlineData("rollMode toggleContent")]
+    [InlineData("grant whileToggle")]
+    [InlineData("response resourceContent")]
+    [InlineData("response toggle")]
+    [InlineData("response outcome resourceContent")]
+    [InlineData("response outcome toggle")]
+    [InlineData("response outcome rollContent")]
+    public void Every_toggle_style_reference_to_another_source_gives_a_reference_outside_warning_when_that_source_is_left_out(string kind)
+    {
+        using var temp = new TempApp();
+        var other = Shared(temp, "Test Holder Source");
+        var holder = Feat(other.Id, "Test Holder", Guid.NewGuid(), Guid.NewGuid()) with { Status = RevisionStatus.Published };
+        temp.App.Store.AddRevision(holder);
+        var own = Shared(temp, "Test Taker Source");
+        temp.App.Store.AddRevision(Feat(own.Id, "Test Taker", Guid.NewGuid(), Guid.NewGuid()) with
+        {
+            Status = RevisionStatus.Published,
+            SchemaVersion = 11,
+            Effects = [NamingOtherContent(kind, holder.ContentId)],
+        });
+
+        Assert.Contains(temp.App.PreviewSourcePack([own.Id]).Warnings, w => w.Code == "pack.reference-outside");
+        Assert.DoesNotContain(temp.App.PreviewSourcePack([own.Id, other.Id]).Warnings, w => w.Code == "pack.reference-outside");
+    }
+
     [Fact]
     public void A_source_pack_carries_no_machine_local_field_and_matches_the_v7_schemas()
     {

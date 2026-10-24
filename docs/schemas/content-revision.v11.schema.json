@@ -1445,6 +1445,140 @@
           "description": "Content v11 (D43): advantage or disadvantage on a saving throw, skill check or ability check, optionally while a toggle is on or against some conditions. Typed only in a v11 revision: in an older one it is an unknown effect, kept byte for byte."
         },
         {
+          "properties": {
+            "type": {
+              "const": "response"
+            },
+            "responseId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1
+            },
+            "phase": {
+              "enum": [
+                "damageReduction",
+                "hitPointOutcome",
+                "threshold"
+              ]
+            },
+            "amount": {
+              "$ref": "#/$defs/formula"
+            },
+            "when": {
+              "type": "object",
+              "properties": {
+                "atOrBelow": {
+                  "$ref": "#/$defs/formula",
+                  "description": "A formula that may also read HP.MAX (only here)."
+                },
+                "survived": {
+                  "const": true
+                }
+              },
+              "oneOf": [
+                {
+                  "required": [
+                    "atOrBelow"
+                  ]
+                },
+                {
+                  "required": [
+                    "survived"
+                  ]
+                }
+              ]
+            },
+            "resourceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "resourceContent": {
+              "$ref": "#/$defs/uuid"
+            },
+            "cost": {
+              "$ref": "#/$defs/formula"
+            },
+            "toggle": {
+              "type": "object",
+              "required": [
+                "toggleId"
+              ],
+              "properties": {
+                "contentId": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "toggleId": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "outcomes": {
+              "type": "array",
+              "maxItems": 8,
+              "items": {
+                "type": "object",
+                "required": [
+                  "kind"
+                ],
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "spend",
+                      "regain",
+                      "toggleOn",
+                      "offerRoll",
+                      "regainHitPoints",
+                      "temporaryHitPoints"
+                    ]
+                  },
+                  "resourceId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "resourceContent": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "amount": {
+                    "$ref": "#/$defs/formula"
+                  },
+                  "toggle": {
+                    "type": "object",
+                    "required": [
+                      "toggleId"
+                    ],
+                    "properties": {
+                      "contentId": {
+                        "$ref": "#/$defs/uuid"
+                      },
+                      "toggleId": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  },
+                  "rollId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "rollContent": {
+                    "$ref": "#/$defs/uuid"
+                  }
+                }
+              }
+            }
+          },
+          "required": [
+            "responseId",
+            "label",
+            "phase"
+          ],
+          "description": "Content v11 (D43): a reaction offered when the character takes damage (reduce it, survive at some hit points, or answer a threshold). Typed only in a v11 revision: in an older one it is an unknown effect, kept byte for byte. A reference without a content id names this revision's content."
+        },
+        {
           "description": "Unknown effect type: kept, reference-only.",
           "properties": {
             "type": {
@@ -1470,7 +1604,8 @@
                   "attack",
                   "attackRider",
                   "value",
-                  "rollMode"
+                  "rollMode",
+                  "response"
                 ]
               }
             }

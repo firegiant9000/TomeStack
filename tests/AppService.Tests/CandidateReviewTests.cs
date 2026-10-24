@@ -431,6 +431,41 @@ public class CandidateReviewTests
     }
 
     [Fact]
+    public void Dependencies_list_the_content_a_response_names()
+    {
+        var (temp, _, jobId) = Imported();
+        using var _t = temp;
+        var feat = Named(temp, jobId, "Fixture Keen Watcher");
+        var installed = temp.App.Store.ListRevisions().First(r => r.Status == RevisionStatus.Published && r.Kind == ContentKind.Feature && r.RulesFamilies.Contains(RulesFamilies.Srd521));
+        var missing = Guid.NewGuid();
+
+        ResponseEffect Response(string id, Guid? pool = null, ToggleRef? toggle = null, IReadOnlyList<ResponseOutcome>? outcomes = null) => new()
+        {
+            Id = id, ResponseId = id, Label = "Brace", Phase = outcomes is null ? ResponsePhase.DamageReduction : ResponsePhase.Threshold,
+            Amount = outcomes is null ? "1" : null, When = outcomes is null ? null : new(null, true),
+            ResourceId = pool is null ? null : "pool", ResourceContent = pool, Cost = pool is null ? null : "1", Toggle = toggle, Outcomes = outcomes,
+        };
+
+        // The pool a response spends, the toggle it needs, and each reference of an outcome: a pool, a toggle and a roll.
+        ResponseEffect[] named =
+        [
+            Response("cost", pool: installed.ContentId),
+            Response("toggle", toggle: new(installed.ContentId, "form")),
+            Response("regain", outcomes: [new(ResponseOutcomeKind.Regain, "pool", installed.ContentId, "1", null, null, null)]),
+            Response("on", outcomes: [new(ResponseOutcomeKind.ToggleOn, null, null, null, new(installed.ContentId, "form"), null, null)]),
+            Response("roll", outcomes: [new(ResponseOutcomeKind.OfferRoll, null, null, null, null, "counter", installed.ContentId)]),
+        ];
+        foreach (var response in named)
+        {
+            temp.App.EditCandidate(new(feat.Id, Expected: temp.EtagOf(feat.Id), Effects: [.. feat.Current.ProposedEffects, response]));
+            Assert.Contains(temp.App.CheckCandidate(feat.Id).Dependencies, d => d.Kind == "content" && d.Name == installed.Name);
+        }
+
+        temp.App.EditCandidate(new(feat.Id, Expected: temp.EtagOf(feat.Id), Effects: [.. feat.Current.ProposedEffects, Response("gone", pool: missing)]));
+        Assert.Contains(temp.App.CheckCandidate(feat.Id).Dependencies, d => d.Kind == "missing-content" && d.Name == missing.ToString());
+    }
+
+    [Fact]
     public void An_ignored_candidate_creates_nothing_and_cannot_be_accepted()
     {
         var (temp, _, jobId) = Imported();

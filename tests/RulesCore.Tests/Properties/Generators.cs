@@ -95,6 +95,7 @@ internal static class Generators
         [AttackRiderEffect.TypeName] = AttackRiderEffect.SchemaVersion,
         [ValueEffect.TypeName] = ValueEffect.SchemaVersion,
         [RollModeEffect.TypeName] = RollModeEffect.SchemaVersion,
+        [ResponseEffect.TypeName] = ResponseEffect.SchemaVersion,
     };
 
     /// <summary>
@@ -336,6 +337,29 @@ internal static class Generators
                 select new JsonObject { ["target"] = target, ["mode"] = mode }
                     .With("against", against == 0 ? null : new JsonArray([.. ConditionKeys.All.Take(against).Select(k => (JsonNode)k)]))
                     .With("toggle", toggle).With("toggleContent", toggleContent?.ToString())),
+            Common(ResponseEffect.TypeName,
+                from responseId in Keys
+                from label in Names
+                from phase in Gen.Elements("damageReduction", "hitPointOutcome", "threshold")
+                from amount in Optional(Formulas)
+                from when in Gen.Elements(0, 1, 2)
+                from resource in Optional(Keys)
+                from resourceContent in OptionalValue(Guids)
+                from cost in Optional(Formulas)
+                from toggle in Optional(Keys)
+                from toggleContent in OptionalValue(Guids)
+                from kinds in Gen.Elements("spend", "regain", "toggleOn", "offerRoll", "regainHitPoints", "temporaryHitPoints").ArrayOf().Select(k => k.Take(3).ToArray())
+                from outcomeContent in OptionalValue(Guids)
+                select new JsonObject { ["responseId"] = responseId, ["label"] = label, ["phase"] = phase }
+                    .With("amount", amount)
+                    .With("when", when == 0 ? null : when == 1 ? new JsonObject { ["atOrBelow"] = "floor(HP.MAX / 4)" } : new JsonObject { ["survived"] = true })
+                    .With("resourceId", resource).With("resourceContent", resourceContent?.ToString()).With("cost", cost)
+                    .With("toggle", toggle is null ? null : new JsonObject { ["toggleId"] = toggle }.With("contentId", toggleContent?.ToString()))
+                    .With("outcomes", kinds.Length == 0 ? null : new JsonArray([.. kinds.Select(k => (JsonNode)new JsonObject { ["kind"] = k }
+                        .With("resourceId", (k == "spend" || k == "regain") ? "pool" : null).With("resourceContent", (k == "spend" || k == "regain") ? outcomeContent?.ToString() : null)
+                        .With("amount", k != "toggleOn" && k != "offerRoll" ? "1" : null)
+                        .With("toggle", k == "toggleOn" ? new JsonObject { ["toggleId"] = "form" } : null)
+                        .With("rollId", k == "offerRoll" ? "roll" : null).With("rollContent", k == "offerRoll" ? outcomeContent?.ToString() : null))]))),
             Common(ToggleGroupEffect.TypeName,
                 from groupId in Keys
                 from label in Names

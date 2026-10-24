@@ -726,6 +726,136 @@ public sealed record RollModeEffect : Effect
         VersionedEffects.NamesMember<RollMode>(unknown.Raw, "mode") ? VersionedEffects.Typed<RollModeEffect>(unknown) : unknown;
 }
 
+/// <summary>Content schema v11 (D43): where in a damage event a response is offered.</summary>
+public enum ResponsePhase
+{
+    /// <summary>Before the damage is applied: it lowers the damage taken by <see cref="ResponseEffect.Amount"/>.</summary>
+    DamageReduction,
+
+    /// <summary>When the damage would drop the character to 0 hit points: it leaves them at <see cref="ResponseEffect.Amount"/> instead.</summary>
+    HitPointOutcome,
+
+    /// <summary>After the damage is decided: it is offered when <see cref="ResponseEffect.When"/> holds.</summary>
+    Threshold,
+}
+
+/// <summary>
+/// Content schema v11 (D43): when a <see cref="ResponsePhase.Threshold"/> response is offered. Exactly one member is set:
+/// <paramref name="AtOrBelow"/> (a formula that may read <c>HP.MAX</c>; offered when the hit points left are at or below it) or
+/// <paramref name="Survived"/> (<c>true</c>; offered when the hit points left are above 0).
+/// </summary>
+public sealed record ResponseWhen(string? AtOrBelow, bool? Survived);
+
+/// <summary>Content schema v11 (D43): what a response does once chosen.</summary>
+public enum ResponseOutcomeKind
+{
+    /// <summary>Spends <see cref="ResponseOutcome.Amount"/> of a pool.</summary>
+    Spend,
+
+    /// <summary>Regains <see cref="ResponseOutcome.Amount"/> of a pool.</summary>
+    Regain,
+
+    /// <summary>Turns a toggle on.</summary>
+    ToggleOn,
+
+    /// <summary>Offers a roll of the content that declares it.</summary>
+    OfferRoll,
+
+    /// <summary>Regains <see cref="ResponseOutcome.Amount"/> hit points (clamped to the maximum). One hit point outcome per response.</summary>
+    RegainHitPoints,
+
+    /// <summary>Gives <see cref="ResponseOutcome.Amount"/> temporary hit points (keeps the higher). One hit point outcome per response.</summary>
+    TemporaryHitPoints,
+}
+
+/// <summary>
+/// Content schema v11 (D43): one thing a response does. Which members apply depends on <paramref name="Kind"/>: spend and regain
+/// need <paramref name="ResourceId"/> and <paramref name="Amount"/>; the two hit point kinds need <paramref name="Amount"/> (a
+/// formula); toggleOn needs <paramref name="Toggle"/>; offerRoll needs <paramref name="RollId"/>. A reference whose content is
+/// absent means the response's own content.
+/// </summary>
+public sealed record ResponseOutcome(
+    [property: JsonRequired] ResponseOutcomeKind Kind,
+    string? ResourceId,
+    Guid? ResourceContent,
+    string? Amount,
+    ToggleRef? Toggle,
+    string? RollId,
+    Guid? RollContent);
+
+/// <summary>
+/// Content schema v11 (D43): a reaction the character can choose when they take damage: reduce it, survive at some hit points, or
+/// answer a threshold with outcomes. Typed only in a v11 revision: in an older revision a <c>response</c> stays an
+/// <see cref="UnknownEffect"/>, byte for byte. A phase or outcome kind that names no member stays untyped here too, and the
+/// validator reports it. This task only reads and validates it; a later task calculates it.
+/// </summary>
+public sealed record ResponseEffect : Effect
+{
+    public const string TypeName = "response";
+
+    public const int SchemaVersion = ContentRevision.PlayMechanicsSchemaVersion;
+
+    private const string OutcomesProperty = "outcomes";
+
+    public override string Type => TypeName;
+
+    /// <summary>Names the response; unique within the revision (validated in the content validator).</summary>
+    public required string ResponseId { get; init; }
+
+    /// <summary>The name the player sees when the response is offered.</summary>
+    public required string Label { get; init; }
+
+    public required ResponsePhase Phase { get; init; }
+
+    /// <summary>A formula: the damage a <see cref="ResponsePhase.DamageReduction"/> response takes off, or the hit points a <see cref="ResponsePhase.HitPointOutcome"/> response leaves. Not allowed on a threshold.</summary>
+    public string? Amount { get; init; }
+
+    /// <summary>Required on, and only on, a <see cref="ResponsePhase.Threshold"/> response.</summary>
+    public ResponseWhen? When { get; init; }
+
+    /// <summary>The pool the response's <see cref="Cost"/> is spent from.</summary>
+    public string? ResourceId { get; init; }
+
+    /// <summary>The content that declares <see cref="ResourceId"/>. Null: this revision's content.</summary>
+    public Guid? ResourceContent { get; init; }
+
+    /// <summary>A formula: how much of <see cref="ResourceId"/> choosing the response spends. Needs a <see cref="ResourceId"/>.</summary>
+    public string? Cost { get; init; }
+
+    /// <summary>The toggle that must be on for the response to be offered (validated like a damage grant's <c>whileToggle</c>). Null: always.</summary>
+    public ToggleRef? Toggle { get; init; }
+
+    /// <summary>What the response does once chosen.</summary>
+    public IReadOnlyList<ResponseOutcome>? Outcomes { get; init; }
+
+    /// <summary>The other contents this response names: its pool, its toggle, and each outcome's pool, toggle and roll content. Null content means this one and is left out.</summary>
+    public IEnumerable<Guid> ReferencedContent() =>
+        new[] { ResourceContent, Toggle?.ContentId }
+            .Concat((Outcomes ?? []).SelectMany(o => new[] { o?.ResourceContent, o?.Toggle?.ContentId, o?.RollContent }))
+            .OfType<Guid>();
+
+    /// <summary>Typed when the phase and every outcome's kind name a member exactly (the serializer also binds padded or combined names, which no schema allows).</summary>
+    internal static Effect FromUnknown(UnknownEffect unknown) =>
+        VersionedEffects.NamesMember<ResponsePhase>(unknown.Raw, "phase") && OutcomeKindsNamed(unknown.Raw)
+            ? VersionedEffects.Typed<ResponseEffect>(unknown)
+            : unknown;
+
+    private static bool OutcomeKindsNamed(JsonElement raw)
+    {
+        foreach (var p in raw.EnumerateObject())
+        {
+            if (!string.Equals(p.Name, OutcomesProperty, StringComparison.OrdinalIgnoreCase) || p.Value.ValueKind != JsonValueKind.Array)
+                continue;
+            foreach (var outcome in p.Value.EnumerateArray())
+            {
+                if (outcome.ValueKind == JsonValueKind.Object && !VersionedEffects.NamesMember<ResponseOutcomeKind>(outcome, "kind"))
+                    return false;
+            }
+        }
+        return true;
+    }
+}
+
 /// <summary>
 /// Content schema v6 (M3 B2, SPEC I-05 "assisted actions"): something the player switches on and off at the table, such
 /// as a stance or an aura. While it is on (play state, character schema v7), the revision's modifiers that name it apply.
@@ -1152,6 +1282,7 @@ internal static class VersionedEffects
             [RollEffect.TypeName] = (1, RollEffect.FromUnknown),
             [ValueEffect.TypeName] = (ValueEffect.SchemaVersion, (u, _) => ValueEffect.FromUnknown(u)),
             [RollModeEffect.TypeName] = (RollModeEffect.SchemaVersion, (u, _) => RollModeEffect.FromUnknown(u)),
+            [ResponseEffect.TypeName] = (ResponseEffect.SchemaVersion, (u, _) => ResponseEffect.FromUnknown(u)),
         };
 
     /// <summary>
@@ -1299,7 +1430,7 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
                 RollEffect.TypeName => element.Deserialize<RollEffect>(options),
                 HitDieEffect.TypeName => element.Deserialize<HitDieEffect>(options),
                 // Typed only in revisions of their schema version (ContentRevision.OnDeserialized); older ones keep them as written.
-                ArmorEffect.TypeName or SpellcastingEffect.TypeName or SpellEffect.TypeName or WeaponEffect.TypeName or ToggleEffect.TypeName or ScaleEffect.TypeName or ItemEffect.TypeName or ToggleGroupEffect.TypeName or UpkeepEffect.TypeName or AttackEffect.TypeName or AttackRiderEffect.TypeName or ValueEffect.TypeName or RollModeEffect.TypeName => UnknownEffect.From(element),
+                ArmorEffect.TypeName or SpellcastingEffect.TypeName or SpellEffect.TypeName or WeaponEffect.TypeName or ToggleEffect.TypeName or ScaleEffect.TypeName or ItemEffect.TypeName or ToggleGroupEffect.TypeName or UpkeepEffect.TypeName or AttackEffect.TypeName or AttackRiderEffect.TypeName or ValueEffect.TypeName or RollModeEffect.TypeName or ResponseEffect.TypeName => UnknownEffect.From(element),
                 LegacyAbilityScoreIncrease or LegacyInitiativeBonus => FromSchemaVersion1(element, type, options),
                 _ => UnknownEffect.From(element),
             } ?? UnknownEffect.From(element);

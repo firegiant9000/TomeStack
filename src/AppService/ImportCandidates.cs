@@ -811,6 +811,7 @@ public sealed partial class TomeStackApp
             .Concat(draft.Effects.OfType<RollEffect>().Select(r => r.WhileToggle?.ContentId).OfType<Guid>())
             .Concat(draft.Effects.OfType<RollModeEffect>().Select(m => m.ToggleContent).OfType<Guid>())
             .Concat(draft.Effects.OfType<GrantEffect>().Select(g => g.WhileToggle?.ContentId).OfType<Guid>())
+            .Concat(draft.Effects.OfType<ResponseEffect>().SelectMany(r => r.ReferencedContent()))
             .Where(id => id != draft.ContentId); // a toggle or upkeep naming its own content is no dependency
         foreach (var contentId in draft.Effects.OfType<RollEffect>().Select(r => r.ResourceContent).OfType<Guid>().Concat(toggleContent).Distinct())
         {

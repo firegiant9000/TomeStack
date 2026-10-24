@@ -34,6 +34,13 @@ public static class FormulaIdentifiers
     /// </summary>
     public const string ValuePrefix = "VALUE.";
 
+    /// <summary>
+    /// Content schema v11 (D43): <c>HP.MAX</c>, the hit point maximum before a damage event. Only the <c>atOrBelow</c> of a response's
+    /// threshold reads it (<see cref="FormulaFeatures.HitPointMaximum"/>). It is not a derived field here: the field evaluator never
+    /// sees it, so it can form no dependency cycle.
+    /// </summary>
+    public const string HitPointMaximum = "HP.MAX";
+
     private static readonly Dictionary<string, string?> Fields = Build();
 
     public static IEnumerable<string> All => Fields.Keys;
@@ -75,13 +82,17 @@ public static class FormulaIdentifiers
     }
 }
 
-/// <summary>The version-gated identifiers a formula may use: <c>SCALE.</c> from content schema v9, <c>VALUE.</c> from v11 (D43).</summary>
+/// <summary>
+/// The version-gated identifiers a formula may use: <c>SCALE.</c> from content schema v9, <c>VALUE.</c> from v11 (D43). Also
+/// <c>HP.MAX</c>, which no revision gets by default: it is passed only to check a response threshold's <c>atOrBelow</c>.
+/// </summary>
 [Flags]
 public enum FormulaFeatures
 {
     None = 0,
     Scales = 1,
     Values = 2,
+    HitPointMaximum = 4,
 }
 
 /// <summary>Immutable formula AST. Only these node kinds exist; there is no way to express a call to user code.</summary>
@@ -363,7 +374,8 @@ public sealed class Formula
                 case TokenKind.Identifier:
                     if (!FormulaIdentifiers.IsKnown(token.Text)
                         && !(features.HasFlag(FormulaFeatures.Scales) && FormulaIdentifiers.IsScale(token.Text))
-                        && !(features.HasFlag(FormulaFeatures.Values) && FormulaIdentifiers.IsValue(token.Text)))
+                        && !(features.HasFlag(FormulaFeatures.Values) && FormulaIdentifiers.IsValue(token.Text))
+                        && !(features.HasFlag(FormulaFeatures.HitPointMaximum) && token.Text == FormulaIdentifiers.HitPointMaximum))
                         throw new FormulaException("formula.unknown-identifier", $"'{Truncate(token.Text)}' is not a known value. Use one of: {string.Join(", ", FormulaIdentifiers.All)}.");
                     Identifiers.Add(token.Text);
                     return new IdentifierNode(token.Text);
