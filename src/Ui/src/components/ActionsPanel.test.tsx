@@ -545,3 +545,90 @@ it('the Points to spend box is aria-invalid and described by its reason only whi
   expect(box.getAttribute('aria-invalid')).toBeNull();
   expect(box.getAttribute('aria-describedby')).toBeNull();
 });
+
+// D43 S8: charging. Gather spends focus and builds charge; Release draws the built-up charge down.
+const chargePool = (spent: number, maximum = 4) => ({
+  content: ref, contentName: 'Testy Source', effectId: 'e-charge', resourceId: 'charge', label: 'Testy charge', maximum, spent, current: maximum - spent, countsUp: true,
+  trace: [], warnings: [], automation: 'automatic', recoveries: [],
+});
+const chargingView = (effects: object[], pools: object[]) =>
+  ({ character: { id: 'fixture' }, sheet: { attacks: [], toggles: [], resources: pools, features: [{ content: ref, name: 'Testy Source', kind: 'feature', effects }] } }) as unknown as CharacterView;
+const gather = {
+  id: 'gather', rollId: 'gather-roll', type: 'roll', label: 'Gather', activation: 'action', resourceId: 'focus', cost: 1, available: true,
+  alsoChange: [{ resourceContent: 'c1', resourceId: 'charge', change: 'spend', amount: 1 }],
+};
+const release = {
+  id: 'release', rollId: 'release-roll', type: 'roll', label: 'Release', dice: '2d6', activation: 'action', resourceId: 'charge', cost: 0, drawsDown: true,
+  available: true, perUnit: { dice: '1d6' },
+};
+
+it('Use on an action with alsoChange sends useAction with the basis', async () => {
+  const act = vi.fn();
+  render(<ActionsPanel view={chargingView([gather], [focusPool(4), chargePool(0)])} roll={() => {}} act={act} />);
+  await userEvent.click(screen.getByRole('button', { name: 'Use Gather (1 Testy focus, +1 Testy charge)' }));
+  expect(act).toHaveBeenCalledWith({ action: 'useAction', contentId: 'c1', rollId: 'gather-roll' });
+  expect(act).not.toHaveBeenCalledWith(expect.objectContaining({ action: 'spend' }));
+});
+
+it('a dice-less Use with no alsoChange and no drawsDown still sends spend', async () => {
+  const act = vi.fn();
+  const plain = { id: 'plain', rollId: 'plain-roll', type: 'roll', label: 'Plain', activation: 'action', resourceId: 'focus', cost: 1, available: true };
+  render(<ActionsPanel view={chargingView([plain], [focusPool(4)])} roll={() => {}} act={act} />);
+  await userEvent.click(screen.getByRole('button', { name: 'Use Plain (1 Testy focus)' }));
+  expect(act).toHaveBeenCalledWith({ action: 'spend', amount: 1, contentId: 'c1', resourceId: 'focus' });
+});
+
+it('a regain entry reads with a minus sign', () => {
+  const calm = { ...gather, id: 'calm', label: 'Calm', alsoChange: [{ resourceContent: 'c1', resourceId: 'charge', change: 'regain', amount: 2 }] };
+  render(<ActionsPanel view={chargingView([calm], [focusPool(4), chargePool(3)])} roll={() => {}} act={() => {}} />);
+  expect(screen.getByRole('button', { name: 'Use Calm (1 Testy focus, −2 Testy charge)' })).toBeTruthy();
+});
+
+it('Use is disabled with a linked reason when the charge is full, the focus is short or an amount is unavailable', () => {
+  render(<ActionsPanel view={chargingView([gather], [focusPool(4), chargePool(4)])} roll={() => {}} act={() => {}} />);
+  const button = screen.getByRole('button', { name: /^Use Gather/ }) as HTMLButtonElement;
+  expect(button.disabled).toBe(true);
+  expect(document.getElementById(button.getAttribute('aria-describedby')!)!.textContent).toMatch(/Testy charge is full/);
+  cleanup();
+
+  render(<ActionsPanel view={chargingView([gather], [focusPool(0), chargePool(0)])} roll={() => {}} act={() => {}} />);
+  expect((screen.getByRole('button', { name: /^Use Gather/ }) as HTMLButtonElement).disabled).toBe(true);
+  cleanup();
+
+  const unknown = { ...gather, alsoChange: [{ resourceContent: 'c1', resourceId: 'charge', change: 'spend', amount: null }] };
+  render(<ActionsPanel view={chargingView([unknown], [focusPool(4), chargePool(0)])} roll={() => {}} act={() => {}} />);
+  const b = screen.getByRole('button', { name: /^Use Gather/ }) as HTMLButtonElement;
+  expect(b.disabled).toBe(true);
+  expect(document.getElementById(b.getAttribute('aria-describedby')!)!.textContent).toMatch(/Cost unavailable/);
+});
+
+it("release's amount box is limited to the built-up charge", async () => {
+  const roll = vi.fn();
+  render(<ActionsPanel view={chargingView([release], [chargePool(2)])} roll={roll} act={() => {}} />);
+  const box = screen.getByRole('spinbutton', { name: /Points to spend/ }) as HTMLInputElement;
+  expect(box.max).toBe('2');
+  await userEvent.clear(box);
+  await userEvent.type(box, '2');
+  expect((screen.getByRole('button', { name: 'Roll Release (2d6)' }) as HTMLButtonElement).disabled).toBe(false);
+  await userEvent.clear(box);
+  await userEvent.type(box, '3');
+  expect((screen.getByRole('button', { name: 'Roll Release (2d6)' }) as HTMLButtonElement).disabled).toBe(true);
+});
+
+it("the record's Spend for a drawsDown release sends useAction with the record's amount, never a plain spend", async () => {
+  const act = vi.fn();
+  const rec = recordFor({
+    provenance: { rollId: 'release-roll', label: 'Release', content: ref, effectId: 'release', linkedResourceId: 'charge', linkedResourceContent: 'c1' },
+    spend: { contentId: 'c1', resourceId: 'charge', amount: 2, drawsDown: true },
+  });
+  const features = [{ content: ref, name: 'Testy Source', kind: 'feature', effects: [release] }] as never;
+  render(<RollResult record={rec} resources={[chargePool(3)] as never} features={features} act={act} />);
+  await userEvent.click(screen.getByRole('button', { name: /^Spend 2 Testy charge/ }));
+  expect(act).toHaveBeenCalledTimes(1);
+  expect(act).toHaveBeenCalledWith({ action: 'useAction', contentId: 'c1', rollId: 'release-roll', amount: 2 });
+  cleanup();
+
+  // Bounded by what has built up, not by what is left under the maximum.
+  render(<RollResult record={rec} resources={[chargePool(1)] as never} features={features} act={act} />);
+  expect((screen.getByRole('button', { name: /^Spend 2 Testy charge/ }) as HTMLButtonElement).disabled).toBe(true);
+});

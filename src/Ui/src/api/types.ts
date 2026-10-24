@@ -310,6 +310,19 @@ export interface FeatureEffect {
   targets?: string;
   /** Content v11 (D43): extra dice for each unit spent beyond the base cost. */
   perUnit?: RollPerUnit;
+  /** Content v11 (D43): the other pools a use also changes, each amount evaluated for this character (null when it could not be). */
+  alsoChange?: AlsoChangeValue[];
+  /** Content v11 (D43): the cost and per-unit amount use up the counting-up pool's built-up value. */
+  drawsDown?: boolean;
+  /** The roll's content `rollId` (what `useAction` names); it can differ from `id`. */
+  rollId?: string;
+}
+
+export interface AlsoChangeValue {
+  resourceContent: string;
+  resourceId: string;
+  change: 'spend' | 'regain';
+  amount?: number | null;
 }
 
 export type AreaShape = 'line' | 'cone' | 'sphere' | 'cube' | 'cylinder' | 'emanation';
@@ -872,6 +885,8 @@ export interface RollSpend {
   contentId: string;
   resourceId: string;
   amount: number;
+  /** D43 S8: the pool counts up and this roll draws it down; the record's Spend is a `useAction`, never a plain `spend`. */
+  drawsDown?: boolean;
 }
 
 /** A content roll effect (`content` + `effectId`) or a sheet field as a d20 test (`field`). */

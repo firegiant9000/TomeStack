@@ -223,13 +223,14 @@ public sealed record FeatureEntry(
 /// <param name="PerUnit">Extra dice per unit spent, as written; the roll command applies it (Task 5.3).</param>
 /// <param name="AlsoChange">Content v11 (D43): the other pools the use also changes, each amount evaluated for this character (never below 0). Null when the roll has none.</param>
 /// <param name="DrawsDown">Content v11 (D43): the cost and per-unit amount use up the built-up value of the counting-up pool instead of adding to it.</param>
+/// <param name="RollId">The roll's content <c>rollId</c> (what <c>useAction</c> names); it can differ from <paramref name="Id"/>. A computed sheet member, not stored.</param>
 public sealed record FeatureEffect(
     string Id, string Type, AutomationStatus Automation, string? Text, string? Label = null, string? Dice = null, string? ResourceId = null, Activation? Activation = null,
     Guid? ResourceContent = null, int? Cost = null, bool VariableCost = false, int? Bonus = null, bool Available = true, string? UnavailableReason = null,
     Ability? SaveAbility = null, int? SaveDc = null, IReadOnlyList<TraceEntry>? SaveTrace = null,
     RollArea? Area = null, string? Range = null, string? Targets = null,
     RollPerUnit? PerUnit = null,
-    IReadOnlyList<AlsoChangeValue>? AlsoChange = null, bool DrawsDown = false);
+    IReadOnlyList<AlsoChangeValue>? AlsoChange = null, bool DrawsDown = false, string? RollId = null);
 
 /// <summary>
 /// Content v11 (D43): one pool a use also changes, for this character. <paramref name="ResourceContent"/> is the content that
@@ -1906,7 +1907,7 @@ public static class CharacterCalculator
                 roll.ResourceContent, detail?.Cost, roll.VariableCost == true,
                 bonuses.TryGetValue((revision.Reference, roll.Id), out var bonus) ? bonus : null, reason is null, reason,
                 roll.Save?.Ability, detail?.SaveDc, detail?.SaveTrace, roll.Area, roll.Range, roll.Targets, roll.PerUnit,
-                detail?.AlsoChange, roll.DrawsDown == true);
+                detail?.AlsoChange, roll.DrawsDown == true, roll.RollId);
         }
         var effects = revision.Effects.Select(e => e switch
         {

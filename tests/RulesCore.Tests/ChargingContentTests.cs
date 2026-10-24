@@ -364,6 +364,16 @@ public class ChargingContentTests
     }
 
     [Fact]
+    public void A_roll_effect_on_the_sheet_carries_its_RollId_even_when_it_differs_from_the_effect_id()
+    {
+        var sheet = Sheet(WithGather(r => r with { RollId = "gather-roll" }));
+
+        var gather = Effect(sheet, "gather");
+        Assert.Equal("gather", gather.Id);
+        Assert.Equal("gather-roll", gather.RollId);
+    }
+
+    [Fact]
     public void An_alsoChange_amount_reads_the_character_and_never_goes_below_zero()
     {
         var sheet = Sheet(WithGather(r => r with { AlsoChange = [Charge(amount: "PB - 3"), Charge(amount: "PB"), Charge(amount: "0 - 2")] }));
