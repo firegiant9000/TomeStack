@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json;
 
 namespace TomeStack.RulesCore.Tests;
@@ -461,6 +462,326 @@ public class DamageResponseTests
         var (_, sheet) = Stand(extra: [holder]);
 
         Assert.DoesNotContain(sheet.Responses!, r => r.ResponseId == "note");
+    }
+
+    // ---- the plan's cost pass (task 7.3 review, carried into 7.4) -------------------------------------------------------------------
+
+    private const string GritPool = "\"resourceId\":\"grit\",\"resourceContent\":\"6f0dc000-0000-4000-8000-000000000070\"";
+
+    [Fact]
+    public void An_ineligible_response_does_not_use_up_a_pool_a_later_eligible_one_needs()
+    {
+        // Sheet order: X (a threshold at 5 or less, costing 1 grit) then the twin reduction (costing 1 grit); 1 grit left.
+        var x = Holder(60, $$"""{"type":"response","id":"x","responseId":"x","label":"X","phase":"threshold","when":{"atOrBelow":"5"},{{GritPool}},"cost":"1"}""");
+        var twin = Holder(61, $$"""{"type":"response","id":"twin","responseId":"twin","label":"Twin","phase":"damageReduction","amount":"5",{{GritPool}},"cost":"1"}""");
+        var c = Stand(hp: 68, extra: [x, twin], more: p => p.WithSpent(Fixtures.Bulwark.ContentId, "grit", 4));
+        Assert.True(c.Sheet.Responses!.ToList().FindIndex(r => r.ResponseId == "x") < c.Sheet.Responses!.ToList().FindIndex(r => r.ResponseId == "twin"));
+
+        var plan = PlanFor(c, 10, null, "x", "twin");
+
+        Assert.Equal(5, plan.Reduction);
+        var note = Assert.Single(plan.Notes);
+        Assert.Equal("damage.response-unavailable", note.Code);
+        Assert.Contains("'x'", note.Message, StringComparison.Ordinal);
+        Assert.Equal(new HitPointState(68, 63, 0), plan.Final);
+    }
+
+    [Fact]
+    public void A_response_that_is_both_ineligible_and_over_budget_gets_one_note()
+    {
+        // Each costs 1 and each is available alone (1 grit left), but together they are over budget; X is also not eligible (63 > 5).
+        var twin = Holder(62, $$"""{"type":"response","id":"twin","responseId":"twin","label":"Twin","phase":"damageReduction","amount":"5",{{GritPool}},"cost":"1"}""");
+        var x = Holder(64, $$"""{"type":"response","id":"x","responseId":"x","label":"X","phase":"threshold","when":{"atOrBelow":"5"},{{GritPool}},"cost":"1"}""");
+        var c = Stand(hp: 68, extra: [twin, x], more: p => p.WithSpent(Fixtures.Bulwark.ContentId, "grit", 4));
+
+        var plan = PlanFor(c, 10, null, "twin", "x");
+
+        var note = Assert.Single(plan.Notes);
+        Assert.Equal("damage.response-unavailable", note.Code);
+        Assert.Contains("'x'", note.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_chosen_threshold_is_cost_fitted_against_what_the_reductions_left()
+    {
+        // Rally (its own pool) is eligible after brace; a test threshold that wants the last grit fits once brace took none of it.
+        var late = Holder(63, $$"""{"type":"response","id":"late","responseId":"late","label":"Late","phase":"threshold","when":{"atOrBelow":"HP.MAX"},{{GritPool}},"cost":"1"}""");
+        var c = Stand(hp: 30, extra: [late], more: p => p.WithSpent(Fixtures.Bulwark.ContentId, "grit", 4));
+
+        var braceAndLate = PlanFor(c, 20, null, "brace", "late");
+        var lateAlone = PlanFor(c, 20, null, "late");
+
+        // brace (reduction) is fitted first and takes the last grit, so the later threshold is refused.
+        Assert.Equal("damage.response-unavailable", Assert.Single(braceAndLate.Notes).Code);
+        Assert.Empty(lateAlone.Notes);
+    }
+
+    // ---- applying a plan (task 7.4) -------------------------------------------------------------------------------------------------
+
+    private static (PlayState Play, IReadOnlyList<OfferedRoll> Rolls, IReadOnlyList<Diagnostic> Errors) Run(
+        (Character Character, CharacterSheet Sheet) c, int amount, params string[] chosen)
+    {
+        var plan = PlanFor(c, amount, null, chosen);
+        Assert.Empty(plan.Notes);
+        return DamagePipeline.Apply(c.Character.Play, plan, c.Sheet);
+    }
+
+    private static PlayState SpentGrit(PlayState play, int spent) => play.WithSpent(Fixtures.Bulwark.ContentId, "grit", spent);
+
+    [Fact]
+    public void Applying_pays_costs_and_runs_outcomes_in_order()
+    {
+        var c = Stand(hp: 30, more: p => SpentGrit(p, 2));
+
+        var (play, rolls, errors) = Run(c, 14, "rally");
+
+        Assert.Empty(errors);
+        Assert.Empty(rolls);
+        Assert.Equal(16, play.CurrentHitPoints);
+        Assert.Equal(1, play.SpentOf(Fixtures.Rally.ContentId, "rally")); // the response's cost
+        Assert.True(play.IsOn(Fixtures.SurgeForm.ContentId, "surge"));
+        Assert.Equal(1, play.SpentOf(Fixtures.Bulwark.ContentId, "grit")); // regain 1 of the 2 spent; turning the form on cost no grit
+
+        // Regain never goes below 0 spent.
+        var (none, _, noErrors) = Run(Stand(hp: 30), 14, "rally");
+        Assert.Empty(noErrors);
+        Assert.Equal(0, none.SpentOf(Fixtures.Bulwark.ContentId, "grit"));
+        Assert.DoesNotContain(none.Resources, r => r.ResourceId == "grit");
+    }
+
+    [Fact]
+    public void A_toggle_outcome_into_an_exclusive_group_switches_without_cost()
+    {
+        var c = Stand(hp: 30, more: p => SpentGrit(p, 3) with { Toggles = [new ActiveToggle(Fixtures.GuardForm.ContentId, "guard")] });
+
+        var (play, _, errors) = Run(c, 14, "rally");
+
+        Assert.Empty(errors);
+        Assert.False(play.IsOn(Fixtures.GuardForm.ContentId, "guard"));
+        Assert.True(play.IsOn(Fixtures.SurgeForm.ContentId, "surge"));
+        Assert.Equal(2, play.SpentOf(Fixtures.Bulwark.ContentId, "grit")); // only the rally's regain of 1: no cost for the switch, no refund for the form that went off
+        Assert.Equal([new ActiveToggle(Fixtures.SurgeForm.ContentId, "surge")], play.Toggles);
+    }
+
+    [Fact]
+    public void A_toggle_outcome_ends_overlays_that_needed_the_old_form_and_counts_rounds_in_an_encounter()
+    {
+        var aura = Holder(50, """{"type":"toggle","id":"aura","toggleId":"aura","label":"Aura","group":"forms","groupContent":"6f0dc000-0000-4000-8000-000000000074","layer":"overlay","allowedWith":[{"contentId":"6f0dc000-0000-4000-8000-000000000077","toggleId":"guard"}]}""");
+        var c = Stand(hp: 30, extra: [aura], more: p => p with { Toggles = [new ActiveToggle(Fixtures.GuardForm.ContentId, "guard"), new ActiveToggle(aura.ContentId, "aura")], Encounter = new(2) });
+        Assert.True(c.Sheet.Toggles!.Single(t => t.ToggleId == "aura").On);
+
+        var (play, _, errors) = Run(c, 14, "rally");
+
+        Assert.Empty(errors);
+        // The guard form and the overlay that needed it are gone; the surge form (no duration) has no count.
+        Assert.Equal([new ActiveToggle(Fixtures.SurgeForm.ContentId, "surge")], play.Toggles);
+    }
+
+    [Fact]
+    public void An_offered_roll_is_listed_and_rolls_nothing()
+    {
+        var c = Stand(hp: 10);
+
+        var (play, rolls, errors) = Run(c, 15, "stand", "rebound");
+
+        Assert.Empty(errors);
+        var roll = Assert.Single(rolls);
+        Assert.Equal(new OfferedRoll(Fixtures.Rebound, "counter", "counter", "Counter"), roll);
+        Assert.Equal(1, play.CurrentHitPoints);
+        Assert.Equal(1, play.SpentOf(Fixtures.LastStand.ContentId, "stand"));
+        Assert.Equal(c.Character.Play.DeathSaves, play.DeathSaves);
+    }
+
+    [Fact]
+    public void Apply_is_all_or_nothing()
+    {
+        // Brace (a reduction) pays first and fits; rally then cannot pay because its pool is spent in the play state being applied to.
+        var c = Stand(hp: 30);
+        var plan = PlanFor(c, 20, null, "brace", "rally");
+        Assert.Empty(plan.Notes);
+        var spent = c.Character.Play.WithSpent(Fixtures.Rally.ContentId, "rally", 1);
+
+        var (play, rolls, errors) = DamagePipeline.Apply(spent, plan, c.Sheet);
+
+        Assert.Same(spent, play);
+        Assert.Empty(rolls);
+        var error = Assert.Single(errors);
+        Assert.Equal("damage.response-unavailable", error.Code);
+        Assert.Contains("rally", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_plan_with_notes_is_returned_unchanged_with_those_notes()
+    {
+        var c = Stand(hp: 10);
+        var plan = PlanFor(c, 15, null, "endure"); // not available outside the surge form
+
+        var (play, rolls, errors) = DamagePipeline.Apply(c.Character.Play, plan, c.Sheet);
+
+        Assert.Same(c.Character.Play, play);
+        Assert.Empty(rolls);
+        Assert.Equal(plan.Notes, errors);
+        Assert.NotEmpty(errors);
+    }
+
+    [Fact]
+    public void The_applied_play_state_validates()
+    {
+        var c = Stand(hp: 10, concentrating: true);
+        var (play, _, errors) = Run(c, 15, "stand", "rebound");
+
+        Assert.Empty(errors);
+        Assert.Empty(play.Validate());
+
+        // A plan that would leave an invalid state is refused whole, with the validation codes.
+        var plan = PlanFor(c, 15, null, "stand");
+        var broken = plan with { Final = plan.Final with { Temporary = PlayState.MaxHitPoints + 1 } };
+        var (same, rolls, problems) = DamagePipeline.Apply(c.Character.Play, broken, c.Sheet);
+        Assert.Same(c.Character.Play, same);
+        Assert.Empty(rolls);
+        Assert.Contains(problems, d => d.Code == "play.hit-points-out-of-range");
+    }
+
+    [Fact]
+    public void A_survival_keeps_concentration_and_sets_its_dc()
+    {
+        var c = Stand(hp: 10, concentrating: true, more: p => p with { DeathSaves = new DeathSaves(1, 1) });
+
+        var (play, _, errors) = Run(c, 15, "stand");
+
+        Assert.Empty(errors);
+        Assert.Equal(1, play.CurrentHitPoints);
+        Assert.Equal(new Concentration(Fixtures.Bulwark, "Held", 10), play.Concentration);
+        Assert.Equal(new DeathSaves(1, 1), play.DeathSaves);
+    }
+
+    [Fact]
+    public void A_hit_to_zero_without_a_survival_ends_concentration()
+    {
+        var (play, _, errors) = Run(Stand(hp: 10, concentrating: true), 15);
+
+        Assert.Empty(errors);
+        Assert.Equal(0, play.CurrentHitPoints);
+        Assert.Null(play.Concentration);
+    }
+
+    [Fact]
+    public void Temporary_hit_points_keep_the_higher()
+    {
+        var ward = Holder(51, """{"type":"response","id":"ward8","responseId":"ward8","label":"Ward","phase":"damageReduction","amount":"1","outcomes":[{"kind":"temporaryHitPoints","amount":"8"}]}""");
+
+        // 3 temporary, 3 damage less 1 reduced: 2 absorbed, 1 left; the outcome's 8 is higher.
+        var (low, _, lowErrors) = Run(Stand(hp: 68, temporary: 3, extra: [ward]), 3, "ward8");
+        // 14 temporary, 4 damage less 1: 11 left, which is higher than 8.
+        var (high, _, highErrors) = Run(Stand(hp: 68, temporary: 14, extra: [ward]), 4, "ward8");
+
+        Assert.Empty(lowErrors);
+        Assert.Empty(highErrors);
+        Assert.Equal(8, low.TemporaryHitPoints);
+        Assert.Equal(11, high.TemporaryHitPoints);
+    }
+
+    [Fact]
+    public void A_heal_outcome_applies_after_the_hit_and_is_clamped()
+    {
+        var big = Holder(52, """{"type":"response","id":"bigheal","responseId":"bigheal","label":"Big heal","phase":"threshold","when":{"atOrBelow":"HP.MAX"},"outcomes":[{"kind":"regainHitPoints","amount":"100"}]}""");
+        var c = Stand(hp: 30, extra: [Holder(1, AtAnyDrop), big]);
+
+        var (healed, _, errors) = Run(c, 14, "heal");
+        var (clamped, _, bigErrors) = Run(c, 14, "bigheal");
+
+        Assert.Empty(errors);
+        Assert.Empty(bigErrors);
+        Assert.Equal(26, healed.CurrentHitPoints); // 30 - 14 = 16, then +10
+        Assert.Null(clamped.CurrentHitPoints); // up to the maximum, stored as null
+    }
+
+    [Fact]
+    public void A_heal_from_zero_resets_death_saves()
+    {
+        var mend = Holder(53, """{"type":"response","id":"mend","responseId":"mend","label":"Mend","phase":"damageReduction","amount":"1","outcomes":[{"kind":"regainHitPoints","amount":"5"}]}""");
+        var c = Stand(hp: 0, extra: [mend], more: p => p with { DeathSaves = new DeathSaves(1, 1) });
+
+        var (play, _, errors) = Run(c, 1, "mend");
+
+        Assert.Empty(errors);
+        Assert.Equal(5, play.CurrentHitPoints);
+        Assert.Equal(new DeathSaves(), play.DeathSaves);
+    }
+
+    [Fact]
+    public void Apply_stores_full_hit_points_as_null()
+    {
+        Assert.Null(new PlayState { CurrentHitPoints = 3 }.WithHitPoints(68, 4, 68).CurrentHitPoints);
+        Assert.Equal(4, new PlayState().WithHitPoints(68, 4, 68).TemporaryHitPoints);
+        Assert.Equal(67, new PlayState().WithHitPoints(67, 0, 68).CurrentHitPoints);
+        Assert.Null(new PlayState { CurrentHitPoints = 3 }.WithCurrentHitPoints(70, 68).CurrentHitPoints);
+        // Through Apply: damage fully absorbed by temporary hit points leaves the character at full hit points, stored as null.
+        var (play, _, errors) = Run(Stand(hp: 68, temporary: 20), 5);
+        Assert.Empty(errors);
+        Assert.Null(play.CurrentHitPoints);
+        Assert.Equal(15, play.TemporaryHitPoints);
+    }
+
+    [Fact]
+    public void A_response_unavailable_at_apply_time_names_the_ids_only()
+    {
+        // The pool is spent between planning and applying (rally's cost cannot be paid), so apply refuses and changes nothing.
+        var c = Stand(hp: 30);
+        var plan = PlanFor(c, 14, null, "rally");
+        var spent = c.Character.Play.WithSpent(Fixtures.Rally.ContentId, "rally", 1);
+
+        var (play, _, errors) = DamagePipeline.Apply(spent, plan, c.Sheet);
+
+        Assert.Same(spent, play);
+        var error = Assert.Single(errors);
+        Assert.Contains(Fixtures.Rally.ContentId.ToString(), error.Message, StringComparison.Ordinal);
+    }
+
+    public static IEnumerable<object[]> ServiceRows() =>
+        typeof(DamagePipelineTests).GetMethod(nameof(DamagePipelineTests.Resolve_matches_the_service_for_every_existing_case))!
+            .GetCustomAttributes<InlineDataAttribute>()
+            .SelectMany(a => a.GetData(null!))
+            // The columns this test uses: the inputs (0-7), the amount after defences (9), and the hit points, temporary hit points, DC and end flag after (12-15).
+            .Select(row => new[] { row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[9], row[12], row[13], row[14], row[15] });
+
+    [Theory]
+    [MemberData(nameof(ServiceRows))]
+    public void Plan_then_apply_matches_plain_damage_without_responses(
+        string family, int amount, string? type, string defences, int temporary, int current, int maximum, bool concentrating,
+        int adjusted, int afterCurrent, int afterTemporary, int? dc, bool ends)
+    {
+        var policy = RulesFamilies.Get(family);
+        var character = Fixtures.Load("pm-bulwark-l8.json");
+        var play = new PlayState
+        {
+            CurrentHitPoints = current >= maximum ? null : current,
+            TemporaryHitPoints = temporary,
+            Concentration = concentrating ? new Concentration(Fixtures.Bulwark, "Held") : null,
+        };
+        character = character with { Play = play };
+        var sheet = new CharacterSheet(
+            character.Id, family, [], [], HitPoints: new(maximum, current, temporary),
+            DamageDefences: [.. Defences(defences).Select(d => new DamageDefenceValue(d.Type, d.Kind, []))]);
+
+        var plan = DamagePipeline.Plan(new(amount, type), character, sheet, [], policy);
+        var (applied, rolls, errors) = DamagePipeline.Apply(play, plan, sheet);
+
+        Assert.Empty(errors);
+        Assert.Empty(rolls);
+        // What the service's plain damage writes: nothing for a hit of 0 after defences, else the hit points (null at the maximum),
+        // the temporary hit points, and the concentration (ended, or kept with the pending DC).
+        if (adjusted == 0)
+        {
+            Assert.Same(play, applied);
+            return;
+        }
+        Assert.Equal(afterCurrent >= maximum ? null : afterCurrent, applied.CurrentHitPoints);
+        Assert.Equal(afterTemporary, applied.TemporaryHitPoints);
+        var expectedConcentration = ends ? null : dc is { } pending && play.Concentration is { } held ? held with { PendingSaveDc = pending } : play.Concentration;
+        Assert.Equal(expectedConcentration, applied.Concentration);
+        Assert.Equal(play.DeathSaves, applied.DeathSaves);
+        Assert.Equal(play.Toggles, applied.Toggles);
     }
 
     // ---- no responses = task 7.1 -------------------------------------------------------------------------------------------------

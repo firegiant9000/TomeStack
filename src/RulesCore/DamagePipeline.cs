@@ -65,6 +65,12 @@ public sealed record DamagePlan(
     IReadOnlyList<ResponseOffer> Offers, IReadOnlyList<ResponseChoice> Chosen,
     IReadOnlyList<ResponseOutcomeValue> Outcomes, IReadOnlyList<Diagnostic> Notes);
 
+/// <summary>
+/// D43 S7 (D45): a roll a response offered after a hit. It rolls nothing; the player rolls it with the roll command
+/// (<paramref name="Content"/> and <paramref name="EffectId"/> name the roll effect). <paramref name="Label"/> is the roll's label as the sheet shows it.
+/// </summary>
+public sealed record OfferedRoll(ContentReference Content, string EffectId, string RollId, string Label);
+
 public static class DamagePipeline
 {
     /// <summary>
@@ -152,6 +158,13 @@ public static class DamagePipeline
         var defences = sheet.DamageDefences?.Select(d => new DamageDefence(d.Type, d.Kind)).ToList() ?? [];
         var responses = sheet.Responses ?? [];
         var notes = new List<Diagnostic>();
+        // One note per response, however many reasons it has.
+        var noted = new HashSet<(Guid, string)>();
+        void Refuse(Guid contentId, string responseId)
+        {
+            if (noted.Add((contentId, responseId)))
+                notes.Add(Unavailable(contentId, responseId));
+        }
 
         // The choices: unknown and repeated ones are notes; the rest are the picked responses (counted once each).
         var picked = new HashSet<(Guid, string)>();
@@ -159,16 +172,17 @@ public static class DamagePipeline
         {
             var key = (choice.ContentId, choice.ResponseId);
             if (!responses.Any(r => (r.ContentId, r.ResponseId) == key) || !picked.Add(key))
-                notes.Add(Unavailable(choice.ContentId, choice.ResponseId));
+                Refuse(choice.ContentId, choice.ResponseId);
         }
         var pickedResponses = responses.Where(r => picked.Contains((r.ContentId, r.ResponseId))).ToList();
         var usable = pickedResponses.Where(r => r.Available).ToList();
 
-        // The chosen costs together must fit each pool: in sheet order, a response whose cost no longer fits is refused, and
-        // nothing below uses it.
+        // The chosen costs together must fit each pool. Eligibility depends on the hit points, which depend on the reductions and
+        // the survival, so the pass runs in phases, each in sheet order: reductions, then survivals, then the eligible thresholds.
+        // A response that no longer fits is refused, and nothing below uses it; one that is not eligible takes nothing from a pool.
         var committed = new Dictionary<(Guid?, string), int>();
-        var fitted = new List<ResponseValue>();
-        foreach (var response in usable)
+        var fitted = new HashSet<ResponseValue>();
+        bool Fit(ResponseValue response)
         {
             if (response.Cost is { } cost && response.ResourceId is { } poolId)
             {
@@ -177,15 +191,18 @@ public static class DamagePipeline
                 var total = committed.GetValueOrDefault(key) + cost;
                 if (pool?.Current is not { } left || total > left)
                 {
-                    notes.Add(Unavailable(response.ContentId, response.ResponseId));
-                    continue;
+                    Refuse(response.ContentId, response.ResponseId);
+                    return false;
                 }
                 committed[key] = total;
             }
             fitted.Add(response);
+            return true;
         }
 
         // 1. Reductions: every damage reduction is eligible.
+        foreach (var response in usable.Where(r => r.Phase == ResponsePhase.DamageReduction))
+            Fit(response);
         var reduction = fitted.Where(r => r.Phase == ResponsePhase.DamageReduction).Sum(r => r.Amount ?? 0);
 
         // 2 to 4. Defences, the concentration DC, temporary hit points, hit points: one implementation.
@@ -193,7 +210,12 @@ public static class DamagePipeline
 
         // 5. A hit that would drop a character who was up to 0: the survival responses are eligible; one chosen leaves them standing.
         var drops = hp.Current > 0 && result.After.Current == 0;
-        var survival = drops ? fitted.FirstOrDefault(r => r.Phase == ResponsePhase.HitPointOutcome) : null;
+        if (drops)
+        {
+            foreach (var response in usable.Where(r => r.Phase == ResponsePhase.HitPointOutcome))
+                Fit(response);
+        }
+        var survival = drops ? usable.FirstOrDefault(r => r.Phase == ResponsePhase.HitPointOutcome && fitted.Contains(r)) : null;
         var final = result.After;
         if (survival is not null)
         {
@@ -220,12 +242,15 @@ public static class DamagePipeline
         var eligible = responses.Where(Eligible).ToList();
         var offers = eligible.Select(r => new ResponseOffer(r, r.Available, r.Available ? null : r.UnavailableReason)).ToList();
 
+        // The eligible chosen thresholds are cost-fitted against what the reductions and the survival left.
+        foreach (var response in usable.Where(r => r.Phase == ResponsePhase.Threshold && eligible.Contains(r)))
+            Fit(response);
         foreach (var response in pickedResponses)
         {
             if (!eligible.Contains(response) || !response.Available)
-                notes.Add(Unavailable(response.ContentId, response.ResponseId));
+                Refuse(response.ContentId, response.ResponseId);
         }
-        var applied = fitted.Where(eligible.Contains).ToList();
+        var applied = responses.Where(r => fitted.Contains(r) && eligible.Contains(r)).ToList();
         // Counted over everything chosen, available and eligible (a response refused for its cost still counts).
         if (usable.Count(r => eligible.Contains(r) && IsHitPointOutcome(r)) > 1)
             notes.Add(new("damage.one-outcome", "At most one hit point outcome (a survival, a heal or temporary hit points) can be chosen for one hit."));
@@ -233,6 +258,158 @@ public static class DamagePipeline
         // 7. The outcomes, in sheet order. Hit point and temporary hit point outcomes are applied by the caller.
         IReadOnlyList<ResponseOutcomeValue> outcomes = notes.Count > 0 ? [] : [.. applied.SelectMany(r => r.Outcomes ?? [])];
         return new(result, reduction, final, offers, [.. chosen], outcomes, notes);
+    }
+
+    /// <summary>
+    /// D43 S7 (D45): writes a <see cref="Plan"/> to the play state, and throws nothing. All or nothing: with any error (a plan that has
+    /// notes, a chosen response that cannot be paid for or switched on now, or a result <see cref="PlayState.Validate"/> refuses) the
+    /// input <paramref name="play"/> comes back unchanged, with no rolls and the errors. The order:
+    /// <list type="number">
+    /// <item>the hit points the plan ended with (temporary hit points too, current stored as null at the maximum), unless the hit did nothing;</item>
+    /// <item>concentration: ended, or kept with the DC the plan set, as plain damage writes it;</item>
+    /// <item>each chosen response in sheet order pays its cost from its pool first (<c>damage.response-unavailable</c> when the pool
+    /// cannot pay now), then runs its outcomes in order: spend and regain (clamped to 0 and the maximum; an untracked pool is left
+    /// as it is), toggleOn (the S1 switch, with no cost and no refund), offerRoll (listed, never rolled), regainHitPoints (up to the
+    /// maximum; leaving 0 resets death saves) and temporaryHitPoints (keeps the higher).</item>
+    /// </list>
+    /// Errors name content and response ids, never user text.
+    /// </summary>
+    public static (PlayState Play, IReadOnlyList<OfferedRoll> Rolls, IReadOnlyList<Diagnostic> Errors) Apply(PlayState play, DamagePlan plan, CharacterSheet sheet)
+    {
+        ArgumentNullException.ThrowIfNull(play);
+        ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(sheet);
+        if (plan.Notes.Count > 0)
+            return (play, [], plan.Notes);
+
+        var errors = new List<Diagnostic>();
+        var rolls = new List<OfferedRoll>();
+        var maximum = sheet.HitPoints?.Maximum ?? plan.Final.Maximum;
+        var result = play;
+        var responses = sheet.Responses ?? [];
+        var toggles = (sheet.Toggles ?? []).ToList();
+
+        // 1 and 2. The hit, as plain damage writes it: nothing for a hit that was 0 after defences and reductions.
+        if (plan.Result.Outcome.Adjusted != 0)
+        {
+            var concentration = plan.Result.ConcentrationEnds ? null
+                : plan.Result.ConcentrationDc is { } dc && result.Concentration is { } held ? held with { PendingSaveDc = dc }
+                : result.Concentration;
+            result = result.WithHitPoints(plan.Final.Current, plan.Final.Temporary, maximum) with { Concentration = concentration };
+        }
+
+        // 3 and 4. The chosen responses, in sheet order. Every choice must be on the sheet and offered by the plan.
+        var chosenKeys = plan.Chosen.Select(c => (c.ContentId, c.ResponseId)).ToHashSet();
+        foreach (var (contentId, responseId) in chosenKeys)
+        {
+            if (!responses.Any(r => r.ContentId == contentId && r.ResponseId == responseId)
+                || !plan.Offers.Any(o => o.Offered && o.Response.ContentId == contentId && o.Response.ResponseId == responseId))
+                errors.Add(Unavailable(contentId, responseId));
+        }
+
+        ResourceValue? Pool(Guid? contentId, string? resourceId) =>
+            contentId is null || resourceId is null ? null : sheet.Resources?.FirstOrDefault(r => r.Content.ContentId == contentId && r.ResourceId == resourceId);
+
+        bool Pay(ResponseValue response)
+        {
+            if (response.Cost is not { } cost || response.ResourceId is not { } poolId || cost <= 0)
+                return true;
+            if (Pool(response.CostResourceContent, poolId) is not { Maximum: { } poolMaximum } || response.CostResourceContent is not { } poolContent)
+                return false;
+            var spent = result.SpentOf(poolContent, poolId);
+            if (Math.Max(poolMaximum - spent, 0) < cost)
+                return false;
+            result = result.WithSpent(poolContent, poolId, spent + cost);
+            return true;
+        }
+
+        bool Run(ResponseOutcomeValue outcome)
+        {
+            switch (outcome.Kind)
+            {
+                case ResponseOutcomeKind.Spend or ResponseOutcomeKind.Regain:
+                    if (outcome.Amount is not { } poolAmount || Pool(outcome.ResourceContent, outcome.ResourceId) is not { } pool)
+                        return false;
+                    if (pool.Maximum is not { } poolMaximum)
+                        return true; // not tracked: left as it is
+                    var spent = result.SpentOf(pool.Content.ContentId, pool.ResourceId);
+                    result = result.WithSpent(
+                        pool.Content.ContentId, pool.ResourceId,
+                        outcome.Kind == ResponseOutcomeKind.Spend ? Math.Min(poolMaximum, spent + poolAmount) : Math.Max(0, spent - poolAmount));
+                    return true;
+                case ResponseOutcomeKind.ToggleOn:
+                    return outcome.Toggle is { ContentId: { } toggleContent } reference && SwitchOn(toggleContent, reference.ToggleId);
+                case ResponseOutcomeKind.OfferRoll:
+                    if (outcome.Roll is not { } roll || outcome.RollEffectId is not { } effectId || outcome.RollId is not { } rollId)
+                        return false;
+                    var label = sheet.Features?.FirstOrDefault(f => f.Content == roll)?.Effects.FirstOrDefault(e => e.Id == effectId)?.Label;
+                    rolls.Add(new(roll, effectId, rollId, label ?? rollId));
+                    return true;
+                case ResponseOutcomeKind.RegainHitPoints:
+                    if (outcome.Amount is not { } heal)
+                        return false;
+                    var before = result.CurrentHitPoints ?? maximum;
+                    var after = Math.Max(before, Math.Min(maximum, before + heal));
+                    result = result.WithCurrentHitPoints(after, maximum);
+                    // SRD 5.1 p. 98, SRD 5.2.1 p. 17: regaining any hit points resets death saving throws.
+                    if ((play.CurrentHitPoints ?? maximum) == 0 && after > 0)
+                        result = result with { DeathSaves = new() };
+                    return true;
+                case ResponseOutcomeKind.TemporaryHitPoints:
+                    if (outcome.Amount is not { } temporary)
+                        return false;
+                    result = result with { TemporaryHitPoints = Math.Max(result.TemporaryHitPoints, temporary) };
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        // The S1 switch with no cost and no refund: the occupants of the group go off, the overlays that needed them end.
+        bool SwitchOn(Guid contentId, string toggleId)
+        {
+            var toggle = toggles.FirstOrDefault(t => t.Content.ContentId == contentId && t.ToggleId == toggleId);
+            if (toggle is null || toggle.Auto == true)
+                return false;
+            if (toggle.On)
+                return true;
+            if (!ToggleGroups.OverlayAllowedNow(toggle, toggles))
+                return false;
+            var gone = new HashSet<(Guid, string)>();
+            if (toggle is { Group: not null, Layer: not ToggleLayer.Overlay })
+            {
+                var groupPresent = sheet.Features is null || sheet.Features.Any(f => f.Content.ContentId == toggle.GroupContent);
+                foreach (var occupant in ToggleGroups.Occupants(toggle, toggles, groupPresent))
+                    gone.Add((occupant.Content.ContentId, occupant.ToggleId));
+                var stored = result.Toggles.Select(s => (s.ContentId, s.ToggleId)).ToHashSet();
+                foreach (var overlay in ToggleGroups.OverlaysEndedBySwitchingOn(toggle, toggles, stored))
+                    gone.Add((overlay.Content.ContentId, overlay.ToggleId));
+            }
+            result = result with
+            {
+                Toggles =
+                [
+                    .. result.Toggles.Where(t => !gone.Contains((t.ContentId, t.ToggleId)) && !(t.ContentId == contentId && t.ToggleId == toggleId)),
+                    new ActiveToggle(contentId, toggleId, result.Encounter is null ? null : toggle.Duration),
+                ],
+            };
+            toggles = [.. toggles.Select(t =>
+                gone.Contains((t.Content.ContentId, t.ToggleId)) ? t with { On = false }
+                : t.Content.ContentId == contentId && t.ToggleId == toggleId ? t with { On = true }
+                : t)];
+            return true;
+        }
+
+        foreach (var response in responses.Where(r => chosenKeys.Contains((r.ContentId, r.ResponseId))))
+        {
+            if (!Pay(response) || !(response.Outcomes ?? []).All(Run))
+                errors.Add(Unavailable(response.ContentId, response.ResponseId));
+        }
+
+        // 5. The result must be a state the play state accepts.
+        if (errors.Count == 0)
+            errors.AddRange(result.Validate());
+        return errors.Count > 0 ? (play, [], errors) : (result, rolls, []);
     }
 
     private static bool IsHitPointOutcome(ResponseValue response) =>

@@ -131,6 +131,51 @@ public static class ToggleGroups
             : allowedWith?.Any(r => (r.ContentId ?? overlayContent) == on.ContentId && r.ToggleId == on.ToggleId) == true;
 
     /// <summary>
+    /// The primaries of <paramref name="toggle"/>'s group that are on beside it, which switching it on turns off (the S1 switch), in
+    /// <paramref name="toggles"/> order. Overlays are never occupants. <paramref name="groupPresent"/> is false when the content that declares
+    /// the group is not on the character (a group of one: nothing is exclusive with it). This is the rule the toggle command and a
+    /// damage response's <c>toggleOn</c> share.
+    /// </summary>
+    public static IReadOnlyList<ToggleValue> Occupants(ToggleValue toggle, IReadOnlyList<ToggleValue> toggles, bool groupPresent)
+    {
+        ArgumentNullException.ThrowIfNull(toggle);
+        ArgumentNullException.ThrowIfNull(toggles);
+        return !groupPresent
+            ? []
+            : [.. toggles.Where(t => t.On && t.Group == toggle.Group && t.GroupContent == toggle.GroupContent && t.Layer != ToggleLayer.Overlay
+                && !(t.Content.ContentId == toggle.Content.ContentId && t.ToggleId == toggle.ToggleId))];
+    }
+
+    /// <summary>
+    /// True when <paramref name="overlay"/> may be on with the form that is on now in <paramref name="toggles"/> (none: the base character).
+    /// A toggle that is not an overlay of a group is always allowed.
+    /// </summary>
+    public static bool OverlayAllowedNow(ToggleValue overlay, IReadOnlyList<ToggleValue> toggles)
+    {
+        ArgumentNullException.ThrowIfNull(overlay);
+        ArgumentNullException.ThrowIfNull(toggles);
+        if (overlay.Group is null || overlay.Layer != ToggleLayer.Overlay)
+            return true;
+        var on = toggles.FirstOrDefault(t => t.On && t.Group == overlay.Group && t.GroupContent == overlay.GroupContent && t.Layer != ToggleLayer.Overlay);
+        return OverlayAllowed(overlay.AllowedWith, overlay.AllowedInBase, overlay.Content.ContentId, on is null ? null : (on.Content.ContentId, on.ToggleId));
+    }
+
+    /// <summary>
+    /// The overlays of <paramref name="primary"/>'s group that are on (or only stored, when <paramref name="stored"/> is given) and are not
+    /// allowed with <paramref name="primary"/>: they end when it is switched on in place of the form that was on.
+    /// </summary>
+    public static IReadOnlyList<ToggleValue> OverlaysEndedBySwitchingOn(ToggleValue primary, IReadOnlyList<ToggleValue> toggles, IReadOnlySet<(Guid ContentId, string ToggleId)>? stored)
+    {
+        ArgumentNullException.ThrowIfNull(primary);
+        ArgumentNullException.ThrowIfNull(toggles);
+        if (primary.Group is null || primary.Layer == ToggleLayer.Overlay)
+            return [];
+        return [.. toggles.Where(t => (t.On || stored?.Contains((t.Content.ContentId, t.ToggleId)) == true)
+            && t.Group == primary.Group && t.GroupContent == primary.GroupContent && t.Layer == ToggleLayer.Overlay
+            && !OverlayAllowed(t.AllowedWith, t.AllowedInBase, t.Content.ContentId, (primary.Content.ContentId, primary.ToggleId)))];
+    }
+
+    /// <summary>
     /// The overlays that are on and no longer allowed once <paramref name="ending"/> is off, in <paramref name="toggles"/> order. Only a
     /// primary of a group takes overlays with it. <paramref name="toggles"/> is the state now (the <c>On</c> flags): the primary of the
     /// group that is still on beside <paramref name="ending"/>, if any, is the one the overlays must be allowed with; none means the

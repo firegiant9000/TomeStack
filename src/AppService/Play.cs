@@ -154,7 +154,6 @@ public sealed partial class TomeStackApp
             return SaveWithPlay(ChangeCharges(character, sheet, command)); // charges live on the equipment entry, not in the play state
         var play = character.Play;
         var hp = sheet.HitPoints!;
-        int? AtMaximumIsNull(int value) => value >= hp.Maximum ? null : value;
         DamageOutcome? damage = null;
         IReadOnlyList<Diagnostic>? notices = null;
 
@@ -162,10 +161,10 @@ public sealed partial class TomeStackApp
         {
             PlayActionKind.Spend or PlayActionKind.Regain => ChangeResource(play, sheet, command),
             PlayActionKind.Damage => Damage(play, sheet, command, RulesFamilies.Get(character.RulesFamily), out damage),
-            PlayActionKind.Heal => play with { CurrentHitPoints = AtMaximumIsNull(hp.Current + command.Amount) },
+            PlayActionKind.Heal => play.WithCurrentHitPoints(hp.Current + command.Amount, hp.Maximum),
             PlayActionKind.SetTemporaryHitPoints => play with { TemporaryHitPoints = command.Amount },
             PlayActionKind.SetHitPoints => command.Amount <= hp.Maximum
-                ? play with { CurrentHitPoints = AtMaximumIsNull(command.Amount) }
+                ? play.WithCurrentHitPoints(command.Amount, hp.Maximum)
                 : throw new AppValidationException([new("play.hit-points-above-maximum", $"Current hit points cannot be above the maximum ({hp.Maximum}).")]),
             PlayActionKind.AddCondition => play.Conditions.Contains(Condition(command))
                 ? play
@@ -409,8 +408,7 @@ public sealed partial class TomeStackApp
         {
             // Defensive: the sheet reports no group for a group of one (C6), so a primary here always has its group's content; this only guards a sheet built otherwise.
             var groupPresent = sheet.Features is null || sheet.Features.Any(f => f.Content.ContentId == toggle.GroupContent);
-            var occupants = !groupPresent ? [] : (sheet.Toggles ?? []).Where(t => t.On && t.Group == toggle.Group && t.GroupContent == toggle.GroupContent && t.Layer != ToggleLayer.Overlay
-                && !(t.Content.ContentId == toggle.Content.ContentId && t.ToggleId == toggle.ToggleId)).ToList();
+            var occupants = ToggleGroups.Occupants(toggle, sheet.Toggles ?? [], groupPresent);
             if (occupants.Count > 0 && !command.Replace)
                 throw new AppValidationException([new("toggle.group-occupied", $"Group '{toggle.Group}' already has '{occupants[0].Label}' ({occupants[0].ContentName}) on; turn it off first, or switch with replace.", toggle.Content, toggle.EffectId)]);
             next = [.. others.Where(t => !occupants.Any(o => o.Content.ContentId == t.ContentId && o.ToggleId == t.ToggleId))];
@@ -483,7 +481,7 @@ public sealed partial class TomeStackApp
         var concentration = result.ConcentrationEnds ? null
             : result.ConcentrationDc is { } dc && play.Concentration is { } con ? con with { PendingSaveDc = dc }
             : play.Concentration;
-        return play with { TemporaryHitPoints = result.After.Temporary, CurrentHitPoints = result.After.Current >= hp.Maximum ? null : result.After.Current, Concentration = concentration };
+        return play.WithHitPoints(result.After.Current, result.After.Temporary, hp.Maximum) with { Concentration = concentration };
     }
 
     private static PlayState StartConcentration(PlayState play, CharacterSheet sheet, PlayCommand command)
