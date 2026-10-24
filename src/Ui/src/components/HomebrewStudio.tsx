@@ -12,6 +12,7 @@ import type {
   DebugFinding,
   DebugReport,
   DesignHint,
+  Diagnostic,
   Effect,
   PublishResult,
   RulesFamilyId,
@@ -38,6 +39,7 @@ import { abilities, nextGroupKey, nextScaleKey, parseSlotRows, parseTwenty } fro
 import { nextAttackKey, type ToggleChoice } from '../attackAuthoring';
 import { AttackFields, RiderFields, ToggleSelect } from './AttackFields';
 import { DefenceFields, RollModeFields, isDamageDefence } from './RollModeFields';
+import { ResponseFields } from './ResponseFields';
 import { RollFields } from './RollFields';
 import { isValueKey, nextValueKey, type PoolChoice } from '../rollAuthoring';
 import {
@@ -879,8 +881,13 @@ function EntryEditor(props: {
             : false;
   const listed = revision.effects.map((effect, index) => ({ effect, index })).filter(({ effect }) => !shownByEditor(effect));
 
-  function add(type: 'modifier' | 'resource' | 'recovery' | 'roll' | 'armor' | 'grant' | 'scale' | 'value' | 'spellcasting' | 'toggle' | 'toggleGroup' | 'upkeep' | 'attack' | 'attackRider' | 'rollMode' | 'damageDefence') {
+  function add(type: 'modifier' | 'resource' | 'recovery' | 'roll' | 'armor' | 'grant' | 'scale' | 'value' | 'spellcasting' | 'toggle' | 'toggleGroup' | 'upkeep' | 'attack' | 'attackRider' | 'rollMode' | 'damageDefence' | 'response') {
     const id = nextId(type === 'damageDefence' ? 'grant' : type);
+    if (type === 'response') {
+      // Content v11 (D43 S7): a valid start (take 1 less damage). The response id is set once, like a resource's.
+      update({ effects: [...revision.effects, { type, id, responseId: id, label: '', phase: 'damageReduction', amount: '1' }] });
+      return;
+    }
     if (type === 'rollMode') {
       // Content v11 (D43 slice 6): a valid start (advantage on a Dexterity save).
       update({ effects: [...revision.effects, { type, id, target: 'save.dex', mode: 'advantage' }] });
@@ -1111,6 +1118,8 @@ function EntryEditor(props: {
           groups={revision.effects.filter((e): e is Extract<Effect, { type: 'toggleGroup' }> => e.type === 'toggleGroup')}
           otherToggles={otherToggles}
           otherPools={otherPools}
+          rolls={revision.effects.filter((e): e is Extract<Effect, { type: 'roll' }> => e.type === 'roll')}
+          diagnostics={[...(report?.errors ?? []), ...(report?.warnings ?? [])].filter((d) => d.effectId === effect.id)}
           grantable={grantable}
           previewRevision={previewRevision}
           onChange={(e) => setEffect(index, e)}
@@ -1183,6 +1192,9 @@ function EntryEditor(props: {
         </button>
         <button type="button" onClick={() => add('damageDefence')}>
           Add damage defence
+        </button>
+        <button type="button" onClick={() => add('response')}>
+          Add damage response
         </button>
         <button type="button" onClick={() => add('toggle')}>
           Add toggle
@@ -1601,6 +1613,10 @@ function EffectEditor(props: {
   otherToggles: ToggleChoice[];
   /** Content v11 (D43 slice 5): the pools of the source's other entries, which a roll can spend. */
   otherPools: PoolChoice[];
+  /** Content v11 (D43 S7): the rolls this revision declares, which a response outcome can offer. */
+  rolls: Extract<Effect, { type: 'roll' }>[];
+  /** The last check's errors and warnings for this rule (shown inside a response, whose fields cannot each carry one). */
+  diagnostics: Diagnostic[];
   grantable: StudioEntry[];
   /** The draft the formula previews are worked out against (D61). */
   previewRevision?: ContentRevision;
@@ -1613,6 +1629,7 @@ function EffectEditor(props: {
   const names: Record<Effect['type'], string> = {
     modifier: 'Modifier',
     rollMode: 'Roll mode',
+    response: 'Damage response',
     grant: isDamageDefence(effect) ? 'Damage defence' : 'Granted feature',
     resource: 'Resource',
     recovery: 'Recovery',
@@ -1985,6 +2002,18 @@ function EffectEditor(props: {
       {effect.type === 'rollMode' && (
         <RollModeFields effect={effect} toggles={toggleChoices} showToggle={toggles.length > 0 || props.otherToggles.length > 0} onChange={onChange} onProblem={onProblem} />
       )}
+      {effect.type === 'response' && (
+        <ResponseFields
+          effect={effect}
+          resources={props.resources}
+          otherPools={props.otherPools}
+          toggles={toggleChoices}
+          rolls={props.rolls}
+          previewRevision={props.previewRevision}
+          diagnostics={props.diagnostics}
+          onChange={onChange}
+        />
+      )}
       {isDamageDefence(effect) && <DefenceFields effect={effect} toggles={toggleChoices} showToggle={toggles.length > 0 || props.otherToggles.length > 0} onChange={onChange} />}
       {effect.type === 'grant' && effect.grant === 'content' && (
         <>
@@ -2041,7 +2070,8 @@ function EffectEditor(props: {
       {effect.type === 'spellcasting' && <SpellcastingFields effect={effect} previewRevision={props.previewRevision} onChange={onChange} onProblem={onProblem} />}
       {/* An upkeep is previewed and confirmed by a turn, never applied by calculation, so it has no automation to choose. */}
       {/* A named value is always calculated (the validator refuses any other automation), so it has none to choose either. */}
-      {effect.type !== 'grant' && effect.type !== 'upkeep' && effect.type !== 'value' && (
+      {/* A response is chosen by the player when the hit is taken, so it has no automation to choose either. */}
+      {effect.type !== 'grant' && effect.type !== 'upkeep' && effect.type !== 'value' && effect.type !== 'response' && (
         <label className="field">
           Automation
           <select

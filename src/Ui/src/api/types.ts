@@ -593,6 +593,17 @@ export interface ResponseValue {
   outcomes?: ResponseOutcomeValue[];
 }
 
+/** One outcome of a `response` effect as authored (content v11); which members apply depends on `kind`. */
+export interface ResponseOutcomeDef {
+  kind: ResponseOutcomeKind;
+  resourceId?: string;
+  resourceContent?: string;
+  amount?: string;
+  toggle?: { contentId?: string; toggleId: string };
+  rollId?: string;
+  rollContent?: string;
+}
+
 /** A response chosen for a hit. */
 export interface ResponseChoice {
   contentId: string;
@@ -1586,6 +1597,20 @@ export type Effect =
       against?: string[];
       toggle?: string;
       toggleContent?: string;
+    })
+  // Content v11 (D43 S7): a damage-time response. `amount` belongs to a damageReduction or hitPointOutcome response, `when` to a threshold one.
+  | (EffectBase & {
+      type: 'response';
+      responseId: string;
+      label: string;
+      phase: ResponsePhase;
+      amount?: string;
+      when?: { atOrBelow?: string; survived?: true };
+      resourceId?: string;
+      resourceContent?: string;
+      cost?: string;
+      toggle?: { contentId?: string; toggleId: string };
+      outcomes?: ResponseOutcomeDef[];
     })
   | (EffectBase & {
       type: 'resource';

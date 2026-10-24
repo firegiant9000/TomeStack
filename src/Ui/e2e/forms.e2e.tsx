@@ -1,9 +1,12 @@
 // D43 slice 1 against the real DevHost: form groups authored in the studio, the form picker on Play, and a refused switch.
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import { App } from '../src/App';
 import { client } from '../src/api/client';
+import type { ContentReference, ContentRevision } from '../src/api/types';
 
 vi.mock('../src/api/client', async (importOriginal) => {
   const { inject } = await import('vitest');
@@ -444,5 +447,141 @@ it('a feat with automatic advantage rolls two dice on a Dex save, and turning on
   const cancelled = await screen.findByRole('button', { name: 'Roll Dexterity saving throw (normal: advantage and disadvantage cancel)' });
   await user.click(cancelled);
   await waitFor(() => expect(diceRolled()).toBe(1));
+});
+
+// ---- D43 S7: damage responses against the real DevHost ----
+
+const fixtureFolder = () => resolve(process.cwd(), '../../tests/RulesFixtures');
+
+/** The content ids of the responses pack, in the order they can be published (the pool and the form come first). */
+const responseContentOrder = ['70', '74', '71', '72', '73', '75', '76', '77'].map((n) => `6f0dc000-0000-4000-8000-0000000000${n}`);
+
+let responsesPack: Promise<ContentReference[]> | undefined;
+
+/**
+ * Installs the responses fixture pack (`tests/RulesFixtures/fixture-pack-responses.json`) as one homebrew source, because the
+ * DevHost seeds only its older fixture packs. A draft gets a new revision id, so the class's grants of the six features (which
+ * name their revision ids) are left out and the character pins the features itself, as the fixture character does. Content ids
+ * stay, so the features' pool and form references still resolve. Once per run.
+ */
+function installResponsesPack(): Promise<ContentReference[]> {
+  responsesPack ??= (async () => {
+    const pack = JSON.parse(readFileSync(resolve(fixtureFolder(), 'fixture-pack-responses.json'), 'utf8')) as { revisions: ContentRevision[] };
+    const source = await client.createHomebrewSource('E2E Responses Book', ['srd-5.2.1']);
+    const published: ContentReference[] = [];
+    for (const contentId of responseContentOrder) {
+      const revision = pack.revisions.find((r) => r.contentId === contentId)!;
+      const effects = revision.kind === 'class' ? revision.effects.filter((e) => e.type !== 'grant') : revision.effects;
+      const draft = await client.saveDraft({ ...revision, status: 'draft', effects, provenance: { ...revision.provenance, sourceId: source.id } });
+      const result = await client.publish(draft);
+      expect(result.report.errors).toEqual([]);
+      published.push(result.published);
+    }
+    return published;
+  })();
+  return responsesPack;
+}
+
+/** A level 8 Fixture Bulwark with the fixture character's scores, the six response features and the guard form pinned. */
+async function createBulwark(name: string): Promise<string> {
+  const pins = await installResponsesPack();
+  const fixture = JSON.parse(readFileSync(resolve(fixtureFolder(), 'characters/pm-bulwark-l8.json'), 'utf8')) as { baseAbilities: Record<string, number> };
+  const created = await client.createCharacter({
+    name,
+    rulesFamily: 'srd-5.2.1',
+    baseAbilities: fixture.baseAbilities as never,
+    pins,
+    classes: [{ class: pins[0]!, level: 8 }],
+  });
+  return created.character.id;
+}
+
+async function openBulwark(user: ReturnType<typeof userEvent.setup>, name: string): Promise<HTMLElement> {
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: new RegExp(`^${name}`) }));
+  const sheet = await screen.findByRole('article', { name });
+  await openTab(user, sheet, 'Play');
+  return sheet;
+}
+
+const hitPointsOf = async (id: string) => (await client.getCharacter(id)).sheet.hitPoints!;
+
+it('a hit that would drop the character to 0 offers survival; choosing it leaves 1 HP and Undo restores the exact state', async () => {
+  const user = userEvent.setup();
+  const id = await createBulwark('E2E Bulwark Stand');
+  const { maximum } = await hitPointsOf(id);
+  await client.play(id, { action: 'setHitPoints', amount: 5 });
+  const before = (await client.getCharacter(id)).character.play;
+  await openBulwark(user, 'E2E Bulwark Stand');
+
+  await user.type(await screen.findByRole('spinbutton', { name: 'Amount' }), '20');
+  await user.click(screen.getByRole('button', { name: 'Take damage' }));
+  const group = await screen.findByRole('radiogroup', { name: 'Survive at 0 hit points' });
+  // The survival that needs the surge form is listed but cannot be chosen, and says why; the others are open.
+  const stand = within(group).getByRole<HTMLInputElement>('radio', { name: /^Last stand/ });
+  expect(within(group).getByRole<HTMLInputElement>('radio', { name: /^Endure/ }).disabled).toBe(true);
+  expect(within(group).getByRole<HTMLInputElement>('radio', { name: 'None' }).checked).toBe(true);
+  await user.click(stand);
+  await screen.findByText(`Hit points after: 1 of ${maximum}`);
+  const apply = screen.getByRole('button', { name: 'Apply damage' });
+  await waitFor(() => expect(apply.getAttribute('aria-disabled')).toBe('false'));
+  await user.click(apply);
+  await screen.findByRole('heading', { name: `Hit points: 1 of ${maximum}` });
+  expect(await hitPointsOf(id)).toMatchObject({ current: 1, maximum });
+
+  // The service undoes the whole hit: the stored play state (hit points, the spent pool) is as it was before.
+  await user.click(await screen.findByRole('button', { name: /^Undo damage 20/ }));
+  await screen.findByRole('heading', { name: 'Hit points: 5 of ' + maximum });
+  expect((await client.getCharacter(id)).character.play).toEqual(before);
+});
+
+it('a hit to a quarter of the maximum offers the threshold, which turns the form on', async () => {
+  const user = userEvent.setup();
+  const id = await createBulwark('E2E Bulwark Rally');
+  const { maximum } = await hitPointsOf(id);
+  const quarter = Math.floor(maximum / 4);
+  await openBulwark(user, 'E2E Bulwark Rally');
+  const forms = () => screen.getByRole('radiogroup', { name: 'Forms' });
+  expect(within(forms()).getByRole('radio', { name: /^Surge form/ }).getAttribute('aria-checked')).toBe('false');
+
+  // A hit that is not enough: the threshold is not offered.
+  await user.type(await screen.findByRole('spinbutton', { name: 'Amount' }), '1');
+  await user.click(screen.getByRole('button', { name: 'Take damage' }));
+  const first = await screen.findByRole('group', { name: 'Responses' });
+  expect(within(first).queryByRole('checkbox', { name: /^Rally/ })).toBeNull();
+  await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+  // A hit that leaves exactly a quarter of the maximum: the threshold is offered; choosing it turns the surge form on.
+  await user.type(await screen.findByRole('spinbutton', { name: 'Amount' }), String(maximum - quarter));
+  await user.click(screen.getByRole('button', { name: 'Take damage' }));
+  const responses = await screen.findByRole('group', { name: 'Responses' });
+  const rally = await within(responses).findByRole<HTMLInputElement>('checkbox', { name: /^Rally/ });
+  await waitFor(() => expect(rally.disabled).toBe(false));
+  await user.click(rally);
+  // The surge form raises Constitution, so the maximum after the hit is the form's, not the one the threshold was read against.
+  await screen.findByText(new RegExp(`^Hit points after: ${quarter} of \\d+`));
+  const apply = screen.getByRole('button', { name: 'Apply damage' });
+  await waitFor(() => expect(apply.getAttribute('aria-disabled')).toBe('false'));
+  await user.click(apply);
+  await waitFor(() => expect(within(forms()).getByRole('radio', { name: /^Surge form/ }).getAttribute('aria-checked')).toBe('true'));
+  expect((await hitPointsOf(id)).current).toBe(quarter);
+});
+
+it('plain damage from the summary routes through the panel', async () => {
+  const user = userEvent.setup();
+  const id = await createBulwark('E2E Bulwark Plain');
+  const { maximum } = await hitPointsOf(id);
+  await openBulwark(user, 'E2E Bulwark Plain');
+
+  // The summary's quick button opens the panel (the character has responses); with nothing chosen Apply is plain damage.
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' }));
+  await screen.findByRole('heading', { name: 'Take 1 untyped damage' });
+  expect(await hitPointsOf(id)).toMatchObject({ current: maximum }); // nothing is written by opening it
+  const apply = screen.getByRole('button', { name: 'Apply damage' });
+  await waitFor(() => expect(apply.getAttribute('aria-disabled')).toBe('false'));
+  await user.click(apply);
+  await screen.findByRole('heading', { name: `Hit points: ${maximum - 1} of ${maximum}` });
+  expect(screen.queryByRole('button', { name: 'Apply damage' })).toBeNull();
+  expect(await hitPointsOf(id)).toMatchObject({ current: maximum - 1, maximum });
 });
 

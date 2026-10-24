@@ -1716,6 +1716,72 @@ it('a timeout whose reload also fails says the sheet could not be reloaded', asy
   expect(onError).toHaveBeenCalled();
 });
 
+it('the reload after a damage timeout waits its turn in the save queue, so a later apply is not rolled back by it', async () => {
+  const user = userEvent.setup();
+  const onChanged = vi.fn();
+  const v = respondingView();
+  const stale = v; // the stored copy as the reload read it, before panel 2's hit
+  const afterPanel2 = { ...v, character: { ...v.character, updatedAt: '2026-10-03T00:00:05Z' }, sheet: { ...v.sheet, hitPoints: { maximum: 8, current: 7, temporary: 0 } } };
+  const reload = pending();
+  vi.mocked(client.damagePreview).mockReset();
+  vi.mocked(client.damagePreview).mockResolvedValue(hitPreview());
+  vi.mocked(client.play).mockReset();
+  vi.mocked(client.play).mockRejectedValueOnce(new TomeStackError({ code: 'timeout', message: 'No answer.' })).mockResolvedValueOnce(afterPanel2);
+  vi.mocked(client.getCharacter).mockReset();
+  vi.mocked(client.getCharacter).mockReturnValue(reload.promise);
+  render(<CharacterSheet view={v} onChanged={onChanged} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+
+  // Panel 1: a response is applied, the reply never arrives (timeout), and the reload of the stored copy is on its way.
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' }));
+  await user.click(await screen.findByRole('checkbox', { name: /Brace/ }));
+  const first = screen.getByRole('button', { name: 'Apply damage' });
+  await waitFor(() => expect(first.getAttribute('aria-disabled')).toBe('false'));
+  await user.click(first);
+  await waitFor(() => expect(client.getCharacter).toHaveBeenCalledTimes(1));
+
+  // Panel 2: plain damage applied while that reload is still in flight.
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' }));
+  const second = await screen.findByRole('button', { name: 'Apply damage' });
+  await waitFor(() => expect(second.getAttribute('aria-disabled')).toBe('false'));
+  await user.click(second);
+  await new Promise((r) => setTimeout(r, 30)); // an unqueued apply would have finished and been shown by now
+
+  // The late reload reply must not be shown after panel 2's apply.
+  reload.settle(stale);
+  await waitFor(() => expect(onChanged).toHaveBeenCalledWith(afterPanel2));
+  expect(onChanged.mock.calls.at(-1)![0]).toBe(afterPanel2);
+});
+
+it('a timeout from the first damage panel after a second press reloads, says so, and leaves the new panel open', async () => {
+  const user = userEvent.setup();
+  const onStatus = vi.fn();
+  const fresh = withUpdatedAt(respondingView(), '2026-10-03T00:00:09Z');
+  let timeOut: (error: unknown) => void = noop;
+  const first = new Promise<CharacterView>((_resolve, reject) => {
+    timeOut = reject;
+  });
+  vi.mocked(client.damagePreview).mockReset();
+  vi.mocked(client.damagePreview).mockResolvedValue(hitPreview());
+  vi.mocked(client.play).mockReset();
+  vi.mocked(client.play).mockReturnValueOnce(first);
+  vi.mocked(client.getCharacter).mockReset();
+  vi.mocked(client.getCharacter).mockResolvedValue(fresh);
+  render(<CharacterSheet view={respondingView()} onChanged={noop} onError={noop} onStatus={onStatus} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' }));
+  await user.click(await screen.findByRole('checkbox', { name: /Brace/ }));
+  const apply = screen.getByRole('button', { name: 'Apply damage' });
+  await waitFor(() => expect(apply.getAttribute('aria-disabled')).toBe('false'));
+  await user.click(apply);
+  await waitFor(() => expect(client.play).toHaveBeenCalledTimes(1));
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' })); // a fresh panel replaces the one that is applying
+  await waitFor(() => expect(client.damagePreview).toHaveBeenCalledTimes(3));
+
+  timeOut(new TomeStackError({ code: 'timeout', message: 'No answer.' }));
+  await waitFor(() => expect(onStatus).toHaveBeenCalledWith('The reply did not arrive. The sheet was reloaded; check hit points before trying again.'));
+  expect(client.getCharacter).toHaveBeenCalledWith('fixture-2');
+  expect(screen.getByRole('button', { name: 'Apply damage' })).toBeTruthy(); // the new panel stays open
+});
+
 it('the reply of a replaced damage panel does not close the new panel', async () => {
   const user = userEvent.setup();
   const onChanged = vi.fn();

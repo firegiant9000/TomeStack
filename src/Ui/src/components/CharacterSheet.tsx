@@ -476,8 +476,9 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
     closeDamage(n);
     let reloaded = false;
     try {
-      const fresh = await client.getCharacter(characterId);
-      adopt(fresh); // unconditionally: the stored copy is the truth
+      // Through the save queue, behind any apply queued meanwhile: a late reload reply must not roll back a later change. The queue
+      // takes the reply as the latest stored copy (what `adopt` did).
+      const fresh = await runQueued(() => client.getCharacter(characterId), (reply) => reply.character);
       onChanged(fresh);
       reloaded = true;
     } catch (error) {
