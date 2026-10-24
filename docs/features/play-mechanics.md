@@ -482,6 +482,7 @@ On a sheet with responses, "Take damage" and the summary's "Lose 1 hit point" op
 ## Not yet
 
 - Damage responses: the studio's outcome roll picker offers only the same entry's rolls. A roll from another entry can be stored in content but not chosen in the studio yet.
+- Damage responses: a response is offered only when each of its form outcomes is allowed with the forms on before the hit. A response that switches a form on and then an overlay that only that form allows is not offered while the form is off.
 - Feature attacks in the exports (the Foundry actor and the neutral JSON list equipped weapons only), and rolling a feature attack's cost automatically (the attack roll offers "Spend").
 - Applying a saving throw, an area or a range: they are shown as text. Nothing rolls a target's save or places the area. A feature attack has no per-unit amount (only a roll effect does; an `amount` on anything else is `roll.amount-not-allowed`). A dice-less `variableCost` action spends its full cost through Use: there is no box to choose a smaller amount.
 - Named values outside a class (a species or a feat pinned on its own has none), a value that takes arguments, and a catalog-wide `validate.value-unknown` for features.
