@@ -29,7 +29,7 @@ it('lists every client play action kind exactly once (plus the toggleOn replace 
     setExhaustion: true, recordDeathSave: true, addDeathSaveFailure: true, clearDeathSaves: true, setInspiration: true, spendSlot: true, regainSlot: true,
     spendPactSlot: true, regainPactSlot: true, toggleOn: true, toggleOff: true, startConcentration: true, endConcentration: true, clearConcentrationCheck: true,
     spendCharge: true, regainCharge: true, companionDamage: true, companionHeal: true, companionSetHitPoints: true, companionSetTemporaryHitPoints: true,
-    startEncounter: true, endEncounter: true,
+    startEncounter: true, endEncounter: true, useAction: true,
   };
   const named = new Set(parity.map((c) => c.action));
   expect([...named].sort()).toEqual(Object.keys(all).sort());

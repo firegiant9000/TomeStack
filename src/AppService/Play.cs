@@ -94,12 +94,17 @@ public enum PlayActionKind
 
     /// <summary>D43 slice 3: ends the encounter and clears every toggle's rounds left (the reply names the toggles that lost a duration). Refused <c>encounter.not-started</c> outside one. Compound, like <see cref="StartEncounter"/>.</summary>
     EndEncounter,
+
+    /// <summary>D43 slice 8: uses one roll (<c>contentId</c> and <c>rollId</c>): its own spend (or draw-down, for a <c>drawsDown</c> roll; <c>amount</c> for a per-unit roll) and every <c>alsoChange</c> entry, all applied or none. Refused <c>use.not-found</c>, <c>use.unavailable</c>, <c>use.unaffordable</c> or <c>use.pool-full</c>. Compound; the undo label is "use {roll label}".</summary>
+    UseAction,
 }
 
 /// <param name="Confirm">Must be <c>true</c>: play state changes only by an explicit user action, never as a side effect.</param>
 /// <param name="Replace">With <c>toggleOn</c> of a primary form: switch off the primary of the same group that is on instead of refusing (D43).</param>
 /// <param name="ExpectedUpdatedAt">The <c>Character.UpdatedAt</c> of the copy the page acted on (D43 S2). When sent and not the stored one, the command is refused with <c>character.stale</c> and nothing is written, as <see cref="TomeStackApp.SaveCharacter"/> does. Compound changes require it.</param>
 /// <param name="Responses">D43 S7, with <c>damage</c>: the damage responses chosen for the hit (<c>character.damagePreview</c> lists them). A non-empty list makes the change compound: it needs <paramref name="ExpectedUpdatedAt"/> and is one undo step.</param>
+/// <param name="RollId">D43 S8, with <c>useAction</c> and <paramref name="ContentId"/>: the roll (its <c>rollId</c>) to use.</param>
+/// <param name="Clear">D43 S8, with <c>endEncounter</c> only: counting-up pools whose built-up value goes to 0 in the same change, as <c>"{contentId:D}/{resourceId}"</c> (at most 64). Refused <c>play.clear-invalid</c> with any other action or any entry that is not a counting-up pool of the character.</param>
 /// <param name="ContentId">With <paramref name="ResourceId"/>, the resource to spend or regain (the content that defines it).</param>
 public sealed record PlayCommand(
     Guid CharacterId,
@@ -117,7 +122,9 @@ public sealed record PlayCommand(
     int? Temporary = null,
     bool Replace = false,
     DateTimeOffset? ExpectedUpdatedAt = null,
-    IReadOnlyList<ResponseChoice>? Responses = null);
+    IReadOnlyList<ResponseChoice>? Responses = null,
+    string? RollId = null,
+    IReadOnlyList<string>? Clear = null);
 
 /// <summary>
 /// <c>character.undoPlay</c> (D43 S2): undoes the last compound play change. <paramref name="UpdatedAt"/> is the stamp of the copy the
@@ -148,6 +155,9 @@ public sealed partial class TomeStackApp
             throw new AppValidationException([new("character.stale", StaleMessage)], "character.stale");
         if (command.Amount is < 0 or > PlayState.MaxHitPoints)
             throw new AppValidationException([new("play.amount-out-of-range", $"The amount must be between 0 and {PlayState.MaxHitPoints}.")]);
+        // D43 S8: a list of pools to clear belongs to the end of an encounter only; anywhere else it is refused, never ignored.
+        if (command.Clear is { Count: > 0 } && command.Action != PlayActionKind.EndEncounter)
+            throw new AppValidationException([new("play.clear-invalid", "Pools can be cleared only when an encounter ends.")], "play.clear-invalid");
 
         if (command.Action is PlayActionKind.CompanionDamage or PlayActionKind.CompanionHeal or PlayActionKind.CompanionSetHitPoints or PlayActionKind.CompanionSetTemporaryHitPoints)
             return SaveWithPlay(character with { Play = ChangeCompanion(character, command) }); // a companion's hit points are not the character's: no sheet needed
@@ -158,6 +168,7 @@ public sealed partial class TomeStackApp
         var hp = sheet.HitPoints!;
         DamageOutcome? damage = null;
         IReadOnlyList<Diagnostic>? notices = null;
+        string? useLabel = null;
 
         play = command.Action switch
         {
@@ -197,7 +208,8 @@ public sealed partial class TomeStackApp
                 : throw new AppValidationException([new("encounter.already-started", "An encounter is already running.")]),
             PlayActionKind.EndEncounter => play.Encounter is null
                 ? throw new AppValidationException([new("encounter.not-started", "No encounter is running.")])
-                : EndEncounter(play, sheet, out notices),
+                : EndEncounter(play, sheet, command.Clear, out notices),
+            PlayActionKind.UseAction => UseAction(play, sheet, command, out notices, out useLabel),
             PlayActionKind.StartConcentration => StartConcentration(play, sheet, command),
             PlayActionKind.EndConcentration => play.Concentration is null
                 ? throw new AppValidationException([new("play.not-concentrating", "The character is not concentrating on a spell.")])
@@ -215,7 +227,7 @@ public sealed partial class TomeStackApp
         // D43 S2: a compound change keeps the play state it started from, for one undo (the toggle exists: ChangeToggle checked it).
         // A damage with responses is compound (decided in CompoundUndo), but its label needs the outcome, which only exists here.
         var (compound, compoundLabel) = CompoundUndo(command, sheet);
-        var undoLabel = compoundLabel ?? (compound && command.Action == PlayActionKind.Damage && damage is not null ? DamageLabel(command, damage) : null);
+        var undoLabel = compoundLabel ?? useLabel ?? (compound && command.Action == PlayActionKind.Damage && damage is not null ? DamageLabel(command, damage) : null);
         (PlayState, string)? undo = undoLabel is { } label ? (character.Play, label) : null;
         if (command.Action == PlayActionKind.Spend)
             notices = ResourceFullNotice(sheet, command);
@@ -248,15 +260,132 @@ public sealed partial class TomeStackApp
     };
 
     /// <summary>The encounter ends and every count of rounds left goes with it. A toggle that had one is named in <paramref name="notices"/> (no content ref: nothing is downgraded).</summary>
-    private static PlayState EndEncounter(PlayState play, CharacterSheet sheet, out IReadOnlyList<Diagnostic>? notices)
+    private static PlayState EndEncounter(PlayState play, CharacterSheet sheet, IReadOnlyList<string>? clear, out IReadOnlyList<Diagnostic>? notices)
     {
+        var pools = ClearedPools(sheet, clear); // refused whole before anything is applied
         var lost = play.Toggles.Where(t => t.RoundsLeft is not null).Select(t =>
         {
             var label = sheet.Toggles?.FirstOrDefault(v => v.Content.ContentId == t.ContentId && v.ToggleId == t.ToggleId)?.Label ?? t.ToggleId;
             return new Diagnostic("encounter.duration-by-hand", $"{label} ({t.ToggleId}): duration: track by hand");
         }).ToList();
         notices = lost.Count == 0 ? null : lost;
-        return play with { Encounter = null, Toggles = [.. play.Toggles.Select(t => t with { RoundsLeft = null })] };
+        play = play with { Encounter = null, Toggles = [.. play.Toggles.Select(t => t with { RoundsLeft = null })] };
+        return pools.Aggregate(play, (state, pool) => state.WithSpent(pool.Content.ContentId, pool.ResourceId, 0));
+    }
+
+    /// <summary>
+    /// D43 S8: the pools an <c>endEncounter</c> clears. Entries are <c>"{contentId:D}/{resourceId}"</c>, at most <see cref="MaxClearEntries"/>
+    /// (duplicates allowed); each must name a counting-up pool on the sheet. Anything else refuses the whole command with
+    /// <c>play.clear-invalid</c> (the message names the entry's position, never its text).
+    /// </summary>
+    private static List<ResourceValue> ClearedPools(CharacterSheet sheet, IReadOnlyList<string>? clear)
+    {
+        var pools = new List<ResourceValue>();
+        if (clear is not { Count: > 0 })
+            return pools;
+        if (clear.Count > MaxClearEntries)
+            throw new AppValidationException([new("play.clear-invalid", $"At most {MaxClearEntries} pools can be cleared; {clear.Count} were named.")], "play.clear-invalid");
+        for (var i = 0; i < clear.Count; i++)
+        {
+            var entry = clear[i] ?? ""; // a null entry in the request is malformed like any other
+            var slash = entry.IndexOf('/', StringComparison.Ordinal);
+            var pool = slash > 0 && Guid.TryParseExact(entry[..slash], "D", out var content) && slash < entry.Length - 1
+                ? sheet.Resources?.FirstOrDefault(r => r.Content.ContentId == content && r.ResourceId == entry[(slash + 1)..])
+                : null;
+            if (pool is not { CountsUp: true })
+                throw new AppValidationException([new("play.clear-invalid", $"Entry {i + 1} of the pools to clear is not a counting-up pool of this character.")], "play.clear-invalid");
+            pools.Add(pool);
+        }
+        return pools;
+    }
+
+    /// <summary>The most pools one <c>endEncounter</c> may clear.</summary>
+    internal const int MaxClearEntries = 64;
+
+    /// <summary>
+    /// D43 S8: <c>useAction</c>. Finds the roll (content id and roll id) on the calculated sheet, builds every pool change it implies (its
+    /// own spend, or draw-down for a <c>drawsDown</c> roll, then each <c>alsoChange</c> entry) and applies them with
+    /// <see cref="PoolChanges.Apply"/>: all together or none. The roll's own amount follows the roll command's rules (a per-unit roll takes
+    /// <c>command.Amount</c> within the same bounds; any other the evaluated cost, or 1 with none declared).
+    /// </summary>
+    private PlayState UseAction(PlayState play, CharacterSheet sheet, PlayCommand command, out IReadOnlyList<Diagnostic>? notices, out string? label)
+    {
+        notices = null;
+        label = null;
+        if (command.ContentId is not { } contentId || string.IsNullOrEmpty(command.RollId))
+            throw new AppValidationException([new("use.not-found", "Name the content and the roll to use.")], "use.not-found");
+        FeatureEntry? feature = null;
+        RollEffect? roll = null;
+        FeatureEffect? calculated = null;
+        foreach (var candidate in sheet.Features ?? [])
+        {
+            if (candidate.Content.ContentId != contentId)
+                continue;
+            roll = _store.FindRevision(candidate.Content)?.Effects.OfType<RollEffect>().FirstOrDefault(e => e.RollId == command.RollId);
+            calculated = roll is null ? null : candidate.Effects.FirstOrDefault(e => e.Id == roll.Id && e.Type == RollEffect.TypeName);
+            if (calculated is not null)
+            {
+                feature = candidate;
+                break;
+            }
+        }
+        if (feature is null || roll is null || calculated is null)
+            throw new AppValidationException([new("use.not-found", $"Content {contentId:D} has no roll '{command.RollId}' for this character.")], "use.not-found");
+        var reference = feature.Content;
+        if (!calculated.Available)
+            throw new AppValidationException([new("use.unavailable", $"Roll '{roll.Id}' is not available now.", reference, roll.Id)], "use.unavailable");
+
+        var changes = new List<PoolChange>();
+        if (roll.ResourceId is { } ownPool)
+        {
+            // A cost that cannot be calculated refuses the use with the calculation's own diagnostic, as the roll command does for an amount.
+            if (roll.Cost is not null && calculated.Cost is null)
+            {
+                var failure = sheet.Diagnostics.FirstOrDefault(d => d.Code == "effect.invalid-formula" && d.Content == reference && d.EffectId == roll.Id)
+                    ?? new Diagnostic("effect.invalid-formula", $"The cost of roll '{roll.Id}' could not be calculated.", reference, roll.Id);
+                throw new AppValidationException([failure], failure.Code);
+            }
+            var poolContent = calculated.ResourceContent ?? contentId;
+            int amount;
+            if (calculated.PerUnit is { } perUnit)
+            {
+                amount = command.Amount;
+                var baseCost = calculated.Cost ?? 0;
+                var pool = sheet.Resources?.FirstOrDefault(r => r.Content.ContentId == poolContent && r.ResourceId == ownPool);
+                var cap = perUnit.MaxUnits is { } units ? baseCost + units : pool?.Maximum;
+                if (amount < baseCost || (cap is { } limit && amount > limit))
+                    throw new AppValidationException([new("roll.amount-out-of-range", $"'{roll.Id}' takes an amount from {baseCost} to {cap?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "the pool's maximum"}, not {amount}.", reference, roll.Id)], "roll.amount-out-of-range");
+            }
+            else
+            {
+                amount = calculated.Cost ?? 1;
+            }
+            changes.Add(new(poolContent, ownPool, calculated.DrawsDown ? UpkeepChange.Regain : UpkeepChange.Spend, amount));
+        }
+        foreach (var also in calculated.AlsoChange ?? [])
+        {
+            if (also.Amount is not { } alsoAmount)
+                throw new AppValidationException([new("use.unavailable", $"An amount of roll '{roll.Id}' could not be calculated, so it cannot be used.", reference, roll.Id)], "use.unavailable");
+            changes.Add(new(also.ResourceContent, also.ResourceId, also.Change, alsoAmount));
+        }
+        if (changes.Count == 0)
+            throw new AppValidationException([new("use.unavailable", $"Roll '{roll.Id}' changes no pool, so there is nothing to use.", reference, roll.Id)], "use.unavailable");
+
+        var (applied, errors) = PoolChanges.Apply(play, sheet, changes);
+        if (errors.Count > 0)
+            throw new AppValidationException(errors, errors[0].Code);
+
+        // A counting-up pool this use filled exactly says so (the content's own text), on the value it has now.
+        var full = new List<Diagnostic>();
+        foreach (var change in changes.Where(c => c.Change == UpkeepChange.Spend).Select(c => (c.ResourceContent, c.ResourceId)).Distinct())
+        {
+            var pool = sheet.Resources?.FirstOrDefault(r => r.Content.ContentId == change.ResourceContent && r.ResourceId == change.ResourceId);
+            if (pool is { CountsUp: true, Maximum: > 0 } && !string.IsNullOrWhiteSpace(pool.FullText) && applied.SpentOf(change.ResourceContent, change.ResourceId) == pool.Maximum)
+                full.Add(new("resource.full", pool.FullText));
+        }
+        notices = full.Count == 0 ? null : full;
+        label = $"use {roll.Label}";
+        return applied;
     }
 
     /// <summary>
@@ -289,7 +418,8 @@ public sealed partial class TomeStackApp
     /// the current stamp (<c>play.basis-required</c> without one) and keeps the play state it started from for one undo. Today:
     /// <c>toggleOn</c> with <c>replace</c> ("switch to {toggle label}", the label only once the toggle exists on the
     /// <paramref name="sheet"/>), <c>startEncounter</c> ("start encounter"), <c>endEncounter</c> ("end encounter") and <c>damage</c> with
-    /// responses (D43 S7; compound here, labelled by <see cref="DamageLabel"/> once the outcome is known). Later slices (S8) extend this switch.
+    /// responses (D43 S7; compound here, labelled by <see cref="DamageLabel"/> once the outcome is known) and <c>useAction</c> (D43 S8;
+    /// labelled "use {roll label}" by <see cref="UseAction"/>, because the roll is found by its <c>rollId</c> in the stored revision).
     /// With no <paramref name="sheet"/> (the stamp check runs before it is calculated) only <c>Compound</c> is answered.
     /// </summary>
     internal static (bool Compound, string? Label) CompoundUndo(PlayCommand command, CharacterSheet? sheet) => command.Action switch
@@ -300,6 +430,7 @@ public sealed partial class TomeStackApp
         PlayActionKind.EndEncounter => (true, "end encounter"),
         // D43 S7: a damage with responses decides several writes from one preview. Its label ("damage 15 fire (7 taken)") needs the outcome, so Play builds it.
         PlayActionKind.Damage when command.Responses is { Count: > 0 } => (true, null),
+        PlayActionKind.UseAction => (true, null), // D43 S8: the label ("use Gather") needs the roll, which only UseAction finds
         _ => (false, null),
     };
 

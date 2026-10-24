@@ -233,7 +233,13 @@ public sealed partial class TomeStackApp
             {
                 if (pool?.Current is not { } current)
                     throw new AppValidationException([new("roll.amount-unaffordable", $"Pool '{effect.ResourceId}' is untracked, so {amount} cannot be paid from it.", reference, effect.Id)], "roll.amount-unaffordable");
-                if (amount > current)
+                // D43 S8: a roll that draws a counting-up pool down pays from what is built up, not from the room left.
+                if (effect.DrawsDown == true)
+                {
+                    if (amount > pool.Spent)
+                        throw new AppValidationException([new("roll.amount-unaffordable", $"Pool '{effect.ResourceId}' has {pool.Spent} built up; {amount} cannot be drawn down.", reference, effect.Id)], "roll.amount-unaffordable");
+                }
+                else if (amount > current)
                     throw new AppValidationException([new("roll.amount-unaffordable", $"Pool '{effect.ResourceId}' has {current} left; {amount} cannot be paid.", reference, effect.Id)], "roll.amount-unaffordable");
             }
             // Unreachable for validated content; stored content with a per-unit die this cannot add is refused, never rolled as the base dice.
@@ -244,7 +250,7 @@ public sealed partial class TomeStackApp
         if (effect.ResourceId is null)
             return null;
         var spent = command.Amount ?? cost ?? (effect.Cost is null ? 1 : null);
-        return spent is { } uses ? new RollSpend(poolContent, effect.ResourceId, uses) : null;
+        return spent is { } uses ? new RollSpend(poolContent, effect.ResourceId, uses, effect.DrawsDown == true) : null;
     }
 
     /// <summary>

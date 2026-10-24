@@ -263,6 +263,52 @@ public class ChargingContentTests
         Assert.Equal(writtenRelease, Fixtures.EffectJson(Fixtures.RevisionWithEffect(writtenRelease, 11).Effects.Single()));
     }
 
+    // ---- carried from the 8.1 review -----------------------------------------------------------------------------------
+
+    [Fact]
+    public void An_alsoChange_amount_counts_as_a_formula_read()
+    {
+        var revision = Change("gather", r => r with { AlsoChange = [Charge(amount: "SCALE.x + VALUE.y")] });
+
+        var read = ContentGraph.Identifiers(revision).Where(i => i.EffectId == "gather").Select(i => i.Identifier).ToList();
+
+        Assert.Contains("SCALE.x", read);
+        Assert.Contains("VALUE.y", read);
+        Assert.Contains(ContentGraph.Formulas(revision), f => f.EffectId == "gather" && f.Source == "SCALE.x + VALUE.y");
+    }
+
+    [Fact]
+    public void A_pool_changed_only_by_another_contents_alsoChange_is_not_dead()
+    {
+        var source = Fixtures.ChargingPack().Sources[0].Id;
+        ContentRevision Draft(int n, params Effect[] effects) => new()
+        {
+            ContentId = Guid.Parse($"6f0dc000-0000-4000-8000-{n:X12}"),
+            RevisionId = Guid.Parse($"6f0de000-0000-4000-8000-{n:X12}"),
+            SchemaVersion = 11,
+            Kind = ContentKind.Feature,
+            Name = $"Debug {n:X}",
+            RulesFamilies = [RulesFamilies.Srd521],
+            Provenance = new(source),
+            Status = RevisionStatus.Draft,
+            Effects = effects,
+        };
+        var pool = Draft(0x90, new ResourceEffect { Id = "store", ResourceId = "store", Label = "Store", Maximum = "3" });
+        var changer = Draft(0x91, new RollEffect
+        {
+            Id = "fill", RollId = "fill", Label = "Fill", Dice = "1d4",
+            AlsoChange = [new AlsoChange("store", pool.ContentId, UpkeepChange.Spend, "1")],
+        });
+        var stored = Fixtures.ChargingPack().Revisions;
+        var catalog = new InMemoryContentCatalog(Fixtures.ChargingPack().Sources, [.. stored, pool, changer]);
+
+        var alone = ContentDebugger.Diagnose([pool], stored, new InMemoryContentCatalog(Fixtures.ChargingPack().Sources, [.. stored, pool]));
+        var together = ContentDebugger.Diagnose([pool, changer], stored, catalog);
+
+        Assert.Contains(alone.Findings, f => f.Code == "debug.resource-dead" && f.EffectId == "store");
+        Assert.DoesNotContain(together.Findings, f => f.Code == "debug.resource-dead");
+    }
+
     // ---- the calculated sheet ------------------------------------------------------------------------------------------
 
     private static CharacterSheet Sheet(InMemoryContentCatalog? catalog = null) =>

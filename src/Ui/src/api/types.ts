@@ -711,7 +711,8 @@ export type PlayActionKind =
   | 'companionSetHitPoints'
   | 'companionSetTemporaryHitPoints'
   | 'startEncounter'
-  | 'endEncounter';
+  | 'endEncounter'
+  | 'useAction';
 
 export interface PlayAction {
   action: PlayActionKind;
@@ -729,6 +730,10 @@ export interface PlayAction {
   damageType?: string;
   /** With `damage` (D43 S7): the damage responses chosen for this hit. A non-empty list makes the change compound (it needs `expectedUpdatedAt`). */
   responses?: { contentId: string; responseId: string }[];
+  /** With `useAction` (D43 S8, with `contentId`): the roll to use, by its `rollId`. Compound (needs `expectedUpdatedAt`); `amount` is the units of a per-unit roll. */
+  rollId?: string;
+  /** With `endEncounter` (D43 S8): counting-up pools to reset to 0 in the same change, as `{contentId}/{resourceId}` (at most 64). Any other action, or a pool that does not count up, is `play.clear-invalid`. */
+  clear?: string[];
   /** With `spendCharge` or `regainCharge`: the equipment entry, by its id, or by `entryIndex` and `contentId` while it has none. */
   entryId?: string;
   entryIndex?: number;
