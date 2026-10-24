@@ -639,6 +639,8 @@ export interface PlayAction {
   expectedUpdatedAt?: string;
   /** With `damage`: one of the thirteen damage types (any case). Absent: untyped, so no defence applies. */
   damageType?: string;
+  /** With `damage` (D43 S7): the damage responses chosen for this hit. A non-empty list makes the change compound (it needs `expectedUpdatedAt`). */
+  responses?: { contentId: string; responseId: string }[];
   /** With `spendCharge` or `regainCharge`: the equipment entry, by its id, or by `entryIndex` and `contentId` while it has none. */
   entryId?: string;
   entryIndex?: number;

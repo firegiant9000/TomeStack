@@ -808,7 +808,7 @@ public static class CharacterCalculator
     }
 
     /// <summary>The most damage responses one sheet lists (risk C5); later ones are dropped in sheet order with <c>response.too-many</c>.</summary>
-    private const int MaxResponses = 64;
+    public const int MaxResponses = 64;
 
     /// <summary>
     /// Content v11 (D43, D45): the damage responses of the active content, in active-content order and then effect order. Reference-only

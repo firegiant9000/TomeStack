@@ -99,6 +99,7 @@ public enum PlayActionKind
 /// <param name="Confirm">Must be <c>true</c>: play state changes only by an explicit user action, never as a side effect.</param>
 /// <param name="Replace">With <c>toggleOn</c> of a primary form: switch off the primary of the same group that is on instead of refusing (D43).</param>
 /// <param name="ExpectedUpdatedAt">The <c>Character.UpdatedAt</c> of the copy the page acted on (D43 S2). When sent and not the stored one, the command is refused with <c>character.stale</c> and nothing is written, as <see cref="TomeStackApp.SaveCharacter"/> does. Compound changes require it.</param>
+/// <param name="Responses">D43 S7, with <c>damage</c>: the damage responses chosen for the hit (<c>character.damagePreview</c> lists them). A non-empty list makes the change compound: it needs <paramref name="ExpectedUpdatedAt"/> and is one undo step.</param>
 /// <param name="ContentId">With <paramref name="ResourceId"/>, the resource to spend or regain (the content that defines it).</param>
 public sealed record PlayCommand(
     Guid CharacterId,
@@ -115,7 +116,8 @@ public sealed record PlayCommand(
     Guid? CompanionId = null,
     int? Temporary = null,
     bool Replace = false,
-    DateTimeOffset? ExpectedUpdatedAt = null);
+    DateTimeOffset? ExpectedUpdatedAt = null,
+    IReadOnlyList<ResponseChoice>? Responses = null);
 
 /// <summary>
 /// <c>character.undoPlay</c> (D43 S2): undoes the last compound play change. <paramref name="UpdatedAt"/> is the stamp of the copy the
@@ -160,6 +162,7 @@ public sealed partial class TomeStackApp
         play = command.Action switch
         {
             PlayActionKind.Spend or PlayActionKind.Regain => ChangeResource(play, sheet, command),
+            PlayActionKind.Damage when command.Responses is { Count: > 0 } => DamageWithResponses(character, play, sheet, command, out damage, out notices),
             PlayActionKind.Damage => Damage(play, sheet, command, RulesFamilies.Get(character.RulesFamily), out damage),
             PlayActionKind.Heal => play.WithCurrentHitPoints(hp.Current + command.Amount, hp.Maximum),
             PlayActionKind.SetTemporaryHitPoints => play with { TemporaryHitPoints = command.Amount },
@@ -210,9 +213,14 @@ public sealed partial class TomeStackApp
         if (hp.Current == 0 && (play.CurrentHitPoints ?? hp.Maximum) > 0 && command.Action is PlayActionKind.Heal or PlayActionKind.SetHitPoints)
             play = play with { DeathSaves = new() };
         // D43 S2: a compound change keeps the play state it started from, for one undo (the toggle exists: ChangeToggle checked it).
-        (PlayState, string)? undo = CompoundUndo(command, sheet).Label is { } label ? (character.Play, label) : null;
+        // A damage with responses is compound (decided in CompoundUndo), but its label needs the outcome, which only exists here.
+        var (compound, compoundLabel) = CompoundUndo(command, sheet);
+        var undoLabel = compoundLabel ?? (compound && command.Action == PlayActionKind.Damage && damage is not null ? DamageLabel(command, damage) : null);
+        (PlayState, string)? undo = undoLabel is { } label ? (character.Play, label) : null;
         if (command.Action == PlayActionKind.Spend)
             notices = ResourceFullNotice(sheet, command);
+        else if (command.Action == PlayActionKind.Damage && !compound)
+            notices = SkippedResponses(character, sheet, command); // R12: plain damage names the responses it passed over
         var view = SaveWithPlay(character with { Play = play }, undo);
         if (notices is not null)
             view = view with { Notices = notices };
@@ -280,7 +288,8 @@ public sealed partial class TomeStackApp
     /// D43 S2/S3: the one server switch for compound play changes. A compound change decides several writes from one view, so it needs
     /// the current stamp (<c>play.basis-required</c> without one) and keeps the play state it started from for one undo. Today:
     /// <c>toggleOn</c> with <c>replace</c> ("switch to {toggle label}", the label only once the toggle exists on the
-    /// <paramref name="sheet"/>), <c>startEncounter</c> ("start encounter") and <c>endEncounter</c> ("end encounter"). Later slices (S7, S8) extend this switch.
+    /// <paramref name="sheet"/>), <c>startEncounter</c> ("start encounter"), <c>endEncounter</c> ("end encounter") and <c>damage</c> with
+    /// responses (D43 S7; compound here, labelled by <see cref="DamageLabel"/> once the outcome is known). Later slices (S8) extend this switch.
     /// With no <paramref name="sheet"/> (the stamp check runs before it is calculated) only <c>Compound</c> is answered.
     /// </summary>
     internal static (bool Compound, string? Label) CompoundUndo(PlayCommand command, CharacterSheet? sheet) => command.Action switch
@@ -289,6 +298,8 @@ public sealed partial class TomeStackApp
             sheet?.Toggles?.FirstOrDefault(t => t.Content.ContentId == command.ContentId && t.ToggleId == command.ToggleId) is { } switched ? $"switch to {switched.Label}" : null),
         PlayActionKind.StartEncounter => (true, "start encounter"),
         PlayActionKind.EndEncounter => (true, "end encounter"),
+        // D43 S7: a damage with responses decides several writes from one preview. Its label ("damage 15 fire (7 taken)") needs the outcome, so Play builds it.
+        PlayActionKind.Damage when command.Responses is { Count: > 0 } => (true, null),
         _ => (false, null),
     };
 
@@ -466,13 +477,7 @@ public sealed partial class TomeStackApp
     /// </summary>
     private static PlayState Damage(PlayState play, CharacterSheet sheet, PlayCommand command, RulesFamilyPolicy family, out DamageOutcome outcome)
     {
-        string? type = null;
-        if (command.DamageType is { } written)
-        {
-            if (!DamageTypes.TryNormalize(written, out var canonical))
-                throw new AppValidationException([new("play.damage-type-unknown", $"Damage type must be one of: {string.Join(", ", DamageTypes.All)}.")]);
-            type = canonical;
-        }
+        var type = NormalizedDamageType(command.DamageType);
         var hp = sheet.HitPoints!;
         var result = DamagePipeline.Resolve(new(command.Amount, type), hp, sheet.DamageDefences?.Select(d => new DamageDefence(d.Type, d.Kind)).ToList() ?? [], play.Concentration is not null, family);
         outcome = result.Outcome;

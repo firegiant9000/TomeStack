@@ -10,13 +10,15 @@ import { inverseOf, isCompound } from './undo';
 const parity = JSON.parse(readFileSync(resolve(process.cwd(), '../../tests/RulesFixtures/compound-play-actions.json'), 'utf8')) as {
   action: PlayActionKind;
   replace?: boolean;
+  responses?: boolean;
   compound: boolean;
 }[];
 
 it('agrees with the server on which play actions are compound (shared fixture)', () => {
   expect(parity.length).toBeGreaterThan(25);
-  for (const { action, replace, compound } of parity) {
-    expect(isCompound({ action, ...(replace === undefined ? {} : { replace }) }), `${action} replace=${String(replace)}`).toBe(compound);
+  for (const { action, replace, responses, compound } of parity) {
+    const dummy = responses ? { responses: [{ contentId: 'c', responseId: 'r' }] } : {};
+    expect(isCompound({ action, ...(replace === undefined ? {} : { replace }), ...dummy }), `${action} replace=${String(replace)} responses=${String(responses)}`).toBe(compound);
   }
 });
 
