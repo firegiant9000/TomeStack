@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // Item 18: the character's own hand-typed attacks are listed in "Attacks and actions" and rolled from there. There is no
 // editing on Play (that is on Inventory).
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { CharacterView, CustomAttack, RollTarget } from '../api/types';
@@ -631,4 +631,57 @@ it("the record's Spend for a drawsDown release sends useAction with the record's
   // Bounded by what has built up, not by what is left under the maximum.
   render(<RollResult record={rec} resources={[chargePool(1)] as never} features={features} act={act} />);
   expect((screen.getByRole('button', { name: /^Spend 2 Testy charge/ }) as HTMLButtonElement).disabled).toBe(true);
+});
+
+it("a compound roll with no rollId is never spent as a plain spend: Use and the record's Spend are held with a reason", async () => {
+  const act = vi.fn();
+  const noId = { ...gather, rollId: undefined };
+  render(<ActionsPanel view={chargingView([noId], [focusPool(4), chargePool(0)])} roll={() => {}} act={act} />);
+  const use = screen.getByRole('button', { name: /^Use Gather/ }) as HTMLButtonElement;
+  expect(use.disabled).toBe(true);
+  expect(document.getElementById(use.getAttribute('aria-describedby')!)!.textContent).toMatch(/Can't be used here/);
+  await userEvent.click(use);
+  cleanup();
+
+  const noRoll = { ...release, rollId: undefined };
+  const base = {
+    provenance: { rollId: undefined, label: 'Release', content: ref, effectId: 'release', linkedResourceId: 'charge', linkedResourceContent: 'c1' },
+    spend: { contentId: 'c1', resourceId: 'charge', amount: 2, drawsDown: true },
+  };
+  render(<RollResult record={recordFor(base)} resources={[chargePool(3)] as never} features={[{ content: ref, name: 'Testy Source', kind: 'feature', effects: [noRoll] }] as never} act={act} />);
+  const spendBtn = screen.getByRole('button', { name: /^Spend 2 Testy charge/ }) as HTMLButtonElement;
+  expect(spendBtn.disabled).toBe(true);
+  expect(document.getElementById(spendBtn.getAttribute('aria-describedby')!)!.textContent).toMatch(/Can't be used here/);
+  cleanup();
+
+  // The effect cannot be found at all: still held, never a plain spend.
+  render(<RollResult record={recordFor(base)} resources={[chargePool(3)] as never} features={[]} act={act} />);
+  expect((screen.getByRole('button', { name: /^Spend 2 Testy charge/ }) as HTMLButtonElement).disabled).toBe(true);
+  expect(act).not.toHaveBeenCalled();
+});
+
+it("a refused useAction gives the record's Spend back", async () => {
+  const act = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+  const rec = recordFor({
+    provenance: { rollId: 'release-roll', label: 'Release', content: ref, effectId: 'release', linkedResourceId: 'charge', linkedResourceContent: 'c1' },
+    spend: { contentId: 'c1', resourceId: 'charge', amount: 2, drawsDown: true },
+  });
+  render(<RollResult record={rec} resources={[chargePool(3)] as never} features={[{ content: ref, name: 'Testy Source', kind: 'feature', effects: [release] }] as never} act={act} />);
+  const spendBtn = () => screen.getByRole('button', { name: /^Spend 2 Testy charge/ }) as HTMLButtonElement;
+  await userEvent.click(spendBtn());
+  await waitFor(() => expect(spendBtn().disabled).toBe(false));
+  await userEvent.click(spendBtn());
+  expect(act).toHaveBeenCalledTimes(2);
+  expect(spendBtn().disabled).toBe(true);
+});
+
+it('a drawsDown dice-less Use is disabled with its reason when less has built up than it costs', () => {
+  const draw = { id: 'vent', rollId: 'vent-roll', type: 'roll', label: 'Vent', activation: 'action', resourceId: 'charge', cost: 2, drawsDown: true, available: true };
+  render(<ActionsPanel view={chargingView([draw], [chargePool(1)])} roll={() => {}} act={() => {}} />);
+  const use = screen.getByRole('button', { name: 'Use Vent (2 Testy charge)' }) as HTMLButtonElement;
+  expect(use.disabled).toBe(true);
+  expect(document.getElementById(use.getAttribute('aria-describedby')!)!.textContent).toMatch(/Not enough Testy charge built up \(1\)/);
+  cleanup();
+  render(<ActionsPanel view={chargingView([draw], [chargePool(2)])} roll={() => {}} act={() => {}} />);
+  expect((screen.getByRole('button', { name: 'Use Vent (2 Testy charge)' }) as HTMLButtonElement).disabled).toBe(false);
 });

@@ -155,6 +155,38 @@ it('End encounter with nothing ticked omits clear, and Cancel sends nothing and 
   expect(act.mock.calls[0]![0]).toEqual({ action: 'endEncounter' });
 });
 
+it('an encounter that ends closes an open confirmation, so the next one starts without it', async () => {
+  const user = userEvent.setup();
+  const act = vi.fn();
+  const resources = [pool('strain', { countsUp: true, spent: 3, current: 2 })];
+  const { rerender } = strip(view({ round: 2, resources }), { act });
+  await user.click(screen.getByRole('button', { name: 'End encounter' }));
+  expect(screen.getByRole('group', { name: 'End encounter' })).toBeTruthy();
+  rerender(<CombatStrip view={view({ resources })} act={act} busy={false} onTurn={vi.fn()} />);
+  expect(screen.queryByRole('group', { name: 'End encounter' })).toBeNull();
+  rerender(<CombatStrip view={view({ round: 1, resources })} act={act} busy={false} onTurn={vi.fn()} />);
+  expect(screen.queryByRole('group', { name: 'End encounter' })).toBeNull();
+  expect(screen.getByRole('button', { name: 'End encounter' })).toBeTruthy();
+});
+
+it('a refused End encounter keeps the confirmation open with the ticks and focus in the group; an applied one closes it', async () => {
+  const user = userEvent.setup();
+  const act = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+  strip(view({ round: 2, resources: [pool('strain', { countsUp: true, spent: 3, current: 2 })] }), { act });
+  await user.click(screen.getByRole('button', { name: 'End encounter' }));
+  const group = screen.getByRole('group', { name: 'End encounter' });
+  await user.click(within(group).getByRole('checkbox'));
+  await user.click(within(group).getByRole('button', { name: 'End encounter' }));
+  expect(act).toHaveBeenCalledTimes(1);
+  const still = screen.getByRole('group', { name: 'End encounter' });
+  expect(within(still).getByRole<HTMLInputElement>('checkbox').checked).toBe(true);
+  expect(still.contains(document.activeElement)).toBe(true);
+  await user.click(within(still).getByRole('button', { name: 'End encounter' }));
+  expect(act).toHaveBeenCalledTimes(2);
+  expect(act).toHaveBeenLastCalledWith({ action: 'endEncounter', clear: ['c1/strain'] });
+  expect(screen.queryByRole('group', { name: 'End encounter' })).toBeNull();
+});
+
 it('End encounter stays one click when no counting-up pool has built up', async () => {
   const user = userEvent.setup();
   const act = vi.fn();

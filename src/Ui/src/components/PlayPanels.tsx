@@ -805,9 +805,12 @@ function RollItem({
     }
     return undefined;
   };
+  // A compound use is named by `rollId`; without it there is nothing to send (never a plain spend for such a roll).
   const useReason = locked
     ? (effect.unavailableReason ?? 'Not available right now')
-    : costFailed
+    : compound && !effect.rollId
+      ? "Can't be used here"
+      : costFailed
       ? 'Cost unavailable'
       : useCost < 1
         ? 'Costs nothing here'
@@ -827,14 +830,14 @@ function RollItem({
             type="button"
             disabled={useReason !== undefined}
             aria-describedby={useReason !== undefined ? reasonId : undefined}
-            onClick={() =>
+            onClick={() => {
               // D43 S8: a use that also changes another pool, or draws a pool down, is one compound change on the service.
-              act(
-                compound && effect.rollId
-                  ? { action: 'useAction', contentId: feature.content.contentId, rollId: effect.rollId }
-                  : { action: 'spend', amount: useCost, contentId: effect.resourceContent ?? feature.content.contentId, resourceId: effect.resourceId! },
-              )
-            }
+              if (compound) {
+                if (effect.rollId) act({ action: 'useAction', contentId: feature.content.contentId, rollId: effect.rollId });
+                return;
+              }
+              act({ action: 'spend', amount: useCost, contentId: effect.resourceContent ?? feature.content.contentId, resourceId: effect.resourceId! });
+            }}
           >
             Use {label}
             {costFailed ? '' : ` (${useCost} ${poolName}${alsoText})`}
@@ -1096,6 +1099,7 @@ export function RollResult({
   // A record's Spend is used once: the record it was used for stays spent, and a new record starts fresh.
   const [spentFor, setSpentFor] = useState<RollRecord>();
   const spentAlready = record !== undefined && spentFor === record;
+  const cantUseId = useId();
   /** Holds the button while the change is under way, and gives it back when the change is refused so it can be retried. */
   function spendOnce(action: PlayAction, refused?: () => void) {
     setSpentFor(record);
@@ -1130,11 +1134,16 @@ export function RollResult({
   // would build the charge up instead). The roll is named by the record's own `rollId`; a draw-down is bounded by what has built up.
   const drawsDown = spend?.drawsDown === true || effect?.drawsDown === true;
   const useRollId = p?.rollId ?? effect?.rollId;
-  const compound = (drawsDown || (effect?.alsoChange?.length ?? 0) > 0) && useRollId !== undefined && p?.content?.contentId !== undefined;
-  const spendAction = (amount: number, resourceContent: string, resourceId: string): PlayAction =>
-    compound
-      ? { action: 'useAction', contentId: p!.content!.contentId, rollId: useRollId!, ...(effect?.perUnit ? { amount } : {}) }
-      : { action: 'spend', amount, contentId: resourceContent, resourceId };
+  const compound = drawsDown || (effect?.alsoChange?.length ?? 0) > 0;
+  // Never a plain `spend` for such a roll: without the roll's content, its id or its effect, the Spend is held with a reason.
+  const cantUse = compound && (useRollId === undefined || p?.content?.contentId === undefined || effect === undefined);
+  const spendAction = (amount: number, resourceContent: string, resourceId: string): PlayAction | undefined =>
+    cantUse
+      ? undefined
+      : compound
+        ? { action: 'useAction', contentId: p!.content!.contentId, rollId: useRollId!, ...(effect?.perUnit ? { amount } : {}) }
+        : { action: 'spend', amount, contentId: resourceContent, resourceId };
+  const cantUseText = "Can't be used here";
   const stock = linked ? (drawsDown ? linked.spent : linked.current) : undefined;
   const stockText = linked ? (drawsDown ? `${linked.spent} built up` : `${linked.current} left`) : '';
   const most = linked?.current !== undefined && stock !== undefined ? Math.min(cost, stock) : 0;
@@ -1173,8 +1182,12 @@ export function RollResult({
       {!costUnavailable && linked && linked.current !== undefined && !effect?.variableCost && (
         <button
           type="button"
-          disabled={spentAlready || cost < 1 /* a cost formula can evaluate to 0 at some levels */ || (stock ?? 0) < cost}
-          onClick={() => spendOnce(spendAction(cost, spend?.contentId ?? linked.content.contentId, spend?.resourceId ?? linked.resourceId))}
+          disabled={spentAlready || cantUse || cost < 1 /* a cost formula can evaluate to 0 at some levels */ || (stock ?? 0) < cost}
+          aria-describedby={cantUse ? cantUseId : undefined}
+          onClick={() => {
+            const action = spendAction(cost, spend?.contentId ?? linked.content.contentId, spend?.resourceId ?? linked.resourceId);
+            if (action) spendOnce(action);
+          }}
         >
           Spend {cost} {linked.label} ({stockText})
         </button>
@@ -1187,16 +1200,24 @@ export function RollResult({
           </label>
           <button
             type="button"
-            disabled={spentAlready || !validChoice}
+            disabled={spentAlready || cantUse || !validChoice}
+            aria-describedby={cantUse ? cantUseId : undefined}
             onClick={() => {
+              const action = spendAction(chosen, linked.content.contentId, linked.resourceId);
+              if (!action) return;
               const typedAmount = amount;
-              spendOnce(spendAction(chosen, linked.content.contentId, linked.resourceId), () => setTyped((t) => (t.record === record && t.value === '' ? { record, value: typedAmount } : t)));
+              spendOnce(action, () => setTyped((t) => (t.record === record && t.value === '' ? { record, value: typedAmount } : t)));
               setAmount('');
             }}
           >
             Spend {validChoice ? chosen : ''} {linked.label} ({stockText})
           </button>
         </div>
+      )}
+      {!costUnavailable && linked && linked.current !== undefined && cantUse && (
+        <span id={cantUseId} className="hint">
+          {cantUseText}
+        </span>
       )}
     </div>
   );

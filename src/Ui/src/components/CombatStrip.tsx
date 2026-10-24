@@ -45,29 +45,35 @@ export function CombatStrip({
   onTurn: (at: TurnMoment) => void;
 }) {
   // D43 S8: ending an encounter asks which built-up counting-up pools to clear, when there are any.
+  const encounter = view.character.play?.encounter;
+  const resources = view.sheet.resources ?? [];
+  const builtUp = resources.filter((r) => r.countsUp && r.spent > 0);
   const [confirming, setConfirming] = useState(false);
   const [ticked, setTicked] = useState<string[]>([]);
+  // The confirmation is open only while there is an encounter with something built up; an encounter that ends (from anywhere) closes it.
+  const open = confirming && encounter !== undefined && builtUp.length > 0;
+  if (confirming && encounter === undefined) {
+    setConfirming(false);
+    setTicked([]);
+  }
   const firstBox = useRef<HTMLInputElement>(null);
   const endButton = useRef<HTMLButtonElement>(null);
   const focusEnd = useRef(false);
   useEffect(() => {
-    if (confirming) firstBox.current?.focus();
+    if (open) firstBox.current?.focus();
     else if (focusEnd.current) {
       focusEnd.current = false;
       endButton.current?.focus();
     }
-  }, [confirming]);
+  }, [open]);
   if (!hasCombat(view)) return null;
   const toggles = view.sheet.toggles ?? [];
-  const resources = view.sheet.resources ?? [];
-  const builtUp = resources.filter((r) => r.countsUp && r.spent > 0);
   const clearKey = (r: ResourceValue) => `${r.content.contentId}/${r.resourceId}`;
   const closeConfirm = (returnFocus: boolean) => {
     focusEnd.current = returnFocus;
     setConfirming(false);
     setTicked([]);
   };
-  const encounter = view.character.play?.encounter;
   const timed = toggles.filter((t) => t.on && t.duration != null);
   const pools = resources.filter((r) => r.countsUp || r.allowance);
   return (
@@ -91,7 +97,7 @@ export function CombatStrip({
             <button type="button" id="turn-open-turnEnd" disabled={busy} onClick={() => onTurn('turnEnd')}>
               End my turn
             </button>
-            {confirming ? (
+            {open ? (
               <fieldset className="field-group">
                 <legend>End encounter</legend>
                 {builtUp.map((r, i) => (
@@ -110,8 +116,14 @@ export function CombatStrip({
                   disabled={busy}
                   onClick={() => {
                     const clear = builtUp.map(clearKey).filter((k) => ticked.includes(k));
-                    closeConfirm(false);
-                    void act(clear.length > 0 ? { action: 'endEncounter', clear } : { action: 'endEncounter' });
+                    // Closed only once the change is applied; a refusal keeps the choices and the focus in the group.
+                    void Promise.resolve(act(clear.length > 0 ? { action: 'endEncounter', clear } : { action: 'endEncounter' }))
+                      .then((applied) => applied !== false)
+                      .catch(() => false)
+                      .then((applied) => {
+                        if (applied) closeConfirm(false);
+                        else firstBox.current?.focus();
+                      });
                   }}
                 >
                   End encounter
