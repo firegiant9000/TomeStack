@@ -169,6 +169,55 @@ public class ChargingTests
     }
 
     [Fact]
+    public void A_cost_that_cannot_be_calculated_refuses_the_use()
+    {
+        var (temp, id) = Charger(adjust: r => r.ContentId == Beam
+            ? r with { Effects = [.. r.Effects.Select(e => e is RollEffect { Id: "gather" } roll ? roll with { Cost = "1 + SCALE.nonesuch" } : e)] }
+            : r);
+        using var _ = temp;
+        var before = Stored(temp, id);
+
+        var refused = Refused(() => Use(temp, id, "gather", Stamp(temp, id)));
+
+        Assert.Equal("effect.invalid-formula", refused.Code);
+        Assert.Equal("effect.invalid-formula", refused.Problems[0].Code);
+        Assert.Equal(before, Stored(temp, id));
+    }
+
+    [Fact]
+    public void A_use_that_changes_nothing_is_refused_and_keeps_the_undo_slot()
+    {
+        var (temp, id) = Charger();
+        using var _ = temp;
+        var gathered = Use(temp, id, "gather", Stamp(temp, id));
+        var before = Stored(temp, id);
+
+        var refused = Refused(() => Use(temp, id, "release", Stamp(temp, id), amount: 0)); // base cost 0, nothing drawn down
+
+        Assert.Equal("use.unavailable", refused.Code);
+        Assert.Equal(before, Stored(temp, id));
+        Assert.Equal("use Gather", temp.App.GetCharacter(id).UndoLabel);
+        Assert.Equal(gathered.Character.UpdatedAt, Stamp(temp, id));
+    }
+
+    [Fact]
+    public void A_regain_with_nothing_spent_changes_nothing_and_is_refused()
+    {
+        var (temp, id) = Charger(adjust: r => r.ContentId == Beam
+            ? r with { Effects = [.. r.Effects.Select(e => e is RollEffect { Id: "gather" } roll
+                ? roll with { ResourceId = null, ResourceContent = null, Cost = null, AlsoChange = [new AlsoChange("focus", Class, UpkeepChange.Regain, "1")] }
+                : e)] }
+            : r);
+        using var _ = temp;
+        var before = Stored(temp, id);
+
+        var refused = Refused(() => Use(temp, id, "gather", Stamp(temp, id)));
+
+        Assert.Equal("use.unavailable", refused.Code);
+        Assert.Equal(before, Stored(temp, id));
+    }
+
+    [Fact]
     public void A_roll_that_changes_no_pool_cannot_be_used()
     {
         var (temp, id) = Charger(adjust: r => r.ContentId == Beam
@@ -231,9 +280,11 @@ public class ChargingTests
     {
         var (temp, id) = Charger(charge: 4);
         using var _ = temp;
+        var before = Stored(temp, id);
 
         Assert.Equal("roll.amount-out-of-range", Refused(() => temp.App.Roll(new RollCommand(id, BeamRef, "release", Amount: 5))).Code);
         Assert.Equal("roll.amount-out-of-range", Refused(() => Use(temp, id, "release", Stamp(temp, id), amount: 5)).Code);
+        Assert.Equal(before, Stored(temp, id));
     }
 
     [Fact]

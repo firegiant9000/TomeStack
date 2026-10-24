@@ -246,10 +246,17 @@ public sealed partial class TomeStackApp
     private static IReadOnlyList<Diagnostic>? ResourceFullNotice(CharacterSheet sheet, PlayCommand command)
     {
         var pool = sheet.Resources?.FirstOrDefault(r => r.Content.ContentId == command.ContentId && r.ResourceId == command.ResourceId);
-        return pool is { CountsUp: true, Maximum: > 0 } && !string.IsNullOrWhiteSpace(pool.FullText) && pool.Spent + command.Amount >= pool.Maximum
-            ? [new("resource.full", pool.FullText)]
-            : null;
+        return FullNotice(pool, (pool?.Spent ?? 0) + command.Amount) is { } notice ? [notice] : null;
     }
+
+    /// <summary>
+    /// The <c>resource.full</c> notice (the content's own text) of a counting-up pool that was below its maximum on the sheet
+    /// (<c>pool.Spent</c>) and is at it after the change (<paramref name="spentAfter"/>). Null otherwise. The one place the rule lives.
+    /// </summary>
+    private static Diagnostic? FullNotice(ResourceValue? pool, int spentAfter) =>
+        pool is { CountsUp: true, Maximum: > 0 } && !string.IsNullOrWhiteSpace(pool.FullText) && pool.Spent < pool.Maximum && spentAfter >= pool.Maximum
+            ? new("resource.full", pool.FullText)
+            : null;
 
     /// <summary>The encounter starts at round 0, and each toggle that is on with a duration gets its rounds left (the sheet knows which are on).</summary>
     private static PlayState StartEncounter(PlayState play, CharacterSheet sheet) => play with
@@ -352,9 +359,8 @@ public sealed partial class TomeStackApp
                 amount = command.Amount;
                 var baseCost = calculated.Cost ?? 0;
                 var pool = sheet.Resources?.FirstOrDefault(r => r.Content.ContentId == poolContent && r.ResourceId == ownPool);
-                var cap = perUnit.MaxUnits is { } units ? baseCost + units : pool?.Maximum;
-                if (amount < baseCost || (cap is { } limit && amount > limit))
-                    throw new AppValidationException([new("roll.amount-out-of-range", $"'{roll.Id}' takes an amount from {baseCost} to {cap?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "the pool's maximum"}, not {amount}.", reference, roll.Id)], "roll.amount-out-of-range");
+                if (PerUnitRangeProblem(roll.Id, reference, amount, baseCost, perUnit, pool?.Maximum) is { } outOfRange)
+                    throw new AppValidationException([outOfRange], outOfRange.Code);
             }
             else
             {
@@ -375,13 +381,18 @@ public sealed partial class TomeStackApp
         if (errors.Count > 0)
             throw new AppValidationException(errors, errors[0].Code);
 
-        // A counting-up pool this use filled exactly says so (the content's own text), on the value it has now.
+        // A use that changes nothing (a regain with nothing spent, a per-unit amount of 0) is not a change: no write, no undo slot taken.
+        var pools = changes.Select(c => (c.ResourceContent, c.ResourceId)).Distinct().ToList();
+        if (pools.All(p => applied.SpentOf(p.ResourceContent, p.ResourceId) == play.SpentOf(p.ResourceContent, p.ResourceId)))
+            throw new AppValidationException([new("use.unavailable", $"Using '{roll.Id}' would change no pool.", reference, roll.Id)], "use.unavailable");
+
+        // A counting-up pool this use filled says so (the content's own text): it was below its maximum before and is at it now.
         var full = new List<Diagnostic>();
-        foreach (var change in changes.Where(c => c.Change == UpkeepChange.Spend).Select(c => (c.ResourceContent, c.ResourceId)).Distinct())
+        foreach (var (poolContent, poolId) in pools)
         {
-            var pool = sheet.Resources?.FirstOrDefault(r => r.Content.ContentId == change.ResourceContent && r.ResourceId == change.ResourceId);
-            if (pool is { CountsUp: true, Maximum: > 0 } && !string.IsNullOrWhiteSpace(pool.FullText) && applied.SpentOf(change.ResourceContent, change.ResourceId) == pool.Maximum)
-                full.Add(new("resource.full", pool.FullText));
+            var filled = FullNotice(sheet.Resources?.FirstOrDefault(r => r.Content.ContentId == poolContent && r.ResourceId == poolId), applied.SpentOf(poolContent, poolId));
+            if (filled is not null)
+                full.Add(filled);
         }
         notices = full.Count == 0 ? null : full;
         label = $"use {roll.Label}";
