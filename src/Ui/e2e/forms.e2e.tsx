@@ -226,8 +226,13 @@ it('authors a stance with upkeep in the studio, starts an encounter, takes turns
   expect(within(resources()).getByRole('heading', { name: 'Strain: built up 2 of 5' })).toBeTruthy();
   expect(screen.queryByRole('button', { name: /^Undo turn/ })).toBeNull(); // one level: nothing left to undo
 
+  // Strain is built up, so End encounter first asks which pools to clear (D43 S8); nothing is ticked, so the strain stays.
   await user.click(within(combat()).getByRole('button', { name: 'End encounter' }));
+  const clearing = await within(combat()).findByRole('group', { name: 'End encounter' });
+  expect(within(clearing).getByRole<HTMLInputElement>('checkbox', { name: 'Clear Strain (2 built up)' }).checked).toBe(false);
+  await user.click(within(clearing).getByRole('button', { name: 'End encounter' }));
   await within(combat()).findByText('No encounter running');
+  await within(combat()).findByText('Strain: built up 2 of 5');
   expect(stance().checked).toBe(true); // the stance has no duration, so ending the encounter leaves it on
 });
 
@@ -465,21 +470,24 @@ let responsesPack: Promise<ContentReference[]> | undefined;
  * stay, so the features' pool and form references still resolve. Once per run.
  */
 function installResponsesPack(): Promise<ContentReference[]> {
-  responsesPack ??= (async () => {
-    const pack = JSON.parse(readFileSync(resolve(fixtureFolder(), 'fixture-pack-responses.json'), 'utf8')) as { revisions: ContentRevision[] };
-    const source = await client.createHomebrewSource('E2E Responses Book', ['srd-5.2.1']);
-    const published: ContentReference[] = [];
-    for (const contentId of responseContentOrder) {
-      const revision = pack.revisions.find((r) => r.contentId === contentId)!;
-      const effects = revision.kind === 'class' ? revision.effects.filter((e) => e.type !== 'grant') : revision.effects;
-      const draft = await client.saveDraft({ ...revision, status: 'draft', effects, provenance: { ...revision.provenance, sourceId: source.id } });
-      const result = await client.publish(draft);
-      expect(result.report.errors).toEqual([]);
-      published.push(result.published);
-    }
-    return published;
-  })();
+  responsesPack ??= publishFixturePack('fixture-pack-responses.json', 'E2E Responses Book', responseContentOrder);
   return responsesPack;
+}
+
+/** Publishes a fixture pack's revisions, in the given content order, into a new homebrew source; the class's grants are left out. */
+async function publishFixturePack(file: string, title: string, order: string[]): Promise<ContentReference[]> {
+  const pack = JSON.parse(readFileSync(resolve(fixtureFolder(), file), 'utf8')) as { revisions: ContentRevision[] };
+  const source = await client.createHomebrewSource(title, ['srd-5.2.1']);
+  const published: ContentReference[] = [];
+  for (const contentId of order) {
+    const revision = pack.revisions.find((r) => r.contentId === contentId)!;
+    const effects = revision.kind === 'class' ? revision.effects.filter((e) => e.type !== 'grant') : revision.effects;
+    const draft = await client.saveDraft({ ...revision, status: 'draft', effects, provenance: { ...revision.provenance, sourceId: source.id } });
+    const result = await client.publish(draft);
+    expect(result.report.errors).toEqual([]);
+    published.push(result.published);
+  }
+  return published;
 }
 
 /** A level 8 Fixture Bulwark with the fixture character's scores, the six response features and the guard form pinned. */
@@ -583,5 +591,58 @@ it('plain damage from the summary routes through the panel', async () => {
   await screen.findByRole('heading', { name: `Hit points: ${maximum - 1} of ${maximum}` });
   expect(screen.queryByRole('button', { name: 'Apply damage' })).toBeNull();
   expect(await hitPointsOf(id)).toMatchObject({ current: maximum - 1, maximum });
+});
+
+// ---- D43 S8: charging against the real DevHost ----
+
+let chargingPack: Promise<ContentReference[]> | undefined;
+
+/** The charging pack (`fixture-pack-charging.json`): the class with its two pools, then the feature that gathers and releases. Once per run. */
+function installChargingPack(): Promise<ContentReference[]> {
+  chargingPack ??= publishFixturePack('fixture-pack-charging.json', 'E2E Charging Book', ['80', '81'].map((n) => `6f0dc000-0000-4000-8000-0000000000${n}`));
+  return chargingPack;
+}
+
+it('gather twice, release with the charge, then end the encounter with nothing left to clear', async () => {
+  const user = userEvent.setup();
+  const pins = await installChargingPack();
+  const fixture = JSON.parse(readFileSync(resolve(fixtureFolder(), 'characters/pm-charger-l5.json'), 'utf8')) as { baseAbilities: Record<string, number> };
+  await client.createCharacter({ name: 'E2E Charger', rulesFamily: 'srd-5.2.1', baseAbilities: fixture.baseAbilities as never, pins, classes: [{ class: pins[0]!, level: 5 }] });
+
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: /^E2E Charger/ }));
+  const sheet = await screen.findByRole('article', { name: 'E2E Charger' });
+  await openTab(user, sheet, 'Play');
+  const resources = () => screen.getByRole('region', { name: 'Resources' });
+  const lastRoll = () => screen.getByRole('region', { name: 'Last roll' });
+  expect(within(resources()).getByRole('heading', { name: 'Focus: 9 of 9' })).toBeTruthy();
+  await user.click(await screen.findByRole('button', { name: 'Start encounter' }));
+  await screen.findByRole('button', { name: 'End encounter' });
+
+  // Each Gather spends 1 Focus and builds 1 Charge in one change, which Undo takes back as one.
+  const gather = () => screen.getByRole('button', { name: /^Use Gather/ });
+  await user.click(gather());
+  await waitFor(() => expect(within(resources()).getByRole('heading', { name: 'Charge: built up 1 of 4' })).toBeTruthy());
+  await user.click(gather());
+  await waitFor(() => expect(within(resources()).getByRole('heading', { name: 'Charge: built up 2 of 4' })).toBeTruthy());
+  expect(within(resources()).getByRole('heading', { name: 'Focus: 7 of 9' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Undo use Gather' })).toBeTruthy();
+
+  // Release with 2 points rolls the base dice and 2 extra; rolling changes nothing, the record's Spend draws the charge down.
+  const points = await screen.findByRole<HTMLInputElement>('spinbutton', { name: /^Points to spend/ });
+  expect(points.max).toBe('2');
+  await user.clear(points);
+  await user.type(points, '2');
+  await user.click(screen.getByRole('button', { name: /^Roll Release/ }));
+  await waitFor(() => expect(lastRoll().textContent).toMatch(/Release/));
+  expect(lastRoll().textContent).toMatch(/2d8\s?\+\s?2d8/);
+  expect(within(resources()).getByRole('heading', { name: 'Charge: built up 2 of 4' })).toBeTruthy();
+  await user.click(await within(lastRoll()).findByRole('button', { name: /^Spend 2 Charge/ }));
+  await waitFor(() => expect(within(resources()).getByRole('heading', { name: 'Charge: built up 0 of 4' })).toBeTruthy());
+
+  // Nothing is built up, so End encounter is one click with no clear choices.
+  await user.click(screen.getByRole('button', { name: 'End encounter' }));
+  expect(screen.queryByRole('group', { name: 'End encounter' })).toBeNull();
+  await screen.findByRole('button', { name: 'Start encounter' });
 });
 

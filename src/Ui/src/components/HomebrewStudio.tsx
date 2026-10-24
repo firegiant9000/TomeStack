@@ -862,7 +862,7 @@ function EntryEditor(props: {
   const otherPools: PoolChoice[] = props.entries
     .filter((e) => e.contentId !== revision.contentId && e.latestPublished)
     .flatMap((e) =>
-      e.latestPublished!.effects.flatMap((r) => (r.type === 'resource' ? [{ contentId: e.contentId, resourceId: r.resourceId, label: r.label, entryName: e.name }] : [])),
+      e.latestPublished!.effects.flatMap((r) => (r.type === 'resource' ? [{ contentId: e.contentId, resourceId: r.resourceId, label: r.label, entryName: e.name, countsUp: r.counts === 'up' }] : [])),
     );
   const isClass = revision.kind === 'class';
   const classLike = isClass || revision.kind === 'subclass';
@@ -1143,14 +1143,20 @@ function EntryEditor(props: {
               (e.type === 'attackRider' && removedToggle !== undefined && !e.toggleContent && e.toggle === removedToggle) ||
               (e.type === 'modifier' && removedResource !== undefined && !resourceStillDefined && e.target === `resource.${removedResource}`);
             const kept = remaining.filter((e) => !goesWith(e));
+            // D43 slice 8: a roll stops also changing the removed pool (its own pool goes through the reset below).
+            const withoutRemovedPool = (e: Effect): Effect => {
+              if (e.type !== 'roll' || removedResource === undefined || resourceStillDefined || !e.alsoChange) return e;
+              const rows = e.alsoChange.filter((row) => row.resourceContent || row.resourceId !== removedResource);
+              return rows.length === e.alsoChange.length ? e : { ...e, alsoChange: rows.length === 0 ? undefined : rows };
+            };
             update({
-              effects: kept.map((e) =>
+              effects: kept.map(withoutRemovedPool).map((e) =>
                 e.type === 'modifier' && removedToggle !== undefined && !e.toggleContent && e.toggle === removedToggle
                   ? { ...e, toggle: undefined, timing: undefined }
                   : (e.type === 'attack' || e.type === 'roll') && removedToggle !== undefined && !e.whileToggle?.contentId && e.whileToggle?.toggleId === removedToggle
                     ? { ...e, whileToggle: undefined }
                     : e.type === 'roll' && removedResource !== undefined && !resourceStillDefined && !e.resourceContent && e.resourceId === removedResource
-                      ? { ...e, resourceId: undefined, resourceContent: undefined, cost: undefined, variableCost: undefined, perUnit: undefined }
+                      ? { ...e, resourceId: undefined, resourceContent: undefined, cost: undefined, variableCost: undefined, perUnit: undefined, alsoChange: undefined, drawsDown: undefined }
                     : e.type === 'attack' && removedResource !== undefined && !resourceStillDefined && !e.resourceContent && e.resourceId === removedResource
                       ? { ...e, resourceId: undefined, cost: undefined }
                       : e.type === 'toggle' && removedResource !== undefined && !resourceStillDefined && e.resourceId === removedResource

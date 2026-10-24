@@ -48,7 +48,7 @@ function startOutcome(kind: ResponseOutcomeKind, resources: Resource[], rolls: R
   }
 }
 
-function PoolSelect(props: {
+export function PoolSelect(props: {
   label: string;
   noneLabel: string;
   current: { contentId?: string; resourceId?: string };

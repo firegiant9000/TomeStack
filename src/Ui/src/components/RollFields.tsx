@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { abilities } from '../classBasics';
 import type { Ability, ContentRevision, Effect } from '../api/types';
 import { parseAreaSize, parseAreaWidth, parseMaxUnits, parsePerUnitDice, parseRollText, poolValue, type PoolChoice } from '../rollAuthoring';
 import { ActivationSelect, FormulaField, StrictField } from './AttackFields';
+import { PoolSelect } from './ResponseFields';
 
 type Roll = Extract<Effect, { type: 'roll' }>;
 type Resource = Extract<Effect, { type: 'resource' }>;
@@ -81,6 +82,130 @@ function PerUnitFields(props: { effect: Roll; onChange: (effect: Effect) => void
   );
 }
 
+/** The most pool changes a roll can also make (the service's MaxAlsoChanges). */
+export const maxAlsoChanges = 4;
+
+type AlsoChange = NonNullable<Roll['alsoChange']>[number];
+
+/**
+ * Content v11 (D43 S8): the other pools a roll changes in the same use. The roll's own pool is not offered (it is the cost). The
+ * amounts are formulas the service checks; an empty list is saved as absent.
+ */
+function AlsoChangeFields(props: { effect: Roll; resources: Resource[]; otherPools: PoolChoice[]; previewRevision?: ContentRevision; onChange: (effect: Effect) => void }) {
+  const { effect, onChange } = props;
+  const rows = effect.alsoChange ?? [];
+  const box = useRef<HTMLFieldSetElement>(null);
+  const focusAfter = useRef<string | null>(null);
+  // WCAG 2.4.3: Add and Remove rebuild the list, so focus is put back by hand once the new list is drawn.
+  useEffect(() => {
+    const key = focusAfter.current;
+    if (key === null) return;
+    focusAfter.current = null;
+    const target = key === 'add' ? box.current?.querySelector<HTMLElement>('[data-focus="add"]') : box.current?.querySelector<HTMLElement>(`[data-row="${key}"] select`);
+    target?.focus();
+  });
+  const isOwn = (contentId: string | undefined, resourceId: string) => resourceId === effect.resourceId && contentId === effect.resourceContent;
+  const resources = props.resources.filter((r) => !isOwn(undefined, r.resourceId));
+  const otherPools = props.otherPools.filter((p) => !isOwn(p.contentId, p.resourceId));
+  const first = resources[0] ? { resourceId: resources[0].resourceId } : otherPools[0] ? { resourceId: otherPools[0].resourceId, resourceContent: otherPools[0].contentId } : undefined;
+  const atLimit = rows.length >= maxAlsoChanges;
+  const cannotAdd = atLimit || first === undefined;
+  const hintId = `rule-${effect.id}-alsochange-limit`;
+  const set = (next: AlsoChange[]) => onChange({ ...effect, alsoChange: next.length === 0 ? undefined : next });
+  const replaceAt = (at: number, row: AlsoChange) => set(rows.map((r, i) => (i === at ? row : r)));
+  const add = () => {
+    if (cannotAdd || !first) return;
+    focusAfter.current = String(rows.length);
+    set([...rows, { ...first, change: 'spend', amount: '1' }]);
+  };
+  const remove = (at: number) => {
+    focusAfter.current = at < rows.length - 1 ? String(at) : 'add';
+    set(rows.filter((_, i) => i !== at));
+  };
+  return (
+    <fieldset className="bare-fieldset" ref={box}>
+      <legend>Also changes</legend>
+      {rows.length > 0 && (
+        <ol>
+          {rows.map((row, i) => {
+            const n = i + 1;
+            return (
+              <li key={i} data-row={i}>
+                <PoolSelect
+                  label={`Change ${n}: pool`}
+                  noneLabel="Choose a pool"
+                  current={{ contentId: row.resourceContent, resourceId: row.resourceId }}
+                  resources={resources}
+                  otherPools={otherPools}
+                  onPick={(pool) => replaceAt(i, { ...row, resourceId: pool?.resourceId ?? '', resourceContent: pool?.contentId })}
+                />
+                <label className="field">
+                  {`Change ${n}: spend or regain`}
+                  <select value={row.change} onChange={(e) => replaceAt(i, { ...row, change: e.target.value === 'regain' ? 'regain' : 'spend' })}>
+                    <option value="spend">Spend</option>
+                    <option value="regain">Regain</option>
+                  </select>
+                </label>
+                <FormulaField
+                  effectId={effect.id}
+                  part={`alsochange${n}`}
+                  label={`Change ${n}: amount (a number or a formula)`}
+                  value={row.amount}
+                  previewRevision={props.previewRevision}
+                  floorAtZero
+                  onChange={(amount) => replaceAt(i, { ...row, amount })}
+                />
+                <button type="button" onClick={() => remove(i)}>
+                  {`Remove change ${n}`}
+                </button>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+      <button type="button" data-focus="add" aria-disabled={cannotAdd || undefined} aria-describedby={cannotAdd ? hintId : undefined} onClick={add}>
+        Add change
+      </button>
+      {cannotAdd && (
+        <p id={hintId} className="hint">
+          {atLimit ? `A roll also changes at most ${maxAlsoChanges} pools; remove one to add another.` : 'There is no other pool to change.'}
+        </p>
+      )}
+    </fieldset>
+  );
+}
+
+/** Content v11 (D43 S8): a roll that draws down the built-up charge of a pool that counts up. */
+function DrawsDownField(props: { effect: Roll; countsUp: boolean | undefined; poolKnown: boolean; onChange: (effect: Effect) => void; onProblem: ReportProblem }) {
+  const { effect } = props;
+  const ticked = effect.drawsDown === true;
+  const wrong = ticked && props.poolKnown && props.countsUp !== true;
+  const reasonId = `rule-${effect.id}-draws-down-reason`;
+  const label = 'Draws down built-up charge';
+  useReportedProblem(`${effect.id}-draws-down`, wrong ? `${label}: only for a pool that counts up.` : undefined, props.onProblem);
+  return (
+    <>
+      <label className="choice">
+        <input
+          type="checkbox"
+          checked={ticked}
+          // A stored tick on a pool that does not count up stays enabled, so it can be cleared.
+          disabled={props.countsUp !== true && !ticked}
+          aria-invalid={wrong ? true : undefined}
+          aria-describedby={props.countsUp === true ? undefined : reasonId}
+          onChange={(e) => props.onChange({ ...effect, drawsDown: e.target.checked ? true : undefined })}
+        />
+        {`${label} (the roll uses what has built up)`}
+      </label>
+      {props.countsUp !== true && (
+        <p id={reasonId} className={wrong ? 'error' : 'hint'}>
+          Only for a pool that counts up
+        </p>
+      )}
+    </>
+  );
+}
+
 /** Content v11 (D43 slice 5): the editor of a roll or action; every v6 and v11 field. */
 export function RollFields(props: {
   effect: Roll;
@@ -98,6 +223,10 @@ export function RollFields(props: {
       : props.resources.some((r) => r.resourceId === effect.resourceId)
     : true;
   const poolSelected = effect.resourceId ? poolValue(effect.resourceContent, effect.resourceId) : '';
+  // Whether the chosen pool counts up (a pool that is in neither list is not known).
+  const countsUp = effect.resourceContent
+    ? props.otherPools.find((p) => p.contentId === effect.resourceContent && p.resourceId === effect.resourceId)?.countsUp === true
+    : props.resources.some((r) => r.resourceId === effect.resourceId && r.counts === 'up');
   return (
     <>
       <label className="field">
@@ -120,10 +249,12 @@ export function RollFields(props: {
           value={poolSelected}
           onChange={(e) => {
             const picked = e.target.value;
-            if (!picked) return onChange({ ...effect, resourceId: undefined, resourceContent: undefined, cost: undefined, variableCost: undefined, perUnit: undefined });
+            // Another pool starts the charging members over: they were chosen against the old pool.
+            const charging = { alsoChange: undefined, drawsDown: undefined };
+            if (!picked) return onChange({ ...effect, resourceId: undefined, resourceContent: undefined, cost: undefined, variableCost: undefined, perUnit: undefined, ...charging });
             const other = props.otherPools.find((p) => poolValue(p.contentId, p.resourceId) === picked);
-            if (other) return onChange({ ...effect, resourceId: other.resourceId, resourceContent: other.contentId });
-            if (props.resources.some((r) => r.resourceId === picked)) onChange({ ...effect, resourceId: picked, resourceContent: undefined });
+            if (other) return onChange({ ...effect, resourceId: other.resourceId, resourceContent: other.contentId, ...charging });
+            if (props.resources.some((r) => r.resourceId === picked)) onChange({ ...effect, resourceId: picked, resourceContent: undefined, ...charging });
           }}
         >
           <option value="">No resource</option>
@@ -162,7 +293,8 @@ export function RollFields(props: {
           </label>
           {/* Keyed on the dice being there, so its texts start over when clearing the dice removes the per-unit dice. */}
           {effect.variableCost !== true && <PerUnitFields key={effect.dice ? 'dice' : 'no-dice'} effect={effect} onChange={onChange} onProblem={onProblem} />}
-        </>
+          <AlsoChangeFields effect={effect} resources={props.resources} otherPools={props.otherPools} previewRevision={props.previewRevision} onChange={onChange} />
+          <DrawsDownField effect={effect} countsUp={countsUp} poolKnown={poolKnown} onChange={onChange} onProblem={onProblem} />        </>
       )}
       <label className="field">
         Saving throw

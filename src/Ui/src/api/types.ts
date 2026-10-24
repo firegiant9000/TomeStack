@@ -1670,6 +1670,10 @@ export type Effect =
       targets?: string;
       /** Content v11: extra dice for each unit spent beyond the base cost. */
       perUnit?: { dice: string; maxUnits?: number };
+      /** Content v11 (D43 S8): other pool changes made in the same use, at most 4; `amount` is a formula. */
+      alsoChange?: { resourceId: string; resourceContent?: string; change: 'spend' | 'regain'; amount: string }[];
+      /** Content v11 (D43 S8): the roll draws down the built-up charge of its pool (a pool that counts up). */
+      drawsDown?: boolean;
     })
   // Content v11 (D43, slice 5): a named formula, read as VALUE.<valueId>.
   | (EffectBase & { type: 'value'; valueId: string; formula: string })

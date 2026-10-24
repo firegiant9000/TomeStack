@@ -287,6 +287,12 @@ it('hides the amount box for a pool tracked by hand', () => {
   expect(screen.queryByRole('spinbutton')).toBeNull();
 });
 
+it('renders for a sheet whose only combat content is a counting-up pool, so an encounter can be started and ended', () => {
+  strip(view({ resources: [pool('charge', { countsUp: true, maximum: 4 })] }));
+  expect(screen.getByRole('button', { name: 'Start encounter' })).toBeTruthy();
+  expect(screen.getByText(/Fixture charge: built up 0 of 4/)).toBeTruthy();
+});
+
 it('renders for a sheet whose only D43 content is a toggle with a duration, so an encounter can be started', () => {
   strip(view({ toggles: [toggle('iron', { on: false, duration: 3 })] }));
   expect(screen.getByRole('button', { name: 'Start encounter' })).toBeTruthy();

@@ -7,7 +7,7 @@ function hasCombat(view: CharacterView): boolean {
   const { sheet, character } = view;
   return (
     (sheet.toggles ?? []).some((t) => t.group || t.duration != null) ||
-    (sheet.resources ?? []).some((r) => r.allowance) ||
+    (sheet.resources ?? []).some((r) => r.allowance || r.countsUp) ||
     (sheet.upkeeps ?? []).length > 0 ||
     character.play?.encounter !== undefined
   );
