@@ -300,11 +300,18 @@ public static class DamagePipeline
 
         // 3 and 4. The chosen responses, in sheet order. Every choice must be on the sheet and offered by the plan.
         var chosenKeys = plan.Chosen.Select(c => (c.ContentId, c.ResponseId)).ToHashSet();
+        // One error per response, however many reasons it has.
+        var refused = new HashSet<(Guid, string)>();
+        void Refuse(Guid contentId, string responseId)
+        {
+            if (refused.Add((contentId, responseId)))
+                errors.Add(Unavailable(contentId, responseId));
+        }
         foreach (var (contentId, responseId) in chosenKeys)
         {
             if (!responses.Any(r => r.ContentId == contentId && r.ResponseId == responseId)
                 || !plan.Offers.Any(o => o.Offered && o.Response.ContentId == contentId && o.Response.ResponseId == responseId))
-                errors.Add(Unavailable(contentId, responseId));
+                Refuse(contentId, responseId);
         }
 
         ResourceValue? Pool(Guid? contentId, string? resourceId) =>
@@ -403,7 +410,7 @@ public static class DamagePipeline
         foreach (var response in responses.Where(r => chosenKeys.Contains((r.ContentId, r.ResponseId))))
         {
             if (!Pay(response) || !(response.Outcomes ?? []).All(Run))
-                errors.Add(Unavailable(response.ContentId, response.ResponseId));
+                Refuse(response.ContentId, response.ResponseId);
         }
 
         // 5. The result must be a state the play state accepts.

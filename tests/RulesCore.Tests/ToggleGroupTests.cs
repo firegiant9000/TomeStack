@@ -424,4 +424,46 @@ public class ToggleGroupTests
         Assert.Equal((true, false), (sheet.Toggles!.Single(t => t.ToggleId == "ember").On, sheet.Toggles!.Single(t => t.ToggleId == "tide").On));
         Assert.Contains(sheet.Diagnostics, d => d.Code == "toggle.group-conflict");
     }
+
+    // ---- the helpers a damage response's toggleOn uses (D43 S7 task 7.4) --------------------------------------------------------
+
+    private static readonly Guid FormsContent = Guid.Parse("6f0dc000-0000-4000-8000-0000000000a1");
+
+    private static ToggleValue Form(string id, bool on, ToggleLayer layer = ToggleLayer.Primary, bool? inBase = null, params string[] allowedWith) =>
+        new(new(FormsContent, Guid.Empty), "Forms", id, id, id, on, null, null, Group: "forms", GroupContent: FormsContent, Layer: layer,
+            AllowedWith: layer == ToggleLayer.Overlay ? [.. allowedWith.Select(w => new ToggleRef(FormsContent, w))] : null, AllowedInBase: inBase);
+
+    [Fact]
+    public void OverlayAllowedNow_follows_the_form_that_is_on()
+    {
+        var overlay = Form("aura", false, ToggleLayer.Overlay, inBase: false, "tide");
+        var baseOnly = Form("calm", false, ToggleLayer.Overlay, inBase: true);
+
+        Assert.False(ToggleGroups.OverlayAllowedNow(overlay, [Form("tide", false), overlay]));      // no form on: the base character
+        Assert.True(ToggleGroups.OverlayAllowedNow(overlay, [Form("tide", true), overlay]));
+        Assert.False(ToggleGroups.OverlayAllowedNow(overlay, [Form("ember", true), overlay]));
+        Assert.True(ToggleGroups.OverlayAllowedNow(baseOnly, [Form("tide", false)]));
+        Assert.False(ToggleGroups.OverlayAllowedNow(baseOnly, [Form("tide", true)]));
+        Assert.True(ToggleGroups.OverlayAllowedNow(Form("tide", false), [])); // a primary is always allowed
+    }
+
+    [Fact]
+    public void OverlaysEndedBySwitchingOn_ends_only_overlays_the_new_form_does_not_allow()
+    {
+        var guard = Form("guard", true);
+        var surge = Form("surge", false);
+        var withGuard = Form("with-guard", true, ToggleLayer.Overlay, inBase: false, "guard");
+        var withBoth = Form("with-both", true, ToggleLayer.Overlay, inBase: false, "guard", "surge");
+        var storedOnly = Form("stored-only", false, ToggleLayer.Overlay, inBase: true);
+        var allowedStored = Form("stored-allowed", false, ToggleLayer.Overlay, inBase: false, "surge");
+        IReadOnlyList<ToggleValue> toggles = [guard, surge, withGuard, withBoth, storedOnly, allowedStored];
+        IReadOnlySet<(Guid, string)> stored = new HashSet<(Guid, string)> { (FormsContent, "stored-only"), (FormsContent, "stored-allowed") };
+
+        Assert.Equal(["with-guard"], ToggleGroups.OverlaysEndedBySwitchingOn(surge, toggles, null).Select(t => t.ToggleId));
+        // A stored overlay that is not on counts too, when the stored set is given.
+        Assert.Equal(["with-guard", "stored-only"], ToggleGroups.OverlaysEndedBySwitchingOn(surge, toggles, stored).Select(t => t.ToggleId));
+        // An overlay is never a form to switch to; a toggle outside a group ends nothing.
+        Assert.Empty(ToggleGroups.OverlaysEndedBySwitchingOn(withGuard, toggles, stored));
+        Assert.Empty(ToggleGroups.OverlaysEndedBySwitchingOn(surge with { Group = null, GroupContent = null }, toggles, stored));
+    }
 }

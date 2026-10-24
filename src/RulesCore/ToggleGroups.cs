@@ -167,12 +167,7 @@ public static class ToggleGroups
     public static IReadOnlyList<ToggleValue> OverlaysEndedBySwitchingOn(ToggleValue primary, IReadOnlyList<ToggleValue> toggles, IReadOnlySet<(Guid ContentId, string ToggleId)>? stored)
     {
         ArgumentNullException.ThrowIfNull(primary);
-        ArgumentNullException.ThrowIfNull(toggles);
-        if (primary.Group is null || primary.Layer == ToggleLayer.Overlay)
-            return [];
-        return [.. toggles.Where(t => (t.On || stored?.Contains((t.Content.ContentId, t.ToggleId)) == true)
-            && t.Group == primary.Group && t.GroupContent == primary.GroupContent && t.Layer == ToggleLayer.Overlay
-            && !OverlayAllowed(t.AllowedWith, t.AllowedInBase, t.Content.ContentId, (primary.Content.ContentId, primary.ToggleId)))];
+        return EndingWith(primary, toggles, stored, primary);
     }
 
     /// <summary>
@@ -188,7 +183,15 @@ public static class ToggleGroups
     /// not allowed with the form that was on) counts too, so it cannot come back on silently later. <paramref name="stored"/> holds the
     /// (content id, toggle id) of every stored toggle.
     /// </summary>
-    public static IReadOnlyList<ToggleValue> EndingWith(ToggleValue ending, IReadOnlyList<ToggleValue> toggles, IReadOnlySet<(Guid ContentId, string ToggleId)>? stored)
+    public static IReadOnlyList<ToggleValue> EndingWith(ToggleValue ending, IReadOnlyList<ToggleValue> toggles, IReadOnlySet<(Guid ContentId, string ToggleId)>? stored) =>
+        EndingWith(ending, toggles, stored, null);
+
+    /// <summary>
+    /// As the overload with <c>stored</c>, with the primary the overlays must be allowed with given explicitly: <paramref name="replacement"/>,
+    /// the form that takes the place of <paramref name="ending"/> (a switch). Null means the primary of the group still on beside
+    /// <paramref name="ending"/>, if any, else the base character.
+    /// </summary>
+    public static IReadOnlyList<ToggleValue> EndingWith(ToggleValue ending, IReadOnlyList<ToggleValue> toggles, IReadOnlySet<(Guid ContentId, string ToggleId)>? stored, ToggleValue? replacement)
     {
         ArgumentNullException.ThrowIfNull(ending);
         ArgumentNullException.ThrowIfNull(toggles);
@@ -196,7 +199,7 @@ public static class ToggleGroups
             return [];
         bool Same(ToggleValue t) => t.Content.ContentId == ending.Content.ContentId && t.ToggleId == ending.ToggleId;
         bool InGroup(ToggleValue t) => t.Group == ending.Group && t.GroupContent == ending.GroupContent;
-        var remaining = toggles.FirstOrDefault(t => t.On && InGroup(t) && t.Layer != ToggleLayer.Overlay && !Same(t));
+        var remaining = replacement ?? toggles.FirstOrDefault(t => t.On && InGroup(t) && t.Layer != ToggleLayer.Overlay && !Same(t));
         (Guid, string)? primary = remaining is null ? null : (remaining.Content.ContentId, remaining.ToggleId);
         return [.. toggles.Where(t => (t.On || stored?.Contains((t.Content.ContentId, t.ToggleId)) == true) && InGroup(t) && t.Layer == ToggleLayer.Overlay && !OverlayAllowed(t.AllowedWith, t.AllowedInBase, t.Content.ContentId, primary))];
     }

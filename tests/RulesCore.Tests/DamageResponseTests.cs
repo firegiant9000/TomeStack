@@ -502,18 +502,24 @@ public class DamageResponseTests
     }
 
     [Fact]
-    public void A_chosen_threshold_is_cost_fitted_against_what_the_reductions_left()
+    public void A_chosen_threshold_is_cost_fitted_after_the_reductions_whatever_the_sheet_order()
     {
-        // Rally (its own pool) is eligible after brace; a test threshold that wants the last grit fits once brace took none of it.
+        // Sheet order: the threshold, then the reduction; one grit left; both chosen and both eligible (30 - 15 = 15 is a drop).
         var late = Holder(63, $$"""{"type":"response","id":"late","responseId":"late","label":"Late","phase":"threshold","when":{"atOrBelow":"HP.MAX"},{{GritPool}},"cost":"1"}""");
-        var c = Stand(hp: 30, extra: [late], more: p => p.WithSpent(Fixtures.Bulwark.ContentId, "grit", 4));
+        var red = Holder(65, $$"""{"type":"response","id":"red","responseId":"red","label":"Red","phase":"damageReduction","amount":"5",{{GritPool}},"cost":"1"}""");
+        var c = Stand(hp: 30, extra: [late, red], more: p => p.WithSpent(Fixtures.Bulwark.ContentId, "grit", 4));
+        var order = c.Sheet.Responses!.Select(r => r.ResponseId).ToList();
+        Assert.True(order.IndexOf("late") < order.IndexOf("red"));
 
-        var braceAndLate = PlanFor(c, 20, null, "brace", "late");
-        var lateAlone = PlanFor(c, 20, null, "late");
+        var both = PlanFor(c, 20, null, "late", "red");
 
-        // brace (reduction) is fitted first and takes the last grit, so the later threshold is refused.
-        Assert.Equal("damage.response-unavailable", Assert.Single(braceAndLate.Notes).Code);
-        Assert.Empty(lateAlone.Notes);
+        // The reduction is cost-fitted first and keeps the grit; the threshold, fitted against what is left, is refused.
+        // (A single pass in sheet order, as before this fix, fitted "late" first and refused the reduction: Reduction 0.)
+        Assert.Equal(5, both.Reduction);
+        Assert.Equal(new HitPointState(68, 15, 0), both.Final);
+        var note = Assert.Single(both.Notes);
+        Assert.Contains("'late'", note.Message, StringComparison.Ordinal);
+        Assert.Empty(PlanFor(c, 20, null, "late").Notes);
     }
 
     // ---- applying a plan (task 7.4) -------------------------------------------------------------------------------------------------
@@ -564,17 +570,104 @@ public class DamageResponseTests
     }
 
     [Fact]
-    public void A_toggle_outcome_ends_overlays_that_needed_the_old_form_and_counts_rounds_in_an_encounter()
+    public void A_toggle_outcome_ends_overlays_the_new_form_does_not_allow_and_keeps_the_rest()
     {
-        var aura = Holder(50, """{"type":"toggle","id":"aura","toggleId":"aura","label":"Aura","group":"forms","groupContent":"6f0dc000-0000-4000-8000-000000000074","layer":"overlay","allowedWith":[{"contentId":"6f0dc000-0000-4000-8000-000000000077","toggleId":"guard"}]}""");
-        var c = Stand(hp: 30, extra: [aura], more: p => p with { Toggles = [new ActiveToggle(Fixtures.GuardForm.ContentId, "guard"), new ActiveToggle(aura.ContentId, "aura")], Encounter = new(2) });
-        Assert.True(c.Sheet.Toggles!.Single(t => t.ToggleId == "aura").On);
+        const string forms = "\"group\":\"forms\",\"groupContent\":\"6f0dc000-0000-4000-8000-000000000074\",\"layer\":\"overlay\"";
+        const string guard = "{\"contentId\":\"6f0dc000-0000-4000-8000-000000000077\",\"toggleId\":\"guard\"}";
+        const string surge = "{\"contentId\":\"6f0dc000-0000-4000-8000-000000000074\",\"toggleId\":\"surge\"}";
+        var holder = Holder(50, $$"""
+            {"type":"toggle","id":"aura","toggleId":"aura","label":"Aura",{{forms}},"allowedWith":[{{guard}}]},
+            {"type":"toggle","id":"keep","toggleId":"keep","label":"Keep",{{forms}},"allowedWith":[{{guard}},{{surge}}]},
+            {"type":"toggle","id":"dormant","toggleId":"dormant","label":"Dormant",{{forms}},"allowedWith":[{{surge}}]},
+            {"type":"toggle","id":"baseonly","toggleId":"baseonly","label":"Base only",{{forms}},"allowedInBase":true,"allowedWith":[]}
+            """);
+        var c = Stand(hp: 30, extra: [holder], more: p => p with
+        {
+            Toggles =
+            [
+                new ActiveToggle(Fixtures.GuardForm.ContentId, "guard"), new ActiveToggle(holder.ContentId, "aura"), new ActiveToggle(holder.ContentId, "keep"),
+                new ActiveToggle(holder.ContentId, "dormant"), new ActiveToggle(holder.ContentId, "baseonly"),
+            ],
+        });
+        // dormant and baseonly are stored but not on (guard does not allow them); aura and keep are on.
+        Assert.Equal(["aura", "keep"], c.Sheet.Toggles!.Where(t => t.On && t.Layer == ToggleLayer.Overlay).Select(t => t.ToggleId));
 
         var (play, _, errors) = Run(c, 14, "rally");
 
         Assert.Empty(errors);
-        // The guard form and the overlay that needed it are gone; the surge form (no duration) has no count.
-        Assert.Equal([new ActiveToggle(Fixtures.SurgeForm.ContentId, "surge")], play.Toggles);
+        // Guard goes off; aura (needed guard) and the stored-only baseonly (not allowed with surge) end; keep (allowed with both) and the
+        // stored-only dormant (allowed with surge) stay.
+        Assert.Equal(
+            [new ActiveToggle(holder.ContentId, "keep"), new ActiveToggle(holder.ContentId, "dormant"), new ActiveToggle(Fixtures.SurgeForm.ContentId, "surge")],
+            play.Toggles);
+    }
+
+    [Theory]
+    [InlineData(true, 3)]
+    [InlineData(false, null)]
+    public void A_toggle_outcome_counts_rounds_only_in_an_encounter(bool inEncounter, int? roundsLeft)
+    {
+        var timed = Holder(54, """
+            {"type":"toggle","id":"timed","toggleId":"timed","label":"Timed","group":"forms","groupContent":"6f0dc000-0000-4000-8000-000000000074","duration":"3"},
+            {"type":"response","id":"go","responseId":"go","label":"Go","phase":"threshold","when":{"atOrBelow":"HP.MAX"},"outcomes":[{"kind":"toggleOn","toggle":{"toggleId":"timed"}}]}
+            """);
+        var c = Stand(hp: 30, extra: [timed], more: p => p with { Encounter = inEncounter ? new(2) : null });
+
+        var (play, _, errors) = Run(c, 14, "go");
+
+        Assert.Empty(errors);
+        Assert.Equal(new ActiveToggle(timed.ContentId, "timed", roundsLeft), Assert.Single(play.Toggles));
+    }
+
+    private const string AtAnyDropWith = """{"type":"response","id":"go","responseId":"go","label":"Go","phase":"threshold","when":{"atOrBelow":"HP.MAX"},"outcomes":[%OUTCOME%]}""";
+
+    private static (PlayState Before, PlayState Play, IReadOnlyList<Diagnostic> Errors) ApplyOutcome(string effects, string outcome, int grit = 0)
+    {
+        var holder = Holder(55, effects.Length == 0 ? AtAnyDropWith.Replace("%OUTCOME%", outcome, StringComparison.Ordinal) : effects + "," + AtAnyDropWith.Replace("%OUTCOME%", outcome, StringComparison.Ordinal));
+        var c = Stand(hp: 30, extra: [holder], more: p => SpentGrit(p, grit));
+        var (play, rolls, errors) = Run(c, 14, "go");
+        Assert.Empty(rolls);
+        return (c.Character.Play, play, errors);
+    }
+
+    [Theory]
+    [InlineData("""{"kind":"toggleOn","toggle":{"toggleId":"ghost"}}""", "")] // not on the sheet
+    [InlineData("""{"kind":"toggleOn","toggle":{"toggleId":"auto"}}""", """{"type":"toggle","id":"auto","toggleId":"auto","label":"Auto","autoWhen":"bloodied"}""")] // switches itself
+    [InlineData("""{"kind":"toggleOn","toggle":{"toggleId":"needs-form"}}""", """{"type":"toggle","id":"needs-form","toggleId":"needs-form","label":"Needs form","group":"forms","groupContent":"6f0dc000-0000-4000-8000-000000000074","layer":"overlay","allowedWith":[{"contentId":"6f0dc000-0000-4000-8000-000000000074","toggleId":"surge"}]}""")] // not allowed with no form on
+    [InlineData("""{"kind":"spend","resourceId":"nope","amount":"1"}""", "")] // a pool nothing defines
+    [InlineData("""{"kind":"regain","resourceId":"nope","amount":"1"}""", "")]
+    public void An_outcome_that_cannot_run_refuses_the_whole_apply_with_one_error(string outcome, string effects)
+    {
+        var (before, play, errors) = ApplyOutcome(effects, outcome);
+
+        Assert.Same(before, play);
+        var error = Assert.Single(errors);
+        Assert.Equal("damage.response-unavailable", error.Code);
+        Assert.Contains("'go'", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Spend_is_clamped_at_the_maximum_and_regain_at_zero()
+    {
+        // Grit holds 5: 3 spent plus a spend of 10 is 5 spent; 3 spent less a regain of 10 is 0 (the entry goes).
+        var (_, spent, spendErrors) = ApplyOutcome("", $$"""{"kind":"spend",{{GritPool}},"amount":"10"}""", grit: 3);
+        var (_, regained, regainErrors) = ApplyOutcome("", $$"""{"kind":"regain",{{GritPool}},"amount":"10"}""", grit: 3);
+
+        Assert.Empty(spendErrors);
+        Assert.Empty(regainErrors);
+        Assert.Equal(5, spent.SpentOf(Fixtures.Bulwark.ContentId, "grit"));
+        Assert.Equal(0, regained.SpentOf(Fixtures.Bulwark.ContentId, "grit"));
+    }
+
+    [Fact]
+    public void A_pool_without_a_calculated_maximum_is_left_as_it_is()
+    {
+        var odd = """{"type":"resource","id":"odd","resourceId":"odd","label":"Odd","maximum":"banana"}""";
+
+        var (before, play, errors) = ApplyOutcome(odd, """{"kind":"spend","resourceId":"odd","amount":"2"}""");
+
+        Assert.Empty(errors);
+        Assert.Equal(before.Resources, play.Resources);
     }
 
     [Fact]
@@ -736,6 +829,21 @@ public class DamageResponseTests
         Assert.Same(spent, play);
         var error = Assert.Single(errors);
         Assert.Contains(Fixtures.Rally.ContentId.ToString(), error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_response_that_is_not_offered_and_cannot_pay_gets_one_error()
+    {
+        var c = Stand(hp: 30);
+        var plan = PlanFor(c, 14, null, "rally");
+        var notOffered = plan with { Offers = [.. plan.Offers.Select(o => o with { Offered = false })] };
+        var spent = c.Character.Play.WithSpent(Fixtures.Rally.ContentId, "rally", 1);
+
+        var (play, rolls, errors) = DamagePipeline.Apply(spent, notOffered, c.Sheet);
+
+        Assert.Same(spent, play);
+        Assert.Empty(rolls);
+        Assert.Equal("damage.response-unavailable", Assert.Single(errors).Code);
     }
 
     public static IEnumerable<object[]> ServiceRows() =>
