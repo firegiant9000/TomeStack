@@ -169,6 +169,24 @@ it('an encounter that ends closes an open confirmation, so the next one starts w
   expect(screen.getByRole('button', { name: 'End encounter' })).toBeTruthy();
 });
 
+it('a confirmation hidden because nothing is built up does not come back with stale ticks or steal focus', async () => {
+  const user = userEvent.setup();
+  const act = vi.fn();
+  const at = (spent: number) => view({ round: 2, resources: [pool('strain', { countsUp: true, spent, current: 5 - spent })] });
+  const { rerender } = strip(at(3), { act });
+  await user.click(screen.getByRole('button', { name: 'End encounter' }));
+  await user.click(within(screen.getByRole('group', { name: 'End encounter' })).getByRole('checkbox'));
+  rerender(<CombatStrip view={at(0)} act={act} busy={false} onTurn={vi.fn()} />);
+  expect(screen.queryByRole('group', { name: 'End encounter' })).toBeNull();
+  const end = screen.getByRole<HTMLButtonElement>('button', { name: 'End encounter' });
+  end.focus();
+  rerender(<CombatStrip view={at(1)} act={act} busy={false} onTurn={vi.fn()} />);
+  expect(screen.queryByRole('group', { name: 'End encounter' })).toBeNull();
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'End encounter' }));
+  await user.click(screen.getByRole('button', { name: 'End encounter' }));
+  expect(within(screen.getByRole('group', { name: 'End encounter' })).getByRole<HTMLInputElement>('checkbox').checked).toBe(false);
+});
+
 it('a refused End encounter keeps the confirmation open with the ticks and focus in the group; an applied one closes it', async () => {
   const user = userEvent.setup();
   const act = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
@@ -180,7 +198,7 @@ it('a refused End encounter keeps the confirmation open with the ticks and focus
   expect(act).toHaveBeenCalledTimes(1);
   const still = screen.getByRole('group', { name: 'End encounter' });
   expect(within(still).getByRole<HTMLInputElement>('checkbox').checked).toBe(true);
-  expect(still.contains(document.activeElement)).toBe(true);
+  expect(document.activeElement).toBe(within(still).getByRole('checkbox'));
   await user.click(within(still).getByRole('button', { name: 'End encounter' }));
   expect(act).toHaveBeenCalledTimes(2);
   expect(act).toHaveBeenLastCalledWith({ action: 'endEncounter', clear: ['c1/strain'] });

@@ -50,9 +50,10 @@ export function CombatStrip({
   const builtUp = resources.filter((r) => r.countsUp && r.spent > 0);
   const [confirming, setConfirming] = useState(false);
   const [ticked, setTicked] = useState<string[]>([]);
-  // The confirmation is open only while there is an encounter with something built up; an encounter that ends (from anywhere) closes it.
+  // The confirmation is open only while there is an encounter with something built up; an encounter that ends (from anywhere), or
+  // nothing left built up, closes it for good, so it never comes back with stale ticks.
   const open = confirming && encounter !== undefined && builtUp.length > 0;
-  if (confirming && encounter === undefined) {
+  if (confirming && (encounter === undefined || builtUp.length === 0)) {
     setConfirming(false);
     setTicked([]);
   }
