@@ -43,6 +43,7 @@ The play-mechanics engine (D43, slices 1 to 8, ADR-018) and the Plan A items mer
 
 - **RulesCore boundary test:** `RulesCoreBoundaryTests` fails the build if `TomeStack.RulesCore` references persistence, UI, Windows or network assemblies, declares any project, package or framework reference, or targets Windows. No change to the app.
 - **Automated accessibility checks (SI S5):** component tests now run axe (`axe-core`, a development-only dependency, MPL-2.0) on the summary bar with a roll result, the import review's detail view with its confirm ticks, and the homebrew studio's effect editor open on a toggle. Colour contrast stays a manual check. No change to the app.
+- **CI time limit 30 minutes:** the CI job's limit goes from 20 to 30 minutes; the .NET tests alone take about 14 and the whole job had reached the old limit. No change to the app.
 
 ## 0.6.0 (the tester feedback: characters from any sheet or text, class import and bulk publish, play mechanics and theme colour)
 
