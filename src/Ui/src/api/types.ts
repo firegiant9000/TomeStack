@@ -2455,3 +2455,28 @@ export interface CoverageRequest {
   contentId?: string;
   includeDrafts?: boolean;
 }
+
+/** A feature a class grants at a level, or an option it offers there through a choice. */
+export interface ClassTableRef {
+  contentId: string;
+  name: string;
+}
+
+export interface ClassLevelRow {
+  level: number;
+  proficiencyBonus: number;
+  features: ClassTableRef[];
+  choices: ClassTableRef[];
+  /** Scale values as text, by column name; empty where the scale has no value at this level. */
+  scales: Record<string, string>;
+  /** Spell slots by spell level (1, 2, ...); absent without ordinary slots at this level. */
+  slots?: number[] | null;
+  pactSlots?: number | null;
+  pactLevel?: number | null;
+}
+
+/** `content.classTable`: read-only; the 20-level progression of one class revision, published or draft. */
+export interface ClassTableView {
+  columns: string[];
+  rows: ClassLevelRow[];
+}

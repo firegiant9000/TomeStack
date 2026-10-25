@@ -55,6 +55,7 @@ import type {
   ExportPreview,
   ExportPurpose,
   FormulaPreviewResult,
+  ClassTableView,
   CoverageReport,
   CoverageRequest,
   GapNote,
@@ -142,6 +143,7 @@ export function createClient(transport: Transport) {
       call<FormulaPreviewResult>('content.previewFormula', { formula, revision, floorAtZero }),
     /** What the engine really does with each effect of a source's content (Import Lab, D62 L1). Read-only; drafts only when asked. */
     contentCoverage: (args: CoverageRequest = {}) => call<CoverageReport>('content.coverage', args),
+    contentClassTable: (revisionId: string) => call<ClassTableView>('content.classTable', { revisionId }),
     listSources: () => call<SourceRecord[]>('source.list'),
     createHomebrewSource: (title: string, rulesFamilies: RulesFamilyId[]) =>
       call<SourceRecord>('source.createHomebrew', { title, rulesFamilies }),

@@ -115,7 +115,7 @@ public static class Coverage
     /// The latest published revision of each content by store order (rowid), and, with drafts included, each content's newest revision
     /// when that is a draft. A published revision keeps its draft behind it in the store, so a draft only shows while it is newer.
     /// </summary>
-    private static (Dictionary<Guid, ContentRevision> Published, Dictionary<Guid, ContentRevision> Drafts) Choose(IReadOnlyList<ContentRevision> all, bool includeDrafts)
+    internal static (Dictionary<Guid, ContentRevision> Published, Dictionary<Guid, ContentRevision> Drafts) Choose(IReadOnlyList<ContentRevision> all, bool includeDrafts)
     {
         var published = new Dictionary<Guid, ContentRevision>();
         var newest = new Dictionary<Guid, ContentRevision>();

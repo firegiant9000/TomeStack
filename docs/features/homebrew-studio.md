@@ -305,6 +305,15 @@ The studio's subclass form offers "Offered in the choice" with every choice of e
 - **May need a mechanic.** `missingMechanic` is true for a feature with an unsupported effect, or with no effects and text containing one of a few generic phrases (`once per`, `regain`, `expend`, `as a reaction`, `bonus action`; `Coverage.MechanicPatterns`). Advice only, never a gate.
 - **Order.** Class level, then name, then content id, so the report is identical after a reopen, an export and an import.
 
+## Class table (Import Lab, D62 L2)
+
+`content.classTable { revisionId }` returns the 20-level progression of one class revision, published or draft, as `{ columns, rows }` (`client.contentClassTable(revisionId)`). It is read-only and writes nothing; a revision that is not a class is refused (`content.not-a-class`). The studio grid that shows it is a later Lab task.
+
+- **Rows.** Always 20, levels 1 to 20. Each row has the proficiency bonus (`DesignFeedback.ProficiencyBonus`, the rule the calculator uses; both SRDs print the same table, so nothing reads the rules family), the features the class grants at that level (`grant` with a `level`), the choice options it offers there (the choice's listed options and the published revisions that extend the choice), one text value per scale column, and spell slots.
+- **Columns.** One per `scale` effect of the class, named by its label (its id when the label is blank, and "label (id)" when two labels match). A scale without a value for a level shows an empty cell.
+- **Slots.** `slots` is the ordinary spell slot row for that class level (null without it). Pact Magic shows `pactSlots` and `pactLevel` instead, and leaves `slots` null.
+- **Which revisions.** The class is the revision asked for, so a draft shows its own moves. Features and options are read from the latest published revision of each content, as Coverage does: a moved grant in a draft changes the draft's grid and nothing a saved character gets, because characters stay on the published class revision.
+
 ## Publishing and updating characters (SPEC I-06)
 
 After a publish, the studio lists the characters that use an older revision, with their role (`pin`, `class`, `choice`, `equipment`, `grant`). **Review update** opens the update review: the rule changes (effects and properties, including `extendsChoice`), calculated values that change, overrides whose calculated value moves, choices left open and new problems. **Apply update** calls `character.applyUpdate` with `confirm`. "Keep the current revision" changes nothing.
