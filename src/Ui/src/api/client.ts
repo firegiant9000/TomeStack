@@ -55,6 +55,8 @@ import type {
   ExportPreview,
   ExportPurpose,
   FormulaPreviewResult,
+  CoverageReport,
+  CoverageRequest,
   GapNote,
   GapNoteListing,
   GapNoteStatus,
@@ -138,6 +140,8 @@ export function createClient(transport: Transport) {
     /** A formula's value at sample class levels (D61). Read-only; `revision` is the unsaved draft whose scales `SCALE.<id>` reads. */
     previewFormula: (formula: string, revision?: ContentRevision, floorAtZero?: boolean) =>
       call<FormulaPreviewResult>('content.previewFormula', { formula, revision, floorAtZero }),
+    /** What the engine really does with each effect of a source's content (Import Lab, D62 L1). Read-only; drafts only when asked. */
+    contentCoverage: (args: CoverageRequest = {}) => call<CoverageReport>('content.coverage', args),
     listSources: () => call<SourceRecord[]>('source.list'),
     createHomebrewSource: (title: string, rulesFamilies: RulesFamilyId[]) =>
       call<SourceRecord>('source.createHomebrew', { title, rulesFamilies }),

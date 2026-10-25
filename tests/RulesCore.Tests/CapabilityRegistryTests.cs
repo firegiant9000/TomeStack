@@ -92,14 +92,21 @@ public class CapabilityRegistryTests
     }
 
     [Fact]
-    public void A_field_row_reads_the_json_of_an_effect_the_build_kept_untyped()
+    public void A_registered_type_the_build_kept_untyped_is_reference_only_whatever_its_members()
     {
-        // A rollMode in a revision below v11 stays an UnknownEffect; its members still count.
-        var untyped = Read("""{"type":"rollMode","id":"r","target":"save.wis","mode":"advantage","against":["frightened"]}""");
+        // R7: a rollMode in a revision below v11 stays an UnknownEffect, which the engine ignores. Its type is registered (so it is
+        // not unsupported), but nothing is delivered: the ceiling is Reference, with or without a member that would lower a typed one.
+        var withAgainst = Read("""{"type":"rollMode","id":"r","target":"save.wis","mode":"advantage","against":["frightened"]}""");
+        var plain = Read("""{"type":"rollMode","id":"r","target":"save.wis","mode":"advantage","against":null}""");
 
-        Assert.IsType<UnknownEffect>(untyped);
-        Assert.Equal(AutomationStatus.Assisted, CapabilityRegistry.Ceiling(untyped));
-        Assert.Equal(AutomationStatus.Automatic, CapabilityRegistry.Ceiling(Read("""{"type":"rollMode","id":"r","target":"save.wis","mode":"advantage","against":null}""")));
+        Assert.IsType<UnknownEffect>(withAgainst);
+        Assert.IsType<UnknownEffect>(plain);
+        foreach (var untyped in new[] { withAgainst, plain })
+        {
+            Assert.Equal(AutomationStatus.Reference, CapabilityRegistry.Ceiling(untyped));
+            var effective = CapabilityRegistry.Effective(untyped, AutomationStatus.Automatic, hasDiagnostic: false);
+            Assert.Equal((AutomationStatus.Reference, false, AutomationStatus.Reference), (effective.Status, effective.Unsupported, effective.Ceiling));
+        }
     }
 
     [Fact]

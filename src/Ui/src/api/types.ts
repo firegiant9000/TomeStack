@@ -2377,3 +2377,69 @@ export interface FormulaPreviewResult {
   unavailable?: string | null;
   points: FormulaPreviewPoint[];
 }
+
+/** Import Lab (D62 L1): effects by how far TomeStack really goes with them. `unsupported` means the type is not known. */
+export interface CoverageCounts {
+  automatic: number;
+  assisted: number;
+  reference: number;
+  unsupported: number;
+}
+
+/** One effect's author value, the engine's ceiling and the effective automation. The server omits null fields. */
+export interface EffectCoverage {
+  /** Absent for the text-only line of a feature that has no effects. */
+  effectId?: string | null;
+  type: string;
+  author: AutomationStatus;
+  ceiling?: AutomationStatus | null;
+  effective?: AutomationStatus | null;
+  reason?: string | null;
+  evidence?: string | null;
+  unsupported: boolean;
+}
+
+export interface FeatureCoverage {
+  contentId: string;
+  revisionId: string;
+  name: string;
+  kind: ContentKind;
+  status: 'published' | 'draft';
+  totals: CoverageCounts;
+  /** The feature may need a mechanic: advice, never a gate. */
+  missingMechanic: boolean;
+  effects: EffectCoverage[];
+}
+
+export interface LevelCoverage {
+  level: number;
+  features: FeatureCoverage[];
+}
+
+export interface ClassCoverage {
+  contentId: string;
+  name: string;
+  totals: CoverageCounts;
+  levels: LevelCoverage[];
+}
+
+export interface SourceCoverage {
+  sourceId: string;
+  name: string;
+  totals: CoverageCounts;
+  classes: ClassCoverage[];
+  other: FeatureCoverage[];
+}
+
+/** `content.coverage`: read-only; needs no character. */
+export interface CoverageReport {
+  scope: { sourceId?: string | null; contentId?: string | null; includeDrafts: boolean };
+  totals: CoverageCounts;
+  sources: SourceCoverage[];
+}
+
+export interface CoverageRequest {
+  sourceId?: string;
+  contentId?: string;
+  includeDrafts?: boolean;
+}

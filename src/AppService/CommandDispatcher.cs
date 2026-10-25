@@ -37,7 +37,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "export.preview", "export.saveAs", "export.download",
         "library.backupPreview", "library.backupSaveAs", "library.restoreChoose", "library.restoreApply",
         "ddb.read", "ddb.readData", "ddb.readText", "ddb.preview", "ddb.apply", "ddb.discard",
-        "content.previewFormula",
+        "content.previewFormula", "content.coverage",
     ];
 
     /// <summary>
@@ -117,6 +117,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "content.tree" => app.Tree(Payload<DiagnoseRequest>(payload)),
         "content.feedback" => app.Feedback(Payload<DiagnoseRequest>(payload)),
         "content.previewFormula" => app.PreviewFormula(Payload<FormulaPreviewRequest>(payload)),
+        "content.coverage" => app.Coverage(Payload<CoverageRequest>(payload)),
         "source.list" => app.ListSources(),
         "source.createHomebrew" => app.CreateHomebrewSource(Payload<HomebrewSourceRequest>(payload)),
         "source.setShareable" => app.SetShareable(Payload<ShareableRequest>(payload)),

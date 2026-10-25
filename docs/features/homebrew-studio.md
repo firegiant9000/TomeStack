@@ -294,6 +294,17 @@ Performance: every calculation looks up the extensions of every offered choice, 
 
 The studio's subclass form offers "Offered in the choice" with every choice of every class for the source's family.
 
+## Coverage (Import Lab, D62 L1)
+
+`content.coverage { sourceId?, contentId?, includeDrafts? }` says what TomeStack really does with each effect of a source's content. It is read-only, needs no character and writes nothing. The service half is built; the Coverage view and the per-feature row in the studio come in a later task.
+
+- **Counts.** Each effect is `automatic`, `assisted` or `reference` by its **effective** automation (the capability registry's ceiling for that effect, lowered by what the author declared, and to assisted when a draft's effect fails validation). An effect of a type the build does not know is `unsupported`, a fourth count. An effect the build keeps untyped (a versioned type stored in a revision below its version, which the engine ignores) is `reference`. A feature with no effects counts as one `reference` line (its text).
+- **Which revision.** The latest published revision of each content (store order). `includeDrafts` shows a content whose newest revision is a draft as that draft, marked `draft`; a draft never replaces what saved characters use.
+- **Grouping.** A source lists its classes, each by class level, and `other` for everything not placed under a class. A feature sits at a class level when the class grants it (`grant` with a `level`) or offers it as a choice option at that level (the choice's listed options and the published revisions that extend the choice). Only features of the class's own source are placed under it. The class's own rules (hit die, spellcasting, tables, ungated grants) are listed at level 1 under the class's name. A feature placed under two classes counts once in the source's totals.
+- **Families stay separate.** Rows are per content id, so a name used in both rules families is two rows, never merged.
+- **May need a mechanic.** `missingMechanic` is true for a feature with an unsupported effect, or with no effects and text containing one of a few generic phrases (`once per`, `regain`, `expend`, `as a reaction`, `bonus action`; `Coverage.MechanicPatterns`). Advice only, never a gate.
+- **Order.** Class level, then name, then content id, so the report is identical after a reopen, an export and an import.
+
 ## Publishing and updating characters (SPEC I-06)
 
 After a publish, the studio lists the characters that use an older revision, with their role (`pin`, `class`, `choice`, `equipment`, `grant`). **Review update** opens the update review: the rule changes (effects and properties, including `extendsChoice`), calculated values that change, overrides whose calculated value moves, choices left open and new problems. **Apply update** calls `character.applyUpdate` with `confirm`. "Keep the current revision" changes nothing.

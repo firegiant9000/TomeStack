@@ -61,6 +61,8 @@ public static class CapabilityRegistry
 
     private static readonly ConcurrentDictionary<(Type Type, string Field), PropertyInfo?> Members = new();
 
+    private const string UntypedReason = "This build kept the rule untyped (stored below the version that introduced its type, or its body does not fit), so it ignores it: text only";
+
     public static bool IsRegistered(string effectType) => effectType is not null && TypeWide.ContainsKey(effectType);
 
     /// <summary>The highest automation the engine delivers for <paramref name="effect"/>, or null when its type is not registered.</summary>
@@ -83,6 +85,10 @@ public static class CapabilityRegistry
         ArgumentNullException.ThrowIfNull(effect);
         if (!TypeWide.TryGetValue(effect.Type, out var typeWide))
             return null;
+        // R7: a registered type the build kept untyped (a versioned type stored in a revision below its version gate, or a body that
+        // does not fit) is ignored by the engine, so nothing beyond its text is delivered, whatever its members say.
+        if (effect is UnknownEffect && typeWide.Ceiling != AutomationStatus.Reference)
+            return typeWide with { Ceiling = AutomationStatus.Reference, Reason = UntypedReason };
         var binding = typeWide;
         foreach (var entry in Entries)
         {
@@ -103,11 +109,6 @@ public static class CapabilityRegistry
     /// <summary>A member is present when its JSON property is on the effect and not null.</summary>
     private static bool IsPresent(Effect effect, string field)
     {
-        if (effect is UnknownEffect unknown)
-        {
-            return unknown.Raw.ValueKind == JsonValueKind.Object
-                && unknown.Raw.EnumerateObject().Any(p => string.Equals(p.Name, field, StringComparison.OrdinalIgnoreCase) && p.Value.ValueKind != JsonValueKind.Null);
-        }
         var property = Members.GetOrAdd((effect.GetType(), field), key =>
             key.Type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
                 .FirstOrDefault(p => string.Equals(JsonNamingPolicy.CamelCase.ConvertName(p.Name), key.Field, StringComparison.Ordinal)));

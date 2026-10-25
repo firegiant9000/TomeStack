@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- **Coverage report (Import Lab, D62 L1):** the read-only `content.coverage` command counts, per source and class level, what TomeStack really automates, assists or leaves as reference, and flags effects of types it does not know. It reads published revisions (drafts only when asked), writes nothing and needs no character. A registered effect type stored below its version gate now reads as reference only. No schema, package, content or database change ([features/homebrew-studio.md](features/homebrew-studio.md)).
 - **Capability registry (Import Lab, ADR-020, D66):** RulesCore now lists every effect type the engine knows, with the most it does for each and the test that proves it. The mechanics report's "not understood" list is read from it instead of a hand-kept list. No calculated value, saved character, schema or hash changes ([features/m3-effects.md](features/m3-effects.md)).
 - **Homebrew Import Lab requirements ([features/import-lab.md](features/import-lab.md)):** the owner's 2026-10-18 Lab spec is now in `docs/`, name-scrubbed and narrowed to D62, with what D62 builds now and what it defers. Docs only: no schema, package, content or database change.
 
