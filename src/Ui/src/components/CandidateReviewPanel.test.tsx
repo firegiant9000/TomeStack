@@ -10,7 +10,7 @@ import { expectNoAxeViolations } from '../test/axe';
 import { CandidateReviewPanel } from './CandidateReviewPanel';
 
 vi.mock('../api/client', () => ({
-  client: { candidates: vi.fn(), checkCandidate: vi.fn(), editCandidate: vi.fn(), acceptCandidate: vi.fn(), ignoreCandidate: vi.fn(), acceptCandidates: vi.fn() },
+  client: { candidates: vi.fn(), checkCandidate: vi.fn(), editCandidate: vi.fn(), acceptCandidate: vi.fn(), ignoreCandidate: vi.fn(), acceptCandidates: vi.fn(), importedPage: vi.fn() },
 }));
 
 const source = { id: 'src-1', title: 'Testy Tome', rulesFamilies: ['srd-5.1'] } as SourceRecord;
@@ -1208,4 +1208,86 @@ it('holds Accept as a draft, Accept as reference and Ignore, with a linked reaso
   for (const button of buttons) expect(held(button)).toBe(false);
   await user.click(buttons[2]!);
   await waitFor(() => expect(client.ignoreCandidate).toHaveBeenCalledExactlyOnceWith('cand-1', 'etag-1'));
+});
+
+// D64 (Import Lab, task 9): the selected effect's span, highlighted on the stored page text.
+beforeEach(() => vi.mocked(client.importedPage).mockReset());
+const span = { page: 4, blockStart: 1, blockEnd: 2, patternId: 'fixture.pattern', confidence: 0.9 };
+const spanned = (over: Partial<DraftCandidate>): StoredCandidate => {
+  const base = detected(['srd-5.1']);
+  return {
+    ...base,
+    candidate: { ...base.candidate, excerpt: 'Whole excerpt of the fixture', proposedEffects: [{ id: 'eff-1', type: 'note' }], effectSpans: { 'eff-1': span }, ...over },
+  };
+};
+const storedPage = (texts: string[]) => ({
+  page: 4,
+  text: texts.join('\n'),
+  fromOcr: false,
+  width: 600,
+  height: 800,
+  blocks: texts.map((text) => ({ text, x: 0, y: 0, width: 10, height: 10, fontSize: 10, bold: false })),
+  warnings: [],
+});
+async function openSpanned(candidate: StoredCandidate) {
+  vi.mocked(client.candidates).mockResolvedValue(pageOf([candidate]));
+  vi.mocked(client.checkCandidate).mockResolvedValue(checkOf({}));
+  renderPanel();
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole('button', { name: 'Testy Coat' }));
+  return user;
+}
+
+it('selecting an effect highlights its span', async () => {
+  vi.mocked(client.importedPage).mockResolvedValue(storedPage(['First block', 'Second block', 'Third block\nwith two lines', 'Fourth block']));
+  const user = await openSpanned(spanned({}));
+  await user.click(await screen.findByRole('button', { name: 'The effect eff-1' }));
+  expect(client.importedPage).toHaveBeenCalledWith('src-2', 4);
+  const region = await screen.findByRole('region', { name: 'The effect eff-1' });
+  expect(within(region).getByText('Lines 2–4')).toBeTruthy();
+  const marks = region.querySelectorAll('mark');
+  expect(Array.from(marks).map((m) => m.textContent)).toEqual(['Second block', 'Third block\nwith two lines']);
+  expect(region.textContent).toContain('First block');
+  expect(region.textContent).toContain('Fourth block');
+});
+
+it('candidate without spans shows the whole excerpt', async () => {
+  await openSpanned(spanned({ effectSpans: undefined }));
+  expect(await screen.findByText('Whole excerpt of the fixture')).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'The effect eff-1' })).toBeNull();
+  expect(client.importedPage).not.toHaveBeenCalled();
+});
+
+it('shows the whole excerpt when the page cannot be fetched, the span is out of range, or the effect is gone', async () => {
+  vi.mocked(client.importedPage).mockRejectedValueOnce(new Error('no page'));
+  const user = await openSpanned(spanned({}));
+  await user.click(await screen.findByRole('button', { name: 'The effect eff-1' }));
+  expect(await screen.findByText('Whole excerpt of the fixture')).toBeTruthy();
+  expect(document.querySelector('mark')).toBeNull();
+
+  vi.mocked(client.importedPage).mockResolvedValue(storedPage(['Only block']));
+  cleanup();
+  const user2 = await openSpanned(spanned({}));
+  await user2.click(await screen.findByRole('button', { name: 'The effect eff-1' }));
+  await waitFor(() => expect(client.importedPage).toHaveBeenCalledTimes(2));
+  expect(screen.getByText('Whole excerpt of the fixture')).toBeTruthy();
+  expect(document.querySelector('mark')).toBeNull();
+
+  cleanup();
+  await openSpanned(spanned({ proposedEffects: [{ id: 'eff-2', type: 'note' }] }));
+  expect(await screen.findByText('Whole excerpt of the fixture')).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'The effect eff-1' })).toBeNull();
+});
+
+it('page text is rendered as text, not HTML', async () => {
+  const hostile = '<img src=x onerror=alert(1)>';
+  vi.mocked(client.importedPage).mockResolvedValue(storedPage(['First block', hostile, 'Third block']));
+  const user = await openSpanned(spanned({ excerpt: hostile }));
+  expect(document.querySelector('img')).toBeNull();
+  expect(screen.getByText(hostile)).toBeTruthy();
+  await user.click(await screen.findByRole('button', { name: 'The effect eff-1' }));
+  const region = await screen.findByRole('region', { name: 'The effect eff-1' });
+  expect(region.querySelector('img')).toBeNull();
+  expect(document.querySelector('img')).toBeNull();
+  expect(region.querySelector('mark')!.textContent).toContain(hostile);
 });

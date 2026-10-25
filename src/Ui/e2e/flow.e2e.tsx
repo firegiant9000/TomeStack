@@ -1092,6 +1092,33 @@ it('imports a fixture class: the table is checked, the hit die and slots are con
   expect(granting).toBe(grants);
 });
 
+it('selects a proposed effect of a fixture class and sees its lines highlighted on the stored page text (D64)', async () => {
+  const user = userEvent.setup();
+  const source = await client.createHomebrewSource('E2E Span Book', ['srd-5.2.1']);
+  const book = readFileSync(resolve(process.cwd(), '../../tests/RulesFixtures/pdf/fixture-import.pdf'));
+  await client.attachPdfData(source.id, 'fixture-import.pdf', book.toString('base64'));
+
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: 'Sources' }));
+  const reader = () => within(screen.getByRole('listitem', { name: 'E2E Span Book' })).getByRole('region', { name: 'Read the text of E2E Span Book' });
+  await user.click(within(await screen.findByRole('listitem', { name: 'E2E Span Book' })).getByRole('button', { name: 'Read the whole document' }));
+  await user.click(await within(reader()).findByRole('button', { name: 'Review 19 candidates' }, { timeout: 30000 }));
+  const panel = () => within(reader()).getByRole('region', { name: 'Candidates from E2E Span Book' });
+  await within(reader()).findByRole('region', { name: 'Candidates from E2E Span Book' });
+  await user.selectOptions(within(panel()).getByRole('combobox', { name: 'Kind' }), 'class');
+  await user.click(await within(within(panel()).getByRole('list', { name: 'Candidates' })).findByRole('button', { name: 'Fixture Lamplighter' }));
+  const lamplighter = await within(panel()).findByRole('region', { name: 'Candidate: Fixture Lamplighter' });
+
+  // Before a choice the whole excerpt shows, as always.
+  expect(lamplighter.querySelector('pre.excerpt')).not.toBeNull();
+  const effects = within(lamplighter).getByRole('list', { name: /^Proposed effects/ });
+  await user.click(within(effects).getByRole('button', { name: /^The hit die/ }));
+  const region = await within(lamplighter).findByRole('region', { name: /^The hit die/ });
+  expect(within(region).getByText(/^Lines \d+–\d+$/)).toBeTruthy();
+  expect(region.querySelector('mark')!.textContent!.length).toBeGreaterThan(0);
+  expect(lamplighter.querySelector('pre.excerpt')).toBeNull();
+});
+
 it('accepts two fixture candidates in bulk, publishes both through the studio panel, and the builder offers them (item 9, D33)', async () => {
   const user = userEvent.setup();
   const source = await client.createHomebrewSource('E2E Bulk Book', ['srd-5.2.1']);

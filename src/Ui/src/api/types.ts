@@ -1417,6 +1417,39 @@ export interface ImportSearchHit {
   snippet: string;
 }
 
+/** One text line of a stored block, in PDF points. */
+export interface StoredTextLine {
+  text: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** One text block of a stored page, in PDF points. */
+export interface StoredTextBlock {
+  text: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  fontSize: number;
+  bold: boolean;
+  lines?: StoredTextLine[];
+}
+
+/** `import.page`: the stored extraction of one page (ADR-009). Page text is data: render it as text nodes only. */
+export interface StoredPage {
+  page: number;
+  text: string;
+  fromOcr: boolean;
+  width: number;
+  height: number;
+  blocks: StoredTextBlock[];
+  warnings: string[];
+  error?: string;
+}
+
 /**
  * D64: where on the stored page text one proposed effect (or the name) was read. `blockStart`/`blockEnd` index the page's
  * stored blocks (`blockEnd` is on `pageEnd` when set, else on `page`); `lineStart`/`lineEnd` are source lines (Markdown

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { client } from '../api/client';
 import { TomeStackError } from '../api/transport';
-import type { CandidateCheck, CandidateFilter, CandidateLinkSummary, CandidatePage, CandidateStatus, ContentKind, ImportJob, RulesFamilyId, SourceRecord, StoredCandidate } from '../api/types';
+import type { CandidateCheck, CandidateFilter, CandidateLinkSummary, CandidatePage, CandidateStatus, ContentKind, DraftCandidate, ImportJob, RulesFamilyId, SourceRecord, StoredCandidate, StoredPage } from '../api/types';
 import { familyLabel } from './familyLabels';
 import { SpellListForm } from './SpellListForm';
 
@@ -756,10 +756,7 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
           </button>
         </div>
       )}
-      <figure>
-        <figcaption>Excerpt from {pageText(candidate.page)}</figcaption>
-        <pre className="excerpt">{candidate.excerpt}</pre>
-      </figure>
+      <SpanReview candidate={candidate} effects={confirmable} />
 
       {Object.keys(candidate.fields).length > 0 && (
         <dl aria-label="What was read">
@@ -963,6 +960,93 @@ const abilityNames: Record<string, string> = {
 };
 
 /** Item 8: what a Confirm tick names, from the effect's own fields (the detector's proposals; anything else by its id). */
+/**
+ * D64: the proposed effects beside the page text, the selected effect's span highlighted. Whenever the span cannot be shown
+ * (no spans, none for this effect, the effect was edited away, the page did not load, the span does not fit the page) the
+ * whole excerpt is shown, as before. Page text is rendered as text nodes only.
+ */
+function SpanReview({ candidate, effects }: { candidate: DraftCandidate; effects: (Record<string, unknown> & { id: string })[] }) {
+  const [selected, setSelected] = useState<string>();
+  const [fetched, setFetched] = useState<{ key: string; page?: StoredPage }>();
+  const firstMark = useRef<HTMLElement>(null);
+  const spans = candidate.effectSpans ?? {};
+  const listed = effects.some((e) => spans[e.id] !== undefined);
+  const effect = selected === undefined ? undefined : effects.find((e) => e.id === selected);
+  const rawSpan = effect ? spans[effect.id] : undefined;
+  const span = rawSpan && (rawSpan.pageEnd === undefined || rawSpan.pageEnd === rawSpan.page) ? rawSpan : undefined;
+  const key = span ? `${candidate.sourceId}:${span.page}` : undefined;
+
+  useEffect(() => {
+    if (!key || !span) return;
+    let current = true;
+    client
+      .importedPage(candidate.sourceId, span.page)
+      .then((page) => current && setFetched({ key, page }))
+      .catch(() => current && setFetched({ key })); // the whole excerpt shows instead
+    return () => {
+      current = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` is the source and page of `span`
+  }, [key, candidate.sourceId]);
+
+  const blocks = key && fetched?.key === key ? fetched.page?.blocks : undefined;
+  const fits = span && Array.isArray(blocks) && span.blockStart >= 0 && span.blockEnd >= span.blockStart && span.blockEnd < blocks.length;
+  const lineCount = (text: string) => text.split('\n').length;
+  let lines = '';
+  if (fits && blocks) {
+    const before = blocks.slice(0, span.blockStart).reduce((n, b) => n + lineCount(b.text), 0);
+    const first = span.lineStart ?? before + 1;
+    const last = span.lineEnd ?? before + blocks.slice(span.blockStart, span.blockEnd + 1).reduce((n, b) => n + lineCount(b.text), 0);
+    lines = `Lines ${first}–${last}`;
+  }
+
+  useEffect(() => {
+    const mark = firstMark.current;
+    if (mark && typeof mark.scrollIntoView === 'function') mark.scrollIntoView({ block: 'nearest' });
+  }, [selected, lines]);
+
+  const buttonId = (id: string) => `span-effect-${candidate.id}-${id}`;
+  const label = (e: Record<string, unknown> & { id: string }) => {
+    const text = effectLabel(e);
+    return text.charAt(0).toUpperCase() + text.slice(1);
+  };
+  return (
+    <div className={listed ? 'span-review' : undefined}>
+      {listed && (
+        <ul className="span-effects" aria-label="Proposed effects: choose one to see where it was read">
+          {effects.map((e) => (
+            <li key={e.id}>
+              <button type="button" id={buttonId(e.id)} aria-pressed={selected === e.id} onClick={() => setSelected(selected === e.id ? undefined : e.id)}>
+                {label(e)}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <figure>
+        {fits && blocks && span && effect ? (
+          <>
+            <figcaption>Page text from {pageText({ start: span.page })}</figcaption>
+            <div role="region" aria-labelledby={buttonId(effect.id)} className="excerpt span-text">
+              <p className="hint">{lines}</p>
+              {blocks.map((b, i) => (
+                <p key={i} className="span-block">
+                  {i >= span.blockStart && i <= span.blockEnd ? <mark ref={i === span.blockStart ? firstMark : undefined}>{b.text}</mark> : b.text}
+                </p>
+              ))}
+            </div>
+          </>
+        ) : (
+          <>
+            <figcaption>Excerpt from {pageText(candidate.page)}</figcaption>
+            <pre className="excerpt">{candidate.excerpt}</pre>
+          </>
+        )}
+      </figure>
+    </div>
+  );
+}
+
 function effectLabel(effect: Record<string, unknown> & { id: string }) {
   if (effect.type === 'hitDie' && typeof effect.die === 'number') return `the hit die, d${effect.die}`;
   if (effect.type === 'spellcasting' && Array.isArray(effect.slots)) return 'the spell slot table';
