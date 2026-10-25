@@ -606,6 +606,15 @@ it('authors a homebrew subclass in the studio, plays it, and reviews an update',
   expect(within(coverage).getByText(/E2E Sky Lore/).closest('li')!.textContent).toContain('1 reference');
   expect(within(coverage).getByText(/E2E Storm Ward/).closest('li')!.textContent).toMatch(/^E2E Storm Ward: 2 automatic · 1 by hand \(assisted\) · 0 reference/); // resource and recovery; the roll that spends it is assisted
   expect(coverage.querySelector('[role="status"], [role="alert"], [aria-live], output')).toBeNull(); // no live region of its own
+
+  // Import Lab (D62 L2): a class of this source opens with its 20-row progression grid once a draft is saved.
+  await user.click(screen.getByRole('button', { name: 'New class' }));
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Warden');
+  expect(within(editor()).getByText('Save a draft of this class to see its progression.')).toBeTruthy();
+  await user.click(within(editor()).getByRole('button', { name: 'Save draft' }));
+  const progression = await within(editor()).findByRole('region', { name: 'Class progression, scrollable' });
+  await waitFor(() => expect(within(within(progression).getByRole('table', { name: 'Class progression' })).getAllByRole('row')).toHaveLength(21)); // header + 20 levels
+  expect(within(editor()).getByText('Draft: not yet published')).toBeTruthy();
 });
 
 it('attaches a PDF to a source, offers the cited page on a feature, and removes it after a warning', async () => {

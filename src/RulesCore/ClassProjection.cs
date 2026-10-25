@@ -26,7 +26,11 @@ public static class ClassProjection
 {
     public const int Levels = 20;
 
-    public static ClassTableView Of(ContentRevision classRevision, IContentCatalog catalog)
+    /// <param name="newestName">
+    /// Display only (R11): the name of a content's newest revision, for a content with no published revision (a draft-only feature).
+    /// Never used to decide what a class grants. Null when the caller has no such source.
+    /// </param>
+    public static ClassTableView Of(ContentRevision classRevision, IContentCatalog catalog, Func<Guid, string?>? newestName = null)
     {
         ArgumentNullException.ThrowIfNull(classRevision);
         ArgumentNullException.ThrowIfNull(catalog);
@@ -53,7 +57,7 @@ public static class ClassProjection
         string NameOf(Guid contentId)
         {
             if (!names.TryGetValue(contentId, out var name))
-                names[contentId] = name = catalog.RevisionsOf(contentId).LastOrDefault(r => r.Status == RevisionStatus.Published)?.Name ?? contentId.ToString("D");
+                names[contentId] = name = catalog.RevisionsOf(contentId).LastOrDefault(r => r.Status == RevisionStatus.Published)?.Name ?? newestName?.Invoke(contentId) ?? contentId.ToString("D");
             return name;
         }
 

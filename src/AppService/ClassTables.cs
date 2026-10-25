@@ -21,6 +21,8 @@ public sealed partial class TomeStackApp
         if (revision.Kind != ContentKind.Class)
             throw new AppValidationException([new("content.not-a-class", $"Revision {request.RevisionId} is not a class.")], "content.not-a-class");
         var (published, _) = global::TomeStack.AppService.Coverage.Choose(all, includeDrafts: false);
-        return ClassProjection.Of(revision, new InMemoryContentCatalog([], published.Values));
+        // Display only (R11): a feature with no published revision is named by its newest revision; the catalog stays published-only.
+        var newest = all.GroupBy(r => r.ContentId).ToDictionary(g => g.Key, g => g.Last().Name);
+        return ClassProjection.Of(revision, new InMemoryContentCatalog([], published.Values), id => newest.GetValueOrDefault(id));
     }
 }

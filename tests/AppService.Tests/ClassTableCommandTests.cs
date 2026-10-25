@@ -55,6 +55,22 @@ public class ClassTableCommandTests
     }
 
     [Fact]
+    public void A_draft_only_feature_is_named_by_its_newest_revision_not_its_content_id()
+    {
+        using var temp = new TempApp();
+        var app = temp.App;
+        var source = app.CreateHomebrewSource(new("Fixture Class Table Source", [RulesFamilies.Srd521]));
+        var feature = app.SaveDraft(Draft(source, ContentKind.Feature, "Fixture Draft Feature"));
+        var draft = app.SaveDraft(Draft(source, ContentKind.Class, "Placeholder Class", null, Grant("g3", new(feature.ContentId, feature.RevisionId), 3)));
+
+        var view = app.ClassTable(new(draft.RevisionId));
+
+        var granted = Assert.Single(view.Rows[2].Features);
+        Assert.Equal("Fixture Draft Feature", granted.Name);
+        Assert.Equal(feature.ContentId, granted.ContentId);
+    }
+
+    [Fact]
     public void A_class_in_each_bundled_family_has_the_shared_proficiency_bonus()
     {
         using var temp = new TempApp();
