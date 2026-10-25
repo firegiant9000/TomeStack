@@ -1338,6 +1338,8 @@ export interface ExportPreview {
   omitted: OmittedSource[];
   /** Gap notes the package would carry: all of the characters' notes in a backup, 0 in a share (M3 B3). */
   gapNotes: number;
+  /** G6: `package.needs-newer-build` when the package would hold content or a character that TomeStack 0.6.x refuses. */
+  warnings?: Diagnostic[];
 }
 
 /** `import` (gap-note schema v2, D16b): an item a D&D Beyond sheet import could not match or place, named by its label. Only the importer writes it. */
