@@ -38,6 +38,13 @@ public sealed record StoredCandidate
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<CandidateGrant>? GrantsCandidates { get; init; }
+    /// <summary>
+    /// D64: SHA-256 of the job's attachment when the candidate was detected, so a <see cref="CandidateSpan"/> resolves to the stored
+    /// page text after the attachment is replaced. Omitted when unknown (every row stored before it existed keeps its bytes); no
+    /// schema version change, and older builds keep it as an unknown field. Accepting never reads it.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? AttachmentSha256 { get; init; }
     public CandidateStatus Status { get; init; } = CandidateStatus.Pending;
     /// <summary>The draft revision an accepted candidate became.</summary>
     public ContentReference? Draft { get; init; }
@@ -260,7 +267,7 @@ public sealed partial class TomeStackApp
         {
             _store.DeletePendingImportCandidates(job.Id);
             foreach (var candidate in fresh)
-                _store.SaveImportCandidate(new StoredCandidate { Id = candidate.Id, JobId = job.Id, Candidate = WithEarlier(candidate, earlier.GetValueOrDefault(candidate.Id)), GrantsCandidates = grants.GetValueOrDefault(candidate.Id), UpdatedAt = now });
+                _store.SaveImportCandidate(new StoredCandidate { Id = candidate.Id, JobId = job.Id, Candidate = WithEarlier(candidate, earlier.GetValueOrDefault(candidate.Id)), GrantsCandidates = grants.GetValueOrDefault(candidate.Id), AttachmentSha256 = job.Sha256, UpdatedAt = now });
         });
         // Item 13: the review list says when it is not the whole book. The flags are set each run (a resumed job re-detects).
         return job with

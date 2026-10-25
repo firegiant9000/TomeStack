@@ -20,6 +20,8 @@
 
   <ItemGroup>
     <None Include="..\RulesFixtures\pdf\*.pdf" LinkBase="RulesFixtures\pdf" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Task 8 (D64): the fixture book's detection output as it was before per-effect spans existed. -->
+    <None Include="Golden\*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1417,6 +1417,22 @@ export interface ImportSearchHit {
   snippet: string;
 }
 
+/**
+ * D64: where on the stored page text one proposed effect (or the name) was read. `blockStart`/`blockEnd` index the page's
+ * stored blocks (`blockEnd` is on `pageEnd` when set, else on `page`); `lineStart`/`lineEnd` are source lines (Markdown
+ * only; absent for a PDF). `patternId` is a stable id, never prose.
+ */
+export interface CandidateSpan {
+  page: number;
+  pageEnd?: number;
+  blockStart: number;
+  blockEnd: number;
+  lineStart?: number;
+  lineEnd?: number;
+  patternId: string;
+  confidence: number;
+}
+
 export interface DraftCandidate {
   id: string;
   sourceId: string;
@@ -1433,6 +1449,10 @@ export interface DraftCandidate {
   fields: Record<string, string>;
   lowConfidenceFields: string[];
   summary?: string;
+  /** D64: by proposed effect id. Absent on a candidate stored before spans existed (review then shows the whole excerpt). */
+  effectSpans?: Record<string, CandidateSpan>;
+  /** D64: where the name was read; absent when unknown. */
+  nameSpan?: CandidateSpan;
 }
 
 export type CandidateStatus = 'pending' | 'accepted' | 'acceptedAsReference' | 'ignored';
@@ -1449,6 +1469,8 @@ export interface StoredCandidate {
   grantsCandidates?: { candidateId: string; level: number }[];
   /** R29: the reviewer saved a rules family for this candidate; absent (false) until then. */
   familiesReviewed?: boolean;
+  /** D64: SHA-256 of the job's attachment, so a span resolves to the stored page text after the attachment is replaced; absent before spans existed. */
+  attachmentSha256?: string;
   /** R120: the compare-and-swap token of the stored row; sent back as `CandidateEdit.expected`. */
   etag?: string;
   updatedAt: string;

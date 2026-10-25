@@ -127,7 +127,25 @@ public sealed record DraftCandidate(
 
     /// <summary>The entry's text for the draft (the description), when it differs from the excerpt.</summary>
     public string? Summary { get; init; }
+
+    /// <summary>
+    /// D64: where each proposed effect was read, by effect id. Null when unknown (a candidate stored before spans existed, or an
+    /// effect the detector could not place). Review aid only: accepting a candidate never reads it.
+    /// </summary>
+    public IReadOnlyDictionary<string, CandidateSpan>? EffectSpans { get; init; }
+
+    /// <summary>D64: where the name was read; null when unknown.</summary>
+    public CandidateSpan? NameSpan { get; init; }
 }
+
+/// <summary>
+/// D64: a place in a job's stored page text. <paramref name="BlockStart"/> and <paramref name="BlockEnd"/> index the page's stored
+/// blocks (<paramref name="BlockEnd"/> lies on <paramref name="PageEnd"/> when it is set, else on <paramref name="Page"/>);
+/// <paramref name="LineStart"/> and <paramref name="LineEnd"/> are source lines for Markdown and null for a PDF.
+/// <paramref name="PatternId"/> is a <see cref="Detection.DetectionPatterns"/> id; <paramref name="Confidence"/> is the detector's
+/// confidence in the read (a UI hint, never permission).
+/// </summary>
+public sealed record CandidateSpan(int Page, int? PageEnd, int BlockStart, int BlockEnd, int? LineStart, int? LineEnd, string PatternId, double Confidence);
 
 public static class CandidateQuarantine
 {
