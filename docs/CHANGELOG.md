@@ -10,6 +10,9 @@
 - **Capability registry (Import Lab, ADR-020, D66):** RulesCore now lists every effect type the engine knows, with the most it does for each and the test that proves it. The mechanics report's "not understood" list is read from it instead of a hand-kept list. No calculated value, saved character, schema or hash changes ([features/m3-effects.md](features/m3-effects.md)).
 - **Homebrew Import Lab requirements ([features/import-lab.md](features/import-lab.md)):** the owner's 2026-10-18 Lab spec is now in `docs/`, name-scrubbed and narrowed to D62, with what D62 builds now and what it defers. Docs only: no schema, package, content or database change.
 
+### Changed
+- **Faster candidate edits on large libraries (Import Lab, L3):** editing an import candidate with many unresolved references used to read the whole library once per reference; it now reads it once (20 references against 1,000 installed features: about 1.0 s before, 45 ms after). A page turn of the candidate list now reads and allocates the same however many candidates the job holds. Results are unchanged. No schema, package, content or database change ([performance.md](performance.md)).
+
 ## 0.7.0 (the play-mechanics engine: forms, turns, feature attacks, damage responses and charging; spell filters, the by-hand list and the combat card)
 
 The play-mechanics engine (D43, slices 1 to 8, ADR-018) and the Plan A items merged into `main` after 0.6.0 (P09, P14, P18), listed below. Homebrew content can now describe forms and overlays that cost from a shared pool, a round counter with upkeep, feature attacks and riders, action details, roll modes, damage responses and charging; the SRD packs are unchanged. It is checked on test data (automated tests, a scripted engine rehearsal with original content, and the desktop smoke); the owner checks on an installed build are still open (Narrator, keyboard, 400% zoom and High Contrast on the new screens, print).

@@ -87,6 +87,57 @@ Time is the mean; P95 and allocations are per operation. "Spread" compares the t
 
 **Budget (owner's ruling of 2026-10-24, on risk G2 and ruling R15):** the calculation case is held to the P95 of "Calculate, SRD 5.2.1" **in the same run** plus 40 % (the noise band above), which is 1.561 ms, and to that run's allocations plus 10 % (1.56 MB). It measured 1.179 ms and 1.48 MB, so it passes: +5.7 % on P95 and +4 % on allocations over the same-run comparison. The two previews have no budget; they are recorded so a later change can be compared.
 
+## Import Lab (before)
+
+`LabBenchmarks` (Import Lab L3, design 10), measured 2026-10-25 on `import-lab` before the fixes below. The library is the bundled SRD plus N original published features of one homebrew source (N = 250, 500, 1000), and a job with N pending candidates. `Coverage` is `content.coverage` for every source (the real handler path: one store read, grouped in memory). `CandidatesPage` is `import.candidates`, page 3 of 50. `DetectWithLibrary` is what detection does with the library (one name set over the published revisions, then 50 invented pages of spell-shaped blocks; the benchmark repeats those lines, as detection's own method is private). `EditCandidate` is `import.candidate.edit` of a candidate with 20 unresolved references, none installed; `EditCandidateOneReference` is the same with one. Two runs; raw results: [`performance/raw/2026-10-25/before-run-1/`](performance/raw/2026-10-25/before-run-1/) and [`before-run-2/`](performance/raw/2026-10-25/before-run-2/). Allocations were the same in both runs to within 0.1 %, so one column is shown; times are the two runs' means.
+
+| Benchmark | N | Mean (run 1 / run 2) | Allocated |
+|---|---:|---:|---:|
+| Coverage | 250 | 27.4 ms / 25.8 ms | 18.9 MB |
+| Coverage | 500 | 33.8 ms / 33.4 ms | 23.0 MB |
+| Coverage | 1000 | 57.2 ms / 53.2 ms | 31.5 MB |
+| CandidatesPage | 250 | 0.41 ms / 0.39 ms | 304 KB |
+| CandidatesPage | 500 | 0.49 ms / 0.52 ms | 373 KB |
+| CandidatesPage | 1000 | 0.80 ms / 0.77 ms | 510 KB |
+| DetectWithLibrary | 250 | 26.9 ms / 25.8 ms | 18.3 MB |
+| DetectWithLibrary | 500 | 33.0 ms / 33.2 ms | 22.3 MB |
+| DetectWithLibrary | 1000 | 49.5 ms / 51.6 ms | 30.1 MB |
+| EditCandidate (20 references) | 250 | 512 ms / 499 ms | 357 MB |
+| EditCandidate (20 references) | 500 | 632 ms / 621 ms | 437 MB |
+| EditCandidate (20 references) | 1000 | 1,014 ms / 1,033 ms | 598 MB |
+| EditCandidateOneReference | 250 | 29.1 ms / 26.7 ms | 17.9 MB |
+| EditCandidateOneReference | 500 | 38.3 ms / 36.0 ms | 21.9 MB |
+| EditCandidateOneReference | 1000 | 52.6 ms / 53.2 ms | 29.9 MB |
+
+What the numbers say:
+- `Coverage` allocates about 17 KB per added feature (4.3 MB from 250 to 500, 8.7 MB from 500 to 1000) on top of about 14.6 MB for the SRD: linear. At 1000 it takes 53 to 57 ms against a target of 300 ms, so **no database change (DB v12) is proposed** on this evidence.
+- `EditCandidate` read the library once per reference: with 20 references it allocated about 20 times the one-reference cost at every N (the cost per read is linear in N).
+- `CandidatesPage` took well under its 50 ms target, but its allocations grew with N (304 KB, 373 KB, 510 KB): the page turn listed the id, page and name of every candidate to order them.
+
+## Import Lab (after)
+
+The same benchmarks after two in-memory fixes, no migration: the edit path builds one `InstalledNames` set per edit (`IsInstalledName` is gone), and a candidate page turn reads the pages its window falls on instead of every candidate's id and name (`SqliteStore.QueryImportCandidates`: two scalar page reads and two counts, then only the rows of those pages). One run; raw results: [`performance/raw/2026-10-25/after/`](performance/raw/2026-10-25/after/). `Coverage` and `DetectWithLibrary` are unchanged code (their rows are a second measurement of the same code).
+
+| Benchmark | N | Mean | Allocated | Target | Met |
+|---|---:|---:|---:|---|---|
+| Coverage | 250 | 25.5 ms | 18.9 MB | | |
+| Coverage | 500 | 33.5 ms | 23.0 MB | | |
+| Coverage | 1000 | 54.7 ms | 31.6 MB | 300 ms; allocations linear | yes |
+| CandidatesPage | 250 | 0.37 ms | 257 KB | | |
+| CandidatesPage | 500 | 0.43 ms | 257 KB | | |
+| CandidatesPage | 1000 | 0.49 ms | 257 KB | 50 ms; allocations independent of N | yes |
+| DetectWithLibrary | 250 | 25.7 ms | 18.3 MB | | |
+| DetectWithLibrary | 500 | 36.0 ms | 22.3 MB | | |
+| DetectWithLibrary | 1000 | 51.8 ms | 30.1 MB | allocations linear in N | yes |
+| EditCandidate (20 references) | 250 | 26.5 ms | 17.6 MB | | |
+| EditCandidate (20 references) | 500 | 38.1 ms | 21.5 MB | | |
+| EditCandidate (20 references) | 1000 | 45.3 ms | 29.4 MB | linear in N; independent of references | yes |
+| EditCandidateOneReference | 250 | 26.4 ms | 17.5 MB | | |
+| EditCandidateOneReference | 500 | 38.1 ms | 21.5 MB | | |
+| EditCandidateOneReference | 1000 | 45.3 ms | 29.4 MB | | |
+
+`EditCandidate` at 1000 went from 598 MB to 29.4 MB and from about 1.0 s to 45 ms; with 20 references it now allocates 31 KB more than with one (0.1 %). `MarkdownExtract` and `Duplicates` belong to later Lab tasks.
+
 ## First paint (owed: owner, by hand)
 
 Not measured yet. Method, so the result can be compared later:

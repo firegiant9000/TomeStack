@@ -300,6 +300,9 @@ public sealed partial class TomeStackApp
         if (summary is { Length: > 20_000 })
             throw new AppValidationException([new("candidate.summary-too-long", "The text has at most 20,000 characters.")]);
         var dismissed = request.DismissReferences ?? [];
+        // Import Lab L3: one read of the library per edit, however many references the candidate holds.
+        var open = current.UnresolvedReferences.Where(r => !dismissed.Contains(r, StringComparer.OrdinalIgnoreCase)).ToList();
+        var installedNames = open.Count == 0 ? null : InstalledNames.Build(_store.ListRevisions(), families);
         var edited = current with
         {
             ProposedName = name,
@@ -308,7 +311,7 @@ public sealed partial class TomeStackApp
             ProposedEffects = request.Effects ?? current.ProposedEffects,
             Summary = summary,
             LowConfidenceFields = [],
-            UnresolvedReferences = [.. current.UnresolvedReferences.Where(r => !dismissed.Contains(r, StringComparer.OrdinalIgnoreCase) && !IsInstalledName(r, families))],
+            UnresolvedReferences = [.. open.Where(r => !installedNames!.Contains(r))],
         };
         // R29: sending a families set (even the current one) is the reviewer's answer; an edit that sends none leaves it as it was.
         var updated = stored with { Edited = edited, FamiliesReviewed = stored.FamiliesReviewed || request.RulesFamilies is not null, UpdatedAt = _time.GetUtcNow() };
@@ -822,9 +825,6 @@ public sealed partial class TomeStackApp
         dependencies.AddRange(candidate.UnresolvedReferences.Select(n => new CandidateDependency("unresolved-name", n)));
         return dependencies;
     }
-
-    private bool IsInstalledName(string name, IReadOnlyList<string> families) =>
-        _store.ListRevisions().Any(r => r.Status == RevisionStatus.Published && r.RulesFamilies.Any(families.Contains) && CandidateDetector.Key(r.Name) == CandidateDetector.Key(name));
 
     private StoredCandidate FindCandidateOrThrow(Guid candidateId) =>
         _store.FindImportCandidate(candidateId) ?? throw new AppValidationException([new("candidate.not-found", $"Candidate {candidateId} does not exist.")]);
