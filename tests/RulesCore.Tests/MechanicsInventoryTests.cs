@@ -39,6 +39,17 @@ public class MechanicsInventoryTests
         Assert.Empty(MechanicsInventory.Of(CharacterCalculator.Calculate(character, catalog), new HashSet<Guid>()).Mechanics); // other sources only
     }
 
+    /// <summary>A published feat from the test homebrew source that holds <paramref name="effects"/>, for the per-type capability evidence tests (ADR-020).</summary>
+    internal static ContentRevision Holder(string name, int schemaVersion, params Effect[] effects) => new()
+    {
+        ContentId = Guid.NewGuid(), RevisionId = Guid.NewGuid(), SchemaVersion = schemaVersion, Kind = ContentKind.Feat, Name = name,
+        RulesFamilies = [RulesFamilies.Srd521], Provenance = new(Homebrew, new(4)), Status = RevisionStatus.Published, Effects = effects,
+    };
+
+    /// <summary>The character with <paramref name="revision"/> pinned, its sheet, and the mechanics report for the homebrew source.</summary>
+    internal static (MechanicsReport Report, CharacterSheet Sheet) Pinned(ContentRevision revision) =>
+        Report(revision, c => c with { Pins = [.. c.Pins, revision.Reference] });
+
     private static (MechanicsReport Report, CharacterSheet Sheet) Report(ContentRevision revision, Func<Character, Character> shape)
     {
         var source = new SourceRecord
@@ -75,6 +86,21 @@ public class MechanicsInventoryTests
         Assert.Equal(AutomationStatus.Automatic, Assert.Single(report.Mechanics, m => m.EffectId == "ink-roll").Automation);
         Assert.DoesNotContain(sheet.Diagnostics, d => d.Content == feat.Reference);
         Assert.DoesNotContain(sheet.Features!.SelectMany(f => f.Diagnostics), d => d.EffectId == "ink-roll");
+    }
+
+    [Fact]
+    public void Unregistered_types_are_reported_unsupported()
+    {
+        var holder = Fixtures.RevisionWithEffect("""{"type":"fixture-unknown","id":"odd","text":"Do the odd thing by hand."}""", 11) with
+        {
+            Provenance = new(Homebrew, new(4)),
+        };
+
+        var (report, _) = Report(holder, c => c with { Pins = [.. c.Pins, holder.Reference] });
+
+        var odd = Assert.Single(report.Unsupported);
+        Assert.Equal(("odd", "fixture-unknown", AutomationStatus.Reference), (odd.EffectId, odd.EffectType, odd.Automation));
+        Assert.Contains(report.Mechanics, m => m.EffectId == "odd");
     }
 
     [Fact]

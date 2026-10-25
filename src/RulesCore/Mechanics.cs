@@ -74,13 +74,8 @@ public static class MechanicsInventory
                     string.IsNullOrWhiteSpace(effect.Text) ? feature.Summary : effect.Text, feature.Origin.SourceId, feature.Origin.Page));
             }
         }
-        var known = new HashSet<string>(StringComparer.Ordinal)
-        {
-            ModifierEffect.TypeName, GrantEffect.TypeName, ResourceEffect.TypeName, ChoiceEffect.TypeName, RestrictionEffect.TypeName,
-            RecoveryEffect.TypeName, RollEffect.TypeName, HitDieEffect.TypeName, ArmorEffect.TypeName, SpellcastingEffect.TypeName,
-            SpellEffect.TypeName, WeaponEffect.TypeName, ToggleEffect.TypeName, ToggleGroupEffect.TypeName, UpkeepEffect.TypeName, AttackEffect.TypeName, AttackRiderEffect.TypeName, ItemEffect.TypeName, ScaleEffect.TypeName, ValueEffect.TypeName, RollModeEffect.TypeName, ResponseEffect.TypeName, "text",
-        };
-        return new(mechanics, [.. mechanics.Where(m => !known.Contains(m.EffectType))])
+        // ADR-020: the types the engine knows are the capability registry's, not a list kept here.
+        return new(mechanics, [.. mechanics.Where(m => !CapabilityRegistry.IsRegistered(m.EffectType))])
         {
             HasLimitedUseAction = limitedUse,
             HasReferenceOnlyFeature = referenceOnly,

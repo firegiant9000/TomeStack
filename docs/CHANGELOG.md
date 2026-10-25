@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- **Capability registry (Import Lab, ADR-020, D66):** RulesCore now lists every effect type the engine knows, with the most it does for each and the test that proves it. The mechanics report's "not understood" list is read from it instead of a hand-kept list. No calculated value, saved character, schema or hash changes ([features/m3-effects.md](features/m3-effects.md)).
 - **Homebrew Import Lab requirements ([features/import-lab.md](features/import-lab.md)):** the owner's 2026-10-18 Lab spec is now in `docs/`, name-scrubbed and narrowed to D62, with what D62 builds now and what it defers. Docs only: no schema, package, content or database change.
 
 ## 0.7.0 (the play-mechanics engine: forms, turns, feature attacks, damage responses and charging; spell filters, the by-hand list and the combat card)
