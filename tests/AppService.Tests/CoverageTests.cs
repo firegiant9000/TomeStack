@@ -115,37 +115,73 @@ public class CoverageTests
     }
 
     [Fact]
-    public void Published_only_by_default()
+    public void A_newer_draft_is_listed_beside_the_published_row_and_never_counted()
     {
         using var temp = new TempApp();
         var (source, _, features) = BuildClass(temp.App);
         var pool = features[0];
-        var newer = Draft(
+        temp.App.SaveDraft(Draft(
             source, ContentKind.Feature, "Fixture Pool", RulesFamilies.Srd521, contentId: pool.ContentId,
-            effects: [Modifier("m1"), Modifier("extra"), Modifier("extra2"), Modifier("extra3")]);
-        temp.App.SaveDraft(newer);
+            effects: [Modifier("m1"), Modifier("extra"), Modifier("extra2"), Modifier("extra3")]));
 
         var published = temp.App.Coverage(new(source.Id));
         var withDrafts = temp.App.Coverage(new(source.Id, IncludeDrafts: true));
 
         Assert.Equal(new CoverageCounts(7, 2, 0, 1), published.Totals);
         Assert.All(published.Sources.Single().Classes.Single().Levels.SelectMany(l => l.Features), f => Assert.Equal(RevisionStatus.Published, f.Status));
-        Assert.Equal(new CoverageCounts(8, 2, 0, 1), withDrafts.Totals); // Fixture Pool: the draft's 4 automatic effects replace the published 3
-        var shown = withDrafts.Sources.Single().Classes.Single().Levels.SelectMany(l => l.Features).Single(f => f.ContentId == pool.ContentId);
-        Assert.Equal((RevisionStatus.Draft, new CoverageCounts(4, 0, 0, 0)), (shown.Status, shown.Totals));
+        Assert.Equal(published.Totals, withDrafts.Totals);
+        Assert.Equal(published.Sources.Single().Totals, withDrafts.Sources.Single().Totals);
+        var klass = withDrafts.Sources.Single().Classes.Single();
+        Assert.Equal(published.Sources.Single().Classes.Single().Totals, klass.Totals);
+        var level1 = klass.Levels.Single(l => l.Level == 1).Features.Where(f => f.ContentId == pool.ContentId).OrderBy(f => f.Status).ToList();
+        Assert.Equal(
+            [(RevisionStatus.Draft, new CoverageCounts(4, 0, 0, 0)), (RevisionStatus.Published, new CoverageCounts(3, 0, 0, 0))],
+            level1.Select(f => (f.Status, f.Totals)));
     }
 
     [Fact]
-    public void A_content_that_was_never_published_shows_only_with_drafts()
+    public void A_content_that_was_never_published_shows_as_a_draft_row_only_with_drafts_and_counts_for_nothing()
     {
         using var temp = new TempApp();
         var source = temp.App.CreateHomebrewSource(new("Fixture Draft Source", [RulesFamilies.Srd521]));
         temp.App.SaveDraft(Draft(source, ContentKind.Feature, "Fixture Idea", RulesFamilies.Srd521, effects: [Modifier("m")]));
 
-        Assert.Equal(new CoverageCounts(0, 0, 0, 0), temp.App.Coverage(new(source.Id)).Totals);
+        Assert.Empty(Assert.Single(temp.App.Coverage(new(source.Id)).Sources).Other);
         var withDrafts = temp.App.Coverage(new(source.Id, IncludeDrafts: true));
         var feature = Assert.Single(Assert.Single(withDrafts.Sources).Other);
         Assert.Equal((RevisionStatus.Draft, new CoverageCounts(1, 0, 0, 0)), (feature.Status, feature.Totals));
+        Assert.Equal(new CoverageCounts(0, 0, 0, 0), withDrafts.Totals);
+        Assert.Equal(new CoverageCounts(0, 0, 0, 0), withDrafts.Sources.Single().Totals);
+    }
+
+    [Fact]
+    public void A_content_asked_for_in_another_source_is_refused()
+    {
+        using var temp = new TempApp();
+        var (_, cls, _) = BuildClass(temp.App);
+        var other = temp.App.CreateHomebrewSource(new("Fixture Other Source", [RulesFamilies.Srd521]));
+
+        var ex = Assert.Throws<AppValidationException>(() => temp.App.Coverage(new(other.Id, cls.ContentId)));
+
+        Assert.Equal("content.not-found", ex.Code);
+    }
+
+    [Fact]
+    public void A_subclass_whose_latest_published_revision_dropped_extendsChoice_is_not_placed_under_the_class()
+    {
+        using var temp = new TempApp();
+        var source = temp.App.CreateHomebrewSource(new("Fixture Path Source", [RulesFamilies.Srd521]));
+        var cls = Publish(temp.App, Draft(source, ContentKind.Class, "Placeholder Class", RulesFamilies.Srd521, effects: [new ChoiceEffect { Id = "path", ChoiceId = "path", Level = 3 }]));
+        var pathId = Guid.NewGuid();
+        Publish(temp.App, Draft(source, ContentKind.Subclass, "Fixture Path", RulesFamilies.Srd521, contentId: pathId, effects: [Modifier("m")]) with { ExtendsChoice = new(cls.ContentId, "path") });
+        var placed = temp.App.Coverage(new(source.Id)).Sources.Single();
+        Assert.Contains(Assert.Single(placed.Classes).Levels, l => l.Level == 3 && l.Features.Any(f => f.ContentId == pathId));
+
+        Publish(temp.App, Draft(source, ContentKind.Subclass, "Fixture Path", RulesFamilies.Srd521, contentId: pathId, effects: [Modifier("m")]));
+
+        var dropped = temp.App.Coverage(new(source.Id)).Sources.Single();
+        Assert.DoesNotContain(Assert.Single(dropped.Classes).Levels, l => l.Features.Any(f => f.ContentId == pathId));
+        Assert.Contains(dropped.Other, f => f.ContentId == pathId);
     }
 
     private static string Snapshot(TomeStackApp app) =>

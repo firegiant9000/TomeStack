@@ -66,31 +66,43 @@ public static class Coverage
             throw new AppValidationException([new("source.not-found", $"Source {wanted} is not installed.")]);
 
         var all = store.ListRevisionsInOrder();
-        var chosen = Choose(all, request.IncludeDrafts);
-        if (request.ContentId is { } contentId && !chosen.ContainsKey(contentId))
+        var (chosen, drafts) = Choose(all, request.IncludeDrafts);
+        Guid? home = null;
+        if (request.ContentId is { } contentId)
         {
-            var message = all.Any(r => r.ContentId == contentId)
-                ? $"Content {contentId} has no published revision. Include drafts to see its draft."
-                : $"Content {contentId} is not installed.";
-            throw new AppValidationException([new("content.not-found", message)]);
+            if (!chosen.TryGetValue(contentId, out var shown) && !drafts.TryGetValue(contentId, out shown))
+            {
+                var message = all.Any(r => r.ContentId == contentId)
+                    ? $"Content {contentId} has no published revision. Include drafts to see its draft."
+                    : $"Content {contentId} is not installed.";
+                throw new AppValidationException([new("content.not-found", message)], "content.not-found");
+            }
+            home = shown.Provenance.SourceId; // a class is read with the features of its own source
+            if (request.SourceId is { } asked && asked != home)
+                throw new AppValidationException([new("content.not-found", $"Content {contentId} is not in source {asked}.")], "content.not-found");
         }
 
-        var inScope = chosen.Values
-            .Where(r => request.SourceId is null || r.Provenance.SourceId == request.SourceId)
-            .ToList();
-        if (request.ContentId is { } one)
-        {
-            var home = chosen[one].Provenance.SourceId; // a class is read with the features of its own source
-            inScope = [.. inScope.Where(r => r.Provenance.SourceId == home)];
-        }
-        var catalog = new InMemoryContentCatalog([], all);
+        bool InScope(ContentRevision r) =>
+            (request.SourceId is null || r.Provenance.SourceId == request.SourceId) && (home is null || r.Provenance.SourceId == home);
+        var inScope = chosen.Values.Where(InScope).ToList();
+        var draftScope = drafts.Values.Where(InScope).ToList();
+        // Drafts are listed beside the published rows and never counted: the walk sees the published revisions only (the latest of
+        // each content, so a subclass that dropped its extendsChoice no longer joins the class); validation sees everything.
+        var walkCatalog = new InMemoryContentCatalog([], chosen.Values);
+        var validationCatalog = new InMemoryContentCatalog([], all);
         var validated = new Dictionary<Guid, HashSet<string>>(); // draft revision id -> effect ids with a validation error
-        var rows = inScope.ToDictionary(r => r.ContentId, r => Row(r, catalog, validated));
+        var rows = inScope.ToDictionary(r => r.ContentId, r => Row(r, validationCatalog, validated));
+        var draftRows = draftScope.ToDictionary(r => r.ContentId, r => Row(r, validationCatalog, validated));
 
         var sourceNames = store.ListSources().ToDictionary(s => s.Id, s => s.Title);
         var sources = new List<SourceCoverage>();
-        foreach (var group in inScope.GroupBy(r => r.Provenance.SourceId))
-            sources.Add(Source(group.Key, sourceNames.GetValueOrDefault(group.Key) ?? group.Key.ToString("D"), [.. group], rows, catalog, request.ContentId));
+        foreach (var sourceId in inScope.Concat(draftScope).Select(r => r.Provenance.SourceId).Distinct())
+        {
+            sources.Add(Source(
+                sourceId, sourceNames.GetValueOrDefault(sourceId) ?? sourceId.ToString("D"),
+                [.. inScope.Where(r => r.Provenance.SourceId == sourceId)], [.. draftScope.Where(r => r.Provenance.SourceId == sourceId).Select(r => draftRows[r.ContentId])],
+                rows, draftRows, walkCatalog, request.ContentId));
+        }
         if (request.SourceId is { } only && sources.Count == 0)
             sources.Add(new(only, sourceNames.GetValueOrDefault(only) ?? only.ToString("D"), default, [], []));
 
@@ -100,29 +112,31 @@ public static class Coverage
     }
 
     /// <summary>
-    /// The revision each content shows: its latest published one by store order (rowid), or, with drafts included, its newest revision
+    /// The latest published revision of each content by store order (rowid), and, with drafts included, each content's newest revision
     /// when that is a draft. A published revision keeps its draft behind it in the store, so a draft only shows while it is newer.
     /// </summary>
-    private static Dictionary<Guid, ContentRevision> Choose(IReadOnlyList<ContentRevision> all, bool includeDrafts)
+    private static (Dictionary<Guid, ContentRevision> Published, Dictionary<Guid, ContentRevision> Drafts) Choose(IReadOnlyList<ContentRevision> all, bool includeDrafts)
     {
-        var chosen = new Dictionary<Guid, ContentRevision>();
+        var published = new Dictionary<Guid, ContentRevision>();
         var newest = new Dictionary<Guid, ContentRevision>();
         foreach (var revision in all)
         {
             newest[revision.ContentId] = revision;
             if (revision.Status == RevisionStatus.Published)
-                chosen[revision.ContentId] = revision;
+                published[revision.ContentId] = revision;
         }
-        if (includeDrafts)
-        {
-            foreach (var (contentId, revision) in newest.Where(n => n.Value.Status == RevisionStatus.Draft))
-                chosen[contentId] = revision;
-        }
-        return chosen;
+        var drafts = includeDrafts
+            ? newest.Where(n => n.Value.Status == RevisionStatus.Draft).ToDictionary(n => n.Key, n => n.Value)
+            : [];
+        return (published, drafts);
     }
 
+    private static IEnumerable<FeatureCoverage> InOrder(IEnumerable<FeatureCoverage> rows) =>
+        rows.OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase).ThenBy(f => f.Name, StringComparer.Ordinal).ThenBy(f => f.ContentId).ThenByDescending(f => f.Status);
+
     private static SourceCoverage Source(
-        Guid sourceId, string name, List<ContentRevision> contents, Dictionary<Guid, FeatureCoverage> rows, InMemoryContentCatalog catalog, Guid? only)
+        Guid sourceId, string name, List<ContentRevision> contents, List<FeatureCoverage> draftsHere, Dictionary<Guid, FeatureCoverage> rows,
+        Dictionary<Guid, FeatureCoverage> draftRows, InMemoryContentCatalog catalog, Guid? only)
     {
         var classes = new List<ClassCoverage>();
         var placed = new HashSet<Guid>();
@@ -136,10 +150,10 @@ public static class Coverage
             {
                 if (!byLevel.TryGetValue(level, out var list))
                     byLevel[level] = list = [];
-                if (list.Any(f => f.ContentId == row.ContentId))
+                if (list.Any(f => f.RevisionId == row.RevisionId))
                     return;
                 list.Add(row);
-                if (counted.Add(row.ContentId))
+                if (row.Status == RevisionStatus.Published && counted.Add(row.ContentId))
                     total += row.Totals;
             }
 
@@ -154,29 +168,32 @@ public static class Coverage
                 if (rows.TryGetValue(contentId, out var row) && row.Kind != ContentKind.Class && ids.Contains(contentId))
                 {
                     Place(level, row);
+                    if (draftRows.TryGetValue(contentId, out var draft))
+                        Place(level, draft); // beside the published row, never counted
                     placed.Add(contentId);
                 }
             }
-            classes.Add(new(cls.ContentId, cls.Name, total, [.. byLevel.Select(l => new LevelCoverage(l.Key, [.. l.Value.OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase).ThenBy(f => f.Name, StringComparer.Ordinal).ThenBy(f => f.ContentId)]))]));
+            classes.Add(new(cls.ContentId, cls.Name, total, [.. byLevel.Select(l => new LevelCoverage(l.Key, [.. InOrder(l.Value)]))]));
         }
 
-        var other = contents
-            .Where(r => r.Kind != ContentKind.Class && !placed.Contains(r.ContentId))
-            .Select(r => rows[r.ContentId])
-            .OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase).ThenBy(f => f.Name, StringComparer.Ordinal).ThenBy(f => f.ContentId)
-            .ToList();
+        var other = InOrder(
+            contents.Where(r => r.Kind != ContentKind.Class && !placed.Contains(r.ContentId)).Select(r => rows[r.ContentId])
+                .Concat(draftsHere.Where(d => !placed.Contains(d.ContentId)))).ToList();
         classes.Sort((a, b) => Compare(a.Name, a.ContentId, b.Name, b.ContentId));
 
         if (only is { } asked)
         {
-            // One content asked for: a class with its levels, else the one feature, wherever it sits.
+            // One content asked for: a class with its levels, else the one feature (and its draft), wherever it sits.
             classes = [.. classes.Where(c => c.ContentId == asked)];
-            other = [.. contents.Where(r => r.ContentId == asked && r.Kind != ContentKind.Class).Select(r => rows[r.ContentId])];
-            var shown = classes.Aggregate(default(CoverageCounts), (sum, c) => sum + c.Totals) + other.Aggregate(default(CoverageCounts), (sum, f) => sum + f.Totals);
+            other = [.. InOrder(
+                contents.Where(r => r.ContentId == asked && r.Kind != ContentKind.Class).Select(r => rows[r.ContentId])
+                    .Concat(draftsHere.Where(d => d.ContentId == asked)))];
+            var shown = classes.Aggregate(default(CoverageCounts), (sum, c) => sum + c.Totals)
+                + other.Where(f => f.Status == RevisionStatus.Published).Aggregate(default(CoverageCounts), (sum, f) => sum + f.Totals);
             return new(sourceId, name, shown, classes, other);
         }
 
-        // Each content once, wherever it is listed, so a feature under two classes is not counted twice.
+        // Each published content once, wherever it is listed, so a feature under two classes is not counted twice. Drafts never count.
         var totals = contents.Aggregate(default(CoverageCounts), (sum, r) => sum + rows[r.ContentId].Totals);
         return new(sourceId, name, totals, classes, other);
     }
