@@ -4,7 +4,8 @@
 import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
-import type { Character, CharacterSheet, CharacterView, DerivedValue, FieldOverride, PlayState } from '../api/types';
+import type { Character, CharacterSheet, CharacterView, DerivedValue, FieldOverride, PlayState, RollRecord } from '../api/types';
+import { expectNoAxeViolations } from '../test/axe';
 import { SheetSummary } from './SheetSummary';
 
 afterEach(cleanup);
@@ -95,6 +96,24 @@ it('lists the core numbers as terms and definitions, with no heading or named re
   expect(within(summary).getByText('Strength', { selector: 'dt' })).toBeTruthy();
   expect(within(summary).getByText('+3', { selector: '.derived' })).toBeTruthy(); // the modifier is the large number (owner: modifier first by default)
   expect(within(summary).getByText('16', { selector: '.score' })).toBeTruthy();
+});
+
+it('has no axe violations in the summary bar with a roll result', async () => {
+  const record: RollRecord = {
+    formula: '1d20+3',
+    mode: 'normal',
+    critical: false,
+    dice: [{ term: 0, sides: 20, value: 14, kept: true, fromCritical: false }],
+    diceTotal: 14,
+    expressionConstant: 0,
+    modifiers: [{ label: 'Strength modifier', amount: 3 }],
+    total: 17,
+  };
+  const { container } = render(
+    <SheetSummary view={fixtureView()} rollMode="normal" onRollMode={() => {}} lastRoll={record} rollLog={[{ at: Date.now(), record }]} act={() => {}} onRoll={() => {}} onRollDice={async () => {}} />,
+  );
+  expect(screen.getByRole('region', { name: 'Last roll' }).textContent).toContain('17');
+  await expectNoAxeViolations(container);
 });
 
 it('names inspiration by family and lists conditions and exhaustion when present', () => {

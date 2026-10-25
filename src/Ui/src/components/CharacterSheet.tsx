@@ -38,6 +38,7 @@ import { SpellsPanel } from './SpellsPanel';
 import { TraceTable } from './TraceTable';
 import { UpdatesPanel } from './UpdatesPanel';
 import { VttExportPanel } from './VttExportPanel';
+import { ByHandPanel } from './ByHandPanel';
 import { TabList, TabPanel, tabId, type TabSpec } from './sheet/TabList';
 import { rememberSheetTab, rememberedSheetTab, type SheetTabId } from '../sheetTab';
 import { inverseOf, isCompound, type UndoEntry } from '../undo';
@@ -928,6 +929,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
       <TabPanel idPrefix="sheet" id="features" active={active === 'features'}>
         {(sheet.features ?? []).length === 0 && <p className="hint">No features yet.</p>}
         <FeaturesPanel view={view} pdfSources={pdfSources} openPage={openPage} reportGap={(id) => reportGap(gapAboutFeature(id))} />
+        <ByHandPanel characterId={character.id} sheet={sheet} active={active === 'features'} />
       </TabPanel>
 
       <TabPanel idPrefix="sheet" id="stats" active={active === 'stats'}>

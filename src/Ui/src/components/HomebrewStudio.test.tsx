@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { client } from '../api/client';
 import type { AppInfo, SourceRecord, StudioEntry } from '../api/types';
+import { expectNoAxeViolations } from '../test/axe';
 import { HomebrewStudio } from './HomebrewStudio';
 
 vi.mock('../api/client', () => ({
@@ -435,4 +436,21 @@ it('moving a toggle to another group forgets the forms it was allowed with', asy
   const sent = await checked();
   expect(sent('toggle-2').group).toBe('two');
   expect(sent('toggle-2').allowedWith).toBeUndefined();
+});
+
+it('has no axe violations in the effect editor open on a toggle', async () => {
+  const user = userEvent.setup();
+  const withToggle = {
+    contentId: 'id-t',
+    name: 'Testy Toggler',
+    kind: 'feat',
+    revisions: [],
+    latest: { contentId: 'id-t', revisionId: 'r-t', kind: 'feat', name: 'Testy Toggler', rulesFamilies: ['srd-5.1'], provenance: { sourceId: 'a' }, status: 'draft', effects: [{ id: 'tg1', type: 'toggle', toggleId: 'stance', label: 'Testy stance' }] },
+  } as unknown as StudioEntry;
+  vi.mocked(client.contentBySource).mockImplementation((id) => Promise.resolve(id === 'a' ? [withToggle] : []));
+  vi.mocked(client.listCharacters).mockResolvedValue([]); // the open editor mounts the compare panel
+  const { container } = render(<HomebrewStudio info={info} onError={() => {}} onStatus={() => {}} />);
+  await user.click(await screen.findByRole('button', { name: 'Edit Testy Toggler' }));
+  expect(await screen.findByRole('textbox', { name: 'Toggle name' })).toBeTruthy();
+  await expectNoAxeViolations(container);
 });

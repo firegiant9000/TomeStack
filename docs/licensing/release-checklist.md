@@ -9,6 +9,10 @@ The four items ADR-008 left open before the first published installer (LIVING_SP
 | 3 | Velopack `Setup.exe` / `Update.exe` notices | **Done.** Generated and installed | **Unchanged.** Same Velopack version (1.2.161); the notices file stands | **Unchanged.** Same Velopack version (1.2.161) |
 | 4 | Code signing | **Decided: unsigned** (owner, 2026-10-01) | **Unsigned**, as decided | **Unsigned**, as decided |
 
+## Next release re-check (after 0.6.0)
+
+- **Dependencies:** `axe-core` 4.14.0 was added as a development-only dependency (unit tests only, not shipped; `src/Ui/package.json` devDependencies and `package-lock.json`). Licence MPL-2.0, read from the installed package. Nothing ships it, so there is no notice to add; its source is not modified or redistributed.
+
 ## 0.6.0 re-check (2026-10-21)
 
 - **Dependencies:** no shipped dependency was added or changed since the `v0.5.0` tag. `src/Ui/package.json`, `src/Ui/package-lock.json`, `.config/dotnet-tools.json`, the workflows and the packing scripts are unchanged, and no package reference in a project file changed (the only project-file change copies a test fixture in `TomeStack.AppService.Tests`).
