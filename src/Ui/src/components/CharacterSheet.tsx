@@ -162,15 +162,40 @@ function ExportPanel({ characterId, onError, onStatus }: ExportProps) {
   const [purpose, setPurpose] = useState<ExportPurpose>('backup');
   const [preview, setPreview] = useState<ExportPreview>();
 
+  // G6: both purposes are previewed, so the package's warnings (it needs a newer TomeStack) show before the file is saved. A share needs
+  // its preview (the export button waits for it); a backup's is advisory, so a failure to read it is not reported.
+  const chosen = useRef<ExportPurpose>('backup');
+  const load = useCallback(
+    async (next: ExportPurpose) => {
+      try {
+        const loaded = await client.previewExport([characterId], next);
+        if (chosen.current === next) setPreview(loaded);
+      } catch (error) {
+        if (next === 'share' && chosen.current === next) onError(error);
+      }
+    },
+    [characterId, onError],
+  );
+  useEffect(() => {
+    let current = true;
+    (async () => {
+      try {
+        const loaded = await client.previewExport([characterId], 'backup');
+        if (current && chosen.current === 'backup') setPreview(loaded);
+      } catch {
+        // advisory only (see above)
+      }
+    })();
+    return () => {
+      current = false;
+    };
+  }, [characterId]);
+
   async function choose(next: ExportPurpose) {
+    chosen.current = next;
     setPurpose(next);
     setPreview(undefined);
-    if (next !== 'share') return;
-    try {
-      setPreview(await client.previewExport([characterId], next));
-    } catch (error) {
-      onError(error);
-    }
+    await load(next);
   }
 
   async function exportCharacter() {
@@ -224,6 +249,13 @@ function ExportPanel({ characterId, onError, onStatus }: ExportProps) {
             </>
           )}
         </div>
+      )}
+      {(preview?.warnings ?? []).length > 0 && (
+        <ul>
+          {preview!.warnings!.map((w, i) => (
+            <li key={i}>{w.message}</li>
+          ))}
+        </ul>
       )}
       <button type="button" onClick={exportCharacter} disabled={purpose === 'share' && !preview}>
         Export package

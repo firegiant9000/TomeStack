@@ -1,4 +1,4 @@
-# Play mechanics: form groups, turns, upkeep, feature attacks, action details and roll modes and damage responses (D43, slices 1 to 7)
+# Play mechanics: form groups, turns, upkeep, feature attacks, action details, roll modes, damage responses and charging (D43, slices 1 to 8; built, 0.7.0)
 
 LIVING_SPECS D43 · [ADR-018](../decisions/ADR-018-play-mechanics.md) · ADR-003 content schema v11 · character schema v10 · status: **slices 1 to 7 implemented** (built on `play-mechanics`; ships in the release after 0.6.0).
 
@@ -536,6 +536,10 @@ A roll with a pool gains "Also changes", a list of up to four rows. Each row has
 
 - **Play** lists each group under "Forms" (in the Combat strip since slice 3) as a labelled group of radio choices: "Base" first, then each form with its cost ("5 Focus"), and the overlays as checkboxes. A choice that cannot be made is disabled and says why. See [accessibility-checklist.md](accessibility-checklist.md) row 69 for the keyboard rule: the arrow keys move focus and do not choose, because each choice spends from a pool. The strip also shows the round, the timed effects, the combat pools and the turn buttons ([sheet-play.md](sheet-play.md)). Since slice 7, taking damage on a sheet that has responses opens the damage panel (see "Slice 7"). Since slice 8, an action that also changes pools or draws a charge down is used as one change ("Use <name>", "Undo use <name>"), and End encounter offers to clear built-up pools (see "Slice 8").
 - **Homebrew studio** ([homebrew-studio.md](homebrew-studio.md)): a toggle has Cost (with the formula preview), Form group, Kind (form or overlay), Allowed in base, "Can be on with these forms", Level and, since slice 3, "Lasts (rounds)" (a formula with a preview; empty is until switched off). "Add form group" declares a group, and "Add toggle" adds a toggle. A resource has "Counts up", "When full, say" (only while it counts up) and "Allowance". "Add upkeep" (it needs a pool) adds a rule with Toggle (a select of this revision's toggles, or "Always"), When (start or end of my turn), Pool, Change (spend or regain), Amount (a formula; "all" for a regain only, and a switch back to spend turns "all" into 1) and "If the pool is short" (ask or end; only for a spend that belongs to a toggle). Changing a toggle's group clears its allowed forms; removing the pool clears the cost of the toggles that spent it and removes the upkeeps that changed it; removing a toggle removes the upkeeps of this revision that belonged to it (an upkeep that names a toggle that is missing is refused at validation, `validate.upkeep-toggle-unknown`). The check and publish use the server codes above; the version is chosen from what the rules use. Since slice 7, "Add damage response" adds a response with its phase, cost, form and outcome list. Since slice 8, a roll with a pool has "Also changes" and "Draws down built-up charge".
+
+## Sharing
+
+TomeStack 0.6.0 refuses a package that holds a content revision at schema v11 or a character at schema v10 (`package.schema-unsupported`). The previews of an export, a source pack and a campaign pack (`package.exportPreview`, `package.sourcePackPreview`, `package.campaignPackPreview`) warn with `package.needs-newer-build` (once per preview) when the package they describe would hold either, so the sender knows the receiver needs 0.7.0 or later.
 
 ## Not yet
 

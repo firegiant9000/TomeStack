@@ -1032,6 +1032,31 @@ it('does not report a print preview lookup that fails after the preview was clos
   expect(onError).not.toHaveBeenCalled();
 });
 
+// G6: the export dialog shows the preview's warning, for a backup on opening and for a share once chosen.
+it('shows the needs-newer-build warning of the export preview, for a backup and for a share', async () => {
+  const user = userEvent.setup();
+  const text = 'Opening this needs TomeStack 0.7.0 or later: it holds content or a character that older versions refuse.';
+  vi.mocked(client.previewExport).mockResolvedValue({
+    purpose: 'share', fileName: 'x.tomestack.zip', characters: [], included: [], omitted: [], gapNotes: 0,
+    warnings: [{ code: 'package.needs-newer-build', message: text }],
+  } as Awaited<ReturnType<typeof client.previewExport>>);
+  renderSheet(view());
+  await user.click(screen.getByRole('tab', { name: 'Manage' }));
+  expect(await screen.findByText(text)).toBeTruthy();
+  await user.click(screen.getByRole('radio', { name: /^Share with someone/ }));
+  expect(await screen.findByText(text)).toBeTruthy();
+  expect(vi.mocked(client.previewExport).mock.calls.map((c) => c[1])).toEqual(['backup', 'share']);
+});
+
+it('shows no export warning when the preview has none', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.previewExport).mockResolvedValue({ purpose: 'backup', fileName: 'x', characters: [], included: [], omitted: [], gapNotes: 0 } as Awaited<ReturnType<typeof client.previewExport>>);
+  renderSheet(view());
+  await user.click(screen.getByRole('tab', { name: 'Manage' }));
+  await waitFor(() => expect(client.previewExport).toHaveBeenCalled());
+  expect(screen.queryByText(/needs TomeStack/)).toBeNull();
+});
+
 const dieChange = [{ id: 'hitDie:0', kind: 'hitDie', label: 'Spend a d8', from: 3, to: 8, reason: 'Fixture', die: 8, amount: 5 }] as unknown as Changes;
 const d8Pool = [{ die: 8, total: 2, spent: 0, remaining: 2, classes: ['Fixture'] }];
 

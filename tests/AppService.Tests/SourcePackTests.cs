@@ -107,6 +107,23 @@ public class SourcePackTests
     }
 
     [Fact]
+    public void A_source_pack_preview_warns_once_when_a_revision_is_at_schema_v11_and_not_for_older_content()
+    {
+        using var temp = new TempApp();
+        var (old, _, _) = SharedWithTwoRevisions(temp);
+        Assert.DoesNotContain(temp.App.PreviewSourcePack([old.Id]).Warnings, w => w.Code == "package.needs-newer-build");
+
+        var newer = Shared(temp, "Test Newer Source");
+        temp.App.Store.AddRevision(Feat(newer.Id, "Test Newer One", Guid.NewGuid(), Guid.NewGuid()) with { Status = RevisionStatus.Published, SchemaVersion = 11 });
+        temp.App.Store.AddRevision(Feat(newer.Id, "Test Newer Two", Guid.NewGuid(), Guid.NewGuid()) with { Status = RevisionStatus.Published, SchemaVersion = 11 });
+        var warning = Assert.Single(temp.App.PreviewSourcePack([newer.Id]).Warnings, w => w.Code == "package.needs-newer-build");
+        Assert.Equal(PackageWarningText, warning.Message);
+        Assert.Single(temp.App.PreviewSourcePack([old.Id, newer.Id]).Warnings, w => w.Code == "package.needs-newer-build");
+    }
+
+    private const string PackageWarningText = "Opening this needs TomeStack 0.7.0 or later: it holds content or a character that older versions refuse.";
+
+    [Fact]
     public void A_toggle_that_names_content_in_another_source_gives_a_reference_outside_warning()
     {
         using var temp = new TempApp();

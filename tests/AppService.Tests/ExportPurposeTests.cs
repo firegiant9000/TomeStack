@@ -25,7 +25,7 @@ public class ExportPurposeTests
     };
 
     /// <summary>A character pinning seeded (redistributable) fixture content plus one non-redistributable homebrew feat.</summary>
-    private static Guid SaveMixedCharacter(TempApp app)
+    private static Guid SaveMixedCharacter(TempApp app, int homebrewSchemaVersion = ContentRevision.CurrentSchemaVersion)
     {
         app.App.Store.UpsertSource(new SourceRecord
         {
@@ -37,7 +37,7 @@ public class ExportPurposeTests
             License = "Personal homebrew",
             Redistributable = false,
         });
-        app.App.Store.AddRevision(HomebrewFeat);
+        app.App.Store.AddRevision(HomebrewFeat with { SchemaVersion = homebrewSchemaVersion });
         var character = TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json");
         return app.App.SaveCharacter(character with { Pins = [.. character.Pins, HomebrewFeat.Reference] }).Character.Id;
     }
@@ -102,6 +102,42 @@ public class ExportPurposeTests
         var backup = origin.App.PreviewExport([id], ExportPurpose.Backup);
         Assert.Empty(backup.Omitted);
         Assert.Contains(backup.Included, n => n.SourceId == HomebrewSource);
+    }
+
+    private static IEnumerable<Diagnostic> NewerBuildWarnings(ExportPreview preview) => (preview.Warnings ?? []).Where(w => w.Code == "package.needs-newer-build");
+
+    [Fact]
+    public void Export_preview_warns_once_when_a_pinned_revision_is_at_schema_v11()
+    {
+        using var origin = new TempApp();
+        var id = SaveMixedCharacter(origin, homebrewSchemaVersion: 11);
+
+        var backup = NewerBuildWarnings(origin.App.PreviewExport([id], ExportPurpose.Backup));
+        Assert.Equal("Opening this needs TomeStack 0.7.0 or later: it holds content or a character that older versions refuse.", Assert.Single(backup).Message);
+        // A share leaves the non-redistributable homebrew out, so nothing at v11 would be written.
+        Assert.Empty(NewerBuildWarnings(origin.App.PreviewExport([id], ExportPurpose.Share)));
+    }
+
+    [Fact]
+    public void Export_preview_does_not_warn_for_v9_character_and_old_content()
+    {
+        using var origin = new TempApp();
+        var id = SaveMixedCharacter(origin, homebrewSchemaVersion: 3);
+        Assert.True(origin.App.Store.FindCharacter(id)!.SchemaVersion <= Character.DetailsSchemaVersion);
+        Assert.Empty(NewerBuildWarnings(origin.App.PreviewExport([id], ExportPurpose.Backup)));
+        Assert.Empty(NewerBuildWarnings(origin.App.PreviewExport([id], ExportPurpose.Share)));
+    }
+
+    [Fact]
+    public void Export_preview_warns_for_a_character_mid_encounter_even_with_only_old_content()
+    {
+        using var origin = new TempApp();
+        var character = TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json");
+        var id = origin.App.SaveCharacter(character with { Play = (character.Play ?? new PlayState()) with { Encounter = new EncounterState(0) } }).Character.Id;
+        Assert.Equal(Character.EncounterSchemaVersion, origin.App.Store.FindCharacter(id)!.SchemaVersion);
+
+        Assert.Single(NewerBuildWarnings(origin.App.PreviewExport([id], ExportPurpose.Share)));
+        Assert.Single(NewerBuildWarnings(origin.App.PreviewExport([id], ExportPurpose.Backup)));
     }
 
     [Fact]
