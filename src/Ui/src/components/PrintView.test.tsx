@@ -183,6 +183,24 @@ it('full sheet prints a counting-up pool as built up and a normal pool as before
   expect(row('Fixture Surge').textContent).not.toContain('built up');
 });
 
+it('full sheet prints a counting-up pool with no maximum as built up, tracked by hand', () => {
+  const noMax = {
+    ...countUpView,
+    sheet: {
+      ...countUpView.sheet,
+      resources: [
+        { content: { revisionId: 'u2' }, resourceId: 'fixture-rage', label: 'Fixture Rage', spent: 4, current: 0, countsUp: true, recoveries: [] },
+        { content: { revisionId: 'u3' }, resourceId: 'fixture-pool', label: 'Fixture Pool', spent: 2, current: 0, recoveries: [] },
+      ],
+    } as unknown as CharacterSheet,
+  };
+  render(<PrintView view={noMax} onError={() => {}} onClose={() => {}} />);
+  const preview = screen.getByRole('region', { name: 'Print preview' });
+  const row = (name: string) => within(preview).getByRole('rowheader', { name }).closest('tr')!;
+  expect(row('Fixture Rage').textContent).toContain('4 built up (tracked by hand)');
+  expect(row('Fixture Pool').textContent).toContain('2 spent (tracked by hand)');
+});
+
 it('combat card labels the ticks of a counting-up pool "to build up" and a normal pool "uses"', async () => {
   const preview = await openCombat(userEvent.setup(), countUpView);
   const row = (name: string) => within(preview).getByRole('rowheader', { name }).closest('tr')!;

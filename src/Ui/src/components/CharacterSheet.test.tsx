@@ -1057,6 +1057,37 @@ it('shows no export warning when the preview has none', async () => {
   expect(screen.queryByText(/needs TomeStack/)).toBeNull();
 });
 
+it('loads the export preview only when Manage opens, and again when the character changes (G6)', async () => {
+  const user = userEvent.setup();
+  const first = 'Needs 0.7.0 first.';
+  const second = 'Needs 0.8.0 second.';
+  const preview = (message: string) =>
+    ({ purpose: 'backup', fileName: 'x', characters: [], included: [], omitted: [], gapNotes: 0, warnings: [{ code: 'package.needs-newer-build', message }] }) as Awaited<ReturnType<typeof client.previewExport>>;
+  vi.mocked(client.previewExport).mockReset();
+  vi.mocked(client.previewExport).mockResolvedValueOnce(preview(first)).mockResolvedValueOnce(preview(second));
+  const v = view();
+  const { rerender } = renderSheet(v);
+  await new Promise((r) => setTimeout(r, 20));
+  expect(client.previewExport).not.toHaveBeenCalled();
+  await user.click(screen.getByRole('tab', { name: 'Manage' }));
+  expect(await screen.findByText(first)).toBeTruthy();
+  expect(client.previewExport).toHaveBeenCalledTimes(1);
+  rerender(sheetElement({ ...v, character: { ...v.character, updatedAt: '2026-10-03T00:00:09Z' } }));
+  expect(await screen.findByText(second)).toBeTruthy();
+  expect(client.previewExport).toHaveBeenCalledTimes(2);
+});
+
+it('says so in plain text when the backup export preview cannot be read (G6)', async () => {
+  const user = userEvent.setup();
+  const onError = vi.fn();
+  vi.mocked(client.previewExport).mockRejectedValue(new Error('boom'));
+  render(<CharacterSheet view={view()} onChanged={noop} onError={onError} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+  await user.click(screen.getByRole('tab', { name: 'Manage' }));
+  const line = await screen.findByText('Could not check whether this package needs a newer TomeStack.');
+  expect(line.closest('[role="status"],[role="alert"]')).toBeNull();
+  expect(onError).not.toHaveBeenCalled();
+});
+
 const dieChange = [{ id: 'hitDie:0', kind: 'hitDie', label: 'Spend a d8', from: 3, to: 8, reason: 'Fixture', die: 8, amount: 5 }] as unknown as Changes;
 const d8Pool = [{ die: 8, total: 2, spent: 0, remaining: 2, classes: ['Fixture'] }];
 

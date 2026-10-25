@@ -550,7 +550,7 @@ export function PrintView({ view, onError, onClose }: Props) {
             {sheet.resources!.map((r) => (
               <tr key={`${r.content.revisionId}-${r.resourceId}`}>
                 <th scope="row">{r.label}</th>
-                <td>{r.maximum === undefined ? `${r.spent} spent (tracked by hand)` : r.countsUp ? `${r.spent} built up of ${r.maximum}` : `${r.current} of ${r.maximum}`}</td>
+                <td>{r.maximum === undefined ? `${r.spent} ${r.countsUp ? 'built up' : 'spent'} (tracked by hand)` : r.countsUp ? `${r.spent} built up of ${r.maximum}` : `${r.current} of ${r.maximum}`}</td>
                 <td>{r.recoveries.map((x) => (x.on === 'shortRest' ? 'short rest' : 'long rest')).join(', ')}</td>
               </tr>
             ))}

@@ -153,43 +153,49 @@ function FieldCard({ value, labels, onOverride, onRoll, onReportGap }: FieldProp
 
 interface ExportProps {
   characterId: string;
+  /** The Manage tab is shown: the preview loads only then. */
+  active: boolean;
+  /** The character's stamp; a change reloads the preview. */
+  updatedAt: string | undefined;
   onError: (error: unknown) => void;
   onStatus: (text: string) => void;
 }
 
 /** ADR-007: choose backup or share; a share first lists everything it will leave out. */
-function ExportPanel({ characterId, onError, onStatus }: ExportProps) {
+function ExportPanel({ characterId, active, updatedAt, onError, onStatus }: ExportProps) {
   const [purpose, setPurpose] = useState<ExportPurpose>('backup');
   const [preview, setPreview] = useState<ExportPreview>();
 
+  const [backupFailed, setBackupFailed] = useState(false);
+
   // G6: both purposes are previewed, so the package's warnings (it needs a newer TomeStack) show before the file is saved. A share needs
-  // its preview (the export button waits for it); a backup's is advisory, so a failure to read it is not reported.
+  // its preview (the export button waits for it); a backup's is advisory, so a failure shows one plain line. The preview loads only while
+  // the Manage tab is shown and again when the character changes (updatedAt), so the warning never goes stale.
   const chosen = useRef<ExportPurpose>('backup');
+  const requestId = useRef(0);
   const load = useCallback(
     async (next: ExportPurpose) => {
+      const id = ++requestId.current;
+      setBackupFailed(false);
       try {
         const loaded = await client.previewExport([characterId], next);
-        if (chosen.current === next) setPreview(loaded);
+        if (requestId.current === id && chosen.current === next) setPreview(loaded);
       } catch (error) {
-        if (next === 'share' && chosen.current === next) onError(error);
+        if (requestId.current !== id || chosen.current !== next) return;
+        if (next === 'share') onError(error);
+        else setBackupFailed(true);
       }
     },
     [characterId, onError],
   );
+  const loadRef = useRef(load);
   useEffect(() => {
-    let current = true;
-    (async () => {
-      try {
-        const loaded = await client.previewExport([characterId], 'backup');
-        if (current && chosen.current === 'backup') setPreview(loaded);
-      } catch {
-        // advisory only (see above)
-      }
-    })();
-    return () => {
-      current = false;
-    };
-  }, [characterId]);
+    loadRef.current = load;
+  }, [load]);
+  useEffect(() => {
+    if (!active) return;
+    void loadRef.current(chosen.current);
+  }, [active, characterId, updatedAt]);
 
   async function choose(next: ExportPurpose) {
     chosen.current = next;
@@ -251,12 +257,13 @@ function ExportPanel({ characterId, onError, onStatus }: ExportProps) {
         </div>
       )}
       {(preview?.warnings ?? []).length > 0 && (
-        <ul>
+        <ul className="warnings" aria-label="Export warnings">
           {preview!.warnings!.map((w, i) => (
             <li key={i}>{w.message}</li>
           ))}
         </ul>
       )}
+      {backupFailed && purpose === 'backup' && <p>Could not check whether this package needs a newer TomeStack.</p>}
       <button type="button" onClick={exportCharacter} disabled={purpose === 'share' && !preview}>
         Export package
       </button>
@@ -993,7 +1000,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
 
       <TabPanel idPrefix="sheet" id="manage" active={active === 'manage'}>
         <UpdatesPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} />
-        <ExportPanel characterId={character.id} onError={onError} onStatus={onStatus} />
+        <ExportPanel characterId={character.id} active={active === 'manage'} updatedAt={character.updatedAt} onError={onError} onStatus={onStatus} />
         <VttExportPanel characterId={character.id} onError={onError} onStatus={onStatus} />
         <ArchivePanel character={character} onError={onError} onStatus={onStatus} onChanged={onArchiveChanged} />
         <SnapshotsPanel character={character} onChanged={onChanged} onError={onError} onStatus={onStatus} />
