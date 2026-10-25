@@ -182,6 +182,7 @@ function ExportPanel({ characterId, active, updatedAt, onError, onStatus }: Expo
         if (requestId.current === id && chosen.current === next) setPreview(loaded);
       } catch (error) {
         if (requestId.current !== id || chosen.current !== next) return;
+        setPreview(undefined); // an older preview must not stand in for the one that failed
         if (next === 'share') onError(error);
         else setBackupFailed(true);
       }
