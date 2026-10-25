@@ -756,7 +756,20 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
           </button>
         </div>
       )}
-      <SpanReview candidate={candidate} effects={confirmable} />
+      <SpanReview
+        candidate={candidate}
+        effects={confirmable}
+        sha256={stored.attachmentSha256}
+        confirm={
+          pending && isClass && confirmable.length > 0
+            ? {
+                hint: `Tick each proposal you have checked against the page. Unticked, a proposal stays reference only. The class becomes a draft once its hit die${casting ? ' and spell slot table are' : ' is'} ticked.`,
+                ticked: confirmed,
+                onToggle: toggleConfirmed,
+              }
+            : undefined
+        }
+      />
 
       {Object.keys(candidate.fields).length > 0 && (
         <dl aria-label="What was read">
@@ -813,20 +826,6 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
             ))}
           </ul>
         </>
-      )}
-      {pending && isClass && confirmable.length > 0 && (
-        <fieldset className="confirm-effects">
-          <legend>Confirm what was read</legend>
-          <p className="hint">
-            Tick each proposal you have checked against the page. Unticked, a proposal stays reference only. The class becomes a draft once its hit die{casting ? ' and spell slot table are' : ' is'} ticked.
-          </p>
-          {confirmable.map((effect) => (
-            <label key={effect.id} className="choice">
-              <input type="checkbox" checked={confirmed.includes(effect.id)} onChange={(e) => toggleConfirmed(effect.id, e.target.checked)} />
-              Confirm {effectLabel(effect)}
-            </label>
-          ))}
-        </fieldset>
       )}
 
       {pending && (
@@ -965,7 +964,25 @@ const abilityNames: Record<string, string> = {
  * (no spans, none for this effect, the effect was edited away, the page did not load, the span does not fit the page) the
  * whole excerpt is shown, as before. Page text is rendered as text nodes only.
  */
-function SpanReview({ candidate, effects }: { candidate: DraftCandidate; effects: (Record<string, unknown> & { id: string })[] }) {
+interface ConfirmProps {
+  hint: string;
+  ticked: string[];
+  onToggle: (id: string, on: boolean) => void;
+}
+
+function SpanReview({
+  candidate,
+  effects,
+  sha256,
+  confirm,
+}: {
+  candidate: DraftCandidate;
+  effects: (Record<string, unknown> & { id: string })[];
+  /** The hash of the PDF the candidate was read from, when stored with it. */
+  sha256?: string;
+  /** R15: the confirm ticks sit in the left column beside their effect buttons. */
+  confirm?: ConfirmProps;
+}) {
   const [selected, setSelected] = useState<string>();
   const [fetched, setFetched] = useState<{ key: string; page?: StoredPage }>();
   const firstMark = useRef<HTMLElement>(null);
@@ -980,14 +997,14 @@ function SpanReview({ candidate, effects }: { candidate: DraftCandidate; effects
     if (!key || !span) return;
     let current = true;
     client
-      .importedPage(candidate.sourceId, span.page)
+      .importedPage(candidate.sourceId, span.page, sha256)
       .then((page) => current && setFetched({ key, page }))
       .catch(() => current && setFetched({ key })); // the whole excerpt shows instead
     return () => {
       current = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` is the source and page of `span`
-  }, [key, candidate.sourceId]);
+  }, [key, candidate.sourceId, sha256]);
 
   const blocks = key && fetched?.key === key ? fetched.page?.blocks : undefined;
   const fits = span && Array.isArray(blocks) && span.blockStart >= 0 && span.blockEnd >= span.blockStart && span.blockEnd < blocks.length;
@@ -1011,18 +1028,38 @@ function SpanReview({ candidate, effects }: { candidate: DraftCandidate; effects
     return text.charAt(0).toUpperCase() + text.slice(1);
   };
   return (
-    <div className={listed ? 'span-review' : undefined}>
-      {listed && (
-        <ul className="span-effects" aria-label="Proposed effects: choose one to see where it was read">
-          {effects.map((e) => (
-            <li key={e.id}>
-              <button type="button" id={buttonId(e.id)} aria-pressed={selected === e.id} onClick={() => setSelected(selected === e.id ? undefined : e.id)}>
-                {label(e)}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+    <div className={listed || confirm ? 'span-review' : undefined}>
+      {(listed || confirm) &&
+        (() => {
+          const list = (
+            <ul className="span-effects" aria-label={listed ? 'Proposed effects: choose one to see where it was read' : undefined}>
+              {effects.map((e) => (
+                <li key={e.id}>
+                  {listed && (
+                    <button type="button" id={buttonId(e.id)} aria-pressed={selected === e.id} onClick={() => setSelected(selected === e.id ? undefined : e.id)}>
+                      {label(e)}
+                    </button>
+                  )}
+                  {confirm && (
+                    <label className="choice">
+                      <input type="checkbox" checked={confirm.ticked.includes(e.id)} onChange={(ev) => confirm.onToggle(e.id, ev.target.checked)} />
+                      Confirm {effectLabel(e)}
+                    </label>
+                  )}
+                </li>
+              ))}
+            </ul>
+          );
+          return confirm ? (
+            <fieldset className="confirm-effects">
+              <legend>Confirm what was read</legend>
+              <p className="hint">{confirm.hint}</p>
+              {list}
+            </fieldset>
+          ) : (
+            list
+          );
+        })()}
       <figure>
         {fits && blocks && span && effect ? (
           <>

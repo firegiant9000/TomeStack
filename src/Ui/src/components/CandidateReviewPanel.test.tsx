@@ -1242,7 +1242,7 @@ it('selecting an effect highlights its span', async () => {
   vi.mocked(client.importedPage).mockResolvedValue(storedPage(['First block', 'Second block', 'Third block\nwith two lines', 'Fourth block']));
   const user = await openSpanned(spanned({}));
   await user.click(await screen.findByRole('button', { name: 'The effect eff-1' }));
-  expect(client.importedPage).toHaveBeenCalledWith('src-2', 4);
+  expect(client.importedPage).toHaveBeenCalledWith('src-2', 4, undefined);
   const region = await screen.findByRole('region', { name: 'The effect eff-1' });
   expect(within(region).getByText('Lines 2–4')).toBeTruthy();
   const marks = region.querySelectorAll('mark');
@@ -1258,25 +1258,64 @@ it('candidate without spans shows the whole excerpt', async () => {
   expect(client.importedPage).not.toHaveBeenCalled();
 });
 
-it('shows the whole excerpt when the page cannot be fetched, the span is out of range, or the effect is gone', async () => {
+async function settled() {
+  await act(async () => {});
+}
+
+it('shows the whole excerpt, with no highlight, when the page cannot be fetched', async () => {
+  const unhandled: unknown[] = [];
+  const record = (reason: unknown) => unhandled.push(reason);
+  process.on('unhandledRejection', record);
   vi.mocked(client.importedPage).mockRejectedValueOnce(new Error('no page'));
   const user = await openSpanned(spanned({}));
   await user.click(await screen.findByRole('button', { name: 'The effect eff-1' }));
-  expect(await screen.findByText('Whole excerpt of the fixture')).toBeTruthy();
-  expect(document.querySelector('mark')).toBeNull();
-
-  vi.mocked(client.importedPage).mockResolvedValue(storedPage(['Only block']));
-  cleanup();
-  const user2 = await openSpanned(spanned({}));
-  await user2.click(await screen.findByRole('button', { name: 'The effect eff-1' }));
-  await waitFor(() => expect(client.importedPage).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(client.importedPage).toHaveBeenCalledTimes(1));
+  await settled();
+  await new Promise((resolve) => setTimeout(resolve, 20)); // Node reports an unhandled rejection after the microtask queue drains
+  process.off('unhandledRejection', record);
+  expect(unhandled).toEqual([]); // the failed read is caught, not left rejected
+  expect(unhandled.length).toBe(0);
   expect(screen.getByText('Whole excerpt of the fixture')).toBeTruthy();
   expect(document.querySelector('mark')).toBeNull();
+  expect(screen.queryByRole('region', { name: 'The effect eff-1' })).toBeNull();
+});
 
-  cleanup();
+it('shows the whole excerpt, with no highlight, when the span does not fit the fetched page', async () => {
+  vi.mocked(client.importedPage).mockResolvedValue(storedPage(['Only block']));
+  const user = await openSpanned(spanned({}));
+  await user.click(await screen.findByRole('button', { name: 'The effect eff-1' }));
+  await waitFor(() => expect(client.importedPage).toHaveBeenCalledTimes(1));
+  await settled();
+  expect(screen.getByText('Whole excerpt of the fixture')).toBeTruthy();
+  expect(document.querySelector('mark')).toBeNull();
+  expect(screen.queryByRole('region', { name: 'The effect eff-1' })).toBeNull();
+});
+
+it('lists no effects and fetches nothing when the effect with the span was edited away', async () => {
   await openSpanned(spanned({ proposedEffects: [{ id: 'eff-2', type: 'note' }] }));
-  expect(await screen.findByText('Whole excerpt of the fixture')).toBeTruthy();
+  await screen.findByText('Whole excerpt of the fixture');
+  await settled();
+  expect(screen.queryByRole('list', { name: /^Proposed effects/ })).toBeNull();
   expect(screen.queryByRole('button', { name: 'The effect eff-1' })).toBeNull();
+  expect(client.importedPage).not.toHaveBeenCalled();
+});
+
+it('reads the page of the PDF the candidate was detected on, by its stored hash', async () => {
+  vi.mocked(client.importedPage).mockResolvedValue(storedPage(['First block', 'Second block', 'Third block']));
+  const stored = { ...spanned({}), attachmentSha256: 'ab'.repeat(32) };
+  const user = await openSpanned(stored);
+  await user.click(await screen.findByRole('button', { name: 'The effect eff-1' }));
+  await screen.findByRole('region', { name: 'The effect eff-1' });
+  expect(client.importedPage).toHaveBeenCalledWith('src-2', 4, 'ab'.repeat(32));
+});
+
+it('puts each confirm tick beside its effect button in one group', async () => {
+  vi.mocked(client.importedPage).mockResolvedValue(storedPage(['First block', 'Second block', 'Third block']));
+  const user = await openSpanned(spanned({ proposedKind: 'class', proposedEffects: [{ id: 'hd', type: 'hitDie', die: 8 }], effectSpans: { hd: span } }));
+  const group = await screen.findByRole('group', { name: 'Confirm what was read' });
+  expect(within(group).getByRole('checkbox', { name: 'Confirm the hit die, d8' })).toBeTruthy();
+  await user.click(within(group).getByRole('button', { name: 'The hit die, d8' }));
+  expect(await screen.findByRole('region', { name: 'The hit die, d8' })).toBeTruthy();
 });
 
 it('page text is rendered as text, not HTML', async () => {

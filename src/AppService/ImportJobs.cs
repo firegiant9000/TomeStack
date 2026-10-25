@@ -87,7 +87,8 @@ public sealed record ImportSearchRequest(Guid SourceId, string Query);
 
 public sealed record ImportSearchHit(int Page, string Snippet);
 
-public sealed record ImportPageRequest(Guid SourceId, int Page);
+/// <param name="Sha256">D64: read the page of the PDF with this hash, if one of the source's import jobs read it; null: the source's current PDF.</param>
+public sealed record ImportPageRequest(Guid SourceId, int Page, string? Sha256 = null);
 
 public sealed partial class TomeStackApp
 {
@@ -240,7 +241,14 @@ public sealed partial class TomeStackApp
     {
         ArgumentNullException.ThrowIfNull(request);
         var source = FindSourceOrThrow(request.SourceId);
-        if (source.AttachmentId is { } id && _store.FindAttachment(id) is { Sha256: { } sha } && _store.FindImportPage(sha, request.Page) is { } page)
+        if (request.Sha256 is { } wanted)
+        {
+            // D64: the page a candidate was read from, even after the source's PDF was replaced; only a PDF one of this source's jobs read.
+            if (_store.ListImportJobs().Any(j => j.SourceId == request.SourceId && string.Equals(j.Sha256, wanted, StringComparison.OrdinalIgnoreCase))
+                && _store.FindImportPage(wanted, request.Page) is { } stored)
+                return stored;
+        }
+        else if (source.AttachmentId is { } id && _store.FindAttachment(id) is { Sha256: { } sha } && _store.FindImportPage(sha, request.Page) is { } page)
             return page;
         throw new AppValidationException([new("import.page-not-extracted", $"Page {request.Page} of '{source.Title}' has not been extracted. Import it first; the page still opens in the PDF viewer.")]);
     }

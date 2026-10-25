@@ -182,8 +182,11 @@ export function createClient(transport: Transport) {
     resumeImport: (jobId: string) => call<ImportJob>('import.resume', { jobId }),
     /** SPEC I-03: pages of one source whose extracted text contains the query; writes nothing. */
     searchImport: (sourceId: string, query: string) => call<ImportSearchHit[]>('import.search', { sourceId, query }),
-    /** D64: the stored extraction of one page of the source's current PDF (`import.page-not-extracted` when it was never read). */
-    importedPage: (sourceId: string, page: number) => call<StoredPage>('import.page', { sourceId, page }),
+    /**
+     * D64: the stored extraction of one page of the source's current PDF, or with `sha256` of the PDF a candidate was read from
+     * (`import.page-not-extracted` when it was never read).
+     */
+    importedPage: (sourceId: string, page: number, sha256?: string) => call<StoredPage>('import.page', { sourceId, page, ...(sha256 ? { sha256 } : {}) }),
     /** One page (50 unless `limit` says; at most 200) of a job's candidates in page order, and the total the filter matches. */
     candidates: (jobId: string, filter: CandidateFilter = {}, paging: { offset?: number; limit?: number } = {}) =>
       call<CandidatePage>('import.candidates', { jobId, ...filter, ...paging }),
