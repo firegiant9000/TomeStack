@@ -465,10 +465,22 @@ export interface MechanicEntry {
   effectId?: string;
   /** The effect's type; `"text"` for a feature with no effects. */
   effectType: string;
+  /** What the author wrote. Not what TomeStack delivers: read `effective` for that. */
   automation: AutomationStatus;
+  /** Import Lab (R10): the author's value lowered by what the engine does (capability registry). Absent from an older host. */
+  effective?: EffectiveAutomation;
   manualStep?: string;
   sourceId?: string;
   page?: PageRef;
+}
+
+/** `status` is absent when `unsupported`: the effect's type is not one this build knows. The server omits null fields. */
+export interface EffectiveAutomation {
+  status?: AutomationStatus | null;
+  unsupported: boolean;
+  ceiling?: AutomationStatus | null;
+  reason?: string | null;
+  evidence?: string | null;
 }
 
 /** `Unsupported` is a subset of `mechanics`: effects of a type this build does not know. */

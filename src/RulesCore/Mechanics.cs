@@ -15,7 +15,8 @@ public sealed record Mechanic(
     AutomationStatus Automation,
     string? ManualStep,
     Guid? SourceId,
-    PageRef? Page)
+    PageRef? Page,
+    EffectiveAutomation? Effective = null)
 {
     /// <summary>A mechanic TomeStack does not fully apply, with nothing telling the player what to do.</summary>
     public bool MissingManualStep => Automation != AutomationStatus.Automatic && string.IsNullOrWhiteSpace(ManualStep);
@@ -46,7 +47,17 @@ public sealed record MechanicsReport(IReadOnlyList<Mechanic> Mechanics, IReadOnl
 /// </summary>
 public static class MechanicsInventory
 {
-    public static MechanicsReport Of(CharacterSheet sheet, IReadOnlySet<Guid> sources)
+    /// <summary>A feature with no effects is its text alone: reference, as the registry's text row says.</summary>
+    private static readonly EffectiveAutomation TextOnly = CapabilityRegistry.Entries
+        .Where(e => e.EffectType == CapabilityRegistry.TextType && e.Field is null)
+        .Select(e => new EffectiveAutomation(e.Ceiling, false, e.Ceiling, e.Reason, e.Evidence))
+        .Single();
+
+    /// <param name="catalog">
+    /// Import Lab (D62 L1, R10): when given, each mechanic also carries <see cref="Mechanic.Effective"/>, the author's value lowered
+    /// by the capability registry. The author's <see cref="Mechanic.Automation"/> stays as it was; the calculator never reads this.
+    /// </param>
+    public static MechanicsReport Of(CharacterSheet sheet, IReadOnlySet<Guid> sources, IContentCatalog? catalog = null)
     {
         ArgumentNullException.ThrowIfNull(sheet);
         ArgumentNullException.ThrowIfNull(sources);
@@ -59,9 +70,10 @@ public static class MechanicsInventory
                 referenceOnly = true;
             if (feature.Effects.Count == 0)
             {
-                mechanics.Add(new(feature.Content, feature.Name, feature.Kind, null, "text", AutomationStatus.Reference, feature.Summary, feature.Origin.SourceId, feature.Origin.Page));
+                mechanics.Add(new(feature.Content, feature.Name, feature.Kind, null, "text", AutomationStatus.Reference, feature.Summary, feature.Origin.SourceId, feature.Origin.Page, catalog is null ? null : TextOnly));
                 continue;
             }
+            var stored = catalog?.FindRevision(feature.Content)?.Effects;
             foreach (var effect in feature.Effects)
             {
                 // A diagnostic on the effect (a formula that fails, a cycle) means it is not applied as written.
@@ -69,9 +81,14 @@ public static class MechanicsInventory
                     ? AutomationStatus.Assisted
                     : effect.Automation;
                 limitedUse |= effect.Type == RollEffect.TypeName && effect.ResourceId is not null;
+                // The same diagnostic rule, applied to the stored effect so a member (a roll mode's "against") can lower the ceiling.
+                var source = stored?.FirstOrDefault(e => e.Id == effect.Id);
+                var effective = source is null
+                    ? null
+                    : CapabilityRegistry.Effective(source, effect.Automation, feature.Diagnostics.Any(d => d.EffectId == effect.Id));
                 mechanics.Add(new(
                     feature.Content, feature.Name, feature.Kind, effect.Id, effect.Type, automation,
-                    string.IsNullOrWhiteSpace(effect.Text) ? feature.Summary : effect.Text, feature.Origin.SourceId, feature.Origin.Page));
+                    string.IsNullOrWhiteSpace(effect.Text) ? feature.Summary : effect.Text, feature.Origin.SourceId, feature.Origin.Page, effective));
             }
         }
         // ADR-020: the types the engine knows are the capability registry's, not a list kept here.

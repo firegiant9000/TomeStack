@@ -30,6 +30,7 @@ import type { BeforeSave } from './OriginPieces';
 import { DebugFindings } from './DebugFindings';
 import { SandboxPanel } from './SandboxPanel';
 import { ComparePanel } from './ComparePanel';
+import { CoveragePanel } from './CoveragePanel';
 import { PublishManyPanel, type PendingDraft } from './PublishManyPanel';
 import { SpellListForm } from './SpellListForm';
 import { TreeView } from './TreeView';
@@ -487,6 +488,8 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
           )}
         </section>
       )}
+
+      {source && <CoveragePanel sourceId={source.id} refreshKey={entries} />}
 
       {editing && source && (
         <EntryEditor

@@ -595,6 +595,17 @@ it('authors a homebrew subclass in the studio, plays it, and reviews an update',
   const remaining = () => within(within(screen.getByRole('article', { name: 'E2E Storm' })).getByRole('region', { name: 'Updates available' }));
   await waitFor(() => expect(remaining().queryByRole('button', { name: 'Review update: Path of the E2E Storm' })).toBeNull());
   expect(remaining().getByRole('button', { name: 'Review update: Barbarian' })).toBeTruthy(); // still only offered
+
+  // Import Lab (D62 L1): the studio's Coverage view for this source counts what the engine does with the rules just authored.
+  await user.click(screen.getByRole('button', { name: 'Homebrew studio' }));
+  const coverageSource = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  await user.selectOptions(coverageSource, within(coverageSource).getByRole('option', { name: /^E2E Homebrew/ }));
+  const coverage = await screen.findByRole('region', { name: 'Coverage' });
+  const totals = await within(coverage).findByText(/^\d+ automatic · \d+ by hand \(assisted\) · \d+ reference · \d+ not understood$/);
+  expect(totals.textContent).toMatch(/ · 0 not understood$/);
+  expect(within(coverage).getByText(/E2E Sky Lore/).closest('li')!.textContent).toContain('1 reference');
+  expect(within(coverage).getByText(/E2E Storm Ward/).closest('li')!.textContent).toMatch(/^E2E Storm Ward: 2 automatic · 1 by hand \(assisted\) · 0 reference/); // resource and recovery; the roll that spends it is assisted
+  expect(coverage.querySelector('[role="status"], [role="alert"], [aria-live], output')).toBeNull(); // no live region of its own
 });
 
 it('attaches a PDF to a source, offers the cited page on a feature, and removes it after a warning', async () => {
