@@ -722,7 +722,7 @@ public static class CharacterCalculator
         var damageDefences = CollectDamageDefences(active, character, resolved.ClassLevels, effective, autoOn, diagnostics);
         var scoped = diagnostics.Concat(warnings.Values.SelectMany(w => w)).Concat(resources.SelectMany(r => r.Warnings)).Where(d => d.Content is not null).Distinct().ToList();
         var features = active.Select(item => Feature(
-            item, family, [.. scoped.Where(d => d.Content == item.Revision.Reference)], rollDetails, rollBonuses, form => OutOfForm(active, item, form, effective, autoOn))).ToList();
+            item, family, [.. scoped.Where(d => d.Content == item.Revision.Reference)], rollDetails, rollBonuses, form => OutOfForm(active, item, form, effective, autoOn), resources)).ToList();
         var toggles = active
             .SelectMany(item => item.Revision.Effects.OfType<ToggleEffect>()
                 .Where(t => t.Automation != AutomationStatus.Reference && LevelReached(item, t, character, resolved.ClassLevels))
@@ -1892,13 +1892,21 @@ public static class CharacterCalculator
 
     private static FeatureEntry Feature(
         ActiveContent item, string family, IReadOnlyList<Diagnostic> diagnostics, Dictionary<(ContentReference, string), RollDetail> rollDetails, Dictionary<(ContentReference, string), int> bonuses,
-        Func<ToggleRef, string?> outOfForm)
+        Func<ToggleRef, string?> outOfForm, IReadOnlyList<ResourceValue> resources)
     {
         var revision = item.Revision;
         // Content v11 (D43): a roll with whileToggle is always listed; it is unavailable, with the reason, while its form is off.
         FeatureEffect Roll(RollEffect roll)
         {
             var reason = roll.WhileToggle is { } form ? outOfForm(form) : null;
+            // A roll that draws down needs a pool that counts up on this sheet (a pinned revision may have an ordinary one): it is unavailable
+            // with the reason, never given a spent use back.
+            if (reason is null && roll.DrawsDown == true && roll.ResourceId is { } drawnPool)
+            {
+                var drawnContent = roll.ResourceContent ?? revision.ContentId;
+                if (!resources.Any(r => r.Content.ContentId == drawnContent && r.ResourceId == drawnPool && r.CountsUp))
+                    reason = $"Pool '{drawnPool}' does not count up for this character, so it cannot be drawn down.";
+            }
             var detail = rollDetails.GetValueOrDefault((revision.Reference, roll.Id));
             // A cost or save DC that cannot be calculated: the row stays available and the player works it out.
             var automation = detail is { Failed: true } && roll.Automation == AutomationStatus.Automatic ? AutomationStatus.Assisted : roll.Automation;

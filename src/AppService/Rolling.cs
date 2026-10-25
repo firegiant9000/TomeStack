@@ -230,6 +230,10 @@ public sealed partial class TomeStackApp
     {
         var poolContent = effect.ResourceContent ?? revision.ContentId;
         var reference = revision.Reference;
+        // D43: a draw-down needs a pool that counts up on this sheet (a pinned revision may have an ordinary one), whatever the amount.
+        if (effect is { DrawsDown: true, ResourceId: { } drawnPool }
+            && sheet.Resources?.FirstOrDefault(r => r.Content.ContentId == poolContent && r.ResourceId == drawnPool) is not { CountsUp: true })
+            throw new AppValidationException([new("use.unavailable", $"Pool '{drawnPool}' does not count up for this character, so '{effect.Id}' cannot draw it down.", reference, effect.Id)], "use.unavailable");
         if (command.Amount is { } amount)
         {
             if (effect.PerUnit is not { } perUnit)

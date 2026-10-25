@@ -289,6 +289,21 @@ public class ChargingTests
     }
 
     [Fact]
+    public void A_drawsDown_roll_on_a_pool_that_does_not_count_up_is_refused_and_changes_nothing()
+    {
+        var (temp, id) = Charger(charge: 3, adjust: r => r.ContentId == Class
+            ? r with { Effects = [.. r.Effects.Select(e => e is ResourceEffect { ResourceId: "charge" } pool ? pool with { Counts = null } : e)] }
+            : r);
+        using var _ = temp;
+        var before = Stored(temp, id);
+
+        Assert.False(temp.App.GetCharacter(id).Sheet.Features!.Single(f => f.Content == BeamRef).Effects.Single(e => e.Id == "release").Available);
+        Assert.Equal("use.unavailable", Refused(() => Use(temp, id, "release", Stamp(temp, id), amount: 3)).Code);
+        Assert.Equal("use.unavailable", Refused(() => temp.App.Roll(new RollCommand(id, BeamRef, "release", Amount: 3))).Code);
+        Assert.Equal(before, Stored(temp, id)); // the pool's spent uses are not given back
+    }
+
+    [Fact]
     public void A_release_above_the_built_up_charge_is_refused()
     {
         var (temp, id) = Charger(charge: 2);

@@ -889,9 +889,13 @@ public static class ContentValidator
         ResourceEffect? FindResource(Guid? content, string resourceId)
         {
             var holder = content ?? revision.ContentId;
+            // Drafts first (the ones validated together, then any in the catalog, the studio sandbox's included), then the newest published
+            // revision: an older one must not decide whether a pool counts up for a roll that draws it down.
             var definers = holder == revision.ContentId
                 ? new List<ContentRevision> { revision }
-                : local.OfContent(holder).Concat(catalog.RevisionsOf(holder)).Where(r => r.ContentId == holder).ToList();
+                : [.. local.OfContent(holder).Where(r => r.ContentId == holder),
+                    .. catalog.RevisionsOf(holder).Where(r => r.ContentId == holder && r.Status != RevisionStatus.Published),
+                    .. catalog.RevisionsOf(holder).Where(r => r.ContentId == holder && r.Status == RevisionStatus.Published).TakeLast(1)];
             return definers.SelectMany(r => r.Effects.OfType<ResourceEffect>()).FirstOrDefault(r => r.ResourceId == resourceId);
         }
 

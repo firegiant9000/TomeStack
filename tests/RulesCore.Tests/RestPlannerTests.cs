@@ -53,6 +53,33 @@ public class RestPlannerTests
     }
 
     [Fact]
+    public void A_long_rest_that_ends_a_form_takes_the_overlay_that_needs_it_even_when_the_overlay_is_unticked()
+    {
+        var tide = new ActiveToggle(Fixtures.TideForm.ContentId, "tide");
+        var bound = new ActiveToggle(Fixtures.BoundOverlay.ContentId, "bound"); // allowed only with Tide
+        var character = ToggleGroupTests.Forms(tide, bound);
+        var sheet = ToggleGroupTests.Sheet(character);
+        Assert.True(sheet.Toggles!.Single(t => t.ToggleId == "bound").On);
+        var plan = RestPlanner.LongRest(character, sheet);
+        var boundChange = Assert.Single(plan.Changes, c => c.Kind == RestChangeKind.Toggle && c.ResourceId == "bound");
+
+        // The overlay's own switch-off is unticked and the form's is ticked: the overlay still goes with the form.
+        var play = RestPlanner.Apply(character.Play, plan, new HashSet<string> { boundChange.Id }, sheetToggles: sheet.Toggles);
+        Assert.Empty(play.Toggles);
+
+        // Without the sheet's toggles the form alone goes, as before (callers that do not know the groups).
+        Assert.Equal(["bound"], RestPlanner.Apply(character.Play, plan, new HashSet<string> { boundChange.Id }).Toggles.Select(t => t.ToggleId));
+
+        // Switching the form on again does not bring the overlay back.
+        var again = ToggleGroupTests.Sheet(character with { Play = play with { Toggles = [tide] } });
+        Assert.DoesNotContain(again.Toggles!, t => t.ToggleId == "bound" && t.On);
+
+        // Keeping the form (its change unticked) keeps it on; the overlay's own change still applies.
+        var tideChange = Assert.Single(plan.Changes, c => c.Kind == RestChangeKind.Toggle && c.ResourceId == "tide");
+        Assert.Equal(["tide"], RestPlanner.Apply(character.Play, plan, new HashSet<string> { tideChange.Id }, sheetToggles: sheet.Toggles).Toggles.Select(t => t.ToggleId));
+    }
+
+    [Fact]
     public void Long_rest_proposes_ending_the_encounter_once()
     {
         var running = Tired() with { Encounter = new(3), Toggles = [new(Guid.Parse("5f3dc000-0000-4000-8000-0000000000aa"), "stance", RoundsLeft: 2)] };
