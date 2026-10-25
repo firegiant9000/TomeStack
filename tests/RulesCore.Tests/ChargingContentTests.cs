@@ -214,6 +214,24 @@ public class ChargingContentTests
         Assert.DoesNotContain(report.Errors, e => e.Code == "validate.draws-down");
     }
 
+    [Fact]
+    public void A_pool_reference_resolves_against_the_newest_published_revision()
+    {
+        var pack = Fixtures.ChargingPack();
+        var adept = pack.Revisions.Single(r => r.Reference == Fixtures.ChargeAdept);
+        var newer = adept with
+        {
+            RevisionId = Guid.Parse("6f0de000-0000-4000-8000-0000000000f1"),
+            Effects = [.. adept.Effects.Select(e => e is ResourceEffect { ResourceId: "charge" } pool ? pool with { Counts = null } : e)],
+        };
+        Assert.Equal(RevisionStatus.Published, newer.Status);
+        var ordinaryNewest = new InMemoryContentCatalog([.. Fixtures.Pack().Sources, .. pack.Sources], [.. Fixtures.Pack().Revisions, .. pack.Revisions, newer]);
+
+        // The older revision counts up, the newest does not: the draw-down is refused against the newest, as it was before the newer one.
+        Assert.Contains(ContentValidator.Validate(Beam(), ordinaryNewest).Errors, e => e.Code == "validate.draws-down");
+        Assert.DoesNotContain(Validate(Beam()).Errors, e => e.Code == "validate.draws-down");
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData(false)]
@@ -367,6 +385,25 @@ public class ChargingContentTests
         Assert.Null(release.AlsoChange);
         Assert.Equal(0, release.Cost);
         Assert.DoesNotContain(sheet.Diagnostics, d => d.Code == "effect.invalid-formula");
+    }
+
+    [Fact]
+    public void A_drawsDown_roll_is_unavailable_when_the_pinned_pool_does_not_count_up()
+    {
+        var pack = Fixtures.ChargingPack();
+        var revisions = pack.Revisions
+            .Select(r => r.Reference == Fixtures.ChargeAdept
+                ? r with { Effects = [.. r.Effects.Select(e => e is ResourceEffect { ResourceId: "charge" } pool ? pool with { Counts = null } : e)] }
+                : r)
+            .ToList();
+        var ordinary = new InMemoryContentCatalog([.. Fixtures.Pack().Sources, .. pack.Sources], [.. Fixtures.Pack().Revisions, .. revisions]);
+
+        var release = Effect(Sheet(ordinary), "release");
+        Assert.False(Sheet(ordinary).Resources!.Single(r => r.ResourceId == "charge").CountsUp);
+        Assert.False(release.Available);
+        Assert.Contains("charge", release.UnavailableReason, StringComparison.Ordinal);
+
+        Assert.True(Effect(Sheet(), "release").Available); // a counting-up pool: as before
     }
 
     [Fact]

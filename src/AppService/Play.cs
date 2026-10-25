@@ -355,6 +355,9 @@ public sealed partial class TomeStackApp
                 throw new AppValidationException([failure], failure.Code);
             }
             var poolContent = calculated.ResourceContent ?? contentId;
+            // Defence in depth: a draw-down gives uses back, which on an ordinary pool would refill it, so it needs a counting-up pool here.
+            if (calculated.DrawsDown && sheet.Resources?.FirstOrDefault(r => r.Content.ContentId == poolContent && r.ResourceId == ownPool) is not { CountsUp: true })
+                throw new AppValidationException([new("use.unavailable", $"Pool '{ownPool}' does not count up for this character, so roll '{roll.Id}' cannot draw it down.", reference, roll.Id)], "use.unavailable");
             int amount;
             if (calculated.PerUnit is { } perUnit)
             {

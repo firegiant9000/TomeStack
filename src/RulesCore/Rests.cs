@@ -417,7 +417,7 @@ public static class RestPlanner
     /// caps hit points a spent hit die restores; each one is applied to the actual current value, so skipping one never
     /// gives the others more than they restore.
     /// </summary>
-    public static PlayState Apply(PlayState play, RestPlan plan, IReadOnlySet<string> skipped, int maximumHitPoints = int.MaxValue)
+    public static PlayState Apply(PlayState play, RestPlan plan, IReadOnlySet<string> skipped, int maximumHitPoints = int.MaxValue, IReadOnlyList<ToggleValue>? sheetToggles = null)
     {
         ArgumentNullException.ThrowIfNull(play);
         ArgumentNullException.ThrowIfNull(plan);
@@ -458,7 +458,18 @@ public static class RestPlanner
                     play = play with { PactSlotsSpent = 0 };
                     break;
                 case RestChangeKind.Toggle:
-                    play = play with { Toggles = [.. play.Toggles.Where(t => !(t.ContentId == change.ContentId && t.ToggleId == change.ResourceId))] };
+                    var gone = new HashSet<(Guid, string)> { (change.ContentId!.Value, change.ResourceId!) };
+                    // D43: a form that goes off takes the overlays that need it, stored or on (the rule the toggle command and the turn planner share),
+                    // so none stays in play.toggles to come back unpaid when the form is switched on again.
+                    var ending = sheetToggles?.FirstOrDefault(t => t.Content.ContentId == change.ContentId && t.ToggleId == change.ResourceId);
+                    if (ending is not null)
+                    {
+                        var working = sheetToggles!.Select(t => gone.Contains((t.Content.ContentId, t.ToggleId)) ? t with { On = false } : t).ToList();
+                        var stored = play.Toggles.Select(s => (s.ContentId, s.ToggleId)).Where(k => !gone.Contains(k)).ToHashSet();
+                        foreach (var overlay in ToggleGroups.EndingWith(ending, working, stored))
+                            gone.Add((overlay.Content.ContentId, overlay.ToggleId));
+                    }
+                    play = play with { Toggles = [.. play.Toggles.Where(t => !gone.Contains((t.ContentId, t.ToggleId)))] };
                     break;
                 case RestChangeKind.Concentration:
                     play = play with { Concentration = null };
