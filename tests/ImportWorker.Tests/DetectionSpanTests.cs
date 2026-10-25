@@ -96,6 +96,8 @@ public class DetectionSpanTests
         var spell = Assert.Single(found, c => c.ProposedName == "Fixture Ember Lance");
         Assert.Contains("Components: V, S", BlockText(pages, EffectSpan(spell, "spell")), StringComparison.Ordinal);
         Assert.Contains("Level 2 Evocation", BlockText(pages, EffectSpan(spell, "spell")), StringComparison.Ordinal); // the header is part of the read
+        Assert.Contains("ranged spell attack", BlockText(pages, EffectSpan(spell, "spell")), StringComparison.Ordinal); // the description is part of the read
+        Assert.Contains("3d6", BlockText(pages, EffectSpan(spell, "spell")), StringComparison.Ordinal);
         Assert.Contains("Fixture Ember Lance", BlockText(pages, spell.NameSpan!), StringComparison.Ordinal);
 
         var weapon = Assert.Single(found, c => c.ProposedName == "Fixture Hookblade");

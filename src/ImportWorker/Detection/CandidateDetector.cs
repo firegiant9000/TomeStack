@@ -501,7 +501,7 @@ public static partial class CandidateDetector
                 else
                     description.Add(line);
             }
-            var more = Description(units, next, body, u => ReadSpellHeader(u) is not null, out var endPage, out _);
+            var more = Description(units, next, body, u => ReadSpellHeader(u) is not null, out var endPage, out var lastUnit);
             if (more.Count > 0 && description.Count > 0)
                 description.Add("");
             description.AddRange(more);
@@ -575,8 +575,8 @@ public static partial class CandidateDetector
                 Fields = fields,
                 LowConfidenceFields = low,
                 Summary = text.Length == 0 ? null : text,
-                // D64: the effect is read from the header and the detail lines that follow it; the name from the header alone.
-                EffectSpans = SpansById([(effect.Id, SpanOf(units, i, next - 1, DetectionPatterns.SpellComponents, spellConfidence))]),
+                // D64: the effect is read from the header, its detail lines and the description (dice, attack and save come from it); the name from the header alone.
+                EffectSpans = SpansById([(effect.Id, SpanOf(units, i, Math.Max(next - 1, lastUnit),DetectionPatterns.SpellComponents, spellConfidence))]),
                 NameSpan = SpanOf(units, i, i, DetectionPatterns.SpellHeader, spellConfidence),
             };
         }

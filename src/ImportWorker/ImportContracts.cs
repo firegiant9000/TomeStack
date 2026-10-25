@@ -136,6 +136,13 @@ public sealed record DraftCandidate(
 
     /// <summary>D64: where the name was read; null when unknown.</summary>
     public CandidateSpan? NameSpan { get; init; }
+
+    /// <summary>
+    /// Keys this build does not know (a newer build's additive fields) are kept as read and written back, so a candidate saved
+    /// here does not lose them. Null while there are none, so rows without any keep their bytes.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonExtensionData]
+    public Dictionary<string, JsonElement>? Extensions { get; init; }
 }
 
 /// <summary>

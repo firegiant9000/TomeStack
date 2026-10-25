@@ -55,33 +55,60 @@ public class StoredCandidateCompatibilityTests
         Assert.Equal(PreviousBuildRow, JsonSerializer.Serialize(again with { AttachmentSha256 = null, Candidate = again.Candidate with { EffectSpans = null, NameSpan = null } }, RulesJson.Compact));
     }
 
-    /// <summary>The previous build's row shape, with the unknown-field catch-all every record of the row keeps.</summary>
-    private sealed record OldCandidate(Guid Id, JsonElement Page, string Excerpt)
+    /// <summary>The pre-spans (0.7.0) DraftCandidate: no span fields and, as shipped, no catch-all for unknown keys.</summary>
+    private sealed record OldDraftCandidate(
+        Guid Id, Guid SourceId, PageRef Page, string Excerpt, ContentKind ProposedKind, string ProposedName, IReadOnlyList<string> RulesFamilies,
+        IReadOnlyList<Effect> ProposedEffects, double Confidence, IReadOnlyList<string> Uncertainties)
     {
-        [JsonExtensionData]
-        public Dictionary<string, JsonElement>? Extensions { get; init; }
+        public IReadOnlyList<string> UnresolvedReferences { get; init; } = [];
+        public IReadOnlyDictionary<string, string> Fields { get; init; } = new Dictionary<string, string>();
+        public IReadOnlyList<string> LowConfidenceFields { get; init; } = [];
+        public string? Summary { get; init; }
     }
 
-    private sealed record OldRow(Guid Id, int SchemaVersion, OldCandidate Candidate, string Status)
+    /// <summary>The pre-spans StoredCandidate (the fields this test needs): its row-level catch-all is what keeps unknown top-level keys.</summary>
+    private sealed record OldStoredCandidate(Guid Id, int SchemaVersion, Guid JobId, OldDraftCandidate Candidate, CandidateStatus Status, DateTimeOffset UpdatedAt)
     {
         [JsonExtensionData]
         public Dictionary<string, JsonElement>? Extensions { get; init; }
     }
 
     [Fact]
-    public void Spans_survive_an_older_reader()
+    public void A_pre_spans_build_keeps_the_attachment_hash_but_drops_candidate_spans_when_it_saves()
     {
         var read = JsonSerializer.Deserialize<StoredCandidate>(PreviousBuildRow, RulesJson.Compact)!;
         var newer = JsonSerializer.Serialize(
-            read with { AttachmentSha256 = new string('b', 64), Candidate = read.Candidate with { EffectSpans = new Dictionary<string, CandidateSpan> { ["bonus-1"] = Span } } },
+            read with
+            {
+                AttachmentSha256 = new string('b', 64),
+                Candidate = read.Candidate with { EffectSpans = new Dictionary<string, CandidateSpan> { ["bonus-1"] = Span }, NameSpan = Span },
+            },
             RulesJson.Compact);
 
-        // A reader of the old shape that keeps what it does not know (extension data) writes the spans back unchanged.
-        var old = JsonSerializer.Deserialize<OldRow>(newer, RulesJson.Compact)!;
-        var rewritten = JsonSerializer.Deserialize<StoredCandidate>(JsonSerializer.Serialize(old, RulesJson.Compact), RulesJson.Compact)!;
+        var old = JsonSerializer.Deserialize<OldStoredCandidate>(newer, RulesJson.Compact)!;
+        var saved = JsonSerializer.Serialize(old, RulesJson.Compact);
+        var rewritten = JsonSerializer.Deserialize<StoredCandidate>(saved, RulesJson.Compact)!;
 
-        Assert.Equal(new string('b', 64), rewritten.AttachmentSha256);
-        Assert.Equal(Span, rewritten.Candidate.EffectSpans!["bonus-1"]);
+        Assert.Equal(new string('b', 64), rewritten.AttachmentSha256); // a row-level key: kept by the row's extension data
+        Assert.Contains("\"attachmentSha256\"", saved, StringComparison.Ordinal);
+        Assert.Null(rewritten.Candidate.EffectSpans); // nested keys: the old DraftCandidate has no catch-all, so they are dropped
+        Assert.Null(rewritten.Candidate.NameSpan);
+        Assert.DoesNotContain("effectSpans", saved, StringComparison.Ordinal);
+        Assert.DoesNotContain("nameSpan", saved, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_draft_candidate_catch_all_keeps_an_unknown_nested_key_through_a_read_and_a_save()
+    {
+        var withFuture = PreviousBuildRow.Replace("initiative.\"},\"status\"", "initiative.\",\"futureField\":{\"a\":[1,2]}},\"status\"", StringComparison.Ordinal); // unknown keys are written last
+        Assert.NotEqual(PreviousBuildRow, withFuture);
+
+        var read = JsonSerializer.Deserialize<StoredCandidate>(withFuture, RulesJson.Compact)!;
+        var saved = JsonSerializer.Serialize(read, RulesJson.Compact);
+
+        Assert.Contains("futureField", read.Candidate.Extensions!.Keys);
+        Assert.Contains("\"futureField\":{\"a\":[1,2]}", saved, StringComparison.Ordinal);
+        Assert.Equal(withFuture, saved); // and in place: nothing else moved
     }
 
     [Fact]
