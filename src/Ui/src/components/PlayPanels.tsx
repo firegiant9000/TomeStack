@@ -457,6 +457,20 @@ function ResourceCard({ resource, act, level = 4 }: { resource: ResourceValue; a
         </ul>
       )}
       <ExplainList label={`${resource.label} maximum`} steps={resource.trace} />
+      {resource.trace.length > 0 && (
+        <details>
+          <summary>How the maximum is calculated</summary>
+          <ul>
+            {resource.trace.map((step) => (
+              <li key={step.order}>
+                {step.description} = {step.result}
+                {step.inputs && ` (${step.inputs.map((i) => `${i.name} ${i.value}`).join(', ')})`}
+                {step.origin.sourceTitle && ` · ${step.origin.sourceTitle}${step.origin.page ? `, ${pageText(step.origin.page)}` : ''}`}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
     </li>
   );
 }
