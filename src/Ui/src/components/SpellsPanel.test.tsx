@@ -70,6 +70,22 @@ it('sends the chosen mode with a spell attack roll and none with its dice (R93)'
   expect(roll).toHaveBeenLastCalledWith({ spell: ref(20) });
 });
 
+it('a secondary caster shows a "Why?" for its spell attack bonus and one for its save DC (D72 X04)', () => {
+  const v = view();
+  const second = {
+    ...v.sheet.spellcasting![0]!, content: ref(2), name: 'Fixture Second Source', primary: false,
+    attackTrace: [{ order: 1, operation: 'add', description: 'Proficiency bonus', amount: 2, result: 5, origin }],
+    saveDcTrace: [{ order: 1, operation: 'add', description: 'Proficiency bonus', amount: 2, result: 13, origin }],
+  };
+  v.sheet.spellcasting = [v.sheet.spellcasting![0]!, second];
+  panel(v);
+  expect(screen.getAllByText('Why?')).toHaveLength(2);
+  const attack = screen.getByRole('list', { hidden: true, name: 'Why Fixture Second Source spell attack bonus' });
+  const dc = screen.getByRole('list', { hidden: true, name: 'Why Fixture Second Source spell save DC' });
+  expect(attack.textContent).toMatch(/\+2 Proficiency bonus/);
+  expect(dc.closest('details')!.open).toBe(false);
+});
+
 it('filters a caster’s spells by name, keeps the Prepared and Concentrate names of the rows shown, and says how many (D30)', async () => {
   const user = userEvent.setup();
   panel(view());

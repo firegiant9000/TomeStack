@@ -211,6 +211,7 @@ it('shows the riders in the attack trace', () => {
   const trace = screen.getByRole('list', { name: 'How the Testy strike attack is calculated' });
   expect(trace.textContent).toMatch(/Fixture Blazing Mode rider: 4d8 added to the damage/);
   expect(trace.textContent).not.toMatch(/\+0 = /); // a step with no amount does not claim one
+  expect(trace.textContent).toMatch(/Starts at 3: Dexterity modifier/); // D72: the shared sentence renderer
 });
 
 it('says a replacing attack replaces one attack of the Attack action', () => {
@@ -327,6 +328,26 @@ it('an action shows its save DC, area, range and targets as text', () => {
   cleanup();
   render(<ActionsPanel view={actionsView([{ id: 'plain', type: 'roll', label: 'Plain', dice: '1d4', available: true }])} roll={() => {}} act={() => {}} />);
   expect(screen.getByRole('button', { name: 'Roll Plain (1d4)' }).closest('li')!.textContent).not.toMatch(/Save|Range|undefined|\(\)/);
+});
+
+it('an action with a save trace offers "Why DC 13?", closed, ending with the DC; none without a trace (D72 X04)', () => {
+  const rules = { kind: 'rulesPolicy' };
+  const beam = {
+    id: 'beam', type: 'roll', label: 'Beam', dice: '4d6', activation: 'action', available: true, saveAbility: 'dex', saveDc: 13,
+    saveTrace: [
+      { order: 1, operation: 'base', description: 'Base DC', amount: 8, result: 8, origin: rules },
+      { order: 2, operation: 'add', description: 'Proficiency bonus', amount: 3, result: 11, origin: rules },
+      { order: 3, operation: 'derive', description: 'Save DC', result: 13, origin: rules },
+    ],
+  };
+  render(<ActionsPanel view={actionsView([beam])} roll={() => {}} act={() => {}} />);
+  const why = screen.getByText('Why DC 13?').closest('details')!;
+  expect(why.open).toBe(false);
+  const items = within(why).getAllByRole('listitem', { hidden: true });
+  expect(items[items.length - 1]!.textContent).toBe('Save DC: 13');
+  cleanup();
+  render(<ActionsPanel view={actionsView([{ ...beam, saveTrace: [] }])} roll={() => {}} act={() => {}} />);
+  expect(screen.queryByText(/^Why DC/)).toBeNull();
 });
 
 it("the per-unit amount box rolls with that amount and the record's Spend spends exactly it", async () => {

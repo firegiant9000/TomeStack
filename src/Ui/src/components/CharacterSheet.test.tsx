@@ -1289,6 +1289,32 @@ it('a save with automatic advantage says so on its button and in its accessible 
   expect(screen.getByRole('button', { name: 'Roll Initiative' })).toBeTruthy(); // a field with no reason is unchanged
 });
 
+it('a field card shows a closed "Why?" above its trace table, with the proficiency sentence (D72 X04)', async () => {
+  const user = userEvent.setup();
+  const rules = { kind: 'rulesPolicy', rulesFamily: 'srd-5.2.1' } as const;
+  const v = statsWith('save.wis', 'Wisdom save', 4, 'modifier');
+  const saved = v.sheet.fields.find((f) => f.field === 'save.wis')!;
+  saved.trace = [
+    { order: 1, operation: 'base', description: 'Wisdom modifier', amount: 1, result: 1, origin: rules },
+    { order: 2, operation: 'add', description: 'Proficiency bonus', amount: 3, result: 4, origin: rules },
+  ];
+  renderSheet(v, 'stats');
+  await user.click(screen.getByRole('heading', { name: 'Wisdom save: +4' }));
+  const why = screen.getByText('Why?').closest('details')!;
+  expect(why.open).toBe(false);
+  expect(why.compareDocumentPosition(screen.getByRole('table', { name: /How wisdom save is calculated/ })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  const list = within(why).getByRole('list', { hidden: true, name: 'Why Wisdom save' });
+  expect(list.textContent).toMatch(/\+3 Proficiency bonus/);
+  expect(why.closest('[aria-live]')).toBeNull();
+});
+
+it('a field with an empty trace shows no "Why?"', async () => {
+  const user = userEvent.setup();
+  renderSheet(statsWith('save.dex', 'Dexterity save', 1, 'modifier'), 'stats');
+  await user.click(screen.getByRole('heading', { name: 'Dexterity save: +1' }));
+  expect(screen.queryByText('Why?')).toBeNull();
+});
+
 it('advantage and disadvantage together read as normal with the reason', async () => {
   const user = userEvent.setup();
   const mode = { automatic: 'normal' as const, reasons: [modeReason('advantage', 'Fixture Swift Instinct'), modeReason('disadvantage', 'Fixture Heavy Armor')] };

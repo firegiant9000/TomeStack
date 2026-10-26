@@ -35,6 +35,7 @@ import { RestPanel } from './RestPanel';
 import { logged, rollLogLimit, type LoggedRoll } from './RollLog';
 import { SheetSummary } from './SheetSummary';
 import { SpellsPanel } from './SpellsPanel';
+import { ExplainList } from './ExplainList';
 import { TraceTable } from './TraceTable';
 import { UpdatesPanel } from './UpdatesPanel';
 import { VttExportPanel } from './VttExportPanel';
@@ -119,6 +120,7 @@ function FieldCard({ value, labels, onOverride, onRoll, onReportGap }: FieldProp
             ))}
           </ul>
         )}
+        <ExplainList label={value.label} steps={value.trace} />
         <TraceTable label={value.label} trace={value.trace} labels={labels} />
         {value.warnings.length > 0 && (
           <ul className="warnings" aria-label={`${value.label} warnings`}>

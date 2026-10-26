@@ -20,11 +20,13 @@ import type {
   RollTarget,
   ToggleValue,
 } from '../api/types';
+import { explainSteps } from '../explain';
 import { hitDiceText, rollBonus } from '../format';
 import { rollButtonSuffix } from '../rollModes';
 import { diceLine, rollKey, rollModeText } from '../rollText';
 import { announceRollsOn, diceAnimationOn } from '../settings';
 import { damageTypeLabel, damageTypes, normalizeDamageType } from './customModel';
+import { ExplainList } from './ExplainList';
 import { Pips } from './Pips';
 
 /** The one name for the inspiration toggle and its summary line: "Heroic Inspiration" in 5.2.1, "Inspiration" otherwise. */
@@ -454,20 +456,7 @@ function ResourceCard({ resource, act, level = 4 }: { resource: ResourceValue; a
           ))}
         </ul>
       )}
-      {resource.trace.length > 0 && (
-        <details>
-          <summary>How the maximum is calculated</summary>
-          <ul>
-            {resource.trace.map((step) => (
-              <li key={step.order}>
-                {step.description} = {step.result}
-                {step.inputs && ` (${step.inputs.map((i) => `${i.name} ${i.value}`).join(', ')})`}
-                {step.origin.sourceTitle && ` · ${step.origin.sourceTitle}${step.origin.page ? `, ${pageText(step.origin.page)}` : ''}`}
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
+      <ExplainList label={`${resource.label} maximum`} steps={resource.trace} />
     </li>
   );
 }
@@ -870,6 +859,9 @@ function RollItem({
       )}
       {diceless && !effect.resourceId && effect.text && <span className="hint"> · {effect.text}</span>}
       {details && <p className="hint">{details}</p>}
+      {effect.saveDc !== undefined && effect.saveTrace && (
+        <ExplainList label={`${label} save DC`} steps={effect.saveTrace} summary={`Why DC ${effect.saveDc}?`} />
+      )}
       {perUnit && (
         <div className="inline-form">
           <label className="field">
@@ -934,11 +926,8 @@ function AttackItem({
           {feature && attack.resourceId ? ` · uses ${attack.cost ?? 1} ${pool?.label ?? 'of a resource'} (spend it from the roll)` : ''}
         </p>
         <ul aria-label={`How the ${attack.name} attack is calculated`}>
-          {attack.trace.map((step) => (
-            <li key={step.order}>
-              {/* A step with no amount (damage dice, a rider that lost) is the sentence alone: no invented "+0". */}
-              {typeof step.amount === 'number' ? `${step.description}: ${signed(step.amount)} = ${signed(step.result)}` : step.description}
-            </li>
+          {explainSteps(attack.trace, 'attack').map((sentence, i) => (
+            <li key={i}>{sentence}</li>
           ))}
         </ul>
         {attack.warnings.length > 0 && (
