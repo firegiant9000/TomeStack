@@ -190,3 +190,47 @@ No art, logos, trade dress, product names or other publications. No monsters or 
 - No SRD armor or equipment is bundled. Adding the armor table needs this review extended (SPEC Q-03).
 - Frenzy (5.2.1) offers a 2d6 roll for Rage Damage +2 (Barbarian levels 1–8).
 - Advantage-granting features (Rage, Danger Sense, Reckless Attack) stay text only. Since M2 item 2, the sheet shows them as reference-only features, and the player picks advantage for the roll.
+
+## SRD 5.1 races (2026-10-26, D60 amended 2026-10-26)
+
+**Document:** `SRD_CC_v5.1.pdf`, downloaded again on 2026-10-26 from media.wizards.com. Its SHA-256 matches the table above. The file stays outside the repository.
+
+**Scope reviewed and approved for bundling** (CC-BY-4.0, the same source record, attribution and modification notice as the other SRD 5.1 packs; nothing outside these pages):
+
+| Pack file | Content | Pages |
+| --- | --- | --- |
+| `srd-5.1-origins.json` | Dwarf (p. 3) with Hill Dwarf (p. 4) | pp. 3–4 |
+| | Elf with High Elf | p. 4 |
+| | Halfling (pp. 4–5) with Lightfoot (p. 5) | pp. 4–5 |
+| | Human | p. 5 |
+| | Dragonborn (pp. 5–6), with the ten rows of the Draconic Ancestry table (p. 5) | pp. 5–6 |
+| | Gnome with Rock Gnome | p. 6 |
+| | Half-Elf (pp. 6–7), with its ability score and skill choices | pp. 6–7 |
+| | Tiefling, with Infernal Legacy's 3rd- and 5th-level spells | p. 7 |
+| | The "Subraces" paragraph (its first two sentences, in each subrace choice's text) | p. 3 |
+
+- **Method:** the scripted method of the casters and the Fighter. The text was transcribed from pypdf layout mode, with line breaks and hyphenation repaired. A second script then checked the pack against **two independent parses** of pp. 3–7: layout mode, with the two columns split by position and read in order, and plain mode (reading order, with its mid-word spaces ignored).
+  - **Every SRD sentence** in a summary or effect text was found in both parses: 234 sentences, 0 mismatches.
+  - **Numbers and table cells** were read from each parse by pattern and compared with the encoded effects: each race's speed, ability increases (subrace included) and darkvision range, and the three cells of each Draconic Ancestry row plus the resistance it encodes. 72 cells, 0 mismatches.
+  - The check was run once on a copy with one changed number and one changed word; it reported both.
+  - The scripts stay outside the repository, like the others.
+- **Structure:**
+  - Each race is a `species` revision. Its summary keeps the race's introduction, Size, Speed, Darkvision, the traits that stay text, and the Languages line shortened to the languages, as the Half-Orc's does. Age, Alignment and the descriptive sentences are left out.
+  - A subrace is a `feature` revision offered by a one-option `choice` on its race, the SRD's own structure ("Members of a subrace have the traits of the parent race in addition to the traits specified for their subrace", p. 3), as the M1 Barbarian offers its one SRD path. A chosen subrace is species content, so its ability increase applies under 2014 rules (`RulesFamilyPolicy.AbilityIncreaseSource`).
+  - The Dragonborn chooses one of ten `Draconic Ancestry: <dragon>` features, each restating its table row ("Dragon: Red. Damage Type: Fire. Breath Weapon: 15 ft. cone (Dex. save).") and granting the resistance.
+  - The Half-Elf chooses two of five ability score features (not Charisma: "two other ability scores") and two of eighteen skill features.
+- **Encoded as effects:**
+  - ability increases;
+  - walking speed as a `replace` on `speed` (25 or 30 feet; content schema v10, so these races are published at v10);
+  - damage resistances (Dwarf poison, Dragonborn by ancestry, Tiefling fire; content v10);
+  - skill proficiencies (Keen Senses; Skill Versatility);
+  - weapon proficiencies (Dwarven Combat Training: battleaxe, handaxe, light hammer, warhammer; Elf Weapon Training: longsword, shortsword, shortbow, longbow);
+  - Dwarven Toughness (+1 hit point per level);
+  - the Breath Weapon's use (1, back on a short or long rest);
+  - Infernal Legacy's hellish rebuke (from 3rd level) and darkness (from 5th level), each once per long rest, as features the Tiefling grants at those character levels.
+
+  Each revision is published at the lowest content schema version it needs (`SrdOrigins51Tests`).
+- **Reference text only** (no field or effect type exists for them on `main`): size; darkvision; languages; tool proficiencies (Dwarf, Rock Gnome); the High Elf cantrip and the Tiefling's thaumaturgy; advantage on saves (Dwarven Resilience's half, Fey Ancestry, Brave, Gnome Cunning); Lucky; Trance; Stonecunning; Artificer's Lore; Tinker; Halfling Nimbleness; Naturally Stealthy. **The Breath Weapon's damage** (2d6, 3d6 at 6th level, 4d6 at 11th, 5d6 at 16th) and its save DC (8 + Constitution modifier + proficiency bonus) stay in its text: dice that grow with character level need a scale that species content cannot use on `main` (`scale` belongs to classes and subclasses), so the player rolls it by hand.
+- **Not taken:** Age, Alignment, the races' descriptive and Language flavour sentences, and the "Racial Traits" introduction (p. 3) apart from the two "Subraces" sentences.
+- **Checks:** `SrdOrigins51Tests` (each race through an invented level-1 fixture, `tests/RulesFixtures/characters/srd51-<race>-l1.json`: scores, speed, size, choices, resistances, proficiencies, the level-gated Infernal Legacy uses; every revision validates at its lowest version; no id collides with other bundled content), and `SrdPackTests` (the source record, the nine races once each).
+- **Done 2026-10-26:** `srd-5.1-origins.json` has 47 revisions: 8 races, 4 subraces, 10 draconic ancestries, 5 Half-Elf ability score options, 18 Half-Elf skill options and 2 Infernal Legacy features. `srd-5.1.json` is unchanged.

@@ -2252,7 +2252,7 @@ public static class CharacterCalculator
                 return value;
             }));
         }
-        // D24: speed. The bundled species carry no speed data, so the base is the SRD's common 30 feet by rules policy. From
+        // D24: speed. The M1 species (Half-Orc, SRD 5.2.1 Dwarf) carry no speed data, so the base is the SRD's common 30 feet by rules policy. From
         // content v10 a species (homebrew) sets its own with a `replace` modifier on speed, which replaces this base before
         // bonuses; otherwise a different speed is an override on Stats.
         specs.Add(new(FieldIds.Speed, "Speed", "feet", [], (c, steps) =>
