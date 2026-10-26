@@ -43,6 +43,8 @@ it('shows the proficiency bonus and one column per scale', async () => {
   const first = within(table).getAllByRole('row')[1]!;
   expect(within(first).getByRole('rowheader').textContent).toBe('1');
   expect(within(first).getAllByRole('cell').map((c) => c.textContent)).toContain('2');
+  const fifth = within(table).getAllByRole('row')[5]!;
+  expect(within(fifth).getAllByRole('cell').at(-1)!.textContent).toBe('—'); // an empty scale cell reads like its siblings
 });
 
 it('opens a feature through its Edit button', async () => {

@@ -73,7 +73,7 @@ it('says each omitted and blocking row in words, never as a code', async () => {
   const region = await screen.findByRole('region', { name: 'Preflight: shared package' });
   expect(vi.mocked(client.packagePreflight)).toHaveBeenCalledWith({ kind: 'package', selection: ['ch-1'] });
   expect(within(region).getByRole('alert').textContent).toMatch(/Borrowed Rules: not marked as your own shareable work/);
-  expect(region.textContent).toMatch(/Ink Trick \(Ink Imports\): holds material imported from a PDF, so it is never shared/);
+  expect(region.textContent).toMatch(/Ink Trick \(Ink Imports\): holds imported material \(from a PDF or a Markdown file\), so it is never shared/);
   expect(region.textContent).toMatch(/Plain Draft \(Lantern Notes\): a draft; only published content is shared/);
   expect(region.textContent).not.toMatch(/preflight\./);
   expect(within(region).getByText('Included (1)')).toBeTruthy();
@@ -209,6 +209,36 @@ it('the campaign-pack share asks again when the campaign is edited and saved whi
   expect(vi.mocked(client.packagePreflight)).toHaveBeenLastCalledWith({ kind: 'campaignPack', selection: ['camp-1'] });
   const again = await screen.findByRole('region', { name: 'Share Lantern Table' });
   await waitFor(() => expect(within(again).getByRole<HTMLButtonElement>('button', { name: 'Save campaign pack…' }).disabled).toBe(false));
+});
+
+it('a campaign-pack preview that answers late does not overwrite the one asked after the save', async () => {
+  const user = userEvent.setup();
+  const before = { id: 'camp-1', name: 'Lantern Table', rulesFamily: 'srd-5.1' as const, allowedSources: ['src-1'] };
+  const after = { ...before, allowedSources: [], updatedAt: 't2' };
+  const preview = (fileName: string) => ({
+    fileName, campaignId: 'camp-1', name: 'Lantern Table', rulesFamily: 'srd-5.1' as const, included: [], referenced: [], leftOut: [], revisions: 0, warnings: [],
+  });
+  let answerFirst: (value: ReturnType<typeof preview>) => void = () => {};
+  vi.mocked(client.listCampaigns).mockResolvedValue([before]);
+  vi.mocked(client.saveCampaign).mockResolvedValue(after as never);
+  vi.mocked(client.campaignPackPreview)
+    .mockReturnValueOnce(new Promise((resolve) => { answerFirst = resolve; }))
+    .mockResolvedValue(preview('New-pack.zip'));
+  vi.mocked(client.packagePreflight).mockResolvedValue(clear);
+  render(<CampaignsPanel rulesFamilies={[]} onError={() => {}} onStatus={() => {}} />);
+
+  await user.click(await screen.findByRole('button', { name: 'Share Lantern Table…' }));
+  const share = await screen.findByRole('region', { name: 'Share Lantern Table' });
+  vi.mocked(client.listCampaigns).mockResolvedValue([after]);
+  await user.click(screen.getByRole('button', { name: 'Edit Lantern Table' }));
+  await user.click(await screen.findByRole('checkbox', { name: /Lantern Notes/ }));
+  await user.click(screen.getByRole('button', { name: 'Save campaign' }));
+  await within(share).findByText(/New-pack\.zip/);
+
+  answerFirst(preview('Old-pack.zip')); // the pre-save answer arrives last
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(within(screen.getByRole('region', { name: 'Share Lantern Table' })).queryByText(/Old-pack\.zip/)).toBeNull();
+  expect(within(screen.getByRole('region', { name: 'Share Lantern Table' })).getByText(/New-pack\.zip/)).toBeTruthy();
 });
 
 it('the character-package export checks a share, and a backup keeps its own rule', async () => {

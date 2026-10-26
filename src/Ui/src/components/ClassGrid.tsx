@@ -90,7 +90,7 @@ function Grid({ view, onEditFeature }: { view: ClassTableView; onEditFeature: (c
                 </td>
               )}
               {view.columns.map((c) => (
-                <td key={c}>{r.scales[c] ?? ''}</td>
+                <td key={c}>{r.scales[c] || '—'}</td>
               ))}
               {slots && <td>{r.slots && r.slots.length > 0 ? r.slots.join(' / ') : '—'}</td>}
               {pact && <td>{(r.pactSlots ?? 0) > 0 ? `${r.pactSlots} at spell level ${r.pactLevel}` : '—'}</td>}

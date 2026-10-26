@@ -91,6 +91,19 @@ public class MarkdownImportJobTests
     }
 
     [Fact]
+    public void Starting_a_markdown_import_marks_the_source_import_derived()
+    {
+        using var temp = new TempApp();
+        var source = Homebrew(temp);
+
+        Import(temp, source.Id, Unique(ClassFixture)); // nothing is accepted
+
+        var after = temp.App.Store.FindSource(source.Id)!;
+        Assert.True(after.ImportDerived);
+        Assert.False(after.Redistributable);
+    }
+
+    [Fact]
     public void Imported_candidates_are_not_active_until_accepted()
     {
         using var temp = new TempApp();

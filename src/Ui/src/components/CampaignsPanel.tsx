@@ -26,7 +26,18 @@ function CampaignPackForm({ campaign, onError, onStatus }: { campaign: Campaign 
   // The preview is asked again when the campaign is saved with other sources.
   const version = `${campaign.updatedAt ?? ''}~${campaign.allowedSources.join(',')}`;
   useEffect(() => {
-    client.campaignPackPreview(campaign.id).then(setPreview).catch(onError);
+    let current = true;
+    client
+      .campaignPackPreview(campaign.id)
+      .then((result) => {
+        if (current) setPreview(result);
+      })
+      .catch((error: unknown) => {
+        if (current) onError(error);
+      });
+    return () => {
+      current = false;
+    };
   }, [campaign.id, version, onError]);
 
   async function save() {

@@ -91,7 +91,7 @@ public static class Preflight
     {
         null => new Diagnostic("pack.source-missing", $"Source {id} is not installed."),
         _ when bundled.Contains(id) => new Diagnostic("pack.source-bundled", $"'{source.Title}' is bundled with TomeStack; everyone has it already, so a pack never carries it."),
-        { ImportDerived: true } => new Diagnostic("pack.source-import-derived", $"'{source.Title}' holds material imported from a PDF, so it is never shared."),
+        { ImportDerived: true } => new Diagnostic("pack.source-import-derived", $"'{source.Title}' holds imported material (from a PDF or a Markdown file), so it is never shared."),
         { Origin: SourceOrigin.Received } => new Diagnostic("pack.source-received", $"'{source.Title}' came from someone else's package, so you cannot share it as your own work."),
         { Redistributable: false } or { ShareConfirmedAt: null } => new Diagnostic("pack.source-not-shareable", $"'{source.Title}' is not marked as shareable. Mark it as shareable (you confirm it is your own work) first."),
         _ => null,

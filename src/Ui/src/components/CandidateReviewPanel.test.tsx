@@ -1252,6 +1252,7 @@ it('selecting an effect highlights its span', async () => {
   expect(Array.from(marks).map((m) => m.textContent)).toEqual(['Second block', 'Third block\nwith two lines']);
   expect(region.textContent).toContain('First block');
   expect(region.textContent).toContain('Fourth block');
+  expect(region.getAttribute('tabindex')).toBe('0'); // the scrollable text is reachable by keyboard
 });
 
 it('candidate without spans shows the whole excerpt', async () => {

@@ -2,7 +2,7 @@ import type { PreflightReport } from '../api/types';
 
 /** Import Lab L5: the reason codes of `package.preflight`, in words. */
 const reasonText: Record<string, string> = {
-  'preflight.import-derived': 'holds material imported from a PDF, so it is never shared',
+  'preflight.import-derived': 'holds imported material (from a PDF or a Markdown file), so it is never shared',
   'preflight.not-redistributable': 'not marked as your own shareable work, so it is not yours to share',
   'preflight.draft': 'a draft; only published content is shared',
   'preflight.attachment': 'a PDF and the text read from it never travel in a share',

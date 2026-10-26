@@ -1078,7 +1078,7 @@ function SpanReview({
         {fits && blocks && span && effect ? (
           <>
             <figcaption>Page text from {pageText({ start: span.page })}</figcaption>
-            <div role="region" aria-labelledby={buttonId(effect.id)} className="excerpt span-text">
+            <div role="region" aria-labelledby={buttonId(effect.id)} className="excerpt span-text" tabIndex={0}>
               <p className="hint">{lines}</p>
               {blocks.map((b, i) => (
                 <p key={i} className="span-block">
