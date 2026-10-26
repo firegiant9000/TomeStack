@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Security.Cryptography;
+using System.Text.RegularExpressions;
 using TomeStack.AppService.Persistence;
 using TomeStack.RulesCore;
 
@@ -104,45 +105,31 @@ public sealed partial class PackageService
     public LibraryBackupResult WriteLibraryBackup(Stream output)
     {
         ArgumentNullException.ThrowIfNull(output);
-        var plan = PlanLibrary(verifyPdfs: true);
-        var files = new SortedDictionary<string, (string Kind, byte[] Bytes)>(StringComparer.Ordinal);
-        var withPdf = plan.Attachments.Select(a => a.AttachmentId).ToHashSet();
-        foreach (var source in plan.Sources)
-        {
-            // Unlike a package, the backup keeps the source's PDF link (a restore re-links it), unless the PDF is left out.
-            var attachment = source.AttachmentId is { } id && withPdf.Contains(id) ? source.AttachmentId : null;
-            files[$"sources/{source.Id:D}.json"] = ("source", Json(source with { PdfRef = null, AttachmentId = attachment }));
-        }
-        foreach (var revision in plan.Revisions)
-            files[$"content/{revision.RevisionId:D}.json"] = ("contentRevision", Json(revision));
-        foreach (var character in plan.Characters)
-            files[$"characters/{character.Id:D}.json"] = ("character", Json(character));
-        foreach (var campaign in plan.Campaigns)
-            files[$"campaigns/{campaign.Id:D}.json"] = ("campaign", Json(campaign));
-        foreach (var note in plan.GapNotes)
-            files[$"gaps/{note.Id:D}.json"] = ("gapNote", Json(note));
-        foreach (var attachment in plan.Attachments)
-            files[$"{AttachmentFolder}{attachment.AttachmentId:D}.json"] = ("attachment", Json(attachment));
-        // M6 slice 3 (ADR-011): installed extension files, without their grants: a restore brings them back turned off.
-        var extensionsLeftOut = new List<string>();
-        foreach (var installed in plan.Extensions)
-        {
-            if (Extensions.ExtensionFiles.ReadIntact(ExtensionDirectory, installed.Sha256) is { } bytes)
-                files[$"{ExtensionFolder}{installed.Sha256}.zip"] = ("extension", bytes);
-            else
-                extensionsLeftOut.Add(installed.Manifest.Name);
-        }
-        var withExtensions = files.Keys.Any(p => p.StartsWith(ExtensionFolder, StringComparison.Ordinal));
-        var pdfs =plan.Attachments.Where(a => a.Mode == AttachmentMode.Managed).DistinctBy(a => a.Sha256).OrderBy(a => a.Sha256, StringComparer.Ordinal).ToList();
+        return WriteLibraryBackup(output, PlanLibrary(verifyPdfs: true));
+    }
 
-        // The reader's limits, checked before anything is written: a backup that could not be restored is worse than none.
-        // A restore reads every entry with the package entry limit too.
+    /// <summary>
+    /// The reader's limits, checked before anything is written: a backup that could not be restored is worse than none.
+    /// A restore reads every entry with the package entry limit too.
+    /// </summary>
+    private static void RequireWithinLibraryLimits(SortedDictionary<string, (string Kind, byte[] Bytes)> files, List<Attachment> pdfs)
+    {
         RequireEntriesWithinLimit(files.Select(f => (f.Key, f.Value.Bytes.LongLength)));
         var jsonBytes = files.Values.Sum(f => f.Bytes.LongLength);
         if (files.Count + pdfs.Count + 1 > MaxLibraryEntries || jsonBytes > MaxLibraryJsonBytes || pdfs.Count > MaxLibraryPdfs || pdfs.Sum(p => p.ByteLength) > MaxLibraryPdfBytes)
         {
             throw new PackageException([new("backup.too-large", $"This library is larger than a full backup can hold ({MaxLibraryEntries:N0} entries, {MaxLibraryJsonBytes / (1024 * 1024)} MB of data, {MaxLibraryPdfs:N0} PDFs or {MaxLibraryPdfBytes / (1024L * 1024 * 1024)} GB of PDFs). Nothing was written. Back up characters one at a time and keep copies of the PDFs.")]);
         }
+    }
+
+    /// <param name="plan">Planned with <c>verifyPdfs: true</c>: every managed PDF in it matches its hash.</param>
+    private LibraryBackupResult WriteLibraryBackup(Stream output, LibraryPlan plan)
+    {
+        var extensionsLeftOut = new List<string>();
+        var files = LibraryFiles(plan, extensionsLeftOut);
+        var withExtensions = files.Keys.Any(p => p.StartsWith(ExtensionFolder, StringComparison.Ordinal));
+        var pdfs = ManagedPdfs(plan);
+        RequireWithinLibraryLimits(files, pdfs);
 
         var createdAt = time.GetUtcNow();
         var manifest = new PackageManifest
@@ -155,11 +142,7 @@ public sealed partial class PackageService
             CreatedAt = createdAt,
             AppVersion = typeof(PackageService).Assembly.GetName().Version?.ToString(3) ?? "0.0.0",
             Characters = [.. plan.Characters.Select(c => c.Id)],
-            Entries =
-            [
-                .. files.Select(f => new PackageEntry(f.Key, f.Value.Kind, Hash(f.Value.Bytes), f.Value.Bytes.LongLength)),
-                .. pdfs.Select(a => new PackageEntry($"{PdfFolder}{a.Sha256}.pdf", "pdf", a.Sha256!, a.ByteLength)),
-            ],
+            Entries = LibraryEntries(files, pdfs),
             Notices = [.. plan.Sources.Select(Notice)],
             RevisionOrder = [.. plan.Revisions.Select(r => r.RevisionId)],
             AttachmentPolicy = PackageManifest.LibraryAttachmentPolicy,
@@ -190,6 +173,48 @@ public sealed partial class PackageService
             .ToList();
         return new(Summary(plan).FileName, written, Summary(plan), warnings);
     }
+
+    /// <summary>The JSON entries of a library backup of <paramref name="plan"/>, by path; extensions whose file is unreadable are named in <paramref name="extensionsLeftOut"/>.</summary>
+    private SortedDictionary<string, (string Kind, byte[] Bytes)> LibraryFiles(LibraryPlan plan, List<string> extensionsLeftOut)
+    {
+        var files = new SortedDictionary<string, (string Kind, byte[] Bytes)>(StringComparer.Ordinal);
+        var withPdf = plan.Attachments.Select(a => a.AttachmentId).ToHashSet();
+        foreach (var source in plan.Sources)
+        {
+            // Unlike a package, the backup keeps the source's PDF link (a restore re-links it), unless the PDF is left out.
+            var attachment = source.AttachmentId is { } id && withPdf.Contains(id) ? source.AttachmentId : null;
+            files[$"sources/{source.Id:D}.json"] = ("source", Json(source with { PdfRef = null, AttachmentId = attachment }));
+        }
+        foreach (var revision in plan.Revisions)
+            files[$"content/{revision.RevisionId:D}.json"] = ("contentRevision", Json(revision));
+        foreach (var character in plan.Characters)
+            files[$"characters/{character.Id:D}.json"] = ("character", Json(character));
+        foreach (var campaign in plan.Campaigns)
+            files[$"campaigns/{campaign.Id:D}.json"] = ("campaign", Json(campaign));
+        foreach (var note in plan.GapNotes)
+            files[$"gaps/{note.Id:D}.json"] = ("gapNote", Json(note));
+        foreach (var attachment in plan.Attachments)
+            files[$"{AttachmentFolder}{attachment.AttachmentId:D}.json"] = ("attachment", Json(attachment));
+        // M6 slice 3 (ADR-011): installed extension files, without their grants: a restore brings them back turned off.
+        foreach (var installed in plan.Extensions)
+        {
+            if (Extensions.ExtensionFiles.ReadIntact(ExtensionDirectory, installed.Sha256) is { } bytes)
+                files[$"{ExtensionFolder}{installed.Sha256}.zip"] = ("extension", bytes);
+            else
+                extensionsLeftOut.Add(installed.Manifest.Name);
+        }
+        return files;
+    }
+
+    private static List<Attachment> ManagedPdfs(LibraryPlan plan) =>
+        [.. plan.Attachments.Where(a => a.Mode == AttachmentMode.Managed).DistinctBy(a => a.Sha256).OrderBy(a => a.Sha256, StringComparer.Ordinal)];
+
+    /// <summary>The manifest's entry list: every JSON entry, then every PDF (named by its hash).</summary>
+    private static List<PackageEntry> LibraryEntries(SortedDictionary<string, (string Kind, byte[] Bytes)> files, List<Attachment> pdfs) =>
+    [
+        .. files.Select(f => new PackageEntry(f.Key, f.Value.Kind, Hash(f.Value.Bytes), f.Value.Bytes.LongLength)),
+        .. pdfs.Select(a => new PackageEntry($"{PdfFolder}{a.Sha256}.pdf", "pdf", a.Sha256!, a.ByteLength)),
+    ];
 
     /// <summary><c>library.restorePreview</c>: checks a library backup file completely (every PDF's hash too). Nothing is written.</summary>
     public PackagePreview PreviewLibraryRestore(string path) => WithLibrary(path, (preview, _, _) => preview);
@@ -512,6 +537,185 @@ public sealed partial class PackageService
                 continue;
             store.BackupTo(target);
             return $"{BackupFolderName}/{name}";
+        }
+    }
+
+    // ---- D77: daily copies ----
+
+    /// <summary>D77: daily copies live in <c>backups/daily</c>, one full library backup per local calendar day.</summary>
+    public const string DailyFolderName = "daily";
+
+    public const int DailyCopiesKept = 7;
+
+    /// <summary>Free space a daily copy leaves on the drive, at least: 2 GB, so the live database and Windows are never short.</summary>
+    public const long DailyFreeSpaceBytes = 2L * 1024 * 1024 * 1024;
+
+    /// <summary>The one setting, a file in the data folder (like the version stamp): absent means on, the line <c>off</c> means off.</summary>
+    public const string DailySettingFileName = "tomestack.daily-copies";
+
+    private string DailyDirectory => Path.Combine(backupDirectory, DailyFolderName);
+
+    private string DailySettingPath => Path.Combine(Path.GetDirectoryName(Path.GetFullPath(store.DatabasePath))!, DailySettingFileName);
+
+    /// <summary><c>.tomestack.zip</c>, like "Back up everything", so the restore's Open dialog lists the copies.</summary>
+    [GeneratedRegex(@"^library-\d{4}-\d{2}-\d{2}\.tomestack\.zip$", RegexOptions.CultureInvariant)]
+    private static partial Regex DailyCopyName();
+
+    /// <summary>The daily copies on disk, newest first (the name is the date, so it sorts).</summary>
+    private List<string> ListDailyCopies() => !Directory.Exists(DailyDirectory) ? [] :
+        [.. Directory.GetFiles(DailyDirectory).Select(Path.GetFileName).OfType<string>().Where(n => DailyCopyName().IsMatch(n)).OrderDescending(StringComparer.Ordinal)];
+
+    private long DailyCopiesBytes() => ListDailyCopies().Sum(n => new FileInfo(Path.Combine(DailyDirectory, n)).Length);
+
+    private bool DailyCopiesOn()
+    {
+        try
+        {
+            return !File.Exists(DailySettingPath) || File.ReadAllText(DailySettingPath).Trim() != "off";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return true; // an unreadable setting is the default
+        }
+    }
+
+    /// <summary><c>library.dailyCopies</c>: the setting and the copies kept.</summary>
+    public DailyCopiesState DailyCopies() => new(DailyCopiesOn(), ListDailyCopies(), DailyCopiesBytes());
+
+    /// <summary><c>library.setDailyCopies</c>. Turning it off keeps the copies already taken.</summary>
+    public DailyCopiesState SetDailyCopies(bool on)
+    {
+        try
+        {
+            if (on)
+                File.Delete(DailySettingPath);
+            else
+            {
+                var temporary = DailySettingPath + ".tmp";
+                File.WriteAllText(temporary, "off\n");
+                File.Move(temporary, DailySettingPath, overwrite: true);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new AppValidationException([new("library.daily-setting-failed", "The setting could not be saved: the data folder is not writable. Nothing was changed.")]);
+        }
+        return DailyCopies();
+    }
+
+    /// <summary>
+    /// D77: on the first open of a local calendar day whose library differs from the newest daily copy, writes a full
+    /// library backup (the format "Back up everything" writes, so restoring one is the usual restore) to
+    /// <c>backups/daily/library-YYYY-MM-DD.tomestack.zip</c> and keeps the newest <see cref="DailyCopiesKept"/>. "Differs"
+    /// compares the entry list (path and SHA-256 of every entry) the backup would have with the newest copy's manifest: it is
+    /// exactly what a restore would bring back and needs no stored state. Not <c>PRAGMA data_version</c> (it starts again with
+    /// every connection) nor the file's time (opening writes to it). Call it once the app is open, before anything else uses
+    /// it: the shell does, right after <c>Open</c>, so it never overlaps a restore or an upgrade copy.
+    /// </summary>
+    /// <remarks>
+    /// Copies are named by the local date, so a clock that was once ahead leaves copies "after today": they are never compared
+    /// with and never deleted (only copies dated before today rotate out). The quick check reads no PDF (a managed copy is
+    /// named by its hash); only when it differs is every PDF hashed, and compared again, because a damaged PDF that the last
+    /// copy left out must not count as a change every day. A copy that leaves something out (a damaged PDF or extension file)
+    /// deletes no older copy: those may be the only ones that still hold it.
+    /// </remarks>
+    internal DailyCopyResult TakeDailyCopy()
+    {
+        if (!DailyCopiesOn())
+            return new(DailyCopyOutcome.Off, null, []);
+        var name = $"library-{time.GetLocalNow().ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)}.tomestack.zip";
+        var relative = $"{BackupFolderName}/{DailyFolderName}/{name}";
+        var target = Path.Combine(DailyDirectory, name);
+        if (File.Exists(target))
+            return new(DailyCopyOutcome.AlreadyTaken, relative, []);
+        var newest = ListDailyCopies().FirstOrDefault(n => string.CompareOrdinal(n, name) < 0) is { } found ? Path.Combine(DailyDirectory, found) : null;
+
+        var quick = PlanLibrary(verifyPdfs: false);
+        var quickFiles = LibraryFiles(quick, []);
+        if (newest is not null && SameEntries(newest, LibraryEntries(quickFiles, ManagedPdfs(quick))))
+            return new(DailyCopyOutcome.Unchanged, null, []);
+        RequireWithinLibraryLimits(quickFiles, ManagedPdfs(quick)); // a library too large fails here, before any PDF is read
+
+        var plan = PlanLibrary(verifyPdfs: true);
+        var files = LibraryFiles(plan, []);
+        var pdfs = ManagedPdfs(plan);
+        if (newest is not null && SameEntries(newest, LibraryEntries(files, pdfs)))
+            return new(DailyCopyOutcome.Unchanged, null, []);
+        if (!RoomFor(pdfs.Sum(a => a.ByteLength) + files.Values.Sum(f => f.Bytes.LongLength)))
+            return new(DailyCopyOutcome.NotEnoughSpace, null, []);
+
+        Directory.CreateDirectory(DailyDirectory);
+        var partial = target + ".partial"; // complete or absent: a crash mid-write leaves no half copy under the real name
+        var moved = false;
+        LibraryBackupResult result;
+        try
+        {
+            using (var file = new FileStream(partial, FileMode.Create, FileAccess.ReadWrite))
+            {
+                result = WriteLibraryBackup(file, plan);
+                file.Flush(flushToDisk: true);
+            }
+            File.Move(partial, target);
+            moved = true;
+        }
+        finally
+        {
+            if (!moved)
+                TryDelete(partial);
+        }
+        if (result.Warnings.Count == 0)
+        {
+            foreach (var old in ListDailyCopies().Where(n => string.CompareOrdinal(n, name) < 0).Skip(DailyCopiesKept - 1))
+                TryDelete(Path.Combine(DailyDirectory, old));
+        }
+        foreach (var stale in Directory.GetFiles(DailyDirectory, "library-*.tomestack.zip.partial"))
+            TryDelete(stale); // a crash on an earlier day
+        return new(DailyCopyOutcome.Written, relative, [.. result.Warnings.Select(w => w.Code)]);
+    }
+
+    /// <summary>Whether the copy at <paramref name="path"/> lists exactly <paramref name="entries"/>. Unreadable means no.</summary>
+    private static bool SameEntries(string path, List<PackageEntry> entries)
+    {
+        try
+        {
+            using var zip = ZipFile.OpenRead(path);
+            if (zip.GetEntry(ManifestPath) is not { } entry)
+                return false;
+            var manifest = Deserialize<PackageManifest>(ManifestPath, ReadBounded(entry, MaxLibraryJsonBytes), []);
+            return manifest?.Entries is { } listed && listed.Select(e => (e.Path, e.Sha256)).SequenceEqual(entries.Select(e => (e.Path, e.Sha256)));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or EntryTooLargeException or TotalTooLargeException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// An automatic copy never crowds the drive the library lives on: at least <see cref="DailyFreeSpaceBytes"/> must still be
+    /// free afterwards. Each copy holds every managed PDF, so the folder grows with the copies kept.
+    /// </summary>
+    private bool RoomFor(long bytes)
+    {
+        try
+        {
+            var root = Path.GetPathRoot(Path.GetFullPath(backupDirectory));
+            return root is null || new DriveInfo(root).AvailableFreeSpace - bytes >= DailyFreeSpaceBytes;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return true; // the write itself fails cleanly if the disk is full
+        }
+    }
+
+    private static void TryDelete(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // best effort: the next copy tries again
         }
     }
 

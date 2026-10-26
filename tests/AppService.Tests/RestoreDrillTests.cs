@@ -133,6 +133,25 @@ public class RestoreDrillTests
     }
 
     [Fact]
+    public void Daily_copy_restores_in_the_drill()
+    {
+        using var author = new TempApp();
+        Fill(author.App);
+        var copy = author.App.TakeDailyCopy();
+        Assert.Equal(DailyCopyOutcome.Written, copy.Outcome);
+        author.Close();
+
+        using var clean = new TempApp(now: TempApp.Now.AddDays(1));
+        clean.App.ApplyLibraryRestore(Path.Combine(author.Directory, copy.FileName!));
+        clean.Close();
+
+        // D77: a daily copy is an ordinary full backup, so the drill finds the same expected differences only.
+        var differences = RestoreDrill.Compare(RestoreDrill.Count(author.Directory), RestoreDrill.Count(clean.Directory));
+        Assert.All(differences, d => Assert.True(d.Expected is not null, $"{d.Item}: {d.Before} -> {d.After}"));
+        Assert.DoesNotContain(differences, d => d.Item is "table content_revisions" or "table sources" or "table characters" or "table campaigns" or "table gap_notes" or "table attachments" or "table sheets");
+    }
+
+    [Fact]
     public void An_unexpected_difference_is_reported_as_one()
     {
         using var temp = new TempApp();

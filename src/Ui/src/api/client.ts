@@ -9,6 +9,7 @@ import type {
   CandidateEdit,
   CandidateFilter,
   CandidatePage,
+  DailyCopies,
   ImportJob,
   ImportSearchHit,
   StoredCandidate,
@@ -329,6 +330,10 @@ export function createClient(transport: Transport) {
     /** Only the preview's "Restore" button calls this. */
     applyLibraryRestore: (token: string, sourceChoices: Record<string, SourceChoice> = {}) =>
       call<LibraryRestoreResult>('library.restoreApply', { token, sourceChoices, confirm: true }, { timeoutMs: null }),
+    /** D77: the daily copies setting and the copies kept. */
+    dailyCopies: () => call<DailyCopies>('library.dailyCopies'),
+    /** Turning it off keeps the copies already taken. */
+    setDailyCopies: (on: boolean) => call<DailyCopies>('library.setDailyCopies', { on }),
   };
 }
 

@@ -2127,6 +2127,15 @@ it('the Backups screen says what a full backup holds, and needs the desktop app 
   expect(contents.textContent).toMatch(/\d+ published and [1-9]\d* draft entries/);
   expect(contents.textContent).toMatch(/Not included: text read from PDFs/);
 
+  // D77: daily copies are on by default; the setting is kept by the service (DevHost takes no copies itself).
+  const daily = await within(panel).findByRole('checkbox', { name: 'Keep 7 daily copies' });
+  expect((daily as HTMLInputElement).checked).toBe(true);
+  await user.click(daily);
+  await waitFor(() => expect((daily as HTMLInputElement).checked).toBe(false));
+  expect((await client.dailyCopies()).on).toBe(false);
+  await user.click(daily); // back on, for the flows after this one
+  await waitFor(() => expect((daily as HTMLInputElement).checked).toBe(true));
+
   // DevHost has no native Save or Open dialog, so both say what they need instead of doing nothing.
   await user.click(within(panel).getByRole('button', { name: 'Back up everything…' }));
   expect((await screen.findByRole('alert')).textContent).toMatch(/Backing up everything needs the TomeStack desktop app/);
