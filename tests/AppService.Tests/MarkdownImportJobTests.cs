@@ -20,7 +20,31 @@ public class MarkdownImportJobTests
 
     private static SourceRecord Homebrew(TempApp temp) => temp.App.CreateHomebrewSource(new("Test Markdown Book", [RulesFamilies.Srd521]));
 
-    private static string[] TempCopies() => [.. Directory.GetFiles(Path.GetTempPath(), "tomestack-markdown-*")];
+    /// <summary>
+    /// The app's temp copies (<c>tomestack-markdown-*</c>) that hold exactly <paramref name="bytes"/>. The temp folder is shared with
+    /// every other test, so a test gives its import bytes of its own (<see cref="Unique"/>) and looks only for copies of those: a copy
+    /// this test's app leaked would still be found, and a copy another test is writing or deleting is not read as this test's.
+    /// </summary>
+    private static string[] CopiesOf(byte[] bytes)
+    {
+        var found = new List<string>();
+        foreach (var file in Directory.GetFiles(Path.GetTempPath(), "tomestack-markdown-*"))
+        {
+            try
+            {
+                if (new FileInfo(file).Length == bytes.Length && File.ReadAllBytes(file).AsSpan().SequenceEqual(bytes))
+                    found.Add(file);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Another test's copy, written or deleted while we looked.
+            }
+        }
+        return [.. found];
+    }
+
+    /// <summary>The class fixture with a trailing comment no other test uses (the extractor drops comment content).</summary>
+    private static byte[] Unique(byte[] bytes) => [.. bytes, .. Encoding.UTF8.GetBytes($"\n\n<!-- {Guid.NewGuid():N} -->\n")];
 
     private static ImportJobRecord Import(TempApp temp, Guid sourceId, byte[] bytes, ImportJobStatus expected = ImportJobStatus.Completed) =>
         temp.WaitForImport(temp.App.StartMarkdownImport(sourceId, bytes).Id, expected);
@@ -56,14 +80,14 @@ public class MarkdownImportJobTests
         var attachmentsBefore = temp.App.Store.ListAttachments().Count;
         var managedFolder = Path.Combine(temp.Directory, "attachments");
         var managedBefore = Directory.Exists(managedFolder) ? Directory.GetFiles(managedFolder, "*", SearchOption.AllDirectories) : [];
-        var tempBefore = TempCopies();
+        var mine = Unique(ClassFixture);
 
-        Import(temp, source.Id, ClassFixture);
+        Import(temp, source.Id, mine);
 
         Assert.Null(temp.App.Store.FindSource(source.Id)!.AttachmentId);
         Assert.Equal(attachmentsBefore, temp.App.Store.ListAttachments().Count);
         Assert.Equal(managedBefore, Directory.Exists(managedFolder) ? Directory.GetFiles(managedFolder, "*", SearchOption.AllDirectories) : []);
-        Assert.Equal(tempBefore, TempCopies()); // the worker's temp copy is deleted when the run ends
+        Assert.Empty(CopiesOf(mine)); // the worker's temp copy is deleted when the run ends
     }
 
     [Fact]
@@ -103,7 +127,6 @@ public class MarkdownImportJobTests
     {
         using var temp = new TempApp();
         var source = Homebrew(temp);
-        var tempBefore = TempCopies();
         var big = new byte[ExtractionLimitsBytes + 1];
         Array.Fill(big, (byte)'a');
 
@@ -112,7 +135,7 @@ public class MarkdownImportJobTests
         Assert.Equal("markdown.too-large", refused.Problems[0].Code);
         Assert.Empty(temp.App.ListImports());
         Assert.Null(temp.App.Store.FindImportPage(Sha(big), 1));
-        Assert.Equal(tempBefore, TempCopies());
+        Assert.Empty(CopiesOf(big));
     }
 
     private const int ExtractionLimitsBytes = ImportWorker.ExtractionLimits.MarkdownMaxBytes;
@@ -282,16 +305,16 @@ public class MarkdownImportJobTests
         using var gated = new GatedMarkdown();
         using var temp = new TempApp(markdownExtractor: gated);
         var source = Homebrew(temp);
-        var tempBefore = TempCopies();
-        var first = temp.App.StartMarkdownImport(source.Id, ClassFixture);
+        var mine = Unique(ClassFixture);
+        var first = temp.App.StartMarkdownImport(source.Id, mine);
 
-        var refused = Assert.Throws<AppValidationException>(() => temp.App.StartMarkdownImport(source.Id, ClassFixture));
+        var refused = Assert.Throws<AppValidationException>(() => temp.App.StartMarkdownImport(source.Id, mine));
 
         Assert.Equal("import.busy", refused.Problems[0].Code);
-        Assert.Single(TempCopies().Except(tempBefore)); // the running job's copy only
+        Assert.Single(CopiesOf(mine)); // the running job's copy only: the refused one is gone
         gated.Release();
         temp.WaitForImport(first.Id);
-        Assert.Equal(tempBefore, TempCopies());
+        Assert.Empty(CopiesOf(mine));
     }
 
     private sealed class GatedMarkdown : ImportWorker.IDocumentExtractor, IDisposable

@@ -21,7 +21,11 @@ Date: 2026-10-25
 4. **The engine sets the ceiling; the author may only lower it.**
 5. **`MechanicsInventory`'s hand-kept `known` set is replaced by `CapabilityRegistry.IsRegistered`.**
 6. **A registered type this build kept untyped reads as Reference.** An effect stored below the version that introduced its type (or whose body does not fit) is an `UnknownEffect`: the calculator ignores it, so the registry caps it at Reference whatever the type's ceiling (built in Import Lab Task 2, after the first registry task).
-7. **Coverage reads the registry.** `content.coverage` counts each effect of the installed content by `CapabilityRegistry.Effective` (the author's value, with a failing diagnostic on the effect lowering Automatic to Assisted), never by the ceiling alone. A feature with no effects counts once as the registry's `text` entry (Reference). The four states are Automatic, Assisted, Reference and Unsupported. It is read-only and writes nothing; "may need a mechanic" is advice for a feature with no effects whose text holds a generic phrase, never a gate.
+7. **Coverage reads the registry.** `content.coverage` counts each effect of the installed content by `CapabilityRegistry.Effective` (the author's value), never by the ceiling alone. The four states are Automatic, Assisted, Reference and Unsupported. It is read-only and writes nothing.
+   - A failing diagnostic on an effect lowers Automatic to Assisted only for a draft revision, which is validated for the report; a published revision passed validation when it was published, so none is checked.
+   - A class's level-gated content grants and choices are its structure and are not counted as effects.
+   - A revision with no effects, other than a class, counts once as the registry's `text` entry (Reference).
+   - "May need a mechanic" is advice, never a gate. It is set when any effect is Unsupported, or when a revision has no effects and its summary holds a generic phrase.
 
 **Ceilings follow the code.** A row records what this build's calculator and commands do, proven by a test, not what a plan said they would do. Where the Lab design's first table disagreed with the code (a roll that names a resource: the action command now spends it), the code won.
 

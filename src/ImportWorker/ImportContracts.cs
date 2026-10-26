@@ -155,7 +155,7 @@ public sealed record DraftCandidate(
 /// <summary>
 /// D64: a place in a job's stored page text. <paramref name="BlockStart"/> and <paramref name="BlockEnd"/> index the page's stored
 /// blocks (<paramref name="BlockEnd"/> lies on <paramref name="PageEnd"/> when it is set, else on <paramref name="Page"/>);
-/// <paramref name="LineStart"/> and <paramref name="LineEnd"/> are source lines for Markdown and null for a PDF.
+/// <paramref name="LineStart"/> and <paramref name="LineEnd"/> are null today, for Markdown as for a PDF: spans carry block indices only.
 /// <paramref name="PatternId"/> is a <see cref="Detection.DetectionPatterns"/> id; <paramref name="Confidence"/> is the detector's
 /// confidence in the read (a UI hint, never permission).
 /// </summary>

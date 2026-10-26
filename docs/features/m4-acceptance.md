@@ -65,10 +65,10 @@ The other kinds did not move (class 8, feat 47, spell 116, item 66); review samp
 
 | | SRD 5.1 (classes / links / stubs) | SRD 5.2.1 (classes / links / stubs) |
 | --- | --- | --- |
-| Old (before this change) | to be measured by the owner (`TOMESTACK_SRD_PDF_DIR` not set) | to be measured by the owner (`TOMESTACK_SRD_PDF_DIR` not set) |
+| Old (before this change) | not measured (`TOMESTACK_SRD_PDF_DIR` was not set then) | not measured (`TOMESTACK_SRD_PDF_DIR` was not set then) |
 | New | 12 / 159 / 57 (measured 2026-10-26 on the Import Lab build, see below) | 12 / 172 / 14 (measured 2026-10-26 on the Import Lab build, see below) |
 
-"Old" is the build before this change (`788bc60`), "new" the build with it. No number is recorded: the PDFs were not available where the change was made. The SRD floors are unchanged; the new test line has no floor until it has been measured.
+"Old" is the build before this change (`788bc60`), "new" the build with it. Only "new" is measured (2026-10-26, on the Import Lab build, with both SRD PDFs); "old" is not, because the PDFs were not available where the change was made. The SRD floors are unchanged; the new test line has no floor.
 
 ## Precision and recall (D3)
 
