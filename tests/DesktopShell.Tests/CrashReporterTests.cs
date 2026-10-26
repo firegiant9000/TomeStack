@@ -66,14 +66,14 @@ public sealed class CrashReporterTests : IDisposable
     }
 
     [Fact]
-    public void Two_fatals_show_one_dialog_and_log_both()
+    public void A_fatal_after_the_dialog_was_closed_shows_it_again()
     {
         var reporter = Reporter();
 
         reporter.ReportFatal("dispatcher", Failure());
         reporter.ReportFatal("appdomain", Failure());
 
-        Assert.Single(_dialogs);
+        Assert.Equal(2, _dialogs.Count);
         Assert.Equal(2, Entries().Length);
     }
 
@@ -104,6 +104,8 @@ public sealed class CrashReporterTests : IDisposable
         Assert.Equal(ProcessFailureAction.Reload, reporter.ReportProcessFailure("main", "RenderProcessExited", "Crashed", 5));
         Assert.Empty(_dialogs);
         Assert.Equal(ProcessFailureAction.Close, reporter.ReportProcessFailure("main", "RenderProcessUnresponsive", "Unresponsive", 0));
+        Assert.Empty(_dialogs); // the host posts the dialog outside the WebView2 callback
+        reporter.ShowUnrecoverableDialog();
 
         Assert.Equal($"TomeStack's window stopped responding and could not be recovered. Details were saved to:\n{_log.FilePath}", Assert.Single(_dialogs));
         var entries = Entries();
@@ -127,7 +129,47 @@ public sealed class CrashReporterTests : IDisposable
         var action = Reporter().ReportProcessFailure("main", "BrowserProcessExited", "Terminated", 1);
 
         Assert.Equal(ProcessFailureAction.Close, action);
+        Assert.Single(Entries());
+    }
+
+    [Fact]
+    public void A_viewer_dialog_does_not_use_up_the_dialog_for_a_later_fatal()
+    {
+        var reporter = Reporter();
+        reporter.ShowUnrecoverableDialog();
+
+        reporter.ReportFatal("dispatcher", Failure());
+
+        Assert.Equal(2, _dialogs.Count);
+    }
+
+    [Fact]
+    public void A_fatal_while_a_dialog_is_open_only_logs()
+    {
+        CrashReporter? reporter = null;
+        reporter = new CrashReporter(_log, _log.FilePath, Profile, text =>
+        {
+            _dialogs.Add(text);
+            reporter!.ReportFatal("appdomain", Failure());
+        });
+
+        reporter.ReportFatal("dispatcher", Failure());
+
         Assert.Single(_dialogs);
+        Assert.Equal(2, Entries().Length);
+    }
+
+    [Fact]
+    public void An_exception_whose_text_throws_does_not_escape()
+    {
+        Reporter().ReportFatal("dispatcher", new ThrowingException());
+
+        Assert.Single(_dialogs);
+    }
+
+    private sealed class ThrowingException : Exception
+    {
+        public override string ToString() => throw new InvalidOperationException("no text");
     }
 
     [Fact]

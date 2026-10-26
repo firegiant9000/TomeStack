@@ -139,7 +139,12 @@ public partial class MainWindow : Window
                     core.Reload();
                     break;
                 case ProcessFailureAction.Close:
-                    Application.Current.Shutdown(1);
+                    // Not inside the WebView2 callback: the dialog pumps messages and Shutdown disposes the control.
+                    Dispatcher.BeginInvoke(() =>
+                    {
+                        _crashReporter.ShowUnrecoverableDialog();
+                        Application.Current.Shutdown(1);
+                    });
                     break;
             }
         };

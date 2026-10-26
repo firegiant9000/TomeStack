@@ -77,7 +77,12 @@ public sealed class PdfViewerWindow : Window
                         core.Reload();
                         break;
                     case ProcessFailureAction.Close:
-                        Close();
+                        // Not inside the WebView2 callback: closing disposes the control that is raising it.
+                        Dispatcher.BeginInvoke(() =>
+                        {
+                            crashReporter.ShowUnrecoverableDialog();
+                            Close();
+                        });
                         break;
                 }
             };

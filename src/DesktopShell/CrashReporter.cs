@@ -31,37 +31,39 @@ public sealed class CrashReporter(IErrorLog log, string logPath, string userProf
 
     private readonly Lock _gate = new();
     private readonly Dictionary<string, int> _renderFailures = [];
-    private int _dialogShown;
+    private int _dialogOpen;
 
     /// <summary>Logs a fatal (<c>dispatcher</c> or <c>appdomain</c>) and shows the dialog unless one is already up.</summary>
     public void ReportFatal(string kind, Exception exception)
     {
-        Record(kind, exception.ToString());
-        ShowOnce($"TomeStack hit an unexpected error and has to close. Details were saved to:\n{logPath}");
+        Record(kind, exception.ToString);
+        ShowDialog($"TomeStack hit an unexpected error and has to close. Details were saved to:\n{logPath}");
     }
 
     /// <summary>Logs a failure that is not a crash (an unobserved task fault). No dialog.</summary>
-    public void ReportNonFatal(string kind, Exception exception) => Record(kind, exception.ToString());
+    public void ReportNonFatal(string kind, Exception exception) => Record(kind, exception.ToString);
 
     /// <summary>
     /// Logs a WebView2 process failure and says what the host window does. A renderer that exits or stops responding is
-    /// reloaded once per host; the second time, and any browser-process exit, shows the dialog and closes the host.
+    /// reloaded once per host; the second time, and any browser-process exit, is <see cref="ProcessFailureAction.Close"/>.
+    /// The caller then posts <see cref="ShowUnrecoverableDialog"/> and closes the host, outside the WebView2 callback.
     /// </summary>
     /// <param name="host">Identifies the window, so each viewer gets its own one reload.</param>
     /// <param name="kind">The <c>CoreWebView2ProcessFailedKind</c> name.</param>
     public ProcessFailureAction ReportProcessFailure(string host, string kind, string reason, int exitCode)
     {
-        Record($"webview2-{kind}", string.Create(CultureInfo.InvariantCulture, $"WebView2 process failed: kind={kind} reason={reason} exitCode={exitCode}"));
-        var action = kind switch
+        Record($"webview2-{kind}", () => string.Create(CultureInfo.InvariantCulture, $"WebView2 process failed: kind={kind} reason={reason} exitCode={exitCode}"));
+        return kind switch
         {
             "RenderProcessExited" or "RenderProcessUnresponsive" => NextRenderAction(host),
             "BrowserProcessExited" => ProcessFailureAction.Close,
             _ => ProcessFailureAction.LogOnly,
         };
-        if (action == ProcessFailureAction.Close)
-            ShowOnce($"TomeStack's window stopped responding and could not be recovered. Details were saved to:\n{logPath}");
-        return action;
     }
+
+    /// <summary>The dialog for a window that could not be recovered (after <see cref="ProcessFailureAction.Close"/>).</summary>
+    public void ShowUnrecoverableDialog() =>
+        ShowDialog($"TomeStack's window stopped responding and could not be recovered. Details were saved to:\n{logPath}");
 
     private ProcessFailureAction NextRenderAction(string host)
     {
@@ -72,11 +74,11 @@ public sealed class CrashReporter(IErrorLog log, string logPath, string userProf
         }
     }
 
-    private void Record(string kind, string detail)
+    private void Record(string kind, Func<string> detail)
     {
         try
         {
-            log.Record(FileErrorLog.NewCorrelationId(), kind, Scrub(detail));
+            log.Record(FileErrorLog.NewCorrelationId(), kind, Scrub(detail()));
         }
         catch (Exception)
         {
@@ -87,9 +89,10 @@ public sealed class CrashReporter(IErrorLog log, string logPath, string userProf
     private string Scrub(string text) =>
         userProfile.Length == 0 ? text : text.Replace(userProfile, ProfileToken, StringComparison.OrdinalIgnoreCase);
 
-    private void ShowOnce(string text)
+    /// <summary>At most one dialog is open at a time; a failure while it is open only logs. Later failures can show again.</summary>
+    private void ShowDialog(string text)
     {
-        if (showDialog is null || Interlocked.Exchange(ref _dialogShown, 1) == 1)
+        if (showDialog is null || Interlocked.Exchange(ref _dialogOpen, 1) == 1)
             return;
         try
         {
@@ -98,6 +101,10 @@ public sealed class CrashReporter(IErrorLog log, string logPath, string userProf
         catch (Exception)
         {
             // Nothing more can be done; the entry is already written.
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _dialogOpen, 0);
         }
     }
 }
