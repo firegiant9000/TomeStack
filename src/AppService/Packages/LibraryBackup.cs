@@ -617,7 +617,7 @@ public sealed partial class PackageService
     /// with and never deleted (only copies dated before today rotate out). The quick check reads no PDF (a managed copy is
     /// named by its hash); only when it differs is every PDF hashed, and compared again, because a damaged PDF that the last
     /// copy left out must not count as a change every day. A copy that leaves something out (a damaged PDF or extension file)
-    /// deletes no older copy: those may be the only ones that still hold it.
+    /// spares the newest older copy that still holds every PDF, beyond the newest 7: it may be the only good one.
     /// </remarks>
     internal DailyCopyResult TakeDailyCopy()
     {
@@ -634,15 +634,16 @@ public sealed partial class PackageService
         var quickFiles = LibraryFiles(quick, []);
         if (newest is not null && SameEntries(newest, LibraryEntries(quickFiles, ManagedPdfs(quick))))
             return new(DailyCopyOutcome.Unchanged, null, []);
-        RequireWithinLibraryLimits(quickFiles, ManagedPdfs(quick)); // a library too large fails here, before any PDF is read
+        // Both before any PDF is read: a library too large fails here, and the quick plan's size bounds the copy's.
+        RequireWithinLibraryLimits(quickFiles, ManagedPdfs(quick));
+        if (!RoomFor(ManagedPdfs(quick).Sum(a => a.ByteLength) + quickFiles.Values.Sum(f => f.Bytes.LongLength)))
+            return new(DailyCopyOutcome.NotEnoughSpace, null, []);
 
         var plan = PlanLibrary(verifyPdfs: true);
         var files = LibraryFiles(plan, []);
         var pdfs = ManagedPdfs(plan);
         if (newest is not null && SameEntries(newest, LibraryEntries(files, pdfs)))
-            return new(DailyCopyOutcome.Unchanged, null, []);
-        if (!RoomFor(pdfs.Sum(a => a.ByteLength) + files.Values.Sum(f => f.Bytes.LongLength)))
-            return new(DailyCopyOutcome.NotEnoughSpace, null, []);
+            return new(DailyCopyOutcome.Unchanged, null, []); // while a PDF stays damaged, every launch hashes them all to get here
 
         Directory.CreateDirectory(DailyDirectory);
         var partial = target + ".partial"; // complete or absent: a crash mid-write leaves no half copy under the real name
@@ -663,30 +664,37 @@ public sealed partial class PackageService
             if (!moved)
                 TryDelete(partial);
         }
-        if (result.Warnings.Count == 0)
-        {
-            foreach (var old in ListDailyCopies().Where(n => string.CompareOrdinal(n, name) < 0).Skip(DailyCopiesKept - 1))
-                TryDelete(Path.Combine(DailyDirectory, old));
-        }
+        // A copy that left a PDF out spares the newest older copy that still holds every PDF the library lists: it may be the
+        // only good one left. So at most one copy beyond the newest 7 is kept.
+        var keep = result.Warnings.Count == 0 ? null
+            : ListDailyCopies().Where(n => string.CompareOrdinal(n, name) < 0).FirstOrDefault(n => HoldsPdfs(Path.Combine(DailyDirectory, n), ManagedPdfs(quick)));
+        foreach (var old in ListDailyCopies().Where(n => string.CompareOrdinal(n, name) < 0 && n != keep).Skip(DailyCopiesKept - 1))
+            TryDelete(Path.Combine(DailyDirectory, old));
         foreach (var stale in Directory.GetFiles(DailyDirectory, "library-*.tomestack.zip.partial"))
             TryDelete(stale); // a crash on an earlier day
         return new(DailyCopyOutcome.Written, relative, [.. result.Warnings.Select(w => w.Code)]);
     }
 
     /// <summary>Whether the copy at <paramref name="path"/> lists exactly <paramref name="entries"/>. Unreadable means no.</summary>
-    private static bool SameEntries(string path, List<PackageEntry> entries)
+    private static bool SameEntries(string path, List<PackageEntry> entries) =>
+        DailyManifestEntries(path) is { } listed && listed.Select(e => (e.Path, e.Sha256)).SequenceEqual(entries.Select(e => (e.Path, e.Sha256)));
+
+    /// <summary>Whether the copy at <paramref name="path"/> lists a PDF for each of <paramref name="pdfs"/>. Unreadable means no.</summary>
+    private static bool HoldsPdfs(string path, List<Attachment> pdfs) =>
+        DailyManifestEntries(path) is { } listed && pdfs.All(a => listed.Any(e => e.Path == $"{PdfFolder}{a.Sha256}.pdf"));
+
+    private static IReadOnlyList<PackageEntry>? DailyManifestEntries(string path)
     {
         try
         {
             using var zip = ZipFile.OpenRead(path);
             if (zip.GetEntry(ManifestPath) is not { } entry)
-                return false;
-            var manifest = Deserialize<PackageManifest>(ManifestPath, ReadBounded(entry, MaxLibraryJsonBytes), []);
-            return manifest?.Entries is { } listed && listed.Select(e => (e.Path, e.Sha256)).SequenceEqual(entries.Select(e => (e.Path, e.Sha256)));
+                return null;
+            return Deserialize<PackageManifest>(ManifestPath, ReadBounded(entry, MaxLibraryJsonBytes), [])?.Entries;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or EntryTooLargeException or TotalTooLargeException)
         {
-            return false;
+            return null;
         }
     }
 

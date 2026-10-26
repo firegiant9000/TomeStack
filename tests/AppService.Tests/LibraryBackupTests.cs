@@ -690,6 +690,8 @@ public class LibraryBackupTests
 
         Assert.Equal(DailyCopyOutcome.Unchanged, unchanged.Outcome);
         Assert.Contains("library-2026-09-24.tomestack.zip", DailyCopies(temp)); // the only copy with the intact PDF
+        Assert.Equal(8, DailyCopies(temp).Length); // the newest 7, and that one: the folder stays bounded
+        Assert.Contains("backup.pdf-unreadable", File.ReadAllText(Path.Combine(temp.Directory, "logs", FileErrorLog.FileName)), StringComparison.Ordinal);
     }
 
     [Fact]
