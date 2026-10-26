@@ -5,6 +5,7 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { CharacterView, CustomAttack, RollTarget } from '../api/types';
+import { attackPin, customPin, rollPin, togglePin, type Pin } from '../quickbar';
 import { ActionsPanel, RollResult } from './PlayPanels';
 
 afterEach(cleanup);
@@ -767,4 +768,126 @@ it('a drawsDown dice-less Use is disabled with its reason when less has built up
   cleanup();
   render(<ActionsPanel view={chargingView([draw], [chargePool(2)])} roll={() => {}} act={() => {}} />);
   expect((screen.getByRole('button', { name: 'Use Vent (2 Testy charge)' }) as HTMLButtonElement).disabled).toBe(false);
+});
+
+// D73: the "Usable now" filter, the reasons under rows and the Pin buttons.
+const usableNow = () => screen.getByRole('checkbox', { name: 'Usable now' });
+const wave = { id: 'wave', type: 'roll', label: 'Wave', dice: '2d6', activation: 'action', resourceId: 'focus', cost: 2, available: true };
+const rally = { id: 'rally', type: 'roll', label: 'Rally', activation: 'bonusAction', resourceId: 'focus', cost: 2, available: true };
+const waveFeature = { content: ref, name: 'Testy Source', kind: 'feature', effects: [wave] };
+const wavePin = () => rollPin(waveFeature as never, wave as never);
+
+it('Usable now is off by default and every row shows', () => {
+  render(<ActionsPanel view={actionsView([wave, rally], focusPool(1))} roll={() => {}} act={() => {}} />);
+  expect((usableNow() as HTMLInputElement).checked).toBe(false);
+  expect(screen.getByRole('button', { name: /^Roll Wave/ })).toBeTruthy();
+  expect(screen.getByRole('button', { name: /^Use Rally/ })).toBeTruthy();
+});
+
+it('a form-only roll shows its reason, the filter hides it, and it returns when the form is on (no remount)', async () => {
+  const formOnly = { id: 'flash', type: 'roll', label: 'Flash', dice: '1d6', activation: 'action', available: false, unavailableReason: 'Available in Fixture Tide Form' };
+  const other = { ...wave, id: 'other', label: 'Other', resourceId: undefined };
+  const props = { roll: () => {}, act: () => {} };
+  const { rerender } = render(<ActionsPanel view={actionsView([formOnly, other])} {...props} />);
+  expect(screen.getByRole('button', { name: /^Roll Flash/ }).closest('li')!.textContent).toMatch(/Available in Fixture Tide Form/);
+  await userEvent.click(usableNow());
+  expect(screen.queryByRole('button', { name: /^Roll Flash/ })).toBeNull();
+  expect(screen.getByRole('button', { name: /^Roll Other/ })).toBeTruthy();
+  rerender(<ActionsPanel view={actionsView([{ ...formOnly, available: true }, other])} {...props} />);
+  expect(screen.getByRole('button', { name: /^Roll Flash/ })).toBeTruthy();
+});
+
+it('a roll with dice the pool cannot pay stays enabled, says why, is described by it, and the filter hides it', async () => {
+  render(<ActionsPanel view={actionsView([wave], focusPool(1))} roll={() => {}} act={() => {}} />);
+  const button = screen.getByRole('button', { name: /^Roll Wave/ }) as HTMLButtonElement;
+  expect(button.disabled).toBe(false);
+  expect(button.closest('li')!.textContent).toMatch(/Needs 2 Testy focus \(1 left\)/);
+  expect(document.getElementById(button.getAttribute('aria-describedby')!)!.textContent).toMatch(/Needs 2 Testy focus \(1 left\)/);
+  await userEvent.click(usableNow());
+  expect(screen.queryByRole('button', { name: /^Roll Wave/ })).toBeNull();
+  expect(screen.getByText('Nothing is usable right now.')).toBeTruthy();
+});
+
+it('an allowance pool at 0 loses its group under the filter, and nothing else left says so', async () => {
+  const reaction = { id: 'guard', type: 'roll', label: 'Guard', resourceId: 'react', cost: 1, available: true };
+  const pool = { ...focusPool(0), resourceId: 'react', label: 'Reaction', maximum: 1, spent: 1, allowance: true };
+  render(<ActionsPanel view={actionsView([reaction], pool)} roll={() => {}} act={() => {}} />);
+  expect(screen.getByRole('region', { name: 'Reaction' })).toBeTruthy();
+  await userEvent.click(usableNow());
+  expect(screen.queryByRole('region', { name: 'Reaction' })).toBeNull();
+  expect(screen.getByText('Nothing is usable right now.')).toBeTruthy();
+});
+
+it('a dice-less Use of an untracked pool is by hand and stays under the filter', async () => {
+  render(<ActionsPanel view={actionsView([rally], { ...focusPool(), current: undefined })} roll={() => {}} act={() => {}} />);
+  await userEvent.click(usableNow());
+  expect(screen.getByRole('button', { name: /^Use Rally/ })).toBeTruthy();
+  expect(screen.queryByText('Nothing is usable right now.')).toBeNull();
+});
+
+it('a pinned row that is not usable stays listed under the filter so it can be unpinned', async () => {
+  const onPin = vi.fn();
+  render(<ActionsPanel view={actionsView([wave], focusPool(1))} roll={() => {}} act={() => {}} pins={[wavePin()]} onPin={onPin} />);
+  await userEvent.click(usableNow());
+  await userEvent.click(screen.getByRole('button', { name: 'Pin Wave to the quickbar' }));
+  expect(onPin).toHaveBeenCalledWith(wavePin());
+});
+
+it('Pin calls onPin with the row pin, a pinned row is aria-pressed Unpin, and no onPin means no Pin buttons', async () => {
+  const onPin = vi.fn();
+  const { rerender } = render(<ActionsPanel view={actionsView([wave])} roll={() => {}} act={() => {}} onPin={onPin} />);
+  const pin = screen.getByRole('button', { name: 'Pin Wave to the quickbar' });
+  expect(pin.getAttribute('aria-pressed')).toBe('false');
+  expect(pin.textContent).toBe('Pin');
+  await userEvent.click(pin);
+  expect(onPin).toHaveBeenCalledWith(wavePin());
+  rerender(<ActionsPanel view={actionsView([wave])} roll={() => {}} act={() => {}} onPin={onPin} pins={[wavePin()]} />);
+  const pinned = screen.getByRole('button', { name: 'Pin Wave to the quickbar' });
+  expect(pinned.getAttribute('aria-pressed')).toBe('true');
+  expect(pinned.textContent).toBe('Unpin');
+  rerender(<ActionsPanel view={actionsView([wave])} roll={() => {}} act={() => {}} />);
+  expect(screen.queryByRole('button', { name: /to the quickbar$/ })).toBeNull();
+});
+
+it('Pin buttons cover attacks, custom attacks and toggles, and an auto toggle gets none', async () => {
+  const onPin = vi.fn();
+  const v = {
+    character: { id: 'fixture', customAttacks: [sling] },
+    sheet: { attacks: [weaponRow], toggles: [toggle('stance'), toggle('grit', { auto: true, on: true })], features: [] },
+  } as unknown as CharacterView;
+  render(<ActionsPanel view={v} roll={() => {}} act={() => {}} onPin={onPin} />);
+  await userEvent.click(screen.getByRole('button', { name: 'Pin Fixture Needle to the quickbar' }));
+  expect(onPin).toHaveBeenLastCalledWith(attackPin(weaponRow as never));
+  await userEvent.click(screen.getByRole('button', { name: 'Pin Testy Sling to the quickbar' }));
+  expect(onPin).toHaveBeenLastCalledWith(customPin(sling));
+  await userEvent.click(screen.getByRole('button', { name: 'Pin Testy stance to the quickbar' }));
+  expect(onPin).toHaveBeenLastCalledWith(togglePin(toggle('stance') as never));
+  expect(screen.queryByRole('button', { name: 'Pin Testy grit to the quickbar' })).toBeNull();
+});
+
+it('a toggle that cannot be turned on shows its reason, stays enabled, and the filter hides it unless it is on', async () => {
+  const v = togglesView([toggle('stance', { available: false, unavailableReason: 'Available in Fixture Tide Form' })]);
+  render(<ActionsPanel view={v} roll={() => {}} act={() => {}} />);
+  const box = screen.getByRole('checkbox', { name: /Testy stance/ }) as HTMLInputElement;
+  expect(box.disabled).toBe(false);
+  expect(document.getElementById(box.getAttribute('aria-describedby')!)!.textContent).toMatch(/Available in Fixture Tide Form/);
+  await userEvent.click(usableNow());
+  expect(screen.queryByRole('checkbox', { name: /Testy stance/ })).toBeNull();
+});
+
+it('with 8 pins an unpinned row cannot be pinned (aria-disabled, no call, described) but a pinned one can be unpinned', async () => {
+  const eight: Pin[] = Array.from({ length: 8 }, (_, i) => ({ kind: 'custom', attackId: `k${i}` }));
+  const onPin = vi.fn();
+  render(<ActionsPanel view={actionsView([wave])} roll={() => {}} act={() => {}} onPin={onPin} pins={eight} />);
+  const blocked = screen.getByRole('button', { name: 'Pin Wave to the quickbar' });
+  expect(blocked.getAttribute('aria-disabled')).toBe('true');
+  expect(document.getElementById(blocked.getAttribute('aria-describedby')!)!.textContent?.trim()).toBe('The quickbar holds 8 actions.');
+  await userEvent.click(blocked);
+  expect(onPin).not.toHaveBeenCalled();
+  cleanup();
+  render(<ActionsPanel view={actionsView([wave])} roll={() => {}} act={() => {}} onPin={onPin} pins={[...eight.slice(0, 7), wavePin()]} />);
+  const own = screen.getByRole('button', { name: 'Pin Wave to the quickbar' });
+  expect(own.getAttribute('aria-disabled')).toBeNull();
+  await userEvent.click(own);
+  expect(onPin).toHaveBeenCalledTimes(1);
 });

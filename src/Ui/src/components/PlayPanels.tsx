@@ -19,9 +19,10 @@ import type {
   RollTarget,
   ToggleValue,
 } from '../api/types';
-import { dicelessUse, poolFor, recordSpend } from '../actionRows';
+import { attackAvailability, dicelessUse, poolFor, recordSpend, rollAvailability, toggleAvailability, type Availability } from '../actionRows';
 import { explainSteps } from '../explain';
 import { hitDiceText, rollBonus } from '../format';
+import { attackPin, customPin, maxPins, pinKey, rollPin, togglePin, type Pin } from '../quickbar';
 import { rollButtonSuffix } from '../rollModes';
 import { diceLine, rollKey, rollModeText } from '../rollText';
 import { announceRollsOn, diceAnimationOn } from '../settings';
@@ -537,7 +538,9 @@ const signed = (n: number) => `${n >= 0 ? '+' : ''}${n}`;
  * One toggle of the active effects. D38: an auto toggle follows the hit points, so it shows its state as text and has no switch
  * (there is nothing to confirm). Kept small so activation groups can take it over.
  */
-function ToggleRow({ toggle: t, act }: { toggle: ToggleValue; act: Act }) {
+function ToggleRow({ toggle: t, act, availability, pinning }: { toggle: ToggleValue; act: Act; availability: Availability; pinning?: Pinning }) {
+  const reasonId = useId();
+  const reason = availability.reasons.join(' ');
   if (t.auto) {
     return (
       <div className="choice">
@@ -550,19 +553,52 @@ function ToggleRow({ toggle: t, act }: { toggle: ToggleValue; act: Act }) {
     );
   }
   return (
-    <label className="choice">
-      <input
-        type="checkbox"
-        checked={t.on}
-        onChange={() => act({ action: t.on ? 'toggleOff' : 'toggleOn', contentId: t.content.contentId, toggleId: t.toggleId })}
-      />
-      {t.label}
-      <span className="option-source">
-        {t.contentName}
-        {t.resourceId ? ' · turning it on spends 1 use' : ''}
-        {t.text ? ` · ${t.text}` : ''}
-      </span>
-    </label>
+    <>
+      <label className="choice">
+        <input
+          type="checkbox"
+          checked={t.on}
+          aria-describedby={reason ? reasonId : undefined}
+          onChange={() => act({ action: t.on ? 'toggleOff' : 'toggleOn', contentId: t.content.contentId, toggleId: t.toggleId })}
+        />
+        {t.label}
+        <span className="option-source">
+          {t.contentName}
+          {t.resourceId ? ' · turning it on spends 1 use' : ''}
+          {t.text ? ` · ${t.text}` : ''}
+        </span>
+      </label>
+      {reason && (
+        <span id={reasonId} className="hint">
+          {' '}
+          {reason}
+        </span>
+      )}
+      {pinning && <PinButton {...pinning} />}
+    </>
+  );
+}
+
+/** D73: how a row is pinned to the quickbar; absent when the panel is not given `onPin`. */
+type Pinning = { name: string; pinned: boolean; full: boolean; onPin: () => void };
+
+/** Pin / Unpin at the end of a row. The name stays the same in both states (`aria-pressed` says which); at the limit a new pin is refused, not hidden. */
+function PinButton({ name, pinned, full, onPin }: Pinning) {
+  const hintId = useId();
+  const blocked = full && !pinned;
+  return (
+    <>
+      {' '}
+      <button type="button" aria-label={`Pin ${name} to the quickbar`} aria-pressed={pinned} aria-disabled={blocked ? true : undefined} aria-describedby={blocked ? hintId : undefined} onClick={() => !blocked && onPin()}>
+        {pinned ? 'Unpin' : 'Pin'}
+      </button>
+      {blocked && (
+        <span id={hintId} className="hint">
+          {' '}
+          The quickbar holds {maxPins} actions.
+        </span>
+      )}
+    </>
   );
 }
 
@@ -576,16 +612,23 @@ export function ActionsPanel({
   act,
   rollMode = 'normal',
   onDamageType,
+  pins = [],
+  onPin,
 }: {
   view: CharacterView;
   roll: (target: RollTarget) => void;
   act: Act;
+  /** D73: the visible, resolved quickbar pins; a row whose pin is among them shows "Unpin". */
+  pins?: Pin[];
+  /** D73: pins the row's action, or unpins it when already pinned. Without it no Pin buttons show. */
+  onPin?: (pin: Pin) => void;
   /** The summary's advantage / disadvantage choice. Used by the attack rolls of weapons and of the character's own attacks (R93); damage is always normal. */
   rollMode?: RollMode;
   /** Wave 3 item 21: a damage roll pre-fills the Hit points damage type with the attack's type ('' when it names none of the thirteen). */
   onDamageType?: (type: string) => void;
 }) {
   const [critical, setCritical] = useState(false);
+  const [usableOnly, setUsableOnly] = useState(false);
   const rollDamage = (target: RollTarget, type?: string) => {
     onDamageType?.(normalizeDamageType(type));
     roll(target);
@@ -602,39 +645,62 @@ export function ActionsPanel({
   const resourcePools = view.sheet.resources ?? [];
   const allowances = resourcePools.filter((r) => r.allowance);
   const allowanceOf = (resourceId: string | undefined, contentId: string) => poolFor(allowances, resourceId, contentId);
-  const rollPool = ({ feature, effect }: (typeof rolls)[number]) => allowanceOf(effect.resourceId, effect.resourceContent ?? feature.content.contentId);
   const togglePool = (t: ToggleValue) => allowanceOf(t.resourceId, t.costResourceContent ?? t.content.contentId);
-  const poolGroups = allowances
-    .map((pool) => ({ pool, rolls: rolls.filter((r) => rollPool(r) === pool), toggles: plainToggles.filter((t) => togglePool(t) === pool) }))
-    .filter((g) => g.rolls.length > 0 || g.toggles.length > 0);
   if (attacks.length === 0 && customAttacks.length === 0 && rolls.length === 0 && plainToggles.length === 0) return null;
+  // D73: "Usable now" hides what the sheet can see is not usable; a by-hand row and a pinned one (so it can be unpinned) always stay.
+  const pinned = (pin: Pin) => pins.some((p) => pinKey(p) === pinKey(pin));
+  const pinning = (pin: Pin | undefined, name: string): Pinning | undefined =>
+    onPin && pin ? { name, pinned: pinned(pin), full: pins.length >= maxPins, onPin: () => onPin(pin) } : undefined;
+  const listed = (a: Availability, pin?: Pin) => !usableOnly || a.usable || a.byHand === true || (pin !== undefined && pinned(pin));
+  const rollRows = rolls
+    .map(({ feature, effect }) => ({
+      feature,
+      effect,
+      availability: rollAvailability(feature, effect, poolFor(resourcePools, effect.resourceId, effect.resourceContent ?? feature.content.contentId), resourcePools),
+      // A roll with nothing to roll and nothing to spend is only text.
+      pin: effect.dice || effect.resourceId !== undefined ? rollPin(feature, effect) : undefined,
+    }))
+    .filter((r) => listed(r.availability, r.pin));
+  const attackRows = attacks
+    .map((attack) => ({ attack, availability: attackAvailability(attack, poolFor(resourcePools, attack.resourceId ?? undefined, attack.costResourceContent ?? undefined)), pin: attackPin(attack) }))
+    .filter((r) => listed(r.availability, r.pin));
+  const toggleRows = plainToggles
+    .map((t) => ({ toggle: t, availability: toggleAvailability(t, poolFor(resourcePools, t.resourceId, t.costResourceContent ?? t.content.contentId)), pin: t.auto ? undefined : togglePin(t) }))
+    .filter((r) => listed(r.availability, r.pin));
+  const rowPool = ({ feature, effect }: (typeof rollRows)[number]) => allowanceOf(effect.resourceId, effect.resourceContent ?? feature.content.contentId);
+  const poolGroups = allowances
+    .map((pool) => ({ pool, rolls: rollRows.filter((r) => rowPool(r) === pool), toggles: toggleRows.filter((r) => togglePool(r.toggle) === pool) }))
+    .filter((g) => g.rolls.length > 0 || g.toggles.length > 0);
   // Wave 3 item 22 (R157): a toggle with an activation is listed in that group; one without stays in "Active effects".
-  const ungroupedToggles = plainToggles.filter((t) => !t.activation && !togglePool(t));
-  const rollItem = ({ feature, effect }: (typeof rolls)[number]) => (
+  const ungroupedToggles = toggleRows.filter((r) => !r.toggle.activation && !togglePool(r.toggle));
+  const rollItem = (r: (typeof rollRows)[number]) => (
     <RollItem
-      key={`${feature.content.revisionId}-${effect.id}`}
-      feature={feature}
-      effect={effect}
-      pool={poolFor(resourcePools, effect.resourceId, effect.resourceContent ?? feature.content.contentId)}
+      key={`${r.feature.content.revisionId}-${r.effect.id}`}
+      feature={r.feature}
+      effect={r.effect}
+      pool={poolFor(resourcePools, r.effect.resourceId, r.effect.resourceContent ?? r.feature.content.contentId)}
       pools={resourcePools}
+      availability={r.availability}
+      pinning={pinning(r.pin, r.effect.label || r.effect.id)}
       critical={critical}
       roll={roll}
       act={act}
     />
   );
-  const toggleItem = (t: ToggleValue) => (
-    <li key={`${t.content.revisionId}-${t.toggleId}`} className="feature">
-      <ToggleRow toggle={t} act={act} />
+  const toggleItem = (r: (typeof toggleRows)[number]) => (
+    <li key={`${r.toggle.content.revisionId}-${r.toggle.toggleId}`} className="feature">
+      <ToggleRow toggle={r.toggle} act={act} availability={r.availability} pinning={pinning(r.pin, r.toggle.label)} />
     </li>
   );
+  const nothingListed = attackRows.length === 0 && customAttacks.length === 0 && rollRows.length === 0 && toggleRows.length === 0;
   return (
     <section aria-labelledby="actions-heading" className="play-panel">
       <h3 id="actions-heading">Attacks and actions</h3>
       {ungroupedToggles.length > 0 && (
         <fieldset>
           <legend>Active effects (a switch is a confirmed change)</legend>
-          {ungroupedToggles.map((t) => (
-            <ToggleRow key={`${t.content.revisionId}-${t.toggleId}`} toggle={t} act={act} />
+          {ungroupedToggles.map((r) => (
+            <ToggleRow key={`${r.toggle.content.revisionId}-${r.toggle.toggleId}`} toggle={r.toggle} act={act} availability={r.availability} pinning={pinning(r.pin, r.toggle.label)} />
           ))}
         </fieldset>
       )}
@@ -642,18 +708,23 @@ export function ActionsPanel({
         <input type="checkbox" checked={critical} onChange={(e) => setCritical(e.target.checked)} />
         Critical hit (double the damage dice)
       </label>
+      <label className="choice">
+        <input type="checkbox" checked={usableOnly} onChange={(e) => setUsableOnly(e.target.checked)} />
+        Usable now
+      </label>
+      {usableOnly && nothingListed && <p className="hint">Nothing is usable right now.</p>}
       {activationGroups.map(({ key, title }) => {
         // Weapons stay in 'action'; a feature attack goes where its activation says (default 'action').
-        const groupAttacks = attacks.filter((a) => (a.source === 'feature' ? (a.activation ?? 'action') : 'action') === key);
+        const groupAttacks = attackRows.filter((r) => (r.attack.source === 'feature' ? (r.attack.activation ?? 'action') : 'action') === key);
         const groupCustom = key === 'action' ? customAttacks : [];
-        const groupRolls = rolls.filter((r) => (r.effect.activation ?? 'other') === key && !rollPool(r));
-        const groupToggles = plainToggles.filter((t) => t.activation === key && !togglePool(t));
+        const groupRolls = rollRows.filter((r) => (r.effect.activation ?? 'other') === key && !rowPool(r));
+        const groupToggles = toggleRows.filter((r) => r.toggle.activation === key && !togglePool(r.toggle));
         if (groupAttacks.length === 0 && groupCustom.length === 0 && groupRolls.length === 0 && groupToggles.length === 0) return null;
         return (
           <section key={key} aria-labelledby={`actions-${key}`}>
             <h4 id={`actions-${key}`}>{title}</h4>
             <ul className="features">
-              {groupAttacks.map((attack) => (
+              {groupAttacks.map(({ attack, availability, pin }) => (
                 <AttackItem
                   key={`${attack.item.revisionId}-${attack.effectId}`}
                   attack={attack}
@@ -662,6 +733,8 @@ export function ActionsPanel({
                   roll={roll}
                   rollDamage={rollDamage}
                   pool={poolFor(resourcePools, attack.resourceId ?? undefined, attack.costResourceContent ?? undefined)}
+                  availability={availability}
+                  pinning={pinning(pin, attack.name)}
                 />
               ))}
               {groupCustom.map((attack) => (
@@ -677,6 +750,7 @@ export function ActionsPanel({
                       Roll {attack.name} damage
                     </button>
                   )}
+                  {onPin && <PinButton {...pinning(customPin(attack), attack.name)!} />}
                 </li>
               ))}
               {groupRolls.map(rollItem)}
@@ -740,6 +814,8 @@ function RollItem({
   effect,
   pool,
   pools,
+  availability,
+  pinning,
   critical,
   roll,
   act,
@@ -749,6 +825,9 @@ function RollItem({
   pool?: ResourceValue;
   /** Every pool on the sheet: an `alsoChange` entry can name another one. */
   pools: ResourceValue[];
+  /** D73: what the sheet can see about using this row now; its reasons are shown as text the main control is described by. */
+  availability: Availability;
+  pinning?: Pinning;
   critical: boolean;
   roll: (target: RollTarget) => void;
   act: Act;
@@ -778,7 +857,11 @@ function RollItem({
   const diceless = !effect.dice;
   // D73: the Use (its reason, its cost text and the action it sends) lives in actionRows.ts, shared with the quickbar.
   const { cost: useCost, costFailed, poolName, alsoText, reason: useReason, action: useAction } = dicelessUse(feature, effect, pool, pools);
-  const rollDescribedBy = [locked ? reasonId : undefined, perUnit && !amountOk ? amountReasonId : undefined].filter(Boolean).join(' ') || undefined;
+  // D73: a roll with dice that the pool can't pay stays enabled (the cost is spent from its record) but says so; a locked one reuses the lock's reason.
+  const needsId = `roll-needs-${baseId}`;
+  const needs = !diceless && !locked ? availability.reasons.join(' ') : '';
+  const rollDescribedBy =
+    [locked ? reasonId : undefined, needs ? needsId : undefined, perUnit && !amountOk ? amountReasonId : undefined].filter(Boolean).join(' ') || undefined;
   return (
     <li className="feature">
       {diceless ? (
@@ -818,6 +901,12 @@ function RollItem({
           · {locked ? (effect.unavailableReason ?? 'Not available right now') : useReason}
         </span>
       )}
+      {needs && (
+        <span id={needsId} className="hint">
+          {' '}
+          · {needs}
+        </span>
+      )}
       {diceless && !effect.resourceId && effect.text && <span className="hint"> · {effect.text}</span>}
       {details && <p className="hint">{details}</p>}
       {effect.saveDc !== undefined && effect.saveTrace && (
@@ -844,6 +933,7 @@ function RollItem({
           )}
         </div>
       )}
+      {pinning && <PinButton {...pinning} />}
     </li>
   );
 }
@@ -855,6 +945,8 @@ function AttackItem({
   roll,
   rollDamage,
   pool,
+  availability,
+  pinning,
 }: {
   attack: AttackEntry;
   critical: boolean;
@@ -863,14 +955,19 @@ function AttackItem({
   rollDamage: (target: RollTarget, type?: string) => void;
   /** The pool a feature attack spends from, to name it in the cost line. */
   pool?: ResourceValue;
+  /** D73: a feature attack the pool can't pay stays enabled and says so. */
+  availability: Availability;
+  pinning?: Pinning;
 }) {
   const reasonId = useId();
+  const needsId = useId();
   // D43 slice 4: a feature attack is rolled by the content that gives it and its effect id; a weapon by its item.
   const feature = attack.source === 'feature';
   const target: RollTarget = feature ? { content: attack.item, effectId: attack.effectId } : { weapon: attack.item };
   // An unavailable attack is a disabled button whose reason is text beside it, not a tooltip.
   const locked = attack.available === false;
-  const described = locked ? reasonId : undefined;
+  const needs = locked ? '' : availability.reasons.join(' ');
+  const described = locked ? reasonId : needs ? needsId : undefined;
   return (
     <li className="feature">
       <details>
@@ -912,11 +1009,18 @@ function AttackItem({
           {attack.unavailableReason ?? 'Not available right now'}
         </span>
       )}
+      {needs && (
+        <span id={needsId} className="hint">
+          {' '}
+          {needs}
+        </span>
+      )}
       {attack.versatileDamage && (
         <button type="button" onClick={() => rollDamage({ weapon: attack.item, damage: true, versatile: true, critical }, attack.damageType)}>
           Roll {attack.name} two-handed damage ({attack.versatileDamage})
         </button>
       )}
+      {pinning && <PinButton {...pinning} />}
     </li>
   );
 }
