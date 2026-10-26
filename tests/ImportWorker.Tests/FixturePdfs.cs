@@ -288,6 +288,102 @@ internal static class FixturePdfs
         return builder.Build();
     }
 
+    /// <summary>
+    /// Import Lab Task 14 (D60 gate): the original class fixture <c>tests/RulesFixtures/lab/placeholder-class.md</c> set as a PDF, so the
+    /// Markdown and PDF routes read one class. A title, a heading, "Key: value" lines, a pipe table and paragraphs are laid out the
+    /// way the other fixture PDFs are: one bold heading size, a table of cells at fixed columns, body text wrapped at 10 points.
+    /// </summary>
+    public static byte[] PlaceholderClass(string markdown)
+    {
+        var builder = new PdfDocumentBuilder();
+        var regular = builder.AddStandard14Font(Standard14Font.Helvetica);
+        var bold = builder.AddStandard14Font(Standard14Font.HelveticaBold);
+        var page = builder.AddPage(PageSize.Letter);
+        var y = 740.0;
+
+        void Room(double needed)
+        {
+            if (y - needed >= 60)
+                return;
+            page = builder.AddPage(PageSize.Letter);
+            y = 740;
+        }
+
+        void Line(string text, double size, bool isBold)
+        {
+            Room(size + 4);
+            page.AddText(text, size, new PdfPoint(60, y), isBold ? bold : regular);
+            y -= size + 4;
+        }
+
+        var rows = new List<string[]>();
+        void FlushTable()
+        {
+            if (rows.Count == 0)
+                return;
+            const double pitch = 11;
+            Room((rows.Count + 2) * pitch + 10);
+            double[] columns = [60, 98, 190];
+            y -= pitch;
+            for (var c = 0; c < rows[0].Length; c++)
+                page.AddText(rows[0][c], 8, new PdfPoint(columns[c], y), bold);
+            foreach (var row in rows.Skip(1))
+            {
+                y -= pitch;
+                for (var c = 0; c < row.Length; c++)
+                    page.AddText(row[c], 8, new PdfPoint(columns[c], y), regular);
+            }
+            y -= pitch + 6;
+            rows.Clear();
+        }
+
+        foreach (var raw in markdown.ReplaceLineEndings("\n").Split('\n'))
+        {
+            var line = raw.TrimEnd();
+            if (line.StartsWith('|'))
+            {
+                var cells = line.Trim('|').Split('|').Select(c => c.Trim()).ToArray();
+                if (!cells.All(c => c.Length > 0 && c.All(ch => ch is '-' or ':')))
+                    rows.Add(cells);
+                continue;
+            }
+            FlushTable();
+            if (line.Length == 0)
+            {
+                y -= 6;
+                continue;
+            }
+            var heading = line.TakeWhile(c => c == '#').Count();
+            if (heading > 0)
+            {
+                if (heading == 3)
+                {
+                    Room(110); // a feature's name stays on the page with its "Level N" line and its text
+                    y -= 10;
+                }
+                Line(line[heading..].Trim(), heading == 1 ? 20 : 14, true);
+                continue;
+            }
+            var words = line.Replace("**", "", StringComparison.Ordinal).Split(' ');
+            var current = "";
+            foreach (var word in words)
+            {
+                if (current.Length + word.Length + 1 > 90)
+                {
+                    Line(current, 10, false);
+                    current = word;
+                }
+                else
+                {
+                    current = current.Length == 0 ? word : $"{current} {word}";
+                }
+            }
+            Line(current, 10, false);
+        }
+        FlushTable();
+        return builder.Build();
+    }
+
     /// <summary>A hand-built PDF from object bodies (object 1 first), with a correct cross-reference table.</summary>
     public static byte[] Raw(IReadOnlyList<byte[]> objects, string trailerExtra = "")
     {
