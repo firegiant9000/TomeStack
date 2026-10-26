@@ -1,3 +1,4 @@
+using TomeStack.AppService.Persistence;
 using TomeStack.RulesCore;
 
 namespace TomeStack.AppService.Tests;
@@ -38,7 +39,8 @@ public class SrdOrigins51Tests
 
         Assert.Equal(scores, Enum.GetValues<Ability>().Select(a => sheet.Field(FieldIds.Score(a)).Value));
         // 2014 rules: species content may raise ability scores (RulesFamilyPolicy.AbilityIncreaseSource), subraces included.
-        Assert.DoesNotContain(sheet.Diagnostics, d => d.Code == "policy.ability-increase-source");
+        // The refusal is a field warning on the score (never a sheet diagnostic).
+        Assert.DoesNotContain(Enum.GetValues<Ability>().SelectMany(a => sheet.Field(FieldIds.Score(a)).Warnings), d => d.Code == "policy.ability-increase-source");
 
         var walking = sheet.Field(FieldIds.Speed);
         Assert.Equal(speed, walking.Value);
@@ -71,14 +73,23 @@ public class SrdOrigins51Tests
         Assert.DoesNotContain(Named(Origins, subrace), unanswered.Active!);
     }
 
-    [Fact]
-    public void Hill_dwarf_toughness_and_poison_resistance()
+    [Theory]
+    [InlineData(1, 16)]
+    [InlineData(3, 38)]
+    public void Hill_dwarf_toughness_and_poison_resistance(int level, int hitPoints)
     {
         using var temp = new TempApp();
-        var sheet = Load(temp, "dwarf").Sheet;
+        var character = Load(temp, "dwarf").Character;
+        var barbarian = character.Classes[0].Class;
+        List<ChoiceSelection> choices = [.. character.Choices];
+        if (level >= 3)
+            choices.Add(new(barbarian, "primal-path", [new(Guid.Parse("51c00000-0000-4000-8000-000000000014"), Guid.Parse("51e00000-0000-4000-8000-000000000014"))]));
+        var sheet = temp.App.SaveCharacter(character with { Level = level, Classes = [new(barbarian, level)], Choices = choices }).Sheet;
 
-        // Barbarian d12: 12 + Con 3 (16 after +2), plus Dwarven Toughness 1 per level.
-        Assert.Equal(16, sheet.Field(FieldIds.HitPoints).Value);
+        // Barbarian d12: 12 + Con 3 (16 after +2) at 1st level, 7 + 3 per later level, plus Dwarven Toughness 1 per level.
+        var hp = sheet.Field(FieldIds.HitPoints);
+        Assert.Equal(hitPoints, hp.Value);
+        Assert.Equal(level, hp.Trace.Single(t => t.Origin.ContentName == "Hill Dwarf").Amount);
         var poison = Assert.Single(sheet.DamageDefences!);
         Assert.Equal(("poison", DamageDefenceKind.Resistance), (poison.Type, poison.Kind));
     }
@@ -96,6 +107,25 @@ public class SrdOrigins51Tests
         var sheet = temp.App.SaveCharacter(character with { Equipment = [new(Named(equipment, weapon), Equipped: true)] }).Sheet;
 
         Assert.Equal(proficient, Assert.Single(sheet.Attacks!).Proficient);
+    }
+
+    [Fact]
+    public void Known_gap_the_armor_strength_warning_does_not_know_the_dwarf_exemption()
+    {
+        // The SRD 5.1 Dwarf's speed "is not reduced by wearing heavy armor", but no content field can say so, so the
+        // armor Strength warning still tells a Dwarf to lower Speed (docs/licensing/srd-pack-review.md, "SRD 5.1 races",
+        // reference text). The calculated speed is not changed. When a field can express the exemption, invert this test.
+        using var temp = new TempApp();
+        var armor = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.1-armor.json");
+        var character = Load(temp, "dwarf").Character;
+        var sheet = temp.App.SaveCharacter(character with
+        {
+            BaseAbilities = new(12, 13, 14, 8, 12, 10),
+            Equipment = [new(Named(armor, "Plate"), Equipped: true)],
+        }).Sheet;
+
+        Assert.Contains(sheet.Field(FieldIds.ArmorClass).Warnings, d => d.Code == "equipment.armor-strength");
+        Assert.Equal(25, sheet.Field(FieldIds.Speed).Value);
     }
 
     [Theory]
@@ -170,6 +200,27 @@ public class SrdOrigins51Tests
             Assert.True(report.CanPublish, $"{revision.Name}: {string.Join("; ", report.Errors.Select(e => e.Message))}");
             Assert.True(revision.SchemaVersion == report.RequiredSchemaVersion, $"{revision.Name}: v{revision.SchemaVersion}, needs v{report.RequiredSchemaVersion}");
         }
+    }
+
+    [Fact]
+    public void Every_published_revision_keeps_its_pinned_hash()
+    {
+        // Published revisions are insert-only: an in-place edit after release makes every launch log content.bundled-conflict.
+        // tests/RulesFixtures/bundled/srd-5.1-origins.hashes.json pins each revision's stored hash (SqliteStore's own). Add a
+        // line for a new revision; never change an existing one. TOMESTACK_WRITE_FIXTURES=1 rewrites the file (new packs only).
+        var actual = Origins.Revisions.ToDictionary(r => r.RevisionId.ToString(), r => SqliteStore.Sha256(SqliteStore.Serialize(r)));
+        if (Environment.GetEnvironmentVariable("TOMESTACK_WRITE_FIXTURES") == "1")
+        {
+            var repo = new DirectoryInfo(AppContext.BaseDirectory);
+            while (!File.Exists(Path.Combine(repo.FullName, "TomeStack.slnx")))
+                repo = repo.Parent!;
+            var json = System.Text.Json.JsonSerializer.Serialize(new SortedDictionary<string, string>(actual), new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(Path.Combine(repo.FullName, "tests", "RulesFixtures", "bundled", "srd-5.1-origins.hashes.json"), json.ReplaceLineEndings("\n") + "\n");
+        }
+        var pinned = TempApp.LoadFixture<Dictionary<string, string>>("bundled/srd-5.1-origins.hashes.json");
+
+        Assert.All(pinned, p => Assert.Equal(p.Value, actual.GetValueOrDefault(p.Key)));
+        Assert.Empty(actual.Keys.Except(pinned.Keys));
     }
 
     [Fact]
