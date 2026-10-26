@@ -40,10 +40,15 @@ public partial class SrdSpellMetadataTests(ITestOutputHelper output)
     private static readonly string[] FieldNames = ["level", "school", "casting time", "ritual", "concentration", "components"];
 
     /// <summary>
-    /// A field the detector did not read is counted, not compared. 2026-10-26: the Components line of 1 spell on 5.1 and 12 on
-    /// 5.2.1 is not found by the detector (a detection gap; the packs hold the components). Lower these as detection improves.
+    /// A field the detector did not read is counted, not compared, against a ceiling per field (0 when not listed).
+    /// 2026-10-26: the Components line of 1 spell on 5.1 and 12 on 5.2.1 is not found by the detector (a detection gap; the
+    /// packs hold the components). Lower these as detection improves.
     /// </summary>
-    private static readonly Dictionary<string, int> NotReadCeiling = new() { ["5.1"] = 1, ["5.2.1"] = 12 };
+    private static readonly Dictionary<(string Version, string Field), int> NotReadCeiling = new()
+    {
+        [("5.1", "components")] = 1,
+        [("5.2.1", "components")] = 12,
+    };
 
     [SrdPdfFact]
     public async Task The_bundled_spell_metadata_matches_the_SRD_spell_headers()
@@ -100,8 +105,11 @@ public partial class SrdSpellMetadataTests(ITestOutputHelper output)
                 Compare("level", pdf.Level.ToString(System.Globalization.CultureInfo.InvariantCulture), truth.Level.ToString(System.Globalization.CultureInfo.InvariantCulture));
                 Compare("school", pdf.School?.ToLowerInvariant(), truth.School?.ToLowerInvariant());
                 Compare("casting time", Normalise(pdf.CastingTime), Normalise(truth.CastingTime));
-                Compare("ritual", pdf.Ritual ? "yes" : "no", truth.Ritual ? "yes" : "no");
-                Compare("concentration", pdf.Concentration ? "yes" : "no", truth.Concentration ? "yes" : "no");
+                // The detector reads concentration from the Duration line and, on 5.2.1, the ritual tag from the Casting Time line
+                // (5.1 has it in the header): with that line not read, the flag is not read either, rather than a silent "no".
+                var ritualRead = family == RulesFamilies.Srd51 || pdf.CastingTime is not null;
+                Compare("ritual", ritualRead ? YesNo(pdf.Ritual) : null, YesNo(truth.Ritual));
+                Compare("concentration", pdf.Duration is null ? null : YesNo(pdf.Concentration), YesNo(truth.Concentration));
                 Compare("components", Letters(pdf.Components), Letters(truth.Components));
                 if (differs.Count == 0)
                     allRight++;
@@ -118,16 +126,21 @@ public partial class SrdSpellMetadataTests(ITestOutputHelper output)
                 failures.Add($"{version} unread {unread}/{bundled.Count}");
             foreach (var field in FieldNames.Where(f => wrong[f] != 0))
                 failures.Add($"{version} {field} {wrong[field]}/{matched}");
-            var missing = notRead.Values.Sum();
-            if (missing > NotReadCeiling[version])
-                failures.Add($"{version} fields not read {missing} > {NotReadCeiling[version]}");
-            else if (missing < NotReadCeiling[version])
-                output.WriteLine($"{version}: fields not read {missing} < ceiling {NotReadCeiling[version]}; lower the ceiling.");
+            foreach (var field in FieldNames)
+            {
+                var ceiling = NotReadCeiling.GetValueOrDefault((version, field));
+                if (notRead[field] > ceiling)
+                    failures.Add($"{version} {field} not read {notRead[field]} > {ceiling}");
+                else if (notRead[field] < ceiling)
+                    output.WriteLine($"{version}: {field} not read {notRead[field]} < ceiling {ceiling}; lower the ceiling.");
+            }
         }
         if (Environment.GetEnvironmentVariable("TOMESTACK_SPELL_METADATA_OUT") is { Length: > 0 } outFile)
             await File.WriteAllTextAsync(outFile, report.ToString());
         Assert.True(failures.Count == 0, string.Join("; ", failures)); // counts only, never names
     }
+
+    private static string YesNo(bool value) => value ? "yes" : "no";
 
     private static string Quote(string? value) => value is null ? "(not read)" : $"'{value}'";
 

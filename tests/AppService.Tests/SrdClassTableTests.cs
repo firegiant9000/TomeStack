@@ -193,7 +193,8 @@ public class SrdClassTableTests(ITestOutputHelper output)
                         abilityRight++;
                 }
                 if (Has("spellcasting") || slotTable) slotTables++;
-                // Diagnostics for SRD pages only (CC-BY text, console only): the class and the parts read, never stored.
+                // Diagnostics for SRD pages only (CC-BY): the class name and the effect ids read, no page text. The weekly job keeps
+                // this output in its test-results artifact for 7 days.
                 output.WriteLine($"  {version} {c.ProposedName}: {row} [{string.Join(' ', c.ProposedEffects.Select(e => e.Id).Where(i => i.StartsWith("weapon-", StringComparison.Ordinal) || i.StartsWith("armor-", StringComparison.Ordinal)))}]");
             }
             output.WriteLine($"{version}: classes {classes.Count}; proposed hit die {hit}, saves {saves}, armor {armor} (+{armorNone} read as none), weapons {weapons} (+{weaponsQualified} qualified, not proposed), "
