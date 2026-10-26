@@ -36,9 +36,13 @@ function normalise(values: unknown[], max: number): Pin[] {
   for (const value of values) {
     if (!isPin(value)) continue;
     const pin: Pin = { kind: value.kind };
-    if (typeof value.contentId === 'string') pin.contentId = value.contentId;
-    if (typeof value.effectId === 'string') pin.effectId = value.effectId;
-    if (typeof value.attackId === 'string') pin.attackId = value.attackId;
+    // Only the ids the kind uses: a stray field would make the same action look like a different pin.
+    if (value.kind === 'custom') {
+      pin.attackId = value.attackId;
+    } else {
+      pin.contentId = value.contentId;
+      pin.effectId = value.effectId;
+    }
     const k = pinKey(pin);
     if (seen.has(k)) continue;
     seen.add(k);
@@ -111,8 +115,10 @@ export function resolvePin(view: CharacterView, pin: Pin): QuickAction | undefin
       const target: RollTarget = { content: feature.content, effectId: effect.id, ...(effect.perUnit && pool?.current !== undefined ? { amount: effect.cost ?? 0 } : {}) };
       // The name promises a spend only when the roll's record would offer the fixed Spend (recordSpend's autoAction).
       const stock = effect.drawsDown ? pool?.spent : pool?.current;
+      // A held roll (compound with no rollId) has no Spend to offer, so its name stays plain.
+      const held = (effect.drawsDown || (effect.alsoChange?.length ?? 0) > 0) && !effect.rollId;
       const spends =
-        pool?.current !== undefined && !effect.variableCost && !use.costFailed && !(use.cost < 1 && (effect.alsoChange?.length ?? 0) === 0) && (stock ?? 0) >= use.cost;
+        !held && pool?.current !== undefined && !effect.variableCost && !use.costFailed && !(use.cost < 1 && (effect.alsoChange?.length ?? 0) === 0) && (stock ?? 0) >= use.cost;
       return { ...base, name: spends ? `Roll ${label} and spend ${use.cost} ${pool.label}` : `Roll ${label}`, availability, target };
     }
     case 'attack': {
@@ -155,7 +161,7 @@ export function editPins(view: CharacterView, stored: Pin[], pin: Pin): Pin[] {
   let rest = hidden;
   if (shown.has(k)) {
     next = visible.filter((p) => pinKey(p) !== k);
-  } else if (visible.length < maxPins) {
+  } else if (visible.length < maxPins && pinnable(view, pin)) {
     next = [...visible, pin];
     rest = hidden.filter((p) => pinKey(p) !== k);
   } else {

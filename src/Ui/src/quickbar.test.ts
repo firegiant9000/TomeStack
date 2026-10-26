@@ -141,6 +141,37 @@ it('names a roll with dice without a spend when it would not offer one', () => {
   expect(rollName(effect(), pool({ current: 1 }))).toBe('Roll Tide Wave');
 });
 
+it('names a held roll (compound, no rollId) plainly, and a compound roll with a rollId with its spend', () => {
+  const rollName = (e: FeatureEffect) => {
+    const f = feature([e]);
+    return resolvePin(view({ features: [f] }), rollPin(f, f.effects[0]!))!.name;
+  };
+  const also = [{ resourceContent: 'c1', resourceId: 'charge', change: 'spend', amount: 1 }];
+  expect(rollName(effect({ alsoChange: also }))).toBe('Roll Tide Wave');
+  expect(rollName(effect({ drawsDown: true }))).toBe('Roll Tide Wave');
+  expect(rollName(effect({ alsoChange: also, rollId: 'wave-roll' }))).toBe('Roll Tide Wave and spend 2 Focus');
+});
+
+it('reads a pin without the ids its kind does not use, and de-duplicates it against the clean pin', () => {
+  localStorage.setItem(
+    'tomestack.quickbar.c1',
+    JSON.stringify([
+      { kind: 'roll', contentId: 'c1', effectId: 'a', attackId: 'stray' },
+      { kind: 'roll', contentId: 'c1', effectId: 'a' },
+      { kind: 'custom', attackId: 'k1', contentId: 'c1', effectId: 'a' },
+    ]),
+  );
+  expect(readPins('c1')).toEqual([{ kind: 'roll', contentId: 'c1', effectId: 'a' }, { kind: 'custom', attackId: 'k1' }]);
+});
+
+it('editPins adds a pin only when it resolves on the sheet, and always lets one be unpinned', () => {
+  const v = customView(2);
+  const pins = customPins(2);
+  expect(editPins(v, [pins[0]!], ghost(1))).toEqual([pins[0]!]);
+  expect(editPins(v, [pins[0]!], pins[1]!)).toEqual([pins[0]!, pins[1]!]);
+  expect(editPins(v, [pins[0]!, ghost(1)], pins[0]!)).toEqual([ghost(1)]);
+});
+
 it('carries the base cost for a per-unit roll', () => {
   const f = feature([effect({ perUnit: { dice: '1d6' } })]);
   expect(resolvePin(view({ features: [f] }), rollPin(f, f.effects[0]!))!.target).toEqual({ content: ref, effectId: 'wave', amount: 2 });
