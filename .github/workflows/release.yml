@@ -3,44 +3,72 @@ name: Release
 # Roadmap T5 (ADR-008): a version tag builds, checks and packs the installer and creates a DRAFT GitHub release.
 # Nothing is published until the owner reviews the draft and publishes it by hand. The build is unsigned
 # (owner decision 2026-10-01; docs/licensing/release-checklist.md), so the notes describe the SmartScreen prompt.
+#
+# Three jobs, so no step that runs repo code or npm packages holds a write or OIDC token:
+#   build   (contents: read)   the version check, the full gate, pack, installer smoke, SHA256SUMS
+#   attest  (id-token, attestations)   build provenance over every file SHA256SUMS lists
+#   publish (contents: write)  the draft release; runs no repo code
+# A manual run (workflow_dispatch) is a dry run: build only, no attestation, no release.
+# Every action is pinned to a full commit SHA; the version is in the trailing comment.
 on:
   push:
     tags: ['v[0-9]+.[0-9]+.[0-9]+']
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: 'Build only (gate, pack, installer smoke, SHA256SUMS). A manual run never attests or publishes.'
+        type: boolean
+        default: true
 
-permissions:
-  contents: write   # create the draft release; nothing else
+permissions: {}
 
 concurrency:
   group: release-${{ github.ref_name }}
   cancel-in-progress: false
 
 jobs:
-  release:
+  build:
     runs-on: windows-latest
     timeout-minutes: 45
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: src/Ui/package-lock.json
 
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
 
       # The tag, Directory.Build.props and the changelog must agree, and vpk must match the Velopack library it packs
-      # (ADR-008 "Versioning"), before anything is built.
+      # (ADR-008 "Versioning"), before anything is built. A manual run has no tag, so it takes the version from
+      # Directory.Build.props and checks the rest.
       - name: Check version, changelog and Velopack versions
         id: version
         shell: pwsh
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          DRY_RUN: ${{ inputs.dry-run }}
         run: |
-          $tag = '${{ github.ref_name }}'
-          $version = $tag.TrimStart('v')
           $props = ([xml](Get-Content Directory.Build.props -Raw)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
-          if ($props -ne $version) { throw "Tag $tag does not match Directory.Build.props Version $props" }
+          if ($env:EVENT_NAME -eq 'push') {
+            $version = $env:REF_NAME.TrimStart('v')
+            if ($props -ne $version) { throw "Tag $env:REF_NAME does not match Directory.Build.props Version $props" }
+          } else {
+            if ($env:DRY_RUN -ne 'true') { throw 'A manual run is a dry run only; push a vX.Y.Z tag to release.' }
+            $version = $props
+          }
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Version '$version' must be MAJOR.MINOR.PATCH" }
           if (-not (Select-String -Path docs/CHANGELOG.md -Pattern "^## $([regex]::Escape($version))(\s|$)" -Quiet)) { throw "docs/CHANGELOG.md has no '## $version' section" }
           $vpk = (Get-Content .config/dotnet-tools.json -Raw | ConvertFrom-Json).tools.vpk.version
           $lib = ([xml](Get-Content src/DesktopShell/TomeStack.DesktopShell.csproj -Raw)).Project.ItemGroup.PackageReference | Where-Object { $_.Include -eq 'Velopack' } | ForEach-Object { $_.Version }
@@ -48,7 +76,7 @@ jobs:
           "version=$version" >> $env:GITHUB_OUTPUT
           "Releasing $version (vpk and Velopack $vpk)"
 
-      # The gate (CONTRIBUTING.md), in order.
+      # The gate (CONTRIBUTING.md), in order. It stays here in full: a release never reuses a CI artefact.
       - name: UI install
         working-directory: src/Ui
         run: npm ci
@@ -91,34 +119,121 @@ jobs:
         shell: pwsh
         run: scripts/pack-installer.ps1 -Version '${{ steps.version.outputs.version }}' -OutputDir "$env:RUNNER_TEMP/installer"
 
+      # Signing runs here when B1 lands (release-checklist.md "Code signing"): after the pack, before the installer
+      # smoke and the hash file, so the smoke runs and SHA256SUMS covers the signed files.
+
       # Install, smoke, check the notices and uninstall with the data kept (no older build here to upgrade from;
       # the upgrade test is an owner check, docs/features/m2-acceptance.md).
       - name: Installer smoke
         shell: pwsh
         run: scripts/installer-smoke.ps1 -Adapter Velopack -InstallOnly -NewBuild "$env:RUNNER_TEMP/installer/${{ steps.version.outputs.version }}"
 
-      - name: Release notes from the changelog
-        shell: pwsh
-        run: scripts/release-notes.ps1 -Version '${{ steps.version.outputs.version }}' -Output "$env:RUNNER_TEMP/release-notes.md"
-
-      # A draft only: the owner reviews it and publishes it on GitHub. Re-running for the same tag fails rather than
-      # replacing an existing release.
-      - name: Create the draft release
+      # The release assets are every file vpk wrote at the top of the version folder (the publish folder below it is
+      # not an asset), the same set as before SHA256SUMS. SHA256SUMS is in sha256sum text format: "<hash>  <name>",
+      # lower-case hex, LF line endings, so `sha256sum --check` and the attest job read it as written.
+      - name: Collect the assets and write SHA256SUMS
         shell: pwsh
         env:
-          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          $version = '${{ steps.version.outputs.version }}'
-          $dir = "$env:RUNNER_TEMP/installer/$version"
-          $assets = Get-ChildItem $dir -File | ForEach-Object { $_.FullName }
-          if (-not ($assets | Where-Object { $_ -like '*TomeStack.App-win-Setup.exe' })) { throw 'Setup.exe is missing' }
-          gh release create '${{ github.ref_name }}' $assets --draft --verify-tag --title "TomeStack $version" --notes-file "$env:RUNNER_TEMP/release-notes.md"
-          if ($LASTEXITCODE -ne 0) { throw 'gh release create failed' }
+          $src = Join-Path $env:RUNNER_TEMP "installer/$env:VERSION"
+          $out = Join-Path $env:RUNNER_TEMP 'release-assets'
+          New-Item -ItemType Directory -Path $out -Force | Out-Null
+          $files = Get-ChildItem $src -File | Sort-Object Name
+          if (-not ($files | Where-Object { $_.Name -like '*TomeStack.App-win-Setup.exe' })) { throw 'Setup.exe is missing' }
+          $lines = foreach ($f in $files) {
+            if ($f.Name -notmatch '^[A-Za-z0-9._-]+$') { throw "Unexpected asset name '$($f.Name)'" }
+            Copy-Item $f.FullName $out
+            '{0}  {1}' -f (Get-FileHash (Join-Path $out $f.Name) -Algorithm SHA256).Hash.ToLowerInvariant(), $f.Name
+          }
+          [IO.File]::WriteAllText((Join-Path $out 'SHA256SUMS'), (($lines -join "`n") + "`n"))
+          Get-Content (Join-Path $out 'SHA256SUMS')
+
+      - name: Release notes from the changelog
+        shell: pwsh
+        run: scripts/release-notes.ps1 -Version '${{ steps.version.outputs.version }}' -Output "$env:RUNNER_TEMP/release-notes/release-notes.md"
+
+      - name: Upload the release assets
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-assets
+          path: ${{ runner.temp }}/release-assets/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload the release notes
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-notes
+          path: ${{ runner.temp }}/release-notes/release-notes.md
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Upload smoke report
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-smoke-result
           path: ${{ runner.temp }}/smoke-result.json
           if-no-files-found: warn
+
+  # Build provenance for every file SHA256SUMS lists. Verify with:
+  #   gh attestation verify TomeStack.App-win-Setup.exe --repo firegiant9000/TomeStack \
+  #     --signer-workflow firegiant9000/TomeStack/.github/workflows/release.yml --source-ref refs/tags/vX.Y.Z
+  attest:
+    needs: build
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      id-token: write
+      attestations: write
+      contents: read
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-assets
+          path: release-assets
+
+      # The attestation is made from the hashes in SHA256SUMS, so check them against the files first.
+      - name: Check the assets against SHA256SUMS
+        working-directory: release-assets
+        run: sha256sum --check --strict SHA256SUMS
+
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-checksums: release-assets/SHA256SUMS
+
+  # A draft only: the owner reviews it and publishes it on GitHub. Re-running for the same tag fails rather than
+  # replacing an existing release. No repo code runs here: the job uploads the files SHA256SUMS lists, and SHA256SUMS.
+  publish:
+    needs: [build, attest]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write   # create the draft release; nothing else
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-assets
+          path: release-assets
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-notes
+          path: release-notes
+
+      - name: Create the draft release
+        working-directory: release-assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          sha256sum --check --strict SHA256SUMS
+          grep -qE '  TomeStack\.App-win-Setup\.exe$' SHA256SUMS || { echo 'Setup.exe is missing'; exit 1; }
+          mapfile -t assets < <(cut -d' ' -f3- SHA256SUMS)
+          gh release create "$TAG" "${assets[@]}" SHA256SUMS --draft --verify-tag --title "TomeStack $VERSION" --notes-file ../release-notes/release-notes.md

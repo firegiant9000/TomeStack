@@ -35,6 +35,17 @@ $body
 - **TomeStack.App-win-Setup.exe**: the installer (per-user, no admin rights, Windows 10 and 11, 64-bit). Windows 10 is best-effort.
 - **TomeStack.App-win-Portable.zip**: the same build without installing.
 - The ``.nupkg`` and ``releases.win.json`` files are Velopack's package and feed. You don't need them; TomeStack never downloads updates by itself.
+- **SHA256SUMS**: the SHA-256 hash of every other file on this page.
+
+## Verify the download
+
+The release workflow attests every file listed in ``SHA256SUMS``: GitHub records which workflow, tag and commit built it. With the [GitHub CLI](https://cli.github.com/), run this in the folder you downloaded to:
+
+``````
+gh attestation verify TomeStack.App-win-Setup.exe --repo firegiant9000/TomeStack --signer-workflow firegiant9000/TomeStack/.github/workflows/release.yml --source-ref refs/tags/v$Version
+``````
+
+Without the GitHub CLI, compare ``(Get-FileHash TomeStack.App-win-Setup.exe).Hash`` in PowerShell with the installer's line in ``SHA256SUMS`` (the case of the letters doesn't matter). An attestation shows where a file was built; it is not a code signature, so Windows still shows the SmartScreen prompt.
 
 This build is **unsigned**. See the note at the top about the SmartScreen prompt. Third-party notices are in ``ATTRIBUTION.md`` next to ``TomeStack.exe``. Two Microsoft Windows SDK files that ship with TomeStack (``Microsoft.Windows.SDK.NET.dll``, ``WinRT.Runtime.dll``) are covered by the Microsoft Windows SDK license terms. By installing TomeStack you agree to those terms for those files; see "Terms for the Microsoft Windows SDK files" in ``ATTRIBUTION.md``.
 "@

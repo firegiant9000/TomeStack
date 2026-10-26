@@ -11,6 +11,7 @@
 ### Internal
 
 - **RulesCore boundary test:** `RulesCoreBoundaryTests` fails the build if `TomeStack.RulesCore` references persistence, UI, Windows or network assemblies, declares any project, package or framework reference, or targets Windows. No change to the app.
+- **Release integrity (F1):** the release workflow is split into `build` (read-only token, checkout without a persisted token; the full gate, pack and installer smoke as before), `attest` and `publish`, with every action pinned to a commit SHA. The release gains `SHA256SUMS` (the SHA-256 of every asset) and a build provenance attestation for each file it lists; the notes and `docs/licensing/release-checklist.md` ("Verify a release") give the `gh attestation verify` command. A manual run of the workflow is a build-only dry run. The assets are otherwise unchanged and still unsigned. No change to the app.
 - **Automated accessibility checks (SI S5):** component tests now run axe (`axe-core`, a development-only dependency, MPL-2.0) on the summary bar with a roll result, the import review's detail view with its confirm ticks, and the homebrew studio's effect editor open on a toggle. Colour contrast stays a manual check. No change to the app.
 
 ## 0.6.0 (the tester feedback: characters from any sheet or text, class import and bulk publish, play mechanics and theme colour)

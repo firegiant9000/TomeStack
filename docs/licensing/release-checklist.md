@@ -117,6 +117,24 @@ Velopack (MIT, Caelan Sayler) builds `Setup.exe` and `Update.exe` in Rust, with 
    1. the full gate;
    2. the self-contained publish and `vpk pack`;
    3. an install, smoke and uninstall on the runner;
-   4. it creates a **draft** release with `Setup.exe`, the portable zip, the `.nupkg`, the Velopack feed files and notes from the changelog.
+   4. it writes `SHA256SUMS` over those files, attests each file it lists (build provenance) and creates a **draft** release with `Setup.exe`, the portable zip, the `.nupkg`, the Velopack feed files, `SHA256SUMS` and notes from the changelog.
 4. Review the draft on GitHub (assets, notes, the unsigned note), then **Publish**. Nothing is public before that.
 5. After publishing: run the upgrade test and the install checks on the published `Setup.exe` (`docs/features/release-0.4.0-verification.md`).
+
+### Verify a release
+
+The **Release** workflow has three jobs, so no step that runs the repo's code or npm packages holds a write or OIDC token:
+
+- `build` (`contents: read`, checkout without a persisted token): the version check, the full gate, pack, installer smoke, then `SHA256SUMS` (`<sha256>  <file>` per asset, lower-case hex). Signing, when it lands, goes after the pack and before the hash file.
+- `attest` (`id-token: write`, `attestations: write`): checks the files against `SHA256SUMS`, then `actions/attest-build-provenance` with `subject-checksums: SHA256SUMS`.
+- `publish` (`contents: write`): checks the files again and creates the draft with the listed files and `SHA256SUMS`. It runs no repo code.
+
+Every action is pinned to a commit SHA. A manual run (**Run workflow**, `dry-run` ticked) runs `build` only, so the build can be rehearsed on a branch without a tag; it never attests or publishes.
+
+**Before publishing the draft** (owner, on a machine with the GitHub CLI): download `TomeStack.App-win-Setup.exe` and `SHA256SUMS` from the draft and run
+
+```
+gh attestation verify TomeStack.App-win-Setup.exe --repo firegiant9000/TomeStack --signer-workflow firegiant9000/TomeStack/.github/workflows/release.yml --source-ref refs/tags/vX.Y.Z
+```
+
+with the release's tag. It must report the attestation verified. `--signer-workflow` and `--source-ref` make it fail for a file attested by any other workflow or ref. Then check the installer's hash against its line in `SHA256SUMS` (`(Get-FileHash TomeStack.App-win-Setup.exe).Hash` in PowerShell; the case of the letters doesn't matter). The release notes print the same command for users. An attestation says which workflow built a file, not who published it: it is not a code signature, and the build is not bit-reproducible.
