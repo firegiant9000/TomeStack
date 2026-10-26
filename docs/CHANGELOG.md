@@ -12,6 +12,7 @@
 
 - **RulesCore boundary test:** `RulesCoreBoundaryTests` fails the build if `TomeStack.RulesCore` references persistence, UI, Windows or network assemblies, declares any project, package or framework reference, or targets Windows. No change to the app.
 - **Automated accessibility checks (SI S5):** component tests now run axe (`axe-core`, a development-only dependency, MPL-2.0) on the summary bar with a roll result, the import review's detail view with its confirm ticks, and the homebrew studio's effect editor open on a toggle. Colour contrast stays a manual check. No change to the app.
+- **Security policy and issue forms:** `SECURITY.md` (private vulnerability reporting, the latest release supported, what a release is, how to check a download against `SHA256SUMS` and its attestation with `gh attestation verify --signer-workflow`, and the app's no-network stance from ADR-001), a "Verify a release" paragraph in the README, and GitHub issue forms for bugs and feature requests (blank issues off; vulnerabilities go to `SECURITY.md`). No change to the app.
 
 ## 0.6.0 (the tester feedback: characters from any sheet or text, class import and bulk publish, play mechanics and theme colour)
 

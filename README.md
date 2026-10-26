@@ -117,6 +117,13 @@ scripts/installer-smoke.ps1 -Adapter Velopack -OldBuild artifacts/installer/<old
 
 It installs to `%LOCALAPPDATA%\TomeStack.App`. Uninstalling removes only that folder, never the data folder. The version comes from `Directory.Build.props` and must go up with every build you hand out.
 
+**Verify a release.** Each release lists a `SHA256SUMS` file, and each of its files has a build attestation from the Release workflow. With the download and `SHA256SUMS` in one folder, the first command prints `True` when the hash matches, and the second (needs the [GitHub CLI](https://cli.github.com/)) checks that this repository's `release.yml` built it. Details, and what a release is and isn't, are in [SECURITY.md](SECURITY.md).
+
+```powershell
+(Get-FileHash .\TomeStack.App-win-Setup.exe -Algorithm SHA256).Hash -eq ((Select-String -Path .\SHA256SUMS -Pattern 'TomeStack.App-win-Setup.exe' -SimpleMatch).Line -split '\s+')[0]
+gh attestation verify .\TomeStack.App-win-Setup.exe --repo firegiant9000/TomeStack --signer-workflow firegiant9000/TomeStack/.github/workflows/release.yml
+```
+
 ## Safety defaults
 
 - Offline: the shell refuses any network request outside the app's virtual host, and the production bundle has a strict CSP.
