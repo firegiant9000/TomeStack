@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Added
+- **"Why?" on rolls and sheet numbers (D72):** a closed "Why?" beside the Last roll explains in short sentences how the roll came out: the number's steps, advantage or disadvantage, and doubled dice on a critical hit. The same "Why?" is on every sheet number that has a trace. A roll record now carries that trace (`explain`) for field rolls, attacks and spell attacks; it is never stored, so nothing in a saved character, package or database changes. Print, share and export never show it. The owner check at 400% zoom is open ([accessibility-checklist.md](features/accessibility-checklist.md) row 86).
+
 ## 0.7.0 (the play-mechanics engine: forms, turns, feature attacks, damage responses and charging; spell filters, the by-hand list and the combat card)
 
 The play-mechanics engine (D43, slices 1 to 8, ADR-018) and the Plan A items merged into `main` after 0.6.0 (P09, P14, P18), listed below. Homebrew content can now describe forms and overlays that cost from a shared pool, a round counter with upkeep, feature attacks and riders, action details, roll modes, damage responses and charging; the SRD packs are unchanged. It is checked on test data (automated tests, a scripted engine rehearsal with original content, and the desktop smoke); the owner checks on an installed build are still open (Narrator, keyboard, 400% zoom and High Contrast on the new screens, print).
