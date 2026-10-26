@@ -83,9 +83,10 @@ public sealed partial class TomeStackApp : IDisposable
     /// </param>
     /// <param name="extractor">PDF extraction for imports (ADR-009); by default the isolated worker next to the app.</param>
     /// <param name="formReader">Character-sheet import: reads a PDF's form fields; by default the isolated worker next to the app.</param>
+    /// <param name="markdownExtractor">Markdown imports (D67); by default the same isolated worker, asked for its <c>extractMarkdown</c> kind.</param>
     /// <param name="appVersion">The version to stamp the data folder with (R75); the running build's, unless a test says otherwise.</param>
     /// <exception cref="DataFolderInUseException">Another process has the folder open (M2.1); nothing was read or changed.</exception>
-    public static TomeStackApp Open(string dataDirectory, TimeProvider? time = null, IEnumerable<string>? syncRoots = null, bool devFixtures = false, ImportWorker.IDocumentExtractor? extractor = null, ImportWorker.Forms.IFormReader? formReader = null, string? appVersion = null)
+    public static TomeStackApp Open(string dataDirectory, TimeProvider? time = null, IEnumerable<string>? syncRoots = null, bool devFixtures = false, ImportWorker.IDocumentExtractor? extractor = null, ImportWorker.Forms.IFormReader? formReader = null, string? appVersion = null, ImportWorker.IDocumentExtractor? markdownExtractor = null)
     {
         // Before the database opens: migration, the leftover-import check and the file cleanup below all assume this
         // process is the only one using the folder.
@@ -97,8 +98,9 @@ public sealed partial class TomeStackApp : IDisposable
             var version = appVersion ?? AppVersionStamp.CurrentVersion;
             AppVersionStamp.CopyBeforeOpen(dataDirectory, Path.Combine(dataDirectory, DatabaseFileName), version, SqliteStore.LatestSchemaVersion);
             var warning = DataFolder.SyncRootWarning(dataDirectory, syncRoots ?? DataFolder.DiscoverSyncRoots());
-            app = new TomeStackApp(dataDirectory, time ?? TimeProvider.System, warning is null ? [] : [warning]) { _extractor = extractor, _sheetExtractor = extractor, _formReader = formReader, _folderLock = folderLock };
+            app = new TomeStackApp(dataDirectory, time ?? TimeProvider.System, warning is null ? [] : [warning]) { _extractor = extractor, _markdownExtractor = markdownExtractor, _sheetExtractor = extractor, _formReader = formReader, _folderLock = folderLock };
             app.DeleteLeftoverDdbFiles(); // a crash during ddb.readData can leave its temporary copy
+            DeleteLeftoverMarkdownCopies(); // and a crash during a Markdown import, its copy
             app.InterruptLeftoverImports();
             var bundled = new HashSet<Guid>();
             foreach (var pack in BundledPacks)

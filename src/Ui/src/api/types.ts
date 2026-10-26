@@ -1419,6 +1419,10 @@ export type ImportJobStatus = 'queued' | 'running' | 'completed' | 'cancelled' |
 export interface ImportJob {
   id: string;
   sourceId: string;
+  /** SHA-256 of the document the job read (the PDF, or the Markdown file's bytes); its pages are stored under it. */
+  sha256: string;
+  /** `markdown` for a Markdown import (import pages only: no PDF, not resumable); absent for a PDF job. */
+  format?: 'markdown';
   firstPage: number;
   lastPage?: number;
   wholeDocument: boolean;

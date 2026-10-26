@@ -348,11 +348,10 @@ export function SourcesPanel({ onError, onStatus, onOpenStudio }: Props & { onOp
                   </div>
                 </div>
               )}
-              {pdf && pdf.status !== 'missing' && source.editionVersion === 'homebrew' && (
-                <>
-                  <PageImportForm source={source} onError={onError} onStatus={onStatus} />
-                  <ImportPanel source={source} onError={onError} onStatus={onStatus} onOpenStudio={onOpenStudio} />
-                </>
+              {pdf && pdf.status !== 'missing' && source.editionVersion === 'homebrew' && <PageImportForm source={source} onError={onError} onStatus={onStatus} />}
+              {/* D67: a Markdown import needs no PDF, so every homebrew source gets the panel; the PDF reads show only with a PDF. */}
+              {source.editionVersion === 'homebrew' && (
+                <ImportPanel source={source} hasPdf={!!pdf && pdf.status !== 'missing'} onError={onError} onStatus={onStatus} onOpenStudio={onOpenStudio} />
               )}
               {removing?.sourceId === source.id && (
                 <div role="alertdialog" aria-label={`Remove ${removing.originalFileName}?`} className="play-panel">

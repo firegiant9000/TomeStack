@@ -1145,6 +1145,35 @@ it('selects a proposed effect of a fixture class and sees its lines highlighted 
   expect(lamplighter.querySelector('pre.excerpt')).toBeNull();
 });
 
+it('imports a fixture Markdown class into a source with no PDF: pages only, candidates to review, and the stored page text opens in the app (D67)', async () => {
+  const user = userEvent.setup();
+  const source = await client.createHomebrewSource('E2E Markdown Book', ['srd-5.2.1']);
+  const markdown = readFileSync(resolve(process.cwd(), '../../tests/RulesFixtures/lab/placeholder-class.md'));
+  const job = await client.startMarkdownImportData(source.id, 'placeholder-class.md', markdown.toString('base64'));
+  expect(job.format).toBe('markdown');
+
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: 'Sources' }));
+  const reader = () => within(screen.getByRole('listitem', { name: 'E2E Markdown Book' })).getByRole('region', { name: 'Read the text of E2E Markdown Book' });
+  // No PDF: the Markdown import is offered, the PDF reads are not.
+  expect(within(await screen.findByRole('listitem', { name: 'E2E Markdown Book' })).getByRole('button', { name: 'Import a Markdown file…' })).toBeTruthy();
+  expect(within(reader()).queryByRole('button', { name: 'Read the whole document' })).toBeNull();
+
+  const review = await within(reader()).findByRole('button', { name: /^Review \d+ candidates?$/ }, { timeout: 30000 });
+  expect(Number(/\d+/.exec(review.textContent ?? '')?.[0])).toBeGreaterThan(0);
+  expect(within(reader()).getByText(/^Markdown file: completed, \d+ pages? read/)).toBeTruthy();
+  expect(within(reader()).queryByRole('button', { name: 'Resume' })).toBeNull();
+
+  // The read text is searchable, and "Open page" shows what was stored, since there is no PDF to open.
+  await user.type(within(reader()).getByRole('textbox', { name: 'Search the text of E2E Markdown Book' }), 'Placeholder Class');
+  await user.click(within(reader()).getByRole('button', { name: 'Search' }));
+  const results = await within(reader()).findByRole('list', { name: 'Search results' });
+  await user.click(within(results).getAllByRole('button', { name: /^Open page \d+$/ })[0]!);
+  const stored = await within(reader()).findByRole('region', { name: /^Stored text of page \d+ of E2E Markdown Book$/ });
+  expect(stored.textContent).toContain('Placeholder Class');
+  expect(await client.attachment(source.id)).toBeUndefined(); // import pages only: nothing was attached
+});
+
 it('accepts two fixture candidates in bulk, publishes both through the studio panel, and the builder offers them (item 9, D33)', async () => {
   const user = userEvent.setup();
   const source = await client.createHomebrewSource('E2E Bulk Book', ['srd-5.2.1']);

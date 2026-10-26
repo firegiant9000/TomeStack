@@ -124,6 +124,30 @@ Each candidate says where on the page each proposed effect was read, so review c
 
 A pending candidate that looks like content already in the library shows "Possible duplicate of {name} ({source})" beside its row in the candidate list. It comes from the read-only `content.duplicates { jobId }` command: the job's pending candidates (their current, edited version) against the latest published revision of each library content, inside one kind and one rules family. A candidate with no rules family is not compared. The chip is advice: accepting, editing and ignoring work as before, nothing is merged, and a failed lookup shows no chip and no error. The list asks again after an edit, an accept or a spell-list change. The classes and the rules are in [import-lab.md](import-lab.md) (IL-05).
 
+### Markdown import (Import Lab L7, D67)
+
+A homebrew source can import a `.md` file with "Import a Markdown file…" (no PDF needed). It feeds the same detector and review as a PDF; the differences:
+
+- **Pages only.** The file is read once (up to 4 MB), its SHA-256 is kept on the job, and the worker kind `extractMarkdown` reads a temp copy outside the attachments folder that is deleted when the run ends. The file is not copied into the library, so it is not in library backups, and the job is not resumable: Resume is not offered and `import.resume` answers `import.markdown-read-again` ("Import the Markdown file again."). The job record carries `format: "markdown"` (absent for PDF jobs).
+- **Errors:** `markdown.missing`, `markdown.unreadable`, `markdown.encoding` (not UTF-8), `markdown.too-large` (over 4 MB, 200,000 lines, 10,000 characters in a line, 2,000 pages or 40 table columns). Nothing partial is kept.
+- **Search and stored pages.** A source with no PDF searches and shows stored pages from its newest Markdown job; a PDF attachment's text wins when there is one. The in-app page view shows plain text with the page warnings in words (`markdown.page-order`, `markdown.front-matter-ignored`, `page.text-truncated`, `page.no-text`).
+- **Sparse pages.** A `<!-- page: N -->` marker starts page N (numbers must go up; a lower one is ignored with a warning). A page with no text is not emitted; a file with only warnings is one empty page.
+
+| Markdown | Becomes |
+|---|---|
+| `#` to `######` heading | a heading block (large, bold text) |
+| Paragraph | one text block, one line per source line |
+| `Name. text` run-in head | a bold run-in head then body, as a PDF feature head |
+| `-`, `*`, `+` or `1.` item | a list-item block |
+| GFM pipe table | one block per row; cells at X = 72 + column × 90, header bold; a ragged table is plain text rows |
+| `<!-- page: N -->` | starts page N; with no markers a page ends after 60 source lines |
+| Front matter (`---` … `---`) | skipped, with a warning |
+| Code fence | one plain-text block |
+| Emphasis, code marks, links, images | text kept, marks and images removed |
+| HTML | tags removed; `script`, `style` and comment content dropped; nothing is fetched or run |
+
+Positions follow PDF conventions: Y decreases down the page, synthetic at 756 − 12 × row, so the detector's reading order and spacing rules work unchanged.
+
 ## D2: import jobs (ARCHITECTURE "Import lifecycle")
 
 Service: `src/AppService/ImportJobs.cs`, database migration v6 in `SqliteStore`. Acceptance: `tests/AppService.Tests/ImportJobTests.cs`.

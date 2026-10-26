@@ -181,6 +181,15 @@ export function createClient(transport: Transport) {
     // ---- PDF import (M4): extraction jobs, search and candidate review. Accepting creates a draft only (ADR-004). ----
     startImport: (sourceId: string, request: { firstPage?: number; lastPage?: number; wholeDocument?: boolean; writtenFor?: RulesFamilyId[] }) =>
       call<ImportJob>('import.start', { sourceId, ...request }),
+    /**
+     * D67: native Open dialog for a `.md` file, then a Markdown import of it (import pages only; no copy of the file is kept).
+     * Resolves to `undefined` when the dialog was cancelled; fails with `unsupported` outside the desktop app. No timeout: it waits for the dialog.
+     */
+    startMarkdownImport: (sourceId: string, writtenFor?: RulesFamilyId[]) =>
+      call<ImportJob | undefined>('import.startMarkdown', { sourceId, ...(writtenFor ? { writtenFor } : {}) }, { timeoutMs: null }),
+    /** D67, browser development: the chosen file's bytes. */
+    startMarkdownImportData: (sourceId: string, fileName: string, base64: string, writtenFor?: RulesFamilyId[]) =>
+      call<ImportJob>('import.startMarkdownData', { sourceId, fileName, base64, ...(writtenFor ? { writtenFor } : {}) }, { timeoutMs: null }),
     importStatus: (jobId: string) => call<ImportJob>('import.status', { jobId }),
     listImports: (sourceId: string) => call<ImportJob[]>('import.list', { sourceId }),
     cancelImport: (jobId: string) => call<ImportJob>('import.cancel', { jobId }, { timeoutMs: null }),
