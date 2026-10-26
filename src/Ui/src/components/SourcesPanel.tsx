@@ -19,7 +19,7 @@ const inPack = (s: SourceRecord) => s.redistributable && !s.importDerived && s.o
 
 /** M6 slice 1: how a homebrew source may be shared, in words. */
 function sharing(source: SourceRecord): string {
-  if (source.importDerived) return 'Holds imported material (from a PDF or a Markdown file): never shared, even after a PDF is removed.';
+  if (source.importDerived) return 'Holds imported material (from a PDF or a Markdown file): never shared, and that never changes.';
   if (source.origin === 'received') return source.redistributable ? 'Received from someone else; may travel on in character shares.' : 'Received from someone else; not shared.';
   if (inPack(source)) return 'Marked as shareable: your own work, can go in a source pack.';
   if (source.redistributable) return 'Shared in character shares, but not confirmed as your own work, so not in a source pack.';

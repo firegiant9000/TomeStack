@@ -1896,7 +1896,7 @@ export interface SourceRecord {
   editionVersion: string;
   license: string;
   redistributable: boolean;
-  /** M6 slice 1: material from a PDF entered this source; it is never shared, and this never goes away. */
+  /** M6 slice 1: material from a PDF or a Markdown file entered this source; it is never shared, and this never goes away. */
   importDerived?: boolean;
   /** M6 slice 1: `received` sources came in someone else's package and cannot be marked as your own work. */
   origin?: 'local' | 'received';
