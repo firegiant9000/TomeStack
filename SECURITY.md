@@ -25,7 +25,7 @@ $want = ((Select-String -Path .\SHA256SUMS -Pattern 'TomeStack.App-win-Setup.exe
 (Get-FileHash .\TomeStack.App-win-Setup.exe -Algorithm SHA256).Hash -eq $want
 ```
 
-`True` means the file matches the hash the release published. To check that this repository's release workflow built it, use a recent [GitHub CLI](https://cli.github.com/) (older versions lack these flags):
+`True` means the file matches the hash the release published. To check that this repository's release workflow built it, use a recent [GitHub CLI](https://cli.github.com/) (older versions lack `--signer-workflow` and `--source-ref`):
 
 ```powershell
 gh attestation verify .\TomeStack.App-win-Setup.exe --repo firegiant9000/TomeStack --signer-workflow firegiant9000/TomeStack/.github/workflows/release.yml
