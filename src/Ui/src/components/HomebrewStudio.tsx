@@ -31,6 +31,8 @@ import { DebugFindings } from './DebugFindings';
 import { SandboxPanel } from './SandboxPanel';
 import { ComparePanel } from './ComparePanel';
 import { CoveragePanel } from './CoveragePanel';
+import { DuplicateChip } from './DuplicateChip';
+import { duplicateOf, useDuplicates } from './duplicates';
 import { PublishManyPanel, type PendingDraft } from './PublishManyPanel';
 import { SpellListForm } from './SpellListForm';
 import { TreeView } from './TreeView';
@@ -135,6 +137,8 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
   }, [loadSources]);
 
   const source = sources.find((s) => s.id === sourceId) ?? sources[0];
+  // Import Lab L6: library rows that look like another entry get a chip (advice only; nothing is merged). Asked again when the rows change.
+  const duplicates = useDuplicates({ sourceId: source?.id }, entries);
 
   // Item 9: a content is pending when its newest revision is a draft; "Publish all drafts" previews them.
   const [publishingAll, setPublishingAll] = useState(false);
@@ -363,6 +367,7 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
                     {entry.latest.status === 'published' ? 'published' : entry.latestPublished ? 'published, with a newer draft' : 'draft'} ·{' '}
                     {entry.revisions.length} revision{entry.revisions.length === 1 ? '' : 's'}
                   </span>{' '}
+                  <DuplicateChip other={duplicateOf(duplicates, (m) => m.contentId === entry.contentId)} />{' '}
                   <button type="button" onClick={() => edit(entry)}>
                     Edit {entry.name}
                   </button>

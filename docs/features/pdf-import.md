@@ -120,6 +120,10 @@ Each candidate says where on the page each proposed effect was read, so review c
 - A spell's effect span runs from its header through its detail lines and description, because its dice, attack and save are read from the description.
 - Review shows the proposed effects as buttons beside the stored page text (`import.page` with the candidate's `attachmentSha256` when it has one, so the highlight stays on the PDF it was read from after the source's PDF is replaced; text nodes only, never HTML); choosing one highlights its span in a `<mark>` and says "Lines a–b". Review shows the whole excerpt, as before, whenever the candidate has no spans, the effect has none, the effect was edited away, the page fails to load, or the span does not fit the page's blocks.
 
+### Possible duplicates in review (Import Lab L6)
+
+A pending candidate that looks like content already in the library shows "Possible duplicate of {name} ({source})" beside its row in the candidate list. It comes from the read-only `content.duplicates { jobId }` command: the job's pending candidates (their current, edited version) against the latest published revision of each library content, inside one kind and one rules family. A candidate with no rules family is not compared. The chip is advice: accepting, editing and ignoring work as before, nothing is merged, and a failed lookup shows no chip and no error. The list asks again after an edit, an accept or a spell-list change. The classes and the rules are in [import-lab.md](import-lab.md) (IL-05).
+
 ## D2: import jobs (ARCHITECTURE "Import lifecycle")
 
 Service: `src/AppService/ImportJobs.cs`, database migration v6 in `SqliteStore`. Acceptance: `tests/AppService.Tests/ImportJobTests.cs`.

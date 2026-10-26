@@ -2542,6 +2542,34 @@ export interface CoverageRequest {
   includeDrafts?: boolean;
 }
 
+// ---- Import Lab L6 (`content.duplicates`): entries that look alike, listed and never merged ----
+
+export type DuplicateClass = 'exact' | 'sameNameDifferentRules' | 'sameRulesDifferentName';
+
+/** `jobId`: that job's pending candidates against the library. `sourceId`: only groups that source is in (with a job: only that source's library content). */
+export interface DuplicatesRequest {
+  sourceId?: string;
+  jobId?: string;
+}
+
+/** A published library entry (`contentId`, `revisionId`) or a pending candidate (`candidateId`). */
+export interface DuplicateMember {
+  candidateId?: string | null;
+  contentId?: string | null;
+  revisionId?: string | null;
+  kind: ContentKind;
+  name: string;
+  sourceId: string;
+  sourceName: string;
+}
+
+/** Entries of one kind inside one rules family; the families are never compared with each other. */
+export interface DuplicateGroup {
+  class: DuplicateClass;
+  family: RulesFamilyId;
+  members: DuplicateMember[];
+}
+
 /** A feature a class grants at a level, or an option it offers there through a choice. */
 export interface ClassTableRef {
   contentId: string;

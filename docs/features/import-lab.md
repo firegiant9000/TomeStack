@@ -95,7 +95,7 @@ The staging form is versioned, inert and non-executable. It records the entity k
 - Publish only after schema, graph and rights checks and an explicit confirmation. A failed publish leaves the source and every character unchanged.
 - Import is idempotent: the same source hash and the same entity mapping never create a duplicate class.
 - Active characters are never changed silently. A new revision is a reviewed, opt-in migration with a restorable backup.
-- **Now:** duplicate detection that lists duplicates for review and never merges them.
+- **Now:** duplicate detection that lists duplicates for review and never merges them. The read-only `content.duplicates { sourceId?, jobId? }` command groups entries of one kind inside one rules family (the two SRD families are never compared) in three classes: **exact** (same name and same rules), **same name, different rules** (both stay distinct, AT-Q17) and **same rules, different name** (a "possible"). Names are compared as detection compares them; the rules are a hash of the effects with their ids removed and keys sorted, computed on demand and never stored. Scopes: a job's pending candidates against the library, or the library against itself (with a source: the groups it is in). Only published library content counts; a draft is not an entry, and an entry with no effects shares no rules with another. The candidate list and the Homebrew studio's content list show "Possible duplicate of {name} ({source})" beside a row that has a twin. Nothing is merged, removed or changed.
 - **Later:** batch operations for identical patterns, and a diff between two versions of a source.
 
 ### IL-06: Other importers

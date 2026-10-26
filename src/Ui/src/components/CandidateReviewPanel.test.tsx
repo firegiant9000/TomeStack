@@ -10,7 +10,7 @@ import { expectNoAxeViolations } from '../test/axe';
 import { CandidateReviewPanel } from './CandidateReviewPanel';
 
 vi.mock('../api/client', () => ({
-  client: { candidates: vi.fn(), checkCandidate: vi.fn(), editCandidate: vi.fn(), acceptCandidate: vi.fn(), ignoreCandidate: vi.fn(), acceptCandidates: vi.fn(), importedPage: vi.fn() },
+  client: { candidates: vi.fn(), checkCandidate: vi.fn(), editCandidate: vi.fn(), acceptCandidate: vi.fn(), ignoreCandidate: vi.fn(), acceptCandidates: vi.fn(), importedPage: vi.fn(), contentDuplicates: vi.fn() },
 }));
 
 const source = { id: 'src-1', title: 'Testy Tome', rulesFamilies: ['srd-5.1'] } as SourceRecord;
@@ -19,7 +19,10 @@ const job = { id: 'job-1', sourceId: 'src-1' } as ImportJob;
 
 const pageOf = (items: StoredCandidate[], total = items.length) => ({ items, total });
 
-beforeEach(() => vi.mocked(client.candidates).mockResolvedValue(pageOf([])));
+beforeEach(() => {
+  vi.mocked(client.candidates).mockResolvedValue(pageOf([]));
+  vi.mocked(client.contentDuplicates).mockResolvedValue([]);
+});
 afterEach(cleanup);
 
 function renderPanel(onOpenStudio = vi.fn(), forSource: SourceRecord = source) {
@@ -1329,4 +1332,39 @@ it('page text is rendered as text, not HTML', async () => {
   expect(region.querySelector('img')).toBeNull();
   expect(document.querySelector('img')).toBeNull();
   expect(region.querySelector('mark')!.textContent).toContain(hostile);
+});
+
+// Import Lab L6: a pending candidate that looks like content in the library says so, in words; nothing is merged.
+it('shows "Possible duplicate of {name} ({source})" beside a candidate that has a twin, and none beside one that has not', async () => {
+  const twin = detected(['srd-5.1']);
+  const alone = { ...twin, id: 'cand-2', candidate: { ...twin.candidate, id: 'cand-2', proposedName: 'Testy Lone Coat' } };
+  vi.mocked(client.candidates).mockResolvedValue(pageOf([twin, alone]));
+  vi.mocked(client.contentDuplicates).mockResolvedValue([
+    {
+      class: 'sameNameDifferentRules',
+      family: 'srd-5.1',
+      members: [
+        { candidateId: 'cand-1', kind: 'item', name: 'Testy Coat', sourceId: 'src-2', sourceName: 'Testy Both' },
+        { contentId: 'c-9', revisionId: 'r-9', kind: 'item', name: 'Testy Coat', sourceId: 'src-9', sourceName: 'Testy Library' },
+      ],
+    },
+  ]);
+  renderPanel(vi.fn(), bothSource);
+  const rows = await screen.findAllByRole('listitem');
+  const first = rows.find((r) => within(r).queryByRole('button', { name: 'Testy Coat' }))!;
+  const second = rows.find((r) => within(r).queryByRole('button', { name: 'Testy Lone Coat' }))!;
+  expect(await within(first).findByText('Possible duplicate of Testy Coat (Testy Library)')).toBeTruthy();
+  expect(within(second).queryByText(/Possible duplicate/)).toBeNull();
+  expect(client.contentDuplicates).toHaveBeenCalledWith({ sourceId: undefined, jobId: 'job-1' });
+});
+
+it('shows no chip, and no error, when the duplicates cannot be read', async () => {
+  vi.mocked(client.candidates).mockResolvedValue(pageOf([detected(['srd-5.1'])]));
+  vi.mocked(client.contentDuplicates).mockRejectedValue(new Error('unavailable'));
+  const onError = vi.fn();
+  render(<CandidateReviewPanel job={job} source={bothSource} onError={onError} onStatus={() => {}} onOpenPage={() => {}} onOpenStudio={() => {}} />);
+  await screen.findByRole('button', { name: 'Testy Coat' });
+  await waitFor(() => expect(client.contentDuplicates).toHaveBeenCalled());
+  expect(screen.queryByText(/Possible duplicate/)).toBeNull();
+  expect(onError).not.toHaveBeenCalled();
 });

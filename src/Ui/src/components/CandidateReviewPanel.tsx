@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { client } from '../api/client';
 import { TomeStackError } from '../api/transport';
 import type { CandidateCheck, CandidateFilter, CandidateLinkSummary, CandidatePage, CandidateStatus, ContentKind, DraftCandidate, ImportJob, RulesFamilyId, SourceRecord, StoredCandidate, StoredPage } from '../api/types';
+import { DuplicateChip } from './DuplicateChip';
+import { duplicateOf, useDuplicates } from './duplicates';
 import { familyLabel } from './familyLabels';
 import { SpellListForm } from './SpellListForm';
 
@@ -93,6 +95,9 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
   const bulkId = `accepting-${job.id}`;
   const candidates = result?.items;
   const total = result?.total ?? 0;
+  // Import Lab L6: asked again after an edit or an accept (names and rules change); a page turn or filter does not need it.
+  const [duplicatesVersion, setDuplicatesVersion] = useState(0);
+  const duplicates = useDuplicates({ jobId: job.id }, duplicatesVersion);
   const pendingShown = candidates?.filter((c) => c.status === 'pending') ?? [];
   // Item 10: "Add to spell list…" changes the ticked pending spells only; the button says how many.
   const tickedSpells = pendingShown.filter((c) => ticked.includes(c.id) && (c.edited ?? c.candidate).proposedKind === 'spell');
@@ -214,6 +219,7 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
       const stay = outcome.blocked.map((b) => b.candidateId);
       setTicked(stay);
       setAnnouncement(`${stay.length} selected`);
+      setDuplicatesVersion((v) => v + 1);
       await load();
     } catch (error) {
       if (error instanceof TomeStackError && error.code === 'import.candidate-changed') {
@@ -264,6 +270,7 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
       setSkipped(outcome.skipped.map((s) => ({ id: s.candidateId, name: nameOf(s.candidateId), reasons: s.codes.map(reasonOf) })));
       setListOpen(false);
       listOpener.current?.focus(); // WCAG 2.4.3: the form is gone, so focus goes back to the button that opened it
+      setDuplicatesVersion((v) => v + 1);
       await load();
     } catch (error) {
       onError(error);
@@ -545,6 +552,12 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
               <span className="tag">{(c.edited ?? c.candidate).proposedKind}</span> <span className="hint">{pageText((c.edited ?? c.candidate).page)}</span>{' '}
               <span className={(c.edited ?? c.candidate).confidence < 0.8 ? 'warn' : 'hint'}>{percent((c.edited ?? c.candidate).confidence)}</span>{' '}
               <span className="tag">{statusLabels[c.status]}</span>
+              {c.status === 'pending' && (
+                <>
+                  {' '}
+                  <DuplicateChip other={duplicateOf(duplicates, (m) => m.candidateId === c.id)} />
+                </>
+              )}
             </li>
           ))}
         </ul>
@@ -562,6 +575,7 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
           onConfirmedChange={(ticks) => confirmTicks.current.set(current.id, ticks)}
           onChanged={async (text) => {
             onStatus(text);
+            setDuplicatesVersion((v) => v + 1);
             const list = await load();
             // WCAG 2.4.3: a reviewed candidate can leave the filtered list, and its details with it; focus goes back to the list.
             if (!list.some((c) => c.id === current.id)) {

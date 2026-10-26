@@ -136,7 +136,20 @@ The same benchmarks after two in-memory fixes, no migration: the edit path build
 | EditCandidateOneReference | 500 | 38.1 ms | 21.5 MB | | |
 | EditCandidateOneReference | 1000 | 45.3 ms | 29.4 MB | | |
 
-`EditCandidate` at 1000 went from 598 MB to 29.4 MB and from about 1.0 s to 45 ms; with 20 references it now allocates 31 KB more than with one (0.1 %). `MarkdownExtract` and `Duplicates` belong to later Lab tasks.
+`EditCandidate` at 1000 went from 598 MB to 29.4 MB and from about 1.0 s to 45 ms; with 20 references it now allocates 31 KB more than with one (0.1 %). `MarkdownExtract` belongs to a later Lab task.
+
+### Duplicates (L6)
+
+`content.duplicates` (design 9.2), measured 2026-10-25 on `import-lab`, one run; raw results: [`performance/raw/2026-10-25/duplicates/`](performance/raw/2026-10-25/duplicates/). It makes one whole-library read (`ListRevisionsInOrder()`), picks the latest published revision of each content, computes each entry's name key and fingerprint once, and groups in memory (nothing stored, no migration). `Duplicates` is a job's N pending candidates against the SRD and N original features; `DuplicatesLibrary` is the whole library against itself. The fixture is a worst case for "same rules": the N features share only three distinct rule sets, so the groups are large.
+
+| Benchmark | N | Mean | P95 | Allocated | Target | Met |
+|---|---:|---:|---:|---:|---|---|
+| Duplicates | 250 | 60.3 ms | 63.3 ms | 39.5 MB | | |
+| Duplicates | 500 | 71.6 ms | 74.4 ms | 48.5 MB | | |
+| Duplicates | 1000 | 102.9 ms | 106.9 ms | 66.8 MB | 500 ms | yes |
+| DuplicatesLibrary | 250 | 55.7 ms | 58.9 ms | 37.6 MB | | |
+| DuplicatesLibrary | 500 | 65.1 ms | 70.4 ms | 44.6 MB | | |
+| DuplicatesLibrary | 1000 | 90.5 ms | 92.3 ms | 59.1 MB | | |
 
 ## First paint (owed: owner, by hand)
 

@@ -102,6 +102,14 @@ public class LabBenchmarks
     [Benchmark]
     public int CandidatesPage() => _app.ListCandidatesPage(new(_pageJob, Offset: 100, Limit: 50)).Items.Count;
 
+    /// <summary><c>content.duplicates</c> for a job: its N pending candidates against the SRD and the N features of the homebrew source (target up to 500 ms at 1000).</summary>
+    [Benchmark]
+    public int Duplicates() => _app.ContentDuplicates(new(JobId: _pageJob)).Count;
+
+    /// <summary><c>content.duplicates</c> over the whole library: every published entry against every other of its kind and family.</summary>
+    [Benchmark]
+    public int DuplicatesLibrary() => _app.ContentDuplicates(new()).Count;
+
     /// <summary>What detection does with the library (<c>DetectOnce</c>): one name set over the published revisions, then 50 pages.</summary>
     [Benchmark]
     public int DetectWithLibrary()

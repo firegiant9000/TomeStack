@@ -294,6 +294,10 @@ Performance: every calculation looks up the extensions of every offered choice, 
 
 The studio's subclass form offers "Offered in the choice" with every choice of every class for the source's family.
 
+## Possible duplicates (Import Lab, D62 L6)
+
+A row in "Content in {source}" that looks like another entry (the same kind and rules family, by name or by a hash of its effects) shows "Possible duplicate of {name} ({source})" beside it, from `content.duplicates { sourceId }`. The other entry can be in any source. It is advice only: nothing is merged or removed, a draft is not compared (only published content counts), and a failed lookup shows no chip. The rules are in [import-lab.md](import-lab.md) (IL-05).
+
 ## Coverage (Import Lab, D62 L1)
 
 `content.coverage { sourceId?, contentId?, includeDrafts? }` says what TomeStack really does with each effect of a source's content. It is read-only, needs no character and writes nothing. The studio shows it as a "Coverage" section under the open source's content (`CoveragePanel.tsx`): the totals as one line of text ("7 automatic · 2 by hand (assisted) · 0 reference · 1 not understood"), a heading per class, a list per level, then "Other content". An unsupported effect reads "<type>: TomeStack can't calculate this." and a feature that may need a mechanic reads "May need a mechanic: by hand today." "Show drafts" asks again with `includeDrafts`; a draft row is labelled "(Draft, not counted)" and the panel says totals count published content only. It asks again when the source's content list changes, and shows no live region. A per-feature row in the editor is not built (it would need a request per feature).
