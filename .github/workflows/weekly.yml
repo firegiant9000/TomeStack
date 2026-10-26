@@ -156,7 +156,7 @@ jobs:
         # names the latest release stays closed (the owner chose not to move the pin for it); a newer release reopens it.
         run: |
           found=$(gh issue list --repo "$GITHUB_REPOSITORY" --state all --search "\"$TITLE\" in:title" --json number,title,author,state \
-            --jq 'map(select(.title == env.TITLE and .author.login == "app/github-actions")) | .[0] | select(. != null) | "\(.number) \(.state)"')
+            --jq 'map(select(.title == env.TITLE and .author.is_bot == true and (.author.login | test("^(app/)?github-actions$")))) | .[0] | select(. != null) | "\(.number) \(.state)"')
           latest=$(grep -m1 '^- Latest:' "$BODY")
           if [ -z "$found" ]; then
             gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body-file "$BODY"
@@ -165,7 +165,8 @@ jobs:
           fi
           read -r number state <<< "$found"
           if [ "$state" = "CLOSED" ]; then
-            if gh issue view "$number" --repo "$GITHUB_REPOSITORY" --json body --jq .body | grep -qxF -- "$latest"; then
+            body=$(gh issue view "$number" --repo "$GITHUB_REPOSITORY" --json body --jq .body)
+            if printf '%s\n' "$body" | tr -d '\r' | grep -qxF -- "$latest"; then
               echo "Issue #$number is closed for this release; left closed" >> "$GITHUB_STEP_SUMMARY"
               exit 0
             fi
