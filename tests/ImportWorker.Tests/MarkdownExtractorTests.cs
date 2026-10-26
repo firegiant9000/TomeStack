@@ -332,6 +332,167 @@ public class MarkdownExtractorTests
         Assert.True(outcome is null || outcome is ExtractionException { Code: "markdown.too-large" }, outcome?.ToString());
     }
 
+    // ---- fix round 1 ----
+
+    [Theory]
+    [InlineData("<<b>script>alert(1)")]
+    [InlineData("<scr<script>ipt>alert(1)</script>")]
+    [InlineData("<<<b>!-- x -->")]
+    [InlineData("\uFF1Cscript\uFF1Ealert(1)\uFF1C/script\uFF1E")]
+    [InlineData("\uFF1C!-- x --\uFF1E")]
+    [InlineData("a \uFF1Cb\uFF1E bold")]
+    [InlineData("<script")]
+    [InlineData("<!-- never closed")]
+    [InlineData("<style")]
+    [InlineData("## <<b>h1>head")]
+    [InlineData("| a | <<b>i>b |\n|---|---|\n| 1 | \uFF1Cscript\uFF1E |")]
+    [InlineData("```\n<<b>script>x\n```")]
+    public void Stripping_cannot_leave_or_rebuild_a_tag_opener(string markdown)
+    {
+        var pages = Parse(markdown);
+
+        Assert.All(Properties.MarkdownProperties.AllText(pages), text => Assert.False(Properties.MarkdownProperties.HoldsTagOpener(text), text));
+    }
+
+    [Fact]
+    public void Entities_are_not_decoded_so_they_stay_literal_text()
+    {
+        // Decision: no entity is ever decoded, so "&lt;script&gt;" is text that can never become a tag opener.
+        var text = Assert.Single(Blocks("&lt;script&gt;alert(1)&lt;/script&gt; and &#60;b&#62;")).Text;
+
+        Assert.Equal("&lt;script&gt;alert(1)&lt;/script&gt; and &#60;b&#62;", text);
+    }
+
+    [Fact]
+    public void A_fullwidth_bracket_is_folded_and_then_removed_as_a_tag_opener()
+    {
+        var text = Assert.Single(Blocks("x \uFF1Cscript\uFF1Ealert(1) y 1 \uFF1C 2")).Text;
+
+        Assert.Equal("x script>alert(1) y 1 < 2", text);
+    }
+
+    [Theory]
+    [InlineData("<!-- note")]
+    [InlineData("<script")]
+    [InlineData("<script type=\"x\">")]
+    [InlineData("<style>")]
+    public void An_opener_with_no_closer_drops_only_its_line(string opener)
+    {
+        var tail = string.Join("\n\n", Enumerable.Range(0, 50).Select(i => $"kept line {i}"));
+        var pages = Parse($"intro\n{opener}\n\n{tail}");
+
+        var text = string.Join("\n", pages.Select(p => p.Text));
+        Assert.Contains("intro", text, StringComparison.Ordinal);
+        Assert.Contains("kept line 0", text, StringComparison.Ordinal);
+        Assert.Contains("kept line 49", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_closer_before_the_opener_does_not_count()
+    {
+        var pages = Parse("--> early\n\n<!-- late opener\n\nkept after");
+
+        Assert.Contains("kept after", string.Join("\n", pages.Select(p => p.Text)), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_closed_span_still_drops_its_content()
+    {
+        var text = Assert.Single(Parse("a\n\n<!-- gone\nstill gone -->\n\n<script>\nx = 1\n</script>\n\nb")).Text;
+
+        Assert.Equal("a\n\nb", text);
+    }
+
+    [Fact]
+    public void An_oversized_block_is_cut_to_a_prefix_with_a_warning_not_dropped()
+    {
+        // 300 lines of 1,000 characters in one paragraph: 300,000 characters against a 200,000 cap.
+        var markdown = string.Join("\n", Enumerable.Range(0, 300).Select(_ => new string('a', 1000)));
+
+        var page = Assert.Single(Parse(markdown));
+
+        var block = Assert.Single(page.Blocks!);
+        Assert.Equal(ExtractionLimits.Default.MaxTextPerPage, block.Text.Length);
+        Assert.True(block.Lines!.Sum(l => l.Text.Length) <= ExtractionLimits.Default.MaxTextPerPage);
+        Assert.Contains("page.text-truncated", page.Warnings!);
+    }
+
+    [Fact]
+    public void A_block_after_a_full_page_of_text_is_dropped_with_the_warning()
+    {
+        var big = string.Join("\n", Enumerable.Range(0, 250).Select(_ => new string('a', 1000)));
+
+        var page = Assert.Single(Parse($"<!-- page: 1 -->\n{big}\n\nlater paragraph"));
+
+        Assert.Single(page.Blocks!);
+        Assert.Contains("page.text-truncated", page.Warnings!);
+    }
+
+    [Fact]
+    public void Lines_per_page_are_capped_like_the_pdf_reader()
+    {
+        var page = Assert.Single(Parse(string.Concat(Enumerable.Repeat("a\n", ExtractionLimits.Default.MaxLinesPerPage + 5))));
+
+        Assert.Equal(ExtractionLimits.Default.MaxLinesPerPage, page.Blocks!.Sum(b => b.Lines!.Count));
+        Assert.Contains("page.text-truncated", page.Warnings!);
+    }
+
+    [Theory]
+    [InlineData("---\ntitle: only front matter\n---\n", "markdown.front-matter-ignored")]
+    [InlineData("<!-- page: 3 -->\n<!-- page: 2 -->\n", "markdown.page-order")]
+    public void Document_warnings_reach_the_output_even_with_no_content(string markdown, string code)
+    {
+        var page = Assert.Single(Parse(markdown));
+
+        Assert.Equal("", page.Text);
+        Assert.Empty(page.Blocks!);
+        Assert.Contains(code, page.Warnings!);
+        Assert.Contains("page.no-text", page.Warnings!);
+    }
+
+    [Fact]
+    public void An_empty_file_has_no_pages_and_no_warning()
+    {
+        Assert.Empty(Parse(""));
+    }
+
+    [Fact]
+    public void Exactly_200000_lines_are_accepted_and_one_more_is_not()
+    {
+        var atLimit = string.Concat(Enumerable.Repeat("a\n", ExtractionLimits.MarkdownMaxLines));
+
+        Assert.NotEmpty(Parse(atLimit));
+        Assert.Equal("markdown.too-large", CodeOf(() => Parse(atLimit + "a")));
+    }
+
+    [Fact]
+    public void Exactly_4_MiB_is_accepted_and_one_byte_more_is_not()
+    {
+        var bytes = new byte[ExtractionLimits.MarkdownMaxBytes];
+        for (var i = 0; i < bytes.Length; i++)
+            bytes[i] = i % 1001 == 1000 ? (byte)'\n' : (byte)'a';
+
+        Assert.NotEmpty(MarkdownExtractor.Parse(bytes));
+        Assert.Equal("markdown.too-large", CodeOf(() => MarkdownExtractor.Parse(new byte[ExtractionLimits.MarkdownMaxBytes + 1])));
+    }
+
+    [Fact]
+    public void No_invisible_character_is_spelled_literally_in_the_sources()
+    {
+        // The files this task owns spell invisible characters as escapes, so no tool can rewrite them unseen.
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (!File.Exists(Path.Combine(root.FullName, "TomeStack.slnx")))
+            root = root.Parent!;
+        string[] files =
+        [
+            Path.Combine(root.FullName, "src", "ImportWorker", "Extraction", "MarkdownExtractor.cs"),
+            Path.Combine(root.FullName, "tests", "ImportWorker.Tests", "MarkdownExtractorTests.cs"),
+            Path.Combine(root.FullName, "tests", "ImportWorker.Tests", "Properties", "MarkdownProperties.cs"),
+        ];
+        foreach (var file in files)
+            Assert.DoesNotContain(File.ReadAllText(file), c => c is (char)0xFEFF or (char)0x00AD or (char)0x2010 or (char)0x2011 or (char)0x200B);
+    }
+
     private static string Table(int columns) =>
         $"|{string.Concat(Enumerable.Repeat(" h |", columns))}\n|{string.Concat(Enumerable.Repeat("---|", columns))}\n|{string.Concat(Enumerable.Repeat(" c |", columns))}";
 
@@ -439,6 +600,7 @@ public class MarkdownExtractorTests
 
         var riders = Detect(Parse(markdown)).Where(c => c.ProposedName == "Fixture Rider").ToList();
 
+        Assert.Equal(2, riders.Count);
         Assert.All(riders, r => Assert.Equal(1, r.Page.Start));
     }
 }

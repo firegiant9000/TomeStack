@@ -63,7 +63,7 @@ public sealed class MarkdownExtractor : IDocumentExtractor
     {
         if (utf8.Length > ExtractionLimits.MarkdownMaxBytes)
             throw TooLarge();
-        if (utf8.StartsWith("﻿"u8))
+        if (utf8.Length >= 3 && utf8[0] == 0xEF && utf8[1] == 0xBB && utf8[2] == 0xBF)
             utf8 = utf8[3..];
         string text;
         try
@@ -106,7 +106,7 @@ public sealed class MarkdownExtractor : IDocumentExtractor
         var sb = new StringBuilder(line.Length);
         foreach (var c in line)
         {
-            if (c == '﻿')
+            if (c == (char)0xFEFF)
                 continue;
             sb.Append(c < ' ' || c is >= '\u007F' and <= '\u009F' ? ' ' : c);
         }
@@ -123,6 +123,7 @@ public sealed class MarkdownExtractor : IDocumentExtractor
         public List<TextBlock> Blocks { get; } = [];
         public List<string> Warnings { get; } = [];
         public int Chars { get; set; }
+        public int LineCount { get; set; }
     }
 
     private sealed class Scanner(string[] lines)
@@ -148,6 +149,11 @@ public sealed class MarkdownExtractor : IDocumentExtractor
         private int _row;
         private bool _markersSeen;
 
+        // The last line holding each closer: an opener with no closer after it is a one-line tag, not the start of a span that swallows the rest.
+        private int _lastComment = -1;
+        private int _lastScript = -1;
+        private int _lastStyle = -1;
+
         private Open _open = Open.None;
         private readonly List<(string Text, int Row)> _openLines = [];
 
@@ -156,6 +162,15 @@ public sealed class MarkdownExtractor : IDocumentExtractor
         public IReadOnlyList<ExtractedPage> Run()
         {
             var n = lines.Length;
+            for (var k = 0; k < n; k++)
+            {
+                if (lines[k].Contains("-->", StringComparison.Ordinal))
+                    _lastComment = k;
+                if (lines[k].Contains("</script", StringComparison.OrdinalIgnoreCase))
+                    _lastScript = k;
+                if (lines[k].Contains("</style", StringComparison.OrdinalIgnoreCase))
+                    _lastStyle = k;
+            }
             var i = FrontMatterEnd();
             _pageStartLine = i;
             var html = Html.None;
@@ -181,7 +196,7 @@ public sealed class MarkdownExtractor : IDocumentExtractor
                     continue;
                 }
 
-                var t = CleanHtml(raw, ref html).Trim();
+                var t = CleanHtml(raw, i, ref html).Trim();
                 if (t.Length == 0)
                 {
                     FlushOpen();
@@ -250,6 +265,12 @@ public sealed class MarkdownExtractor : IDocumentExtractor
             // Warnings about the document (front matter, a marker out of order) go on its first page; with no page they have nowhere to go.
             if (_pages.Count > 0 && _documentWarnings.Count > 0)
                 _pages[0] = _pages[0] with { Warnings = [.. _documentWarnings, .. _pages[0].Warnings ?? []] };
+            else if (_pages.Count == 0 && _documentWarnings.Count > 0)
+            {
+                // No page to carry them (only front matter, or markers and nothing else): like a PDF page with no text, one empty
+                // page says "page.no-text" and carries the warnings, so they reach the output.
+                _pages.Add(new ExtractedPage(Math.Max(1, _pageNumber), "", false, [], PageWidth, PageHeight, [.. _documentWarnings, "page.no-text"]));
+            }
             return _pages;
         }
 
@@ -308,15 +329,55 @@ public sealed class MarkdownExtractor : IDocumentExtractor
                     _page.Warnings.Add("page.blocks-truncated");
                 return;
             }
-            if (_page.Chars + block.Text.Length > limits.MaxTextPerPage)
+            // Like PdfPigExtractor.Bounded: a page keeps a bounded prefix of text and of lines, and says so.
+            var room = limits.MaxTextPerPage - _page.Chars;
+            var lineRoom = limits.MaxLinesPerPage - _page.LineCount;
+            if (room <= 0 || lineRoom <= 0)
             {
-                if (!_page.Warnings.Contains("page.text-truncated"))
-                    _page.Warnings.Add("page.text-truncated");
+                Warn(_page, "page.text-truncated");
                 return;
             }
-            _page.Chars += block.Text.Length;
-            _page.Blocks.Add(block);
+            var text = block.Text;
+            var kept = block.Lines;
+            if (text.Length > room)
+            {
+                text = Prefix(text, room);
+                Warn(_page, "page.text-truncated");
+            }
+            if (kept is not null)
+            {
+                var lineChars = 0;
+                var cut = new List<TextLine>(Math.Min(kept.Count, lineRoom));
+                foreach (var line in kept)
+                {
+                    if (cut.Count == lineRoom || lineChars >= room)
+                    {
+                        Warn(_page, "page.text-truncated");
+                        break;
+                    }
+                    var lineText = line.Text.Length > room - lineChars ? Prefix(line.Text, room - lineChars) : line.Text;
+                    if (lineText.Length != line.Text.Length)
+                        Warn(_page, "page.text-truncated");
+                    lineChars += lineText.Length;
+                    cut.Add(lineText.Length == line.Text.Length ? line : line with { Text = lineText });
+                }
+                if (cut.Count != kept.Count || cut.Where((l, k) => !ReferenceEquals(l, kept[k])).Any())
+                    kept = cut;
+            }
+            _page.Chars += text.Length;
+            _page.LineCount += kept?.Count ?? 0;
+            _page.Blocks.Add(ReferenceEquals(text, block.Text) && ReferenceEquals(kept, block.Lines) ? block : block with { Text = text, Lines = kept });
         }
+
+        private static void Warn(PageBuilder page, string code)
+        {
+            if (!page.Warnings.Contains(code))
+                page.Warnings.Add(code);
+        }
+
+        /// <summary>The first <paramref name="length"/> characters, not ending inside a surrogate pair.</summary>
+        private static string Prefix(string text, int length) =>
+            length > 0 && char.IsHighSurrogate(text[length - 1]) ? text[..(length - 1)] : text[..length];
 
         private void FinishPage()
         {
@@ -461,7 +522,7 @@ public sealed class MarkdownExtractor : IDocumentExtractor
                     break;
                 }
                 var state = Html.None;
-                var line = Normalize(CleanHtml(lines[i], ref state).Trim());
+                var line = Normalize(CleanHtml(lines[i], i, ref state).Trim());
                 if (line.Length > 0)
                     rows.Add((line, _row));
                 _row++;
@@ -542,7 +603,7 @@ public sealed class MarkdownExtractor : IDocumentExtractor
             while (i < lines.Length)
             {
                 var state = html;
-                var line = CleanHtml(lines[i], ref state).Trim();
+                var line = CleanHtml(lines[i], i, ref state).Trim();
                 if (state != Html.None || line.Length == 0 || !line.Contains('|', StringComparison.Ordinal))
                     break;
                 rows.Add((Cells(line), _row));
@@ -585,16 +646,47 @@ public sealed class MarkdownExtractor : IDocumentExtractor
 
         private static string Text(string source) => Normalize(Inline(source.Trim())).Trim();
 
+        /// <summary>
+        /// The last pass, after normalisation: stripping can leave a tag opener behind ("&lt;&lt;b&gt;script&gt;" leaves "&lt;script&gt;") and
+        /// FormKC folds a fullwidth U+FF1C into "&lt;" after the strip. Any run of '&lt;' that is followed by a letter, '!', '?' or '/'
+        /// is removed, so no text ever holds a tag opener. Entities ("&amp;lt;") are NOT decoded anywhere, so they stay literal text and
+        /// can never become an opener.
+        /// </summary>
+        private static string Defang(string text)
+        {
+            if (text.IndexOf('<', StringComparison.Ordinal) < 0)
+                return text;
+            var sb = new StringBuilder(text.Length);
+            var i = 0;
+            while (i < text.Length)
+            {
+                if (text[i] != '<')
+                {
+                    sb.Append(text[i]);
+                    i++;
+                    continue;
+                }
+                var end = i;
+                while (end < text.Length && text[end] == '<')
+                    end++;
+                var opens = end < text.Length && (IsAsciiLetter(text[end]) || text[end] is '!' or '?' or '/');
+                if (!opens)
+                    sb.Append('<', end - i);
+                i = end;
+            }
+            return sb.ToString();
+        }
+
         /// <summary>The PDF extractor's normalisation (compatibility forms, soft hyphens and hyphen variants), so both readers feed the detector alike.</summary>
         private static string Normalize(string text)
         {
             try
             {
-                return PdfPigExtractor.Normalize(text);
+                return Defang(PdfPigExtractor.Normalize(text));
             }
             catch (ArgumentException)
             {
-                return text;
+                return Defang(text);
             }
         }
 
@@ -694,7 +786,7 @@ public sealed class MarkdownExtractor : IDocumentExtractor
         /// opened comment or element carries to the following lines through <paramref name="state"/>. A tag with no closing '&gt;'
         /// on its line ends at the line's end. A '&lt;' that does not start a tag stays text.
         /// </summary>
-        private static string CleanHtml(string line, ref Html state)
+        private string CleanHtml(string line, int lineIndex, ref Html state)
         {
             if (state == Html.None && line.IndexOf('<', StringComparison.Ordinal) < 0)
                 return line;
@@ -735,16 +827,23 @@ public sealed class MarkdownExtractor : IDocumentExtractor
                 var rest = line.AsSpan(i + 1);
                 if (rest.StartsWith("!--", StringComparison.Ordinal))
                 {
+                    // With no "-->" later in the document, the opener is a one-line tag: the rest of its line goes, the following lines stay.
+                    if (line.IndexOf("-->", i + 4, StringComparison.Ordinal) < 0 && _lastComment <= lineIndex)
+                        return sb.ToString();
                     state = Html.Comment;
                     i += 4;
                 }
                 else if (OpensElement(rest, "script"))
                 {
+                    if (line.IndexOf("</script", i + 7, StringComparison.OrdinalIgnoreCase) < 0 && _lastScript <= lineIndex)
+                        return sb.ToString();
                     state = Html.Script;
                     i += 7;
                 }
                 else if (OpensElement(rest, "style"))
                 {
+                    if (line.IndexOf("</style", i + 6, StringComparison.OrdinalIgnoreCase) < 0 && _lastStyle <= lineIndex)
+                        return sb.ToString();
                     state = Html.Style;
                     i += 6;
                 }

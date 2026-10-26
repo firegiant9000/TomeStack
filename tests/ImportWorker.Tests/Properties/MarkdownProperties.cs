@@ -14,7 +14,10 @@ public class MarkdownProperties
     [
         "# ", "## ", "#### ", "##### ", "| ", " | ", "|---|", "|:-:|--:|", "\\|", "**", "__", "*", "_", "`", "```", "~~~", "~~", "- ", "* ", "+ ", "1. ", "2) ",
         "<!-- page: 3 -->", "<!-- page: 1 -->", "<!--", "-->", "<script>", "</script", "<style>", "</style>", "<b>", "</b>", "<", ">", "<img src=x", "![a](b)", "[x](y)", "](", "[", "]", "(", ")",
-        "---", "...", "\n", "\n", "\n\n", "\r\n", "\r", " ", "\t", "\0", "text", "Fixture Pool.", "é", " ", "­", "‐", "ﬁ", "﻿", "😀",
+        "---", "...", "\n", "\n", "\n\n", "\r\n", "\r", " ", "\t", "\0", "text", "Fixture Pool.",
+        "\u00E9", "\u00A0", "\u00AD", "\u2010", "\uFB01", "\uFEFF", "\uD83D\uDE00",
+        // Bare words and look-alikes that stripping can leave next to a '<'.
+        "script", "style", "!--", "<<", "<scr<", "\uFF1C", "\uFF1E", "&lt;", "&gt;",
     ];
 
     private static Gen<string> Document { get; } =
@@ -37,6 +40,20 @@ public class MarkdownProperties
             return (ex.Code, "");
         }
     }
+
+    /// <summary>True when the text holds a '&lt;' followed by an ASCII letter, '!', '?' or '/': something a reader of the text could take for a tag.</summary>
+    internal static bool HoldsTagOpener(string text)
+    {
+        for (var i = 0; i + 1 < text.Length; i++)
+        {
+            if (text[i] == '<' && (char.IsAsciiLetter(text[i + 1]) || text[i + 1] is '!' or '?' or '/'))
+                return true;
+        }
+        return false;
+    }
+
+    internal static IEnumerable<string> AllText(IEnumerable<ExtractedPage> pages) =>
+        pages.SelectMany(p => new[] { p.Text }.Concat((p.Blocks ?? []).SelectMany(b => new[] { b.Text }.Concat((b.Lines ?? []).Select(l => l.Text)))));
 
     [Property(MaxTest = 300)]
     public Property Same_bytes_same_pages() =>
@@ -64,15 +81,13 @@ public class MarkdownProperties
             return (outcome.Code is null || outcome.Code is "markdown.encoding" or "markdown.too-large").Label($"unexpected failure {outcome.Code}");
         });
 
-    [Property(MaxTest = 300)]
-    public Property No_page_text_holds_a_tag_opener_that_the_input_started_as_html() =>
+    [Property(MaxTest = 1000)]
+    public Property No_text_or_line_holds_a_tag_opener() =>
         Prop.ForAll(Document.ToArbitrary(), document =>
         {
             var pages = MarkdownExtractor.Parse(Encoding.UTF8.GetBytes(document));
-            // A '<' survives only as plain text: never one that opens a script, a style or a comment.
-            var text = string.Join("\n", pages.Select(p => p.Text));
-            var bad = text.Contains("<script", StringComparison.OrdinalIgnoreCase) || text.Contains("<style", StringComparison.OrdinalIgnoreCase) || text.Contains("<!--", StringComparison.Ordinal);
-            return (!bad).Label("markup survived");
+            var bad = AllText(pages).FirstOrDefault(HoldsTagOpener);
+            return (bad is null).Label($"markup survived: {bad}");
         });
 
     [Property(MaxTest = 300)]
