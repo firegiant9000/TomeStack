@@ -33,6 +33,13 @@ afterEach(() => {
   for (const key of Object.keys(document.documentElement.dataset)) delete document.documentElement.dataset[key];
 });
 
+/**
+ * A row of the review panel's Candidates list. After a filter or kind change the panel says "No candidates match." until the
+ * new `import.candidates` reply arrives, so the list itself may not exist yet: the whole lookup is retried, never read once.
+ */
+const candidateButton = (panel: () => HTMLElement, name: string) =>
+  waitFor(() => within(within(panel()).getByRole('list', { name: 'Candidates' })).getByRole('button', { name }), { timeout: 10000 });
+
 function bytesOf(base64: string): Uint8Array<ArrayBuffer> {
   return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
 }
@@ -1006,7 +1013,7 @@ it('reads the fixture PDF, reviews its candidates, and publishes an accepted one
   // A clean spell: excerpt, page, what was read; the check passes; accepting makes a draft.
   await user.selectOptions(kind, 'spell');
   await waitFor(() => expect(within(list()).getAllByRole('listitem')).toHaveLength(2));
-  await user.click(await within(list()).findByRole('button', { name: 'Fixture Ember Lance' })); // a slow PDF worker may still be filling the list
+  await user.click(await candidateButton(panel, 'Fixture Ember Lance')); // a slow PDF worker may still be filling the list
   const ember = await detail('Fixture Ember Lance');
   await waitFor(() => expect(document.activeElement).toBe(within(ember).getByRole('heading', { name: 'Candidate: Fixture Ember Lance' })));
   expect(within(ember).getByRole('figure').textContent).toMatch(/Excerpt from p\. 2.*Fixture Ember Lance.*3d6 Fire/s);
@@ -1023,13 +1030,13 @@ it('reads the fixture PDF, reviews its candidates, and publishes an accepted one
   expect(within(panel()).getByRole('button', { name: 'Open E2E Grimoire in the studio' })).toBeTruthy();
 
   // Ignore the other spell.
-  await user.click(await within(list()).findByRole('button', { name: 'Fixture Frost Veil' }));
+  await user.click(await candidateButton(panel, 'Fixture Frost Veil'));
   await user.click(within(await detail('Fixture Frost Veil')).getByRole('button', { name: 'Ignore' }));
   await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Ignored Fixture Frost Veil/));
 
   // An unresolved reference blocks "Accept as a draft"; "Accept as reference" keeps the text and page only.
   await user.selectOptions(kind, 'feature');
-  await user.click(await within(list()).findByRole('button', { name: 'Fixture Stormcall' }));
+  await user.click(await candidateButton(panel, 'Fixture Stormcall'));
   const stormcall = await detail('Fixture Stormcall');
   expect(within(within(stormcall).getByRole('group', { name: 'Unresolved references' })).getByRole('checkbox', { name: 'Dismiss Fixture Thunder Word' })).toBeTruthy();
   await within(stormcall).findByRole('list', { name: 'Blocks accepting' });
@@ -1039,7 +1046,7 @@ it('reads the fixture PDF, reviews its candidates, and publishes an accepted one
 
   // The feat: accepted as a draft, then published in the studio, which validates it again.
   await user.selectOptions(kind, 'feat');
-  await user.click(await within(list()).findByRole('button', { name: 'Fixture Keen Watcher' }));
+  await user.click(await candidateButton(panel, 'Fixture Keen Watcher'));
   const feat = await detail('Fixture Keen Watcher');
   const acceptFeat = within(feat).getByRole('button', { name: 'Accept as a draft' });
   await waitFor(() => expect(acceptFeat.getAttribute('aria-disabled')).toBeNull());
@@ -1081,7 +1088,7 @@ it('imports a fixture class: the table is checked, the hit die and slots are con
   const panel = () => within(reader()).getByRole('region', { name: 'Candidates from E2E Class Book' });
   await within(reader()).findByRole('region', { name: 'Candidates from E2E Class Book' });
   await user.selectOptions(within(panel()).getByRole('combobox', { name: 'Kind' }), 'class');
-  await user.click(await within(within(panel()).getByRole('list', { name: 'Candidates' })).findByRole('button', { name: 'Fixture Lamplighter' }));
+  await user.click(await candidateButton(panel, 'Fixture Lamplighter'));
   const lamplighter = await within(panel()).findByRole('region', { name: 'Candidate: Fixture Lamplighter' });
 
   // The slot table and the linked features are on screen to check against the page.
@@ -1132,7 +1139,7 @@ it('selects a proposed effect of a fixture class and sees its lines highlighted 
   const panel = () => within(reader()).getByRole('region', { name: 'Candidates from E2E Span Book' });
   await within(reader()).findByRole('region', { name: 'Candidates from E2E Span Book' });
   await user.selectOptions(within(panel()).getByRole('combobox', { name: 'Kind' }), 'class');
-  await user.click(await within(within(panel()).getByRole('list', { name: 'Candidates' })).findByRole('button', { name: 'Fixture Lamplighter' }));
+  await user.click(await candidateButton(panel, 'Fixture Lamplighter'));
   const lamplighter = await within(panel()).findByRole('region', { name: 'Candidate: Fixture Lamplighter' });
 
   // Before a choice the whole excerpt shows, as always.
@@ -1163,6 +1170,14 @@ it('imports a fixture Markdown class into a source with no PDF: pages only, cand
   expect(Number(/\d+/.exec(review.textContent ?? '')?.[0])).toBeGreaterThan(0);
   expect(within(reader()).getByText(/^Markdown file: completed, \d+ pages? read/)).toBeTruthy();
   expect(within(reader()).queryByRole('button', { name: 'Resume' })).toBeNull();
+
+  // The candidates list opens and holds a row for each candidate found (awaited: the list appears with the first reply).
+  await user.click(review);
+  const panel = () => within(reader()).getByRole('region', { name: 'Candidates from E2E Markdown Book' });
+  await within(reader()).findByRole('region', { name: 'Candidates from E2E Markdown Book' });
+  const rows = await waitFor(() => within(within(panel()).getByRole('list', { name: 'Candidates' })).getAllByRole('listitem'));
+  expect(rows.length).toBeGreaterThan(0);
+  expect(within(rows[0]!).getByRole('button')).toBeTruthy();
 
   // The read text is searchable, and "Open page" shows what was stored, since there is no PDF to open.
   await user.type(within(reader()).getByRole('textbox', { name: 'Search the text of E2E Markdown Book' }), 'Placeholder Class');
@@ -1582,7 +1597,7 @@ it('compares the published revision with the unsaved one by rules, text and on a
   await user.type(value, '3');
 
   const panel = within(editor()).getByRole('region', { name: 'Compare revisions' });
-  await user.click(within(panel).getByRole('checkbox', { name: 'E2E Diff Hero' }));
+  await user.click(await within(panel).findByRole('checkbox', { name: 'E2E Diff Hero' })); // the character list loads after the panel opens
   await user.click(within(panel).getByRole('button', { name: 'Compare' }));
   const results = await within(panel).findByRole('region', { name: 'Comparison results' });
   expect(within(results).getByRole('table', { name: 'Rule changes' }).textContent).toMatch(/quick.*changed/);

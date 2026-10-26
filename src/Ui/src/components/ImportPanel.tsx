@@ -122,18 +122,21 @@ export function ImportPanel({ source, hasPdf, onError, onStatus, onOpenStudio }:
   async function importMarkdown(blocked: boolean) {
     if (blocked) return;
     browserTarget.current = { sourceId: source.id, writtenFor };
+    let job: ImportJob | undefined;
     try {
-      const job = await client.startMarkdownImport(source.id, writtenFor);
-      if (job) {
-        onStatus(`Reading the Markdown file for ${source.title}. Nothing changes until you review what is found.`);
-        await refresh();
-      }
+      job = await client.startMarkdownImport(source.id, writtenFor);
     } catch (error) {
       if (error instanceof TomeStackError && error.code === 'unsupported') {
         fileInput.current?.click();
         return;
       }
       onError(markdownRefusal(error));
+      return;
+    }
+    if (job) {
+      onStatus(`Reading the Markdown file for ${source.title}. Nothing changes until you review what is found.`);
+      // The import started. A failed list refresh is its own problem (and the poll tries again), never a refusal of the start.
+      await refresh().catch(onError);
     }
   }
 
@@ -145,10 +148,11 @@ export function ImportPanel({ source, hasPdf, onError, onStatus, onOpenStudio }:
     try {
       await client.startMarkdownImportData(target.sourceId, file.name, await readFileAsBase64(file), target.writtenFor);
       onStatus(`Reading ${file.name}. Nothing changes until you review what is found.`);
-      await refresh();
     } catch (error) {
       onError(markdownRefusal(error));
+      return;
     }
+    await refresh().catch(onError);
   }
 
   /**

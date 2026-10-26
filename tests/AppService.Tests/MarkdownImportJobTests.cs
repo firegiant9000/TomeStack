@@ -171,6 +171,21 @@ public class MarkdownImportJobTests
     }
 
     [Fact]
+    public void A_newer_failed_markdown_job_does_not_hide_the_earlier_good_one()
+    {
+        using var temp = new TempApp();
+        var source = Homebrew(temp);
+        var good = Import(temp, source.Id, Encoding.UTF8.GetBytes("# Older Alpha\n\nAlphaword only here.\n"));
+        var failed = Import(temp, source.Id, [0xFF, 0xFE, 0xFD, 0x80, 0x81], ImportJobStatus.Failed);
+        Assert.Equal("markdown.encoding", failed.FailureCode);
+        Assert.Equal(0, failed.PagesDone);
+
+        Assert.NotEmpty(temp.App.SearchImportedText(new(source.Id, "Alphaword")));
+        Assert.Contains("Alphaword", temp.App.ImportedPage(new(source.Id, 1)).Text, StringComparison.Ordinal);
+        Assert.Equal(good.Sha256, Sha(Encoding.UTF8.GetBytes("# Older Alpha\n\nAlphaword only here.\n")));
+    }
+
+    [Fact]
     public void The_pdf_sha_wins_when_the_source_has_a_pdf()
     {
         using var temp = new TempApp();

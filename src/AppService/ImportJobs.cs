@@ -400,8 +400,10 @@ public sealed partial class TomeStackApp
     {
         if (source.AttachmentId is { } id && _store.FindAttachment(id) is { Sha256: { } sha })
             return sha;
-        // Newest first, so a tie on CreatedAt (one clock tick) goes to the later job.
-        return _store.ListImportJobs().Where(j => j.SourceId == source.Id && j.IsMarkdown).Reverse().MaxBy(j => j.CreatedAt)?.Sha256;
+        // R22: a newer failed or cancelled re-import that stored no pages must not hide an earlier good one, so jobs with pages
+        // come first; with none, the newest Markdown job. Newest first, so a tie on CreatedAt (one clock tick) goes to the later job.
+        var markdown = _store.ListImportJobs().Where(j => j.SourceId == source.Id && j.IsMarkdown).Reverse().ToList();
+        return (markdown.Where(j => j.PagesDone > 0).MaxBy(j => j.CreatedAt) ?? markdown.MaxBy(j => j.CreatedAt))?.Sha256;
     }
 
     /// <summary><c>import.page</c>: the stored extraction of one page of the source's current PDF, or <c>import.page-not-extracted</c>.</summary>

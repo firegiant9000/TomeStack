@@ -13,6 +13,7 @@ const pageWarnings: Record<string, string> = {
   'markdown.page-order': 'Page markers must go up; one was ignored.',
   'markdown.front-matter-ignored': 'Front matter at the top was ignored.',
   'page.text-truncated': 'This page was longer than TomeStack keeps, so the end of it was left out.',
+  'page.blocks-truncated': 'This page had more lines than TomeStack keeps, so the last ones were left out.',
   'page.no-text': 'This page has no text.',
 };
 

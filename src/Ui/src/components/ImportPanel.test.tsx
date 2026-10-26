@@ -348,6 +348,22 @@ it('says a refused start in words, and passes an unknown refusal on as the serve
   expect(onError.mock.calls[0]![0]).toBeInstanceOf(TomeStackError);
 });
 
+it('keeps a started import when the list refresh after it fails: the failure is shown as it is, not as a refusal, and no picker opens', async () => {
+  const onError = vi.fn();
+  const user = await renderPanel(single, { hasPdf: false, onError });
+  const input = screen.getByLabelText('Markdown file') as HTMLInputElement;
+  const picker = vi.spyOn(input, 'click');
+  vi.mocked(client.startMarkdownImport).mockResolvedValue(markdownJob('job-m', 'running'));
+  const failure = new TomeStackError({ code: 'unsupported', message: 'The list could not be read.' });
+  vi.mocked(client.listImports).mockRejectedValue(failure);
+
+  await user.click(screen.getByRole('button', { name: 'Import a Markdown file…' }));
+
+  await vi.waitFor(() => expect(onError).toHaveBeenCalledWith(failure));
+  expect(client.startMarkdownImport).toHaveBeenCalledTimes(1);
+  expect(picker).not.toHaveBeenCalled();
+});
+
 const storedPage = (text: string, warnings: string[] = []): StoredPage => ({ page: 2, text, fromOcr: false, width: 612, height: 792, blocks: [], warnings });
 
 async function searchAndOpen(user: Awaited<ReturnType<typeof renderPanel>>, page: number) {

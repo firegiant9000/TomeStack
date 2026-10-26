@@ -20,5 +20,6 @@ it('puts every Markdown page warning in plain words, and shows an unknown one as
   expect(pageWarningWords('markdown.front-matter-ignored')).toBe('Front matter at the top was ignored.');
   expect(pageWarningWords('page.text-truncated')).toContain('longer than TomeStack keeps');
   expect(pageWarningWords('page.no-text')).toBe('This page has no text.');
-  expect(pageWarningWords('page.blocks-truncated')).toBe('page.blocks-truncated');
+  expect(pageWarningWords('page.blocks-truncated')).toContain('more lines than TomeStack keeps');
+  expect(pageWarningWords('page.something-new')).toBe('page.something-new');
 });

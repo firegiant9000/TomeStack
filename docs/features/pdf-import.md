@@ -130,12 +130,12 @@ A homebrew source can import a `.md` file with "Import a Markdown file…" (no P
 
 - **Pages only.** The file is read once (up to 4 MB), its SHA-256 is kept on the job, and the worker kind `extractMarkdown` reads a temp copy outside the attachments folder that is deleted when the run ends. The file is not copied into the library, so it is not in library backups, and the job is not resumable: Resume is not offered and `import.resume` answers `import.markdown-read-again` ("Import the Markdown file again."). The job record carries `format: "markdown"` (absent for PDF jobs).
 - **Errors:** `markdown.missing`, `markdown.unreadable`, `markdown.encoding` (not UTF-8), `markdown.too-large` (over 4 MB, 200,000 lines, 10,000 characters in a line, 2,000 pages or 40 table columns). Nothing partial is kept.
-- **Search and stored pages.** A source with no PDF searches and shows stored pages from its newest Markdown job; a PDF attachment's text wins when there is one. The in-app page view shows plain text with the page warnings in words (`markdown.page-order`, `markdown.front-matter-ignored`, `page.text-truncated`, `page.no-text`).
+- **Search and stored pages.** A source with no PDF searches and shows stored pages from its newest Markdown job that stored pages (a newer failed or cancelled import does not hide an earlier good one); a PDF attachment's text wins when there is one. The in-app page view shows plain text with the page warnings in words (`markdown.page-order`, `markdown.front-matter-ignored`, `page.text-truncated`, `page.no-text`).
 - **Sparse pages.** A `<!-- page: N -->` marker starts page N (numbers must go up; a lower one is ignored with a warning). A page with no text is not emitted; a file with only warnings is one empty page.
 
 | Markdown | Becomes |
 |---|---|
-| `#` to `######` heading | a heading block (large, bold text) |
+| `#` to `####` heading | a heading block (large, bold text) |
 | Paragraph | one text block, one line per source line |
 | `Name. text` run-in head | a bold run-in head then body, as a PDF feature head |
 | `-`, `*`, `+` or `1.` item | a list-item block |
