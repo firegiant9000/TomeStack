@@ -28,6 +28,8 @@
     <EmbeddedResource Include="Content\srd-5.2.1-armor.json" LogicalName="TomeStack.Content.srd-5.2.1-armor.json" />
     <EmbeddedResource Include="Content\srd-5.1-fighter.json" LogicalName="TomeStack.Content.srd-5.1-fighter.json" />
     <EmbeddedResource Include="Content\srd-5.2.1-fighter.json" LogicalName="TomeStack.Content.srd-5.2.1-fighter.json" />
+    <EmbeddedResource Include="Content\srd-5.2.1-feats.json" LogicalName="TomeStack.Content.srd-5.2.1-feats.json" />
+    <EmbeddedResource Include="Content\srd-5.2.1-origins.json" LogicalName="TomeStack.Content.srd-5.2.1-origins.json" />
     <!-- Character-sheet import: the layout maps (field names only; features/ddb-pdf-import.md). -->
     <EmbeddedResource Include="CharacterImport\Layouts\*.json" LogicalName="TomeStack.CharacterImport.Layouts.%(Filename)%(Extension)" />
     <!-- The original test fixture pack is seeded only by development hosts and tests (TomeStackApp.Open devFixtures). -->
