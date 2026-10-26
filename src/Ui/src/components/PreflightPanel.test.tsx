@@ -19,6 +19,7 @@ vi.mock('../api/client', () => ({
     attachment: vi.fn(),
     sourcePackPreview: vi.fn(),
     listCampaigns: vi.fn(),
+    saveCampaign: vi.fn(),
     campaignPackPreview: vi.fn(),
     previewExport: vi.fn(),
     previewVttExport: vi.fn(),
@@ -177,6 +178,37 @@ it('the campaign-pack export stays off while the preflight blocks and comes on w
   await user.click(await screen.findByRole('button', { name: 'Share Lantern Table…' }));
   const clearShare = await screen.findByRole('region', { name: 'Share Lantern Table' });
   await waitFor(() => expect(within(clearShare).getByRole<HTMLButtonElement>('button', { name: 'Save campaign pack…' }).disabled).toBe(false));
+});
+
+it('the campaign-pack share asks again when the campaign is edited and saved while it is open', async () => {
+  const user = userEvent.setup();
+  const before = { id: 'camp-1', name: 'Lantern Table', rulesFamily: 'srd-5.1' as const, allowedSources: ['src-1'] };
+  const after = { ...before, allowedSources: [], updatedAt: 't2' };
+  vi.mocked(client.listCampaigns).mockResolvedValue([before]);
+  vi.mocked(client.saveCampaign).mockResolvedValue(after as never);
+  vi.mocked(client.campaignPackPreview).mockResolvedValue({
+    fileName: 'Lantern-Table-campaign-pack.tomestack.zip', campaignId: 'camp-1', name: 'Lantern Table', rulesFamily: 'srd-5.1', included: [], referenced: [], leftOut: [], revisions: 0, warnings: [],
+  });
+  vi.mocked(client.packagePreflight).mockResolvedValue(blocked);
+  render(<CampaignsPanel rulesFamilies={[]} onError={() => {}} onStatus={() => {}} />);
+
+  await user.click(await screen.findByRole('button', { name: 'Share Lantern Table…' }));
+  const share = await screen.findByRole('region', { name: 'Share Lantern Table' });
+  await within(share).findByRole('region', { name: 'Preflight: campaign pack' });
+  expect(vi.mocked(client.packagePreflight)).toHaveBeenCalledTimes(1);
+  expect(within(share).getByRole<HTMLButtonElement>('button', { name: 'Save campaign pack…' }).disabled).toBe(true);
+
+  // Edit the same campaign while the share form stays open, untick the source and save.
+  vi.mocked(client.listCampaigns).mockResolvedValue([after]);
+  vi.mocked(client.packagePreflight).mockResolvedValue(clear);
+  await user.click(screen.getByRole('button', { name: 'Edit Lantern Table' }));
+  await user.click(await screen.findByRole('checkbox', { name: /Lantern Notes/ }));
+  await user.click(screen.getByRole('button', { name: 'Save campaign' }));
+
+  await waitFor(() => expect(vi.mocked(client.packagePreflight)).toHaveBeenCalledTimes(2));
+  expect(vi.mocked(client.packagePreflight)).toHaveBeenLastCalledWith({ kind: 'campaignPack', selection: ['camp-1'] });
+  const again = await screen.findByRole('region', { name: 'Share Lantern Table' });
+  await waitFor(() => expect(within(again).getByRole<HTMLButtonElement>('button', { name: 'Save campaign pack…' }).disabled).toBe(false));
 });
 
 it('the character-package export checks a share, and a backup keeps its own rule', async () => {

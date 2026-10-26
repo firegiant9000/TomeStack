@@ -23,9 +23,11 @@ function CampaignPackForm({ campaign, onError, onStatus }: { campaign: Campaign 
   // Import Lab L5: the one sharing rule's answer; Save waits for it and stops on anything blocking.
   const [report, setReport] = useState<PreflightReport>();
 
+  // The preview is asked again when the campaign is saved with other sources.
+  const version = `${campaign.updatedAt ?? ''}~${campaign.allowedSources.join(',')}`;
   useEffect(() => {
     client.campaignPackPreview(campaign.id).then(setPreview).catch(onError);
-  }, [campaign.id, onError]);
+  }, [campaign.id, version, onError]);
 
   async function save() {
     try {
@@ -86,7 +88,7 @@ function CampaignPackForm({ campaign, onError, onStatus }: { campaign: Campaign 
               ))}
             </ul>
           )}
-          <PreflightPanel kind="campaignPack" selection={[campaign.id]} label="campaign pack" refreshKey={`${campaign.updatedAt ?? ''}~${campaign.allowedSources.join(',')}`} onReport={setReport} onError={onError} />
+          <PreflightPanel kind="campaignPack" selection={[campaign.id]} label="campaign pack" refreshKey={version} onReport={setReport} onError={onError} />
           <div className="actions">
             <button type="button" onClick={save} disabled={!canSaveAfter(report)}>
               Save campaign pack…
@@ -107,7 +109,9 @@ export function CampaignsPanel({ rulesFamilies, onError, onStatus }: Props) {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [sources, setSources] = useState<SourceRecord[]>([]);
   const [editing, setEditing] = useState<Campaign>();
-  const [sharing, setSharing] = useState<Campaign>();
+  // Only the id is kept, so the share form always shows the campaign as last saved (an edit made while it is open reaches it).
+  const [sharingId, setSharingId] = useState<string>();
+  const sharing = campaigns.find((c) => c.id === sharingId);
 
   useEffect(() => {
     Promise.all([client.listCampaigns(), client.listSources()])
@@ -155,7 +159,7 @@ export function CampaignsPanel({ rulesFamilies, onError, onStatus }: Props) {
               <button type="button" onClick={() => setEditing(c)}>
                 Edit {c.name}
               </button>{' '}
-              <button type="button" onClick={() => setSharing(sharing?.id === c.id ? undefined : c)} aria-expanded={sharing?.id === c.id}>
+              <button type="button" onClick={() => setSharingId(sharingId === c.id ? undefined : c.id)} aria-expanded={sharingId === c.id}>
                 Share {c.name}…
               </button>
               {pendingOf(c).length > 0 && (
