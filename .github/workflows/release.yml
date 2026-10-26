@@ -23,7 +23,7 @@ on:
 permissions: {}
 
 concurrency:
-  group: release-${{ github.ref_name }}
+  group: release-${{ github.event_name }}-${{ github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -34,16 +34,16 @@ jobs:
       contents: read
     outputs:
       version: ${{ steps.version.outputs.version }}
+      sums: ${{ steps.sums.outputs.sums }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
+      # No npm cache in the release build: a restored cache would be one more input to trust.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: src/Ui/package-lock.json
 
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
@@ -131,7 +131,10 @@ jobs:
       # The release assets are every file vpk wrote at the top of the version folder (the publish folder below it is
       # not an asset), the same set as before SHA256SUMS. SHA256SUMS is in sha256sum text format: "<hash>  <name>",
       # lower-case hex, LF line endings, so `sha256sum --check` and the attest job read it as written.
+      # The hash of SHA256SUMS itself is a job output, so attest and publish can tell if the artifact was replaced
+      # after this step.
       - name: Collect the assets and write SHA256SUMS
+        id: sums
         shell: pwsh
         env:
           VERSION: ${{ steps.version.outputs.version }}
@@ -148,6 +151,7 @@ jobs:
           }
           [IO.File]::WriteAllText((Join-Path $out 'SHA256SUMS'), (($lines -join "`n") + "`n"))
           Get-Content (Join-Path $out 'SHA256SUMS')
+          "sums=$((Get-FileHash (Join-Path $out 'SHA256SUMS') -Algorithm SHA256).Hash.ToLowerInvariant())" >> $env:GITHUB_OUTPUT
 
       - name: Release notes from the changelog
         shell: pwsh
@@ -195,10 +199,16 @@ jobs:
           name: release-assets
           path: release-assets
 
-      # The attestation is made from the hashes in SHA256SUMS, so check them against the files first.
+      # The attestation is made from the hashes in SHA256SUMS, so check SHA256SUMS against the build job's output and
+      # the files against SHA256SUMS first.
       - name: Check the assets against SHA256SUMS
         working-directory: release-assets
-        run: sha256sum --check --strict SHA256SUMS
+        shell: bash
+        env:
+          SUMS: ${{ needs.build.outputs.sums }}
+        run: |
+          [ -n "$SUMS" ] && [ "$(sha256sum SHA256SUMS | cut -d' ' -f1)" = "$SUMS" ] || { echo 'SHA256SUMS differs from the one the build job wrote'; exit 1; }
+          sha256sum --check --strict SHA256SUMS
 
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
@@ -232,7 +242,9 @@ jobs:
           GH_REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
           VERSION: ${{ needs.build.outputs.version }}
+          SUMS: ${{ needs.build.outputs.sums }}
         run: |
+          [ -n "$SUMS" ] && [ "$(sha256sum SHA256SUMS | cut -d' ' -f1)" = "$SUMS" ] || { echo 'SHA256SUMS differs from the one the build job wrote'; exit 1; }
           sha256sum --check --strict SHA256SUMS
           grep -qE '  TomeStack\.App-win-Setup\.exe$' SHA256SUMS || { echo 'Setup.exe is missing'; exit 1; }
           mapfile -t assets < <(cut -d' ' -f3- SHA256SUMS)

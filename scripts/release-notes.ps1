@@ -45,9 +45,11 @@ The release workflow attests every file listed in ``SHA256SUMS``: GitHub records
 gh attestation verify TomeStack.App-win-Setup.exe --repo firegiant9000/TomeStack --signer-workflow firegiant9000/TomeStack/.github/workflows/release.yml --source-ref refs/tags/v$Version
 ``````
 
-Without the GitHub CLI, compare ``(Get-FileHash TomeStack.App-win-Setup.exe).Hash`` in PowerShell with the installer's line in ``SHA256SUMS`` (the case of the letters doesn't matter). An attestation shows where a file was built; it is not a code signature, so Windows still shows the SmartScreen prompt.
+Without the GitHub CLI, compare ``(Get-FileHash TomeStack.App-win-Setup.exe).Hash`` in PowerShell with the installer's line in ``SHA256SUMS`` (the case of the letters doesn't matter). That check only shows the file arrived intact: ``SHA256SUMS`` comes from this same page and is not attested itself, so the ``gh attestation verify`` command is the one that shows where the file was built (it needs a GitHub CLI recent enough to have ``--source-ref``, signed in with ``gh auth login``). An attestation is not a code signature, so Windows still shows the SmartScreen prompt.
 
 This build is **unsigned**. See the note at the top about the SmartScreen prompt. Third-party notices are in ``ATTRIBUTION.md`` next to ``TomeStack.exe``. Two Microsoft Windows SDK files that ship with TomeStack (``Microsoft.Windows.SDK.NET.dll``, ``WinRT.Runtime.dll``) are covered by the Microsoft Windows SDK license terms. By installing TomeStack you agree to those terms for those files; see "Terms for the Microsoft Windows SDK files" in ``ATTRIBUTION.md``.
 "@
+$parent = Split-Path $Output -Parent
+if ($parent) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
 Set-Content -Path $Output -Value $notes -Encoding UTF8
 Write-Output "Release notes for $Version written to $Output ($((Get-Item $Output).Length) bytes)"
