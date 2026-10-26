@@ -8,6 +8,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { client } from '../api/client';
 import type { Character, CharacterView, Companion, CompanionPlay, PlayAction, RollTarget } from '../api/types';
 import { CompanionsPanel } from './CompanionsPanel';
+import { fill } from '../test/fill';
 
 vi.mock('../api/client', () => ({ client: { saveCharacter: vi.fn(), rollDice: vi.fn() } }));
 
@@ -182,12 +183,12 @@ it('adds a companion with an attack line, keeps the other character fields, and 
   await user.click(screen.getByRole('button', { name: 'Add a companion' }));
   expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Name' }));
   await user.type(screen.getByRole('textbox', { name: 'Name' }), '  Testy Mule ');
-  await user.type(screen.getByRole('textbox', { name: 'Kind (optional)' }), 'Fixture mount');
+  await fill(user, screen.getByRole('textbox', { name: 'Kind (optional)' }), 'Fixture mount');
   await user.type(screen.getByRole('spinbutton', { name: 'Armor Class (optional)' }), '10');
   await user.clear(screen.getByRole('spinbutton', { name: 'Hit point maximum' }));
   await user.type(screen.getByRole('spinbutton', { name: 'Hit point maximum' }), '11');
   await user.click(screen.getByRole('button', { name: 'Add an attack line' }));
-  await user.type(screen.getByRole('textbox', { name: 'Attack 1 name' }), 'Testy Kick');
+  await fill(user, screen.getByRole('textbox', { name: 'Attack 1 name' }), 'Testy Kick');
   await user.clear(screen.getByRole('spinbutton', { name: 'Attack 1 to hit bonus' }));
   await user.type(screen.getByRole('spinbutton', { name: 'Attack 1 to hit bonus' }), '2');
   await user.type(screen.getByRole('textbox', { name: 'Attack 1 damage (optional)' }), '1d4');
@@ -214,7 +215,7 @@ it('holds Save with a linked reason until the companion has a name, and explains
   const save = screen.getByRole('button', { name: 'Save companion' });
   expect(held(save)).toBe(true);
   expect(document.getElementById(save.getAttribute('aria-describedby')!)?.textContent).toBe('Save is held until the companion has a name.');
-  await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Testy Mule');
+  await fill(user, screen.getByRole('textbox', { name: 'Name' }), 'Testy Mule');
   await user.clear(screen.getByRole('spinbutton', { name: 'Hit point maximum' }));
   await user.type(screen.getByRole('spinbutton', { name: 'Hit point maximum' }), '10001');
   const maximum = screen.getByRole('spinbutton', { name: 'Hit point maximum' });

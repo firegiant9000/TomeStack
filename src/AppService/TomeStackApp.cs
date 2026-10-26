@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using TomeStack.AppService.Packages;
 using TomeStack.AppService.Persistence;
@@ -446,8 +447,19 @@ public sealed partial class TomeStackApp : IDisposable
         return new(character, sheet, CampaignOf(character, sheet));
     }
 
+    /// <summary>
+    /// Tests only: keep each parsed bundled pack for the life of the process, so the hundreds of data folders a test run opens
+    /// do not parse the same JSON each time. Off in the app, which opens one folder per process and need not keep the packs.
+    /// </summary>
+    internal static bool CacheBundledPacks { get; set; }
+
+    private static readonly ConcurrentDictionary<string, ContentPack> BundledPackCache = new();
+
     /// <summary>Loads an embedded content pack (bundled with this build, so trusted like code).</summary>
-    public static ContentPack LoadBundledPack(string resourceName)
+    public static ContentPack LoadBundledPack(string resourceName) =>
+        CacheBundledPacks ? BundledPackCache.GetOrAdd(resourceName, ParseBundledPack) : ParseBundledPack(resourceName);
+
+    private static ContentPack ParseBundledPack(string resourceName)
     {
         using var stream = typeof(TomeStackApp).Assembly.GetManifestResourceStream(resourceName)
             ?? throw new InvalidOperationException($"Embedded content pack {resourceName} is missing.");

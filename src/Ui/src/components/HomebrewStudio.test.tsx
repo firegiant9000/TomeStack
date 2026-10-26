@@ -7,6 +7,7 @@ import { client } from '../api/client';
 import type { AppInfo, SourceRecord, StudioEntry } from '../api/types';
 import { expectNoAxeViolations } from '../test/axe';
 import { HomebrewStudio } from './HomebrewStudio';
+import { fill } from '../test/fill';
 
 vi.mock('../api/client', () => ({
   client: { listSources: vi.fn(), contentBySource: vi.fn(), publishManyPreview: vi.fn(), createHomebrewSource: vi.fn(), previewFormula: vi.fn(), listCharacters: vi.fn() },
@@ -103,7 +104,7 @@ it('creating a new source closes the open publish panel and drops the old rows',
   vi.mocked(client.contentBySource).mockImplementation((id) => (id === 'c' ? new Promise((resolve) => (release = resolve)) : Promise.resolve([draftEntry])));
   vi.mocked(client.createHomebrewSource).mockResolvedValue(homebrew('c', 'Testy Gamma'));
   vi.mocked(client.listSources).mockResolvedValue([homebrew('a', 'Testy Alpha'), homebrew('b', 'Testy Beta'), homebrew('c', 'Testy Gamma')]);
-  await user.type(screen.getByLabelText('Source title'), 'Testy Gamma');
+  await fill(user, screen.getByLabelText('Source title'), 'Testy Gamma');
   await user.click(screen.getByRole('checkbox', { name: 'SRD 5.1' }));
   await user.click(screen.getByRole('button', { name: 'Create source' }));
 
