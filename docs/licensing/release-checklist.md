@@ -120,3 +120,5 @@ Velopack (MIT, Caelan Sayler) builds `Setup.exe` and `Update.exe` in Rust, with 
    4. it creates a **draft** release with `Setup.exe`, the portable zip, the `.nupkg`, the Velopack feed files and notes from the changelog.
 4. Review the draft on GitHub (assets, notes, the unsigned note), then **Publish**. Nothing is public before that.
 5. After publishing: run the upgrade test and the install checks on the published `Setup.exe` (`docs/features/release-0.4.0-verification.md`).
+
+Before tagging, check the **Weekly** workflow's (`.github/workflows/weekly.yml`) last run date and status: GitHub turns a schedule off after 60 days without repository activity, and the job never blocks a merge, so a red or stale run is only seen here.
