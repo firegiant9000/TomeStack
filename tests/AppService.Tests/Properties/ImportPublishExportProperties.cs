@@ -16,8 +16,9 @@ namespace TomeStack.AppService.Tests.Properties;
 /// The sources are not import-derived. A source that an import wrote into is flagged import-derived and the sharing guard refuses it
 /// (<c>Preflight.ShareProblem</c>, D14 item 6), so it can never be in a source pack; the property therefore starts at the draft, which
 /// is where the accept flow ends (<c>CandidateQuarantine.ToDraftRevision</c> writes a draft, and the accept flow itself is covered by
-/// <see cref="ImportLabGateTests"/>). The drafts come from the shared revision generator (every kind it produces); only the ones the
-/// validator lets publish are kept, since an invalid draft cannot reach the store as published at all.
+/// <see cref="ImportLabGateTests"/>). The drafts come from the shared revision generator (all eight kinds it produces), with valid
+/// effects substituted. Nothing is filtered: every draft must publish (a refusal fails the case), each case has at least one, and the
+/// companion test publishes one draft of every kind and checks the libraries cover all eight kinds.
 /// </para>
 /// </summary>
 public class ImportPublishExportProperties
@@ -41,8 +42,29 @@ public class ImportPublishExportProperties
             Effects = withEffect ? [new ModifierEffect { Id = "init", Operation = ModifierOperation.Bonus, Target = FieldIds.Initiative, Value = bonus.ToString(System.Globalization.CultureInfo.InvariantCulture) }] : [],
         };
 
+    /// <summary>One to four drafts, never none: every case publishes at least one revision.</summary>
     public static Gen<IReadOnlyList<ContentRevision>> Libraries { get; } =
-        Drafts.ArrayOf().Select(d => (IReadOnlyList<ContentRevision>)[.. d.Take(4).GroupBy(r => r.ContentId).Select(g => g.First())]);
+        Drafts.NonEmptyListOf().Select(d => (IReadOnlyList<ContentRevision>)[.. d.Take(4).GroupBy(r => r.ContentId).Select(g => g.First())]);
+
+    private static readonly ContentKind[] GeneratorKinds =
+        [ContentKind.Species, ContentKind.Background, ContentKind.Class, ContentKind.Subclass, ContentKind.Feature, ContentKind.Feat, ContentKind.Spell, ContentKind.Item];
+
+    [Fact]
+    public void Every_kind_the_generator_makes_publishes_and_the_libraries_cover_them_all_and_are_never_empty()
+    {
+        using var app = new TempApp();
+        var source = app.App.CreateHomebrewSource(new("Test Kind Book", Family));
+        foreach (var kind in GeneratorKinds)
+        {
+            var draft = Drafts.Sample(30, 400).First(d => d.Kind == kind); // deterministic enough: 400 draws of eight kinds
+            var saved = app.App.SaveDraft(draft with { Provenance = new(source.Id) });
+            Assert.Equal(RevisionStatus.Published, app.App.Store.FindRevision(app.App.Publish(saved).Published)!.Status);
+        }
+
+        var libraries = Libraries.Sample(30, 300).ToList();
+        Assert.All(libraries, l => Assert.NotEmpty(l));
+        Assert.Equal(GeneratorKinds.Order(), libraries.SelectMany(l => l).Select(d => d.Kind).Distinct().Order());
+    }
 
     [Property(MaxTest = 25)]
     public Property Import_publish_export_round_trips() =>
@@ -56,8 +78,8 @@ public class ImportPublishExportProperties
                 var saved = author.App.SaveDraft(draft with { Provenance = new(source.Id) });
                 published.Add(author.App.Publish(saved).Published);
             }
-            if (published.Count == 0)
-                return true; // nothing was drafted: there is no pack to make (a source with no published content is refused)
+            Assert.Equal(drafts.Count, published.Count); // every generated draft publishes; a refusal throws above and fails the case
+            Assert.NotEmpty(published);
 
             var pack = author.App.ExportSourcePack([source.Id]).Content;
             using var clean = new TempApp(now: TempApp.Now.AddDays(1));
