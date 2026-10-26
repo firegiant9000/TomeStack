@@ -64,6 +64,9 @@ jobs:
           if ($env:EVENT_NAME -eq 'push') {
             $version = $env:REF_NAME.TrimStart('v')
             if ($props -ne $version) { throw "Tag $env:REF_NAME does not match Directory.Build.props Version $props" }
+            # The notes' verify command pins GITHUB_SHA (--source-digest); it must be the commit the tag points to.
+            $tagCommit = git rev-parse "$env:REF_NAME^{commit}"
+            if ($LASTEXITCODE -ne 0 -or $tagCommit -ne $env:GITHUB_SHA) { throw "GITHUB_SHA $env:GITHUB_SHA is not the commit $tagCommit that $env:REF_NAME points to" }
           } else {
             if ($env:DRY_RUN -ne 'true') { throw 'A manual run is a dry run only; push a vX.Y.Z tag to release.' }
             $version = $props
