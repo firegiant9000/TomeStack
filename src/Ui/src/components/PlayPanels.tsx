@@ -629,6 +629,14 @@ export function ActionsPanel({
 }) {
   const [critical, setCritical] = useState(false);
   const [usableOnly, setUsableOnly] = useState(false);
+  // D73: a click can empty the pool and so unmount its own row under "Usable now"; focus then goes to the filter checkbox, not <body>.
+  const usableRef = useRef<HTMLInputElement>(null);
+  const panelHadFocus = useRef(false);
+  useEffect(() => {
+    if (!usableOnly || !panelHadFocus.current) return;
+    const active = document.activeElement;
+    if (active === null || active === document.body) usableRef.current?.focus(); // a real element elsewhere was chosen: leave it
+  });
   const rollDamage = (target: RollTarget, type?: string) => {
     onDamageType?.(normalizeDamageType(type));
     roll(target);
@@ -694,7 +702,17 @@ export function ActionsPanel({
   );
   const nothingListed = attackRows.length === 0 && customAttacks.length === 0 && rollRows.length === 0 && toggleRows.length === 0;
   return (
-    <section aria-labelledby="actions-heading" className="play-panel">
+    <section
+      aria-labelledby="actions-heading"
+      className="play-panel"
+      onFocus={() => {
+        panelHadFocus.current = true;
+      }}
+      onBlur={(e) => {
+        // A removed control blurs with no related target; only focus that went to another element means the user left.
+        if (e.relatedTarget instanceof Node && !e.currentTarget.contains(e.relatedTarget)) panelHadFocus.current = false;
+      }}
+    >
       <h3 id="actions-heading">Attacks and actions</h3>
       {ungroupedToggles.length > 0 && (
         <fieldset>
@@ -709,10 +727,12 @@ export function ActionsPanel({
         Critical hit (double the damage dice)
       </label>
       <label className="choice">
-        <input type="checkbox" checked={usableOnly} onChange={(e) => setUsableOnly(e.target.checked)} />
+        <input ref={usableRef} type="checkbox" checked={usableOnly} onChange={(e) => setUsableOnly(e.target.checked)} />
         Usable now
       </label>
-      {usableOnly && nothingListed && <p className="hint">Nothing is usable right now.</p>}
+      <p role="status" className="hint">
+        {usableOnly && nothingListed ? 'Nothing is usable right now.' : ''}
+      </p>
       {activationGroups.map(({ key, title }) => {
         // Weapons stay in 'action'; a feature attack goes where its activation says (default 'action').
         const groupAttacks = attackRows.filter((r) => (r.attack.source === 'feature' ? (r.attack.activation ?? 'action') : 'action') === key);

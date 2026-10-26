@@ -875,6 +875,33 @@ it('a toggle that cannot be turned on shows its reason, stays enabled, and the f
   expect(screen.queryByRole('checkbox', { name: /Testy stance/ })).toBeNull();
 });
 
+it('when Usable now hides the row just used, focus moves to the filter checkbox, not <body>', async () => {
+  const props = { roll: () => {}, act: () => {} };
+  const { rerender } = render(<ActionsPanel view={actionsView([rally], focusPool(2))} {...props} />);
+  await userEvent.click(usableNow());
+  await userEvent.click(screen.getByRole('button', { name: /^Use Rally/ })); // focuses the button, as the real click does
+  rerender(<ActionsPanel view={actionsView([rally], focusPool(0))} {...props} />);
+  expect(screen.queryByRole('button', { name: /^Use Rally/ })).toBeNull();
+  expect(document.activeElement).toBe(usableNow());
+  expect(screen.getByRole('status').textContent).toBe('Nothing is usable right now.');
+});
+
+it('when the row drops while focus is outside the panel, focus stays there', async () => {
+  const props = { roll: () => {}, act: () => {} };
+  const ui = (pool: number) => (
+    <>
+      <ActionsPanel view={actionsView([rally], focusPool(pool))} {...props} />
+      <button type="button">Elsewhere</button>
+    </>
+  );
+  const { rerender } = render(ui(2));
+  await userEvent.click(usableNow());
+  await userEvent.click(screen.getByRole('button', { name: /^Use Rally/ }));
+  await userEvent.click(screen.getByRole('button', { name: 'Elsewhere' }));
+  rerender(ui(0));
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Elsewhere' }));
+});
+
 it('with 8 pins an unpinned row cannot be pinned (aria-disabled, no call, described) but a pinned one can be unpinned', async () => {
   const eight: Pin[] = Array.from({ length: 8 }, (_, i) => ({ kind: 'custom', attackId: `k${i}` }));
   const onPin = vi.fn();
