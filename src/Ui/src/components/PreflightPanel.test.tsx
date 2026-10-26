@@ -1,0 +1,168 @@
+// @vitest-environment jsdom
+// Import Lab L5: every share export dialog shows what is included, left out (in words) and blocking before Save, and Save stays
+// off while anything blocks. The client is mocked; all names are invented.
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { client } from '../api/client';
+import type { PreflightReport, PreflightRow, SourceRecord } from '../api/types';
+import { CampaignsPanel } from './CampaignsPanel';
+import { ExportPanel } from './CharacterSheet';
+import { PreflightPanel } from './PreflightPanel';
+import { SourcesPanel } from './SourcesPanel';
+import { VttExportPanel } from './VttExportPanel';
+
+vi.mock('../api/client', () => ({
+  client: {
+    packagePreflight: vi.fn(),
+    listSources: vi.fn(),
+    attachment: vi.fn(),
+    sourcePackPreview: vi.fn(),
+    listCampaigns: vi.fn(),
+    campaignPackPreview: vi.fn(),
+    previewExport: vi.fn(),
+    previewVttExport: vi.fn(),
+  },
+}));
+vi.mock('./ImportPanel', () => ({ ImportPanel: () => null }));
+
+const zero = '00000000-0000-0000-0000-000000000000';
+const row = (name: string, sourceName: string, reason?: string, over: Partial<PreflightRow> = {}): PreflightRow => ({
+  contentId: `c-${name}`,
+  revisionId: `r-${name}`,
+  name,
+  sourceName,
+  redistributable: true,
+  importDerived: null,
+  origin: 'local',
+  reason,
+  ...over,
+});
+const clear: PreflightReport = { included: [row('Lantern Step', 'Lantern Notes')], omitted: [], blocking: [], notices: ['Lantern Notes (Test author): Personal homebrew'] };
+const blocked: PreflightReport = {
+  included: [row('Lantern Step', 'Lantern Notes')],
+  omitted: [row('Ink Trick', 'Ink Imports', 'preflight.import-derived'), row('Plain Draft', 'Lantern Notes', 'preflight.draft')],
+  blocking: [row('Borrowed Rules', 'Borrowed Rules', 'preflight.not-redistributable', { revisionId: zero })],
+  notices: [],
+};
+
+const source: SourceRecord = {
+  id: 'src-1',
+  title: 'Lantern Notes',
+  publisher: 'Test author',
+  rulesFamilies: ['srd-5.1'],
+  editionVersion: '1',
+  license: 'Personal homebrew',
+  redistributable: true,
+  origin: 'local',
+  shareConfirmedAt: '2026-10-01T00:00:00Z',
+};
+
+beforeEach(() => {
+  vi.mocked(client.packagePreflight).mockReset();
+  vi.mocked(client.listSources).mockResolvedValue([source]);
+  vi.mocked(client.attachment).mockResolvedValue(undefined as never);
+});
+afterEach(cleanup);
+
+it('says each omitted and blocking row in words, never as a code', async () => {
+  vi.mocked(client.packagePreflight).mockResolvedValue(blocked);
+  render(<PreflightPanel kind="package" selection={['ch-1']} label="shared package" onReport={() => {}} onError={() => {}} />);
+
+  const region = await screen.findByRole('region', { name: 'Preflight: shared package' });
+  expect(vi.mocked(client.packagePreflight)).toHaveBeenCalledWith({ kind: 'package', selection: ['ch-1'] });
+  expect(within(region).getByRole('alert').textContent).toMatch(/Borrowed Rules: not marked as your own shareable work/);
+  expect(region.textContent).toMatch(/Ink Trick \(Ink Imports\): holds material imported from a PDF, so it is never shared/);
+  expect(region.textContent).toMatch(/Plain Draft \(Lantern Notes\): a draft; only published content is shared/);
+  expect(region.textContent).not.toMatch(/preflight\./);
+  expect(within(region).getByText('Included (1)')).toBeTruthy();
+});
+
+it('the source-pack export waits for the preflight and stays off while a source blocks it', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.sourcePackPreview).mockResolvedValue({ fileName: 'Lantern-Notes-source-pack.tomestack.zip', sources: [], revisions: 1, drafts: 0, warnings: [] });
+  vi.mocked(client.packagePreflight).mockResolvedValue(blocked);
+  render(<SourcesPanel onError={() => {}} onStatus={() => {}} onOpenStudio={() => {}} />);
+
+  const form = await screen.findByRole('region', { name: 'Share sources as a pack' });
+  await user.click(within(form).getByRole('checkbox', { name: 'Lantern Notes' }));
+  await user.click(within(form).getByRole('button', { name: 'Preview pack' }));
+  const preview = await within(form).findByRole('region', { name: 'Source pack preview' });
+  await within(form).findByRole('region', { name: 'Preflight: source pack' });
+  expect(vi.mocked(client.packagePreflight)).toHaveBeenLastCalledWith({ kind: 'sourcePack', selection: ['src-1'] });
+  expect(within(preview).getByRole<HTMLButtonElement>('button', { name: 'Save pack…' }).disabled).toBe(true);
+
+  // Untick and tick again with nothing blocking: Save comes on.
+  vi.mocked(client.packagePreflight).mockResolvedValue(clear);
+  await user.click(within(form).getByRole('checkbox', { name: 'Lantern Notes' }));
+  await user.click(within(form).getByRole('checkbox', { name: 'Lantern Notes' }));
+  await user.click(within(form).getByRole('button', { name: 'Preview pack' }));
+  const again = await within(form).findByRole('region', { name: 'Source pack preview' });
+  await waitFor(() => expect(within(again).getByRole<HTMLButtonElement>('button', { name: 'Save pack…' }).disabled).toBe(false));
+});
+
+it('the campaign-pack export stays off while the preflight blocks and comes on when it is clear', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listCampaigns).mockResolvedValue([{ id: 'camp-1', name: 'Lantern Table', rulesFamily: 'srd-5.1', allowedSources: ['src-1'] }]);
+  vi.mocked(client.campaignPackPreview).mockResolvedValue({
+    fileName: 'Lantern-Table-campaign-pack.tomestack.zip', campaignId: 'camp-1', name: 'Lantern Table', rulesFamily: 'srd-5.1', included: [], referenced: [], leftOut: [], revisions: 0, warnings: [],
+  });
+  vi.mocked(client.packagePreflight).mockResolvedValue(blocked);
+  render(<CampaignsPanel rulesFamilies={[]} onError={() => {}} onStatus={() => {}} />);
+
+  await user.click(await screen.findByRole('button', { name: 'Share Lantern Table…' }));
+  const share = await screen.findByRole('region', { name: 'Share Lantern Table' });
+  await within(share).findByRole('region', { name: 'Preflight: campaign pack' });
+  expect(vi.mocked(client.packagePreflight)).toHaveBeenCalledWith({ kind: 'campaignPack', selection: ['camp-1'] });
+  expect(within(share).getByRole<HTMLButtonElement>('button', { name: 'Save campaign pack…' }).disabled).toBe(true);
+
+  cleanup();
+  vi.mocked(client.packagePreflight).mockResolvedValue(clear);
+  render(<CampaignsPanel rulesFamilies={[]} onError={() => {}} onStatus={() => {}} />);
+  await user.click(await screen.findByRole('button', { name: 'Share Lantern Table…' }));
+  const clearShare = await screen.findByRole('region', { name: 'Share Lantern Table' });
+  await waitFor(() => expect(within(clearShare).getByRole<HTMLButtonElement>('button', { name: 'Save campaign pack…' }).disabled).toBe(false));
+});
+
+it('the character-package export checks a share, and a backup keeps its own rule', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.previewExport).mockResolvedValue({ purpose: 'share', fileName: 'Pell.tomestack.zip', characters: ['ch-1'], included: [], omitted: [], gapNotes: 0 });
+  vi.mocked(client.packagePreflight).mockResolvedValue(blocked);
+  render(<ExportPanel characterId="ch-1" active updatedAt="t1" onError={() => {}} onStatus={() => {}} />);
+
+  // A backup is personal: no preflight, and Export is on.
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Export package' }).disabled).toBe(false);
+  expect(vi.mocked(client.packagePreflight)).not.toHaveBeenCalled();
+
+  await user.click(screen.getByRole('radio', { name: /Share with someone/ }));
+  await screen.findByRole('region', { name: 'Preflight: shared package' });
+  expect(vi.mocked(client.packagePreflight)).toHaveBeenCalledWith({ kind: 'package', selection: ['ch-1'] });
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Export package' }).disabled).toBe(true);
+});
+
+it('the sheet export checks a share, and a personal copy keeps its own rule', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.previewVttExport).mockImplementation((_id, target, purpose) =>
+    Promise.resolve({ token: 'tok', target, fileName: 'Pell.sheet.json', bytes: 10, adapterVersion: '1', purpose, dropped: [], notices: [], differences: [], warnings: [] }),
+  );
+  vi.mocked(client.packagePreflight).mockResolvedValue(blocked);
+  render(<VttExportPanel characterId="ch-1" onError={() => {}} onStatus={() => {}} />);
+
+  // Nothing is asked until the user previews, and a share then lists what is left out and blocks.
+  expect(vi.mocked(client.packagePreflight)).not.toHaveBeenCalled();
+  await user.click(screen.getByRole('radio', { name: /TomeStack sheet \(JSON\)/ }));
+  await user.click(screen.getByRole('button', { name: 'Preview export' }));
+  const preview = await screen.findByRole('region', { name: 'Export preview' });
+  await within(preview).findByRole('region', { name: 'Preflight: shared sheet' });
+  expect(vi.mocked(client.packagePreflight)).toHaveBeenCalledWith({ kind: 'sheet', selection: ['ch-1'] });
+  expect(within(preview).getByRole<HTMLButtonElement>('button', { name: 'Save export file…' }).disabled).toBe(true);
+
+  // Personal: the share rule is not asked, and Save is on.
+  vi.mocked(client.packagePreflight).mockClear();
+  await user.click(screen.getByRole('radio', { name: /Personal copy/ }));
+  await user.click(screen.getByRole('button', { name: 'Preview export' }));
+  const personal = await screen.findByRole('region', { name: 'Export preview' });
+  expect(within(personal).queryByRole('region', { name: 'Preflight: shared sheet' })).toBeNull();
+  expect(vi.mocked(client.packagePreflight)).not.toHaveBeenCalled();
+  expect(within(personal).getByRole<HTMLButtonElement>('button', { name: 'Save export file…' }).disabled).toBe(false);
+});

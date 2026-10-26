@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { client } from '../api/client';
 import { TomeStackError } from '../api/transport';
-import type { ExportTarget, SheetPurpose, VttExportPreview } from '../api/types';
+import type { ExportTarget, PreflightReport, SheetPurpose, VttExportPreview } from '../api/types';
 import { downloadBase64 } from '../files';
+import { PreflightPanel } from './PreflightPanel';
+import { canSaveAfter } from './preflightText';
 
 interface Props {
   characterId: string;
@@ -19,6 +21,8 @@ export function VttExportPanel({ characterId, onError, onStatus }: Props) {
   const [target, setTarget] = useState<ExportTarget>('foundry-dnd5e');
   const [purpose, setPurpose] = useState<SheetPurpose>('share');
   const [preview, setPreview] = useState<VttExportPreview>();
+  // Import Lab L5: a share goes through the one sharing rule's preflight; a personal copy keeps its own rule.
+  const [report, setReport] = useState<PreflightReport>();
 
   async function show() {
     try {
@@ -87,6 +91,9 @@ export function VttExportPanel({ characterId, onError, onStatus }: Props) {
             {preview.fileName}, {preview.bytes} bytes; adapter {preview.adapterVersion}
             {preview.targetVersion ? `, checked against ${preview.targetVersion}` : ''}.
           </p>
+          {preview.purpose === 'share' && (
+            <PreflightPanel kind="sheet" selection={[characterId]} label="shared sheet" onReport={setReport} onError={onError} />
+          )}
           <p>{preview.dropped.length === 0 ? 'Nothing is left out.' : 'Left out, because it may not be shared:'}</p>
           {preview.dropped.length > 0 && (
             <ul>
@@ -115,7 +122,7 @@ export function VttExportPanel({ characterId, onError, onStatus }: Props) {
             </ul>
           )}
           <p className="hint">TomeStack is not affiliated with Foundry Gaming LLC, Roll20 or Wizards of the Coast.</p>
-          <button type="button" onClick={save}>
+          <button type="button" onClick={save} disabled={preview.purpose === 'share' && !canSaveAfter(report)}>
             Save export file…
           </button>
         </div>

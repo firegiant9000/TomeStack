@@ -1183,6 +1183,37 @@ export interface PackageManifest {
   attestations?: { sourceId: string; statement: string; confirmedAt: string }[];
 }
 
+// ---- Import Lab L5 (`package.preflight`): the one sharing rule, as a list before any share export is saved ----
+
+export type PreflightKind = 'package' | 'sourcePack' | 'campaignPack' | 'sheet';
+
+/** `selection`: character ids for `package` and `sheet`, source ids for `sourcePack`, the campaign id for `campaignPack`. */
+export interface PreflightRequest {
+  kind: PreflightKind;
+  selection: string[];
+}
+
+/** A revision row names the content; a source-level row (a blocked source, a PDF) has an empty revision id (all zeros). */
+export interface PreflightRow {
+  contentId: string;
+  revisionId: string;
+  name: string;
+  sourceName: string;
+  redistributable: boolean;
+  importDerived?: boolean | null;
+  /** `bundled`, `local`, `received` or `unknown`. */
+  origin: string;
+  /** A `preflight.*` code; absent for an included row. The UI says it in words. */
+  reason?: string | null;
+}
+
+export interface PreflightReport {
+  included: PreflightRow[];
+  omitted: PreflightRow[];
+  blocking: PreflightRow[];
+  notices: string[];
+}
+
 /** M6 slice 1 (`package.sourcePackPreview`): what a source pack would hold. Nothing is written. */
 export interface SourcePackPreview {
   fileName: string;

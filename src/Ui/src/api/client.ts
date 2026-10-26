@@ -26,6 +26,8 @@ import type {
   SpellListKeyCount,
   SourcePackPreview,
   CampaignPackPreview,
+  PreflightReport,
+  PreflightRequest,
   ExtensionInstallPreview,
   ExtensionRunPreview,
   ExtensionRunRequest,
@@ -279,6 +281,8 @@ export function createClient(transport: Transport) {
      */
     saveExportAs: (characterIds: string[], purpose: ExportPurpose = 'backup') =>
       call<SaveOutcome>('package.saveAs', { characterIds, purpose }, { timeoutMs: null }),
+    /** Import Lab L5: what a share export would include, leave out or refuse, by the one sharing rule. Writes nothing; export re-checks. */
+    packagePreflight: (request: PreflightRequest) => call<PreflightReport>('package.preflight', request),
     // ---- source packs (M6 slice 1): only sources you marked as shareable; import goes through previewImport/applyImport ----
     sourcePackPreview: (sourceIds: string[]) => call<SourcePackPreview>('package.sourcePackPreview', { sourceIds }),
     exportSourcePack: (sourceIds: string[]) => call<ExportedPackage>('package.sourcePackExport', { sourceIds }),

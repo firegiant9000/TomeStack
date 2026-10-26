@@ -414,6 +414,9 @@ public sealed partial class TomeStackApp : IDisposable
 
     public ExportPreview PreviewExport(IReadOnlyList<Guid> characterIds, ExportPurpose purpose) => _packages.PreviewExport(characterIds, purpose);
 
+    /// <summary>Import Lab L5, <c>package.preflight</c>: what a share export (package, source pack, campaign pack, sheet) would carry, omit or refuse. Writes nothing.</summary>
+    public PreflightReport PackagePreflight(PreflightRequest request) => _packages.RunPreflight(request);
+
     /// <summary>M6 slice 1: what a source pack of these sources would hold (<c>package.sourcePackPreview</c>). Writes nothing.</summary>
     public SourcePackPreview PreviewSourcePack(IReadOnlyList<Guid> sourceIds) => _packages.PreviewSourcePack(sourceIds);
 

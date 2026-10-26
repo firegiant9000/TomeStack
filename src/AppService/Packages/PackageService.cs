@@ -52,6 +52,9 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
     private sealed record ExportPlan(
         List<Character> Characters, List<ContentRevision> Revisions, List<SourceRecord> Sources, List<OmittedSource> Omitted, string FileName);
 
+    /// <summary>Import Lab L5, <c>package.preflight</c>: what a share export would carry, leave out or refuse. Writes nothing.</summary>
+    public PreflightReport RunPreflight(PreflightRequest request) => Preflight.Plan(store, request, _bundledSources);
+
     /// <summary>What <see cref="Export"/> would write for <paramref name="purpose"/>, without writing it (ADR-007).</summary>
     public ExportPreview PreviewExport(IReadOnlyList<Guid> characterIds, ExportPurpose purpose)
     {
@@ -135,74 +138,18 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         ArgumentNullException.ThrowIfNull(characterIds);
         if (!Enum.IsDefined(purpose))
             throw new PackageException([new("export.purpose-unknown", $"Export purpose '{purpose}' is not supported.")]);
-        var errors = new List<Diagnostic>();
-        var characters = new List<Character>();
-        foreach (var id in characterIds.Distinct())
-        {
-            if (store.FindCharacter(id) is { } character)
-                characters.Add(character);
-            else
-                errors.Add(new("export.character-missing", $"Character {id} does not exist."));
-        }
+        var resolved = Preflight.Resolve(store, characterIds);
+        if (resolved.Errors.Count > 0)
+            throw new PackageException(resolved.Errors);
 
-        var revisions = new Dictionary<Guid, ContentRevision>();
-        foreach (var pin in characters.SelectMany(c => c.AllReferences()))
-        {
-            if (store.FindRevision(pin) is { } revision)
-                revisions[revision.RevisionId] = revision;
-            else
-                errors.Add(new("export.revision-missing", $"Pinned revision {pin.RevisionId} is missing; repair the character before exporting.", pin));
-        }
-        // Content granted by included content (class features, a background's feat) is needed to calculate the same
-        // sheet on the receiving machine. Follow grants transitively; a granted revision missing here is already shown
-        // as missing on this machine's sheet, so it is skipped rather than failing the export.
-        var pending = new Queue<ContentRevision>(revisions.Values);
-        while (pending.Count > 0)
-        {
-            foreach (var grant in pending.Dequeue().Effects.OfType<GrantEffect>().Where(g => g.Grant == GrantKind.Content && g.Content is not null))
-            {
-                if (!revisions.ContainsKey(grant.Content!.RevisionId) && store.FindRevision(grant.Content) is { } granted)
-                {
-                    revisions[granted.RevisionId] = granted;
-                    pending.Enqueue(granted);
-                }
-            }
-        }
+        // Import Lab L5: a share leaves out what the one sharing rule says, at export time (never from an earlier preview).
+        List<OmittedSource> omitted = purpose == ExportPurpose.Share ? Preflight.OmitUnshareable(resolved) : [];
 
-        var sources = new Dictionary<Guid, SourceRecord>();
-        foreach (var revision in revisions.Values)
-        {
-            if (store.FindSource(revision.Provenance.SourceId) is { } source)
-                sources[source.Id] = source;
-            else
-                errors.Add(new("export.source-missing", $"Source {revision.Provenance.SourceId} for '{revision.Name}' is missing.", revision.Reference));
-        }
-
-        if (errors.Count > 0)
-            throw new PackageException(errors);
-
-        var omitted = new List<OmittedSource>();
-        if (purpose == ExportPurpose.Share)
-        {
-            // M6 slice 1: an import-derived source is never shared, whatever its redistributable flag says.
-            foreach (var source in sources.Values.Where(s => !s.MayBeShared).OrderBy(s => s.Id))
-            {
-                var left = revisions.Values.Where(r => r.Provenance.SourceId == source.Id).OrderBy(r => r.RevisionId).ToList();
-                omitted.Add(new(source.Id, source.Title, source.Publisher, source.License,
-                [
-                    .. left.Select(r => new OmittedRevision(
-                        r.Reference, r.Name, [.. characters.Where(c => c.AllReferences().Contains(r.Reference)).Select(c => c.Id)])),
-                ]));
-                foreach (var revision in left)
-                    revisions.Remove(revision.RevisionId);
-                sources.Remove(source.Id);
-            }
-        }
-
+        var characters = resolved.Characters;
         var name = characters.Count == 1 ? SafeFileName(characters[0].Name) : "characters";
         // ADR-007: the file name says what a backup is, so it is not handed on by mistake.
         var fileName = purpose == ExportPurpose.Backup ? $"{name}-personal-backup.tomestack.zip" : $"{name}.tomestack.zip";
-        return new ExportPlan(characters, [.. revisions.Values], [.. sources.Values.OrderBy(s => s.Id)], omitted, fileName);
+        return new ExportPlan(characters, [.. resolved.Revisions.Values], [.. resolved.Sources.Values.OrderBy(s => s.Id)], omitted, fileName);
     }
 
     public PackagePreview Preview(byte[] package) => Read(package).Preview;

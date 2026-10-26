@@ -20,6 +20,7 @@ vi.mock('../api/client', () => ({
     listContent: vi.fn(),
     snapshots: vi.fn(),
     previewExport: vi.fn(),
+    packagePreflight: vi.fn(),
     info: vi.fn(),
     play: vi.fn(),
     undoPlay: vi.fn(),
@@ -1040,6 +1041,7 @@ it('shows the needs-newer-build warning of the export preview, for a backup and 
     purpose: 'share', fileName: 'x.tomestack.zip', characters: [], included: [], omitted: [], gapNotes: 0,
     warnings: [{ code: 'package.needs-newer-build', message: text }],
   } as Awaited<ReturnType<typeof client.previewExport>>);
+  vi.mocked(client.packagePreflight).mockResolvedValue({ included: [], omitted: [], blocking: [], notices: [] });
   renderSheet(view());
   await user.click(screen.getByRole('tab', { name: 'Manage' }));
   expect(await screen.findByText(text)).toBeTruthy();

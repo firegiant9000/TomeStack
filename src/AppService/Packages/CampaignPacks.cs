@@ -5,7 +5,7 @@ namespace TomeStack.AppService.Packages;
 /// <summary>
 /// M6 slice 2 (ROADMAP "M6 plan", B13): campaign packs. A campaign pack (<see cref="PackageScope.Campaign"/>, format v8,
 /// settled on the M5+M6 integration branch, final when it merges to main) shares one campaign profile: its name, rules family, allowed sources and house
-/// rules, plus the published content of the allowed sources that pass the source-pack guard (<see cref="ShareProblem"/>).
+/// rules, plus the published content of the allowed sources that pass the source-pack guard (<see cref="Preflight.ShareProblem"/>).
 /// Bundled SRD sources are referenced by id and never copied; every other allowed source is left out and listed in
 /// <c>omitted[]</c>, and the receiver records it as pending until it is installed. A pack never carries characters, gap
 /// notes, drafts, PDFs, paths or machine-local ids. Documented in docs/features/package-format.md ("Campaign packs").
@@ -64,51 +64,13 @@ public sealed partial class PackageService
     }
 
     /// <summary>
-    /// Sorts the campaign's allowed sources: bundled ones are referenced; ones that pass the guard (D14 item 6, which runs
-    /// at every campaign-pack export) and have published content are carried; every other one is left out, with why.
+    /// Sorts the campaign's allowed sources (<see cref="Preflight.SortCampaignSources"/>, the one sharing rule: the guard,
+    /// D14 item 6, runs at every campaign-pack export), then reads the content of the ones carried.
     /// </summary>
     private CampaignPackPlan PlanCampaignPack(Guid campaignId)
     {
-        var campaign = store.FindCampaign(campaignId)
-            ?? throw new PackageException([new("pack.campaign-missing", $"Campaign {campaignId} does not exist.")]);
-        var pending = (campaign.PendingSources ?? []).ToDictionary(p => p.SourceId);
-        var all = store.ListRevisionsInOrder();
-        var withContent = all.Where(r => r.Status == RevisionStatus.Published).Select(r => r.Provenance.SourceId).ToHashSet();
-        // A content whose revisions sit in two sources cannot leave with one of them (as for a source pack). Here that
-        // source is left out, not the whole pack refused (review fix): the profile is what is being shared.
-        var spanning = all.GroupBy(r => r.ContentId).Where(g => g.Select(r => r.Provenance.SourceId).Distinct().Count() > 1)
-            .SelectMany(g => g.Select(r => (Source: r.Provenance.SourceId, Content: g.Last())))
-            .DistinctBy(s => s.Source).ToDictionary(s => s.Source, s => s.Content);
-        List<SourceRecord> included = [], referenced = [];
-        List<LeftOutSource> leftOut = [];
-        // Titles and publishers have no length limit here, but a pending entry does: the pack names each one as the receiver
-        // will store it (review fix).
-        LeftOutSource Left(Guid id, string? title, string? publisher, string? license, Diagnostic reason)
-        {
-            var named = PendingSource.Clamped(id, title, publisher, license);
-            return new(id, named.Title, named.Publisher, named.License, reason);
-        }
-        foreach (var id in campaign.AllowedSources.Distinct())
-        {
-            var source = store.FindSource(id);
-            if (source is not null && _bundledSources.Contains(id))
-                referenced.Add(source);
-            else if (source is null)
-            {
-                // Not installed here: pending from an earlier campaign pack, so its name is known, or unknown.
-                var known = pending.GetValueOrDefault(id);
-                leftOut.Add(Left(id, known?.Title, known?.Publisher, known?.License,
-                    new("pack.source-missing", $"'{known?.Title ?? id.ToString()}' is not installed here, so the pack only names it.")));
-            }
-            else if (ShareProblem(id, source) is { } problem)
-                leftOut.Add(Left(id, source.Title, source.Publisher, source.License, problem));
-            else if (!withContent.Contains(id))
-                leftOut.Add(Left(id, source.Title, source.Publisher, source.License, new("pack.source-empty", $"'{source.Title}' has no published content to share yet.")));
-            else if (spanning.TryGetValue(id, out var split))
-                leftOut.Add(Left(id, source.Title, source.Publisher, source.License, new("pack.content-spans-sources", $"'{split.Name}' has revisions in '{source.Title}' and in another source, so '{source.Title}' cannot be shared from here.", split.Reference)));
-            else
-                included.Add(source);
-        }
+        var campaign = Preflight.RequireCampaign(store, campaignId);
+        var (included, referenced, leftOut) = Preflight.SortCampaignSources(store, campaign, _bundledSources);
 
         var errors = new List<Diagnostic>();
         var (revisions, _, warnings) = PackContent(included, errors);

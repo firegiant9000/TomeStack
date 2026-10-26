@@ -123,6 +123,10 @@ it('creates a character, shows its traced sheet, overrides, exports and re-impor
   const leftOut = await screen.findByRole('region', { name: 'Left out of the shared package' });
   expect(leftOut.textContent).toMatch(/Nothing is left out/);
   expect(leftOut.textContent).not.toMatch(/session note/i);
+  // L5: the one sharing rule's list is there, and Export waits for it.
+  const shareCheck = await screen.findByRole('region', { name: 'Preflight: shared package' });
+  expect(shareCheck.textContent).toMatch(/Nothing is left out/);
+  await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Export package' }).disabled).toBe(false));
   await user.click(screen.getByRole('button', { name: 'Export package' }));
   await waitFor(() => expect(downloadBase64).toHaveBeenCalledTimes(2));
   expect(vi.mocked(downloadBase64).mock.calls[1]![0]).toBe('E2E-Pell.tomestack.zip');
@@ -725,6 +729,11 @@ it('marks a source as shareable after confirming it is your own work, saves a so
   await user.click(within(packForm).getByRole('button', { name: 'Preview pack' }));
   const preview = await within(packForm).findByRole('region', { name: 'Source pack preview' });
   expect(preview.textContent).toMatch(/1 source, 1 published revision/);
+  // L5: the preflight lists what goes (and what stays), and Save waits for it.
+  const preflight = await within(packForm).findByRole('region', { name: 'Preflight: source pack' });
+  expect(preflight.textContent).toMatch(/Included: 1 item\. Left out: 1\./);
+  expect(preflight.textContent).toMatch(/E2E Own Feat \(E2E Own Notes\): a draft; only published content is shared/); // the draft stays here
+  await waitFor(() => expect(within(preview).getByRole<HTMLButtonElement>('button', { name: 'Save pack…' }).disabled).toBe(false));
   const downloads = vi.mocked(downloadBase64).mock.calls.length;
   await user.click(within(preview).getByRole('button', { name: 'Save pack…' }));
   await waitFor(() => expect(vi.mocked(downloadBase64).mock.calls.length).toBe(downloads + 1));
@@ -737,6 +746,15 @@ it('marks a source as shareable after confirming it is your own work, saves a so
   expect(within(importing).getByText(/This is a source pack\. Its sender stated that each source is their own work/)).toBeTruthy();
   await user.click(within(importing).getByRole('button', { name: 'Apply import' }));
   await expectStatus(/unchanged/);
+
+  // L5: a shareable source with nothing published blocks the pack, in words (the export would refuse it too).
+  const late = await client.createHomebrewSource('E2E Late Notes', ['srd-5.1']);
+  await client.setShareable(late.id, true, true);
+  await user.click(screen.getByRole('button', { name: 'Sources' }));
+  const lateForm = await screen.findByRole('region', { name: 'Share sources as a pack' });
+  await user.click(await within(lateForm).findByRole('checkbox', { name: 'E2E Late Notes' }));
+  const blocked = await within(lateForm).findByRole('region', { name: 'Preflight: source pack' });
+  expect(within(blocked).getByRole('alert').textContent).toMatch(/E2E Late Notes: nothing is published yet/);
 });
 
 it('shares a campaign as a campaign pack that names what it leaves out, and imports it over a changed copy by choice (M6 slice 2)', async () => {
@@ -781,6 +799,10 @@ it('shares a campaign as a campaign pack that names what it leaves out, and impo
   expect(leftOut.textContent).toMatch(/E2E Secret Notes .*not marked as shareable/);
 
   // DevHost has no Save dialog, so it downloads.
+  // L5: the preflight names the same source in words, and Save waits for it.
+  const campaignCheck = await within(share).findByRole('region', { name: 'Preflight: campaign pack' });
+  expect(campaignCheck.textContent).toMatch(/E2E Secret Notes.*not marked as your own shareable work/);
+  await waitFor(() => expect(within(share).getByRole<HTMLButtonElement>('button', { name: 'Save campaign pack…' }).disabled).toBe(false));
   const downloads = vi.mocked(downloadBase64).mock.calls.length;
   await user.click(within(share).getByRole('button', { name: 'Save campaign pack…' }));
   await waitFor(() => expect(vi.mocked(downloadBase64).mock.calls.length).toBe(downloads + 1));
@@ -885,6 +907,8 @@ it('exports a character for Foundry VTT and as sheet JSON after a preview, with 
   expect(preview.textContent).toMatch(/E2E-VTT-Hero\.foundry-dnd5e\.json.*checked against Foundry VTT 14\.367 with dnd5e 6\.0\.5/);
   expect(preview.textContent).toMatch(/not affiliated with Foundry Gaming LLC/);
   const downloads = vi.mocked(downloadBase64).mock.calls.length;
+  await within(panel).findByRole('region', { name: 'Preflight: shared sheet' });
+  await waitFor(() => expect(within(preview).getByRole<HTMLButtonElement>('button', { name: 'Save export file…' }).disabled).toBe(false));
   await user.click(within(preview).getByRole('button', { name: 'Save export file…' }));
   await waitFor(() => expect(vi.mocked(downloadBase64).mock.calls.length).toBe(downloads + 1));
   const [foundryName, foundry64] = vi.mocked(downloadBase64).mock.calls[downloads]!;
@@ -897,7 +921,9 @@ it('exports a character for Foundry VTT and as sheet JSON after a preview, with 
   // The neutral sheet JSON.
   await user.click(within(panel).getByRole('radio', { name: /TomeStack sheet \(JSON\)/ }));
   await user.click(within(panel).getByRole('button', { name: 'Preview export' }));
-  await user.click(within(await within(panel).findByRole('region', { name: 'Export preview' })).getByRole('button', { name: 'Save export file…' }));
+  const sheetPreview = await within(panel).findByRole('region', { name: 'Export preview' });
+  await waitFor(() => expect(within(sheetPreview).getByRole<HTMLButtonElement>('button', { name: 'Save export file…' }).disabled).toBe(false));
+  await user.click(within(sheetPreview).getByRole('button', { name: 'Save export file…' }));
   await waitFor(() => expect(vi.mocked(downloadBase64).mock.calls.length).toBe(downloads + 2));
   const [sheetName, sheet64] = vi.mocked(downloadBase64).mock.calls[downloads + 1]!;
   expect(sheetName).toBe('E2E-VTT-Hero.tomestack-sheet.json');

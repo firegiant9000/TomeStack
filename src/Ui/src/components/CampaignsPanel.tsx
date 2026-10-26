@@ -1,8 +1,10 @@
 import { useEffect, useState, type SubmitEvent } from 'react';
 import { client } from '../api/client';
 import { TomeStackError } from '../api/transport';
-import type { Campaign, CampaignPackPreview, RulesFamilyId, RulesFamilyPolicy, SourceRecord } from '../api/types';
+import type { Campaign, CampaignPackPreview, PreflightReport, RulesFamilyId, RulesFamilyPolicy, SourceRecord } from '../api/types';
 import { downloadBase64 } from '../files';
+import { PreflightPanel } from './PreflightPanel';
+import { canSaveAfter } from './preflightText';
 
 interface Props {
   rulesFamilies: RulesFamilyPolicy[];
@@ -18,6 +20,8 @@ const blank = (family: RulesFamilyId): Campaign => ({ id: '00000000-0000-0000-00
  */
 function CampaignPackForm({ campaign, onError, onStatus }: { campaign: Campaign } & Omit<Props, 'rulesFamilies'>) {
   const [preview, setPreview] = useState<CampaignPackPreview>();
+  // Import Lab L5: the one sharing rule's answer; Save waits for it and stops on anything blocking.
+  const [report, setReport] = useState<PreflightReport>();
 
   useEffect(() => {
     client.campaignPackPreview(campaign.id).then(setPreview).catch(onError);
@@ -82,8 +86,9 @@ function CampaignPackForm({ campaign, onError, onStatus }: { campaign: Campaign 
               ))}
             </ul>
           )}
+          <PreflightPanel kind="campaignPack" selection={[campaign.id]} label="campaign pack" onReport={setReport} onError={onError} />
           <div className="actions">
-            <button type="button" onClick={save}>
+            <button type="button" onClick={save} disabled={!canSaveAfter(report)}>
               Save campaign pack…
             </button>
           </div>
