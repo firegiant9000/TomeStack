@@ -1,6 +1,6 @@
 // D73: the shared availability, Use and Spend rules (the Actions panel and the quickbar read the same answers).
 import { expect, it } from 'vitest';
-import { attackAvailability, poolFor, recordSpend, rollAvailability, toggleAvailability, useOf } from './actionRows';
+import { attackAvailability, poolFor, recordSpend, rollAvailability, toggleAvailability, dicelessUse } from './actionRows';
 import type { AttackEntry, FeatureEffect, FeatureEntry, ResourceValue, RollRecord, ToggleValue } from './api/types';
 
 const ref = { contentId: 'c1', revisionId: 'r1' };
@@ -63,29 +63,29 @@ it('a use is usable exactly when it has an action to send', () => {
   const cases = [plain(), plain({ cost: 0 }), plain({ available: false }), plain({ drawsDown: true }), plain({ drawsDown: true, rollId: 'surge' })];
   const p = pool({ spent: 3 });
   const usable = cases.map((e) => rollAvailability(feature([e]), e, p, [p]).usable);
-  const hasAction = cases.map((e) => useOf(feature([e]), e, p, [p]).action !== undefined);
+  const hasAction = cases.map((e) => dicelessUse(feature([e]), e, p, [p]).action !== undefined);
   expect(usable).toEqual(hasAction);
   expect(hasAction).toEqual([true, false, false, false, true]);
 });
 
-it("useOf: a compound use with no rollId can't be used here and sends nothing", () => {
+it("dicelessUse: a compound use with no rollId can't be used here and sends nothing", () => {
   const e = plain({ drawsDown: true });
-  const got = useOf(feature([e]), e, pool({ countsUp: true, spent: 3 }), []);
+  const got = dicelessUse(feature([e]), e, pool({ countsUp: true, spent: 3 }), []);
   expect(got.reason).toBe("Can't be used here");
   expect(got.action).toBeUndefined();
 });
 
-it('useOf: a plain use sends a spend of its cost from the pool named by the effect (else the feature)', () => {
+it('dicelessUse: a plain use sends a spend of its cost from the pool named by the effect (else the feature)', () => {
   const e = plain();
-  expect(useOf(feature([e]), e, pool(), []).action).toEqual({ action: 'spend', amount: 2, contentId: 'c1', resourceId: 'focus' });
+  expect(dicelessUse(feature([e]), e, pool(), []).action).toEqual({ action: 'spend', amount: 2, contentId: 'c1', resourceId: 'focus' });
   const shared = plain({ resourceContent: 'c-shared' });
-  expect(useOf(feature([shared]), shared, pool({ content: { contentId: 'c-shared', revisionId: 'r2' } }), []).action).toEqual({ action: 'spend', amount: 2, contentId: 'c-shared', resourceId: 'focus' });
+  expect(dicelessUse(feature([shared]), shared, pool({ content: { contentId: 'c-shared', revisionId: 'r2' } }), []).action).toEqual({ action: 'spend', amount: 2, contentId: 'c-shared', resourceId: 'focus' });
 });
 
-it('useOf: a compound use sends useAction with its rollId, and names the cost and the other pools', () => {
+it('dicelessUse: a compound use sends useAction with its rollId, and names the cost and the other pools', () => {
   const other = pool({ resourceId: 'charge', label: 'Testy charge', countsUp: true, spent: 0, current: 3, maximum: 3 });
   const e = plain({ rollId: 'surge-roll', alsoChange: [{ resourceContent: 'c1', resourceId: 'charge', change: 'spend', amount: 1 }] });
-  const got = useOf(feature([e]), e, pool(), [other]);
+  const got = dicelessUse(feature([e]), e, pool(), [other]);
   expect(got.action).toEqual({ action: 'useAction', contentId: 'c1', rollId: 'surge-roll' });
   expect(got.reason).toBeUndefined();
   expect(got.cost).toBe(2);
@@ -129,6 +129,19 @@ it.each([
   ['a cost of nothing', record({ spend: { contentId: 'c1', resourceId: 'focus', amount: 0 } }), effect(), pool()],
 ])('recordSpend: no autoAction for %s', (_name, r, e, p) => {
   expect(spends(r, e, p).autoAction).toBeUndefined();
+});
+
+it('recordSpend: a content roll whose effect has left the sheet is held, with no autoAction', () => {
+  const r = record({ spend: { contentId: 'c1', resourceId: 'focus', amount: 2 } });
+  const got = recordSpend(r, [pool()], [], []);
+  expect(got.cantUse).toBe(true);
+  expect(got.autoAction).toBeUndefined();
+});
+
+it('recordSpend: a compound per-unit record sends useAction carrying the amount spent', () => {
+  const r = record({ spend: { contentId: 'c1', resourceId: 'focus', amount: 3, drawsDown: true } });
+  const got = spends(r, effect({ drawsDown: true, perUnit: { dice: '1d6' } }), pool({ countsUp: true, spent: 4, current: 1 }));
+  expect(got.autoAction).toEqual({ action: 'useAction', contentId: 'c1', rollId: 'surge-roll', amount: 3 });
 });
 
 it('recordSpend: says cantUse and costUnavailable for the held and failed records', () => {

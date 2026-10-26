@@ -19,7 +19,7 @@ import type {
   RollTarget,
   ToggleValue,
 } from '../api/types';
-import { poolFor, recordSpend, useOf } from '../actionRows';
+import { dicelessUse, poolFor, recordSpend } from '../actionRows';
 import { explainSteps } from '../explain';
 import { hitDiceText, rollBonus } from '../format';
 import { rollButtonSuffix } from '../rollModes';
@@ -777,7 +777,7 @@ function RollItem({
   const label = effect.label || effect.id;
   const diceless = !effect.dice;
   // D73: the Use (its reason, its cost text and the action it sends) lives in actionRows.ts, shared with the quickbar.
-  const { cost: useCost, costFailed, poolName, alsoText, reason: useReason, action: useAction } = useOf(feature, effect, pool, pools);
+  const { cost: useCost, costFailed, poolName, alsoText, reason: useReason, action: useAction } = dicelessUse(feature, effect, pool, pools);
   const rollDescribedBy = [locked ? reasonId : undefined, perUnit && !amountOk ? amountReasonId : undefined].filter(Boolean).join(' ') || undefined;
   return (
     <li className="feature">

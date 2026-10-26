@@ -18,13 +18,13 @@ function needs(pool: ResourceValue, cost: number, drawsDown: boolean): string {
   return drawsDown ? `Needs ${cost} ${pool.label} built up (${pool.spent})` : `Needs ${cost} ${pool.label} (${pool.current} left)`;
 }
 
-type Use = { cost: number; costFailed: boolean; poolName?: string; alsoText: string; reason?: string; action?: PlayAction };
-
 /** The dice-less Use of a roll effect (RollItem today): its reason when it can't be used, and the action it sends. */
-export const useOf = (feature: FeatureEntry, effect: FeatureEffect, pool: ResourceValue | undefined, pools: ResourceValue[]): Use =>
-  dicelessUse(feature, effect, pool, pools); // (named for the Use button; not a React hook, so callers outside components may call it)
-
-function dicelessUse(feature: FeatureEntry, effect: FeatureEffect, pool: ResourceValue | undefined, pools: ResourceValue[]): Use {
+export function dicelessUse(
+  feature: FeatureEntry,
+  effect: FeatureEffect,
+  pool: ResourceValue | undefined,
+  pools: ResourceValue[],
+): { cost: number; costFailed: boolean; poolName?: string; alsoText: string; reason?: string; action?: PlayAction; untracked: boolean } {
   const drawsDown = effect.drawsDown === true;
   // D43 slice 4: an action outside the form it needs is disabled, with the reason as text the button is described by.
   const locked = effect.available === false;
@@ -62,21 +62,21 @@ function dicelessUse(feature: FeatureEntry, effect: FeatureEffect, pool: Resourc
     return undefined;
   };
   // A compound use is named by `rollId`; without it there is nothing to send (never a plain spend for such a roll).
-  const reason = locked
-    ? (effect.unavailableReason ?? 'Not available right now')
-    : compound && !effect.rollId
-      ? "Can't be used here"
-      : costFailed
-        ? 'Cost unavailable'
-        : cost < 1 && alsoChange.length === 0 // a compound use is worth it for its other changes
-          ? 'Costs nothing here'
-          : unaffordable
-            ? pool?.current === undefined
-              ? `${poolName} is not tracked on this sheet.`
-              : drawsDown
-                ? `Not enough ${poolName} built up (${pool.spent}).`
-                : `Not enough ${poolName} left (${pool.current}).`
-            : alsoReason();
+  // `untracked`: the pool being untracked is what holds the use (an earlier reason wins), so the row is by hand, not unusable.
+  let untracked = false;
+  const firstReason = (): string | undefined => {
+    if (locked) return effect.unavailableReason ?? 'Not available right now';
+    if (compound && !effect.rollId) return "Can't be used here";
+    if (costFailed) return 'Cost unavailable';
+    if (cost < 1 && alsoChange.length === 0) return 'Costs nothing here'; // a compound use is worth it for its other changes
+    if (!unaffordable) return alsoReason();
+    if (pool?.current === undefined) {
+      untracked = true;
+      return `${poolName} is not tracked on this sheet.`;
+    }
+    return drawsDown ? `Not enough ${poolName} built up (${pool.spent}).` : `Not enough ${poolName} left (${pool.current}).`;
+  };
+  const reason = firstReason();
   // D43 S8: a use that also changes another pool, or draws a pool down, is one compound change on the service.
   const action: PlayAction | undefined =
     reason !== undefined || effect.resourceId === undefined
@@ -84,7 +84,7 @@ function dicelessUse(feature: FeatureEntry, effect: FeatureEffect, pool: Resourc
       : compound
         ? { action: 'useAction', contentId: feature.content.contentId, rollId: effect.rollId! }
         : { action: 'spend', amount: cost, contentId: effect.resourceContent ?? feature.content.contentId, resourceId: effect.resourceId };
-  return { cost, costFailed, poolName, alsoText, reason, action };
+  return { cost, costFailed, poolName, alsoText, reason, action, untracked };
 }
 
 /** A roll effect: a dice-less one is usable exactly when its Use has an action; a rolled one only waits on its pool. */
@@ -93,8 +93,7 @@ export function rollAvailability(feature: FeatureEntry, effect: FeatureEffect, p
   if (effect.resourceId === undefined) return { usable: true, reasons: [] };
   const use = dicelessUse(feature, effect, pool, pools);
   if (!effect.dice) {
-    const untracked = pool?.current === undefined && use.reason === `${use.poolName} is not tracked on this sheet.`;
-    return { usable: use.action !== undefined, reasons: use.reason ? [use.reason] : [], ...(untracked ? { byHand: true } : {}) };
+    return { usable: use.action !== undefined, reasons: use.reason ? [use.reason] : [], ...(use.untracked ? { byHand: true } : {}) };
   }
   // A rolled action's cost is spent from its record, but the row can still say the pool could not pay it.
   if (pool?.current !== undefined && !effect.variableCost && !use.costFailed) {
