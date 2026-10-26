@@ -141,7 +141,7 @@ A 2014/2024 difference the spells show as content: Cure Wounds heals 1d8 (5.1 p.
   - the Defense style's +1 while armored, and the armor table.
   
   Everything else is reference text with its page: Fighting Styles other than Defense, Tactical Mind's reroll, Remarkable Athlete, Heroic Warrior, Survivor, ASIs and Weapon Mastery. The player applies those by hand.
-- **Not taken:** Epic Boon feats (Boon of Combat Prowess is named in the text only), starting equipment, the armor descriptions, magic armor, and the Weapon Mastery property rules (Push, Sap, Slow and the others). Weapon Mastery's chosen kinds are tracked by the player.
+- **Not taken:** Epic Boon feats (Boon of Combat Prowess is named in the text only; the boons are bundled since 2026-10-26, see the next section), starting equipment, the armor descriptions, magic armor, and the Weapon Mastery property rules (Push, Sap, Slow and the others). Weapon Mastery's chosen kinds are tracked by the player.
 - **Checks:** `SrdFighterTests` (both families, levels 1–20, side by side), `SrdPackTests` (source records, attribution, every revision validates, the armor numbers), and `SchemaTests`.
 - **Done 2026-09-28:**
   - `srd-5.1-fighter.json` has 28 revisions: the class, 7 features, the Champion with 5 features, 6 Fighting Style options and 8 skill options.
@@ -188,7 +188,10 @@ With the M1 Dwarf, Soldier and Savage Attacker and the four Fighting Style feats
   - the Breath Weapon's damage above level 4: the roll stays 1d10, and the text says 2d10, 3d10 and 4d10 at character levels 5, 11 and 17;
   - the "Level 4+", "Level 19+" and "Spellcasting Feature" prerequisites;
   - the Epic Boons' Ability Score Increase "to a maximum of 30": the calculator caps increases at 20, so encoding it would be wrong at 20;
-  - conditional benefits (advantage, Shadowy Form's resistance in dim light).
+  - conditional benefits (advantage, Shadowy Form's resistance in dim light);
+  - a second copy of a repeatable feat (Ability Score Improvement, Magic Initiate, Skilled): a character holds a feat once, so later copies are recorded by hand or as overrides;
+  - a tool picked through Skilled (the choice then stays open), and Improve Fate coming back when Initiative is rolled.
+- **The M1 Dwarf** stays at content v3, so its Dwarven Resilience poison resistance stays text (a v10 Dwarf revision is a follow-up).
 - **Not changed:** `srd-5.2.1.json` (the Dwarf, the Soldier and Savage Attacker stay as published) and every other bundled revision. `BundledContentInsertOnlyTests` checks every revision bundled at 66d5515 against its recorded hash.
 - **Checks:** `SrdOrigins521Tests` (a fixture character per species with a mechanic, each background, the feats), `SrdPackTests` (9 species, 4 backgrounds, 17 feats; source record, families, validation), `BundledContentInsertOnlyTests` and `SchemaTests`.
 

@@ -63,7 +63,7 @@
         }
       },
       "status": "published",
-      "summary": "Origin Feat\n\nYou gain the following benefits.\n\nTwo Cantrips. You learn two cantrips of your choice from the Cleric, Druid, or Wizard spell list. Intelligence, Wisdom, or Charisma is your spellcasting ability for this feat’s spells (choose when you select this feat).\n\nLevel 1 Spell. Choose a level 1 spell from the same list you selected for this feat’s cantrips. You always have that spell prepared. You can cast it once without a spell slot, and you regain the ability to cast it in that way when you finish a Long Rest. You can also cast the spell using any spell slots you have.\n\nSpell Change. Whenever you gain a new level, you can replace one of the spells you chose for this feat with a different spell of the same level from the chosen spell list.\n\nRepeatable. You can take this feat more than once, but you must choose a different spell list each time.\n\nTomeStack: the chosen spells are recorded by hand (a feat cannot grant spells yet).",
+      "summary": "Origin Feat\n\nYou gain the following benefits.\n\nTwo Cantrips. You learn two cantrips of your choice from the Cleric, Druid, or Wizard spell list. Intelligence, Wisdom, or Charisma is your spellcasting ability for this feat’s spells (choose when you select this feat).\n\nLevel 1 Spell. Choose a level 1 spell from the same list you selected for this feat’s cantrips. You always have that spell prepared. You can cast it once without a spell slot, and you regain the ability to cast it in that way when you finish a Long Rest. You can also cast the spell using any spell slots you have.\n\nSpell Change. Whenever you gain a new level, you can replace one of the spells you chose for this feat with a different spell of the same level from the chosen spell list.\n\nRepeatable. You can take this feat more than once, but you must choose a different spell list each time.\n\nTomeStack: the chosen spells are recorded by hand (a feat cannot grant spells yet). A character takes this feat only once here; note any later copy by hand.",
       "effects": [
         {
           "type": "resource",
@@ -99,7 +99,7 @@
         }
       },
       "status": "published",
-      "summary": "Origin Feat\n\nYou gain proficiency in any combination of three skills or tools of your choice.\n\nRepeatable. You can take this feat more than once.\n\nTomeStack: tools are not tracked; for a tool, choose fewer skills and note the tool by hand.",
+      "summary": "Origin Feat\n\nYou gain proficiency in any combination of three skills or tools of your choice.\n\nRepeatable. You can take this feat more than once.\n\nTomeStack: tools are not tracked; for a tool, choose fewer skills and note the tool by hand (the choice then stays marked as open). A character takes this feat only once here; note any later copy by hand.",
       "effects": [
         {
           "type": "choice",
@@ -650,7 +650,7 @@
         }
       },
       "status": "published",
-      "summary": "General Feat (Prerequisite: Level 4+)\n\nIncrease one ability score of your choice by 2, or increase two ability scores of your choice by 1. This feat can’t increase an ability score above 20.\n\nRepeatable. You can take this feat more than once.\n\nTomeStack: the level prerequisite is not checked.",
+      "summary": "General Feat (Prerequisite: Level 4+)\n\nIncrease one ability score of your choice by 2, or increase two ability scores of your choice by 1. This feat can’t increase an ability score above 20.\n\nRepeatable. You can take this feat more than once.\n\nTomeStack: the level prerequisite is not checked. A character takes this feat only once here; record later increases as overrides.",
       "effects": [
         {
           "type": "choice",
@@ -1563,7 +1563,7 @@
           "resourceId": "improve-fate",
           "label": "Improve Fate",
           "maximum": "1",
-          "text": "Once you use this benefit, you can’t use it again until you roll Initiative or finish a Short or Long Rest."
+          "text": "Once you use this benefit, you can’t use it again until you roll Initiative or finish a Short or Long Rest.\n\nTomeStack: only a rest restores it; when you roll Initiative, restore it by hand."
         },
         {
           "type": "recovery",

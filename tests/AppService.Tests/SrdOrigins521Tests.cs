@@ -83,17 +83,27 @@ public class SrdOrigins521Tests
     }
 
     [Theory]
-    // Size is reference text (no size field exists); the summary states it as printed.
-    [InlineData("Dragonborn", "Size: Medium (about 5–7 feet tall)")]
-    [InlineData("Elf", "Size: Medium (about 5–6 feet tall)")]
-    [InlineData("Gnome", "Size: Small (about 3–4 feet tall)")]
-    [InlineData("Goliath", "Size: Medium (about 7–8 feet tall)")]
-    [InlineData("Halfling", "Size: Small (about 2–3 feet tall)")]
-    [InlineData("Human", "Size: Medium (about 4–7 feet tall) or Small (about 2–4 feet tall), chosen when you select this species")]
-    [InlineData("Orc", "Size: Medium (about 6–7 feet tall)")]
-    [InlineData("Tiefling", "Size: Medium (about 4–7 feet tall) or Small (about 3–4 feet tall), chosen when you select this species")]
-    public void Each_species_states_its_size_as_printed(string species, string size) =>
-        Assert.StartsWith($"Creature Type: Humanoid. {size}.", Revision(species).Summary, StringComparison.Ordinal);
+    // Size is reference text (no size field exists); only the facts are asserted here, as SRD
+    // text stays in src/AppService/Content: each size and its height range, in order.
+    [InlineData("Dragonborn", "Medium", "5–7")]
+    [InlineData("Elf", "Medium", "5–6")]
+    [InlineData("Gnome", "Small", "3–4")]
+    [InlineData("Goliath", "Medium", "7–8")]
+    [InlineData("Halfling", "Small", "2–3")]
+    [InlineData("Human", "Medium", "4–7", "Small", "2–4")]
+    [InlineData("Orc", "Medium", "6–7")]
+    [InlineData("Tiefling", "Medium", "4–7", "Small", "3–4")]
+    public void Each_species_states_its_size(string species, params string[] facts)
+    {
+        var sizeLine = Revision(species).Summary!.Split('\n')[0];
+        var at = 0;
+        foreach (var fact in facts)
+        {
+            var next = sizeLine.IndexOf(fact, at, StringComparison.Ordinal);
+            Assert.True(next >= 0, $"{species}: '{fact}' missing or out of order in its size line");
+            at = next + fact.Length;
+        }
+    }
 
     [Fact]
     public void A_Dragonborn_resists_its_ancestors_damage_and_breathes_PB_times_with_flight_from_level_5()
@@ -269,12 +279,17 @@ public class SrdOrigins521Tests
 
         Assert.Equal(17, feats.Count);
         Assert.Equal(4, feats.Count(f => f.Summary!.StartsWith("Origin Feat", StringComparison.Ordinal)));
-        Assert.Equal(2, feats.Count(f => f.Summary!.StartsWith("General Feat (Prerequisite: Level 4+", StringComparison.Ordinal)));
-        Assert.Equal(4, feats.Count(f => f.Summary!.StartsWith("Fighting Style Feat (Prerequisite: Fighting Style Feature)", StringComparison.Ordinal)));
-        Assert.Equal(7, feats.Count(f => f.Summary!.StartsWith("Epic Boon Feat (Prerequisite: Level 19+", StringComparison.Ordinal)));
+        Assert.Equal(2, feats.Count(f => f.Summary!.StartsWith("General Feat", StringComparison.Ordinal) && f.Summary.Contains("Level 4+", StringComparison.Ordinal)));
+        Assert.Equal(4, feats.Count(f => f.Summary!.StartsWith("Fighting Style Feat", StringComparison.Ordinal)));
+        Assert.Equal(7, feats.Count(f => f.Summary!.StartsWith("Epic Boon Feat", StringComparison.Ordinal) && f.Summary.Contains("Level 19+", StringComparison.Ordinal)));
         // No level or "has a feature" prerequisite can be encoded: the text says so, and nothing pretends to check it.
         Assert.All(feats.Where(f => f.Summary!.Contains("Level ", StringComparison.Ordinal) && f.Summary.Contains("Prerequisite", StringComparison.Ordinal) && !f.Summary.StartsWith("Fighting Style", StringComparison.Ordinal)),
             f => Assert.Contains("TomeStack: the level", f.Summary!, StringComparison.Ordinal));
+        // A pin applies once, so every repeatable feat says a second copy is kept by hand.
+        var repeatable = feats.Where(f => f.Summary!.Contains("Repeatable.", StringComparison.Ordinal)).Select(f => f.Name).Order().ToList();
+        Assert.Equal(["Ability Score Improvement", "Magic Initiate", "Skilled"], repeatable);
+        Assert.All(feats.Where(f => repeatable.Contains(f.Name)),
+            f => Assert.Contains("A character takes this feat only once here", f.Summary!, StringComparison.Ordinal));
     }
 
     [Fact]
