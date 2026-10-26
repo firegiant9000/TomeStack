@@ -163,6 +163,40 @@ public class PreflightTests
     }
 
     [Fact]
+    public void A_source_that_is_not_installed_blocks_with_its_own_code()
+    {
+        using var temp = new TempApp();
+        var row = Assert.Single(temp.App.PackagePreflight(new(PreflightKind.SourcePack, [Guid.NewGuid()])).Blocking);
+        Assert.Equal(Preflight.SourceMissingReason, row.Reason);
+        Assert.Equal("preflight.source-missing", Preflight.SourceMissingReason);
+    }
+
+    [Fact]
+    public void A_bundled_source_blocks_a_source_pack_with_its_own_code()
+    {
+        using var temp = new TempApp();
+        var bundled = temp.App.ListSources().First(s => s.EditionVersion != "homebrew");
+        var row = Assert.Single(temp.App.PackagePreflight(new(PreflightKind.SourcePack, [bundled.Id])).Blocking);
+        Assert.Equal((Preflight.BundledReason, "bundled"), (row.Reason, row.Origin));
+        Assert.Equal("preflight.bundled", Preflight.BundledReason);
+    }
+
+    [Fact]
+    public void A_received_source_blocks_a_source_pack_with_its_own_code()
+    {
+        using var temp = new TempApp();
+        var id = Guid.NewGuid();
+        temp.App.Store.UpsertSource(new SourceRecord
+        {
+            Id = id, Title = "Test Received Notes", Publisher = "Test author", RulesFamilies = [RulesFamilies.Srd51], EditionVersion = "1",
+            License = "Personal homebrew", Redistributable = true, Origin = SourceOrigin.Received,
+        });
+        var row = Assert.Single(temp.App.PackagePreflight(new(PreflightKind.SourcePack, [id])).Blocking);
+        Assert.Equal((Preflight.ReceivedReason, "received"), (row.Reason, row.Origin));
+        Assert.Equal("preflight.received", Preflight.ReceivedReason);
+    }
+
+    [Fact]
     public void Notices_listed_once_per_source()
     {
         using var temp = new TempApp();

@@ -39,6 +39,8 @@ export function PreflightPanel({ kind, selection, label, refreshKey, onReport, o
   const asked = `${kind}|${refreshKey ?? ''}|${selection.join(',')}`;
   const [answer, setAnswer] = useState<{ asked: string; report: PreflightReport }>();
   const report = answer?.asked === asked ? answer.report : undefined;
+  const [failedAsk, setFailedAsk] = useState<string>();
+  const failed = failedAsk === asked && !report;
   const handlers = useRef({ onReport, onError });
   useEffect(() => {
     handlers.current = { onReport, onError };
@@ -56,13 +58,16 @@ export function PreflightPanel({ kind, selection, label, refreshKey, onReport, o
         handlers.current.onReport(loaded);
       })
       .catch((error: unknown) => {
-        if (current) handlers.current.onError(error);
+        if (!current) return;
+        setFailedAsk(asked);
+        handlers.current.onError(error);
       });
     return () => {
       current = false;
     };
   }, [asked, kind]);
 
+  if (failed) return <p role="alert">Could not check what may be shared, so Save stays off. Close this and try again.</p>;
   if (!report) return <p className="hint">Checking what may be shared…</p>;
   return (
     <div role="region" aria-label={`Preflight: ${label}`}>

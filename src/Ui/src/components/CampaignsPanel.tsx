@@ -86,7 +86,7 @@ function CampaignPackForm({ campaign, onError, onStatus }: { campaign: Campaign 
               ))}
             </ul>
           )}
-          <PreflightPanel kind="campaignPack" selection={[campaign.id]} label="campaign pack" onReport={setReport} onError={onError} />
+          <PreflightPanel kind="campaignPack" selection={[campaign.id]} label="campaign pack" refreshKey={`${campaign.updatedAt ?? ''}~${campaign.allowedSources.join(',')}`} onReport={setReport} onError={onError} />
           <div className="actions">
             <button type="button" onClick={save} disabled={!canSaveAfter(report)}>
               Save campaign pack…

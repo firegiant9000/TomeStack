@@ -23,10 +23,13 @@ export function VttExportPanel({ characterId, onError, onStatus }: Props) {
   const [preview, setPreview] = useState<VttExportPreview>();
   // Import Lab L5: a share goes through the one sharing rule's preflight; a personal copy keeps its own rule.
   const [report, setReport] = useState<PreflightReport>();
+  // Each click on Preview asks the rule again, so a library that changed in between never leaves a stale answer.
+  const [previews, setPreviews] = useState(0);
 
   async function show() {
     try {
       setPreview(await client.previewVttExport(characterId, target, purpose));
+      setPreviews((n) => n + 1);
     } catch (error) {
       onError(error);
     }
@@ -92,7 +95,7 @@ export function VttExportPanel({ characterId, onError, onStatus }: Props) {
             {preview.targetVersion ? `, checked against ${preview.targetVersion}` : ''}.
           </p>
           {preview.purpose === 'share' && (
-            <PreflightPanel kind="sheet" selection={[characterId]} label="shared sheet" onReport={setReport} onError={onError} />
+            <PreflightPanel kind="sheet" selection={[characterId]} label="shared sheet" refreshKey={String(previews)} onReport={setReport} onError={onError} />
           )}
           <p>{preview.dropped.length === 0 ? 'Nothing is left out.' : 'Left out, because it may not be shared:'}</p>
           {preview.dropped.length > 0 && (

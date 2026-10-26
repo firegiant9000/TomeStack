@@ -78,6 +78,61 @@ it('says each omitted and blocking row in words, never as a code', async () => {
   expect(within(region).getByText('Included (1)')).toBeTruthy();
 });
 
+it('says a missing, bundled and received source each in its own words', async () => {
+  vi.mocked(client.packagePreflight).mockResolvedValue({
+    included: [],
+    omitted: [],
+    blocking: [
+      row('Gone Notes', 'Gone Notes', 'preflight.source-missing'),
+      row('Core Rules', 'Core Rules', 'preflight.bundled'),
+      row('Friend Notes', 'Friend Notes', 'preflight.received'),
+    ],
+    notices: [],
+  });
+  render(<PreflightPanel kind="sourcePack" selection={['a']} label="source pack" onReport={() => {}} onError={() => {}} />);
+
+  const text = (await screen.findByRole('alert')).textContent ?? '';
+  expect(text).toMatch(/Gone Notes: this source is not installed here/);
+  expect(text).toMatch(/Core Rules: comes with TomeStack/);
+  expect(text).toMatch(/Friend Notes: came from someone else/);
+  expect(text).not.toMatch(/not yours to share|preflight\./);
+});
+
+it('asks again when the sheet is previewed a second time', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.previewVttExport).mockImplementation((_id, target, purpose) =>
+    Promise.resolve({ token: 'tok', target, fileName: 'Pell.sheet.json', bytes: 10, adapterVersion: '1', purpose, dropped: [], notices: [], differences: [], warnings: [] }),
+  );
+  vi.mocked(client.packagePreflight).mockResolvedValue(blocked);
+  render(<VttExportPanel characterId="ch-1" onError={() => {}} onStatus={() => {}} />);
+
+  await user.click(screen.getByRole('radio', { name: /TomeStack sheet \(JSON\)/ }));
+  await user.click(screen.getByRole('button', { name: 'Preview export' }));
+  const first = await screen.findByRole('region', { name: 'Export preview' });
+  await within(first).findByRole('region', { name: 'Preflight: shared sheet' });
+  expect(within(first).getByRole<HTMLButtonElement>('button', { name: 'Save export file…' }).disabled).toBe(true);
+  expect(vi.mocked(client.packagePreflight)).toHaveBeenCalledTimes(1);
+
+  // The library changed in between: the second preview asks again and Save follows the new answer.
+  vi.mocked(client.packagePreflight).mockResolvedValue(clear);
+  await user.click(screen.getByRole('button', { name: 'Preview export' }));
+  await waitFor(() => expect(vi.mocked(client.packagePreflight)).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Save export file…' }).disabled).toBe(false));
+});
+
+it('says in words that the check failed and keeps Save off', async () => {
+  vi.mocked(client.packagePreflight).mockRejectedValue(new Error('boom'));
+  const onReport = vi.fn();
+  const onError = vi.fn();
+  render(<PreflightPanel kind="package" selection={['ch-1']} label="shared package" onReport={onReport} onError={onError} />);
+
+  expect((await screen.findByRole('alert')).textContent).toMatch(/Could not check what may be shared, so Save stays off/);
+  expect(screen.queryByText(/Checking what may be shared/)).toBeNull();
+  expect(onError).toHaveBeenCalledTimes(1);
+  expect(onReport).toHaveBeenCalledTimes(1);
+  expect(onReport).toHaveBeenCalledWith(undefined);
+});
+
 it('the source-pack export waits for the preflight and stays off while a source blocks it', async () => {
   const user = userEvent.setup();
   vi.mocked(client.sourcePackPreview).mockResolvedValue({ fileName: 'Lantern-Notes-source-pack.tomestack.zip', sources: [], revisions: 1, drafts: 0, warnings: [] });

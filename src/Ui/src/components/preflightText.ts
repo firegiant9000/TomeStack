@@ -8,6 +8,9 @@ const reasonText: Record<string, string> = {
   'preflight.attachment': 'a PDF and the text read from it never travel in a share',
   'preflight.notice-missing': 'its license notice is missing, so it cannot be shared',
   'preflight.empty': 'nothing is published yet',
+  'preflight.source-missing': 'this source is not installed here, so there is nothing to share from it',
+  'preflight.bundled': 'comes with TomeStack, so everyone has it already and a pack never carries it',
+  'preflight.received': 'came from someone else, so you cannot share it as your own work',
   'preflight.spans-sources': 'also has revisions in another source, so it cannot leave with this one',
 };
 

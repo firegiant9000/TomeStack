@@ -42,6 +42,15 @@ public static class Preflight
     /// <summary>A content whose revisions sit in another source too, so it cannot leave with one of them.</summary>
     public const string SpansSourcesReason = "preflight.spans-sources";
 
+    /// <summary>The source is not installed here (a campaign's pending source, or content whose source record is gone).</summary>
+    public const string SourceMissingReason = "preflight.source-missing";
+
+    /// <summary>A bundled source: everyone has it already, so a source pack never carries it.</summary>
+    public const string BundledReason = "preflight.bundled";
+
+    /// <summary>A source that came from someone else's package: not this person's to share as their own work.</summary>
+    public const string ReceivedReason = "preflight.received";
+
     /// <summary>At most this many sources in one pack: a pack is a deliberate share, not a library dump.</summary>
     public const int MaxPackSources = 50;
 
@@ -263,7 +272,11 @@ public static class Preflight
         : bundled.Contains(source.Id) ? "bundled"
         : source.Origin switch { SourceOrigin.Local => "local", SourceOrigin.Received => "received", _ => "unknown" };
 
-    private static string ReasonOf(SourceRecord source) => source.ImportDerived == true ? ImportDerivedReason : NotRedistributableReason;
+    private static string ReasonOf(SourceRecord? source) =>
+        source is null ? SourceMissingReason
+        : source.ImportDerived == true ? ImportDerivedReason
+        : source.Origin == SourceOrigin.Received ? ReceivedReason
+        : NotRedistributableReason;
 
     /// <summary>A guard diagnostic (<see cref="ShareProblem"/> and the pack plans) in a preflight reason.</summary>
     private static string ReasonOf(Diagnostic problem) => problem.Code switch
@@ -271,7 +284,10 @@ public static class Preflight
         "pack.source-import-derived" => ImportDerivedReason,
         "pack.source-empty" => EmptyReason,
         "pack.content-spans-sources" => SpansSourcesReason,
-        _ => NotRedistributableReason, // missing, bundled, received, not marked as shareable: not this person's to redistribute
+        "pack.source-missing" => SourceMissingReason,
+        "pack.source-bundled" => BundledReason,
+        "pack.source-received" => ReceivedReason,
+        _ => NotRedistributableReason, // not marked as shareable, no attestation
     };
 
     private static PreflightRow RevisionRow(ContentRevision revision, SourceRecord? source, IReadOnlySet<Guid> bundled, string? reason) =>
@@ -314,7 +330,7 @@ public static class Preflight
             {
                 bySource.TryGetValue(revision.Provenance.SourceId, out var source);
                 if (leftIds.Contains(revision.RevisionId))
-                    omitted.Add(RevisionRow(revision, source, bundled, source is null ? NotRedistributableReason : ReasonOf(source)));
+                    omitted.Add(RevisionRow(revision, source, bundled, ReasonOf(source)));
                 else
                     included.Add(RevisionRow(revision, source, bundled, null));
             }
@@ -331,7 +347,7 @@ public static class Preflight
                     notices.Add(source);
                 }
                 else
-                    omitted.Add(RevisionRow(revision, source, bundled, source is null ? NotRedistributableReason : ReasonOf(source)));
+                    omitted.Add(RevisionRow(revision, source, bundled, ReasonOf(source)));
             }
         }
         omitted.AddRange(AttachmentRows(sources, bundled));
