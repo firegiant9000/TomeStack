@@ -883,7 +883,21 @@ it('when Usable now hides the row just used, focus moves to the filter checkbox,
   rerender(<ActionsPanel view={actionsView([rally], focusPool(0))} {...props} />);
   expect(screen.queryByRole('button', { name: /^Use Rally/ })).toBeNull();
   expect(document.activeElement).toBe(usableNow());
-  expect(screen.getByRole('status').textContent).toBe('Nothing is usable right now.');
+  expect(document.querySelector('[aria-live="polite"]')!.textContent).toBe('Nothing is usable right now.');
+  expect(document.querySelector('[role="status"]')).toBeNull(); // the page has one status line
+});
+
+it('a later render with no action never moves focus, even after a row button was focused and then lost to <body>', async () => {
+  const props = { roll: () => {}, act: () => {} };
+  const { rerender } = render(<ActionsPanel view={actionsView([rally], focusPool(2))} {...props} />);
+  await userEvent.click(usableNow());
+  const use = screen.getByRole('button', { name: /^Use Rally/ });
+  use.focus();
+  use.blur();
+  expect(document.activeElement).toBe(document.body);
+  rerender(<ActionsPanel view={actionsView([rally], focusPool(0))} {...props} />);
+  expect(screen.queryByRole('button', { name: /^Use Rally/ })).toBeNull();
+  expect(document.activeElement).toBe(document.body);
 });
 
 it('when the row drops while focus is outside the panel, focus stays there', async () => {

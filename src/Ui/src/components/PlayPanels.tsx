@@ -631,11 +631,14 @@ export function ActionsPanel({
   const [usableOnly, setUsableOnly] = useState(false);
   // D73: a click can empty the pool and so unmount its own row under "Usable now"; focus then goes to the filter checkbox, not <body>.
   const usableRef = useRef<HTMLInputElement>(null);
-  const panelHadFocus = useRef(false);
+  // One-shot: set by a click on a row's own control while the filter is on, spent by the next render (so a later, unrelated render never moves focus).
+  const refocusAfterAction = useRef(false);
   useEffect(() => {
-    if (!usableOnly || !panelHadFocus.current) return;
+    if (!refocusAfterAction.current) return;
+    refocusAfterAction.current = false;
     const active = document.activeElement;
-    if (active === null || active === document.body) usableRef.current?.focus(); // a real element elsewhere was chosen: leave it
+    // Focus lost to <body> means the row just used was hidden; a real element anywhere else was chosen, so leave it.
+    if (usableOnly && (active === null || active === document.body)) usableRef.current?.focus();
   });
   const rollDamage = (target: RollTarget, type?: string) => {
     onDamageType?.(normalizeDamageType(type));
@@ -705,12 +708,10 @@ export function ActionsPanel({
     <section
       aria-labelledby="actions-heading"
       className="play-panel"
-      onFocus={() => {
-        panelHadFocus.current = true;
-      }}
-      onBlur={(e) => {
-        // A removed control blurs with no related target; only focus that went to another element means the user left.
-        if (e.relatedTarget instanceof Node && !e.currentTarget.contains(e.relatedTarget)) panelHadFocus.current = false;
+      onClickCapture={(e) => {
+        // Any row control (Roll, Use, Pin, a switch) may hide its own row; the filter checkbox itself and plain inputs do not count.
+        const control = e.target instanceof Element ? e.target.closest('button, input[type="checkbox"]') : null;
+        if (usableOnly && control && control !== usableRef.current) refocusAfterAction.current = true;
       }}
     >
       <h3 id="actions-heading">Attacks and actions</h3>
@@ -730,7 +731,7 @@ export function ActionsPanel({
         <input ref={usableRef} type="checkbox" checked={usableOnly} onChange={(e) => setUsableOnly(e.target.checked)} />
         Usable now
       </label>
-      <p role="status" className="hint">
+      <p className="hint" aria-live="polite">
         {usableOnly && nothingListed ? 'Nothing is usable right now.' : ''}
       </p>
       {activationGroups.map(({ key, title }) => {
