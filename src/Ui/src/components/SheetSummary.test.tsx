@@ -349,3 +349,24 @@ it('shows a "Bloodied" chip as text when the sheet says bloodied, in the hit poi
   expect(chip.getAttribute('role')).toBeNull();
   expect(dd('Hit points')).toBe('17 of 35'); // the Hit points text itself is unchanged
 });
+
+it('puts the Why? disclosure in the roll strip, outside the Last roll live region', () => {
+  const record: RollRecord = {
+    formula: '1d20+3',
+    mode: 'normal',
+    critical: false,
+    dice: [{ term: 0, sides: 20, value: 14, kept: true, fromCritical: false }],
+    diceTotal: 14,
+    expressionConstant: 0,
+    modifiers: [{ label: 'Strength modifier', amount: 3 }],
+    total: 17,
+  };
+  const { container } = render(
+    <SheetSummary view={fixtureView()} rollMode="normal" onRollMode={() => {}} lastRoll={record} rollLog={[]} act={() => {}} onRoll={() => {}} onRollDice={async () => {}} />,
+  );
+  const why = container.querySelector('details.roll-why') as HTMLElement;
+  expect(why).toBeTruthy();
+  expect(why.closest('.roll-strip')).toBeTruthy();
+  expect(screen.getByRole('region', { name: 'Last roll' }).contains(why)).toBe(false);
+  expect(why.closest('[aria-live]')).toBeNull();
+});

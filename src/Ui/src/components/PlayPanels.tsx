@@ -22,7 +22,7 @@ import type {
 } from '../api/types';
 import { hitDiceText, rollBonus } from '../format';
 import { rollButtonSuffix } from '../rollModes';
-import { diceLine, rollModeText } from '../rollText';
+import { diceLine, rollKey, rollModeText } from '../rollText';
 import { announceRollsOn, diceAnimationOn } from '../settings';
 import { damageTypeLabel, damageTypes, normalizeDamageType } from './customModel';
 import { Pips } from './Pips';
@@ -1066,18 +1066,6 @@ function FeatureItem({
 
 /** ADR-015: at most this many dice are drawn; the record's text always lists every die. */
 const drawnDice = 10;
-
-/**
- * A key per record object, so an identical second roll (a new object with the same faces) mounts a new dice row and the
- * CSS tumble runs again. A WeakMap keeps it pure: no state, no effect, and old records are collected.
- */
-const rollKeys = new WeakMap<RollRecord, number>();
-let nextRollKey = 0;
-function rollKey(record: RollRecord): number {
-  let key = rollKeys.get(record);
-  if (key === undefined) rollKeys.set(record, (key = ++nextRollKey));
-  return key;
-}
 
 /** The last roll's record (SPEC C-04): formula, every die, modifiers and provenance. Announced politely. */
 export function RollResult({

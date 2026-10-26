@@ -4,6 +4,7 @@ import { DiceBox } from './DiceBox';
 import { rollButtonSuffix } from '../rollModes';
 import { inspirationLabel, RollModePicker, RollResult } from './PlayPanels';
 import { RollLog, type LoggedRoll } from './RollLog';
+import { RollWhy } from './RollWhy';
 
 const abilities = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const;
 const abilityNames: Record<(typeof abilities)[number], string> = {
@@ -188,6 +189,7 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, ac
       </p>
       <div className="roll-strip">
         <RollResult record={lastRoll} resources={sheet.resources ?? []} features={sheet.features ?? []} attacks={sheet.attacks ?? []} act={act} />
+        <RollWhy record={lastRoll} />
         <RollLog rolls={rollLog} />
       </div>
     </section>

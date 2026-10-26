@@ -418,7 +418,9 @@ html[data-ability-order='score'] .sheet-summary dd.ability > .override-label { o
 .dice-box p.error { width: 0; min-width: 100%; margin: var(--space-1) 0 0; font-size: var(--text-sm); overflow-wrap: anywhere; }
 .dice-box p.error:empty { margin: 0; } /* the status stays mounted (so a refusal is announced) but takes no room while empty */
 .sheet-summary > .hint { grid-area: hint; }
-.sheet-summary > .roll-strip { grid-area: result; min-height: 9.5rem; } /* the Last roll (7.5rem) plus the closed Previous rolls line, so logging the first roll does not move the tabs */
+.sheet-summary > .roll-strip { grid-area: result; min-height: 11rem; } /* the Last roll (7.5rem) plus the closed "Why?" line and the closed Previous rolls line, so the first roll does not move the tabs (an open "Why?" grows the strip by design) */
+.roll-why { margin-top: var(--space-2); }
+.roll-why ul { margin: var(--space-1) 0 0; padding-left: 1.5rem; font-size: var(--text-sm); }
 .roll-log { margin-top: var(--space-2); }
 .roll-log ol { margin: var(--space-1) 0 0; padding-left: 1.5rem; font-size: var(--text-sm); }
 .roll-time { color: var(--muted); font-variant-numeric: tabular-nums; }
