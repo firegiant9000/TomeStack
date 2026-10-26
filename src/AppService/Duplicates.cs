@@ -55,12 +55,20 @@ public static class Fingerprint
     public static string Of(IReadOnlyList<Effect> effects)
     {
         ArgumentNullException.ThrowIfNull(effects);
-        var node = JsonSerializer.SerializeToNode(effects, typeof(IReadOnlyList<Effect>), RulesJson.Compact)!.AsArray();
-        foreach (var effect in node.OfType<JsonObject>())
-            effect.Remove("id");
-        var canonical = FoundryDnd5e.Sorted(node)!.ToJsonString();
-        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)));
+        return OfJson(JsonSerializer.SerializeToNode(effects, typeof(IReadOnlyList<Effect>), RulesJson.Compact)!.AsArray());
     }
+
+    /// <summary>The hash of effects already written as JSON: each effect's top-level <c>id</c> removed, then <see cref="Canonical"/>. Leaves <paramref name="effects"/> unchanged.</summary>
+    internal static string OfJson(JsonArray effects)
+    {
+        var copy = (JsonArray)effects.DeepClone();
+        foreach (var effect in copy.OfType<JsonObject>())
+            effect.Remove("id");
+        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Canonical(copy))));
+    }
+
+    /// <summary>The JSON text with the keys of every object, at every level, in ordinal order (arrays keep their order).</summary>
+    internal static string Canonical(JsonNode node) => FoundryDnd5e.Sorted(node)!.ToJsonString();
 }
 
 /// <summary>
@@ -135,6 +143,9 @@ public static class Duplicates
     /// <summary>One entry per rules family: a revision written for both families is compared inside each, never across.</summary>
     private static IEnumerable<Entry> EntriesOf(DuplicateMember member, IReadOnlyList<string> families, IReadOnlyList<Effect> effects)
     {
+        // An entry with no name has nothing to compare by (and an empty key would make every unnamed entry one group).
+        if (member.Name is null || CandidateDetector.Key(member.Name).Length == 0)
+            return [];
         var key = CandidateDetector.Key(member.Name);
         var fingerprint = Fingerprint.Of(effects);
         return families.Distinct().Select(family => new Entry(member, family, key, fingerprint, effects.Count > 0));

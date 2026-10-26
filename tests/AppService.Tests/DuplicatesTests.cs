@@ -271,6 +271,90 @@ public class DuplicatesTests
             return Fingerprint.Of(original) == Fingerprint.Of(Rewritten(specs));
         });
 
+    // ---- The canonical form, on JSON with nesting (the typed property above cannot see key order: typing re-serialises it) ----
+
+    private static readonly string[] KeyPool = ["a", "b", "c", "d", "e", "Z", "id", "m_1"];
+
+    private static JsonNode Leaf(Random rng) => rng.Next(3) switch
+    {
+        0 => JsonValue.Create(rng.Next(10))!,
+        1 => JsonValue.Create("v" + rng.Next(10))!,
+        _ => JsonValue.Create(rng.Next(2) == 0)!,
+    };
+
+    private static JsonObject Obj(Random rng, int depth)
+    {
+        var node = new JsonObject();
+        foreach (var key in KeyPool.OrderBy(_ => rng.Next()).Take(1 + rng.Next(4)))
+        {
+            node[key] = depth > 0
+                ? rng.Next(4) switch { 0 => Obj(rng, depth - 1), 1 => new JsonArray([.. Enumerable.Range(0, 1 + rng.Next(3)).Select(_ => (JsonNode)Obj(rng, depth - 1))]), _ => Leaf(rng) }
+                : Leaf(rng);
+        }
+        return node;
+    }
+
+    /// <summary>The same JSON with the keys of every object, at every level, in another order.</summary>
+    private static JsonNode Permuted(JsonNode node, Random rng) => node switch
+    {
+        JsonObject o => new JsonObject(o.OrderBy(_ => rng.Next()).Select(p => KeyValuePair.Create(p.Key, p.Value is null ? null : Permuted(p.Value, rng)))),
+        JsonArray a => new JsonArray([.. a.Select(x => x is null ? null : Permuted(x, rng))]),
+        _ => node.DeepClone(),
+    };
+
+    [Property(MaxTest = 300)]
+    public Property Canonical_form_ignores_key_order_at_every_level_and_top_level_ids() =>
+        Prop.ForAll(Gen.Choose(0, 1_000_000).ToArbitrary(), seed =>
+        {
+            var rng = new Random(seed);
+            var original = new JsonArray([.. Enumerable.Range(0, rng.Next(5)).Select(i =>
+            {
+                var effect = Obj(rng, 3);
+                effect["id"] = $"first-{i}";
+                return (JsonNode)effect;
+            })]);
+            var other = (JsonArray)Permuted(original, new Random(seed + 1));
+            foreach (var (effect, i) in other.OfType<JsonObject>().Select((e, i) => (e, i)))
+                effect["id"] = $"second-{seed}-{i}";
+            return Fingerprint.OfJson(original) == Fingerprint.OfJson(other);
+        });
+
+    [Fact]
+    public void Canonical_form_tells_a_nested_change_apart_and_keeps_array_order()
+    {
+        JsonArray Parse(string json) => (JsonArray)JsonNode.Parse(json)!;
+        Assert.NotEqual(Fingerprint.OfJson(Parse("""[{"id":"x","a":{"b":[{"c":1}]}}]""")), Fingerprint.OfJson(Parse("""[{"id":"x","a":{"b":[{"c":2}]}}]""")));
+        Assert.NotEqual(Fingerprint.OfJson(Parse("""[{"a":1},{"a":2}]""")), Fingerprint.OfJson(Parse("""[{"a":2},{"a":1}]""")));
+        Assert.Equal("""{"a":{"x":1,"y":2},"b":[{"m":1,"n":2}]}""", Fingerprint.Canonical(JsonNode.Parse("""{"b":[{"n":2,"m":1}],"a":{"y":2,"x":1}}""")!));
+    }
+
+    [Fact]
+    public void A_default_written_out_and_a_default_left_out_give_the_same_fingerprint()
+    {
+        var written = JsonSerializer.SerializeToNode<Effect>(Bonus("a", 1), RulesJson.Compact)!.AsObject();
+        Assert.True(written.ContainsKey("automation")); // the default is written out here
+        var left = (JsonObject)written.DeepClone();
+        left.Remove("automation");
+        Assert.False(left.ContainsKey("automation"));
+
+        var explicitEffect = JsonSerializer.Deserialize<Effect>(written.ToJsonString(), RulesJson.Compact)!;
+        var omittedEffect = JsonSerializer.Deserialize<Effect>(left.ToJsonString(), RulesJson.Compact)!;
+
+        Assert.Equal(Fingerprint.Of([explicitEffect]), Fingerprint.Of([omittedEffect]));
+    }
+
+    [Fact]
+    public void An_entry_with_no_name_is_skipped_and_unnamed_entries_do_not_form_a_group()
+    {
+        using var temp = new TempApp();
+        var source = Source(temp.App, "Fixture Book One", RulesFamilies.Srd521);
+        var job = NewJob(temp.App, source);
+        Candidate(temp.App, job, source, "", RulesFamilies.Srd521, effects: Bonus("a", 1));
+        Candidate(temp.App, job, source, "   ", RulesFamilies.Srd521, effects: Bonus("a", 1));
+
+        Assert.Empty(temp.App.ContentDuplicates(new(JobId: job)));
+    }
+
     [Fact]
     public void Fingerprint_tells_different_rules_apart()
     {
