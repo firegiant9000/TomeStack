@@ -136,7 +136,7 @@ The same benchmarks after two in-memory fixes, no migration: the edit path build
 | EditCandidateOneReference | 500 | 38.1 ms | 21.5 MB | | |
 | EditCandidateOneReference | 1000 | 45.3 ms | 29.4 MB | | |
 
-`EditCandidate` at 1000 went from 598 MB to 29.4 MB and from about 1.0 s to 45 ms; with 20 references it now allocates 31 KB more than with one (0.1 %). `MarkdownExtract` belongs to a later Lab task.
+`EditCandidate` at 1000 went from 598 MB to 29.4 MB and from about 1.0 s to 45 ms; with 20 references it now allocates 31 KB more than with one (0.1 %). `MarkdownExtract` is measured below.
 
 ### Duplicates (L6)
 
@@ -150,6 +150,16 @@ The same benchmarks after two in-memory fixes, no migration: the edit path build
 | DuplicatesLibrary | 250 | 55.7 ms | 58.9 ms | 37.6 MB | | |
 | DuplicatesLibrary | 500 | 65.1 ms | 70.4 ms | 44.6 MB | | |
 | DuplicatesLibrary | 1000 | 90.5 ms | 92.3 ms | 59.1 MB | | |
+
+### Markdown extractor (L7)
+
+`MarkdownExtractor.Parse` (design 7.2), measured 2026-10-25 on `import-lab`, one run; raw results: [`performance/raw/2026-10-25/markdown/`](performance/raw/2026-10-25/markdown/). `MarkdownExtract` reads an invented document of 20,000 source lines (about 1 MB; headings, paragraphs with emphasis, links and HTML, list items, a pipe table, a run-in head and a comment, repeated), which becomes 334 pages. It is pure: no store, no library. The class's `N` parameter does not affect it, so the same code was measured at all three values (14.2 to 16.4 ms, the run-to-run spread on this machine).
+
+| Benchmark | Lines | Mean | P95 | Allocated | Target | Met |
+|---|---:|---:|---:|---:|---|---|
+| MarkdownExtract | 20,000 | 14.2 to 16.4 ms (three runs of the same code) | 17.4 ms at most | 16.3 MB | 1 s | yes |
+
+A test (`Adversarial_lines_at_the_limits_are_read_in_linear_time`) also reads 4 MB of lines made of one repeated link, tag or table mark each, and each finishes in well under a second.
 
 ## First paint (owed: owner, by hand)
 

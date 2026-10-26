@@ -272,6 +272,22 @@ internal static class FixturePdfs
         return builder.Build();
     }
 
+    /// <summary>
+    /// Lab Task 12 (R4): one page with a run-in head, a bold name followed by regular-weight body text on the same line, as the
+    /// SRDs set "Fixture Pool. You regain ...". The body starts where the name ends (Helvetica-Bold width plus a space).
+    /// </summary>
+    public static byte[] RunInHead(string name = "Fixture Pool.", string body = "You regain one fixture use when you finish a long rest.", double size = 10)
+    {
+        var builder = new PdfDocumentBuilder();
+        var regular = builder.AddStandard14Font(Standard14Font.Helvetica);
+        var bold = builder.AddStandard14Font(Standard14Font.HelveticaBold);
+        var page = builder.AddPage(PageSize.Letter);
+        var nameLetters = page.AddText(name, size, new PdfPoint(72, 700), bold);
+        var end = nameLetters.Max(l => l.BoundingBox.Right);
+        page.AddText(body, size, new PdfPoint(end + size * 0.28, 700), regular);
+        return builder.Build();
+    }
+
     /// <summary>A hand-built PDF from object bodies (object 1 first), with a correct cross-reference table.</summary>
     public static byte[] Raw(IReadOnlyList<byte[]> objects, string trailerExtra = "")
     {

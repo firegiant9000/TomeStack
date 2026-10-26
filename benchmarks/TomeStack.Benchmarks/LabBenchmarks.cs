@@ -32,6 +32,12 @@ public class LabBenchmarks
     [Params(250, 500, 1000)]
     public int N { get; set; }
 
+    /// <summary>Source lines of the Markdown document <see cref="MarkdownExtract"/> reads (one value: the target is stated at 20,000 lines).</summary>
+    [Params(20_000)]
+    public int Lines { get; set; }
+
+    private byte[] _markdown = [];
+
     [GlobalSetup]
     public void Setup()
     {
@@ -66,6 +72,9 @@ public class LabBenchmarks
         _pages = [.. Enumerable.Range(1, DetectionPages).Select(p => new DetectionPage(p, "",
             [new TextBlock($"Fixture Feature {p:D2}\nLevel 1 Evocation (Fixture Mage)\nCasting Time: Action\nRange: 60 feet\nComponents: V, S\nDuration: Instantaneous\nA fixture effect number {p}.", 50, 600, 200, 60, 10, false)],
             false))];
+        _markdown = MarkdownDocument(Lines);
+        if (MarkdownExtract() == 0)
+            throw new InvalidOperationException("The Markdown fixture produced no pages.");
         var found = DetectWithLibrary();
         Console.WriteLine($"// detection fixture: {found} candidates from {DetectionPages} pages, {N} installed features");
         if (found == 0)
@@ -129,6 +138,41 @@ public class LabBenchmarks
     /// <summary>The same edit with one reference: the difference from <see cref="EditCandidate"/> is what the references cost.</summary>
     [Benchmark]
     public int EditCandidateOneReference() => Edit(_oneRefJob);
+
+    /// <summary>
+    /// Lab L7: <c>MarkdownExtractor.Parse</c> of an invented document of <see cref="Lines"/> source lines (headings, paragraphs with
+    /// emphasis, links and HTML, list items, a pipe table and a run-in head, repeated), target up to 1 s at 20,000 lines. Returns the page count.
+    /// </summary>
+    [Benchmark]
+    public int MarkdownExtract() => TomeStack.ImportWorker.Extraction.MarkdownExtractor.Parse(_markdown).Count;
+
+    private static byte[] MarkdownDocument(int lines)
+    {
+        const string unit = """
+            ## Fixture Section {0}
+
+            A fixture paragraph with *emphasis*, **strong** words, a [link](https://example.test/{0}) and <b>html</b> in it.
+            A second line of the same paragraph, with `code` and snake_case_name inside.
+
+            - first fixture item {0}
+            - second fixture item
+            1. numbered fixture item
+
+            | Level | Bonus | Features |
+            |---|---|---|
+            | 1 | +2 | Fixture Pool |
+            | 2 | +2 | Fixture Rider |
+
+            **Fixture Pool {0}.** You regain one fixture use when you finish a long rest.
+            <!-- a comment for the fixture {0} -->
+
+            """;
+        var perUnit = unit.Count(c => c == '\n');
+        var text = new System.Text.StringBuilder();
+        for (var section = 0; section * perUnit < lines; section++)
+            text.Append(string.Format(System.Globalization.CultureInfo.InvariantCulture, unit, section));
+        return System.Text.Encoding.UTF8.GetBytes(string.Join('\n', text.ToString().Split('\n').Take(lines)));
+    }
 
     private int Edit(Guid job)
     {

@@ -67,6 +67,13 @@ public sealed record ExtractionLimits
     /// <summary>The parent kills the child above this working set.</summary>
     public long MaxWorkingSet { get; init; } = 3L << 29;
 
+    /// <summary>Lab L7 (design 7.2): a Markdown file over any of these fails with <c>markdown.too-large</c> and yields nothing.</summary>
+    public const int MarkdownMaxBytes = 4 * 1024 * 1024;
+    public const int MarkdownMaxLines = 200_000;
+    public const int MarkdownMaxLineLength = 10_000;
+    public const int MarkdownMaxPages = 2_000;
+    public const int MarkdownMaxTableColumns = 40;
+
     public static ExtractionLimits Default { get; } = new();
 }
 

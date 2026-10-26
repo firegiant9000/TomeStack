@@ -9,6 +9,8 @@
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <!-- Lab Task 12 property tests; the version RulesCore.Tests and AppService.Tests already use. -->
+    <PackageReference Include="FsCheck.Xunit" Version="3.4.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
@@ -20,6 +22,8 @@
 
   <ItemGroup>
     <None Include="..\RulesFixtures\pdf\*.pdf" LinkBase="RulesFixtures\pdf" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Lab Task 12: the original Markdown fixture class. -->
+    <None Include="..\RulesFixtures\lab\*.md" LinkBase="RulesFixtures\lab" CopyToOutputDirectory="PreserveNewest" />
     <!-- Task 8 (D64): the fixture book's detection output as it was before per-effect spans existed. -->
     <None Include="Golden\*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
