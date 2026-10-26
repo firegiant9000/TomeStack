@@ -13,6 +13,7 @@ Only the latest release on the [Releases page](https://github.com/firegiant9000/
 - The **Release** workflow (`.github/workflows/release.yml`) builds every release on GitHub's runners when a version tag is pushed. It runs the full gate, packs the installer and creates a draft release; the owner reviews the draft and publishes it.
 - The release lists a `SHA256SUMS` file with the SHA-256 hash of each file in it.
 - Each file listed in `SHA256SUMS` has a build attestation. It proves which workflow, in this repository, built the file. It does not make the build reproducible byte for byte.
+- Earlier releases have neither. If a release lists no `SHA256SUMS`, the checks below do not apply to it.
 - Releases are **unsigned** until code signing is added, so Windows SmartScreen warns the first time you run `TomeStack.App-win-Setup.exe` ("Windows protected your PC": choose **More info**, then **Run anyway**).
 
 ## Verify a download
@@ -24,7 +25,7 @@ $want = ((Select-String -Path .\SHA256SUMS -Pattern 'TomeStack.App-win-Setup.exe
 (Get-FileHash .\TomeStack.App-win-Setup.exe -Algorithm SHA256).Hash -eq $want
 ```
 
-`True` means the file matches the hash the release published. To check that this repository's release workflow built it, use the [GitHub CLI](https://cli.github.com/):
+`True` means the file matches the hash the release published. To check that this repository's release workflow built it, use a recent [GitHub CLI](https://cli.github.com/) (older versions lack these flags):
 
 ```powershell
 gh attestation verify .\TomeStack.App-win-Setup.exe --repo firegiant9000/TomeStack --signer-workflow firegiant9000/TomeStack/.github/workflows/release.yml
