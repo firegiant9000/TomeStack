@@ -163,7 +163,7 @@ jobs:
           name: release-assets
           path: ${{ runner.temp }}/release-assets/
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 1
 
       - name: Upload the release notes
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -171,7 +171,7 @@ jobs:
           name: release-notes
           path: ${{ runner.temp }}/release-notes/release-notes.md
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 1
 
       - name: Upload smoke report
         if: always()

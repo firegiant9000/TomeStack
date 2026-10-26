@@ -35,7 +35,7 @@ $body
 - **TomeStack.App-win-Setup.exe**: the installer (per-user, no admin rights, Windows 10 and 11, 64-bit). Windows 10 is best-effort.
 - **TomeStack.App-win-Portable.zip**: the same build without installing.
 - The ``.nupkg`` and ``releases.win.json`` files are Velopack's package and feed. You don't need them; TomeStack never downloads updates by itself.
-- **SHA256SUMS**: the SHA-256 hash of every other file on this page.
+- **SHA256SUMS**: the SHA-256 hash of every file listed above (not GitHub's automatic "Source code" archives).
 
 ## Verify the download
 

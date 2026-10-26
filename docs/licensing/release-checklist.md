@@ -118,7 +118,7 @@ Velopack (MIT, Caelan Sayler) builds `Setup.exe` and `Update.exe` in Rust, with 
    2. the self-contained publish and `vpk pack`;
    3. an install, smoke and uninstall on the runner;
    4. it writes `SHA256SUMS` over those files, attests each file it lists (build provenance) and creates a **draft** release with `Setup.exe`, the portable zip, the `.nupkg`, the Velopack feed files, `SHA256SUMS` and notes from the changelog.
-4. Review the draft on GitHub (assets, notes, the unsigned note), then **Publish**. Nothing is public before that.
+4. Review the draft on GitHub (assets, notes, the unsigned note), then **Publish**. The release page is not public before that, but the workflow run's `release-assets` artifact (the same files) can be downloaded from the public run page for one day.
 5. After publishing: run the upgrade test and the install checks on the published `Setup.exe` (`docs/features/release-0.4.0-verification.md`).
 
 ### Verify a release
@@ -134,9 +134,11 @@ Every action is pinned to a commit SHA. A manual run (**Run workflow**, `dry-run
 **Before publishing the draft** (owner, on a machine with the GitHub CLI): download `TomeStack.App-win-Setup.exe` and `SHA256SUMS` from the draft and run
 
 ```
-gh attestation verify TomeStack.App-win-Setup.exe --repo firegiant9000/TomeStack --signer-workflow firegiant9000/TomeStack/.github/workflows/release.yml --source-ref refs/tags/vX.Y.Z
+gh attestation verify TomeStack.App-win-Setup.exe --repo firegiant9000/TomeStack --signer-workflow firegiant9000/TomeStack/.github/workflows/release.yml --source-ref refs/tags/vX.Y.Z --source-digest <commit>
 ```
 
-with the release's tag. It must report the attestation verified. `--signer-workflow` and `--source-ref` make it fail for a file attested by any other workflow or ref. Then check the installer's hash against its line in `SHA256SUMS` (`(Get-FileHash TomeStack.App-win-Setup.exe).Hash` in PowerShell; the case of the letters doesn't matter). The release notes print the same command for users. The command needs a GitHub CLI recent enough to have `--source-ref`, signed in (`gh auth login`); an "unknown flag" or sign-in error is not a failed attestation. The hash check alone shows only that the file arrived intact: `SHA256SUMS` is not itself attested.
+with the release's tag and the full SHA of the commit it points to (`git rev-parse vX.Y.Z^{commit}`). It must report the attestation verified. `--signer-workflow` and `--source-ref` make it fail for a file attested by any other workflow or ref. Then check the installer's hash against its line in `SHA256SUMS` (`(Get-FileHash TomeStack.App-win-Setup.exe).Hash` in PowerShell; the case of the letters doesn't matter). The release notes print the same command for users. The command needs a GitHub CLI recent enough to have `--source-ref`, signed in (`gh auth login`); an "unknown flag" or sign-in error is not a failed attestation. The hash check alone shows only that the file arrived intact: `SHA256SUMS` is not itself attested.
 
 What an attestation does not prove: it says which workflow file at which tag built a file, not who published it. It is not a code signature, and the build is not bit-reproducible. Anyone who can push a `v*` tag can run the release workflow as it stands at that tag, so the attestation is only as strong as the rule on who may create `v*` tags (the tag ruleset); `--source-digest <commit>` pins the check to one commit.
+
+**Rejecting a draft:** the attestation is made before the draft is reviewed, so a rejected build stays attested for its tag. Never reuse a version tag: delete the draft, delete the run's artifacts, and release the fix as the next patch version with a new tag. The command in the release notes checks only the tag, so it is only sound while every tag names exactly one build.
