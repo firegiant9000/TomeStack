@@ -56,12 +56,12 @@ public class ImportPublishExportProperties
         var source = app.App.CreateHomebrewSource(new("Test Kind Book", Family));
         foreach (var kind in GeneratorKinds)
         {
-            var draft = Drafts.Sample(30, 400).First(d => d.Kind == kind); // deterministic enough: 400 draws of eight kinds
+            var draft = Drafts.Where(d => d.Kind == kind).Sample(30, 1).First(); // Where retries until the kind comes up, so this never misses one
             var saved = app.App.SaveDraft(draft with { Provenance = new(source.Id) });
             Assert.Equal(RevisionStatus.Published, app.App.Store.FindRevision(app.App.Publish(saved).Published)!.Status);
         }
 
-        var libraries = Libraries.Sample(30, 300).ToList();
+        var libraries = Libraries.Sample(300, 300).ToList(); // 300 libraries whichever argument is the count: a missing kind is ~(7/8)^300
         Assert.All(libraries, l => Assert.NotEmpty(l));
         Assert.Equal(GeneratorKinds.Order(), libraries.SelectMany(l => l).Select(d => d.Kind).Distinct().Order());
     }
