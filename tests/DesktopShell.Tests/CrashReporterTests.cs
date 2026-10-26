@@ -133,6 +133,19 @@ public sealed class CrashReporterTests : IDisposable
     }
 
     [Fact]
+    public void A_host_is_told_to_close_only_once()
+    {
+        var reporter = Reporter();
+        reporter.ReportProcessFailure("pdf-1", "RenderProcessExited", "Crashed", 1);
+
+        Assert.Equal(ProcessFailureAction.Close, reporter.ReportProcessFailure("pdf-1", "RenderProcessExited", "Crashed", 1));
+        Assert.Equal(ProcessFailureAction.LogOnly, reporter.ReportProcessFailure("pdf-1", "RenderProcessUnresponsive", "Unresponsive", 0));
+        Assert.Equal(ProcessFailureAction.LogOnly, reporter.ReportProcessFailure("pdf-1", "BrowserProcessExited", "Terminated", 1));
+        Assert.Equal(ProcessFailureAction.Close, reporter.ReportProcessFailure("main", "BrowserProcessExited", "Terminated", 1));
+        Assert.Equal(5, Entries().Length);
+    }
+
+    [Fact]
     public void A_viewer_dialog_does_not_use_up_the_dialog_for_a_later_fatal()
     {
         var reporter = Reporter();

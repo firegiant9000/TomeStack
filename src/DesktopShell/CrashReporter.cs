@@ -31,6 +31,7 @@ public sealed class CrashReporter(IErrorLog log, string logPath, string userProf
 
     private readonly Lock _gate = new();
     private readonly Dictionary<string, int> _renderFailures = [];
+    private readonly HashSet<string> _closedHosts = [];
     private int _dialogOpen;
 
     /// <summary>Logs a fatal (<c>dispatcher</c> or <c>appdomain</c>) and shows the dialog unless one is already up.</summary>
@@ -53,12 +54,17 @@ public sealed class CrashReporter(IErrorLog log, string logPath, string userProf
     public ProcessFailureAction ReportProcessFailure(string host, string kind, string reason, int exitCode)
     {
         Record($"webview2-{kind}", () => string.Create(CultureInfo.InvariantCulture, $"WebView2 process failed: kind={kind} reason={reason} exitCode={exitCode}"));
-        return kind switch
+        var action = kind switch
         {
             "RenderProcessExited" or "RenderProcessUnresponsive" => NextRenderAction(host),
             "BrowserProcessExited" => ProcessFailureAction.Close,
             _ => ProcessFailureAction.LogOnly,
         };
+        if (action != ProcessFailureAction.Close)
+            return action;
+        // Close is returned once per host: while its dialog is open further failures only log.
+        lock (_gate)
+            return _closedHosts.Add(host) ? ProcessFailureAction.Close : ProcessFailureAction.LogOnly;
     }
 
     /// <summary>The dialog for a window that could not be recovered (after <see cref="ProcessFailureAction.Close"/>).</summary>
