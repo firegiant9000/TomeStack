@@ -2,7 +2,6 @@ import { useEffect, useId, useRef, useState, type SubmitEvent } from 'react';
 import type {
   Ability,
   Activation,
-  AlsoChangeValue,
   AttackEntry,
   AutomationStatus,
   CharacterView,
@@ -20,6 +19,7 @@ import type {
   RollTarget,
   ToggleValue,
 } from '../api/types';
+import { poolFor, recordSpend, useOf } from '../actionRows';
 import { explainSteps } from '../explain';
 import { hitDiceText, rollBonus } from '../format';
 import { rollButtonSuffix } from '../rollModes';
@@ -601,8 +601,7 @@ export function ActionsPanel({
   // D43 slice 3: an action or switch that spends an allowance pool (reactions, say) is listed under that pool's name, not its activation group.
   const resourcePools = view.sheet.resources ?? [];
   const allowances = resourcePools.filter((r) => r.allowance);
-  const allowanceOf = (resourceId: string | undefined, contentId: string) =>
-    resourceId ? allowances.find((r) => r.resourceId === resourceId && r.content.contentId === contentId) : undefined;
+  const allowanceOf = (resourceId: string | undefined, contentId: string) => poolFor(allowances, resourceId, contentId);
   const rollPool = ({ feature, effect }: (typeof rolls)[number]) => allowanceOf(effect.resourceId, effect.resourceContent ?? feature.content.contentId);
   const togglePool = (t: ToggleValue) => allowanceOf(t.resourceId, t.costResourceContent ?? t.content.contentId);
   const poolGroups = allowances
@@ -616,7 +615,7 @@ export function ActionsPanel({
       key={`${feature.content.revisionId}-${effect.id}`}
       feature={feature}
       effect={effect}
-      pool={effect.resourceId ? resourcePools.find((r) => r.resourceId === effect.resourceId && r.content.contentId === (effect.resourceContent ?? feature.content.contentId)) : undefined}
+      pool={poolFor(resourcePools, effect.resourceId, effect.resourceContent ?? feature.content.contentId)}
       pools={resourcePools}
       critical={critical}
       roll={roll}
@@ -662,7 +661,7 @@ export function ActionsPanel({
                   rollMode={rollMode}
                   roll={roll}
                   rollDamage={rollDamage}
-                  pool={attack.resourceId ? resourcePools.find((r) => r.resourceId === attack.resourceId && r.content.contentId === attack.costResourceContent) : undefined}
+                  pool={poolFor(resourcePools, attack.resourceId ?? undefined, attack.costResourceContent ?? undefined)}
                 />
               ))}
               {groupCustom.map((attack) => (
@@ -777,55 +776,8 @@ function RollItem({
   const details = actionDetails(effect);
   const label = effect.label || effect.id;
   const diceless = !effect.dice;
-  // An absent cost means one use only when the action declares no cost. A declared cost that failed leaves `cost` absent and
-  // puts an effect.invalid-formula diagnostic on the effect (the sheet does not say which formula); never guess one use then.
-  const costFailed =
-    effect.cost === undefined &&
-    effect.resourceId !== undefined &&
-    (feature.diagnostics ?? []).some((d) => d.code === 'effect.invalid-formula' && d.effectId === effect.id);
-  const useCost = effect.cost ?? 1;
-  // A draw-down use spends what has built up (`spent`); any other use spends what is left (`current`).
-  const available = drawsDown ? pool?.spent : pool?.current;
-  const unaffordable = diceless && effect.resourceId !== undefined && (pool?.current === undefined || (available ?? 0) < useCost);
-  const poolName = pool?.label ?? effect.resourceId;
-  const alsoChange = effect.alsoChange ?? [];
-  const compound = alsoChange.length > 0 || drawsDown;
-  const alsoPool = (a: AlsoChangeValue) => pools.find((r) => r.resourceId === a.resourceId && r.content.contentId === a.resourceContent);
-  const alsoName = (a: AlsoChangeValue) => alsoPool(a)?.label ?? a.resourceId;
-  const alsoText = alsoChange
-    .filter((a) => a.amount != null)
-    // The sign follows what happens to the pool's number: a spend builds a counting-up pool up and uses a normal one up.
-    .map((a) => `, ${(a.change === 'spend') === (alsoPool(a)?.countsUp === true) ? '+' : '−'}${a.amount} ${alsoName(a)}`)
-    .join('');
-  /** The first reason the client can already see that one of the other pools will not take the change; the service stays the authority. */
-  const alsoReason = (): string | undefined => {
-    for (const a of alsoChange) {
-      if (a.amount == null) return 'Cost unavailable';
-      const p = alsoPool(a);
-      if (!p || p.current === undefined) return `${alsoName(a)} is not tracked on this sheet.`;
-      if (a.change !== 'spend') continue;
-      if (p.countsUp ? p.maximum !== undefined && p.spent + a.amount > p.maximum : p.current < a.amount) {
-        return p.countsUp ? `${p.label} is full (${p.spent} of ${p.maximum}).` : `Not enough ${p.label} left (${p.current}).`;
-      }
-    }
-    return undefined;
-  };
-  // A compound use is named by `rollId`; without it there is nothing to send (never a plain spend for such a roll).
-  const useReason = locked
-    ? (effect.unavailableReason ?? 'Not available right now')
-    : compound && !effect.rollId
-      ? "Can't be used here"
-      : costFailed
-      ? 'Cost unavailable'
-      : useCost < 1 && alsoChange.length === 0 // a compound use is worth it for its other changes
-        ? 'Costs nothing here'
-        : unaffordable
-          ? pool?.current === undefined
-            ? `${poolName} is not tracked on this sheet.`
-            : drawsDown
-              ? `Not enough ${poolName} built up (${pool.spent}).`
-              : `Not enough ${poolName} left (${pool.current}).`
-          : alsoReason();
+  // D73: the Use (its reason, its cost text and the action it sends) lives in actionRows.ts, shared with the quickbar.
+  const { cost: useCost, costFailed, poolName, alsoText, reason: useReason, action: useAction } = useOf(feature, effect, pool, pools);
   const rollDescribedBy = [locked ? reasonId : undefined, perUnit && !amountOk ? amountReasonId : undefined].filter(Boolean).join(' ') || undefined;
   return (
     <li className="feature">
@@ -836,12 +788,7 @@ function RollItem({
             disabled={useReason !== undefined}
             aria-describedby={useReason !== undefined ? reasonId : undefined}
             onClick={() => {
-              // D43 S8: a use that also changes another pool, or draws a pool down, is one compound change on the service.
-              if (compound) {
-                if (effect.rollId) act({ action: 'useAction', contentId: feature.content.contentId, rollId: effect.rollId });
-                return;
-              }
-              act({ action: 'spend', amount: useCost, contentId: effect.resourceContent ?? feature.content.contentId, resourceId: effect.resourceId! });
+              if (useAction) act(useAction);
             }}
           >
             Use {label}
@@ -1109,38 +1056,9 @@ export function RollResult({
   // full effect on the next sheet open, which the Settings hint says.
   if (!record) return <div role="region" aria-label="Last roll" aria-live={announceRollsOn() ? 'polite' : undefined} className="roll-result" />;
   const p = record.provenance;
-  // A roll may name a resource its action spends; spending is a separate, explicit button (never automatic). A shared
-  // resource (content v6) is found through the content that defines it.
-  // D43 S5: `record.spend` (set by the service for a roll effect that names a pool) says exactly which pool and how much.
-  const spend = record.spend;
-  const holder = spend?.contentId ?? p?.linkedResourceContent ?? p?.content?.contentId;
-  const linkedId = spend?.resourceId ?? p?.linkedResourceId;
-  const linked = linkedId
-    ? (resources.find((r) => r.resourceId === linkedId && r.content.contentId === holder) ?? (spend ? undefined : resources.find((r) => r.resourceId === linkedId)))
-    : undefined;
-  const effect = features.find((f) => f.content.revisionId === p?.content?.revisionId)?.effects.find((e) => e.id === p?.effectId);
-  const featureAttack = attacks.find((a) => a.source === 'feature' && a.item.revisionId === p?.content?.revisionId && a.effectId === p?.effectId);
-  // The service leaves `spend` out of a content roll effect's record exactly when its cost formula failed: never guess 1 then.
-  const costUnavailable = effect !== undefined && featureAttack === undefined && spend === undefined && linkedId !== undefined;
-  const cost = spend?.amount ?? featureAttack?.cost ?? effect?.cost ?? 1;
-  // D43 S8: a roll that draws a counting-up pool down, or also changes another pool, is spent as one `useAction` (a plain `spend`
-  // would build the charge up instead). The roll is named by the record's own `rollId`; a draw-down is bounded by what has built up.
-  const drawsDown = spend?.drawsDown === true || effect?.drawsDown === true;
-  const useRollId = p?.rollId ?? effect?.rollId;
-  const compound = drawsDown || (effect?.alsoChange?.length ?? 0) > 0;
-  // Never a plain `spend` for such a roll: without the roll's content, its id or its effect, the Spend is held with a reason.
-  // A content roll's record whose effect has left the sheet cannot say whether it was compound: hold it as well.
-  const cantUse = (compound && (useRollId === undefined || p?.content?.contentId === undefined)) || (effect === undefined && featureAttack === undefined && p?.content !== undefined && p.rollId !== undefined);
-  const spendAction = (amount: number, resourceContent: string, resourceId: string): PlayAction | undefined =>
-    cantUse
-      ? undefined
-      : compound
-        ? { action: 'useAction', contentId: p!.content!.contentId, rollId: useRollId!, ...(effect?.perUnit ? { amount } : {}) }
-        : { action: 'spend', amount, contentId: resourceContent, resourceId };
+  // D73: which pool a record spends, what it costs and the action that spends it are worked out in actionRows.ts.
+  const { linked, cost, costUnavailable, cantUse, variableCost, stockText, most, spendAction, autoAction } = recordSpend(record, resources, features, attacks);
   const cantUseText = "Can't be used here";
-  const stock = linked ? (drawsDown ? linked.spent : linked.current) : undefined;
-  const stockText = linked ? (drawsDown ? `${linked.spent} built up` : `${linked.current} left`) : '';
-  const most = linked?.current !== undefined && stock !== undefined ? Math.min(cost, stock) : 0;
   const chosen = Number(amount);
   const validChoice = amount !== '' && Number.isInteger(chosen) && chosen >= 1 && chosen <= most;
   return (
@@ -1173,20 +1091,19 @@ export function RollResult({
         {p?.sourceTitle ? ` · ${p.contentName ?? ''} (${p.sourceTitle}${p.page ? `, ${pageText(p.page)}` : ''})` : ''}
       </p>
       {costUnavailable && <p className="hint">Cost unavailable</p>}
-      {!costUnavailable && linked && linked.current !== undefined && !effect?.variableCost && (
+      {!costUnavailable && linked && linked.current !== undefined && !variableCost && (
         <button
           type="button"
-          disabled={spentAlready || cantUse || (cost < 1 && (effect?.alsoChange?.length ?? 0) === 0) /* a cost formula can evaluate to 0 at some levels */ || (stock ?? 0) < cost}
+          disabled={spentAlready || autoAction === undefined /* held, a cost of 0 (a cost formula can evaluate to 0 at some levels) or too little stock */}
           aria-describedby={cantUse ? cantUseId : undefined}
           onClick={() => {
-            const action = spendAction(cost, spend?.contentId ?? linked.content.contentId, spend?.resourceId ?? linked.resourceId);
-            if (action) spendOnce(action);
+            if (autoAction) spendOnce(autoAction);
           }}
         >
           Spend {cost} {linked.label} ({stockText})
         </button>
       )}
-      {!costUnavailable && linked && linked.current !== undefined && effect?.variableCost && (
+      {!costUnavailable && linked && linked.current !== undefined && variableCost && (
         <div className="inline-form">
           <label className="field">
             {linked.label} to spend (1 to {most})
