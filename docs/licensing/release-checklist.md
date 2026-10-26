@@ -120,3 +120,4 @@ Velopack (MIT, Caelan Sayler) builds `Setup.exe` and `Update.exe` in Rust, with 
    4. it creates a **draft** release with `Setup.exe`, the portable zip, the `.nupkg`, the Velopack feed files and notes from the changelog.
 4. Review the draft on GitHub (assets, notes, the unsigned note), then **Publish**. Nothing is public before that.
 5. After publishing: run the upgrade test and the install checks on the published `Setup.exe` (`docs/features/release-0.4.0-verification.md`).
+6. A GitHub ruleset protects `main` and `refs/tags/v*` from force-push and deletion (repository settings, the owner's; check with `gh api repos/firegiant9000/TomeStack/rulesets`).
