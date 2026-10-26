@@ -32,52 +32,73 @@ public sealed class CrashReporter(IErrorLog log, string logPath, string userProf
     private readonly Lock _gate = new();
     private readonly Dictionary<string, int> _renderFailures = [];
     private readonly HashSet<string> _closedHosts = [];
+    private readonly Dictionary<string, string> _lastKind = [];
     private int _dialogOpen;
 
-    /// <summary>Logs a fatal (<c>dispatcher</c> or <c>appdomain</c>) and shows the dialog unless one is already up.</summary>
-    public void ReportFatal(string kind, Exception exception)
+    /// <summary>
+    /// Logs a fatal (<c>dispatcher</c> or <c>appdomain</c>) and shows the dialog unless one is already up. Returns true when
+    /// this call owned the dialog (or none is shown, in smoke), so the caller may exit afterwards; false when a nested
+    /// failure only logged, because exiting would close the dialog the user has not read yet.
+    /// </summary>
+    public bool ReportFatal(string kind, Exception exception)
     {
         Record(kind, exception.ToString);
-        ShowDialog($"TomeStack hit an unexpected error and has to close. Details were saved to:\n{logPath}");
+        return ShowDialog($"TomeStack hit an unexpected error and has to close. Details were saved to:\n{logPath}");
     }
 
     /// <summary>Logs a failure that is not a crash (an unobserved task fault). No dialog.</summary>
     public void ReportNonFatal(string kind, Exception exception) => Record(kind, exception.ToString);
 
     /// <summary>
-    /// Logs a WebView2 process failure and says what the host window does. A renderer that exits or stops responding is
-    /// reloaded once per host; the second time, and any browser-process exit, is <see cref="ProcessFailureAction.Close"/>.
+    /// Logs a WebView2 process failure and says what the host window does. A renderer that exits is reloaded once per
+    /// host; the second exit is <see cref="ProcessFailureAction.Close"/>. A browser-process exit is Close for the main
+    /// host only (its shutdown closes the viewers). An unresponsive renderer is only logged (the first time until another
+    /// kind is reported), never reloaded: a busy page would lose unsaved work. After Close, a host only logs.
     /// The caller then posts <see cref="ShowUnrecoverableDialog"/> and closes the host, outside the WebView2 callback.
     /// </summary>
-    /// <param name="host">Identifies the window, so each viewer gets its own one reload.</param>
+    /// <param name="host">Identifies the window (<c>main</c> or <c>pdf-…</c>), so each gets its own one reload.</param>
     /// <param name="kind">The <c>CoreWebView2ProcessFailedKind</c> name.</param>
     public ProcessFailureAction ReportProcessFailure(string host, string kind, string reason, int exitCode)
     {
-        Record($"webview2-{kind}", () => string.Create(CultureInfo.InvariantCulture, $"WebView2 process failed: kind={kind} reason={reason} exitCode={exitCode}"));
-        var action = kind switch
-        {
-            "RenderProcessExited" or "RenderProcessUnresponsive" => NextRenderAction(host),
-            "BrowserProcessExited" => ProcessFailureAction.Close,
-            _ => ProcessFailureAction.LogOnly,
-        };
-        if (action != ProcessFailureAction.Close)
-            return action;
-        // Close is returned once per host: while its dialog is open further failures only log.
+        bool repeatUnresponsive;
         lock (_gate)
-            return _closedHosts.Add(host) ? ProcessFailureAction.Close : ProcessFailureAction.LogOnly;
+        {
+            repeatUnresponsive = kind == "RenderProcessUnresponsive" && _lastKind.GetValueOrDefault(host) == kind;
+            _lastKind[host] = kind;
+        }
+        if (!repeatUnresponsive)
+            Record($"webview2-{kind}", () => string.Create(CultureInfo.InvariantCulture, $"WebView2 process failed: kind={kind} reason={reason} exitCode={exitCode}"));
+        lock (_gate)
+        {
+            if (_closedHosts.Contains(host))
+                return ProcessFailureAction.LogOnly;
+            var action = kind switch
+            {
+                "RenderProcessExited" => NextRenderAction(host),
+                "BrowserProcessExited" when host == MainHost => ProcessFailureAction.Close,
+                _ => ProcessFailureAction.LogOnly,
+            };
+            if (action == ProcessFailureAction.Close)
+                _closedHosts.Add(host);
+            return action;
+        }
     }
 
-    /// <summary>The dialog for a window that could not be recovered (after <see cref="ProcessFailureAction.Close"/>).</summary>
-    public void ShowUnrecoverableDialog() =>
+    /// <summary>The host name of the main window; a browser-process exit closes the app only through it.</summary>
+    public const string MainHost = "main";
+
+    /// <summary>
+    /// The dialog for a window that could not be recovered (after <see cref="ProcessFailureAction.Close"/>). Returns true
+    /// when this call owned the dialog, so the host may close; false when another dialog was already open.
+    /// </summary>
+    public bool ShowUnrecoverableDialog() =>
         ShowDialog($"TomeStack's window stopped responding and could not be recovered. Details were saved to:\n{logPath}");
 
+    /// <remarks>Called under <c>_gate</c>.</remarks>
     private ProcessFailureAction NextRenderAction(string host)
     {
-        lock (_gate)
-        {
-            _renderFailures[host] = _renderFailures.GetValueOrDefault(host) + 1;
-            return _renderFailures[host] == 1 ? ProcessFailureAction.Reload : ProcessFailureAction.Close;
-        }
+        _renderFailures[host] = _renderFailures.GetValueOrDefault(host) + 1;
+        return _renderFailures[host] == 1 ? ProcessFailureAction.Reload : ProcessFailureAction.Close;
     }
 
     private void Record(string kind, Func<string> detail)
@@ -96,10 +117,13 @@ public sealed class CrashReporter(IErrorLog log, string logPath, string userProf
         userProfile.Length == 0 ? text : text.Replace(userProfile, ProfileToken, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>At most one dialog is open at a time; a failure while it is open only logs. Later failures can show again.</summary>
-    private void ShowDialog(string text)
+    /// <returns>True when this call owned the dialog, or when dialogs are suppressed (smoke); false when one was already open.</returns>
+    private bool ShowDialog(string text)
     {
-        if (showDialog is null || Interlocked.Exchange(ref _dialogOpen, 1) == 1)
-            return;
+        if (showDialog is null)
+            return true;
+        if (Interlocked.Exchange(ref _dialogOpen, 1) == 1)
+            return false;
         try
         {
             showDialog(text);
@@ -112,5 +136,6 @@ public sealed class CrashReporter(IErrorLog log, string logPath, string userProf
         {
             Interlocked.Exchange(ref _dialogOpen, 0);
         }
+        return true;
     }
 }

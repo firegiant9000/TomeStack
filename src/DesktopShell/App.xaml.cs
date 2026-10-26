@@ -63,9 +63,11 @@ public partial class App : Application
             options.Smoke ? null : text => MessageBox.Show(text, "TomeStack", MessageBoxButton.OK, MessageBoxImage.Error));
         DispatcherUnhandledException += (_, args) =>
         {
-            crashReporter.ReportFatal("dispatcher", args.Exception);
+            // A nested fault (raised while the first one's dialog is open) only logs: exiting would close that dialog unread.
+            var owner = crashReporter.ReportFatal("dispatcher", args.Exception);
             args.Handled = true;
-            Shutdown(1);
+            if (owner)
+                Shutdown(1);
         };
         // The runtime ends the process after this handler returns; it cannot be stopped.
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>

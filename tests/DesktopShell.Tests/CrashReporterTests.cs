@@ -103,14 +103,14 @@ public sealed class CrashReporterTests : IDisposable
 
         Assert.Equal(ProcessFailureAction.Reload, reporter.ReportProcessFailure("main", "RenderProcessExited", "Crashed", 5));
         Assert.Empty(_dialogs);
-        Assert.Equal(ProcessFailureAction.Close, reporter.ReportProcessFailure("main", "RenderProcessUnresponsive", "Unresponsive", 0));
+        Assert.Equal(ProcessFailureAction.Close, reporter.ReportProcessFailure("main", "RenderProcessExited", "Crashed", 6));
         Assert.Empty(_dialogs); // the host posts the dialog outside the WebView2 callback
-        reporter.ShowUnrecoverableDialog();
+        Assert.True(reporter.ShowUnrecoverableDialog());
 
         Assert.Equal($"TomeStack's window stopped responding and could not be recovered. Details were saved to:\n{_log.FilePath}", Assert.Single(_dialogs));
         var entries = Entries();
         Assert.EndsWith(" command=webview2-RenderProcessExited", entries[0], StringComparison.Ordinal);
-        Assert.EndsWith(" command=webview2-RenderProcessUnresponsive", entries[1], StringComparison.Ordinal);
+        Assert.EndsWith(" command=webview2-RenderProcessExited", entries[1], StringComparison.Ordinal);
         Assert.Contains("kind=RenderProcessExited reason=Crashed exitCode=5", File.ReadAllText(_log.FilePath), StringComparison.Ordinal);
     }
 
@@ -130,6 +130,58 @@ public sealed class CrashReporterTests : IDisposable
 
         Assert.Equal(ProcessFailureAction.Close, action);
         Assert.Single(Entries());
+    }
+
+    [Fact]
+    public void An_unresponsive_renderer_is_logged_once_and_never_reloaded_or_counted()
+    {
+        var reporter = Reporter();
+
+        Assert.Equal(ProcessFailureAction.LogOnly, reporter.ReportProcessFailure("main", "RenderProcessUnresponsive", "Unresponsive", 0));
+        Assert.Equal(ProcessFailureAction.LogOnly, reporter.ReportProcessFailure("main", "RenderProcessUnresponsive", "Unresponsive", 0));
+        Assert.EndsWith(" command=webview2-RenderProcessUnresponsive", Assert.Single(Entries()), StringComparison.Ordinal);
+
+        Assert.Equal(ProcessFailureAction.Reload, reporter.ReportProcessFailure("main", "RenderProcessExited", "Crashed", 1));
+        reporter.ReportProcessFailure("main", "RenderProcessUnresponsive", "Unresponsive", 0);
+        Assert.Equal(3, Entries().Length); // a different kind in between logs the next stall again
+    }
+
+    [Fact]
+    public void A_browser_exit_closes_only_through_the_main_host()
+    {
+        var reporter = Reporter();
+
+        Assert.Equal(ProcessFailureAction.LogOnly, reporter.ReportProcessFailure("pdf-1", "BrowserProcessExited", "Terminated", 1));
+        Assert.Equal(ProcessFailureAction.Close, reporter.ReportProcessFailure("main", "BrowserProcessExited", "Terminated", 1));
+        Assert.Equal(2, Entries().Length);
+    }
+
+    [Fact]
+    public void A_closed_host_never_reloads()
+    {
+        var reporter = Reporter();
+        reporter.ReportProcessFailure("main", "BrowserProcessExited", "Terminated", 1);
+
+        Assert.Equal(ProcessFailureAction.LogOnly, reporter.ReportProcessFailure("main", "RenderProcessExited", "Crashed", 1));
+    }
+
+    [Fact]
+    public void A_nested_fatal_or_dialog_is_not_the_owner_and_so_does_not_exit()
+    {
+        CrashReporter? reporter = null;
+        bool? nestedFatal = null, nestedViewer = null;
+        reporter = new CrashReporter(_log, _log.FilePath, Profile, _ =>
+        {
+            nestedFatal = reporter!.ReportFatal("dispatcher", Failure());
+            nestedViewer = reporter.ShowUnrecoverableDialog();
+        });
+
+        var owner = reporter.ReportFatal("dispatcher", Failure());
+
+        Assert.True(owner);
+        Assert.False(nestedFatal);
+        Assert.False(nestedViewer);
+        Assert.True(Reporter(withDialog: false).ReportFatal("dispatcher", Failure())); // smoke: nothing open, so it exits
     }
 
     [Fact]
