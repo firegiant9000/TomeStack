@@ -10,6 +10,7 @@
 
 ### Internal
 
+- **Effect vocabulary coverage (F6):** `docs/features/effect-vocabulary-coverage.md` maps each Avrae automation node and each Foundry dnd5e activity type to the content v11 effect that covers it, or says why nothing does, with the gap ids G1 to G12. Names only; no format is adopted. No change to the app.
 - **RulesCore boundary test:** `RulesCoreBoundaryTests` fails the build if `TomeStack.RulesCore` references persistence, UI, Windows or network assemblies, declares any project, package or framework reference, or targets Windows. No change to the app.
 - **Automated accessibility checks (SI S5):** component tests now run axe (`axe-core`, a development-only dependency, MPL-2.0) on the summary bar with a roll result, the import review's detail view with its confirm ticks, and the homebrew studio's effect editor open on a toggle. Colour contrast stays a manual check. No change to the app.
 
