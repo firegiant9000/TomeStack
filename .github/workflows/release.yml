@@ -155,7 +155,7 @@ jobs:
 
       - name: Release notes from the changelog
         shell: pwsh
-        run: scripts/release-notes.ps1 -Version '${{ steps.version.outputs.version }}' -Output "$env:RUNNER_TEMP/release-notes/release-notes.md"
+        run: scripts/release-notes.ps1 -Version '${{ steps.version.outputs.version }}' -Commit $env:GITHUB_SHA -Output "$env:RUNNER_TEMP/release-notes/release-notes.md"
 
       - name: Upload the release assets
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -180,10 +180,13 @@ jobs:
           name: release-smoke-result
           path: ${{ runner.temp }}/smoke-result.json
           if-no-files-found: warn
+          retention-days: 1
 
   # Build provenance for every file SHA256SUMS lists. Verify with:
   #   gh attestation verify TomeStack.App-win-Setup.exe --repo firegiant9000/TomeStack \
-  #     --signer-workflow firegiant9000/TomeStack/.github/workflows/release.yml --source-ref refs/tags/vX.Y.Z
+  #     --signer-workflow firegiant9000/TomeStack/.github/workflows/release.yml --source-ref refs/tags/vX.Y.Z \
+  #     --source-digest <full SHA of the tagged commit>
+  # GITHUB_SHA (passed to release-notes.ps1) is that commit on a tag push, and the attestation records the same SHA.
   attest:
     needs: build
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')

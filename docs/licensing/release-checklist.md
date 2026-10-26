@@ -118,7 +118,7 @@ Velopack (MIT, Caelan Sayler) builds `Setup.exe` and `Update.exe` in Rust, with 
    2. the self-contained publish and `vpk pack`;
    3. an install, smoke and uninstall on the runner;
    4. it writes `SHA256SUMS` over those files, attests each file it lists (build provenance) and creates a **draft** release with `Setup.exe`, the portable zip, the `.nupkg`, the Velopack feed files, `SHA256SUMS` and notes from the changelog.
-4. Review the draft on GitHub (assets, notes, the unsigned note), then **Publish**. The release page is not public before that, but the workflow run's `release-assets` artifact (the same files) can be downloaded from the public run page for one day.
+4. Review the draft on GitHub (assets, notes, the unsigned note), then **Publish**. The release page is not public before that, but the workflow run's artifacts (`release-assets`, the same files; `release-notes`; `release-smoke-result`) can be downloaded from the public run page for one day.
 5. After publishing: run the upgrade test and the install checks on the published `Setup.exe` (`docs/features/release-0.4.0-verification.md`).
 
 ### Verify a release
@@ -141,4 +141,4 @@ with the release's tag and the full SHA of the commit it points to (`git rev-par
 
 What an attestation does not prove: it says which workflow file at which tag built a file, not who published it. It is not a code signature, and the build is not bit-reproducible. Anyone who can push a `v*` tag can run the release workflow as it stands at that tag, so the attestation is only as strong as the rule on who may create `v*` tags (the tag ruleset); `--source-digest <commit>` pins the check to one commit.
 
-**Rejecting a draft:** the attestation is made before the draft is reviewed, so a rejected build stays attested for its tag. Never reuse a version tag: delete the draft, delete the run's artifacts, and release the fix as the next patch version with a new tag. The command in the release notes checks only the tag, so it is only sound while every tag names exactly one build.
+**Rejecting a draft:** the attestation is made before the draft is reviewed, so a rejected build stays attested for its tag. Never reuse a version tag: delete the draft, delete the run's artifacts, and release the fix as the next patch version with a new tag. The same applies when `publish` fails and cannot be re-run after the artifacts expire (one day): release the next patch version rather than uploading files by hand, which would skip the `SHA256SUMS` checks.

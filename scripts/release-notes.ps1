@@ -5,14 +5,17 @@
   Takes the "## <version> ..." section of the changelog, up to the next "## " heading, and adds the download and
   verification lines a release page needs. Fails if the section is missing or empty, so a tag cannot publish notes from
   the wrong version.
+  -Commit is the full SHA of the commit the tag points to; the verify command in the notes pins it (--source-digest).
 .EXAMPLE
-  scripts/release-notes.ps1 -Version 0.4.0 -Output notes.md
+  scripts/release-notes.ps1 -Version 0.4.0 -Commit (git rev-parse 'v0.4.0^{commit}') -Output notes.md
 #>
 param(
   [Parameter(Mandatory)] [string] $Version,
+  [Parameter(Mandatory)] [string] $Commit,
   [Parameter(Mandatory)] [string] $Output
 )
 $ErrorActionPreference = 'Stop'
+if ($Commit -notmatch '^[0-9a-f]{40}$') { throw "Commit '$Commit' must be a full 40-character commit SHA" }
 $root = Split-Path $PSScriptRoot -Parent
 $lines = Get-Content (Join-Path $root 'docs\CHANGELOG.md') -Encoding UTF8
 $start = -1
@@ -35,14 +38,14 @@ $body
 - **TomeStack.App-win-Setup.exe**: the installer (per-user, no admin rights, Windows 10 and 11, 64-bit). Windows 10 is best-effort.
 - **TomeStack.App-win-Portable.zip**: the same build without installing.
 - The ``.nupkg`` and ``releases.win.json`` files are Velopack's package and feed. You don't need them; TomeStack never downloads updates by itself.
-- **SHA256SUMS**: the SHA-256 hash of every file listed above (not GitHub's automatic "Source code" archives).
+- **SHA256SUMS**: the SHA-256 hash of each file above. It does not list itself or GitHub's automatic "Source code" archives.
 
 ## Verify the download
 
 The release workflow attests every file listed in ``SHA256SUMS``: GitHub records which workflow, tag and commit built it. With the [GitHub CLI](https://cli.github.com/), run this in the folder you downloaded to:
 
 ``````
-gh attestation verify TomeStack.App-win-Setup.exe --repo firegiant9000/TomeStack --signer-workflow firegiant9000/TomeStack/.github/workflows/release.yml --source-ref refs/tags/v$Version
+gh attestation verify TomeStack.App-win-Setup.exe --repo firegiant9000/TomeStack --signer-workflow firegiant9000/TomeStack/.github/workflows/release.yml --source-ref refs/tags/v$Version --source-digest $Commit
 ``````
 
 Without the GitHub CLI, compare ``(Get-FileHash TomeStack.App-win-Setup.exe).Hash`` in PowerShell with the installer's line in ``SHA256SUMS`` (the case of the letters doesn't matter). That check only shows the file arrived intact: ``SHA256SUMS`` comes from this same page and is not attested itself, so the ``gh attestation verify`` command is the one that shows where the file was built (it needs a GitHub CLI recent enough to have ``--source-ref``, signed in with ``gh auth login``). An attestation is not a code signature, so Windows still shows the SmartScreen prompt.
