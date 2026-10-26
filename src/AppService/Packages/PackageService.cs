@@ -443,7 +443,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                 continue;
             }
             if (source.ImportDerived == true && local?.ImportDerived != true)
-                warnings.Add(new("package.source-import-derived", $"'{source.Title}' holds material imported from a PDF on the sender's machine. It stays marked that way here and is never shared."));
+                warnings.Add(new("package.source-import-derived", $"'{source.Title}' holds imported material (from a PDF or a Markdown file) on the sender's machine. It stays marked that way here and is never shared."));
             var changes = local is null ? [] : SourceChanges(local, source);
             var action = local is null ? PackageItemAction.Add
                 : changes.Count == 0 ? PackageItemAction.Unchanged

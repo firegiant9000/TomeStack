@@ -99,7 +99,7 @@ public sealed partial class TomeStackApp
             return _store.FindSource(source.Id)!;
         }
         if (source.ImportDerived == true)
-            throw new AppValidationException([new("source.import-derived", $"'{source.Title}' holds material imported from a PDF, so it can never be shared. Removing the PDF does not change that. Put your own homebrew in a new source.")]);
+            throw new AppValidationException([new("source.import-derived", $"'{source.Title}' holds imported material (from a PDF or a Markdown file), so it can never be shared. Removing the import does not change that. Put your own homebrew in a new source.")]);
         if (source.Origin == SourceOrigin.Received)
             throw new AppValidationException([new("source.received", $"'{source.Title}' came from someone else's package, so you cannot mark it as your own work.")]);
         if (!request.ConfirmOwnWork)

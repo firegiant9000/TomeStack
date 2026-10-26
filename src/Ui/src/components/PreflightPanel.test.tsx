@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // Import Lab L5: every share export dialog shows what is included, left out (in words) and blocking before Save, and Save stays
 // off while anything blocks. The client is mocked; all names are invented.
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { client } from '../api/client';
@@ -235,8 +235,9 @@ it('a campaign-pack preview that answers late does not overwrite the one asked a
   await user.click(screen.getByRole('button', { name: 'Save campaign' }));
   await within(share).findByText(/New-pack\.zip/);
 
-  answerFirst(preview('Old-pack.zip')); // the pre-save answer arrives last
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await act(async () => {
+    answerFirst(preview('Old-pack.zip')); // the pre-save answer arrives last
+  });
   expect(within(screen.getByRole('region', { name: 'Share Lantern Table' })).queryByText(/Old-pack\.zip/)).toBeNull();
   expect(within(screen.getByRole('region', { name: 'Share Lantern Table' })).getByText(/New-pack\.zip/)).toBeTruthy();
 });

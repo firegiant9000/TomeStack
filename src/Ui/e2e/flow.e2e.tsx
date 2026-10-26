@@ -716,7 +716,7 @@ it('marks a source as shareable after confirming it is your own work, saves a so
   expect(within(mine).getByText('Not shared.')).toBeTruthy();
   // A source a PDF was attached to is import-derived for good: it offers no way to share it.
   const theirs = screen.getByRole('listitem', { name: 'E2E Scanned Notes' });
-  expect(within(theirs).getByText(/Holds material imported from a PDF: never shared/)).toBeTruthy();
+  expect(within(theirs).getByText(/Holds imported material \(from a PDF or a Markdown file\): never shared/)).toBeTruthy();
   expect(within(theirs).queryByRole('button', { name: 'Mark as shareable…' })).toBeNull();
 
   // Marking needs the author's confirmation.
