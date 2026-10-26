@@ -18,8 +18,9 @@ public sealed class PdfViewerWindow : Window
 {
     private readonly List<Stream> _served = [];
 
-    public PdfViewerWindow(CoreWebView2Environment environment, string path, int page, string title, Action<string> blocked, Action<bool>? navigated = null)
+    public PdfViewerWindow(CoreWebView2Environment environment, string path, int page, string title, Action<string> blocked, CrashReporter crashReporter, Action<bool>? navigated = null)
     {
+        var host = $"pdf-{Guid.NewGuid():N}";
         Title = title;
         Width = 900;
         Height = 1000;
@@ -68,6 +69,18 @@ public sealed class PdfViewerWindow : Window
                 e.Response = Serve(core.Environment, path);
             };
             core.NavigationCompleted += (_, e) => navigated?.Invoke(e.IsSuccess);
+            core.ProcessFailed += (_, e) =>
+            {
+                switch (crashReporter.ReportProcessFailure(host, e.ProcessFailedKind.ToString(), e.Reason.ToString(), e.ExitCode))
+                {
+                    case ProcessFailureAction.Reload:
+                        core.Reload();
+                        break;
+                    case ProcessFailureAction.Close:
+                        Close();
+                        break;
+                }
+            };
             core.Navigate(PdfViewerRequests.Url(page));
         };
     }

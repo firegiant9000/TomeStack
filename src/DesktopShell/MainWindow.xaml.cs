@@ -22,6 +22,7 @@ public partial class MainWindow : Window
     private readonly TomeStackApp _tomeStack;
     private readonly CommandDispatcher _dispatcher;
     private readonly ShellOptions _options;
+    private readonly CrashReporter _crashReporter;
     private readonly SemaphoreSlim _dispatchGate = new(1, 1);
     private readonly Stopwatch _sinceStart = Stopwatch.StartNew();
     private readonly List<string> _smokeCommands = [];
@@ -30,9 +31,10 @@ public partial class MainWindow : Window
     private const string AdditionalBrowserArguments = "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS";
     private bool _browserArgumentsSet;
 
-    public MainWindow(TomeStackApp tomeStack, ShellOptions options)
+    public MainWindow(TomeStackApp tomeStack, ShellOptions options, CrashReporter crashReporter)
     {
         _tomeStack = tomeStack;
+        _crashReporter = crashReporter;
         _dispatcher = new CommandDispatcher(tomeStack, host: new ShellHostServices(this));
         _options = options;
         _charactersAtStart = options.Smoke ? tomeStack.ListCharacters().Count : 0;
@@ -129,6 +131,18 @@ public partial class MainWindow : Window
                 FinishSmoke(false, $"navigation-failed:{e.WebErrorStatus}");
         };
         core.WebMessageReceived += OnWebMessageReceived;
+        core.ProcessFailed += (_, e) =>
+        {
+            switch (_crashReporter.ReportProcessFailure("main", e.ProcessFailedKind.ToString(), e.Reason.ToString(), e.ExitCode))
+            {
+                case ProcessFailureAction.Reload:
+                    core.Reload();
+                    break;
+                case ProcessFailureAction.Close:
+                    Application.Current.Shutdown(1);
+                    break;
+            }
+        };
         core.Navigate($"{AppOrigin}index.html");
     }
 
@@ -202,6 +216,16 @@ public partial class MainWindow : Window
         _smokeCommands.Add(req.RootElement.GetProperty("command").GetString() ?? "");
         if (!_smokeFinished && _smokeCommands.Contains("app.info") && _smokeCommands.Contains("character.list"))
         {
+            // Test-only (smoke): the window is ready, so fault the UI thread and let the crash handler end the process.
+            if (_options.SimulateUnhandledException)
+            {
+                if (!_simulatedCrash)
+                {
+                    _simulatedCrash = true;
+                    Dispatcher.BeginInvoke(new Action(() => throw new InvalidOperationException("Simulated by --simulate-unhandled-exception.")));
+                }
+                return;
+            }
             try
             {
                 var (ok, detail) = RunSmokeDataCheck();
@@ -345,6 +369,7 @@ public partial class MainWindow : Window
     }
 
     private bool _awaitingViewer;
+    private bool _simulatedCrash;
 
     /// <summary>ADR-005, SPEC S-04: opens a PDF at a page in its own offline viewer window. Called on the UI thread.</summary>
     public bool OpenPdfViewer(string path, int page, string title)
@@ -361,7 +386,7 @@ public partial class MainWindow : Window
                 FinishSmoke(ok, ok ? "ok" : "pdf-viewer-failed");
             }
             : null;
-        var viewer = new PdfViewerWindow(environment, path, page, title, uri => _blockedRequests.Add(uri), navigated) { Owner = this };
+        var viewer = new PdfViewerWindow(environment, path, page, title, uri => _blockedRequests.Add(uri), _crashReporter, navigated) { Owner = this };
         viewer.Show();
         return true;
     }

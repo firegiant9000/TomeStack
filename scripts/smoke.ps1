@@ -5,7 +5,9 @@
   The smoke loads the bundled UI over the WebView2 virtual host, round-trips app.info and character.list over the
   message bridge, then creates a fixture character, exports it and previews the package (M0 exit gate). Since M2
   item 6 it also attaches a generated PDF to a throwaway homebrew source and opens page 2 in the offline PDF viewer
-  window (ADR-005). It fails if the UI or the viewer attempted any network request. Exit code: 0 pass, 1 fail.
+  window (ADR-005). It fails if the UI or the viewer attempted any network request. A plain passing run then starts a
+  second process with --simulate-unhandled-exception on a fresh data folder and checks that it exits non-zero and wrote
+  a dispatcher entry to errors.log (crashCheck in the report). Exit code: 0 pass, 1 fail.
 .EXAMPLE
   scripts/smoke.ps1 -Exe src/DesktopShell/bin/Release/net10.0-windows/TomeStack.exe
 .EXAMPLE
@@ -60,5 +62,34 @@ if ($ExpectCharactersAtStart -ge 0 -and $result.charactersAtStart -ne $ExpectCha
   $problems += "charactersAtStart $($result.charactersAtStart) (expected $ExpectCharactersAtStart)"
 }
 if ($problems.Count -gt 0) { Write-Output "FAIL: $($problems -join '; ')"; exit 1 }
+
+# Crash handler: a forced unhandled exception on the UI thread must exit non-zero and leave a dispatcher entry in
+# errors.log. Only on the plain passing run, so offline-check.ps1's runs (extra arguments, other expected details) are unchanged.
+if ($ExpectDetail -eq 'ok' -and $ExtraArguments.Count -eq 0) {
+  $smokeRoot = Join-Path ([IO.Path]::GetTempPath()) 'tomestack-smoke'
+  New-Item -ItemType Directory -Path $smokeRoot -Force | Out-Null
+  $crashDir = Join-Path $smokeRoot "crash-$([guid]::NewGuid().ToString('N'))"
+  $crashReport = Join-Path $smokeRoot "crash-$([guid]::NewGuid().ToString('N')).json"
+  $crashArguments = @('--smoke', '--simulate-unhandled-exception', '--data-dir', $crashDir, '--smoke-report', $crashReport)
+  $crash = Start-Process -FilePath $Exe -ArgumentList $crashArguments -PassThru
+  if (-not $crash.WaitForExit($TimeoutSeconds * 1000)) {
+    $crash.Kill()
+    Write-Output "FAIL: crash handler: no exit within $TimeoutSeconds s"
+    exit 1
+  }
+  $crashLog = Join-Path $crashDir 'logs\errors.log'
+  $logged = (Test-Path $crashLog) -and ((Get-Content $crashLog -Raw) -match 'command=dispatcher')
+  $crashCheck = @{ exitCode = $crash.ExitCode; logged = [bool]$logged }
+  $result | Add-Member -NotePropertyName crashCheck -NotePropertyValue $crashCheck -Force
+  $result | ConvertTo-Json -Depth 10 | Set-Content -Path $Report
+  Write-Output "crashCheck: $($crashCheck | ConvertTo-Json -Compress)"
+  $full = [IO.Path]::GetFullPath($crashDir)
+  if ($full.StartsWith($smokeRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+    Remove-Item -LiteralPath $full -Recurse -Force -ErrorAction SilentlyContinue
+  }
+  Remove-Item $crashReport -ErrorAction SilentlyContinue
+  if ($crash.ExitCode -eq 0) { Write-Output 'FAIL: crash handler: exit code 0 after a forced unhandled exception'; exit 1 }
+  if (-not $logged) { Write-Output 'FAIL: crash handler: no command=dispatcher entry in errors.log'; exit 1 }
+}
 Write-Output 'PASS'
 exit 0
