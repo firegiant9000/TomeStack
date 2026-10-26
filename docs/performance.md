@@ -1,6 +1,6 @@
 # Performance baseline (roadmap T4)
 
-ROADMAP "Revision 2026-09-29", T4 · status: **measured 2026-10-01; the slice 7 play-mechanics cases measured 2026-10-24; first paint owed (owner, by hand).** This page measures; it optimises nothing. A surprising number becomes a follow-up item below, with its measurement.
+ROADMAP "Revision 2026-09-29", T4 · status: **measured 2026-10-01; the slice 7 play-mechanics cases measured 2026-10-24; the Import Lab cases measured 2026-10-25; first paint owed (owner, by hand).** This page measures; it optimises nothing. A surprising number becomes a follow-up item below, with its measurement.
 
 - Code: [`benchmarks/TomeStack.Benchmarks/`](../benchmarks/TomeStack.Benchmarks/) (BenchmarkDotNet 0.15.8). It is in `TomeStack.slnx`, so it builds under the 0-warning rule. It is not a test project: `dotnet test` and CI never run it.
 - Raw results (BenchmarkDotNet's GitHub-markdown and CSV exports, two runs): [`performance/raw/2026-10-01/`](performance/raw/2026-10-01/). The exports name no path, user or machine; the logs, which do, are not committed.
@@ -53,7 +53,7 @@ Use `--filter "*Calculation*"` and so on for one case, and `--job Dry` to check 
 
 ## Results
 
-Time is the mean; P95 and allocations are per operation. "Spread" compares the two means.
+Time is the mean; P95 and allocations are per operation. "Spread" compares the two means. **Units:** BenchmarkDotNet's `KB` and `MB` are 1,024-based. Every "KB" and "MB" on this page is therefore a KiB or a MiB (the raw `KB` column divided by 1,024 gives the "MB" figure), and a delta between rows is taken in the same unit.
 
 | Case | Run 1 mean | Run 1 P95 | Run 2 mean | Run 2 P95 | Spread | Allocated |
 |---|---:|---:|---:|---:|---:|---:|
@@ -89,7 +89,7 @@ Time is the mean; P95 and allocations are per operation. "Spread" compares the t
 
 ## Import Lab (before)
 
-`LabBenchmarks` (Import Lab L3, design 10), measured 2026-10-25 on `import-lab` before the fixes below. The library is the bundled SRD plus N original published features of one homebrew source (N = 250, 500, 1000), and a job with N pending candidates. `Coverage` is `content.coverage` for every source (the real handler path: one store read, grouped in memory). `CandidatesPage` is `import.candidates`, page 3 of 50. `DetectWithLibrary` is what detection does with the library (one name set over the published revisions, then 50 invented pages of spell-shaped blocks; the benchmark repeats those lines, as detection's own method is private). `EditCandidate` is `import.candidate.edit` of a candidate with 20 unresolved references, none installed; `EditCandidateOneReference` is the same with one. Two runs; raw results: [`performance/raw/2026-10-25/before-run-1/`](performance/raw/2026-10-25/before-run-1/) and [`before-run-2/`](performance/raw/2026-10-25/before-run-2/). Allocations were the same in both runs to within 0.1 %, so one column is shown; times are the two runs' means.
+`LabBenchmarks` (Import Lab L3, design 10), measured 2026-10-25 on `import-lab` before the fixes below. The library is the bundled SRD plus N original published features of one homebrew source (N = 250, 500, 1000), and a job with N pending candidates. `Coverage` is `content.coverage` for every source (the real handler path: one store read, grouped in memory). `CandidatesPage` is `import.candidates`, page 3 of 50. `DetectWithLibrary` is a baseline for the library's share of detection, not detection itself: it reads the revisions once to build the name set of published names, then runs the detector over 50 invented pages of spell-shaped blocks (the benchmark repeats those lines, as detection's own method, `DetectOnce`, is private). It leaves out what `DetectOnce` also does: the second library read behind the installed-feature lookup (`InstalledFeaturesByName`), the stored-page read, and the reads of reviewed candidates. `EditCandidate` is `import.candidate.edit` of a candidate with 20 unresolved references, none installed; `EditCandidateOneReference` is the same with one. Two runs; raw results: [`performance/raw/2026-10-25/before-run-1/`](performance/raw/2026-10-25/before-run-1/) and [`before-run-2/`](performance/raw/2026-10-25/before-run-2/). Allocations were the same in both runs to within 0.1 %, so one column is shown; times are the two runs' means.
 
 | Benchmark | N | Mean (run 1 / run 2) | Allocated |
 |---|---:|---:|---:|
@@ -110,11 +110,13 @@ Time is the mean; P95 and allocations are per operation. "Spread" compares the t
 | EditCandidateOneReference | 1000 | 52.6 ms / 53.2 ms | 29.9 MB |
 
 What the numbers say:
-- `Coverage` allocates about 17 KB per added feature (4.3 MB from 250 to 500, 8.7 MB from 500 to 1000) on top of about 14.6 MB for the SRD: linear. At 1000 it takes 53 to 57 ms against a target of 300 ms, so **no database change (DB v12) is proposed** on this evidence.
+- `Coverage` allocates about 17 KiB per added feature (4.2 MiB from 250 to 500, 8.5 MiB from 500 to 1000; from the raw `KB` columns, 4,275 KB and 8,712 KB over 250 and 500 features) on top of about 14.6 MiB for the SRD: linear. At 1000 it takes 53 to 57 ms against a target of 300 ms, so **no database change (DB v12) is proposed** on this evidence.
 - `EditCandidate` read the library once per reference: with 20 references it allocated about 20 times the one-reference cost at every N (the cost per read is linear in N).
 - `CandidatesPage` took well under its 50 ms target, but its allocations grew with N (304 KB, 373 KB, 510 KB): the page turn listed the id, page and name of every candidate to order them.
 
 ## Import Lab (after)
+
+The Lab's tasks that have numbers: Task 6 (the tables in this section), Task 11 (Duplicates) and Task 12 (Markdown extractor), both below. Task 7 (the indexed-query change, A4, a database v12) was declined by the owner on 2026-10-25, so it has no after numbers and the database is unchanged.
 
 The same benchmarks after two in-memory fixes, no migration: the edit path builds one `InstalledNames` set per edit (`IsInstalledName` is gone), and a candidate page turn reads the pages its window falls on instead of every candidate's id and name (`SqliteStore.QueryImportCandidates`: two scalar page reads and two counts, then only the rows of those pages). One run; raw results: [`performance/raw/2026-10-25/after/`](performance/raw/2026-10-25/after/). `Coverage` and `DetectWithLibrary` are unchanged code (their rows are a second measurement of the same code).
 
@@ -125,7 +127,7 @@ The same benchmarks after two in-memory fixes, no migration: the edit path build
 | Coverage | 1000 | 54.7 ms | 31.6 MB | 300 ms; allocations linear | yes |
 | CandidatesPage | 250 | 0.37 ms | 257 KB | | |
 | CandidatesPage | 500 | 0.43 ms | 257 KB | | |
-| CandidatesPage | 1000 | 0.49 ms | 257 KB | 50 ms; allocations independent of N | yes |
+| CandidatesPage | 1000 | 0.49 ms | 257 KB | 50 ms; allocations independent of N when candidates spread across pages (see below) | yes |
 | DetectWithLibrary | 250 | 25.7 ms | 18.3 MB | | |
 | DetectWithLibrary | 500 | 36.0 ms | 22.3 MB | | |
 | DetectWithLibrary | 1000 | 51.8 ms | 30.1 MB | allocations linear in N | yes |
@@ -137,6 +139,8 @@ The same benchmarks after two in-memory fixes, no migration: the edit path build
 | EditCandidateOneReference | 1000 | 45.3 ms | 29.4 MB | | |
 
 `EditCandidate` at 1000 went from 598 MB to 29.4 MB and from about 1.0 s to 45 ms; with 20 references it now allocates 31 KB more than with one (0.1 %). `MarkdownExtract` is measured below.
+
+**Where "independent of N" holds.** A `CandidatesPage` turn reads and deserialises the rows of the 50 it returns, and lists the id, page and name of every row on the pages the window spans (to order them by name within a page). Its allocations therefore do not depend on N when the candidates spread across pages, as in this fixture (4 per page, so the window spans 13 or 14 pages). They are O(rows on the pages the window spans), and the two boundary pages can hold more rows than the window takes from them: a job whose candidates sit on a few pages (a PDF with one dense page, or a Markdown job with long pages) pays for every row on those pages, up to the job's size in the worst case. The benchmark does not measure that case.
 
 ### Duplicates (L6)
 

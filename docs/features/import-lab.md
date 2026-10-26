@@ -169,7 +169,7 @@ Must-have editor behavior:
 - **AT-08 Round trip:** import, publish and export round-trips (FsCheck property).
 - **AT-09 Regressions:** all SRD fixtures, migrations, packages, calculation traces and the desktop smoke still pass.
 - **AT-10 Duplicates:** two near-identical entries are listed for review and are never merged.
-- **AT-11 Benchmark:** the library-scale pass is measured at 1000 features and 1000 candidates, and the baseline is recorded before any budget is set.
+- **AT-11 Benchmark:** the library-scale pass is measured at 1000 features and 1000 candidates, and the baseline is recorded before any budget is set. **Measured (2026-10-25):** the before and after tables, the duplicates and Markdown cases, and where the candidate page-turn bound holds are in [performance.md](../performance.md) "Import Lab (before)", "(after)", "Duplicates (L6)" and "Markdown extractor (L7)". No database change (A4, the DB v12 proposal, was declined by the owner on 2026-10-25).
 
 Scenarios about forms, counters, hit-point payment, companions, crafted items and choice replacement belong to the play-mechanics work (D43), not the Lab.
 
@@ -181,7 +181,7 @@ Scenarios about forms, counters, hit-point payment, companions, crafted items an
 - Source files, raw extracts and personal notes never appear in telemetry, error text, fixtures or issue attachments.
 - Diagnostics carry counts, error codes, a file fingerprint, a schema version and synthetic reproduction steps. A raw excerpt export is opt-in and labelled sensitive.
 - Progress is resumable and cancellable. Staging is written in transactions. Unchanged pages are not read again.
-- Benchmarks: 100, 500 and 1000 candidate inventories, and a full personal restore. Set numeric budgets after recording a baseline.
+- Benchmarks: 100, 500 and 1000 candidate inventories, and a full personal restore. Set numeric budgets after recording a baseline (recorded in [performance.md](../performance.md)).
 - Keyboard-only use, screen-reader announcements, table headings, signals that do not rely on color.
 
 ## Open questions
