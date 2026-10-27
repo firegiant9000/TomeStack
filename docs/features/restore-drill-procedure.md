@@ -6,6 +6,15 @@ The drill proves that a real library survives a move to another machine. It also
 
 **The record is public**, so it holds only counts, byte totals, SHA-256 digests, times and error codes. It holds no titles, names, text, file names or paths. The tool below prints nothing else.
 
+## Moving your library to a new version or a new PC
+
+This part is for players; the drill below is the owner's check of it. Every path here was checked on the published 0.4.0, 0.5.0, 0.6.0 and 0.7.0 against the current build (`OldReleaseImportTests`, with the packages and data folders those releases made under `tests/RulesFixtures/upgrade/`).
+
+- **A newer version on the same PC:** run the newer `Setup.exe`. Your library stays in `%LOCALAPPDATA%\TomeStack` and the new version opens it as it is. You do not need to export or import anything. Characters, homebrew, drafts, campaigns, gap notes and PDF copies are kept, and a character pinned to an older revision is still offered its update (Updates available) and changes only when you apply it. The first start copies the database once (`tomestack.db.app-<old>-to-<new>.bak`).
+- **A new PC:** on the old PC, open **Backups** and choose **Back up everything…**. Copy the file to the new PC (a USB stick, or a sync folder for the file only). On the new PC install TomeStack, open **Backups**, choose **Choose a full backup…**, check the preview and choose **Restore**. A full backup is the only package that carries your PDF copies, drafts and gap notes; a PDF you linked rather than copied stays where it is, so copy it across and attach it again. A backup made by an older version restores into a newer one.
+- **One character, a homebrew source or a campaign:** export it from its own screen and import the file. A character package carries the revisions the character uses, not its gap notes, and offers no update for content you never had; import the source pack too to see later revisions.
+- **Going back to an older version:** an older version refuses a data folder or a package it cannot read and says which version made it, for example "Update TomeStack to 0.8.0 or newer to import it." Nothing is changed. To return to the version you came from, close TomeStack, move `tomestack.db` (and any `tomestack.db-wal` and `tomestack.db-shm` beside it) out of the data folder, and rename the `tomestack.db.app-<old>-to-<new>.bak` copy to `tomestack.db`. Work done since the upgrade is not in that copy; back up everything first if you may want it again in the newer version.
+
 ## The tool: `--drill-report` and `--drill-compare`
 
 A mode of the dev-only DevHost (`src/DevHost`). The shipped app has no such mode and still opens no socket (ADR-006); the counting code is `AppService.Diagnostics.RestoreDrill` (`RestoreDrillTests`).

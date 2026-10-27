@@ -86,6 +86,9 @@ internal static class AppVersionStamp
         }
     }
 
+    /// <summary>The version that last opened <paramref name="dataDirectory"/> (major.minor.patch), or null when there is no readable stamp.</summary>
+    public static string? Stamped(string dataDirectory) => Read(dataDirectory) is { } version ? Format(version) : null;
+
     private static Version? Read(string dataDirectory)
     {
         try

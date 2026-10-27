@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Added
+- **Moving your library to a new version or a new PC:** a short guide in [restore-drill-procedure.md](features/restore-drill-procedure.md#moving-your-library-to-a-new-version-or-a-new-pc) (an upgrade keeps the library in place; a full backup moves it; how to go back with the one-time database copy), linked from the README. No change to the app.
+
+### Fixed
+- **A refusal for a newer file names the versions:** when a package's format or an entry's schema is newer than this build, or a data folder was last opened by a newer build, the message now says which version made it and which this is, and what to install: "It was made by TomeStack 0.8.0; this is TomeStack 0.7.1. Update TomeStack to 0.8.0 or newer to import it." (a data folder: "TomeStack 0.8.0 last opened it; … to open it."). The version comes from the package's `appVersion` or the folder's version stamp, and is named only when it is a plain version newer than this build; otherwise the message is the older "Update TomeStack to import it.". Codes (`package.unsupported-format`, `package.schema-unsupported`) and behaviour are unchanged: nothing is imported or changed. The folder's stamp is written by 0.6.0 and later, so a folder from 0.5.0 or older still gets the generic advice; 0.5.0 and older themselves keep their old wording. No package format change.
+
+### Internal
+- **Old-release fixtures:** `tests/RulesFixtures/upgrade/v0.4.0` to `v0.7.0` hold a character backup and share, a source pack, a campaign pack, a full backup and a data folder, each made by that published release with original content; `OldReleaseImportTests` imports, restores and opens each with the current build and checks the sheets, campaign, gap notes, PDF copy, draft and the pinned-revision update offer. No change to the app.
+
 ## 0.7.1 (crash reporting and the repo guard)
 
 A patch on 0.7.0: if TomeStack crashes it now leaves a record and tells you where it is. Nothing else in the app changes.

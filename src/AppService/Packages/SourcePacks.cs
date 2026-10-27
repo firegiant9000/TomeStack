@@ -286,7 +286,12 @@ public sealed partial class PackageService
             }
             if (format.GetString() != PackageManifest.FormatName || number is < 1 or > PackageManifest.CurrentFormatVersion)
             {
-                errors.Add(new("package.unsupported-format", $"Package format '{format.GetString()}' v{number} is not supported by this version (v{PackageManifest.CurrentFormatVersion}). Update TomeStack to import it."));
+                // Only a TomeStack package of a later format can name the version that made it.
+                var madeBy = format.GetString() == PackageManifest.FormatName && number > PackageManifest.CurrentFormatVersion
+                    && root.TryGetProperty("appVersion", out var appVersion) && appVersion.ValueKind == JsonValueKind.String
+                    ? appVersion.GetString()
+                    : null;
+                errors.Add(new("package.unsupported-format", $"Package format '{format.GetString()}' v{number} is not supported by this version (v{PackageManifest.CurrentFormatVersion}). {NewerVersionAdvice.ForPackage(madeBy)}"));
                 return false;
             }
             return true;

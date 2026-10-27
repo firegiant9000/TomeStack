@@ -802,7 +802,8 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         }
         if (manifest.Format != PackageManifest.FormatName || manifest.FormatVersion is < 1 or > PackageManifest.CurrentFormatVersion)
         {
-            errors.Add(new("package.unsupported-format", $"Package format '{manifest.Format}' v{manifest.FormatVersion} is not supported by this version (v{PackageManifest.CurrentFormatVersion})."));
+            var madeBy = manifest.Format == PackageManifest.FormatName && manifest.FormatVersion > PackageManifest.CurrentFormatVersion ? manifest.AppVersion : null;
+            errors.Add(new("package.unsupported-format", $"Package format '{manifest.Format}' v{manifest.FormatVersion} is not supported by this version (v{PackageManifest.CurrentFormatVersion}). {NewerVersionAdvice.ForPackage(madeBy)}"));
             return null;
         }
 
@@ -900,17 +901,17 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                     break;
                 case "content" when Deserialize<ContentRevision>(path, bytes, errors) is { } revision:
                     ExpectId(path, id, revision.RevisionId, errors);
-                    ExpectSchema(path, "content", revision.SchemaVersion, ContentRevision.CurrentSchemaVersion, errors);
+                    ExpectSchema(path, "content", revision.SchemaVersion, ContentRevision.CurrentSchemaVersion, manifest.AppVersion, errors);
                     revisions.Add(revision);
                     break;
                 case "characters" when Deserialize<Character>(path, bytes, errors) is { } character:
                     ExpectId(path, id, character.Id, errors);
-                    ExpectSchema(path, "character", character.SchemaVersion, Character.CurrentSchemaVersion, errors);
+                    ExpectSchema(path, "character", character.SchemaVersion, Character.CurrentSchemaVersion, manifest.AppVersion, errors);
                     characters.Add(character);
                     break;
                 case "campaigns" when Deserialize<Campaign>(path, bytes, errors) is { } campaign:
                     ExpectId(path, id, campaign.Id, errors);
-                    ExpectSchema(path, "campaign", campaign.SchemaVersion, Campaign.CurrentSchemaVersion, errors);
+                    ExpectSchema(path, "campaign", campaign.SchemaVersion, Campaign.CurrentSchemaVersion, manifest.AppVersion, errors);
                     if (campaign.AllowedSources is null)
                         errors.Add(new("package.invalid-json", $"Entry '{path}' has no allowed-sources list."));
                     // M6 slice 2 (review fix): pending entries are informational. A campaign pack's own are ignored (the
@@ -921,7 +922,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                     break;
                 case "gaps" when Deserialize<GapNote>(path, bytes, errors) is { } note:
                     ExpectId(path, id, note.Id, errors);
-                    ExpectSchema(path, "gap note", note.SchemaVersion, GapNote.CurrentSchemaVersion, errors);
+                    ExpectSchema(path, "gap note", note.SchemaVersion, GapNote.CurrentSchemaVersion, manifest.AppVersion, errors);
                     gapNotes.Add(note);
                     break;
                 case "attachments" when Deserialize<Attachment>(path, bytes, errors) is { } attachment:
@@ -957,10 +958,15 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
     }
 
     /// <summary>Data from a newer TomeStack is refused rather than silently misread.</summary>
-    private static void ExpectSchema(string path, string kind, int version, int supported, List<Diagnostic> errors)
+    /// <param name="madeBy">The manifest's <c>appVersion</c> (untrusted): named only when it is a plain version newer than this build.</param>
+    private static void ExpectSchema(string path, string kind, int version, int supported, string? madeBy, List<Diagnostic> errors)
     {
         if (version < 1 || version > supported)
-            errors.Add(new("package.schema-unsupported", $"Entry '{path}' uses {kind} schema v{version}; this version of TomeStack supports v1 to v{supported}. Update TomeStack to import this package."));
+        {
+            const string Generic = "Update TomeStack to import this package.";
+            errors.Add(new("package.schema-unsupported", $"Entry '{path}' uses {kind} schema v{version}; this version of TomeStack supports v1 to v{supported}. "
+                + (version > supported ? NewerVersionAdvice.ForPackage(madeBy, Generic) : Generic)));
+        }
     }
 
     private static void ExpectId(string path, Guid expected, Guid actual, List<Diagnostic> errors)
