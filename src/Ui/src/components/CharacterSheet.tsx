@@ -41,7 +41,9 @@ import { UpdatesPanel } from './UpdatesPanel';
 import { VttExportPanel } from './VttExportPanel';
 import { ByHandPanel } from './ByHandPanel';
 import { TabList, TabPanel, tabId, type TabSpec } from './sheet/TabList';
-import { rememberSheetTab, rememberedSheetTab, type SheetTabId } from '../sheetTab';
+import { LevelUpChecklist } from './LevelUpChecklist';
+import { dismissChecklist, readChecklist } from '../levelUpChecklist';
+import { rememberSheetTab,rememberedSheetTab, type SheetTabId } from '../sheetTab';
 import { inverseOf, isCompound, type UndoEntry } from '../undo';
 import { recordSpend } from '../actionRows';
 import { editPins, readPins, resolvePin, visiblePins, writePins, type Pin, type QuickAction } from '../quickbar';
@@ -290,9 +292,11 @@ interface Props {
   onArchiveChanged: () => Promise<void> | void;
   /** The tab to open on (a deep link, for example from the Gap notes screen); Play when absent (ADR-014). */
   initialTab?: SheetTabId;
+  /** D74 R19: true only right after a level-up save; the "What changed" heading takes focus instead of the sheet heading. */
+  focusChecklist?: boolean;
 }
 
-export function CharacterSheet({ view, onChanged, onError: reportError, onStatus, onLevelUp, onMakeChoices, onArchiveChanged, initialTab }: Props) {
+export function CharacterSheet({ view, onChanged, onError: reportError, onStatus, onLevelUp, onMakeChoices, onArchiveChanged, initialTab, focusChecklist }: Props) {
   const { character, sheet } = view;
   // D43: `toggle.group-absent` is information (the toggle works as a group of one), not content that failed to apply.
   const notApplied = sheet.diagnostics.filter((d) => d.code !== 'toggle.group-absent');
@@ -334,7 +338,20 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
 
   // WCAG 2.4.3: opening a sheet (after create, import or picking from the list) moves focus to its heading instead of
   // leaving it on <body>. The sheet is keyed by character, so this runs once per opened character, not on every save.
-  useEffect(() => heading.current?.focus(), []);
+  // D74 R19: on the save path the "What changed" panel takes focus instead; child effects run first, so it must be skipped here.
+  const [checklist, setChecklist] = useState(() => readChecklist(character.id, character.level));
+  const [checklistLevel, setChecklistLevel] = useState(character.level);
+  // A5: a save that lands on this open sheet changes the level; read the list again (no focus moves).
+  const [panelTakesFocus, setPanelTakesFocus] = useState(() => !!focusChecklist && checklist !== undefined);
+  const skipHeadingFocus = useRef(panelTakesFocus);
+  if (character.level !== checklistLevel) {
+    setChecklistLevel(character.level);
+    setChecklist(readChecklist(character.id, character.level));
+    setPanelTakesFocus(false); // a panel that appears later never takes focus
+  }
+  useEffect(() => {
+    if (!skipHeadingFocus.current) heading.current?.focus();
+  }, []);
 
   const [rollMode, setRollMode] = useState<RollMode>('normal');
   const [lastRoll, setLastRoll] = useState<RollRecord>();
@@ -435,6 +452,21 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   function editDetails() {
     setTab('notes');
     setDetailsFocus((n) => n + 1);
+  }
+  // D74: the checklist's links and Dismiss. Focus waits for the render, so it is an effect on a fresh object per press.
+  const [checklistFocus, setChecklistFocus] = useState<{ id: string }>();
+  useEffect(() => {
+    if (checklistFocus) document.getElementById(checklistFocus.id)?.focus();
+  }, [checklistFocus]);
+  function goFromChecklist(target: 'play' | 'spells' | 'choices') {
+    // The choices section shows on every tab, so that link changes no tab (A6).
+    if (target !== 'choices') setTab(target);
+    setChecklistFocus({ id: target === 'choices' ? 'choices-heading' : tabId('sheet', target) });
+  }
+  function dismissLevelUp() {
+    dismissChecklist(character.id);
+    setChecklist(undefined);
+    setChecklistFocus({ id: tabId('sheet', 'features') });
   }
   const [pdfSources, setPdfSources] = useState<ReadonlySet<string>>(new Set());
 
@@ -907,7 +939,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
       {/* Open choices and content problems stay visible whatever tab is open (SPEC C-03). */}
       {sheet.choices?.some((c) => !c.resolved) && (
         <section aria-labelledby="choices-heading">
-          <h3 id="choices-heading">Choices to make</h3>
+          <h3 id="choices-heading" tabIndex={-1}>Choices to make</h3>
           <ul className="warnings">
             {sheet.choices
               .filter((c) => !c.resolved)
@@ -1030,6 +1062,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
       </TabPanel>
 
       <TabPanel idPrefix="sheet" id="features" active={active === 'features'}>
+        {checklist && <LevelUpChecklist checklist={checklist} sheet={sheet} focusOnOpen={panelTakesFocus} onGo={goFromChecklist} onDismiss={dismissLevelUp} />}
         {(sheet.features ?? []).length === 0 && <p className="hint">No features yet.</p>}
         <FeaturesPanel view={view} pdfSources={pdfSources} openPage={openPage} reportGap={(id) => reportGap(gapAboutFeature(id))} />
         <ByHandPanel characterId={character.id} sheet={sheet} active={active === 'features'} />

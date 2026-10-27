@@ -10,6 +10,7 @@ import { client } from '../api/client';
 import type { Character, CharacterSheet as SheetModel, CharacterView, DerivedValue, FeatureEntry, RollRecord } from '../api/types';
 import { TomeStackError } from '../api/transport';
 import { CharacterSheet } from './CharacterSheet';
+import { writeChecklist } from '../levelUpChecklist';
 import { RollResult } from './PlayPanels';
 
 vi.mock('../api/client', () => ({
@@ -85,10 +86,10 @@ function view(sheetOver: Partial<SheetModel> = {}): CharacterView {
 }
 
 const noop = () => {};
-const sheetElement = (v: CharacterView, initialTab?: Parameters<typeof CharacterSheet>[0]['initialTab']) => (
-  <CharacterSheet view={v} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} initialTab={initialTab} />
+const sheetElement = (v: CharacterView, initialTab?: Parameters<typeof CharacterSheet>[0]['initialTab'], focusChecklist?: boolean) => (
+  <CharacterSheet view={v} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} initialTab={initialTab} focusChecklist={focusChecklist} />
 );
-const renderSheet = (v: CharacterView, initialTab?: Parameters<typeof CharacterSheet>[0]['initialTab']) => render(sheetElement(v, initialTab));
+const renderSheet = (v: CharacterView, initialTab?: Parameters<typeof CharacterSheet>[0]['initialTab'], focusChecklist?: boolean) => render(sheetElement(v, initialTab, focusChecklist));
 
 function undoHarness() {
   const v = view();
@@ -2061,5 +2062,96 @@ describe('the quickbar', () => {
     localStorage.setItem('tomestack.quickbar.fixture-1', JSON.stringify([wavePin]));
     renderSheet(tideView());
     expect(screen.queryByRole('region', { name: 'Quickbar' })).toBeNull();
+  });
+});
+
+describe('D74 level-up checklist', () => {
+  const storeKey = 'tomestack.levelUpChecklist.fixture-2';
+  const levelView = (level: number, sheetOver: Partial<SheetModel> = {}) => {
+    const v = view(sheetOver);
+    return { ...v, character: { ...v.character, level } };
+  };
+  const seed = (level = 1) => writeChecklist('fixture-2', { level, changes: [{ kind: 'hitPoints', before: 8, after: 12 }] });
+  const region = () => screen.queryByRole('region', { name: /^What changed at level/ });
+  const clientCalls = () => Object.values(client).reduce((n, fn) => n + vi.mocked(fn).mock.calls.length, 0);
+
+  it('focuses the panel heading, not the sheet heading, when asked on open', () => {
+    seed();
+    renderSheet(levelView(1), 'features', true);
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'What changed at level 1' }));
+    expect(document.activeElement).not.toBe(document.getElementById('sheet-heading'));
+  });
+
+  it('keeps the sheet heading focus when the panel is not asked to take it, and when focusChecklist has no list to show', () => {
+    seed();
+    renderSheet(levelView(1), 'features');
+    expect(document.activeElement).toBe(document.getElementById('sheet-heading'));
+    cleanup();
+    localStorage.clear();
+    renderSheet(levelView(1), 'features', true);
+    expect(document.activeElement).toBe(document.getElementById('sheet-heading'));
+  });
+
+  it('shows no region without a stored list, or when the stored list is for another level', () => {
+    renderSheet(levelView(1), 'features');
+    expect(region()).toBeNull();
+    cleanup();
+    seed(2);
+    renderSheet(levelView(1), 'features');
+    expect(region()).toBeNull();
+  });
+
+  it('Dismiss removes the key and the region, focuses the Features tab, calls no client method, and stays gone on remount', async () => {
+    const user = userEvent.setup();
+    seed();
+    renderSheet(levelView(1), 'features');
+    const before = clientCalls();
+    await user.click(screen.getByRole('button', { name: 'Dismiss' }));
+    expect(localStorage.getItem(storeKey)).toBeNull();
+    expect(region()).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Features' }));
+    expect(clientCalls()).toBe(before);
+    cleanup();
+    renderSheet(levelView(1), 'features');
+    expect(region()).toBeNull();
+  });
+
+  it('Show on Play selects and focuses the Play tab and remembers it', async () => {
+    const user = userEvent.setup();
+    seed();
+    renderSheet(levelView(1), 'features');
+    await user.click(screen.getByRole('button', { name: 'Show on Play' }));
+    const play = screen.getByRole('tab', { name: 'Play' });
+    expect(play.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(play);
+    expect(localStorage.getItem('tomestack.sheetTab.fixture-2')).toBe('play');
+  });
+
+  it('Show choices focuses the choices heading and changes no tab', async () => {
+    const user = userEvent.setup();
+    const choices = [{ source: { contentId: 'fixture.feature', revisionId: 'r1' }, sourceName: 'Fixture feature', choiceId: 'pick', count: 1, options: [], selected: [], resolved: false }] as unknown as SheetModel['choices'];
+    writeChecklist('fixture-2', { level: 1, changes: [{ kind: 'choice', contentId: 'fixture.feature', choiceId: 'pick' }] });
+    renderSheet(levelView(1, { choices }), 'features');
+    await user.click(screen.getByRole('button', { name: 'Show choices' }));
+    expect(document.activeElement).toBe(document.getElementById('choices-heading'));
+    expect(screen.getByRole('tab', { name: 'Features' }).getAttribute('aria-selected')).toBe('true');
+    expect(localStorage.getItem('tomestack.sheetTab.fixture-2')).toBeNull();
+  });
+
+  it('keeps the region when the view is replaced (a rest or spend)', () => {
+    seed();
+    const { rerender } = renderSheet(levelView(1), 'features');
+    rerender(sheetElement({ ...levelView(1), sheet: { ...view().sheet, hitPoints: { maximum: 8, current: 3, temporary: 0 } } }, 'features'));
+    expect(region()).not.toBeNull();
+  });
+
+  it('shows the list when a save lands on the open sheet and the level changes, without moving focus', () => {
+    seed(2);
+    const { rerender } = renderSheet(levelView(1), 'features');
+    expect(region()).toBeNull();
+    const focused = document.activeElement;
+    rerender(sheetElement(levelView(2), 'features', true));
+    expect(region()).not.toBeNull();
+    expect(document.activeElement).toBe(focused);
   });
 });
