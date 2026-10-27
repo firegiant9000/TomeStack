@@ -191,8 +191,8 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, ac
         <DiceBox onRoll={onRollDice} />
       </div>
       <p className="hint">
-        {/* D73 R13: with pins on the bar, a press there rolls and then spends. */}
-        {hasQuickbar ? 'Rolling from here never spends anything; a pinned action on the quickbar rolls and then spends.' : 'Rolling never spends anything.'}
+        {/* D73 R13: a quickbar button whose name says "and spend" rolls and then spends; the others only roll. */}
+        {hasQuickbar ? 'Rolling from here never spends anything; a quickbar button that says "and spend" rolls and then spends.' : 'Rolling never spends anything.'}
         {spellsTab
           ? ' Roll a check here; a save, skill or initiative from its field on Stats; an attack or feature on Play; or a spell on Spells.'
           : ' Roll a check here; a save, skill or initiative from its field on Stats; or an attack or feature on Play.'}
