@@ -28,6 +28,8 @@ A choice that does not apply to this entry is not offered, so it is never "unres
 
 An item carries `weapon { category: simple | martial, attack: melee | ranged, damage, damageType, properties[], versatile?, range?, weaponKey, mastery? }`. Proficiency is a `grant proficiency` in `weapon.simple`, `weapon.martial` or `weapon.<weaponKey>`, and it may be `onlyAs` like any grant.
 
+An attack row shows the weapon's `mastery` only when the character's active content includes a feature named exactly "Weapon Mastery" (an interim name rule); otherwise the row's mastery is empty.
+
 Each **equipped** weapon gives an entry in `sheet.attacks`:
 
 | Value | Rule (both SRDs) |

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Changed
+- **Weapon mastery is shown only to characters with a Weapon Mastery feature:** an attack row's mastery property (SRD 5.2.1 weapons) now appears only when the character has a feature named "Weapon Mastery", such as the Barbarian's or the Fighter's; a Wizard with a Dagger no longer sees "Nick". An interim name rule until the feature grants it. No schema, package, content or database change.
+
 ## 0.7.1 (crash reporting and the repo guard)
 
 A patch on 0.7.0: if TomeStack crashes it now leaves a record and tells you where it is. Nothing else in the app changes.
