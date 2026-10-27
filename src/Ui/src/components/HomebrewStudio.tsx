@@ -38,6 +38,7 @@ import { designFeedbackOn, setDesignFeedback } from '../designFeedback';
 import { abilities, nextGroupKey, nextScaleKey, parseSlotRows, parseTwenty } from '../classBasics';
 import { nextAttackKey, type ToggleChoice } from '../attackAuthoring';
 import { AttackFields, RiderFields, ToggleSelect } from './AttackFields';
+import { WeaponFields } from './WeaponFields';
 import { DefenceFields, RollModeFields, isDamageDefence } from './RollModeFields';
 import { ResponseFields } from './ResponseFields';
 import { RollFields } from './RollFields';
@@ -881,8 +882,13 @@ function EntryEditor(props: {
             : false;
   const listed = revision.effects.map((effect, index) => ({ effect, index })).filter(({ effect }) => !shownByEditor(effect));
 
-  function add(type: 'modifier' | 'resource' | 'recovery' | 'roll' | 'armor' | 'grant' | 'scale' | 'value' | 'spellcasting' | 'toggle' | 'toggleGroup' | 'upkeep' | 'attack' | 'attackRider' | 'rollMode' | 'damageDefence' | 'response') {
+  function add(type: 'modifier' | 'resource' | 'recovery' | 'roll' | 'armor' | 'grant' | 'scale' | 'value' | 'spellcasting' | 'toggle' | 'toggleGroup' | 'upkeep' | 'attack' | 'attackRider' | 'rollMode' | 'damageDefence' | 'response' | 'weapon') {
     const id = nextId(type === 'damageDefence' ? 'grant' : type);
+    if (type === 'weapon') {
+      // Content v12: a valid start except the key, which is set once by the author (the empty key blocks saving until named).
+      update({ effects: [...revision.effects, { type, id, category: 'simple', attack: 'melee', damage: '1d6', damageType: 'bludgeoning', properties: [], weaponKey: '' }] });
+      return;
+    }
     if (type === 'response') {
       // Content v11 (D43 S7): a valid start (take 1 less damage). The response id is set once, like a resource's.
       update({ effects: [...revision.effects, { type, id, responseId: id, label: '', phase: 'damageReduction', amount: '1' }] });
@@ -1235,6 +1241,11 @@ function EntryEditor(props: {
         {revision.kind === 'item' && (
           <button type="button" onClick={() => add('armor')}>
             Add armor
+          </button>
+        )}
+        {revision.kind === 'item' && (
+          <button type="button" onClick={() => add('weapon')}>
+            Add weapon
           </button>
         )}
       </div>
@@ -1644,6 +1655,7 @@ function EffectEditor(props: {
     recovery: 'Recovery',
     roll: 'Roll or action',
     armor: 'Armor',
+    weapon: 'Weapon',
     choice: 'Choice',
     hitDie: 'Hit die',
     restriction: 'Prerequisite',
@@ -2075,6 +2087,7 @@ function EffectEditor(props: {
           </label>
         </>
       )}
+      {effect.type === 'weapon' && <WeaponFields effect={effect} onChange={onChange} onProblem={onProblem} />}
       {effect.type === 'scale' && <ScaleFields effect={effect} onChange={onChange} onProblem={onProblem} />}
       {effect.type === 'value' && <ValueFields effect={effect} previewRevision={props.previewRevision} onChange={onChange} onProblem={onProblem} />}
       {effect.type === 'spellcasting' && <SpellcastingFields effect={effect} previewRevision={props.previewRevision} onChange={onChange} onProblem={onProblem} />}

@@ -1732,6 +1732,20 @@ export type Effect =
       toggleContent?: string;
       stackGroup?: string;
     })
+  // An item's weapon. Content v12 (MECH-X item 0) adds bonus (0 to 10), added to to-hit and damage.
+  | (EffectBase & {
+      type: 'weapon';
+      category: 'simple' | 'martial';
+      attack: 'melee' | 'ranged';
+      damage: string;
+      damageType: string;
+      properties?: string[];
+      versatile?: string;
+      range?: string;
+      weaponKey: string;
+      mastery?: string;
+      bonus?: number;
+    })
   | (EffectBase & { type: 'armor'; category: 'light' | 'medium' | 'heavy' | 'shield'; armorClass: number; dexterityCap?: number })
   | (EffectBase & { type: 'choice'; choiceId: string; count: number; options: ContentReference[]; level?: number; onlyAs?: ClassEntry })
   // M5 slice 1b: the class editor (content v3/v5 effects, and v9 scale and multiclassCasterTable; ADR-010).
