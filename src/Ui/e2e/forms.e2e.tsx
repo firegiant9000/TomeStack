@@ -701,7 +701,7 @@ it('pins a per-unit roll, presses it with Alt+1: it rolls and spends once, Undo 
   expect(spent).toBe(2); // the roll's base cost (R13: a pinned per-unit roll spends no extra units)
   await waitFor(async () => expect(await focus()).toBe(9 - spent));
   expect(within(lastRoll()).getByRole<HTMLButtonElement>('button', { name: /^Spend \d+ Focus/ }).disabled).toBe(true); // spent once; the record cannot spend again
-  expect(quickbar().getAttribute('aria-busy')).toBeNull();
+  await waitFor(() => expect(quickbar().getAttribute('aria-busy')).toBeNull()); // `finally` clears busy after the pool renders
 
   // The service undoes the spend: the pool is back.
   await user.click(await screen.findByRole('button', { name: /^Undo/ }));

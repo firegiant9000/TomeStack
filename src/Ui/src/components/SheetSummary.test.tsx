@@ -78,6 +78,10 @@ it('names the Spells tab in the rolling hint only when it is offered', () => {
   expect(screen.getByText('Rolling never spends anything. Roll a check here; a save, skill or initiative from its field on Stats; or an attack or feature on Play.')).toBeTruthy();
   rerender(<SheetSummary view={fixtureView()} rollMode="normal" onRollMode={() => {}} rollLog={[]} act={() => {}} onRoll={() => {}} onRollDice={async () => {}} spellsTab />);
   expect(screen.getByText('Rolling never spends anything. Roll a check here; a save, skill or initiative from its field on Stats; an attack or feature on Play; or a spell on Spells.')).toBeTruthy();
+  rerender(<SheetSummary view={fixtureView()} rollMode="normal" onRollMode={() => {}} rollLog={[]} act={() => {}} onRoll={() => {}} onRollDice={async () => {}} spellsTab hasQuickbar />);
+  expect(screen.getByText('Rolling from here never spends anything; a pinned action on the quickbar rolls and then spends. Roll a check here; a save, skill or initiative from its field on Stats; an attack or feature on Play; or a spell on Spells.')).toBeTruthy();
+  rerender(<SheetSummary view={fixtureView()} rollMode="normal" onRollMode={() => {}} rollLog={[]} act={() => {}} onRoll={() => {}} onRollDice={async () => {}} hasQuickbar />);
+  expect(screen.getByText('Rolling from here never spends anything; a pinned action on the quickbar rolls and then spends. Roll a check here; a save, skill or initiative from its field on Stats; or an attack or feature on Play.')).toBeTruthy();
 });
 
 it('lists the core numbers as terms and definitions, with no heading or named region of its own', () => {

@@ -828,6 +828,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
         onRoll={(f) => roll({ field: f, mode: rollMode })}
         onRollDice={rollDice}
         quickbar={<Quickbar actions={quickActions} busy={quickBusy} run={quickRun} />}
+        hasQuickbar={quickActions.length > 0}
         spent={{ record: spentFor, spendOnce }}
       />
 

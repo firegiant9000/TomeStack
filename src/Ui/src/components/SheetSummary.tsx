@@ -37,6 +37,8 @@ interface Props {
   spellsTab?: boolean;
   /** D73: the quickbar, in its own row after the summary line (never inside the roll strip). */
   quickbar?: ReactNode;
+  /** D73: whether the bar has any pin; the hint then says a pinned press rolls and spends. */
+  hasQuickbar?: boolean;
   /** D73: the sheet's record-spent state, shared with the quickbar; absent, Last roll keeps its own. */
   spent?: RecordSpent;
 }
@@ -47,7 +49,7 @@ interface Props {
  * `getByRole` and confuse screen readers). Traces and overrides stay on the field cards (Stats, Spells). An overridden
  * value says so in text (WCAG 1.4.1). The d20 roll mode and the last roll live here so they are reachable from every tab.
  */
-export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, act, onDamage, onRoll, onRollDice, spellsTab = false, quickbar, spent }: Props) {
+export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, act, onDamage, onRoll, onRollDice, spellsTab = false, quickbar, hasQuickbar = false, spent }: Props) {
   const { character, sheet } = view;
   const field = (id: string): DerivedValue | undefined => sheet.fields.find((f) => f.field === id);
   const show = (id: string): string => {
@@ -189,9 +191,11 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, ac
         <DiceBox onRoll={onRollDice} />
       </div>
       <p className="hint">
+        {/* D73 R13: with pins on the bar, a press there rolls and then spends. */}
+        {hasQuickbar ? 'Rolling from here never spends anything; a pinned action on the quickbar rolls and then spends.' : 'Rolling never spends anything.'}
         {spellsTab
-          ? 'Rolling never spends anything. Roll a check here; a save, skill or initiative from its field on Stats; an attack or feature on Play; or a spell on Spells.'
-          : 'Rolling never spends anything. Roll a check here; a save, skill or initiative from its field on Stats; or an attack or feature on Play.'}
+          ? ' Roll a check here; a save, skill or initiative from its field on Stats; an attack or feature on Play; or a spell on Spells.'
+          : ' Roll a check here; a save, skill or initiative from its field on Stats; or an attack or feature on Play.'}
       </p>
       <div className="roll-strip">
         <RollResult record={lastRoll} resources={sheet.resources ?? []} features={sheet.features ?? []} attacks={sheet.attacks ?? []} act={act} spent={spent} />
