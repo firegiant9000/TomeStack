@@ -14,6 +14,7 @@ const action = (n: number, over: Partial<QuickAction> = {}): QuickAction => ({
   label: `Fixture ${n}`,
   availability: { usable: true, reasons: [] },
   target: { effectId: `e${n}` },
+  spends: true,
   ...over,
 });
 const two = [action(1), action(2)];

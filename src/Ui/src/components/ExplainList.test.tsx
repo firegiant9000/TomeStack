@@ -5,7 +5,7 @@ import { expect, it } from 'vitest';
 import type { TraceEntry } from '../api/types';
 import { ExplainList } from './ExplainList';
 
-const steps: TraceEntry[] = [{ order: 0, operation: 'base', description: 'Fixture base', result: 10, amount: 10, origin: { kind: 'rules', rulesFamily: 'srd-5.1' } }];
+const steps: TraceEntry[] = [{ order: 0, operation: 'base', description: 'Fixture base', result: 10, amount: 10, origin: { kind: 'rulesPolicy', rulesFamily: 'srd-5.1' } }];
 
 it('names the number in the summary for assistive technology, not only on the list', () => {
   const { container } = render(<ExplainList label="Armor Class" steps={steps} />);
