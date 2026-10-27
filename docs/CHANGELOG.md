@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## 0.7.1 (crash reporting and the repo guard)
+
+A patch on 0.7.0: if TomeStack crashes it now leaves a record and tells you where it is. Nothing else in the app changes.
+
+**Unsigned:** Windows shows "Windows protected your PC" the first time you run `TomeStack.App-win-Setup.exe`. Choose **More info**, then **Run anyway**. Some workplace PCs, and Windows 11 with Smart App Control on, block unsigned apps entirely.
+
+**Updating from 0.7.0:** download the newer `Setup.exe` and run it; TomeStack never checks for updates and makes no network calls. On first start, 0.7.1 copies the database once (`tomestack.db.app-0.7.0-to-0.7.1.bak`). There is no database, schema, content or package change: 0.7.0 and 0.7.1 open the same folder and the same packages.
+
+### Added
+- **Crash reporting:** if TomeStack hits an unexpected error it now saves the details to `logs/errors.log` in your data folder and shows one plain dialog with that path before closing. In these crash entries your user-folder path is replaced by `%USERPROFILE%`; other log entries are unchanged. If the window's web view crashes it reloads once, then tells you and closes; a page that is only unresponsive is logged, not reloaded.
+
+### Internal
+- **Crash-handler smoke check:** `scripts/smoke.ps1` launches the exe a second time with `--simulate-unhandled-exception` (honoured only with `--smoke`) and fails unless it exits non-zero and writes a `dispatcher` entry to `errors.log`; `-SkipCrashCheck` omits it. It is blocking from its first CI run (ADR-006 records the exception to the three-run rule). No change to the app.
+- **Planning-notes guard:** CI fails if any file under `docs/superpowers/` or a `.superpowers/` folder is tracked (any letter case), and `.gitignore` now ignores both; the repo is public and planning notes stay local. No change to the app.
+
 ## 0.7.0 (the play-mechanics engine: forms, turns, feature attacks, damage responses and charging; spell filters, the by-hand list and the combat card)
 
 The play-mechanics engine (D43, slices 1 to 8, ADR-018) and the Plan A items merged into `main` after 0.6.0 (P09, P14, P18), listed below. Homebrew content can now describe forms and overlays that cost from a shared pool, a round counter with upkeep, feature attacks and riders, action details, roll modes, damage responses and charging; the SRD packs are unchanged. It is checked on test data (automated tests, a scripted engine rehearsal with original content, and the desktop smoke); the owner checks on an installed build are still open (Narrator, keyboard, 400% zoom and High Contrast on the new screens, print).

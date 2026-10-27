@@ -10,6 +10,9 @@ namespace TomeStack.AppService;
 public interface IErrorLog
 {
     void Record(string correlationId, string command, Exception exception);
+
+    /// <summary>Same entry format for a failure that has no exception to hand (the shell's crash handlers, WebView2 process failures).</summary>
+    void Record(string correlationId, string command, string detail);
 }
 
 /// <summary>Appends to <c>&lt;data dir&gt;/logs/errors.log</c>, keeping one rolled-over file of at most <see cref="MaxBytes"/>.</summary>
@@ -25,9 +28,20 @@ public sealed class FileErrorLog(string directory, TimeProvider time) : IErrorLo
     public void Record(string correlationId, string command, Exception exception)
     {
         ArgumentNullException.ThrowIfNull(exception);
+        Write(correlationId, command, exception.ToString());
+    }
+
+    public void Record(string correlationId, string command, string detail)
+    {
+        ArgumentNullException.ThrowIfNull(detail);
+        Write(correlationId, command, detail);
+    }
+
+    private void Write(string correlationId, string command, string detail)
+    {
         var entry = string.Create(
             CultureInfo.InvariantCulture,
-            $"[{time.GetUtcNow():O}] {correlationId} command={command}{Environment.NewLine}{exception}{Environment.NewLine}{Environment.NewLine}");
+            $"[{time.GetUtcNow():O}] {correlationId} command={command}{Environment.NewLine}{detail}{Environment.NewLine}{Environment.NewLine}");
         try
         {
             lock (_gate)
