@@ -13,7 +13,9 @@ export function RollWhy({ record }: { record?: RollRecord }) {
   if (sentences.length === 0) return null;
   return (
     <details className="roll-why" key={rollKey(record)}>
-      <summary>Why?</summary>
+      <summary>
+        Why?<span className="visually-hidden"> (this roll came out this way)</span>
+      </summary>
       <ul aria-label="Why this roll came out this way">
         {sentences.map((s, i) => (
           <li key={i}>{s}</li>

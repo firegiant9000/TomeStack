@@ -9,7 +9,10 @@ export function ExplainList({ label, steps, context, summary = 'Why?' }: { label
   if (steps.length === 0) return null;
   return (
     <details className="explain">
-      <summary>{summary}</summary>
+      <summary>
+        {summary}
+        {summary === 'Why?' && <span className="visually-hidden"> ({label})</span>}
+      </summary>
       <ul aria-label={`Why ${label}`}>
         {explainSteps(steps, context).map((sentence, i) => (
           <li key={i}>{sentence}</li>

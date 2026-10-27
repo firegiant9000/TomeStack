@@ -34,7 +34,9 @@ it('renders a closed details headed Why? with the sentences from the record', ()
   const { container } = render(<RollWhy record={record()} />);
   const details = container.querySelector('details.roll-why') as HTMLDetailsElement;
   expect(details.open).toBe(false);
-  expect(details.querySelector('summary')?.textContent).toBe('Why?');
+  // The visible word is "Why?"; a screen reader's name for the disclosure also says what it explains.
+  expect(details.querySelector('summary')?.textContent).toBe('Why? (this roll came out this way)');
+  expect(details.querySelector('summary > span.visually-hidden')?.textContent).toBe(' (this roll came out this way)');
   const list = screen.getByRole('list', { name: 'Why this roll came out this way', hidden: true });
   expect(list.textContent).toContain('Starts at 3: Fixture ability modifier');
   expect(list.textContent).toContain('Fixture proficiency +2');
