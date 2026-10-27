@@ -12,17 +12,42 @@ namespace TomeStack.AppService.Tests;
 /// and <c>folder/</c>, that build's data folder (bundled SRD rows emptied, as for the v0.5.0 folder; they seed again on open).
 /// The content is original only: a homebrew species and feat (whose second revision was published after the character pinned the
 /// first), a draft, a one-page PDF, a campaign and a gap note, so no SRD revision travels in any package. <c>expected.json</c> is
-/// every sheet value the old release itself calculated; this build must calculate the same.
+/// every sheet value the old release itself calculated; this build must calculate the same. Both characters are level 0 (no class),
+/// so this covers abilities, saves, skills, initiative, armour class and the pinned feat, not hit points or spellcasting.
 /// </summary>
-public class OldReleaseImportTests
+public sealed class OldReleaseImportTests : IDisposable
 {
     public static TheoryData<string> Releases => new() { "v0.4.0", "v0.5.0", "v0.6.0", "v0.7.0" };
 
     private static readonly DateTimeOffset Now = new(2026, 10, 28, 12, 0, 0, TimeSpan.Zero);
 
+    private readonly List<string> _directories = [];
+
     private static string Fixture(string release, string name) => Path.Combine(AppContext.BaseDirectory, "RulesFixtures", "upgrade", release, name);
 
-    private static string NewDirectory() => Path.Combine(Path.GetTempPath(), "tomestack-tests", Guid.NewGuid().ToString("N"));
+    private string NewDirectory()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "tomestack-tests", Guid.NewGuid().ToString("N"));
+        _directories.Add(directory);
+        return directory;
+    }
+
+    /// <summary>Runs after each test, once its app is closed.</summary>
+    public void Dispose()
+    {
+        foreach (var directory in _directories)
+        {
+            try
+            {
+                if (Directory.Exists(directory))
+                    Directory.Delete(directory, recursive: true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // best effort: a leftover temp folder does not fail a test
+            }
+        }
+    }
 
     /// <summary>As the shipped app opens: the bundled packs only, no test fixtures.</summary>
     private static TomeStackApp Open(string directory) => TomeStackApp.Open(directory, new FixedTime(Now), syncRoots: []);
@@ -103,6 +128,7 @@ public class OldReleaseImportTests
         Assert.Empty(app.PreviewImport(bytes).Errors);
         var result = app.ApplyImport(bytes);
 
+        Assert.Equal(ExpectedNames(release).Keys.Order(), result.Characters.Order());
         AssertSameSheets(release, app, result.Characters);
         Assert.Empty(app.Store.ListAllGapNotes());
     }

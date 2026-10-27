@@ -77,22 +77,36 @@ public class NewerVersionMessageTests
     public void A_data_folder_last_opened_by_a_newer_build_names_both_versions()
     {
         var directory = Path.Combine(Path.GetTempPath(), "tomestack-tests", Guid.NewGuid().ToString("N"));
-        using (TomeStackApp.Open(directory, new FixedTime(TempApp.Now), syncRoots: [])) { }
-        var database = Path.Combine(directory, TomeStackApp.DatabaseFileName);
-        using (var connection = new SqliteConnection($"Data Source={database};Pooling=False"))
+        try
         {
-            connection.Open();
-            using var command = connection.CreateCommand();
-            command.CommandText = "PRAGMA user_version = 99;";
-            command.ExecuteNonQuery();
+            using (TomeStackApp.Open(directory, new FixedTime(TempApp.Now), syncRoots: [])) { }
+            var database = Path.Combine(directory, TomeStackApp.DatabaseFileName);
+            using (var connection = new SqliteConnection($"Data Source={database};Pooling=False"))
+            {
+                connection.Open();
+                using var command = connection.CreateCommand();
+                command.CommandText = "PRAGMA user_version = 99;";
+                command.ExecuteNonQuery();
+            }
+            File.WriteAllText(Path.Combine(directory, AppVersionStamp.FileName), "99.1.0\n"); // what the newer build wrote
+
+            var ex = Assert.Throws<NewerDatabaseException>(() => TomeStackApp.Open(directory, new FixedTime(TempApp.Now), syncRoots: []));
+
+            Assert.Contains("newer version of TomeStack", ex.Message, StringComparison.Ordinal);
+            Assert.Contains($"TomeStack 99.1.0 last opened it; this is TomeStack {This}.", ex.Message, StringComparison.Ordinal);
+            Assert.Contains("Update TomeStack to 99.1.0 or newer to open it. Nothing was changed.", ex.Message, StringComparison.Ordinal);
+            Assert.Equal("99.1.0", File.ReadAllText(Path.Combine(directory, AppVersionStamp.FileName)).Trim()); // never downgraded
         }
-        File.WriteAllText(Path.Combine(directory, AppVersionStamp.FileName), "99.1.0\n"); // what the newer build wrote
-
-        var ex = Assert.Throws<NewerDatabaseException>(() => TomeStackApp.Open(directory, new FixedTime(TempApp.Now), syncRoots: []));
-
-        Assert.Contains("newer version of TomeStack", ex.Message, StringComparison.Ordinal);
-        Assert.Contains($"TomeStack 99.1.0 last opened it; this is TomeStack {This}.", ex.Message, StringComparison.Ordinal);
-        Assert.Contains("Update TomeStack to 99.1.0 or newer to open it. Nothing was changed.", ex.Message, StringComparison.Ordinal);
-        Assert.Equal("99.1.0", File.ReadAllText(Path.Combine(directory, AppVersionStamp.FileName)).Trim()); // never downgraded
+        finally
+        {
+            try
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // best effort: a leftover temp folder does not fail a test
+            }
+        }
     }
 }
