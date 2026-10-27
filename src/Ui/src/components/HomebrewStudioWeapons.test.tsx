@@ -163,3 +163,54 @@ it('a stored non-number bonus shows as it is and blocks', async () => {
   expect(blocked('Save draft')).toBe(true);
   expect(blocked('Publish')).toBe(true);
 });
+
+it.each(['', '  ', ' 2', '1.5', '11'])('a stored string bonus %j the service cannot read shows as it is and blocks', async (stored) => {
+  const user = userEvent.setup();
+  const { rule } = await openDraft(user, [{ ...blade, bonus: stored }]);
+  const bonus = rule(/^Rule 1: Weapon/).getByRole('textbox', { name: /^Bonus/ }) as HTMLInputElement;
+  expect(bonus.value).toBe(stored);
+  expect(bonus.getAttribute('aria-invalid')).toBe('true');
+  expect(blocked('Save draft')).toBe(true);
+  expect(blocked('Publish')).toBe(true);
+  // Clearing what is there to nothing is a way out once something was typed.
+  await user.type(bonus, '3');
+  await user.clear(bonus);
+  expect(bonus.hasAttribute('aria-invalid')).toBe(false);
+  expect(blocked('Save draft')).toBe(false);
+});
+
+it('a stored string bonus "2" shows 2, does not block, and retyping sends the number', async () => {
+  const user = userEvent.setup();
+  const { rule, checked } = await openDraft(user, [{ ...blade, bonus: '2' }]);
+  const bonus = rule(/^Rule 1: Weapon/).getByRole('textbox', { name: /^Bonus/ }) as HTMLInputElement;
+  expect(bonus.value).toBe('2');
+  expect(bonus.hasAttribute('aria-invalid')).toBe(false);
+  expect(blocked('Save draft')).toBe(false);
+  await user.clear(bonus);
+  await user.type(bonus, '3');
+  expect((await checked()).effect('weapon-1')!.bonus).toBe(3);
+});
+
+it('a differently-cased bonus key gives the notice, not fields', async () => {
+  const user = userEvent.setup();
+  const { rule } = await openDraft(user, [{ ...blade, Bonus: 2 }]);
+  const w = rule(/^Rule 1: Weapon/);
+  expect(w.getByText("This weapon doesn't read, so it can't be edited here.")).toBeTruthy();
+  expect(w.queryByRole('textbox', { name: /^Bonus/ })).toBeNull();
+});
+
+it('clearing properties adds no key when the weapon had none, and writes [] when it had the key', async () => {
+  const user = userEvent.setup();
+  const bare: Raw = { ...blade };
+  delete bare.properties;
+  const none = await openDraft(user, [bare]);
+  const field = none.rule(/^Rule 1: Weapon/).getByRole('textbox', { name: /^Properties/ });
+  await user.type(field, 'light');
+  expect((await none.checked()).effect('weapon-1')!.properties).toEqual(['light']);
+  await user.clear(field);
+  expect('properties' in (await none.checked()).effect('weapon-1')!).toBe(false);
+  cleanup();
+  const had = await openDraft(user, [blade]);
+  await user.clear(had.rule(/^Rule 1: Weapon/).getByRole('textbox', { name: /^Properties/ }));
+  expect((await had.checked()).effect('weapon-1')!.properties).toEqual([]);
+});

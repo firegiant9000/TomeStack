@@ -115,10 +115,26 @@ export function parseBonus(text: string): Parsed<number | undefined> {
   return { value: n === 0 ? undefined : n };
 }
 
-/** A stored bonus as the field shows it: a number or numeral as it is, anything else raw so the author sees it. */
+/**
+ * True when the service reads a stored string bonus as a whole number 0 to 10: the serializer's web defaults read a numeral
+ * string (optional sign, digits, leading zeros allowed, no spaces, not empty). Anything else makes the weapon malformed.
+ */
+export function storedBonusReads(text: string): boolean {
+  if (!/^[+-]?\d+$/.test(text)) return false;
+  const n = Number(text);
+  return n >= 0 && n <= 10;
+}
+
+/** A stored bonus as the field shows it: a number, or a numeral the service reads as that number; anything else raw so the author sees it. */
 export function bonusText(bonus: unknown): string {
   if (bonus === undefined || bonus === null) return '';
-  return typeof bonus === 'string' ? bonus : typeof bonus === 'number' ? String(bonus) : JSON.stringify(bonus);
+  if (typeof bonus === 'string') return storedBonusReads(bonus) ? String(Number(bonus)) : bonus;
+  return typeof bonus === 'number' ? String(bonus) : JSON.stringify(bonus);
+}
+
+/** The stored bonus text the service would reject, or undefined when there is none (a number, a readable numeral, or no bonus). */
+export function unreadableStoredBonus(bonus: unknown): string | undefined {
+  return typeof bonus === 'string' && !storedBonusReads(bonus) ? bonus : undefined;
 }
 
 const optionalText = (v: unknown) => v === undefined || v === null || typeof v === 'string';
@@ -126,6 +142,8 @@ const optionalText = (v: unknown) => v === undefined || v === null || typeof v =
 /** True when a stored weapon has the shape the editor reads. Anything else gets a notice instead of fields. */
 export function weaponReads(effect: Weapon): boolean {
   const w = effect as unknown as Record<string, unknown>;
+  // The service reads keys without regard to case, so a Bonus beside (or instead of) bonus would become a second key on edit.
+  if (Object.keys(w).some((k) => k !== 'bonus' && k.toLowerCase() === 'bonus')) return false;
   return (
     (w.category === 'simple' || w.category === 'martial') &&
     (w.attack === 'melee' || w.attack === 'ranged') &&
