@@ -1484,8 +1484,8 @@ describe('preview at level (D82)', () => {
     view.sheet = { ...view.sheet, spellcasting: [] };
     return view;
   };
-  const renderLevelUp = (view: CharacterView, onError = vi.fn()) =>
-    render(<CharacterBuilder mode={{ kind: 'levelUp', view }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={onError} />);
+  const renderLevelUp = (view: CharacterView, onError = vi.fn(), onCancel = vi.fn()) =>
+    render(<CharacterBuilder mode={{ kind: 'levelUp', view }} rulesFamilies={families} onCommitted={() => {}} onCancel={onCancel} onError={onError} />);
   async function previewAt(user: ReturnType<typeof userEvent.setup>, level: string) {
     const form = screen.getByRole('form', { name: 'Preview at level' });
     const input = within(form).getByRole('spinbutton', { name: 'Level to preview' });
@@ -1519,6 +1519,8 @@ describe('preview at level (D82)', () => {
     await previewAt(user, '5');
     const sheet = await screen.findByRole('region', { name: 'Preview at level 5' });
     expect(within(sheet).getByText('Extra Attack')).toBeTruthy();
+    expect(screen.getByText('Preview at level 5 shown below.').getAttribute('aria-live')).toBe('polite');
+    expect(within(sheet).queryByRole('heading', { name: 'Problems' })).toBeNull();
     expect(within(sheet).getByText(/Nothing is saved/)).toBeTruthy();
     expect(within(sheet).queryByRole('button', { name: /Save|Create/ })).toBeNull(); // read only
     expect(vi.mocked(client.preview)).toHaveBeenCalledTimes(1);
@@ -1532,7 +1534,8 @@ describe('preview at level (D82)', () => {
     const user = userEvent.setup();
     const view = fighter3();
     const before = structuredClone(view);
-    renderLevelUp(view);
+    const onCancel = vi.fn();
+    renderLevelUp(view, vi.fn(), onCancel);
     await previewAt(user, '5');
     await screen.findByRole('region', { name: 'Preview at level 5' });
     await user.click(screen.getByRole('button', { name: 'Close preview' }));
@@ -1547,11 +1550,54 @@ describe('preview at level (D82)', () => {
     await user.click(screen.getByRole('button', { name: 'Next: choices' }));
     await waitFor(() => expect(vi.mocked(client.preview)).toHaveBeenCalledTimes(2));
     expect(vi.mocked(client.preview).mock.calls[1]![0].classes).toEqual([{ class: fighterRef, level: 4 }]);
+    await user.click(await screen.findByRole('button', { name: 'Cancel' }));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(view).toEqual(before);
+    expect(client.saveCharacter).not.toHaveBeenCalled();
+    expect(client.createCharacter).not.toHaveBeenCalled();
+  });
+
+  it('lists the copy\'s problems', async () => {
+    const user = userEvent.setup();
+    vi.mocked(client.preview).mockImplementation(async (draft) => ({
+      character: draft,
+      sheet: { characterId: draft.id, rulesFamily: 'srd-5.1', diagnostics: [{ code: 'fixture.warning', message: 'Fixture warning text' }], fields: [] },
+    }));
+    renderLevelUp(fighter3());
+    await previewAt(user, '5');
+    const sheet = await screen.findByRole('region', { name: 'Preview at level 5' });
+    expect(within(sheet).getByRole('heading', { name: 'Problems' })).toBeTruthy();
+    expect(within(sheet).getByText('Fixture warning text')).toBeTruthy();
+  });
+
+  it('a failure that arrives after another class was picked is not reported', async () => {
+    const user = userEvent.setup();
+    const onError = vi.fn();
+    let fail: (error: Error) => void = () => {};
+    vi.mocked(client.preview).mockImplementation(() => new Promise((_, reject) => (fail = reject)));
+    renderLevelUp(fighter3(), onError);
+    await previewAt(user, '5');
+    await user.click(await screen.findByRole('radio', { name: /^Fixture Warden/ }));
+    fail(new Error('fixture failure'));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('is not offered when the class levels do not add up to the level (an import with no class)', async () => {
+    const user = userEvent.setup();
+    const view = fighter3();
+    view.character = { ...view.character, level: 5, classes: [] };
+    renderLevelUp(view);
+    await user.click(await screen.findByRole('radio', { name: /^Fixture Fighter/ }));
+    expect(screen.getByRole('button', { name: 'Next: choices' }).getAttribute('aria-disabled')).toBeNull(); // a class is picked
+    expect(screen.queryByRole('form', { name: 'Preview at level' })).toBeNull();
   });
 
   it('refuses a level outside the next level to 20 with its reason, and asks nothing', async () => {
     const user = userEvent.setup();
     renderLevelUp(fighter3());
+    // noValidate: the press reaches the form's own guard, not the browser's range check.
+    expect(screen.getByRole<HTMLFormElement>('form', { name: 'Preview at level' }).noValidate).toBe(true);
     for (const level of ['3', '21']) {
       await previewAt(user, level);
       const button = screen.getByRole('button', { name: 'Preview' });

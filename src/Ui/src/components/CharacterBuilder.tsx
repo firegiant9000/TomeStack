@@ -670,6 +670,10 @@ function LevelStep(props: {
         ? 'This class needs a campaign exception reason.'
         : undefined;
 
+  // The service takes the level from the class levels; a character whose level they do not add up to (an import with a level
+  // and no class) would preview at another level than the one asked for, so it is not offered a preview.
+  const classTotal = character.classes.reduce((sum, c) => sum + c.level, 0);
+
   /** The classes after `gain` more levels in the picked class. */
   function classesWith(picked: ContentReference, gain: number): ClassLevel[] {
     const existing = character.classes.find((c) => sameRef(c.class, picked));
@@ -734,7 +738,7 @@ function LevelStep(props: {
           </p>
         )}
       </form>
-      {!blocked && target && (
+      {!blocked && target && classTotal === character.level && (
         // Keyed by the class: picking another one starts a fresh form, so a preview never shows a class that is no longer picked.
         <LevelPreview
           key={`${target.contentId}|${target.revisionId}`}
@@ -785,8 +789,9 @@ function LevelPreview(props: { from: number; draftAt: (level: number) => Charact
 
   const sheet = shownView?.view.sheet;
   const open = (sheet?.choices ?? []).filter((c) => !c.resolved).length;
+  // noValidate: an out-of-range level is refused by the aria-disabled button and its reason (R43), not the browser's bubble.
   return (
-    <form onSubmit={submit} aria-label="Preview at level">
+    <form onSubmit={submit} aria-label="Preview at level" noValidate>
       <fieldset>
         <legend>Preview at level</legend>
         <label className="field">
@@ -803,6 +808,9 @@ function LevelPreview(props: { from: number; draftAt: (level: number) => Charact
             {reason}
           </p>
         )}
+        <p aria-live="polite" className="hint">
+          {shownView ? `Preview at level ${shownView.level} shown below.` : ''}
+        </p>
       </fieldset>
       {shownView && sheet && (
         <div role="region" aria-labelledby="preview-level-heading">
@@ -837,6 +845,18 @@ function LevelPreview(props: { from: number; draftAt: (level: number) => Charact
               <li key={f.content.revisionId}>{f.name}</li>
             ))}
           </ul>
+          {sheet.diagnostics.length > 0 && (
+            <>
+              <h5>Problems</h5>
+              <ul>
+                {sheet.diagnostics.map((d, i) => (
+                  <li key={`d-${d.code}-${i}`} className="warn">
+                    {d.message}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
           <div className="actions">
             <button
               type="button"
