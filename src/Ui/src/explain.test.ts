@@ -118,8 +118,8 @@ describe('attackSteps', () => {
     ];
     expect(attackSteps(trace, 'toHit')).toEqual([trace[0], trace[1], trace[2]]);
     expect(attackSteps(trace, 'damage')).toEqual([trace[0], trace[3]]);
-    expect(explainSteps([trace[3]], 'attack')).toEqual(['Blade: +2 damage (weapon)']);
-    expect(explainSteps([trace[2]], 'attack')).toEqual(['Blade: +2 to hit (weapon)']);
+    expect(explainSteps(trace.slice(3), 'attack')).toEqual(['Blade: +2 damage (weapon)']);
+    expect(explainSteps(trace.slice(2, 3), 'attack')).toEqual(['Blade: +2 to hit (weapon)']);
   });
 
   it('treats a feature-attack damage step (set, no amount, starts "Damage ") as damage', () => {
