@@ -664,8 +664,11 @@ public class LibraryBackupTests
         Assert.Equal([.. Enumerable.Range(1, 7).Select(d => $"library-{TempApp.Now.AddDays(d):yyyy-MM-dd}.tomestack.zip")], DailyCopies(temp));
     }
 
-    [Fact]
-    public void A_damaged_pdf_neither_makes_a_copy_every_day_nor_rotates_out_the_copy_that_holds_it()
+    [Theory]
+    [InlineData("changed")] // the same size, other content: only a full hash finds it
+    [InlineData("cut short")] // the quick check already leaves it out
+    [InlineData("deleted")]
+    public void A_damaged_pdf_neither_makes_a_copy_every_day_nor_rotates_out_the_copy_that_holds_it(string damage)
     {
         var clock = new SettableTime(TempApp.Now);
         using var temp = new TempApp(time: clock);
@@ -674,8 +677,19 @@ public class LibraryBackupTests
         var managed = AttachmentFiles.ManagedPath(temp.App.Store, temp.App.Store.ListAttachments().Single(a => a.Mode == AttachmentMode.Managed).Sha256!);
         File.SetAttributes(managed, FileAttributes.Normal);
         var bytes = File.ReadAllBytes(managed);
-        bytes[^2] ^= 0x20; // the same size, other content: only a full hash finds it
-        File.WriteAllBytes(managed, bytes);
+        bytes[^2] ^= 0x20;
+        switch (damage)
+        {
+            case "changed":
+                File.WriteAllBytes(managed, bytes);
+                break;
+            case "cut short":
+                File.WriteAllBytes(managed, bytes[..^10]);
+                break;
+            default:
+                File.Delete(managed);
+                break;
+        }
 
         for (var day = 1; day <= 8; day++)
         {
@@ -692,6 +706,38 @@ public class LibraryBackupTests
         Assert.Contains("library-2026-09-24.tomestack.zip", DailyCopies(temp)); // the only copy with the intact PDF
         Assert.Equal(8, DailyCopies(temp).Length); // the newest 7, and that one: the folder stays bounded
         Assert.Contains("backup.pdf-unreadable", File.ReadAllText(Path.Combine(temp.Directory, "logs", FileErrorLog.FileName)), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Two_pdfs_lost_on_different_days_each_spare_the_newest_copy_that_holds_them()
+    {
+        var clock = new SettableTime(TempApp.Now);
+        using var temp = new TempApp(time: clock);
+        var library = Fill(temp.App);
+        var second = temp.App.CreateHomebrewSource(new("Test Second Homebrew", [RulesFamilies.Srd51]));
+        temp.App.AttachPdf(second.Id, "second-notes.pdf", Encoding.ASCII.GetBytes("%PDF-1.4\n% TomeStack second test PDF\n%%EOF\n"));
+        var paths = temp.App.Store.ListAttachments().Where(a => a.Mode == AttachmentMode.Managed)
+            .Select(a => AttachmentFiles.ManagedPath(temp.App.Store, a.Sha256!)).ToList();
+        foreach (var path in paths)
+            File.SetAttributes(path, FileAttributes.Normal);
+
+        temp.App.TakeDailyCopy(); // day 0 holds both
+        File.Delete(paths[0]);
+        clock.Now = TempApp.Now.AddDays(1);
+        Change(temp.App, library.Character, "Test note: day 1.");
+        temp.App.TakeDailyCopy(); // day 1 holds only the second
+        File.Delete(paths[1]);
+        for (var day = 2; day <= 10; day++)
+        {
+            clock.Now = TempApp.Now.AddDays(day);
+            Change(temp.App, library.Character, $"Test note: day {day}.");
+            Assert.Equal(DailyCopyOutcome.Written, temp.App.TakeDailyCopy().Outcome);
+        }
+
+        var kept = DailyCopies(temp);
+        Assert.Contains("library-2026-09-24.tomestack.zip", kept); // the newest with the first PDF
+        Assert.Contains("library-2026-09-25.tomestack.zip", kept); // the newest with the second
+        Assert.Equal(9, kept.Length); // the newest 7, and one per PDF left out
     }
 
     [Fact]

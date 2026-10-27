@@ -144,7 +144,7 @@ export function BackupsPanel({ onError, onStatus, onRestored }: Props) {
         <p>
           The first time you open TomeStack on a day, if your library changed since the last copy, it saves a full backup in the
           backups\daily folder of your data folder (normally %LOCALAPPDATA%\TomeStack) and keeps the newest 7. Each copy
-          includes your PDF copies, so they take up to 7 times that space; a copy is skipped if it would leave less than 2 GB
+          includes your PDF copies, so they take about 7 times that space (more while a PDF is damaged); a copy is skipped if it would leave less than 2 GB
           free. They stay on this computer, so they help if something goes wrong in TomeStack, not if the computer fails. To use
           one, choose it with &quot;Choose a full backup…&quot; below.
         </p>

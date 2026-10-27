@@ -616,8 +616,8 @@ public sealed partial class PackageService
     /// Copies are named by the local date, so a clock that was once ahead leaves copies "after today": they are never compared
     /// with and never deleted (only copies dated before today rotate out). The quick check reads no PDF (a managed copy is
     /// named by its hash); only when it differs is every PDF hashed, and compared again, because a damaged PDF that the last
-    /// copy left out must not count as a change every day. A copy that leaves something out (a damaged PDF or extension file)
-    /// spares the newest older copy that still holds every PDF, beyond the newest 7: it may be the only good one.
+    /// copy left out must not count as a change every day. For each file a copy leaves out (a damaged, missing or cut-short PDF
+    /// or extension file), the newest older copy that holds it is spared beyond the newest 7: it may be the only good one.
     /// </remarks>
     internal DailyCopyResult TakeDailyCopy()
     {
@@ -642,8 +642,11 @@ public sealed partial class PackageService
         var plan = PlanLibrary(verifyPdfs: true);
         var files = LibraryFiles(plan, []);
         var pdfs = ManagedPdfs(plan);
-        if (newest is not null && SameEntries(newest, LibraryEntries(files, pdfs)))
-            return new(DailyCopyOutcome.Unchanged, null, []); // while a PDF stays damaged, every launch hashes them all to get here
+        var entries = LibraryEntries(files, pdfs);
+        if (newest is not null && SameEntries(newest, entries))
+            return new(DailyCopyOutcome.Unchanged, null, []); // while a PDF stays damaged at its size, every launch hashes them all to get here
+        if (!RoomFor(entries.Sum(e => e.Size)))
+            return new(DailyCopyOutcome.NotEnoughSpace, null, []);
 
         Directory.CreateDirectory(DailyDirectory);
         var partial = target + ".partial"; // complete or absent: a crash mid-write leaves no half copy under the real name
@@ -664,11 +667,22 @@ public sealed partial class PackageService
             if (!moved)
                 TryDelete(partial);
         }
-        // A copy that left a PDF out spares the newest older copy that still holds every PDF the library lists: it may be the
-        // only good one left. So at most one copy beyond the newest 7 is kept.
-        var keep = result.Warnings.Count == 0 ? null
-            : ListDailyCopies().Where(n => string.CompareOrdinal(n, name) < 0).FirstOrDefault(n => HoldsPdfs(Path.Combine(DailyDirectory, n), ManagedPdfs(quick)));
-        foreach (var old in ListDailyCopies().Where(n => string.CompareOrdinal(n, name) < 0 && n != keep).Skip(DailyCopiesKept - 1))
+        // Each file the library lists (a managed PDF, an extension file) that this copy left out, damaged, missing or cut short,
+        // spares the newest older copy that holds it: it may be the only good one left. The list is the store's, not a plan's,
+        // which drops what it cannot read. So the newest 7 are kept, and at most one more per file left out.
+        var older = ListDailyCopies().Where(n => string.CompareOrdinal(n, name) < 0).ToList();
+        var written = entries.Select(e => e.Path).ToHashSet(StringComparer.Ordinal);
+        var leftOut = store.ListAttachments().Where(a => a.Mode == AttachmentMode.Managed && a.Sha256 is not null).Select(a => $"{PdfFolder}{a.Sha256}.pdf")
+            .Concat(plan.Extensions.Select(e => $"{ExtensionFolder}{e.Sha256}.zip")).Where(p => !written.Contains(p)).Distinct(StringComparer.Ordinal).ToList();
+        var keep = new HashSet<string>(StringComparer.Ordinal);
+        if (leftOut.Count > 0)
+        {
+            var held = older.ToDictionary(n => n, n => DailyCopyHolds(Path.Combine(DailyDirectory, n)));
+            foreach (var path in leftOut)
+                if (older.FirstOrDefault(n => held[n].Contains(path)) is { } holder)
+                    keep.Add(holder);
+        }
+        foreach (var old in older.Skip(DailyCopiesKept - 1).Where(n => !keep.Contains(n)))
             TryDelete(Path.Combine(DailyDirectory, old));
         foreach (var stale in Directory.GetFiles(DailyDirectory, "library-*.tomestack.zip.partial"))
             TryDelete(stale); // a crash on an earlier day
@@ -679,9 +693,29 @@ public sealed partial class PackageService
     private static bool SameEntries(string path, List<PackageEntry> entries) =>
         DailyManifestEntries(path) is { } listed && listed.Select(e => (e.Path, e.Sha256)).SequenceEqual(entries.Select(e => (e.Path, e.Sha256)));
 
-    /// <summary>Whether the copy at <paramref name="path"/> lists a PDF for each of <paramref name="pdfs"/>. Unreadable means no.</summary>
-    private static bool HoldsPdfs(string path, List<Attachment> pdfs) =>
-        DailyManifestEntries(path) is { } listed && pdfs.All(a => listed.Any(e => e.Path == $"{PdfFolder}{a.Sha256}.pdf"));
+    /// <summary>
+    /// The entries the copy at <paramref name="path"/> both lists and holds at the listed size: the manifest alone is not
+    /// trusted. Unreadable means none.
+    /// </summary>
+    private static HashSet<string> DailyCopyHolds(string path)
+    {
+        var held = new HashSet<string>(StringComparer.Ordinal);
+        try
+        {
+            using var zip = ZipFile.OpenRead(path);
+            if (zip.GetEntry(ManifestPath) is not { } manifest
+                || Deserialize<PackageManifest>(ManifestPath, ReadBounded(manifest, MaxLibraryJsonBytes), [])?.Entries is not { } listed)
+                return held;
+            foreach (var entry in listed)
+                if (zip.GetEntry(entry.Path) is { } stored && stored.Length == entry.Size)
+                    held.Add(entry.Path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or EntryTooLargeException or TotalTooLargeException)
+        {
+            held.Clear();
+        }
+        return held;
+    }
 
     private static IReadOnlyList<PackageEntry>? DailyManifestEntries(string path)
     {

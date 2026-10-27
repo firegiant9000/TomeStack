@@ -33,7 +33,7 @@ public sealed partial class TomeStackApp
         if (result.Outcome == DailyCopyOutcome.NotEnoughSpace)
             ErrorLog.Record(FileErrorLog.NewCorrelationId(), "library.dailyCopy", new IOException("Skipped: the drive would have less than 2 GB free afterwards."));
         else if (result.LeftOut.Count > 0)
-            ErrorLog.Record(FileErrorLog.NewCorrelationId(), "library.dailyCopy", new InvalidDataException($"Written without: {string.Join(", ", result.LeftOut)}. Older copies were kept."));
+            ErrorLog.Record(FileErrorLog.NewCorrelationId(), "library.dailyCopy", new InvalidDataException($"Written without: {string.Join(", ", result.LeftOut)}. The newest older copy holding each left-out file was kept."));
         return result;
     }
 
