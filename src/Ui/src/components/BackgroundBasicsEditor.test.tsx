@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // Item 12: the background editor. The feature or feat and the ability increases follow the family's policy (never its name);
 // the 2024 increases are made the way the bundled 5.2.1 backgrounds make them (R48).
-import { act, cleanup, render, screen, within } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useEffect, useState } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -157,8 +157,9 @@ it('makes a new feature draft and grants it', async () => {
   render(<Harness initial={revisionOf(['srd-5.1'])} />);
   await user.type(screen.getByRole('textbox', { name: 'Feature name' }), 'Fixture Roof Overhead');
   await user.click(screen.getByRole('button', { name: 'Create feature and add it' }));
+  // The grant lands after saveDraft resolves; wait for it rather than racing the promise.
+  await waitFor(() => expect(latest.effects).toEqual([{ type: 'grant', id: 'feature', grant: 'content', content: { contentId: 'opt-c1', revisionId: 'opt-r1' } }]));
   expect(client.saveDraft).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ kind: 'feature', name: 'Fixture Roof Overhead', rulesFamilies: ['srd-5.1'] }));
-  expect(latest.effects).toEqual([{ type: 'grant', id: 'feature', grant: 'content', content: { contentId: 'opt-c1', revisionId: 'opt-r1' } }]);
   expect(madeSoFar.map((m) => m.name)).toEqual(['Fixture Roof Overhead']);
 });
 
