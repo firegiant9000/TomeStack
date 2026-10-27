@@ -7,6 +7,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { client } from '../api/client';
 import type { Character, CharacterDetails, CharacterSheet, CharacterView } from '../api/types';
 import { DetailsPanel } from './DetailsPanel';
+import { fill } from '../test/fill';
 
 vi.mock('../api/client', () => ({ client: { saveCharacter: vi.fn() } }));
 
@@ -76,7 +77,7 @@ it('releases Save on a change, saves the whole character with the details, and k
   vi.mocked(client.saveCharacter).mockResolvedValue(saved);
   const { form, save, onChanged, onStatus } = setup(v);
   await user.type(within(form).getByRole('textbox', { name: 'Alignment' }), '  Fixture neutral ');
-  await user.type(within(form).getByRole('textbox', { name: 'Eyes' }), 'Fixture grey');
+  await fill(user, within(form).getByRole('textbox', { name: 'Eyes' }), 'Fixture grey');
   await user.type(within(form).getByRole('textbox', { name: 'Languages' }), 'Fixture tongue{Enter}{Enter}  Fixture signs  {Enter}');
   expect(held(save)).toBe(false);
   expect(save.hasAttribute('aria-describedby')).toBe(false);
@@ -191,7 +192,7 @@ it('ignores a second press while a save runs', async () => {
   const { rerender } = render(<DetailsPanel view={viewOf()} onChanged={onChanged} onError={vi.fn()} onStatus={vi.fn()} />);
   const form = screen.getByRole('form', { name: 'Details' });
   const save = within(form).getByRole('button', { name: 'Save details' });
-  await user.type(within(form).getByRole('textbox', { name: 'Hair' }), 'Fixture auburn  '); // trailing spaces: the saved (trimmed) answer must replace them
+  await fill(user, within(form).getByRole('textbox', { name: 'Hair' }), 'Fixture auburn  '); // trailing spaces: the saved (trimmed) answer must replace them
   await user.click(save);
   await user.click(save);
   expect(client.saveCharacter).toHaveBeenCalledTimes(1);
@@ -214,7 +215,7 @@ it('keeps text typed while a save is in flight, in another field and in the subm
   const form = screen.getByRole('form', { name: 'Details' });
   await user.type(within(form).getByRole('textbox', { name: 'Ideals' }), 'A');
   await user.click(within(form).getByRole('button', { name: 'Save details' }));
-  await user.type(within(form).getByRole('textbox', { name: 'Bonds' }), 'Fixture bond');
+  await fill(user, within(form).getByRole('textbox', { name: 'Bonds' }), 'Fixture bond');
   await user.type(within(form).getByRole('textbox', { name: 'Ideals' }), 'B'); // the submitted field, edited too
   const savedView = viewOf({ details: { ideals: 'A' } });
   finish(savedView);
@@ -251,7 +252,7 @@ it('takes a saved change from elsewhere into fields the user has not edited, and
   const onChanged = vi.fn();
   const { rerender } = render(<DetailsPanel view={viewOf()} onChanged={onChanged} onError={vi.fn()} onStatus={vi.fn()} />);
   const form = screen.getByRole('form', { name: 'Details' });
-  await user.type(within(form).getByRole('textbox', { name: 'Bonds' }), 'Fixture bond');
+  await fill(user, within(form).getByRole('textbox', { name: 'Bonds' }), 'Fixture bond');
   rerender(<DetailsPanel view={viewOf({ details: { ideals: 'Fixture ideal' } })} onChanged={onChanged} onError={vi.fn()} onStatus={vi.fn()} />);
   expect(within(form).getByRole<HTMLTextAreaElement>('textbox', { name: 'Ideals' }).value).toBe('Fixture ideal');
   expect(within(form).getByRole<HTMLTextAreaElement>('textbox', { name: 'Bonds' }).value).toBe('Fixture bond');

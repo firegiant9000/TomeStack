@@ -113,8 +113,9 @@ it('offers Undo for the last play change and sends the inverse through the play 
   await user.click(undo);
   await waitFor(() => expect(client.play).toHaveBeenLastCalledWith('fixture-2', { action: 'setHitPoints', amount: 8 }));
   await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Undo last change' }).disabled).toBe(true));
-  // WCAG 2.4.3: the button is disabled now, so focus is on the hit points heading, not <body>.
-  expect(document.activeElement?.id).toBe('hp-heading');
+  // WCAG 2.4.3: the button is disabled now, so focus is on the hit points heading, not <body>. It moves once the play reply
+  // is in, which can be after the button disables, so wait for it.
+  await waitFor(() => expect(document.activeElement?.id).toBe('hp-heading'));
 });
 
 it('shows the applied state and keeps focus when a later undo step fails (D23)', async () => {

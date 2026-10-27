@@ -49,15 +49,15 @@ public class DdbReferenceDraftTests
         return result;
     }
 
-    private static Guid Read(DdbHarness h, string? block = null, string? second = null)
+    internal static Guid Read(DdbHarness h, string? block = null, string? second = null)
     {
         h.Fields = Fields(h, block ?? Block(), second);
         return h.Temp.App.ReadDdbSheet("C:/fixture/sheet.pdf").Token;
     }
 
-    private static DdbPreviewRequest Preview(Guid token) => new(token, RulesFamilies.Srd521, null, [], [], false);
+    internal static DdbPreviewRequest Preview(Guid token) => new(token, RulesFamilies.Srd521, null, [], [], false);
 
-    private static DdbApplyRequest Apply(Guid token, bool publish = false) =>
+    internal static DdbApplyRequest Apply(Guid token, bool publish = false) =>
         new(token, RulesFamilies.Srd521, null, [], [], false, Confirm: true, PublishReferences: publish);
 
     /// <summary>The apply with the publish tick on, carrying the row ids the preview showed (the consent token, R106 round).</summary>
@@ -150,25 +150,8 @@ public class DdbReferenceDraftTests
         Assert.Empty(h.Temp.App.PreviewDdbImport(Preview(Read(h, $"=== FIXTURE FEATURES ===\n* {BareKnack} • FX 1"))).ReferenceDrafts ?? []);
     }
 
-    [Fact]
-    public void Cancel_and_discard_at_every_step_write_nothing()
-    {
-        using var h = new DdbHarness();
-        var before = DdbStubClassTests.Counts(h);
-
-        var token = Read(h);
-        Assert.Equal(before, DdbStubClassTests.Counts(h)); // read
-        h.Temp.App.PreviewDdbImport(Preview(token));
-        Assert.Equal(before, DdbStubClassTests.Counts(h)); // matches, numbers and summary
-        Assert.True(h.Temp.App.DiscardDdbSheet(token));
-        Assert.Equal(before, DdbStubClassTests.Counts(h));
-        Assert.Equal("ddb.token-invalid", Assert.Throws<AppValidationException>(() => h.Temp.App.PreviewDdbImport(Preview(token))).Code);
-
-        var refused = Read(h);
-        Assert.Throws<AppValidationException>(() => h.Temp.App.ApplyDdbImport(Apply(refused, publish: true) with { Confirm = false }));
-        Assert.Equal(before, DdbStubClassTests.Counts(h));
-        Assert.NotNull(h.Temp.App.DdbSessions.Peek(refused));
-    }
+    // Cancel and discard at every step for the reference drafts: walked with the stub class in
+    // DdbStubClassTests.Cancel_and_discard_at_every_step_write_nothing_for_a_stub_class_and_for_reference_drafts.
 
     // ---- apply ----
 
