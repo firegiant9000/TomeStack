@@ -96,6 +96,42 @@ public class SchemaTests
         Assert.Equal("", ErrorsWith(e => Effect(e, "ember-item")["charges"]!["max"] = 99));
     }
 
+    [Theory]
+    [InlineData("1d06", true)]
+    [InlineData("3d8", true)]
+    [InlineData("0d6", false)]
+    [InlineData("1d7", false)]
+    public void The_v11_schema_checks_a_rider_dice_pattern(string dice, bool accepted)
+    {
+        // A copy of the v10 golden revision at v11 (the golden file itself is never edited) with one rider added.
+        var copy = JsonNode.Parse(File.ReadAllText(Path.Combine(FixtureRoot, "golden", "revisions.json")))!.AsArray()[9]!.DeepClone().AsObject();
+        copy["schemaVersion"] = 11;
+        copy["effects"]!.AsArray().Add(new JsonObject { ["type"] = "attackRider", ["id"] = "x", ["tags"] = new JsonArray("all"), ["dice"] = dice });
+        using var document = JsonDocument.Parse(copy.ToJsonString());
+
+        Assert.Equal(accepted, Validate("content-revision", document.RootElement) == "");
+    }
+
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    public void The_v11_schema_needs_a_roll_with_alsoChange_to_name_its_own_pool(bool hasPool, bool accepted)
+    {
+        var copy = JsonNode.Parse(File.ReadAllText(Path.Combine(FixtureRoot, "golden", "revisions.json")))!.AsArray()[9]!.DeepClone().AsObject();
+        copy["schemaVersion"] = 11;
+        var roll = new JsonObject
+        {
+            ["type"] = "roll", ["id"] = "x", ["rollId"] = "x", ["label"] = "X",
+            ["alsoChange"] = new JsonArray(new JsonObject { ["resourceId"] = "charge", ["change"] = "spend", ["amount"] = "1" }),
+        };
+        if (hasPool)
+            roll["resourceId"] = "focus";
+        copy["effects"]!.AsArray().Add(roll);
+        using var document = JsonDocument.Parse(copy.ToJsonString());
+
+        Assert.Equal(accepted, Validate("content-revision", document.RootElement) == "");
+    }
+
     [Fact]
     public void The_v9_schema_is_not_vacuous()
     {
@@ -158,6 +194,50 @@ public class SchemaTests
         foreach (var (where, actual, expected) in bounds)
             Assert.True(actual == expected, $"{where}: the schema says {actual}, the code says {expected}");
         Assert.Equal(DamageTypes.All, properties["damageDefences"]!["items"]!["properties"]!["type"]!["enum"]!.AsArray().Select(n => n!.GetValue<string>()));
+    }
+
+    [Fact]
+    public void The_v10_schema_is_not_vacuous_and_its_bounds_equal_the_play_constants()
+    {
+        var path = Path.Combine(FixtureRoot, "characters", "srd521-courier-v10.json");
+        var node = JsonNode.Parse(File.ReadAllText(path))!;
+        node["play"]!["encounter"]!["round"] = 10_001;
+        node["play"]!["toggles"]![0]!["roundsLeft"] = -3;
+        using (var document = JsonDocument.Parse(node.ToJsonString()))
+        {
+            var errors = Validate("character", document.RootElement);
+            Assert.Contains("/play/encounter/round", errors, StringComparison.Ordinal);
+            Assert.Contains("/play/toggles/0/roundsLeft", errors, StringComparison.Ordinal);
+        }
+
+        var extra = JsonNode.Parse(File.ReadAllText(path))!;
+        extra["play"]!["encounter"]!["turn"] = 1;
+        using (var document = JsonDocument.Parse(extra.ToJsonString()))
+            Assert.Contains("/play/encounter", Validate("character", document.RootElement), StringComparison.Ordinal);
+
+        var play = JsonNode.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "schemas", "character.v10.schema.json")))!["properties"]!["play"]!["properties"]!;
+        Assert.Equal(PlayState.MaxRounds, play["encounter"]!["properties"]!["round"]!["maximum"]!.GetValue<int>());
+        Assert.Equal(0, play["encounter"]!["properties"]!["round"]!["minimum"]!.GetValue<int>());
+        Assert.Equal(PlayState.MaxRounds, play["toggles"]!["items"]!["properties"]!["roundsLeft"]!["maximum"]!.GetValue<int>());
+        Assert.Equal(0, play["toggles"]!["items"]!["properties"]!["roundsLeft"]!["minimum"]!.GetValue<int>());
+    }
+
+    [Theory]
+    [InlineData(10, false)]
+    [InlineData(11, true)]
+    public void A_package_character_entry_at_schema_v10_is_accepted_and_v11_is_refused(int version, bool refused)
+    {
+        using var origin = new TempApp();
+        var saved = origin.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json"));
+        var package = origin.App.ExportCharacters([saved.Character.Id]).Content;
+        var edited = PackageEditor.Edit(package, path => path.StartsWith("characters/", StringComparison.Ordinal), node => node["schemaVersion"] = version);
+
+        using var destination = new TempApp();
+        var errors = destination.App.PreviewImport(edited).Errors.Where(e => e.Code == "package.schema-unsupported").ToList();
+
+        Assert.Equal(refused, errors.Count > 0);
+        if (refused)
+            Assert.All(errors, e => Assert.Contains("character schema v11", e.Message, StringComparison.Ordinal));
     }
 
     [Fact]
@@ -252,10 +332,11 @@ public class SchemaTests
 
     [Theory]
     [InlineData(10, false)]
-    [InlineData(11, true)]
-    public void A_package_content_entry_at_content_schema_v10_is_accepted_and_v11_is_refused(int version, bool refused)
+    [InlineData(11, false)]
+    [InlineData(12, true)]
+    public void A_package_content_entry_at_content_schema_v11_is_accepted_and_v12_is_refused(int version, bool refused)
     {
-        // Content schema v10 (Wave 3, D42) is the current version; v11 is reserved for a later build and is refused here.
+        // Content schema v11 (play mechanics, D43) is the current version; v12 is reserved for a later build and is refused here.
         using var origin = new TempApp();
         var saved = origin.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json"));
         var package = origin.App.ExportCharacters([saved.Character.Id]).Content;
@@ -267,7 +348,7 @@ public class SchemaTests
         var errors = preview.Errors.Where(e => e.Code == "package.schema-unsupported").ToList();
         Assert.Equal(refused, errors.Count > 0);
         if (refused)
-            Assert.All(errors, e => Assert.Contains("content schema v11", e.Message, StringComparison.Ordinal));
+            Assert.All(errors, e => Assert.Contains("content schema v12", e.Message, StringComparison.Ordinal));
     }
 
     [Fact]
@@ -280,7 +361,7 @@ public class SchemaTests
         {
             ContentId = Guid.Parse("c10a0000-0000-4000-8000-0000000000a1"), RevisionId = Guid.Parse("c10b0000-0000-4000-8000-0000000000a1"),
             Kind = ContentKind.Item, Name = "Fixture Charged Rod", RulesFamilies = [RulesFamilies.Srd51], Provenance = new(source.Id, new PageRef(1)),
-            Status = RevisionStatus.Published,
+            Status = RevisionStatus.Published, SchemaVersion = ContentRevision.PlayDetailsSchemaVersion,
             Effects =
             [
                 new ItemEffect { Id = "rod", RequiresAttunement = true, Charges = new ItemCharges { Max = 4, Recovery = new ItemChargeRecovery { Period = RestPeriod.LongRest, Regain = "1d4" } } },

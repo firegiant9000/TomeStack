@@ -801,7 +801,20 @@ public sealed partial class TomeStackApp
             var revision = batch.FirstOrDefault(r => r.Reference == reference) ?? _store.FindRevision(reference); // a linked feature's draft is written with the class
             dependencies.Add(revision is null ? new("missing-content", reference.RevisionId.ToString(), reference) : new("content", revision.Name, reference));
         }
-        foreach (var contentId in draft.Effects.OfType<RollEffect>().Select(r => r.ResourceContent).OfType<Guid>().Distinct())
+        var toggleContent = draft.Effects.OfType<ToggleEffect>()
+            .SelectMany(t => new[] { t.GroupContent, t.ResourceContent }.Concat((t.AllowedWith ?? []).Select(a => a.ContentId)))
+            .OfType<Guid>()
+            .Concat(draft.Effects.OfType<UpkeepEffect>().SelectMany(u => new[] { u.ToggleContent, u.ResourceContent }.OfType<Guid>()))
+            .Concat(draft.Effects.OfType<AttackEffect>().SelectMany(a => new[] { a.ResourceContent, a.WhileToggle?.ContentId }.OfType<Guid>()))
+            .Concat(draft.Effects.OfType<AttackRiderEffect>().Select(r => r.ToggleContent).OfType<Guid>())
+            .Concat(draft.Effects.OfType<ModifierEffect>().Select(m => m.ToggleContent).OfType<Guid>())
+            .Concat(draft.Effects.OfType<RollEffect>().Select(r => r.WhileToggle?.ContentId).OfType<Guid>())
+            .Concat(draft.Effects.OfType<RollEffect>().SelectMany(r => (r.AlsoChange ?? []).Select(a => a?.ResourceContent).OfType<Guid>()))
+            .Concat(draft.Effects.OfType<RollModeEffect>().Select(m => m.ToggleContent).OfType<Guid>())
+            .Concat(draft.Effects.OfType<GrantEffect>().Select(g => g.WhileToggle?.ContentId).OfType<Guid>())
+            .Concat(draft.Effects.OfType<ResponseEffect>().SelectMany(r => r.ReferencedContent()))
+            .Where(id => id != draft.ContentId); // a toggle or upkeep naming its own content is no dependency
+        foreach (var contentId in draft.Effects.OfType<RollEffect>().Select(r => r.ResourceContent).OfType<Guid>().Concat(toggleContent).Distinct())
         {
             var revision = _store.ListRevisions(contentId).LastOrDefault();
             dependencies.Add(revision is null ? new("missing-content", contentId.ToString()) : new("content", revision.Name, revision.Reference));

@@ -32,7 +32,7 @@ public class SerializationProperties
             var unknownKept = (c.Extensions ?? []).All(e =>
                 read.Extensions?.TryGetValue(e.Key, out var back) == true && JsonElement.DeepEquals(e.Value, back)
                 && JsonNode.DeepEquals(JsonNode.Parse(e.Value.GetRawText()), JsonNode.Parse(written)![e.Key]));
-            return (Write(read) == written && unknownKept && read.TotalLevel == c.TotalLevel && read.SchemaVersion == (c.UsesV9Fields ? Character.CurrentSchemaVersion : Character.PreviousSchemaVersion))
+            return (Write(read) == written && unknownKept && read.TotalLevel == c.TotalLevel && read.SchemaVersion == (c.UsesV10Fields ? Character.EncounterSchemaVersion : c.UsesV9Fields ? Character.DetailsSchemaVersion : Character.PreviousSchemaVersion))
                 .Label(written);
         });
 

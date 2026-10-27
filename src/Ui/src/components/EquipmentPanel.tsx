@@ -13,7 +13,7 @@ interface Props {
   /** The sheet's one save queue (R132); a panel mounted alone saves directly. */
   saveCharacter?: SheetSave;
   /** The sheet's play command (so an Undo is offered, D23). A panel mounted alone sends the command itself. */
-  act?: (action: PlayAction) => void | Promise<void>;
+  act?: (action: PlayAction) => void | Promise<unknown>;
 }
 
 const sameRef = (a: { contentId: string; revisionId: string }, b: { contentId: string; revisionId: string }) =>

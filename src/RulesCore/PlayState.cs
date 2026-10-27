@@ -19,6 +19,9 @@ public sealed record PlayState
     /// <summary>The longest spell name a concentration records (a name the player's own content gave it; the same bound as a snapshot label).</summary>
     public const int MaxConcentrationNameLength = 200;
 
+    /// <summary>The highest encounter round, and the most rounds a toggle can have left, validation accepts (untrusted input, SPEC Q-02).</summary>
+    public const int MaxRounds = 10_000;
+
     /// <summary>A bound on spent slots of one level (untrusted input); overrides can raise a maximum, never past this.</summary>
     public const int MaxSlots = 100;
 
@@ -72,6 +75,12 @@ public sealed record PlayState
     /// </summary>
     public IReadOnlyList<CompanionPlay>? Companions { get => _companions; init => _companions = Character.NullIfEmpty(value); }
 
+    /// <summary>
+    /// Character schema v10 (D43): the encounter in progress, or null (not in one). Null is omitted on write, so a character that never
+    /// starts an encounter stays at its lower version.
+    /// </summary>
+    public EncounterState? Encounter { get; init; }
+
     public bool IsOn(Guid contentId, string toggleId) => Toggles.Any(t => t.ContentId == contentId && t.ToggleId == toggleId);
 
     public int SlotsSpentOf(int level) => SpellSlotsSpent.LastOrDefault(s => s.Level == level)?.Spent ?? 0;
@@ -101,6 +110,15 @@ public sealed record PlayState
             .. spent > 0 ? [new ResourceUse(contentId, resourceId, spent)] : Array.Empty<ResourceUse>(),
         ],
     };
+
+    /// <summary>
+    /// The same state with <paramref name="current"/> hit points stored: <c>null</c> (at the maximum) from <paramref name="maximum"/> up.
+    /// The one place the null-at-maximum rule lives.
+    /// </summary>
+    public PlayState WithCurrentHitPoints(int current, int maximum) => this with { CurrentHitPoints = current >= maximum ? null : current };
+
+    /// <summary>The same state with <paramref name="current"/> (stored as in <see cref="WithCurrentHitPoints"/>) and <paramref name="temporary"/> hit points.</summary>
+    public PlayState WithHitPoints(int current, int temporary, int maximum) => WithCurrentHitPoints(current, maximum) with { TemporaryHitPoints = temporary };
 
     public int HitDiceSpentOf(int die) => HitDiceSpent.LastOrDefault(h => h.Die == die)?.Spent ?? 0;
 
@@ -140,6 +158,10 @@ public sealed record PlayState
             yield return new("play.spell-slots-duplicate", "A spell slot level is recorded more than once.");
         if (Toggles.Any(t => string.IsNullOrWhiteSpace(t.ToggleId)) || Toggles.GroupBy(t => (t.ContentId, t.ToggleId)).Any(g => g.Count() > 1))
             yield return new("play.toggle-invalid", "An active toggle needs a toggle id, and each is recorded once.");
+        if (Encounter is { Round: < 0 or > MaxRounds })
+            yield return new("play.encounter-invalid", $"The encounter round must be between 0 and {MaxRounds}.");
+        if (Toggles.Any(t => t.RoundsLeft is < 0 or > MaxRounds))
+            yield return new("play.toggle-rounds-invalid", $"The rounds left on an active toggle must be between 0 and {MaxRounds}.");
         if (PactSlotsSpent is < 0 or > MaxSlots)
             yield return new("play.spell-slots-invalid", $"Spent Pact Magic slots must be between 0 and {MaxSlots}.");
         if (DeathSaves.Successes is < 0 or > DeathSaves.Maximum || DeathSaves.Failures is < 0 or > DeathSaves.Maximum)
@@ -161,8 +183,14 @@ public sealed record PlayState
 /// <summary>How many uses of one resource are spent. <paramref name="ContentId"/> is the content that defines it.</summary>
 public sealed record ResourceUse(Guid ContentId, string ResourceId, int Spent);
 
-/// <summary>A <c>toggle</c> effect that is switched on: the content that defines it and its toggle id.</summary>
-public sealed record ActiveToggle(Guid ContentId, string ToggleId);
+/// <summary>
+/// A <c>toggle</c> effect that is switched on: the content that defines it and its toggle id. <paramref name="RoundsLeft"/> (schema v10)
+/// counts down the rounds of a timed toggle during an encounter; null is no count and is omitted on write.
+/// </summary>
+public sealed record ActiveToggle(Guid ContentId, string ToggleId, int? RoundsLeft = null);
+
+/// <summary>Character schema v10 (D43): an encounter in progress. Round 0 means the first turn has not started; the UI shows <c>max(1, round)</c>.</summary>
+public sealed record EncounterState(int Round);
 
 /// <summary>Character schema v8 (D19): the spell being concentrated on (an exact pin and its name) and a pending Constitution save DC.</summary>
 public sealed record Concentration(ContentReference Spell, string Name, int? PendingSaveDc = null)

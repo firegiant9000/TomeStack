@@ -107,6 +107,176 @@ public class SourcePackTests
     }
 
     [Fact]
+    public void A_source_pack_preview_warns_once_when_a_revision_is_at_schema_v11_and_not_for_older_content()
+    {
+        using var temp = new TempApp();
+        var (old, _, _) = SharedWithTwoRevisions(temp);
+        Assert.DoesNotContain(temp.App.PreviewSourcePack([old.Id]).Warnings, w => w.Code == "package.needs-newer-build");
+
+        var newer = Shared(temp, "Test Newer Source");
+        temp.App.Store.AddRevision(Feat(newer.Id, "Test Newer One", Guid.NewGuid(), Guid.NewGuid()) with { Status = RevisionStatus.Published, SchemaVersion = 11 });
+        temp.App.Store.AddRevision(Feat(newer.Id, "Test Newer Two", Guid.NewGuid(), Guid.NewGuid()) with { Status = RevisionStatus.Published, SchemaVersion = 11 });
+        var warning = Assert.Single(temp.App.PreviewSourcePack([newer.Id]).Warnings, w => w.Code == "package.needs-newer-build");
+        Assert.Equal(PackageWarningText, warning.Message);
+        Assert.Single(temp.App.PreviewSourcePack([old.Id, newer.Id]).Warnings, w => w.Code == "package.needs-newer-build");
+    }
+
+    private const string PackageWarningText = "Opening this needs TomeStack 0.7.0 or later: it holds content or a character that older versions refuse.";
+
+    [Fact]
+    public void A_toggle_that_names_content_in_another_source_gives_a_reference_outside_warning()
+    {
+        using var temp = new TempApp();
+        var other = Shared(temp, "Test Pool Source");
+        var pool = Feat(other.Id, "Test Pool Holder", Guid.Parse("6e510000-0000-4000-8000-0000000000a1"), Guid.Parse("6e51e000-0000-4000-8000-0000000000a1")) with { Status = RevisionStatus.Published };
+        temp.App.Store.AddRevision(pool);
+        var own = Shared(temp, "Test Form Source");
+        var toggle = Feat(own.Id, "Test Form Taker", Guid.Parse("6e510000-0000-4000-8000-0000000000a2"), Guid.Parse("6e51e000-0000-4000-8000-0000000000a2")) with
+        {
+            Status = RevisionStatus.Published,
+            SchemaVersion = 11,
+            Effects = [new ToggleEffect { Id = "form", ToggleId = "form", Label = "Form", Cost = "1", ResourceId = "focus", ResourceContent = pool.ContentId }],
+        };
+        temp.App.Store.AddRevision(toggle);
+
+        Assert.Contains(temp.App.PreviewSourcePack([own.Id]).Warnings, w => w.Code == "pack.reference-outside");
+        Assert.DoesNotContain(temp.App.PreviewSourcePack([other.Id]).Warnings, w => w.Code == "pack.reference-outside");
+    }
+
+    [Fact]
+    public void An_upkeep_that_names_content_in_another_source_gives_a_reference_outside_warning()
+    {
+        using var temp = new TempApp();
+        var other = Shared(temp, "Test Pool Source");
+        var pool = Feat(other.Id, "Test Pool Holder", Guid.Parse("6e510000-0000-4000-8000-0000000000b1"), Guid.Parse("6e51e000-0000-4000-8000-0000000000b1")) with { Status = RevisionStatus.Published };
+        temp.App.Store.AddRevision(pool);
+        var own = Shared(temp, "Test Upkeep Source");
+        var upkeep = Feat(own.Id, "Test Upkeep Taker", Guid.Parse("6e510000-0000-4000-8000-0000000000b2"), Guid.Parse("6e51e000-0000-4000-8000-0000000000b2")) with
+        {
+            Status = RevisionStatus.Published,
+            SchemaVersion = 11,
+            Effects = [new UpkeepEffect { Id = "tick", At = TurnMoment.TurnEnd, ResourceId = "focus", ResourceContent = pool.ContentId, Change = UpkeepChange.Regain, Amount = "1" }],
+        };
+        temp.App.Store.AddRevision(upkeep);
+
+        Assert.Contains(temp.App.PreviewSourcePack([own.Id]).Warnings, w => w.Code == "pack.reference-outside");
+        Assert.DoesNotContain(temp.App.PreviewSourcePack([other.Id]).Warnings, w => w.Code == "pack.reference-outside");
+    }
+
+    [Fact]
+    public void An_attack_that_spends_a_pool_in_another_source_gives_a_reference_outside_warning()
+    {
+        using var temp = new TempApp();
+        var other = Shared(temp, "Test Pool Source");
+        var pool = Feat(other.Id, "Test Pool Holder", Guid.Parse("6e510000-0000-4000-8000-0000000000c1"), Guid.Parse("6e51e000-0000-4000-8000-0000000000c1")) with { Status = RevisionStatus.Published };
+        temp.App.Store.AddRevision(pool);
+        var own = Shared(temp, "Test Attack Source");
+        var attack = Feat(own.Id, "Test Attack Taker", Guid.Parse("6e510000-0000-4000-8000-0000000000c2"), Guid.Parse("6e51e000-0000-4000-8000-0000000000c2")) with
+        {
+            Status = RevisionStatus.Published,
+            SchemaVersion = 11,
+            Effects = [new AttackEffect { Id = "bolt", AttackId = "bolt", Label = "Bolt", Kind = WeaponAttack.Ranged, Abilities = [Ability.Dex], Damage = new("1", "6"), DamageType = "force", ResourceId = "focus", ResourceContent = pool.ContentId }],
+        };
+        temp.App.Store.AddRevision(attack);
+
+        Assert.Contains(temp.App.PreviewSourcePack([own.Id]).Warnings, w => w.Code == "pack.reference-outside");
+        Assert.DoesNotContain(temp.App.PreviewSourcePack([other.Id]).Warnings, w => w.Code == "pack.reference-outside");
+    }
+
+    [Fact]
+    public void A_rider_that_names_a_toggle_in_another_source_gives_a_reference_outside_warning()
+    {
+        using var temp = new TempApp();
+        var other = Shared(temp, "Test Toggle Source");
+        var holder = Feat(other.Id, "Test Toggle Holder", Guid.Parse("6e510000-0000-4000-8000-0000000000d1"), Guid.Parse("6e51e000-0000-4000-8000-0000000000d1")) with { Status = RevisionStatus.Published };
+        temp.App.Store.AddRevision(holder);
+        var own = Shared(temp, "Test Rider Source");
+        var rider = Feat(own.Id, "Test Rider Taker", Guid.Parse("6e510000-0000-4000-8000-0000000000d2"), Guid.Parse("6e51e000-0000-4000-8000-0000000000d2")) with
+        {
+            Status = RevisionStatus.Published,
+            SchemaVersion = 11,
+            Effects = [new AttackRiderEffect { Id = "edge", Tags = ["all"], ToHit = "1", Toggle = "form", ToggleContent = holder.ContentId }],
+        };
+        temp.App.Store.AddRevision(rider);
+
+        Assert.Contains(temp.App.PreviewSourcePack([own.Id]).Warnings, w => w.Code == "pack.reference-outside");
+        Assert.DoesNotContain(temp.App.PreviewSourcePack([other.Id]).Warnings, w => w.Code == "pack.reference-outside");
+    }
+
+    [Fact]
+    public void A_roll_mode_and_a_defence_grant_that_follow_a_toggle_in_another_source_give_a_reference_outside_warning()
+    {
+        using var temp = new TempApp();
+        var other = Shared(temp, "Test Form Source");
+        var holder = Feat(other.Id, "Test Form Holder", Guid.Parse("6e510000-0000-4000-8000-0000000000e1"), Guid.Parse("6e51e000-0000-4000-8000-0000000000e1")) with { Status = RevisionStatus.Published };
+        temp.App.Store.AddRevision(holder);
+        var mode = Shared(temp, "Test Roll Mode Source");
+        temp.App.Store.AddRevision(Feat(mode.Id, "Test Roll Mode Taker", Guid.Parse("6e510000-0000-4000-8000-0000000000e2"), Guid.Parse("6e51e000-0000-4000-8000-0000000000e2")) with
+        {
+            Status = RevisionStatus.Published,
+            SchemaVersion = 11,
+            Effects = [new RollModeEffect { Id = "stealthy", Target = "skill.stealth", Mode = RollMode.Disadvantage, Toggle = "form", ToggleContent = holder.ContentId }],
+        });
+        var defence = Shared(temp, "Test Defence Source");
+        temp.App.Store.AddRevision(Feat(defence.Id, "Test Defence Taker", Guid.Parse("6e510000-0000-4000-8000-0000000000e3"), Guid.Parse("6e51e000-0000-4000-8000-0000000000e3")) with
+        {
+            Status = RevisionStatus.Published,
+            SchemaVersion = 11,
+            Effects = [new GrantEffect { Id = "ward", Grant = GrantKind.DamageResistance, DamageType = "Fire", WhileToggle = new(holder.ContentId, "form") }],
+        });
+
+        Assert.Contains(temp.App.PreviewSourcePack([mode.Id]).Warnings, w => w.Code == "pack.reference-outside");
+        Assert.Contains(temp.App.PreviewSourcePack([defence.Id]).Warnings, w => w.Code == "pack.reference-outside");
+    }
+
+    /// <summary>One effect of each kind that names another content's toggle, pool or roll (every toggle-style reference).</summary>
+    private static Effect NamingOtherContent(string kind, Guid holder) => kind switch
+    {
+        "modifier toggleContent" => new ModifierEffect { Id = "e", Operation = ModifierOperation.Bonus, Target = FieldIds.Initiative, Value = "1", Timing = EffectTiming.WhileActive, Toggle = "form", ToggleContent = holder },
+        "attack whileToggle" => new AttackEffect { Id = "e", AttackId = "bolt", Label = "Bolt", Kind = WeaponAttack.Ranged, Abilities = [Ability.Dex], Damage = new("1", "6"), DamageType = "force", WhileToggle = new(holder, "form") },
+        "roll whileToggle" => new RollEffect { Id = "e", RollId = "burst", Label = "Burst", Dice = "1d6", WhileToggle = new(holder, "form") },
+        "roll alsoChange" => new RollEffect { Id = "e", RollId = "burst", Label = "Burst", Dice = "1d6", AlsoChange = [new("charge", holder, UpkeepChange.Spend, "1")] },
+        "rollMode toggleContent" => new RollModeEffect { Id = "e", Target = "skill.stealth", Mode = RollMode.Disadvantage, Toggle = "form", ToggleContent = holder },
+        "grant whileToggle" => new GrantEffect { Id = "e", Grant = GrantKind.DamageResistance, DamageType = "Fire", WhileToggle = new(holder, "form") },
+        "response resourceContent" => new ResponseEffect { Id = "e", ResponseId = "brace", Label = "Brace", Phase = ResponsePhase.DamageReduction, Amount = "1", ResourceId = "grit", ResourceContent = holder, Cost = "1" },
+        "response toggle" => new ResponseEffect { Id = "e", ResponseId = "brace", Label = "Brace", Phase = ResponsePhase.DamageReduction, Amount = "1", Toggle = new(holder, "form") },
+        "response outcome resourceContent" => new ResponseEffect { Id = "e", ResponseId = "rally", Label = "Rally", Phase = ResponsePhase.Threshold, When = new(null, true), Outcomes = [new(ResponseOutcomeKind.Regain, "grit", holder, "1", null, null, null)] },
+        "response outcome toggle" => new ResponseEffect { Id = "e", ResponseId = "rally", Label = "Rally", Phase = ResponsePhase.Threshold, When = new(null, true), Outcomes = [new(ResponseOutcomeKind.ToggleOn, null, null, null, new(holder, "form"), null, null)] },
+        "response outcome rollContent" => new ResponseEffect { Id = "e", ResponseId = "rally", Label = "Rally", Phase = ResponsePhase.Threshold, When = new(null, true), Outcomes = [new(ResponseOutcomeKind.OfferRoll, null, null, null, null, "counter", holder)] },
+        _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+    };
+
+    [Theory]
+    [InlineData("modifier toggleContent")]
+    [InlineData("attack whileToggle")]
+    [InlineData("roll whileToggle")]
+    [InlineData("roll alsoChange")]
+    [InlineData("rollMode toggleContent")]
+    [InlineData("grant whileToggle")]
+    [InlineData("response resourceContent")]
+    [InlineData("response toggle")]
+    [InlineData("response outcome resourceContent")]
+    [InlineData("response outcome toggle")]
+    [InlineData("response outcome rollContent")]
+    public void Every_toggle_style_reference_to_another_source_gives_a_reference_outside_warning_when_that_source_is_left_out(string kind)
+    {
+        using var temp = new TempApp();
+        var other = Shared(temp, "Test Holder Source");
+        var holder = Feat(other.Id, "Test Holder", Guid.NewGuid(), Guid.NewGuid()) with { Status = RevisionStatus.Published };
+        temp.App.Store.AddRevision(holder);
+        var own = Shared(temp, "Test Taker Source");
+        temp.App.Store.AddRevision(Feat(own.Id, "Test Taker", Guid.NewGuid(), Guid.NewGuid()) with
+        {
+            Status = RevisionStatus.Published,
+            SchemaVersion = 11,
+            Effects = [NamingOtherContent(kind, holder.ContentId)],
+        });
+
+        Assert.Contains(temp.App.PreviewSourcePack([own.Id]).Warnings, w => w.Code == "pack.reference-outside");
+        Assert.DoesNotContain(temp.App.PreviewSourcePack([own.Id, other.Id]).Warnings, w => w.Code == "pack.reference-outside");
+    }
+
+    [Fact]
     public void A_source_pack_carries_no_machine_local_field_and_matches_the_v7_schemas()
     {
         using var origin = new TempApp();
