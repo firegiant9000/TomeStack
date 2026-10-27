@@ -37,7 +37,7 @@ The work is one item at a time. Each item is generic and declarative, with a tra
 
 | Version | Fields | Status |
 |---|---|---|
-| Content v12 | `weapon.bonus` (item 0) | proposed, waiting for the owner |
+| Content v12 | `weapon.bonus` (item 0) | approved by the owner (2026-10-27) |
 | Character v11 | none yet (only if items 3–4 need one) | not proposed |
 
 ## Consequences
