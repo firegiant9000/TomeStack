@@ -28,7 +28,7 @@ A choice that does not apply to this entry is not offered, so it is never "unres
 
 An item carries `weapon { category: simple | martial, attack: melee | ranged, damage, damageType, properties[], versatile?, range?, weaponKey, mastery?, bonus? }`. `bonus` (content v12) is a whole number from 0 to 10 that the weapon adds to its to-hit and to its damage; below v12 the key is ignored. Proficiency is a `grant proficiency` in `weapon.simple`, `weapon.martial` or `weapon.<weaponKey>`, and it may be `onlyAs` like any grant.
 
-The validator checks `bonus` with three codes: `validate.weapon-bonus` (a bonus outside 0 to 10), `validate.requires-v12` (a bonus in a revision below v12) and `validate.effect-malformed` (a v12 or later weapon that does not read and carries `bonus` in any spelling).
+The validator checks `bonus` with three codes: `validate.weapon-bonus` (a bonus outside 0 to 10), `validate.requires-v12` (a typed bonus in a revision that declares an older version, which only a revision built in code can have: read from JSON below v12, the key stays extension data and does nothing) and `validate.effect-malformed` (a v12 or later weapon that does not read and carries `bonus` in any spelling).
 
 Each **equipped** weapon gives an entry in `sheet.attacks`:
 
