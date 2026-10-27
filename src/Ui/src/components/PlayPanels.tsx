@@ -647,6 +647,10 @@ export function ActionsPanel({
     // Focus lost to <body> means the row just used was hidden; a real element anywhere else was chosen, so leave it.
     if (active === null || active === document.body) usableRef.current?.focus();
   });
+  const disarmUnless = (target: EventTarget) => {
+    const armed = refocusFrom.current;
+    if (armed && !(target instanceof Node && armed.contains(target))) refocusFrom.current = null;
+  };
   const rollDamage = (target: RollTarget, type?: string) => {
     onDamageType?.(normalizeDamageType(type));
     roll(target);
@@ -720,6 +724,10 @@ export function ActionsPanel({
         const control = e.target instanceof Element ? e.target.closest('button, input[type="checkbox"]') : null;
         if (usableOnly && control && control !== usableRef.current) refocusFrom.current = control as HTMLElement;
       }}
+      // The refocus is for the control just used. A pointer or focus move to anything else in the panel means the user has moved on, so a
+      // row that left later (another action emptied its pool) must not pull focus back to "Usable now".
+      onPointerDownCapture={(e) => disarmUnless(e.target)}
+      onFocusCapture={(e) => disarmUnless(e.target)}
     >
       <h3 id="actions-heading">Attacks and actions</h3>
       {ungroupedToggles.length > 0 && (

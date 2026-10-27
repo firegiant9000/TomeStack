@@ -920,6 +920,30 @@ it('a later render with no action never moves focus, even after a row button was
   expect(document.activeElement).toBe(document.body);
 });
 
+it('a row that stayed listed does not pull focus later: a click elsewhere in the panel disarms the refocus', async () => {
+  const props = { roll: () => {}, act: () => {} };
+  const { rerender } = render(<ActionsPanel view={actionsView([rally], focusPool(4))} {...props} />);
+  await userEvent.click(usableNow());
+  await userEvent.click(screen.getByRole('button', { name: /^Use Rally/ })); // arms; the row stays listed
+  rerender(<ActionsPanel view={actionsView([rally], focusPool(3))} {...props} />);
+  await userEvent.click(screen.getByRole('heading', { name: 'Attacks and actions' })); // focus goes to <body>
+  expect(document.activeElement).toBe(document.body);
+  rerender(<ActionsPanel view={actionsView([rally], focusPool(0))} {...props} />); // another action empties the pool
+  expect(screen.queryByRole('button', { name: /^Use Rally/ })).toBeNull();
+  expect(document.activeElement).toBe(document.body);
+});
+
+it('a focus move to another control in the panel disarms the refocus as well', async () => {
+  const props = { roll: () => {}, act: () => {} };
+  const { rerender } = render(<ActionsPanel view={actionsView([rally], focusPool(4))} {...props} />);
+  await userEvent.click(usableNow());
+  await userEvent.click(screen.getByRole('button', { name: /^Use Rally/ }));
+  screen.getByRole('checkbox', { name: /^Critical hit/ }).focus(); // keyboard move, no pointer
+  screen.getByRole('checkbox', { name: /^Critical hit/ }).blur();
+  rerender(<ActionsPanel view={actionsView([rally], focusPool(0))} {...props} />);
+  expect(document.activeElement).toBe(document.body);
+});
+
 it('when the row drops while focus is outside the panel, focus stays there', async () => {
   const props = { roll: () => {}, act: () => {} };
   const ui = (pool: number) => (
