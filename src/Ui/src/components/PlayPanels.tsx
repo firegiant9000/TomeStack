@@ -631,14 +631,21 @@ export function ActionsPanel({
   const [usableOnly, setUsableOnly] = useState(false);
   // D73: a click can empty the pool and so unmount its own row under "Usable now"; focus then goes to the filter checkbox, not <body>.
   const usableRef = useRef<HTMLInputElement>(null);
-  // One-shot: set by a click on a row's own control while the filter is on, spent by the next render (so a later, unrelated render never moves focus).
-  const refocusAfterAction = useRef(false);
+  // The row control last clicked while the filter was on. Armed until that control has left the page: the action's reply arrives after
+  // other renders of the same view (the sheet's in-flight state), so spending it on the first render would miss the row being hidden.
+  const refocusFrom = useRef<HTMLElement | null>(null);
   useEffect(() => {
-    if (!refocusAfterAction.current) return;
-    refocusAfterAction.current = false;
+    const el = refocusFrom.current;
+    if (!el) return;
+    if (!usableOnly) {
+      refocusFrom.current = null;
+      return;
+    }
+    if (el.isConnected) return;
+    refocusFrom.current = null;
     const active = document.activeElement;
     // Focus lost to <body> means the row just used was hidden; a real element anywhere else was chosen, so leave it.
-    if (usableOnly && (active === null || active === document.body)) usableRef.current?.focus();
+    if (active === null || active === document.body) usableRef.current?.focus();
   });
   const rollDamage = (target: RollTarget, type?: string) => {
     onDamageType?.(normalizeDamageType(type));
@@ -711,7 +718,7 @@ export function ActionsPanel({
       onClickCapture={(e) => {
         // Any row control (Roll, Use, Pin, a switch) may hide its own row; the filter checkbox itself and plain inputs do not count.
         const control = e.target instanceof Element ? e.target.closest('button, input[type="checkbox"]') : null;
-        if (usableOnly && control && control !== usableRef.current) refocusAfterAction.current = true;
+        if (usableOnly && control && control !== usableRef.current) refocusFrom.current = control as HTMLElement;
       }}
     >
       <h3 id="actions-heading">Attacks and actions</h3>

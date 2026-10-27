@@ -887,6 +887,26 @@ it('when Usable now hides the row just used, focus moves to the filter checkbox,
   expect(document.querySelector('[role="status"]')).toBeNull(); // the page has one status line
 });
 
+it('focus still returns to the filter when the reply comes after an intermediate render of the same view', async () => {
+  const props = { roll: () => {}, act: () => {} };
+  const { rerender } = render(<ActionsPanel view={actionsView([rally], focusPool(2))} {...props} />);
+  await userEvent.click(usableNow());
+  await userEvent.click(screen.getByRole('button', { name: /^Use Rally/ }));
+  rerender(<ActionsPanel view={actionsView([rally], focusPool(2))} {...props} />); // the sheet's in-flight render: nothing has changed yet
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: /^Use Rally/ }));
+  rerender(<ActionsPanel view={actionsView([rally], focusPool(0))} {...props} />);
+  expect(document.activeElement).toBe(usableNow());
+});
+
+it('a row that stays listed keeps focus through further renders', async () => {
+  const props = { roll: () => {}, act: () => {} };
+  const { rerender } = render(<ActionsPanel view={actionsView([rally], focusPool(4))} {...props} />);
+  await userEvent.click(usableNow());
+  await userEvent.click(screen.getByRole('button', { name: /^Use Rally/ }));
+  for (const pool of [4, 3, 2]) rerender(<ActionsPanel view={actionsView([rally], focusPool(pool))} {...props} />);
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: /^Use Rally/ }));
+});
+
 it('a later render with no action never moves focus, even after a row button was focused and then lost to <body>', async () => {
   const props = { roll: () => {}, act: () => {} };
   const { rerender } = render(<ActionsPanel view={actionsView([rally], focusPool(2))} {...props} />);
