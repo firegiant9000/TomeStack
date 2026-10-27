@@ -1,8 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!-- ADR-009 (c): the isolated extraction process, TomeStack.ImportWorker.Host.exe. It parses untrusted PDFs, so it runs as a
-       child of the app and talks over stdin/stdout only. The Windows TFM brings Windows.Data.Pdf and Windows.Media.Ocr
-       (ADR-009 (b)) with no extra package. -->
+       child of the app and talks over stdin/stdout only. Windows.Data.Pdf and Windows.Media.Ocr (ADR-009 (b)) come from a
+       C#/WinRT projection compiled into this assembly (release checklist §2 option (b)), so no Windows SDK DLL ships. The
+       Windows 10 TFM stays for its platform floor; IncludeWindowsSDKRefFrameworkReferences=false drops the SDK projection it
+       would bring, and CsWinRT generates only the types below. -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
@@ -11,10 +13,80 @@
     <RootNamespace>TomeStack.ImportWorker.Host</RootNamespace>
     <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
     <InvariantGlobalization>false</InvariantGlobalization>
+    <IncludeWindowsSDKRefFrameworkReferences>false</IncludeWindowsSDKRefFrameworkReferences>
+    <CsWinRTEmbedded>true</CsWinRTEmbedded>
+    <!-- What WindowsOcrEngine calls, plus the types those signatures name. Windows.UI is included for Windows.UI.Color, which
+         C#/WinRT writes only with its namespace, so every child namespace is excluded. -->
+    <CsWinRTIncludes>
+      Windows.Foundation;
+      Windows.Data.Pdf;
+      Windows.Media.Ocr;
+      Windows.Graphics.Imaging;
+      Windows.Storage.Streams;
+      Windows.Storage.IStorage;
+      Windows.Storage.Storage;
+      Windows.Storage.FileAccessMode;
+      Windows.Storage.FileAttributes;
+      Windows.Storage.NameCollisionOption;
+      Windows.Storage.CreationCollisionOption;
+      Windows.Storage.KnownLibraryId;
+      Windows.Storage.StreamedFile;
+      Windows.Storage.IStreamedFile;
+      Windows.Data.Text.TextSegment;
+      Windows.Devices.Geolocation;
+      Windows.Storage.FileProperties;
+      Windows.Storage.Search;
+      Windows.System.User;
+      Windows.System.IUser;
+      Windows.Graphics.DirectX;
+      Windows.Globalization.Language;
+      Windows.Globalization.ILanguage;
+      Windows.UI
+    </CsWinRTIncludes>
+    <CsWinRTExcludes>
+      Windows;
+      Microsoft;
+      Windows.Foundation.Diagnostics;
+      Windows.Foundation.PropertyType;
+      Windows.System.UserProfile;
+      Windows.UI.Accessibility;
+      Windows.UI.ApplicationSettings;
+      Windows.UI.Composition;
+      Windows.UI.Core;
+      Windows.UI.Input;
+      Windows.UI.Notifications;
+      Windows.UI.Popups;
+      Windows.UI.Shell;
+      Windows.UI.StartScreen;
+      Windows.UI.Text;
+      Windows.UI.ViewManagement;
+      Windows.UI.WebUI;
+      Windows.UI.WindowManagement;
+      Windows.UI.Xaml
+    </CsWinRTExcludes>
+    <!-- Build-time input only: the Windows 10 2004 metadata from the API pack, not the projection DLLs. Its files never ship. -->
+    <CsWinRTWindowsMetadata>$(NuGetPackageRoot)microsoft.windows.sdk.contracts\10.0.19041.2\ref\netstandard2.0</CsWinRTWindowsMetadata>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The embedded runtime sources replace WinRT.Runtime.dll, so take none of the package's assemblies (its embedded
+         target removes only the net8.0 one, not the net9.0 one NuGet picks for net10.0). PrivateAssets keeps the
+         generator out of the shell, which references this project. Publish="true" undoes the Publish=false that
+         PrivateAssets implies: with it, the shell's publish drops this exe's deps.json. The package ships no file. -->
+    <PackageReference Include="Microsoft.Windows.CsWinRT" Version="2.3.1" ExcludeAssets="compile;runtime" PrivateAssets="all" Publish="true" />
+    <PackageDownload Include="Microsoft.Windows.SDK.Contracts" Version="[10.0.19041.2]" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\ImportWorker\TomeStack.ImportWorker.csproj" />
   </ItemGroup>
+
+  <!-- The embedded runtime's Module.cs holds only [assembly: SupportedOSPlatform("Windows")], which would widen this
+       assembly's platform to every Windows version and hide the 10.0.19041 floor from the CA1416 analyzer. -->
+  <Target Name="DropEmbeddedPlatformAttribute" AfterTargets="CsWinRTIncludeProjection">
+    <ItemGroup>
+      <Compile Remove="$(CsWinRTGeneratedFilesDir)Module.cs" />
+    </ItemGroup>
+  </Target>
 
 </Project>

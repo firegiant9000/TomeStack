@@ -11,6 +11,7 @@
 ### Internal
 
 - **RulesCore boundary test:** `RulesCoreBoundaryTests` fails the build if `TomeStack.RulesCore` references persistence, UI, Windows or network assemblies, declares any project, package or framework reference, or targets Windows. No change to the app.
+- **No Windows SDK files in the app (release checklist §2, option (b)):** the import worker now compiles the small part of the Windows API it uses for text recognition into itself (C#/WinRT 2.3.1, MIT, embedded mode), so `Microsoft.Windows.SDK.NET.dll` and `WinRT.Runtime.dll` no longer ship, and neither do the Windows SDK end-user terms in `ATTRIBUTION.md` and on the release page. The installer is about 6 MB smaller (86.9 MB → 80.8 MB at 0.6.0's contents) and the installed app about 23 MB smaller. Text recognition works as before. A test and `scripts/pack-installer.ps1` fail if either file comes back. No schema, package, content or database change.
 - **Automated accessibility checks (SI S5):** component tests now run axe (`axe-core`, a development-only dependency, MPL-2.0) on the summary bar with a roll result, the import review's detail view with its confirm ticks, and the homebrew studio's effect editor open on a toggle. Colour contrast stays a manual check. No change to the app.
 
 ## 0.6.0 (the tester feedback: characters from any sheet or text, class import and bulk publish, play mechanics and theme colour)

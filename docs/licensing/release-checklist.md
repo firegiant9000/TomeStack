@@ -11,6 +11,8 @@ The four items ADR-008 left open before the first published installer (LIVING_SP
 
 ## Next release re-check (after 0.6.0)
 
+- **Windows SDK binaries (item 2): none ship (option (b), 2026-10-27).** See [§2](#2-windows-sdk-binaries-ocr). The release page no longer carries the SDK terms line (`scripts/release-notes.ps1`).
+- **Dependencies:** `Microsoft.Windows.CsWinRT` 2.3.1 (MIT) is a new build-time package of the import worker; its runtime sources and the projection it generates are compiled into `TomeStack.ImportWorker.Host.dll`, so it is listed in `ATTRIBUTION.md`. `Microsoft.Windows.SDK.Contracts` 10.0.19041.2 (Windows SDK license) is downloaded at build time for its API metadata and not shipped.
 - **Dependencies:** `axe-core` 4.14.0 was added as a development-only dependency (unit tests only, not shipped; `src/Ui/package.json` devDependencies and `package-lock.json`). Licence MPL-2.0, read from the installed package. Nothing ships it, so there is no notice to add; its source is not modified or redistributed.
 
 ## 0.6.0 re-check (2026-10-21)
@@ -45,7 +47,14 @@ A search on 2026-10-01 for `D&D`, `Dungeons`, `Dragons`, `D&D Beyond`, `Wizards 
 
 ## 2. Windows SDK binaries (OCR)
 
-**What ships:** the import worker (`TomeStack.ImportWorker.Host.exe`, ADR-009) uses Windows OCR through the C#/WinRT projection. So two Microsoft DLLs from the NuGet package `Microsoft.Windows.SDK.NET.Ref` 10.0.19041.57 ship unmodified next to `TomeStack.exe`: `Microsoft.Windows.SDK.NET.dll` and `WinRT.Runtime.dll`. The OCR engine itself is part of Windows and is not shipped. (The roadmap guessed "likely none"; two DLLs ship.)
+**Done (2026-10-27): option (b).** From the next release after 0.6.0 no Windows SDK file ships, and the conditions below no longer apply to a release.
+- The import worker builds with C#/WinRT 2.3.1 in embedded mode (`CsWinRTEmbedded`): the projection of only the Windows types it calls, with C#/WinRT's runtime, is compiled into `TomeStack.ImportWorker.Host.dll` (MIT, listed in `ATTRIBUTION.md`). The worker and the shell keep the `net10.0-windows10.0.19041.0` target framework for its platform floor, and set `IncludeWindowsSDKRefFrameworkReferences=false` so the target framework no longer brings `Microsoft.Windows.SDK.NET.Ref`.
+- **Build-time SDK terms may still apply (recorded):** the projection is generated from the API metadata in `Microsoft.Windows.SDK.Contracts` 10.0.19041.2, under the Windows SDK license. The build reads it; nothing from it is copied to the output.
+- Checked by `PublishedOutputTests` (neither deps file lists the projection) and by `scripts/pack-installer.ps1`, which fails if either DLL is in the publish folder. OCR runs in the worker process as before (`OcrTests`, including `The_worker_process_reads_an_image_only_page_with_ocr_too`).
+- Size, self-contained publish at 0.6.0's version: 188,790,433 → 166,100,513 bytes (−22.7 MB; the worker DLL grows from 14 KB to 1.6 MB). `TomeStack.App-win-Setup.exe`: 86,876,089 → 80,750,609 bytes (−6.1 MB, −7 %).
+- The end-user terms are gone from `ATTRIBUTION.md`, the `NOTICE` line is removed, and the release page no longer points to them. Releases up to 0.6.0 shipped the two DLLs under option (a); the history below stands for them.
+
+**What shipped up to 0.6.0:** the import worker (`TomeStack.ImportWorker.Host.exe`, ADR-009) uses Windows OCR through the C#/WinRT projection. So two Microsoft DLLs from the NuGet package `Microsoft.Windows.SDK.NET.Ref` 10.0.19041.57 ship unmodified next to `TomeStack.exe`: `Microsoft.Windows.SDK.NET.dll` and `WinRT.Runtime.dll`. The OCR engine itself is part of Windows and is not shipped. (The roadmap guessed "likely none"; two DLLs ship.)
 
 **Allowed?** Yes.
 - Both files are on Microsoft's redistribution list, in the section "Microsoft.Windows.SDK.NET.Ref": https://learn.microsoft.com/legal/windows-sdk/redist. That section says the package's files "may be distributed unmodified … as part of your program in order to enable your application to call WinRT Apis".
@@ -69,7 +78,7 @@ A search on 2026-10-01 for `D&D`, `Dungeons`, `Dragons`, `D&D Beyond`, `Wizards 
 
 The options that were considered:
 - **(a) Accept them:** keep the DLLs; add short end-user terms covering them (a line in `ATTRIBUTION.md` and on the release page, or an installer licence page); and accept the indemnity.
-- **(b) Remove the DLLs:** C#/WinRT can compile the projection into the worker ("embedded" mode, C#/WinRT 1.4.1 and later), so no Microsoft DLL ships. This is an engineering change to the worker, with its own test run, and the build-time license terms still apply.
+- **(b) Remove the DLLs:** C#/WinRT can compile the projection into the worker ("embedded" mode, C#/WinRT 1.4.1 and later), so no Microsoft DLL ships. This is an engineering change to the worker, with its own test run, and the build-time license terms still apply. **Done 2026-10-27** (above); build-time SDK terms may still apply (recorded).
 - **(c) Ship without OCR:** build the worker without the Windows TFM, so nothing from the SDK ships. Scanned PDFs then can't be read.
 
 Note that the roadmap's fallback ("ship with OCR off by default") does not resolve this. With OCR off, the DLLs would still be distributed.
