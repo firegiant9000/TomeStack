@@ -1,14 +1,18 @@
 // @vitest-environment jsdom
 // Settings: a radio group for the theme and a checkbox for the dice animation, both kept in the page's own storage.
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import { clampAccent } from '../accentClamp';
+import { client } from '../api/client';
 import type { AppInfo } from '../api/types';
 import { SettingsPanel } from './SettingsPanel';
 
+vi.mock('../api/client', () => ({ client: { copyDiagnostics: vi.fn() } }));
+
 afterEach(() => {
   cleanup();
+  vi.mocked(client.copyDiagnostics).mockReset();
   vi.unstubAllGlobals();
   Reflect.deleteProperty(document, 'adoptedStyleSheets');
   localStorage.clear();
@@ -45,9 +49,9 @@ it('switches the dice animation off and on', async () => {
   expect(localStorage.getItem('tomestack.diceAnimation')).toBeNull();
 });
 
-it('groups the screen under Appearance, Accessibility, Keyboard shortcuts and About headings', () => {
+it('groups the screen under Appearance, Accessibility, Keyboard shortcuts, About and Diagnostics headings', () => {
   render(<SettingsPanel />);
-  expect(screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual(['Appearance', 'Accessibility', 'Keyboard shortcuts', 'About']);
+  expect(screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual(['Appearance', 'Accessibility', 'Keyboard shortcuts', 'About', 'Diagnostics']);
   expect(screen.getByText('Ctrl+B', { selector: 'dt' }).nextElementSibling!.textContent).toContain('sidebar');
 });
 
@@ -170,4 +174,55 @@ it('offers a live sample: a line in the accent, a filled chip and a focus-ring s
   expect(sample.querySelector('.accent-sample-ring')).not.toBeNull();
   expect(sample.hasAttribute('style')).toBe(false);
   expect(sample.querySelector('[style]')).toBeNull();
+});
+
+it('Copy diagnostics shows the service text read-only and selected, and Select all selects it again', async () => {
+  const user = userEvent.setup();
+  const text = 'TomeStack diagnostics\nApp version: 0.0.0-fixture\nNo errors have been logged.\n';
+  vi.mocked(client.copyDiagnostics).mockResolvedValue({ text });
+  render(<SettingsPanel />);
+  expect(screen.queryByRole('textbox', { name: 'Diagnostics text' })).toBeNull();
+
+  await user.click(screen.getByRole('button', { name: 'Copy diagnostics' }));
+
+  const box = await screen.findByRole<HTMLTextAreaElement>('textbox', { name: 'Diagnostics text' });
+  expect(box.value).toBe(text);
+  expect(box.readOnly).toBe(true);
+  expect(document.activeElement).toBe(box);
+  expect([box.selectionStart, box.selectionEnd]).toEqual([0, text.length]);
+  box.setSelectionRange(0, 0);
+  await user.click(screen.getByRole('button', { name: 'Select all' }));
+  expect([box.selectionStart, box.selectionEnd]).toEqual([0, text.length]);
+  expect(vi.mocked(client.copyDiagnostics)).toHaveBeenCalledTimes(1);
+});
+
+it('a second Copy diagnostics selects the text again when it has not changed', async () => {
+  const user = userEvent.setup();
+  const text = 'TomeStack diagnostics\nNo errors have been logged.\n';
+  vi.mocked(client.copyDiagnostics).mockResolvedValue({ text });
+  render(<SettingsPanel />);
+  const button = screen.getByRole('button', { name: 'Copy diagnostics' });
+  await user.click(button);
+  const box = await screen.findByRole<HTMLTextAreaElement>('textbox', { name: 'Diagnostics text' });
+  box.setSelectionRange(0, 0);
+  button.focus();
+
+  await user.click(button);
+
+  await waitFor(() => expect(document.activeElement).toBe(box));
+  expect([box.selectionStart, box.selectionEnd]).toEqual([0, text.length]);
+  expect(vi.mocked(client.copyDiagnostics)).toHaveBeenCalledTimes(2);
+});
+
+it('Copy diagnostics hands a failure to the app message', async () => {
+  const user = userEvent.setup();
+  const failure = new Error('fixture failure');
+  vi.mocked(client.copyDiagnostics).mockRejectedValue(failure);
+  const onError = vi.fn();
+  render(<SettingsPanel onError={onError} />);
+
+  await user.click(screen.getByRole('button', { name: 'Copy diagnostics' }));
+
+  await waitFor(() => expect(onError).toHaveBeenCalledWith(failure));
+  expect(screen.queryByRole('textbox', { name: 'Diagnostics text' })).toBeNull();
 });

@@ -9,6 +9,7 @@ import type {
   CandidateEdit,
   CandidateFilter,
   CandidatePage,
+  DiagnosticsText,
   ImportJob,
   ImportSearchHit,
   StoredCandidate,
@@ -345,6 +346,8 @@ export function createClient(transport: Transport) {
     /** Only the preview's "Restore" button calls this. */
     applyLibraryRestore: (token: string, sourceChoices: Record<string, SourceChoice> = {}) =>
       call<LibraryRestoreResult>('library.restoreApply', { token, sourceChoices, confirm: true }, { timeoutMs: null }),
+    /** Settings "Copy diagnostics": versions and the newest error-log entries, redacted by the service; reads only. */
+    copyDiagnostics: () => call<DiagnosticsText>('diagnostics.copy'),
   };
 }
 

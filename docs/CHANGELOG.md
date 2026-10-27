@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Added
+- **Copy diagnostics:** Settings has a new Diagnostics group. "Copy diagnostics" shows text to paste into a bug report: the app and Windows versions, the data folder's name and the newest 20 error-log entries. Error messages and folder paths are left out; your Windows user name and source titles are replaced (`<user>`, `source:<id>`). The text appears selected in a read-only box; press Ctrl+C to copy it. Nothing is sent anywhere, and nothing is written. ADR-006 records this one exception to "log details never cross the bridge".
+
 ## 0.7.1 (crash reporting and the repo guard)
 
 A patch on 0.7.0: if TomeStack crashes it now leaves a record and tells you where it is. Nothing else in the app changes.

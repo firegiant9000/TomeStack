@@ -2130,6 +2130,11 @@ export interface ImportResult {
   databaseCopy?: string;
 }
 
+/** `diagnostics.copy`: plain text for a bug report; paths, the user name and source titles are already replaced. */
+export interface DiagnosticsText {
+  text: string;
+}
+
 // ---- full library backup (M2.1) ----
 
 /** What "Back up everything" would write; nothing is written. */
