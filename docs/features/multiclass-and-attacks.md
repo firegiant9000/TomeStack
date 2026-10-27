@@ -26,15 +26,15 @@ A choice that does not apply to this entry is not offered, so it is never "unres
 
 ## Weapons and attacks (SPEC C-02, C-04)
 
-An item carries `weapon { category: simple | martial, attack: melee | ranged, damage, damageType, properties[], versatile?, range?, weaponKey, mastery? }`. Proficiency is a `grant proficiency` in `weapon.simple`, `weapon.martial` or `weapon.<weaponKey>`, and it may be `onlyAs` like any grant.
+An item carries `weapon { category: simple | martial, attack: melee | ranged, damage, damageType, properties[], versatile?, range?, weaponKey, mastery?, bonus? }`. `bonus` (content v12) is a whole number from 0 to 10 that the weapon adds to its to-hit and to its damage; below v12 the key is ignored. Proficiency is a `grant proficiency` in `weapon.simple`, `weapon.martial` or `weapon.<weaponKey>`, and it may be `onlyAs` like any grant.
 
 Each **equipped** weapon gives an entry in `sheet.attacks`:
 
 | Value | Rule (both SRDs) |
 | --- | --- |
 | Ability | Strength for melee, Dexterity for ranged. With `finesse`, the better of the two |
-| To hit | The ability modifier + the proficiency bonus when proficient. The trace cites the proficiency's content |
-| Damage | The dice + the same ability modifier (`1d8+2`). `versatile` gives a two-handed alternative |
+| To hit | The ability modifier + the proficiency bonus when proficient + the weapon's `bonus`. The trace cites the proficiency's content, then adds "<item>: +N to hit (weapon)" |
+| Damage | The dice + the same ability modifier + the weapon's `bonus` (`1d8+3`), with the trace step "<item>: +N damage (weapon)". `versatile` gives a two-handed alternative with the same bonuses. A flat bonus is not doubled on a critical hit; only dice are |
 
 **Proficiency not recorded:** when no active content grants any weapon proficiency (for example a class published before weapons existed, such as the M1 SRD Barbarian revisions), the attack is **assisted**: no proficiency bonus, and `attack.proficiency-unknown` says to add it by hand. When some proficiencies are recorded but not this one, the attack is automatic with `attack.not-proficient`.
 

@@ -618,6 +618,60 @@ it('authors a homebrew subclass in the studio, plays it, and reviews an update',
   expect(remaining().getByRole('button', { name: 'Review update: Barbarian' })).toBeTruthy(); // still only offered
 });
 
+it('authors a +1 weapon in the studio, equips it and rolls it, and "Why?" names the weapon bonus (MECH-X item 0)', async () => {
+  const user = userEvent.setup();
+  await client.createCharacter({ name: 'E2E Plus Hero', rulesFamily: 'srd-5.2.1', baseAbilities: { str: 14, dex: 12, con: 12, int: 10, wis: 10, cha: 10 }, pins: [] });
+  render(<App />);
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  await waitFor(() => expect(studioButton.disabled).toBe(false));
+  await user.click(studioButton);
+
+  const newSource = await screen.findByRole('form', { name: 'New homebrew source' });
+  await user.type(within(newSource).getByRole('textbox', { name: 'Source title' }), 'E2E Plus Book');
+  await user.click(within(newSource).getByRole('checkbox', { name: 'SRD 5.2.1 (2024 rules)' }));
+  await user.click(within(newSource).getByRole('button', { name: 'Create source' }));
+  await screen.findByRole('heading', { name: 'Content in E2E Plus Book' });
+
+  const editor = () => screen.getByRole('region', { name: /^New |^Edit / });
+  await user.click(screen.getByRole('button', { name: 'New item' }));
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Plus Blade');
+  await user.click(within(editor()).getByRole('button', { name: 'Add weapon' }));
+  const weapon = within(within(editor()).getByRole('group', { name: /^Rule 1: Weapon/ }));
+  await user.type(weapon.getByRole('textbox', { name: /^Weapon key/ }), 'blade');
+  await user.clear(weapon.getByRole('textbox', { name: /^Damage \(/ }));
+  await user.type(weapon.getByRole('textbox', { name: /^Damage \(/ }), '1d6');
+  await user.clear(weapon.getByRole('textbox', { name: /^Damage type/ }));
+  await user.type(weapon.getByRole('textbox', { name: /^Damage type/ }), 'slashing');
+  await user.type(weapon.getByRole('textbox', { name: /^Bonus/ }), '1');
+  await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Published E2E Plus Blade.'));
+
+  // Carry and equip it; both rolls name the weapon bonus under "Why?".
+  await user.click(screen.getByRole('button', { name: /^E2E Plus Hero/ }));
+  const hero = await screen.findByRole('article', { name: 'E2E Plus Hero' });
+  await openTab(user, hero, 'Inventory');
+  const equipment = () => screen.getByRole('region', { name: 'Equipment' });
+  await waitFor(() => expect(within(equipment()).getByRole('option', { name: /^E2E Plus Blade/ })).toBeTruthy());
+  await user.selectOptions(within(equipment()).getByRole('combobox', { name: 'Add an item' }), within(equipment()).getByRole('option', { name: /^E2E Plus Blade/ }));
+  await user.click(within(equipment()).getByRole('button', { name: 'Add' }));
+  await user.click(await within(equipment()).findByRole('checkbox', { name: 'Equip E2E Plus Blade' }));
+
+  await openTab(user, hero, 'Play');
+  const actions = () => screen.getByRole('region', { name: 'Attacks and actions' });
+  const whyList = async () => {
+    const why = within(screen.getByRole('region', { name: 'Summary' })).getByText('Why?').closest('details')!;
+    if (!why.open) await user.click(within(why).getByText('Why?'));
+    return within(why).getByRole('list', { name: 'Why this roll came out this way' }).textContent ?? '';
+  };
+  await waitFor(() => expect(within(actions()).getByRole('button', { name: 'Roll E2E Plus Blade attack' })).toBeTruthy());
+  await user.click(within(actions()).getByRole('button', { name: 'Roll E2E Plus Blade attack' }));
+  await waitFor(() => expect(screen.getByRole('region', { name: 'Last roll' }).textContent).toMatch(/E2E Plus Blade attack: \d+ \(1d20\)/));
+  expect(await whyList()).toMatch(/\+1 to hit \(weapon\)/);
+  await user.click(within(actions()).getByRole('button', { name: /^Roll E2E Plus Blade damage/ }));
+  await waitFor(() => expect(screen.getByRole('region', { name: 'Last roll' }).textContent).toMatch(/E2E Plus Blade damage \(slashing\): \d+/));
+  expect(await whyList()).toMatch(/\+1 damage \(weapon\)/);
+});
+
 it('attaches a PDF to a source, offers the cited page on a feature, and removes it after a warning', async () => {
   const user = userEvent.setup();
   // Setup through the client: a homebrew source, a published feat citing page 7, and a character using it.

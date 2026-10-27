@@ -541,7 +541,7 @@ A roll with a pool gains "Also changes", a list of up to four rows. Each row has
 
 ## Sharing
 
-TomeStack 0.6.0 refuses a package that holds a content revision at schema v11 or a character at schema v10 (`package.schema-unsupported`). The previews of an export, a source pack and a campaign pack (`package.exportPreview`, `package.sourcePackPreview`, `package.campaignPackPreview`) warn with `package.needs-newer-build` (once per preview) when the package they describe would hold either, so the sender knows the receiver needs 0.7.0 or later.
+TomeStack 0.6.0 refuses a package that holds a content revision at schema v11 or a character at schema v10 (`package.schema-unsupported`). The previews of an export, a source pack and a campaign pack (`package.exportPreview`, `package.sourcePackPreview`, `package.campaignPackPreview`) warn with `package.needs-newer-build` (once per preview) when the package they describe would hold either, so the sender knows the receiver needs 0.7.0 or later. A package holding a content revision at schema v12 (a weapon's `bonus`, MECH-X item 0) gets a different text, "a TomeStack version that reads content schema 12 or later", with no release number; it is still one warning, and that text wins.
 
 ## Not yet
 

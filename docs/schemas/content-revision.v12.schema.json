@@ -981,7 +981,7 @@
               "type": "string"
             },
             "bonus": {
-              "description": "Content v12 (MECH-X item 0): the weapon's own bonus, added to its to-hit and to its damage (a flat bonus is not doubled on a critical hit). Read only in a v12 revision: in an older one the key stays an unknown property and does nothing. A present bonus, 0 included, needs v12.",
+              "description": "Content v12 (MECH-X item 0): the weapon's own bonus, added to its to-hit and to its damage (a flat bonus is not doubled on a critical hit). Read only in a v12 revision: in an older one the key stays an unknown property and does nothing. A present bonus, 0 included, needs v12. A numeral string (^[+-]?\\d+$) is also read and stored as a number, like the other whole-number fields (the service's JSON reader accepts numbers written as strings).",
               "type": "integer",
               "minimum": 0,
               "maximum": 10

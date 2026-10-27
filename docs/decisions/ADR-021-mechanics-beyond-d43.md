@@ -45,7 +45,7 @@ The work is one item at a time. Each item is generic and declarative, with a tra
 - **Content is written at the lowest version it needs.** A revision that uses no new field keeps its version, bytes and hash. Below the new version the new keys stay extension data, byte for byte, and have no effect. Declaring a new field at an older version is a validation error.
 - **Packages carrying new-version content need a build that knows it.** An older build refuses them. Nothing changes for existing content, characters or packages.
 - **Published revisions stay insert-only.** A bundled weapon that should carry a bonus gets a new revision and a licensing-review check, never an edit.
-- **The trace explains the bonus.** "+N (weapon)" shows on the attack's to-hit and damage, so "Why?" (D72) explains it with no new renderer code.
+- **The trace explains the bonus.** "+N (weapon)" shows on the attack's to-hit and damage, so "Why?" (D72) explains it with one renderer suffix (the damage step ends "damage (weapon)", so a damage roll's "Why?" keeps it and a to-hit roll's does not).
 - **Marks are trusted to the player.** The app does not know which creature is marked. The toggle says only that one is present.
 
 ## Not doing
@@ -65,3 +65,9 @@ The work is one item at a time. Each item is generic and declarative, with a tra
 ## Evidence
 
 Filled in as each item lands: the tests, the fixture and the feature page.
+
+**Item 0 (a weapon's own bonus, content v12):**
+
+- Tests: `WeaponBonusSchemaTests` (bounds, the v12 rung, older revisions keep their bytes and hash), `WeaponBonusCalculationTests` (to-hit, damage, riders, versatile, no effect below v12), the critical-hit test in `AttackCommandTests` (a flat bonus is not doubled), `weaponAuthoring.test.ts` and `HomebrewStudioWeapons.test.tsx` (the studio editor and its strict input), the package preview tests (`SourcePackTests`, the v12 warning without a release number) and the e2e `authors a +1 weapon in the studio, equips it and rolls it`.
+- Fixture: the v12 golden "Fixture Tidal Blade" in `tests/RulesFixtures/golden/revisions.json`.
+- Feature pages: [multiclass-and-attacks.md](../features/multiclass-and-attacks.md), [homebrew-studio.md](../features/homebrew-studio.md), [package-format.md](../features/package-format.md) and [schemas/README.md](../schemas/README.md).
