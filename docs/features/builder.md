@@ -29,6 +29,12 @@ The choices step lists every choice the draft offers now, from `sheet.choices`: 
 
 **Unresolved choices are flagged, not blocking.** The step says how many are left, and saving is allowed. The sheet then lists them under "Choices to make" (`choice.unresolved`).
 
+### Preview at level (D82)
+
+Under the level-up step's class list, a separate form named "Preview at level" takes a level from one above the current total level to 20 ("Level to preview", starting at the next level) and a "Preview" button. It shows what the character would look like at that level if the picked class gained every level: a Fighter 3 previewed at 5 is a Fighter 5, and a new class previewed at 6 from a total of 3 starts at level 3. The draft goes to the same `character.preview` that "Next: choices" uses, so it is checked like a save and **writes nothing** (the D14 contract of the studio's Try it: calculated on an unsaved copy). The result is a read-only region, "Preview at level N": hit points, Armor Class, initiative, proficiency bonus, attacks and spell save DC (as Try it lists them), resources, class-table columns, features, and how many choices are left open on the copy (the levels in between are not answered here). "Close preview" removes it and returns the focus to "Preview". The level-up is unchanged: "Next: choices" still gains one level.
+
+A level outside the range, or a press while a preview is being calculated, leaves "Preview" `aria-disabled` with its reason linked ("Enter a level from 4 to 20."). The form is not offered at level 20, before a class is picked, or while the picked class needs a campaign exception reason. Picking another class drops a preview on screen, and an answer that arrives after that, or after Next or Cancel, is not shown. A failed preview is reported like any builder error.
+
 ## The new-character steps (D32)
 
 1. **Rules:** the name (Next waits for one), the campaign (if any) and the rules family. The other family's content is never offered afterwards (D31).
