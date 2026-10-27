@@ -77,6 +77,7 @@ The machine has never had TomeStack, uses a standard user, and has the network o
 2. **Restore, timed:**
    1. Start TomeStack and choose **Restore full backup** with the backup file. Start the stopwatch when you confirm the restore.
    2. Stop it when the character list shows the restored characters. Record the time, and every warning or error **code** the preview and the restore show.
+   3. `restore.needs-newer-build` means the backup was written by a newer TomeStack than the one installed, and its characters pick bundled SRD content this version does not have (a backup leaves the bundled packs out). The restore is refused and nothing changes; install the version the message names, or a later one, and restore again. In the drill, install the same version on both machines.
 3. Open **every** character, and look at each sheet: it must open with no new "missing content" diagnostics. Close TomeStack.
 4. **Count and compare:**
    `TomeStack.DevHost.exe --drill-report "$env:LOCALAPPDATA\TomeStack" --out restored.json`
