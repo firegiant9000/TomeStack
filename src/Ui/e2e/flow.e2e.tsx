@@ -269,7 +269,7 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   sheet = await screen.findByRole('article', { name: 'E2E Brenna' });
   expect(within(sheet).queryByRole('region', { name: /^What changed at level/ })).toBeNull();
 
-  const open =within(sheet).getByRole('heading', { name: 'Choices to make' }).parentElement!;
+  const open = within(sheet).getByRole('heading', { name: 'Choices to make' }).parentElement!;
   expect(open.textContent).toMatch(/Primal Knowledge: choose 1 \(0 chosen\)/);
 
   // Answer it from the sheet: Survival is already chosen elsewhere, so pick Animal Handling.

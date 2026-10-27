@@ -732,7 +732,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   // The ref is the guard: two native keydowns can arrive before a re-render, so state could still read "not busy". `quickBusy` only shows it.
   const busyRef = useRef(false);
   const [quickBusy, setQuickBusy] = useState(false);
-  /** A quickbar press: rolls or changes the play state, and spends a rolled action's fixed cost once. The next press waits for the spend to settle. */
+  /** A quickbar press: rolls or changes the play state, and, only when the button's name says "and spend", makes that spend once. The next press waits for it to settle. */
   async function quickRun(a: QuickAction) {
     if (busyRef.current) return;
     busyRef.current = true;

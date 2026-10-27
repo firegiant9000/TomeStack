@@ -1907,7 +1907,7 @@ it('the reply of a replaced damage panel does not close the new panel', async ()
   expect(await screen.findByRole('button', { name: 'Apply damage' })).toBeTruthy(); // and the new panel stays open
 });
 
-// D73: the quickbar spends once. A pinned fixed-cost roll rolls, then spends through the sheet's one spender, the same one the Last roll's Spend uses.
+// D73: the quickbar spends once. A pin whose name says "and spend" rolls, then spends through the sheet's one spender (the one the Last roll's Spend uses); any other pin only rolls.
 describe('the quickbar', () => {
   const tideRef = { contentId: 'c-tide', revisionId: 'r-tide' };
   const focusPool = (current: number) => ({

@@ -693,7 +693,7 @@ it('pins a per-unit roll, presses it with Alt+1: it rolls and spends once, Undo 
   const pinned = await within(quickbar()).findByRole('button', { name: /^Roll Tide wave/ });
   expect(pinned.getAttribute('aria-keyshortcuts')).toBe('Alt+1');
 
-  // Alt+1 rolls and then makes the Last roll's Spend once, through the same play change, so nothing waits on a click.
+  // Alt+1 (a button named "and spend") rolls and then makes that spend once, through the same play change, so nothing waits on a click.
   await user.keyboard('{Alt>}1{/Alt}');
   await waitFor(() => expect(lastRoll().textContent).toMatch(/Tide wave/));
   const spendButton = await within(lastRoll()).findByRole('button', { name: /^Spend \d+ Focus/ });

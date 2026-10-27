@@ -37,7 +37,7 @@ interface Props {
   spellsTab?: boolean;
   /** D73: the quickbar, in its own row after the summary line (never inside the roll strip). */
   quickbar?: ReactNode;
-  /** D73: whether the bar has any pin; the hint then says a pinned press rolls and spends. */
+  /** D73: whether the bar has any pin; the hint then says only a button named "and spend" spends. */
   hasQuickbar?: boolean;
   /** D73: the sheet's record-spent state, shared with the quickbar; absent, Last roll keeps its own. */
   spent?: RecordSpent;
@@ -191,7 +191,7 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, ac
         <DiceBox onRoll={onRollDice} />
       </div>
       <p className="hint">
-        {/* D73 R13: a quickbar button whose name says "and spend" rolls and then spends; the others only roll. */}
+        {/* D73 R13: a quickbar button whose name says "and spend" rolls and then makes that spend once; other pins only roll (Use and toggle pins make their own play change). */}
         {hasQuickbar ? 'Rolling from here never spends anything; a quickbar button that says "and spend" rolls and then spends.' : 'Rolling never spends anything.'}
         {spellsTab
           ? ' Roll a check here; a save, skill or initiative from its field on Stats; an attack or feature on Play; or a spell on Spells.'
