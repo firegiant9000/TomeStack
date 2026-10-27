@@ -42,15 +42,17 @@ internal static class NewerBuild
     /// <summary>
     /// S2 (Review focus 3): one refusal in place of a <c>package.pin-missing</c> per pin. A library backup leaves out the
     /// bundled packs, so a newer build's backup can pin bundled content this build never seeds; restoring would leave those
-    /// picks missing for good. The user updates and restores again.
+    /// picks missing for good. The user updates and restores again. A pin names no source, so a pin lost to damage cannot
+    /// be told apart: the message says "most likely" and names the characters (review fix).
     /// </summary>
-    public static Diagnostic Restore(System.Version backupVersion, int pins, int characters)
+    public static Diagnostic Restore(System.Version backupVersion, int pins, IReadOnlyList<string> characters)
     {
         var normal = Normal(backupVersion);
         var version = normal.ToString(normal.Revision > 0 ? 4 : 3);
         var thisBuild = typeof(NewerBuild).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
+        var names = string.Join(", ", characters.Take(5).Select(n => $"'{n}'")) + (characters.Count > 5 ? $" and {characters.Count - 5} more" : "");
         return new(RestoreCode,
-            $"This backup was made with TomeStack {version}, newer than this one ({thisBuild}). {pins} content pick{(pins == 1 ? "" : "s")} of {characters} character{(characters == 1 ? "" : "s")} use content this version does not have, so restoring now would leave them missing. Update TomeStack to {version} or later, then restore the backup. Nothing has been changed.");
+            $"This backup was made with TomeStack {version}, newer than this one ({thisBuild}). {pins} content pick{(pins == 1 ? "" : "s")} of {characters.Count} character{(characters.Count == 1 ? "" : "s")} ({names}) are neither in the backup nor installed here: most likely content this version does not have. Update TomeStack to {version} or later, then restore the backup. Nothing has been changed.");
     }
 
     /// <summary>Missing parts count as 0, so 0.8 and 0.8.0 compare equal.</summary>

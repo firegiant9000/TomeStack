@@ -595,7 +595,7 @@ public class LibraryBackupTests
             manifest => manifest["appVersion"] = appVersion));
 
     [Fact]
-    public void Restore_of_newer_backup_with_unseeded_pins_warns_with_count()
+    public void Restore_of_newer_backup_with_unseeded_pins_is_refused_with_count()
     {
         // Review focus 3 (S2): a newer build's backup must not pin revisions this build never seeds. The restore refuses it
         // with one message that names the backup's version and how many picks are missing, not one line per pin.
@@ -614,7 +614,8 @@ public class LibraryBackupTests
             var skew = Assert.Single(preview.Errors);
             Assert.Equal("restore.needs-newer-build", skew.Code);
             Assert.Contains("TomeStack 99.1.0", skew.Message, StringComparison.Ordinal);
-            Assert.Contains("2 content picks", skew.Message, StringComparison.Ordinal);
+            Assert.Contains("2 content picks of 1 character (", skew.Message, StringComparison.Ordinal);
+            Assert.Contains("('Pell (2014 fixture)')", skew.Message, StringComparison.Ordinal); // the fixture's name
             var refused = Assert.Throws<PackageException>(() => clean.App.ApplyLibraryRestore(path));
             Assert.Equal("restore.needs-newer-build", Assert.Single(refused.Errors).Code);
             Assert.Empty(clean.App.ListCharacters()); // nothing was written
@@ -645,6 +646,37 @@ public class LibraryBackupTests
             var damaged = clean.App.PreviewLibraryRestore(path);
             Assert.Equal("package.pin-missing", Assert.Single(damaged.Errors).Code);
             Assert.DoesNotContain(damaged.Warnings, d => d.Code == "restore.needs-newer-build");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Theory]
+    [InlineData("0.6.0")] // older
+    [InlineData("this build, 2 parts")] // review fix: missing parts count as 0, so x.y.0 equals x.y
+    [InlineData("this build, 4 parts")]
+    [InlineData("v99.0.0")] // does not parse: no claim of a newer build
+    [InlineData("99.0.0-beta")]
+    [InlineData("")]
+    public void Restore_of_backup_not_from_a_newer_build_keeps_the_per_pin_refusal(string appVersion)
+    {
+        using var origin = new TempApp();
+        Fill(origin.App);
+        var path = TempFile();
+        try
+        {
+            Backup(origin.App, path);
+            var thisBuild = typeof(PackageService).Assembly.GetName().Version!;
+            if (appVersion == "this build, 2 parts")
+                appVersion = thisBuild.ToString(2); // equal when the patch part is 0, otherwise older
+            else if (appVersion == "this build, 4 parts")
+                appVersion = thisBuild.ToString(4);
+            AsWrittenBy(path, appVersion, unseededPins: 1);
+            using var clean = new TempApp();
+            var preview = clean.App.PreviewLibraryRestore(path);
+            Assert.Equal("package.pin-missing", Assert.Single(preview.Errors).Code);
         }
         finally
         {

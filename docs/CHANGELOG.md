@@ -3,7 +3,7 @@
 ## Unreleased
 
 ### Changed
-- **Restoring a backup from a newer TomeStack:** when a full backup was made with a newer version whose characters use SRD content this version does not have, the restore preview now shows one message instead of one line per pick: it names the backup's version, how many picks and characters are affected, and says to update TomeStack and restore again (`restore.needs-newer-build`). The restore was refused before too, and still is; nothing is changed. Backups made with this or an older version are unaffected.
+- **Restoring a backup from a newer TomeStack:** when a full backup was made with a newer version whose characters use SRD content this version does not have, the restore preview now shows one message instead of one line per pick: it names the backup's version, how many picks are affected and which characters, and says to update TomeStack and restore again (`restore.needs-newer-build`). The restore was refused before too, and still is; nothing is changed. Backups made with this or an older version are unaffected.
 
 ## 0.7.1 (crash reporting and the repo guard)
 
