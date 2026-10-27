@@ -7,7 +7,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { client } from './api/client';
 import type { Character, CharacterSummary, CharacterView } from './api/types';
-import { diffLevelUp } from './levelUpChecklist';
+import { diffLevelUp, writeChecklist } from './levelUpChecklist';
 
 // The real module, except that diffLevelUp is a spy (it throws once in the A3 test).
 vi.mock('./levelUpChecklist', async (importOriginal) => {
@@ -201,6 +201,7 @@ it('a throwing diff never loses the save: the sheet still opens on Features with
   const { before, saved } = levelUpViews();
   vi.mocked(client.saveCharacter).mockResolvedValue(saved);
   const { save } = await toSaveLevelUp(user, before);
+  writeChecklist('fixture-a', { level: 2, changes: [{ kind: 'hitPoints', before: 1, after: 2 }] }); // an older list for the same level
   vi.mocked(diffLevelUp).mockImplementationOnce(() => {
     throw new Error('fixture diff failure');
   });
@@ -225,6 +226,9 @@ it('a level-up that lands after the user left the builder writes the list but mo
   finish(saved);
   await waitFor(() => expect(localStorage.getItem('tomestack.levelUpChecklist.fixture-a')).not.toBeNull());
   expect(screen.getAllByRole('tab').find((t) => t.getAttribute('aria-selected') === 'true')?.textContent).toBe(tabBefore);
+  // The list is ready in the Features panel (hidden while another tab is selected) once the save lands.
+  expect(await screen.findByRole('region', { name: 'What changed at level 2', hidden: true })).toBeTruthy();
+  expect(screen.getByRole('tab', { name: /Play/ }).getAttribute('aria-selected')).toBe('true');
   expect(document.activeElement).not.toBe(document.getElementById('level-up-heading'));
 });
 

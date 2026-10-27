@@ -9,7 +9,7 @@ import { CharacterSheet } from './components/CharacterSheet';
 import { HomePanel } from './components/HomePanel';
 import { readFileAsBase64 } from './files';
 import { isTypingTarget } from './keys';
-import { diffLevelUp, writeChecklist } from './levelUpChecklist';
+import { diffLevelUp, dismissChecklist, writeChecklist } from './levelUpChecklist';
 import { applyPreferences, setSidebarCollapsed, sidebarCollapsed } from './settings';
 import type { SheetTabId } from './sheetTab';
 
@@ -367,7 +367,8 @@ export function App() {
                   try {
                     writeChecklist(view.character.id, diffLevelUp(builder.view, view));
                   } catch {
-                    /* the save landed; the checklist is a convenience */
+                    // the save landed; the checklist is a convenience. An older list for this level must not stand in for the missing one.
+                    dismissChecklist(view.character.id);
                   }
                 }
                 if (stillHere) {
