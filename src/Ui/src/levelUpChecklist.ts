@@ -94,7 +94,8 @@ export function checklistRows(checklist: LevelUpList, sheet: CharacterSheet): Ch
   const toggles = sheet.toggles ?? [];
   const rows: ChecklistRow[] = [];
   const add = (row: ChecklistRow) => {
-    if (!rows.some((r) => r.text === row.text)) rows.push(row);
+    // A9: two grouped toggles of one content give one form row; other rows with the same wording are distinct changes.
+    if (!(row.key.startsWith('toggle:') && rows.some((r) => r.key.startsWith('toggle:') && r.text === row.text))) rows.push(row);
   };
   const ofKind = <K extends LevelUpChange['kind']>(kind: K) => checklist.changes.filter((c): c is Extract<LevelUpChange, { kind: K }> => c.kind === kind);
 
@@ -125,7 +126,7 @@ export function checklistRows(checklist: LevelUpList, sheet: CharacterSheet): Ch
     if (c.before === undefined) {
       const maximum = resource.maximum !== undefined ? `, ${resource.maximum}` : '';
       add({ key, text: `New pool: ${resource.label}${maximum}${refresh(resource)}`, target: 'play' });
-    } else {
+    } else if (c.after !== undefined) {
       add({ key, text: `${resource.label}: ${c.before} → ${c.after}`, target: 'play' });
     }
   }
@@ -181,6 +182,7 @@ function normaliseChange(raw: unknown): LevelUpChange | undefined {
     case 'pact': {
       if (c.before !== undefined && !isPact(c.before)) return undefined;
       if (c.after !== undefined && !isPact(c.after)) return undefined;
+      if (!c.before && !c.after) return undefined;
       const change: LevelUpChange = { kind: 'pact' };
       if (c.before) change.before = { maximum: c.before.maximum, level: c.before.level };
       if (c.after) change.after = { maximum: c.after.maximum, level: c.after.level };
@@ -189,6 +191,7 @@ function normaliseChange(raw: unknown): LevelUpChange | undefined {
     case 'pool': {
       if (!isText(c.contentId) || !isText(c.resourceId)) return undefined;
       if ((c.before !== undefined && !isNum(c.before)) || (c.after !== undefined && !isNum(c.after))) return undefined;
+      if (c.before !== undefined && c.after === undefined) return undefined; // a grown pool needs both numbers
       const change: LevelUpChange = { kind: 'pool', contentId: c.contentId, resourceId: c.resourceId };
       if (c.before !== undefined) change.before = c.before;
       if (c.after !== undefined) change.after = c.after;

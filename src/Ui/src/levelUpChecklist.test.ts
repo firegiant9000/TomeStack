@@ -90,7 +90,6 @@ describe('diffLevelUp and checklistRows', () => {
     expect(texts(rowsOf(view(2, pact(2, 1)), view(3, pact(2, 2))))).toEqual(['Pact slots: 2 at level 1 → 2 at level 2']);
     expect(rowsOf(view(2, pact(2, 1)), view(3, pact(2, 1)))).toEqual([]);
     expect(texts(rowsOf(view(2, pact(2, 1)), view(3)))).toEqual(['Pact slots: 2 at level 1 → none']);
-    expect(rowsOf(view(2, pact(2, 1)), view(3, pact(2, 1)))).toEqual([]);
   });
 
   it('words new and grown pools', () => {
@@ -122,6 +121,13 @@ describe('diffLevelUp and checklistRows', () => {
     const rows = rowsOf(view(1), view(2, { toggles: twins }));
     expect(texts(rows)).toEqual(['New form available: Fixture Deep Form']);
     expect(rows[0]!.key).toBe('toggle:deep:one');
+  });
+
+  it('keeps two distinct new choices and two pools that share their wording', () => {
+    const choices = rowsOf(view(1), view(2, { choices: [choice('cls', 'one'), choice('cls', 'two')] }));
+    expect(texts(choices)).toEqual(['New choice: Fixture Class: choose 1 (still to make)', 'New choice: Fixture Class: choose 1 (still to make)']);
+    const pools = rowsOf(view(1), view(2, { resources: [pool('p', 'a', { maximum: 1 }), pool('p', 'b', { maximum: 1 })] }));
+    expect(texts(pools)).toHaveLength(2);
   });
 
   it('closes with the by-hand row for reference and assisted features', () => {
@@ -193,6 +199,8 @@ describe('page storage', () => {
           { kind: 'hitPoints', before: 1, after: null },
           { kind: 'pool', contentId: 'a', resourceId: 'r', before: 'x' },
           { kind: 'pact', after: { maximum: 1 } },
+          { kind: 'pact' },
+          { kind: 'pool', contentId: 'a', resourceId: 'r', before: 3 },
           null,
           'text',
           { kind: 'toggle', contentId: 'a', toggleId: 't' },
@@ -215,6 +223,17 @@ describe('page storage', () => {
     dismissChecklist('c1');
     expect(localStorage.getItem(keyFor('c1'))).toBeNull();
     expect(readChecklist('c1', 5)).toBeUndefined();
+  });
+
+  it('survives no storage at all', () => {
+    vi.stubGlobal('localStorage', undefined);
+    try {
+      expect(readChecklist('c1', 5)).toBeUndefined();
+      expect(() => writeChecklist('c1', { level: 5, changes })).not.toThrow();
+      expect(() => dismissChecklist('c1')).not.toThrow();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('survives a storage that throws', () => {
