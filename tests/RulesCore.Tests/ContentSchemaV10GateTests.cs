@@ -249,11 +249,11 @@ public class ContentSchemaV10GateTests
     // ---- v10 revisions: the keys are typed, so they leave extension data --------------------------------------------
 
     [Fact]
-    public void A_v10_revision_is_current_and_keeps_its_version()
+    public void A_v10_revision_is_supported_and_keeps_its_version()
     {
         var read = Read(Write(Revision(ContentKind.Feat, 10, Toggle())));
         Assert.Equal(10, read.SchemaVersion);
-        Assert.Equal(10, ContentRevision.CurrentSchemaVersion);
+        Assert.Equal(10, ContentRevision.PlayDetailsSchemaVersion);
     }
 
     [Theory]

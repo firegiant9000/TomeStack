@@ -105,7 +105,7 @@ public sealed record SourceAttestation(Guid SourceId, string Statement, DateTime
 /// <summary>What <c>package.sourcePackPreview</c> would write; nothing is written.</summary>
 /// <param name="Sources">The sources, with the license notice each carries.</param>
 /// <param name="Revisions">Published revisions included (superseded ones too, so pinned characters keep working).</param>
-/// <param name="Warnings">Content the pack refers to but does not carry (another source's), which the receiver must have.</param>
+/// <param name="Warnings">Content the pack refers to but does not carry (another source's), which the receiver must have; and <c>package.needs-newer-build</c> (G6).</param>
 /// <param name="Drafts">Drafts of these sources that stay on this machine (a pack never carries them).</param>
 public sealed record SourcePackPreview(string FileName, IReadOnlyList<LicenseNotice> Sources, int Revisions, int Drafts, IReadOnlyList<Diagnostic> Warnings);
 
@@ -114,7 +114,7 @@ public sealed record SourcePackPreview(string FileName, IReadOnlyList<LicenseNot
 /// <param name="Referenced">Allowed sources bundled with TomeStack: referenced by id, never copied.</param>
 /// <param name="LeftOut">Allowed sources the pack leaves out and lists in <c>omitted[]</c>, each with why.</param>
 /// <param name="Revisions">Published revisions carried.</param>
-/// <param name="Warnings">Content the pack refers to but does not carry, which the receiver must have.</param>
+/// <param name="Warnings">Content the pack refers to but does not carry, which the receiver must have; and <c>package.needs-newer-build</c> (G6).</param>
 public sealed record CampaignPackPreview(
     string FileName, Guid CampaignId, string Name, string RulesFamily,
     IReadOnlyList<LicenseNotice> Included, IReadOnlyList<LicenseNotice> Referenced, IReadOnlyList<LeftOutSource> LeftOut,
@@ -159,7 +159,8 @@ public sealed record OmittedRevision(ContentReference Reference, string Name, IR
 
 /// <summary>What an export with a given purpose would contain, before anything is written (<c>package.exportPreview</c>).</summary>
 /// <param name="GapNotes">The number of gap notes included: all of the characters' notes in a backup, always 0 in a share (M3 B3).</param>
-public sealed record ExportPreview(ExportPurpose Purpose, string FileName, IReadOnlyList<Guid> Characters, IReadOnlyList<LicenseNotice> Included, IReadOnlyList<OmittedSource> Omitted, int GapNotes = 0);
+/// <param name="Warnings">G6: <c>package.needs-newer-build</c> when the package would hold content or a character that TomeStack 0.6.x refuses; empty otherwise.</param>
+public sealed record ExportPreview(ExportPurpose Purpose, string FileName, IReadOnlyList<Guid> Characters, IReadOnlyList<LicenseNotice> Included, IReadOnlyList<OmittedSource> Omitted, int GapNotes = 0, IReadOnlyList<Diagnostic>? Warnings = null);
 
 public enum PackageItemAction { Add, Unchanged, Replace, Conflict }
 

@@ -28,7 +28,7 @@ public sealed partial class PackageService
     {
         var plan = PlanCampaignPack(campaignId);
         return new(plan.FileName, plan.Campaign.Id, plan.Campaign.Name, plan.Campaign.RulesFamily,
-            [.. plan.Included.Select(Notice)], [.. plan.Referenced.Select(Notice)], plan.LeftOut, plan.Revisions.Count, plan.Warnings);
+            [.. plan.Included.Select(Notice)], [.. plan.Referenced.Select(Notice)], plan.LeftOut, plan.Revisions.Count, [.. plan.Warnings, .. NewerBuild.For(plan.Revisions, [])]);
     }
 
     /// <summary><c>package.campaignPackExport</c> / <c>package.campaignPackSaveAs</c>: the pack's bytes.</summary>

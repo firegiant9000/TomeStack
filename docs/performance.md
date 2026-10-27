@@ -1,6 +1,6 @@
 # Performance baseline (roadmap T4)
 
-ROADMAP "Revision 2026-09-29", T4 · status: **measured 2026-10-01; first paint owed (owner, by hand).** This page measures; it optimises nothing. A surprising number becomes a follow-up item below, with its measurement.
+ROADMAP "Revision 2026-09-29", T4 · status: **measured 2026-10-01; the slice 7 play-mechanics cases measured 2026-10-24; first paint owed (owner, by hand).** This page measures; it optimises nothing. A surprising number becomes a follow-up item below, with its measurement.
 
 - Code: [`benchmarks/TomeStack.Benchmarks/`](../benchmarks/TomeStack.Benchmarks/) (BenchmarkDotNet 0.15.8). It is in `TomeStack.slnx`, so it builds under the 0-warning rule. It is not a test project: `dotnet test` and CI never run it.
 - Raw results (BenchmarkDotNet's GitHub-markdown and CSV exports, two runs): [`performance/raw/2026-10-01/`](performance/raw/2026-10-01/). The exports name no path, user or machine; the logs, which do, are not committed.
@@ -49,6 +49,7 @@ Use `--filter "*Calculation*"` and so on for one case, and `--job Dry` to check 
    - `ReviewAll` is `character.reviewUpdate` for every character: both sheets calculated and diffed.
    - This goes through the real SQLite store, as the app does.
 5. **Cold start to first paint:** by hand; see "First paint" below.
+6. **Play mechanics** (`PlayMechanicsBenchmarks`, D43 slice 7): case 1's SRD 5.2.1 character with one pinned feature of nine forms, sixteen techniques, riders, upkeep and damage responses; a calculation, a turn preview and a damage preview. See "Play mechanics" below.
 
 ## Results
 
@@ -72,6 +73,19 @@ Time is the mean; P95 and allocations are per operation. "Spread" compares the t
 **The spread is large, and allocations are not.** Allocations matched to within 1 % in every case; times moved by −14 % to +39 % between two runs minutes apart. The cause is not established. The likely suspects are the hybrid CPU (a thread scheduled on an efficient core runs much slower), heat from the test runs in between, and the power plan. Until that is settled (follow-up P-4):
 - treat a time change below about 40 % on this machine as noise;
 - treat a change in allocations as real.
+
+## Play mechanics (D43 slice 7, measured 2026-10-24)
+
+`PlayMechanicsBenchmarks` (case 6): the case 1 character for SRD 5.2.1 with one original feature pinned, built in code. The feature has nine forms in one exclusive group (form 1 on), sixteen techniques (rolls offered while a form is on), a rider and an upkeep for each form, and five damage responses of all three phases. The sheet has 59 fields. The two previews go through the real SQLite store: `Turn_preview` is `character.turnPreview` in an encounter, `Damage_preview_with_responses` is `character.damagePreview` for a hit that drops a character with 10 hit points to 0, with a reduction, a survival and two thresholds chosen. Raw results: [`performance/raw/2026-10-24/`](performance/raw/2026-10-24/), one run of the Calculation and PlayMechanics cases together.
+
+| Case | Mean | P95 | Allocated | Budget |
+|---|---:|---:|---:|---|
+| 1. Calculate, SRD 5.2.1 (same run, the comparison) | 1.094 ms | 1.115 ms | 1.42 MB | none |
+| 6. Calculate with nine forms and sixteen techniques | 1.172 ms | 1.179 ms | 1.48 MB | P95 up to 1.561 ms, allocations up to 1.56 MB: pass |
+| 6. Turn preview | 16.617 ms | 16.825 ms | 8.02 MB | none (recorded) |
+| 6. Damage preview with responses | 33.119 ms | 33.486 ms | 15.8 MB | none (recorded) |
+
+**Budget (owner's ruling of 2026-10-24, on risk G2 and ruling R15):** the calculation case is held to the P95 of "Calculate, SRD 5.2.1" **in the same run** plus 40 % (the noise band above), which is 1.561 ms, and to that run's allocations plus 10 % (1.56 MB). It measured 1.179 ms and 1.48 MB, so it passes: +5.7 % on P95 and +4 % on allocations over the same-run comparison. The two previews have no budget; they are recorded so a later change can be compared.
 
 ## First paint (owed: owner, by hand)
 

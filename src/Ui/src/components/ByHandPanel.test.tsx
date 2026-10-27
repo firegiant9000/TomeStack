@@ -21,7 +21,7 @@ function feature(name: string, effects: Partial<FeatureEffect>[] = [], page = 12
     kind: 'feature',
     origin: { kind: 'content', rulesFamily: 'srd-5.1', sourceId, page: { start: page } },
     automation: 'reference',
-    effects: effects.map((e, i) => ({ id: `e${i}`, type: 'text', automation: 'reference' as AutomationStatus, ...e })),
+    effects: effects.map((e, i) => ({ id: `e${i}`, type: 'text', automation: 'reference' as AutomationStatus, available: true, ...e })),
     diagnostics: [],
   };
 }

@@ -1,7 +1,7 @@
 namespace TomeStack.RulesCore;
 
 /// <summary>What a proposed rest change is about.</summary>
-public enum RestChangeKind { HitPoints, TemporaryHitPoints, Resource, Exhaustion, HitDie, HitDice, DeathSaves, SpellSlots, PactSlots, Toggle, Concentration, Charges }
+public enum RestChangeKind { HitPoints, TemporaryHitPoints, Resource, Exhaustion, HitDie, HitDice, DeathSaves, SpellSlots, PactSlots, Toggle, Concentration, Charges, Encounter }
 
 /// <summary>
 /// One proposed change of a rest preview (SPEC C-05). <paramref name="Id"/> is stable for the same character state, so
@@ -190,6 +190,14 @@ public static class RestPlanner
             changes.Add(new(
                 "concentration", RestChangeKind.Concentration, "Concentration", 1, 0,
                 $"{concentration.Name}: concentration ends after a long rest (untick to keep it)", rules, concentration.Spell.ContentId));
+        }
+
+        // Character schema v10 (D43 slice 3): a long rest ends a running encounter and the rounds left on toggles. Listed so it is seen first.
+        if (character.Play.Encounter is { } encounter)
+        {
+            changes.Add(new(
+                "encounter", RestChangeKind.Encounter, "End the encounter", encounter.Round, 0,
+                $"The encounter (round {encounter.Round}) ends after a long rest (untick to keep it)", rules));
         }
 
         if (character.Play.Exhaustion > 0)
@@ -409,7 +417,7 @@ public static class RestPlanner
     /// caps hit points a spent hit die restores; each one is applied to the actual current value, so skipping one never
     /// gives the others more than they restore.
     /// </summary>
-    public static PlayState Apply(PlayState play, RestPlan plan, IReadOnlySet<string> skipped, int maximumHitPoints = int.MaxValue)
+    public static PlayState Apply(PlayState play, RestPlan plan, IReadOnlySet<string> skipped, int maximumHitPoints = int.MaxValue, IReadOnlyList<ToggleValue>? sheetToggles = null)
     {
         ArgumentNullException.ThrowIfNull(play);
         ArgumentNullException.ThrowIfNull(plan);
@@ -450,10 +458,24 @@ public static class RestPlanner
                     play = play with { PactSlotsSpent = 0 };
                     break;
                 case RestChangeKind.Toggle:
-                    play = play with { Toggles = [.. play.Toggles.Where(t => !(t.ContentId == change.ContentId && t.ToggleId == change.ResourceId))] };
+                    var gone = new HashSet<(Guid, string)> { (change.ContentId!.Value, change.ResourceId!) };
+                    // D43: a form that goes off takes the overlays that need it, stored or on (the rule the toggle command and the turn planner share),
+                    // so none stays in play.toggles to come back unpaid when the form is switched on again.
+                    var ending = sheetToggles?.FirstOrDefault(t => t.Content.ContentId == change.ContentId && t.ToggleId == change.ResourceId);
+                    if (ending is not null)
+                    {
+                        var working = sheetToggles!.Select(t => gone.Contains((t.Content.ContentId, t.ToggleId)) ? t with { On = false } : t).ToList();
+                        var stored = play.Toggles.Select(s => (s.ContentId, s.ToggleId)).Where(k => !gone.Contains(k)).ToHashSet();
+                        foreach (var overlay in ToggleGroups.EndingWith(ending, working, stored))
+                            gone.Add((overlay.Content.ContentId, overlay.ToggleId));
+                    }
+                    play = play with { Toggles = [.. play.Toggles.Where(t => !gone.Contains((t.ContentId, t.ToggleId)))] };
                     break;
                 case RestChangeKind.Concentration:
                     play = play with { Concentration = null };
+                    break;
+                case RestChangeKind.Encounter:
+                    play = play with { Encounter = null, Toggles = [.. play.Toggles.Select(t => t with { RoundsLeft = null })] };
                     break;
                 case RestChangeKind.DeathSaves:
                     // Only when hit points were actually regained: unticking every hit die keeps the saves.
