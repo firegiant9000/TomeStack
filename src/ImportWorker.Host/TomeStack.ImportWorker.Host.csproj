@@ -15,6 +15,9 @@
     <InvariantGlobalization>false</InvariantGlobalization>
     <IncludeWindowsSDKRefFrameworkReferences>false</IncludeWindowsSDKRefFrameworkReferences>
     <CsWinRTEmbedded>true</CsWinRTEmbedded>
+    <!-- Embedded mode compiles the runtime's sources but not its error-string resources, so its exceptions carry the resource
+         key as their message instead of failing to find the string. -->
+    <CsWinRTUseExceptionResourceKeys>true</CsWinRTUseExceptionResourceKeys>
     <!-- What WindowsOcrEngine calls, plus the types those signatures name. Windows.UI is included for Windows.UI.Color, which
          C#/WinRT writes only with its namespace, so every child namespace is excluded. -->
     <CsWinRTIncludes>
