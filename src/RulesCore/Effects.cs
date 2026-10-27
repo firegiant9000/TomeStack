@@ -1075,7 +1075,7 @@ public enum WeaponAttack { Melee, Ranged }
 /// <summary>
 /// Content schema v5 (SPEC C-02, C-04): a weapon on an item. An equipped weapon gives an attack: to hit = the ability
 /// modifier (Strength for melee, Dexterity for ranged, the better of the two with <c>finesse</c>) plus the proficiency bonus
-/// when proficient; damage = <see cref="Damage"/> plus the same modifier. The same in both SRDs.
+/// when proficient, plus the weapon's own <see cref="Bonus"/> (content v12); damage = <see cref="Damage"/> plus the same modifier and bonus. The same in both SRDs.
 /// </summary>
 public sealed record WeaponEffect : Effect
 {

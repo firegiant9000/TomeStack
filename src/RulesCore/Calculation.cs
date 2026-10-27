@@ -317,7 +317,7 @@ public sealed record SpellcastingEntry(
 /// <summary>
 /// SPEC C-02, C-04: an attack with an equipped weapon. <paramref name="ToHit"/> = the ability modifier (Strength for
 /// melee, Dexterity for ranged, the better one with finesse) + the proficiency bonus if proficient + the weapon's own
-/// bonus; <paramref name="Damage"/> is the dice plus the same modifier and bonus. <paramref name="Trace"/> explains to-hit.
+/// bonus (content v12); <paramref name="Damage"/> is the dice plus the same modifier and bonus. <paramref name="Trace"/> explains to-hit.
 /// Content v11 (D43): a feature can give an attack too (<see cref="AttackSource.Feature"/>; <paramref name="Category"/> is null,
 /// <paramref name="Item"/> is the declaring content's revision and <paramref name="EffectId"/> the attack effect's id), and toggled
 /// riders add to either kind. An attack whose die is not a die is listed with <paramref name="Available"/> false and the reason.
@@ -1210,9 +1210,21 @@ public static class CharacterCalculator
                 {
                     warnings.Add(new("attack.not-proficient", $"Not proficient with '{item.Revision.Name}' ({category}): no proficiency bonus.", item.Revision.Reference, weapon.Id));
                 }
+                // The weapon's own bonus (content v12): to hit and damage, after the proficiency bonus and before the riders. A revision
+                // below v12 gets nothing, even one built in code with the property set. Two steps, like a rider's, so a damage roll's
+                // explanation keeps the damage one (R21); the last step's result stays the to-hit.
+                var weaponBonus = 0;
+                if (weapon.Bonus is int b and not 0 && item.Revision.SchemaVersion >= ContentRevision.WeaponBonusSchemaVersion)
+                {
+                    weaponBonus = b;
+                    var weaponOrigin = ContentOrigin(family, item, weapon);
+                    toHit += b;
+                    trace.Add(new(trace.Count + 1, "add", $"{item.Revision.Name}: +{b} to hit (weapon)", b, toHit, weaponOrigin));
+                    trace.Add(new(trace.Count + 1, "add", $"{item.Revision.Name}: +{b} damage (weapon)", b, toHit, weaponOrigin));
+                }
                 // Riders that match (the tags weapon and melee or ranged) add to the numbers; none matching leaves them as they were.
                 var applied = ApplyRiders(family, riders, ["weapon", weapon.Attack == WeaponAttack.Ranged ? "ranged" : "melee"], trace, ref toHit, out var riderBonus);
-                var damageBonus = mod + riderBonus;
+                var damageBonus = mod + weaponBonus + riderBonus;
                 attacks.Add(new(
                     item.Revision.Reference, item.Revision.Name, weapon.Id, weapon.Attack, weapon.Category, ability, toHit,
                     DamageWith(weapon.Damage, applied, damageBonus), weapon.Versatile is { } versatile ? DamageWith(versatile, applied, damageBonus) : null,

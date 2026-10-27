@@ -4,6 +4,7 @@ import type { RollMode, RollRecord, TraceEntry, TraceOrigin } from './api/types'
 export type StepContext = 'value' | 'attack';
 
 const RIDER_DAMAGE_SUFFIX = 'damage (attack rider)';
+const WEAPON_DAMAGE_SUFFIX = 'damage (weapon)';
 const ATTACK_ROLL_IDS = new Set(['weapon.attack', 'weapon.damage', 'attack.attack', 'attack.damage']);
 
 function signed(n: number): string {
@@ -29,7 +30,7 @@ function isRiderDice(step: TraceEntry): boolean {
 }
 
 function isDamageStep(step: TraceEntry): boolean {
-  if (step.operation === 'add' && step.description.endsWith(RIDER_DAMAGE_SUFFIX)) return true;
+  if (step.operation === 'add' && (step.description.endsWith(RIDER_DAMAGE_SUFFIX) || step.description.endsWith(WEAPON_DAMAGE_SUFFIX))) return true;
   return step.operation === 'set' && step.amount === undefined && step.description.startsWith('Damage ');
 }
 

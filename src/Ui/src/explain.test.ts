@@ -109,6 +109,19 @@ describe('attackSteps', () => {
     expect(attackSteps(kindled, 'toHit')).toEqual([kindled[0], kindled[1], kindled[4]]);
   });
 
+  it('splits a weapon bonus: the to-hit step stays with to-hit, the damage step goes with damage', () => {
+    const trace = [
+      step('base', 'Dexterity modifier', 3, rules, 3),
+      step('add', 'Proficiency bonus', 5, rules, 2),
+      step('add', 'Blade: +2 to hit (weapon)', 7, content('Blade'), 2),
+      step('add', 'Blade: +2 damage (weapon)', 7, content('Blade'), 2),
+    ];
+    expect(attackSteps(trace, 'toHit')).toEqual([trace[0], trace[1], trace[2]]);
+    expect(attackSteps(trace, 'damage')).toEqual([trace[0], trace[3]]);
+    expect(explainSteps([trace[3]], 'attack')).toEqual(['Blade: +2 damage (weapon)']);
+    expect(explainSteps([trace[2]], 'attack')).toEqual(['Blade: +2 to hit (weapon)']);
+  });
+
   it('treats a feature-attack damage step (set, no amount, starts "Damage ") as damage', () => {
     const trace = [step('base', 'Ability modifier', 3, rules, 3), step('add', 'Proficiency bonus', 5, rules, 2), step('set', 'Damage 1d8 slashing', 5, rules)];
     expect(attackSteps(trace, 'damage')).toEqual([trace[0], trace[2]]);

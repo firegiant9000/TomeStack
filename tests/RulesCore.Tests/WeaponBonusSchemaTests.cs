@@ -65,6 +65,8 @@ public class WeaponBonusSchemaTests
     [InlineData(11, "bonus", "1.5", true, "2f9dcea67fc886d74968ad2ee047a918edfbbd7b8d1f057e3531262ebe849b26")]
     [InlineData(11, "bonus", "null", true, "46371c90ad068916040cf893940c21d522889e56304b382be8648c85e10c03f2")]
     [InlineData(11, "Bonus", "2", true, "ee01e7ec70e870c1d2dc20dcb74c52d783c472ac36823d3642526ab1e8604fc7")]
+    [InlineData(11, "Bonus", "2", false, "ee01e7ec70e870c1d2dc20dcb74c52d783c472ac36823d3642526ab1e8604fc7")]
+    [InlineData(11, "bonus", "null", false, "46371c90ad068916040cf893940c21d522889e56304b382be8648c85e10c03f2")]
     public void Below_v12_the_bonus_key_is_written_as_the_old_build_wrote_it(int version, string key, string value, bool inTheMiddle, string hash)
     {
         var fragment = $"\"{key}\": {value}";
@@ -80,6 +82,22 @@ public class WeaponBonusSchemaTests
         Assert.Null(weapon.Bonus);
         Assert.True(weapon.Extensions!.ContainsKey(key));
         Assert.Equal(hash, RevisionHashProperties.Hash(stored));
+    }
+
+    /// <summary>Captured on the v11 build (0c9d90f): the old build does not throw on two spellings of one key; it keeps both, in order.</summary>
+    [Fact]
+    public void Below_v12_two_spellings_of_the_bonus_key_are_both_kept_as_the_old_build_kept_them()
+    {
+        var revision = Read(Item(11, mid: "\"bonus\": 1, \"Bonus\": 2, "));
+
+        var stored = RevisionHashProperties.Write(revision);
+
+        Assert.Equal(
+            Head + 11 + Middle
+            + "{\"type\":\"weapon\",\"id\":\"blade\",\"category\":\"simple\",\"attack\":\"melee\",\"damage\":\"1d6\",\"damageType\":\"slashing\",\"properties\":[],\"weaponKey\":\"blade\",\"automation\":\"automatic\",\"timing\":\"always\",\"bonus\":1,\"Bonus\":2}]}",
+            stored);
+        Assert.Null(Assert.IsType<WeaponEffect>(revision.Effects[0]).Bonus);
+        Assert.Equal("57a6dd5cd3c59271ee14149d1a7361d88d6e271040c551ad2637361d6d2b8cc2", RevisionHashProperties.Hash(stored));
     }
 
     [Theory]
