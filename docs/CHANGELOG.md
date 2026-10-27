@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Internal
+- **Background editor test:** the "makes a new feature draft" test waits for the grant to land after the draft is saved, instead of checking straight after the click; it could fail on a busy machine. No change to the app.
+
 ## 0.7.1 (crash reporting and the repo guard)
 
 A patch on 0.7.0: if TomeStack crashes it now leaves a record and tells you where it is. Nothing else in the app changes.
