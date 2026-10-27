@@ -13,6 +13,7 @@ export function LevelUpChecklist({
   checklist,
   sheet,
   focusOnOpen,
+  spellsOffered = true,
   onGo,
   onDismiss,
 }: {
@@ -20,17 +21,19 @@ export function LevelUpChecklist({
   sheet: CharacterSheet;
   /** R19: true only on the save path; the heading takes focus once, on mount. */
   focusOnOpen: boolean;
+  /** False when the sheet does not offer the Spells tab: a Spells row then has no button. */
+  spellsOffered?: boolean;
   onGo(target: 'play' | 'spells' | 'choices'): void;
   onDismiss(): void;
 }) {
   const heading = useRef<HTMLHeadingElement>(null);
+  // Once, on mount: a later render (a rest, a spend) must not take focus back.
+  const takeFocus = useRef(focusOnOpen);
   useEffect(() => {
-    if (focusOnOpen) heading.current?.focus();
-    // Once, on mount: a later render (a rest, a spend) must not take focus back.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (takeFocus.current) heading.current?.focus();
   }, []);
 
-  const rows = checklistRows(checklist, sheet);
+  const rows = checklistRows(checklist, sheet).map((r) => (r.target === 'spells' && !spellsOffered ? { ...r, target: undefined } : r));
   const labelCount = new Map<string, number>();
   for (const row of rows) if (row.target) labelCount.set(row.target, (labelCount.get(row.target) ?? 0) + 1);
 

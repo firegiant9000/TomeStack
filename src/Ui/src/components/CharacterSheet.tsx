@@ -43,7 +43,7 @@ import { ByHandPanel } from './ByHandPanel';
 import { TabList, TabPanel, tabId, type TabSpec } from './sheet/TabList';
 import { LevelUpChecklist } from './LevelUpChecklist';
 import { dismissChecklist, readChecklist } from '../levelUpChecklist';
-import { rememberSheetTab,rememberedSheetTab, type SheetTabId } from '../sheetTab';
+import { rememberSheetTab, rememberedSheetTab, type SheetTabId } from '../sheetTab';
 import { inverseOf, isCompound, type UndoEntry } from '../undo';
 import { recordSpend } from '../actionRows';
 import { editPins, readPins, resolvePin, visiblePins, writePins, type Pin, type QuickAction } from '../quickbar';
@@ -408,7 +408,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
     { id: 'manage', label: 'Manage' },
   ];
   // The sheet is keyed by character, so this runs once per opened character. A deep link wins over the memory.
-  const [tab, setTabState] = useState<SheetTabId>(() => initialTab ?? rememberedSheetTab(character.id) ?? 'play');
+  const [tab, setTabState] = useState<SheetTabId>(() => (panelTakesFocus ? 'features' : undefined) ?? initialTab ??rememberedSheetTab(character.id) ?? 'play');
   function setTab(next: SheetTabId) {
     setTabState(next);
     rememberSheetTab(character.id, next);
@@ -460,6 +460,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   }, [checklistFocus]);
   function goFromChecklist(target: 'play' | 'spells' | 'choices') {
     // The choices section shows on every tab, so that link changes no tab (A6).
+    if (target === 'spells' && !showSpells) return; // not offered: the panel shows no such button
     if (target !== 'choices') setTab(target);
     setChecklistFocus({ id: target === 'choices' ? 'choices-heading' : tabId('sheet', target) });
   }
@@ -1062,7 +1063,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
       </TabPanel>
 
       <TabPanel idPrefix="sheet" id="features" active={active === 'features'}>
-        {checklist && <LevelUpChecklist checklist={checklist} sheet={sheet} focusOnOpen={panelTakesFocus} onGo={goFromChecklist} onDismiss={dismissLevelUp} />}
+        {checklist && <LevelUpChecklist checklist={checklist} sheet={sheet} focusOnOpen={panelTakesFocus} spellsOffered={showSpells} onGo={goFromChecklist} onDismiss={dismissLevelUp} />}
         {(sheet.features ?? []).length === 0 && <p className="hint">No features yet.</p>}
         <FeaturesPanel view={view} pdfSources={pdfSources} openPage={openPage} reportGap={(id) => reportGap(gapAboutFeature(id))} />
         <ByHandPanel characterId={character.id} sheet={sheet} active={active === 'features'} />

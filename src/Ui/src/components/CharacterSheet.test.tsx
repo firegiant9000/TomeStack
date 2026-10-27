@@ -2092,6 +2092,28 @@ describe('D74 level-up checklist', () => {
     expect(document.activeElement).toBe(document.getElementById('sheet-heading'));
   });
 
+  it('opens on Features when asked to focus the panel, whatever the deep link or memory says, and writes no memory', () => {
+    seed();
+    localStorage.setItem('tomestack.sheetTab.fixture-2', 'stats');
+    renderSheet(levelView(1), 'play', true);
+    expect(screen.getByRole('tab', { name: 'Features' }).getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'What changed at level 1' }));
+    expect(localStorage.getItem('tomestack.sheetTab.fixture-2')).toBe('stats');
+  });
+
+  it('focusChecklist with no stored list leaves the tab and the sheet heading focus as before', () => {
+    renderSheet(levelView(1), 'play', true);
+    expect(screen.getByRole('tab', { name: 'Play' }).getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(document.getElementById('sheet-heading'));
+  });
+
+  it('a Spells row has no button when the Spells tab is not offered', () => {
+    writeChecklist('fixture-2', { level: 1, changes: [{ kind: 'slots', level: 1, before: 0, after: 2 }] });
+    renderSheet(levelView(1), 'features');
+    expect(screen.getByText('Level 1 spell slots: 0 → 2')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Show on Spells/ })).toBeNull();
+  });
+
   it('shows no region without a stored list, or when the stored list is for another level', () => {
     renderSheet(levelView(1), 'features');
     expect(region()).toBeNull();
@@ -2105,6 +2127,7 @@ describe('D74 level-up checklist', () => {
     const user = userEvent.setup();
     seed();
     renderSheet(levelView(1), 'features');
+    await act(async () => {}); // let the mount effects settle before counting calls
     const before = clientCalls();
     await user.click(screen.getByRole('button', { name: 'Dismiss' }));
     expect(localStorage.getItem(storeKey)).toBeNull();
