@@ -71,3 +71,10 @@ Filled in as each item lands: the tests, the fixture and the feature page.
 - Tests: `WeaponBonusSchemaTests` (bounds, the v12 rung, older revisions keep their bytes and hash), `WeaponBonusCalculationTests` (to-hit, damage, riders, versatile, no effect below v12), the critical-hit test in `AttackCommandTests` (a flat bonus is not doubled), `weaponAuthoring.test.ts` and `HomebrewStudioWeapons.test.tsx` (the studio editor and its strict input), the package preview tests (`SourcePackTests`, the v12 warning without a release number) and the e2e `authors a +1 weapon in the studio, equips it and rolls it`.
 - Fixture: the v12 golden "Fixture Tidal Blade" in `tests/RulesFixtures/golden/revisions.json`.
 - Feature pages: [multiclass-and-attacks.md](../features/multiclass-and-attacks.md), [homebrew-studio.md](../features/homebrew-studio.md), [package-format.md](../features/package-format.md) and [schemas/README.md](../schemas/README.md).
+
+**Item 5 (target marks, no schema):**
+
+- Tests: `TargetMarkTests` (RulesCore: riders, roll modes and cross-entry riders follow the toggle) and `TargetMarkServiceTests` (the service path: the pool spend, the rolls, the refusal with no use left, the undo).
+- Fixture: `tests/RulesFixtures/fixture-pack-target-marks.json` and `tests/RulesFixtures/characters/pm-marker-l5.json`.
+- Feature page: the "Target marks" section of [play-mechanics.md](../features/play-mechanics.md).
+- No code or schema changed: D43's toggle-gated riders already cover a mark. One limit: advantage on attack rolls against the target is not covered, because roll modes do not target attack rolls.

@@ -534,6 +534,25 @@ A character is on the revisions they are pinned to, so a `drawsDown` roll can me
 
 A roll with a pool gains "Also changes", a list of up to four rows. Each row has "Change N: pool" (the same pool list as the roll's own pool, without the roll's own pool, keyed by content and id), "Change N: spend or regain", "Change N: amount (a number or a formula)" with its preview, and "Remove change N". "Add change" is `aria-disabled` at four rows with the reason as text (or when there is no other pool), and focus moves to the new row or, after a remove, to the next row or to "Add change". The "Draws down built-up charge" checkbox is enabled only when the chosen pool counts up; otherwise it is disabled and "Only for a pool that counts up" is visible text linked to it. A stored `drawsDown: true` on a pool that does not count up stays enabled so it can be cleared, is marked `aria-invalid`, and blocks Save and Publish from the moment the rule loads. While either is set the "player chooses how much to spend" box is hidden, and setting either clears `variableCost` (a stored `variableCost` with either stays visible so it can be cleared). Changing or clearing the roll's pool clears `alsoChange` and `drawsDown`; removing a pool from the entry clears the rows of this revision's rolls that name it. An empty list and an unticked box are saved as absent. The server's `validate.also-change` and `validate.draws-down` results appear with the other results of the check.
 
+## Target marks (MECH-X item 5, no schema)
+
+A feature that marks a creature (extra damage or an edge while the marked target is present) needs nothing new. The mark is a toggle the player sets, for example "Marked target present". It is usually a bonus action with a pool cost, and its riders, `rollMode` effects and `whileActive` modifiers name the toggle (`toggle`, plus `toggleContent` when another entry declares it). While the toggle is off none of them apply. A toggle with no `duration` is untimed: it lasts until the player switches it off.
+
+```json
+{ "type": "toggle", "id": "marked", "toggleId": "marked", "label": "Marked target present", "activation": "bonusAction", "resourceId": "marks" },
+{ "type": "attackRider", "id": "mark-dice", "tags": ["all"], "dice": "1d6", "toggle": "marked" },
+{ "type": "attackRider", "id": "mark-hit", "tags": ["weapon"], "toHit": "1", "toggle": "marked", "toggleContent": "<content id of the entry above>" }
+```
+
+The app never knows which creature is marked. Moving the mark to another creature is leaving the toggle on. Turning the toggle on spends its pool use; with none left it is refused (`resource.insufficient`) and the riders stay off. The extra dice are doubled on a critical hit like any rider dice, and flat parts are not. A plain switch on is not an undo step; the compound form (`replace`, with the page stamp) is.
+
+What it cannot do:
+
+- Advantage on attack rolls against the marked target. Roll modes do not target attack rolls, so give the mark a flat `toHit` rider or a note to apply by hand (R28).
+- Remember a target. Per-target state, several marked creatures at once, or ending the mark when the creature drops are a target model (D63) and are not built.
+
+Fixture and tests: `fixture-pack-target-marks.json`, `characters/pm-marker-l5.json`, `TargetMarkTests` (RulesCore) and `TargetMarkServiceTests` (the service path).
+
 ## On Play and in the studio
 
 - **Play** lists each group under "Forms" (in the Combat strip since slice 3) as a labelled group of radio choices: "Base" first, then each form with its cost ("5 Focus"), and the overlays as checkboxes. A choice that cannot be made is disabled and says why. See [accessibility-checklist.md](accessibility-checklist.md) row 69 for the keyboard rule: the arrow keys move focus and do not choose, because each choice spends from a pool. The strip also shows the round, the timed effects, the combat pools and the turn buttons ([sheet-play.md](sheet-play.md)). Since slice 7, taking damage on a sheet that has responses opens the damage panel (see "Slice 7"). Since slice 8, an action that also changes pools or draws a charge down is used as one change ("Use <name>", "Undo use <name>"), and End encounter offers to clear built-up pools (see "Slice 8").
