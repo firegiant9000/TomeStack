@@ -181,13 +181,22 @@ internal static class Fixtures
     private static ContentReference ChargingRef(int n) =>
         new(Guid.Parse($"6f0dc000-0000-4000-8000-{n:X12}"), Guid.Parse($"6f0de000-0000-4000-8000-{n:X12}"));
 
+    // MECH-X item 5 fixtures (fixture-pack-target-marks.json, content v11): a mark toggle with riders and a roll mode. ChargingContentTests builds in-memory Draft(0x90)/Draft(0x91) with the same prefixes against a Charging-only catalog, so there is no clash.
+    public static readonly ContentReference SigilMark = TargetMarksRef(0x90);
+    public static readonly ContentReference SigilFocus = TargetMarksRef(0x91);
+
+    public static ContentPack TargetMarksPack() => Load<ContentPack>("fixture-pack-target-marks.json");
+
+    private static ContentReference TargetMarksRef(int n) =>
+        new(Guid.Parse($"6f0dc000-0000-4000-8000-{n:X12}"), Guid.Parse($"6f0de000-0000-4000-8000-{n:X12}"));
+
     /// <summary>
     /// The packs of <see cref="AllCatalog"/> plus every play-mechanics pack (D43). Each slice appends its pack here;
     /// <see cref="AllCatalog"/> is left alone so existing tests keep their counts.
     /// </summary>
     public static InMemoryContentCatalog PlayMechanicsCatalog()
     {
-        ContentPack[] packs = [Pack(), M1Pack(), SpellPack(), CombatPack(), EffectsPack(), MulticlassPack(), FormsPack(), TurnsPack(), FeatureAttacksPack(), ActionDetailsPack(), RollModesPack(), ResponsesPack(), ChargingPack()];
+        ContentPack[] packs = [Pack(), M1Pack(), SpellPack(), CombatPack(), EffectsPack(), MulticlassPack(), FormsPack(), TurnsPack(), FeatureAttacksPack(), ActionDetailsPack(), RollModesPack(), ResponsesPack(), ChargingPack(), TargetMarksPack()];
         return new([.. packs.SelectMany(p => p.Sources)], [.. packs.SelectMany(p => p.Revisions)]);
     }
 
