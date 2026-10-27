@@ -133,7 +133,7 @@ public partial class MainWindow : Window
         core.WebMessageReceived += OnWebMessageReceived;
         core.ProcessFailed += (_, e) =>
         {
-            switch (_crashReporter.ReportProcessFailure(CrashReporter.MainHost,e.ProcessFailedKind.ToString(), e.Reason.ToString(), e.ExitCode))
+            switch (_crashReporter.ReportProcessFailure(CrashReporter.MainHost, e.ProcessFailedKind.ToString(), e.Reason.ToString(), e.ExitCode))
             {
                 case ProcessFailureAction.Reload:
                     core.Reload();
@@ -142,7 +142,7 @@ public partial class MainWindow : Window
                     // Not inside the WebView2 callback: the dialog pumps messages and Shutdown disposes the control.
                     Dispatcher.BeginInvoke(() =>
                     {
-                        if (_crashReporter.ShowUnrecoverableDialog())
+                        if (_crashReporter.ShowUnrecoverableDialog() != UnrecoverableResult.NotOwner)
                             Application.Current.Shutdown(1);
                     });
                     break;

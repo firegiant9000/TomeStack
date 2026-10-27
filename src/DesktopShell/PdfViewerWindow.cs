@@ -80,8 +80,16 @@ public sealed class PdfViewerWindow : Window
                         // Not inside the WebView2 callback: closing disposes the control that is raising it.
                         Dispatcher.BeginInvoke(() =>
                         {
-                            if (crashReporter.ShowUnrecoverableDialog())
-                                Close();
+                            switch (crashReporter.ShowUnrecoverableDialog())
+                            {
+                                case UnrecoverableResult.Close:
+                                    Close();
+                                    break;
+                                case UnrecoverableResult.ShutdownApp:
+                                    // A fatal arrived behind this dialog and could only log; it still ends the app.
+                                    Application.Current.Shutdown(1);
+                                    break;
+                            }
                         });
                         break;
                 }

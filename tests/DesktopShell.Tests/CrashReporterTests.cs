@@ -105,7 +105,7 @@ public sealed class CrashReporterTests : IDisposable
         Assert.Empty(_dialogs);
         Assert.Equal(ProcessFailureAction.Close, reporter.ReportProcessFailure("main", "RenderProcessExited", "Crashed", 6));
         Assert.Empty(_dialogs); // the host posts the dialog outside the WebView2 callback
-        Assert.True(reporter.ShowUnrecoverableDialog());
+        Assert.Equal(UnrecoverableResult.Close, reporter.ShowUnrecoverableDialog());
 
         Assert.Equal($"TomeStack's window stopped responding and could not be recovered. Details were saved to:\n{_log.FilePath}", Assert.Single(_dialogs));
         var entries = Entries();
@@ -169,7 +169,8 @@ public sealed class CrashReporterTests : IDisposable
     public void A_nested_fatal_or_dialog_is_not_the_owner_and_so_does_not_exit()
     {
         CrashReporter? reporter = null;
-        bool? nestedFatal = null, nestedViewer = null;
+        bool? nestedFatal = null;
+        UnrecoverableResult? nestedViewer = null;
         reporter = new CrashReporter(_log, _log.FilePath, Profile, _ =>
         {
             nestedFatal = reporter!.ReportFatal("dispatcher", Failure());
@@ -180,7 +181,7 @@ public sealed class CrashReporterTests : IDisposable
 
         Assert.True(owner);
         Assert.False(nestedFatal);
-        Assert.False(nestedViewer);
+        Assert.Equal(UnrecoverableResult.NotOwner, nestedViewer);
         Assert.True(Reporter(withDialog: false).ReportFatal("dispatcher", Failure())); // smoke: nothing open, so it exits
     }
 
@@ -222,6 +223,65 @@ public sealed class CrashReporterTests : IDisposable
 
         Assert.Single(_dialogs);
         Assert.Equal(2, Entries().Length);
+    }
+
+    [Fact]
+    public void A_fatal_during_a_viewer_dialog_is_not_the_owner_and_the_viewer_then_shuts_the_app_down()
+    {
+        CrashReporter? reporter = null;
+        bool? fatalOwner = null;
+        reporter = new CrashReporter(_log, _log.FilePath, Profile, text =>
+        {
+            _dialogs.Add(text);
+            if (_dialogs.Count == 1)
+                fatalOwner = reporter!.ReportFatal("dispatcher", Failure());
+        });
+
+        var result = reporter.ShowUnrecoverableDialog();
+
+        Assert.False(fatalOwner);
+        Assert.Equal(UnrecoverableResult.ShutdownApp, result);
+        Assert.Equal(2, _dialogs.Count);
+        Assert.StartsWith("TomeStack's window stopped responding", _dialogs[0], StringComparison.Ordinal);
+        Assert.Equal($"TomeStack hit an unexpected error and has to close. Details were saved to:\n{_log.FilePath}", _dialogs[1]);
+        Assert.EndsWith(" command=dispatcher", Assert.Single(Entries()), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_viewer_dialog_with_no_fatal_just_closes_and_a_pending_fatal_is_consumed_once()
+    {
+        var reporter = Reporter();
+        Assert.Equal(UnrecoverableResult.Close, reporter.ShowUnrecoverableDialog());
+
+        CrashReporter? nested = null;
+        var first = true;
+        nested = new CrashReporter(_log, _log.FilePath, Profile, _ =>
+        {
+            if (first)
+                nested!.ReportFatal("dispatcher", Failure());
+            first = false;
+        });
+        Assert.Equal(UnrecoverableResult.ShutdownApp, nested.ShowUnrecoverableDialog());
+        Assert.Equal(UnrecoverableResult.Close, nested.ShowUnrecoverableDialog()); // the pending flag does not linger
+    }
+
+    [Fact]
+    public void A_fatal_during_a_fatal_dialog_leaves_nothing_pending_for_a_later_viewer_dialog()
+    {
+        CrashReporter? reporter = null;
+        var first = true;
+        reporter = new CrashReporter(_log, _log.FilePath, Profile, _ =>
+        {
+            if (first)
+            {
+                first = false;
+                reporter!.ReportFatal("appdomain", Failure());
+            }
+        });
+
+        Assert.True(reporter.ReportFatal("dispatcher", Failure()));
+
+        Assert.Equal(UnrecoverableResult.Close, reporter.ShowUnrecoverableDialog());
     }
 
     [Fact]

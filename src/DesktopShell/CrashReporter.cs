@@ -16,6 +16,19 @@ public enum ProcessFailureAction
     Close,
 }
 
+/// <summary>What the caller of <see cref="CrashReporter.ShowUnrecoverableDialog"/> does next.</summary>
+public enum UnrecoverableResult
+{
+    /// <summary>Another dialog was already open; do nothing.</summary>
+    NotOwner,
+
+    /// <summary>Close this window only.</summary>
+    Close,
+
+    /// <summary>A fatal was reported while the dialog was open; shut the app down.</summary>
+    ShutdownApp,
+}
+
 /// <summary>
 /// Every fatal in the shell leaves an <c>errors.log</c> entry and at most one plain dialog. The entry holds the detail with
 /// the user-profile folder replaced by <c>%USERPROFILE%</c>; the dialog holds fixed wording and the log path, never
@@ -33,7 +46,9 @@ public sealed class CrashReporter(IErrorLog log, string logPath, string userProf
     private readonly Dictionary<string, int> _renderFailures = [];
     private readonly HashSet<string> _closedHosts = [];
     private readonly Dictionary<string, string> _lastKind = [];
-    private int _dialogOpen;
+    private bool _dialogOpen;
+    private bool _openIsFatal;
+    private bool _fatalPending;
 
     /// <summary>
     /// Logs a fatal (<c>dispatcher</c> or <c>appdomain</c>) and shows the dialog unless one is already up. Returns true when
@@ -43,7 +58,7 @@ public sealed class CrashReporter(IErrorLog log, string logPath, string userProf
     public bool ReportFatal(string kind, Exception exception)
     {
         Record(kind, exception.ToString);
-        return ShowDialog($"TomeStack hit an unexpected error and has to close. Details were saved to:\n{logPath}");
+        return ShowDialog(FatalText, fatal: true);
     }
 
     /// <summary>Logs a failure that is not a crash (an unobserved task fault). No dialog.</summary>
@@ -88,11 +103,29 @@ public sealed class CrashReporter(IErrorLog log, string logPath, string userProf
     public const string MainHost = "main";
 
     /// <summary>
-    /// The dialog for a window that could not be recovered (after <see cref="ProcessFailureAction.Close"/>). Returns true
-    /// when this call owned the dialog, so the host may close; false when another dialog was already open.
+    /// The dialog for a window that could not be recovered (after <see cref="ProcessFailureAction.Close"/>). Returns
+    /// <see cref="UnrecoverableResult.NotOwner"/> when another dialog was already open, <see cref="UnrecoverableResult.Close"/>
+    /// when the host may close, and <see cref="UnrecoverableResult.ShutdownApp"/> when a fatal was reported while this
+    /// dialog was open: that fatal only logged (it could not exit under the open dialog), so the fatal text is shown here
+    /// and the caller shuts the app down.
     /// </summary>
-    public bool ShowUnrecoverableDialog() =>
-        ShowDialog($"TomeStack's window stopped responding and could not be recovered. Details were saved to:\n{logPath}");
+    public UnrecoverableResult ShowUnrecoverableDialog()
+    {
+        if (!ShowDialog($"TomeStack's window stopped responding and could not be recovered. Details were saved to:\n{logPath}", fatal: false))
+            return UnrecoverableResult.NotOwner;
+        bool fatalPending;
+        lock (_gate)
+        {
+            fatalPending = _fatalPending;
+            _fatalPending = false;
+        }
+        if (!fatalPending)
+            return UnrecoverableResult.Close;
+        ShowDialog(FatalText, fatal: true);
+        return UnrecoverableResult.ShutdownApp;
+    }
+
+    private string FatalText => $"TomeStack hit an unexpected error and has to close. Details were saved to:\n{logPath}";
 
     /// <remarks>Called under <c>_gate</c>.</remarks>
     private ProcessFailureAction NextRenderAction(string host)
@@ -118,12 +151,22 @@ public sealed class CrashReporter(IErrorLog log, string logPath, string userProf
 
     /// <summary>At most one dialog is open at a time; a failure while it is open only logs. Later failures can show again.</summary>
     /// <returns>True when this call owned the dialog, or when dialogs are suppressed (smoke); false when one was already open.</returns>
-    private bool ShowDialog(string text)
+    private bool ShowDialog(string text, bool fatal)
     {
         if (showDialog is null)
             return true;
-        if (Interlocked.Exchange(ref _dialogOpen, 1) == 1)
-            return false;
+        lock (_gate)
+        {
+            if (_dialogOpen)
+            {
+                // A fatal behind a viewer's dialog cannot exit now; the viewer's owner shuts the app down when it returns.
+                if (fatal && !_openIsFatal)
+                    _fatalPending = true;
+                return false;
+            }
+            _dialogOpen = true;
+            _openIsFatal = fatal;
+        }
         try
         {
             showDialog(text);
@@ -134,7 +177,8 @@ public sealed class CrashReporter(IErrorLog log, string logPath, string userProf
         }
         finally
         {
-            Interlocked.Exchange(ref _dialogOpen, 0);
+            lock (_gate)
+                _dialogOpen = false;
         }
         return true;
     }
