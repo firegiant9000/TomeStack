@@ -59,12 +59,13 @@ public class TargetMarkServiceTests
     {
         var (temp, id) = Marker();
         using var _ = temp;
-        // A plain toggleOn is not an undo step; the compound form (replace, with the page stamp) is, as the page sends it.
-        var on = temp.App.Play(MarkOn(id) with { Replace = true, ExpectedUpdatedAt = temp.App.GetCharacter(id).Character.UpdatedAt });
+        var on = temp.App.Play(MarkOn(id));
         Assert.Equal(2, Sigils(on));
         Assert.Contains("1d6", Damage(temp, id).Formula);
 
-        var undone = temp.App.UndoPlay(new(id, on.Character.UpdatedAt, true));
+        // The sheet's own undo of a plain switch on (src/Ui/src/undo.ts:101-110): toggleOff, then regain the cost (1 when none is named) to the pool's content.
+        temp.App.Play(new(id, PlayActionKind.ToggleOff, Confirm: true, ContentId: SigilMark, ToggleId: "marked"));
+        var undone = temp.App.Play(new(id, PlayActionKind.Regain, Confirm: true, Amount: 1, ContentId: SigilMark, ResourceId: "sigil"));
 
         Assert.Empty(undone.Character.Play.Toggles);
         Assert.Equal(3, Sigils(undone));

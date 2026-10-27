@@ -540,11 +540,16 @@ A feature that marks a creature (extra damage or an edge while the marked target
 
 ```json
 { "type": "toggle", "id": "marked", "toggleId": "marked", "label": "Marked target present", "activation": "bonusAction", "resourceId": "marks" },
-{ "type": "attackRider", "id": "mark-dice", "tags": ["all"], "dice": "1d6", "toggle": "marked" },
-{ "type": "attackRider", "id": "mark-hit", "tags": ["weapon"], "toHit": "1", "toggle": "marked", "toggleContent": "<content id of the entry above>" }
+{ "type": "attackRider", "id": "mark-dice", "tags": ["all"], "dice": "1d6", "toggle": "marked" }
 ```
 
-The app never knows which creature is marked. Moving the mark to another creature is leaving the toggle on. Turning the toggle on spends its pool use; with none left it is refused (`resource.insufficient`) and the riders stay off. The extra dice are doubled on a critical hit like any rider dice, and flat parts are not. A plain switch on is not an undo step; the compound form (`replace`, with the page stamp) is.
+The tag `all` matches every attack. A rider in a second entry follows the first entry's toggle by naming its content (the id here is a sample):
+
+```json
+{ "type": "attackRider", "id": "mark-hit", "tags": ["weapon"], "toHit": "1", "toggle": "marked", "toggleContent": "00000000-0000-4000-8000-000000000001" }
+```
+
+The app never knows which creature is marked. Moving the mark to another creature is leaving the toggle on. Turning the toggle on spends its pool use; with none left the mark is refused with a reason on the sheet (`resource.insufficient`) and the riders stay off. The extra dice are doubled on a critical hit like any rider dice, and flat parts are not. Switching the mark on can be undone from the sheet, which gives the pool use back; switching it off is not undoable when the toggle has a pool.
 
 What it cannot do:
 
