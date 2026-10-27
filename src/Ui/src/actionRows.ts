@@ -139,8 +139,8 @@ export type RecordSpend = {
 
 export function recordSpend(record: RollRecord, resources: ResourceValue[], features: FeatureEntry[], attacks: AttackEntry[]): RecordSpend {
   const p = record.provenance;
-  // A roll may name a resource its action spends; spending is a separate, explicit button (never automatic). A shared
-  // resource (content v6) is found through the content that defines it.
+  // A roll may name a resource its action spends; spending is a separate, explicit button (never automatic from the panel; a quickbar press
+  // makes this same spend once, D73). A shared resource (content v6) is found through the content that defines it.
   // D43 S5: `record.spend` (set by the service for a roll effect that names a pool) says exactly which pool and how much.
   const spend = record.spend;
   const holder = spend?.contentId ?? p?.linkedResourceContent ?? p?.content?.contentId;

@@ -603,8 +603,8 @@ function PinButton({ name, pinned, full, onPin }: Pinning) {
 }
 
 /**
- * SPEC C-04: attacks and feature rolls grouped by action, bonus action, reaction and other. Rolling never spends anything;
- * a roll that names a resource offers "Spend" in its record.
+ * SPEC C-04: attacks and feature rolls grouped by action, bonus action, reaction and other. A roll from the panel never spends; a quickbar
+ * press rolls and then spends, once (D73). A roll that names a resource offers "Spend" in its record.
  */
 export function ActionsPanel({
   view,
