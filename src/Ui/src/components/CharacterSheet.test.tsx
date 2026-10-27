@@ -2,7 +2,7 @@
 // The sheet's tabs (ADR-014): Spells only when there is something to show, a tab that is not offered falls back to Play,
 // "Report a gap" switches to Notes and focuses the note text every time it is pressed, and choosing Notes by hand keeps
 // focus on the tab. The client is mocked; values are invented.
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -1904,4 +1904,160 @@ it('the reply of a replaced damage panel does not close the new panel', async ()
   first.settle(respondingView());
   await waitFor(() => expect(onChanged).toHaveBeenCalled()); // the applied damage still reaches the sheet
   expect(await screen.findByRole('button', { name: 'Apply damage' })).toBeTruthy(); // and the new panel stays open
+});
+
+// D73: the quickbar spends once. A pinned fixed-cost roll rolls, then spends through the sheet's one spender, the same one the Last roll's Spend uses.
+describe('the quickbar', () => {
+  const tideRef = { contentId: 'c-tide', revisionId: 'r-tide' };
+  const focusPool = (current: number) => ({
+    content: tideRef, contentName: 'Fixture Tide', effectId: 'e-focus', resourceId: 'focus', label: 'Focus', maximum: 5, spent: 5 - current, current,
+    trace: [], warnings: [], automation: 'automatic', recoveries: [],
+  });
+  const waveEffect = (id: string, label: string) => ({ id, type: 'roll', automation: 'automatic', label, dice: '2d6', resourceId: 'focus', cost: 2, available: true });
+  const tideView = (current = 4, stamp = '2026-10-03T00:00:00Z'): CharacterView => {
+    const v = view({
+      resources: [focusPool(current)],
+      features: [{ content: tideRef, name: 'Fixture Tide', kind: 'feature', origin: {}, automation: 'automatic', diagnostics: [], effects: [waveEffect('wave', 'Tide Wave'), waveEffect('wave2', 'Tide Crest')] }],
+    } as never);
+    return { ...v, character: { ...v.character, updatedAt: stamp } };
+  };
+  const storeKey = 'tomestack.quickbar.fixture-2';
+  const wavePin = { kind: 'roll', contentId: 'c-tide', effectId: 'wave' };
+  const crestPin = { kind: 'roll', contentId: 'c-tide', effectId: 'wave2' };
+  const spendAction = { action: 'spend', amount: 2, contentId: 'c-tide', resourceId: 'focus' };
+  const waveRecord = (label = 'Tide Wave'): RollRecord => ({ ...rollRecord(label, 7), spend: { contentId: 'c-tide', resourceId: 'focus', amount: 2 } });
+  const bar = () => within(screen.getByRole('region', { name: 'Quickbar' }));
+  const barButton = (name: RegExp) => bar().getByRole<HTMLButtonElement>('button', { name });
+  const spendButton = () => screen.getByRole<HTMLButtonElement>('button', { name: 'Spend 2 Focus (4 left)' });
+  const pin = (...pins: object[]) => localStorage.setItem(storeKey, JSON.stringify(pins));
+  const key = (code: string) => new KeyboardEvent('keydown', { code, altKey: true, bubbles: true, cancelable: true });
+  const settle = async () => {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+  };
+
+  beforeEach(() => {
+    vi.mocked(client.roll).mockReset();
+    vi.mocked(client.play).mockReset();
+  });
+
+  it('a press rolls, then spends once through play, and the Last roll Spend is used', async () => {
+    const user = userEvent.setup();
+    pin(wavePin);
+    vi.mocked(client.roll).mockResolvedValue(waveRecord());
+    vi.mocked(client.play).mockResolvedValue(tideView(2));
+    renderSheet(tideView());
+    await user.click(barButton(/^Roll Tide Wave and spend 2 Focus$/));
+    await waitFor(() => expect(client.play).toHaveBeenCalledTimes(1));
+    expect(client.roll).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(client.roll).mock.calls[0]).toEqual(['fixture-2', { content: tideRef, effectId: 'wave' }]); // a roll effect takes no mode
+    expect(vi.mocked(client.play).mock.calls[0]?.[1]).toEqual(spendAction);
+    await waitFor(() => expect(spendButton().disabled).toBe(true));
+    await user.click(spendButton());
+    await settle();
+    expect(client.play).toHaveBeenCalledTimes(1);
+  });
+
+  it('two presses before the roll resolves, and two Alt+1 in one tick, each give one roll and one spend', async () => {
+    pin(wavePin);
+    let resolveRoll!: (r: RollRecord) => void;
+    vi.mocked(client.roll).mockReturnValue(new Promise<RollRecord>((r) => (resolveRoll = r)));
+    vi.mocked(client.play).mockResolvedValue(tideView(2));
+    renderSheet(tideView());
+    const button = barButton(/^Roll Tide Wave/);
+    fireEvent.click(button);
+    fireEvent.click(button);
+    await act(async () => resolveRoll(waveRecord()));
+    await waitFor(() => expect(client.play).toHaveBeenCalledTimes(1));
+    await settle();
+    expect(client.roll).toHaveBeenCalledTimes(1);
+    expect(client.play).toHaveBeenCalledTimes(1);
+
+    // Two native keydowns before React renders in between: only the sheet's ref guard can stop the second.
+    vi.mocked(client.roll).mockReset();
+    vi.mocked(client.play).mockReset();
+    vi.mocked(client.roll).mockResolvedValue(waveRecord());
+    vi.mocked(client.play).mockResolvedValue(tideView(2));
+    await act(async () => {
+      document.dispatchEvent(key('Digit1'));
+      document.dispatchEvent(key('Digit1'));
+    });
+    await waitFor(() => expect(client.play).toHaveBeenCalledTimes(1));
+    await settle();
+    expect(client.roll).toHaveBeenCalledTimes(1);
+    expect(client.play).toHaveBeenCalledTimes(1);
+  });
+
+  it('Alt+2 while the first spend is still pending runs nothing', async () => {
+    pin(wavePin, crestPin);
+    vi.mocked(client.roll).mockResolvedValue(waveRecord());
+    let settlePlay!: (v: CharacterView) => void;
+    vi.mocked(client.play).mockReturnValue(new Promise<CharacterView>((r) => (settlePlay = r)));
+    renderSheet(tideView());
+    await act(async () => {
+      document.dispatchEvent(key('Digit1'));
+    });
+    await waitFor(() => expect(client.play).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      document.dispatchEvent(key('Digit2'));
+    });
+    await settle();
+    expect(client.roll).toHaveBeenCalledTimes(1);
+    expect(barButton(/^Roll Tide Wave/).getAttribute('aria-disabled')).toBe('true');
+    await act(async () => settlePlay(tideView(2)));
+    await waitFor(() => expect(barButton(/^Roll Tide Wave/).getAttribute('aria-disabled')).toBeNull());
+  });
+
+  it('a refused spend shows the error, gives the Last roll Spend back and plays once', async () => {
+    const user = userEvent.setup();
+    pin(wavePin);
+    const refusal = new TomeStackError({ code: 'character.stale', message: 'The character changed.' });
+    vi.mocked(client.roll).mockResolvedValue(waveRecord());
+    vi.mocked(client.play).mockRejectedValue(refusal);
+    vi.mocked(client.getCharacter).mockResolvedValue(tideView());
+    const onError = vi.fn();
+    render(<CharacterSheet view={tideView()} onChanged={noop} onError={onError} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+    await user.click(barButton(/^Roll Tide Wave/));
+    await waitFor(() => expect(onError).toHaveBeenCalledWith(refusal));
+    await waitFor(() => expect(spendButton().disabled).toBe(false));
+    expect(client.play).toHaveBeenCalledTimes(1);
+  });
+
+  it('Undo last change after a quickbar spend sends the inverse (regain)', async () => {
+    const user = userEvent.setup();
+    pin(wavePin);
+    const before = tideView();
+    const after = tideView(2, '2026-10-03T00:00:05Z');
+    vi.mocked(client.roll).mockResolvedValue(waveRecord());
+    vi.mocked(client.play).mockResolvedValueOnce(after).mockResolvedValue(before);
+    const onChanged = vi.fn();
+    const element = (shown: CharacterView) => <CharacterSheet view={shown} onChanged={onChanged} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />;
+    const { rerender } = render(element(before));
+    await user.click(barButton(/^Roll Tide Wave/));
+    await waitFor(() => expect(onChanged).toHaveBeenCalledWith(after));
+    rerender(element(after)); // the app shows the returned view
+    await user.click(await screen.findByRole('button', { name: /^Undo last change:/ }));
+    await waitFor(() => expect(client.play).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(client.play).mock.calls[1]?.[1]).toEqual({ ...spendAction, action: 'regain' });
+  });
+
+  it('a pin whose content is not on the sheet shows no bar and no error; pinning another keeps it after the visible ones', async () => {
+    const user = userEvent.setup();
+    const ghost = { kind: 'custom', attackId: 'gone' };
+    pin(ghost);
+    const onError = vi.fn();
+    render(<CharacterSheet view={tideView()} onChanged={noop} onError={onError} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+    expect(screen.queryByRole('region', { name: 'Quickbar' })).toBeNull();
+    expect(onError).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: /^Pin Tide Wave/ }));
+    expect(JSON.parse(localStorage.getItem(storeKey)!)).toEqual([wavePin, ghost]);
+    expect(barButton(/^Roll Tide Wave/)).toBeTruthy();
+  });
+
+  it('pins stored for another character do not show', () => {
+    localStorage.setItem('tomestack.quickbar.fixture-1', JSON.stringify([wavePin]));
+    renderSheet(tideView());
+    expect(screen.queryByRole('region', { name: 'Quickbar' })).toBeNull();
+  });
 });

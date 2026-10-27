@@ -370,3 +370,27 @@ it('puts the Why? disclosure in the roll strip, outside the Last roll live regio
   expect(screen.getByRole('region', { name: 'Last roll' }).contains(why)).toBe(false);
   expect(why.closest('[aria-live]')).toBeNull();
 });
+
+it('puts a quickbar slot inside the summary, after the summary line and outside the roll strip (D73)', () => {
+  const { container } = render(
+    <SheetSummary
+      view={fixtureView()}
+      rollMode="normal"
+      onRollMode={() => {}}
+      rollLog={[]}
+      act={() => {}}
+      onRoll={() => {}}
+      onRollDice={async () => {}}
+      quickbar={
+        <section className="quickbar" aria-label="Quickbar">
+          <button type="button">Fixture</button>
+        </section>
+      }
+    />,
+  );
+  const bar = screen.getByRole('region', { name: 'Quickbar' });
+  expect(bar.closest('.sheet-summary')).toBeTruthy();
+  expect(bar.closest('.roll-strip')).toBeNull();
+  expect(bar.parentElement).toBe(container.querySelector('.sheet-summary')); // a direct child: the grid's `quick` row
+  expect(container.querySelector('.summary-line')!.nextElementSibling).toBe(bar);
+});

@@ -43,6 +43,9 @@ import { ByHandPanel } from './ByHandPanel';
 import { TabList, TabPanel, tabId, type TabSpec } from './sheet/TabList';
 import { rememberSheetTab, rememberedSheetTab, type SheetTabId } from '../sheetTab';
 import { inverseOf, isCompound, type UndoEntry } from '../undo';
+import { recordSpend } from '../actionRows';
+import { editPins, readPins, resolvePin, visiblePins, writePins, type Pin, type QuickAction } from '../quickbar';
+import { Quickbar } from './Quickbar';
 import { applyPreferences, compactPlay, setCompactPlay } from '../settings';
 
 import { assistedNotes, rollButtonSuffix } from '../rollModes';
@@ -668,6 +671,58 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
     setLastRoll(record);
   }
 
+  // D73: a roll record's Spend is used once, whether the Spend button or a quickbar press spends it. The state lives here (not in
+  // Last roll) so both go through one `spendOnce`; the record it was used for stays spent, and a new record starts fresh.
+  const [spentFor, setSpentFor] = useState<RollRecord>();
+  /** Holds the record's Spend while the change is under way, gives it back when the change is refused (and calls `refused`); resolves to whether it applied. */
+  async function spendOnce(record: RollRecord, action: PlayAction, refused?: () => void): Promise<boolean> {
+    setSpentFor(record);
+    const applied = await Promise.resolve(act(action))
+      .then((result) => result !== false) // a caller that returns nothing is taken to have applied it
+      .catch(() => false);
+    if (!applied) {
+      setSpentFor((current) => (current === record ? undefined : current));
+      refused?.();
+    }
+    return applied;
+  }
+
+  // D73: the pins are this character's, kept in the page's storage; the sheet is keyed by character, so another one never sees them.
+  const [pins, setPins] = useState(() => readPins(character.id));
+  const visible = visiblePins(view, pins);
+  const quickActions = visible.map((p) => resolvePin(view, p)).filter((a): a is QuickAction => a !== undefined);
+  function pinAction(pin: Pin) {
+    const next = editPins(view, pins, pin);
+    writePins(character.id, next);
+    setPins(next);
+  }
+  // The ref is the guard: two native keydowns can arrive before a re-render, so state could still read "not busy". `quickBusy` only shows it.
+  const busyRef = useRef(false);
+  const [quickBusy, setQuickBusy] = useState(false);
+  /** A quickbar press: rolls or changes the play state, and spends a rolled action's fixed cost once. The next press waits for the spend to settle. */
+  async function quickRun(a: QuickAction) {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setQuickBusy(true);
+    try {
+      if (a.action) {
+        await act(a.action);
+      } else if (a.target) {
+        // A d20 attack follows the sheet's roll mode; a roll effect takes none and is never critical.
+        const withMode = a.pin.kind === 'attack' || a.pin.kind === 'custom';
+        const record = await client.roll(character.id, withMode ? { ...a.target, mode: rollMode } : a.target);
+        showRoll(record);
+        const { autoAction } = recordSpend(record, view.sheet.resources ?? [], view.sheet.features ?? [], view.sheet.attacks ?? []);
+        if (autoAction) await spendOnce(record, autoAction);
+      }
+    } catch (error) {
+      onError(error);
+    } finally {
+      busyRef.current = false;
+      setQuickBusy(false);
+    }
+  }
+
   /** A roll the strip does not show (hit dice in a rest, dice-engine.md "Display"): logged only. */
   function logRoll(record: RollRecord) {
     const entry = logged(record);
@@ -769,7 +824,12 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
         </button>
       </header>
 
-      <SheetSummary view={view} rollMode={rollMode} onRollMode={setRollMode} lastRoll={lastRoll} rollLog={rollLog} act={act} onDamage={openDamage} spellsTab={showSpells} onRoll={(f) => roll({ field: f, mode: rollMode })} onRollDice={rollDice} />
+      <SheetSummary view={view} rollMode={rollMode} onRollMode={setRollMode} lastRoll={lastRoll} rollLog={rollLog} act={act} onDamage={openDamage} spellsTab={showSpells}
+        onRoll={(f) => roll({ field: f, mode: rollMode })}
+        onRollDice={rollDice}
+        quickbar={<Quickbar actions={quickActions} busy={quickBusy} run={quickRun} />}
+        spent={{ record: spentFor, spendOnce }}
+      />
 
       {resting && (
         <div className="rest-sheet" id="rest-panel">
@@ -939,7 +999,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
           <ClassColumnsPanel view={view} />
         </div>
         <div className="play-column">
-          <ActionsPanel view={view} roll={roll} act={act} rollMode={rollMode} onDamageType={setDamageType} />
+          <ActionsPanel view={view} roll={roll} act={act} rollMode={rollMode} onDamageType={setDamageType} pins={visible} onPin={pinAction} />
           <CompanionsPanel view={view} act={act} roll={roll} rollMode={rollMode} onChanged={onChanged} onError={onError} onStatus={onStatus} saveCharacter={saveCharacter} />
         </div>
       </TabPanel>

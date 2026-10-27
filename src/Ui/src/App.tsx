@@ -8,6 +8,7 @@ import type { BuilderMode } from './components/CharacterBuilder';
 import { CharacterSheet } from './components/CharacterSheet';
 import { HomePanel } from './components/HomePanel';
 import { readFileAsBase64 } from './files';
+import { isTypingTarget } from './keys';
 import { applyPreferences, setSidebarCollapsed, sidebarCollapsed } from './settings';
 import type { SheetTabId } from './sheetTab';
 
@@ -67,10 +68,7 @@ export function App() {
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (!event.ctrlKey || event.altKey || event.metaKey || (event.code !== 'KeyB' && event.key.toLowerCase() !== 'b')) return; // physical B too: other layouts give another character
-      const target = event.target as HTMLElement | null;
-      if (target && (target.isContentEditable || /^(TEXTAREA|SELECT)$/.test(target.tagName))) return;
-      // Only text-entry inputs keep Ctrl+B; a focused checkbox, radio or button must not block the shortcut (WCAG 2.1.1).
-      if (target?.tagName === 'INPUT' && !/^(checkbox|radio|button|submit|reset|range|color|file)$/.test((target as HTMLInputElement).type)) return;
+      if (isTypingTarget(event.target)) return; // text entry keeps Ctrl+B
       event.preventDefault();
       if (event.repeat) return; // holding the keys must not flicker the sidebar
       toggleSidebar();

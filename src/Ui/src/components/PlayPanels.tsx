@@ -1149,6 +1149,12 @@ function FeatureItem({
 /** ADR-015: at most this many dice are drawn; the record's text always lists every die. */
 const drawnDice = 10;
 
+/** D73: which record's Spend is used, and the one way to spend (resolves to whether the change applied; a refusal gives the button back and calls `refused`). */
+export type RecordSpent = {
+  record?: RollRecord;
+  spendOnce: (record: RollRecord, action: PlayAction, refused?: () => void) => Promise<boolean>;
+};
+
 /** The last roll's record (SPEC C-04): formula, every die, modifiers and provenance. Announced politely. */
 export function RollResult({
   record,
@@ -1156,6 +1162,7 @@ export function RollResult({
   features,
   attacks = [],
   act,
+  spent,
 }: {
   record?: RollRecord;
   resources: ResourceValue[];
@@ -1163,17 +1170,24 @@ export function RollResult({
   /** D43 slice 4: a feature attack's cost is on its sheet row, not on a feature effect. */
   attacks?: AttackEntry[];
   act: Act;
+  /** D73: the sheet's own "this record was spent" state and spender, shared with the quickbar so a press and this button spend once between them. Absent: kept here. */
+  spent?: RecordSpent;
 }) {
   // The typed amount belongs to the roll it was typed for, so a new roll never inherits it.
   const [typed, setTyped] = useState<{ record?: RollRecord; value: string }>({ value: '' });
   const amount = typed.record === record ? typed.value : '';
   const setAmount = (value: string) => setTyped({ record, value });
   // A record's Spend is used once: the record it was used for stays spent, and a new record starts fresh.
-  const [spentFor, setSpentFor] = useState<RollRecord>();
+  const [ownSpentFor, setSpentFor] = useState<RollRecord>();
+  const spentFor = spent ? spent.record : ownSpentFor;
   const spentAlready = record !== undefined && spentFor === record;
   const cantUseId = useId();
   /** Holds the button while the change is under way, and gives it back when the change is refused so it can be retried. */
   function spendOnce(action: PlayAction, refused?: () => void) {
+    if (spent) {
+      if (record) void spent.spendOnce(record, action, refused);
+      return;
+    }
     setSpentFor(record);
     void Promise.resolve(act(action))
       .then((applied) => applied !== false) // a caller that returns nothing is taken to have applied it
