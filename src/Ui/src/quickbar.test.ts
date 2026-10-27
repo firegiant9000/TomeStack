@@ -143,6 +143,20 @@ it('names a roll with dice without a spend when it would not offer one', () => {
   expect(rollName(effect(), pool({ current: 1 }))).toBe('Roll Tide Wave');
 });
 
+it('names a feature attack with a pool cost "and spend", and sets spends (R13: the name is the only promise)', () => {
+  const attackName = (a: AttackEntry, p = pool()) => resolvePin(view({ attacks: [a], resources: [p] }), attackPin(a))!;
+  const spending = attackName(featureAttack({ cost: 2 }));
+  expect(spending.name).toBe('Roll Testy Lash attack and spend 2 Focus');
+  expect(spending.spends).toBe(true);
+  expect(spending.name).toContain(spending.label);
+  expect(attackName(featureAttack()).name).toBe('Roll Testy Lash attack and spend 1 Focus');
+  for (const none of [attackName(featureAttack({ cost: 2 }), pool({ current: 1 })), attackName(featureAttack({ resourceId: null })), attackName(featureAttack({ cost: 0 })), attackName(weapon())]) {
+    expect(none.spends).toBe(false);
+    expect(none.name).not.toContain('and spend');
+  }
+  expect(resolvePin(view(), customPin(custom))!.spends).toBe(false);
+});
+
 it('names a held roll (compound, no rollId) plainly, and a compound roll with a rollId with its spend', () => {
   const rollName = (e: FeatureEffect) => {
     const f = feature([e]);

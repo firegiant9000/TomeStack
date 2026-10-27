@@ -137,6 +137,15 @@ export type RecordSpend = {
   autoAction?: PlayAction;
 };
 
+/**
+ * The one test for "the fixed-cost Spend would be offered (and enabled for an unspent record)": a tracked pool, a cost the sheet can name,
+ * nothing held, a cost of at least 1 (or a compound roll, whose cost may be 0), and enough stock. recordSpend's `autoAction` and a quickbar
+ * pin's "and spend" name both read it, so a button never spends unless its name says so (D73 R13).
+ */
+export function fixedSpendOffered(o: { tracked: boolean; costUnavailable: boolean; variableCost: boolean; held: boolean; cost: number; alsoChanges: boolean; stock: number | undefined }): boolean {
+  return o.tracked && !o.costUnavailable && !o.variableCost && !o.held && !(o.cost < 1 && !o.alsoChanges) && (o.stock ?? 0) >= o.cost;
+}
+
 export function recordSpend(record: RollRecord, resources: ResourceValue[], features: FeatureEntry[], attacks: AttackEntry[]): RecordSpend {
   const p = record.provenance;
   // A roll may name a resource its action spends; spending is a separate, explicit button (never automatic from the panel; a quickbar press
@@ -173,7 +182,8 @@ export function recordSpend(record: RollRecord, resources: ResourceValue[], feat
   const variableCost = effect?.variableCost === true;
   // Exactly the fixed Spend button's enabled condition, minus "already spent" (that is the component's own state).
   const autoAction =
-    linked && !costUnavailable && linked.current !== undefined && !variableCost && !cantUse && !(cost < 1 && (effect?.alsoChange?.length ?? 0) === 0) && (stock ?? 0) >= cost
+    linked &&
+    fixedSpendOffered({ tracked: linked.current !== undefined, costUnavailable, variableCost, held: cantUse, cost, alsoChanges: (effect?.alsoChange?.length ?? 0) > 0, stock })
       ? spendAction(cost, spend?.contentId ?? linked.content.contentId, spend?.resourceId ?? linked.resourceId)
       : undefined;
   return { linked, cost, costUnavailable, cantUse, variableCost, stock, stockText, most, spendAction, autoAction };

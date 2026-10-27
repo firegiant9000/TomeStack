@@ -745,6 +745,8 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
         const withMode = a.pin.kind === 'attack' || a.pin.kind === 'custom';
         const record = await client.roll(character.id, withMode ? { ...a.target, mode: rollMode } : a.target);
         showRoll(record);
+        // Only a button named "... and spend" spends (R13); any other pin leaves the record's Spend on the Last roll.
+        if (!a.spends || !mounted.current) return;
         const { autoAction } = recordSpend(record, view.sheet.resources ?? [], view.sheet.features ?? [], view.sheet.attacks ?? []);
         if (autoAction) await spendOnce(record, autoAction);
       }

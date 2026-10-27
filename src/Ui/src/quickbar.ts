@@ -1,5 +1,5 @@
 // D73: the quickbar's pins, kept per character in the page's own storage, and how a pin finds its action on the current sheet.
-import { attackAvailability, dicelessUse, poolFor, rollAvailability, toggleAvailability, type Availability } from './actionRows';
+import { attackAvailability, dicelessUse, fixedSpendOffered, poolFor, rollAvailability, toggleAvailability, type Availability } from './actionRows';
 import type { AttackEntry, CharacterView, CustomAttack, FeatureEffect, FeatureEntry, PlayAction, RollTarget, ToggleValue } from './api/types';
 
 export type PinKind = 'roll' | 'attack' | 'custom' | 'toggle';
@@ -93,6 +93,8 @@ export type QuickAction = {
   target?: RollTarget;
   /** A play change (dice-less Use, toggle); absent for a roll. */
   action?: PlayAction;
+  /** True exactly when `name` says "and spend": the press makes the roll record's fixed Spend once. Any other press only rolls. */
+  spends: boolean;
 };
 
 /** A pin finds its row by content id (not revision), so a pinned row survives a revision update; a missing row resolves to nothing. */
@@ -111,7 +113,7 @@ export function resolvePin(view: CharacterView, pin: Pin): QuickAction | undefin
       if (!effect.dice) {
         if (effect.resourceId === undefined) return undefined; // nothing to roll and nothing to spend
         const cost = use.costFailed ? '' : ` (${use.cost} ${use.poolName}${use.alsoText})`;
-        return { ...base, name: `Use ${label}${cost}`, label, availability, action: use.action };
+        return { ...base, name: `Use ${label}${cost}`, label, availability, action: use.action, spends: false };
       }
       // R13: a per-unit roll carries its base cost; the unit count is chosen at run time.
       const target: RollTarget = { content: feature.content, effectId: effect.id, ...(effect.perUnit && pool?.current !== undefined ? { amount: effect.cost ?? 0 } : {}) };
@@ -120,20 +122,29 @@ export function resolvePin(view: CharacterView, pin: Pin): QuickAction | undefin
       // A held roll (compound with no rollId) has no Spend to offer, so its name stays plain.
       const held = (effect.drawsDown || (effect.alsoChange?.length ?? 0) > 0) && !effect.rollId;
       const spends =
-        !held && pool?.current !== undefined && !effect.variableCost && !use.costFailed && !(use.cost < 1 && (effect.alsoChange?.length ?? 0) === 0) && (stock ?? 0) >= use.cost;
-      return { ...base, name: spends ? `Roll ${label} and spend ${use.cost} ${pool.label}` : `Roll ${label}`, label, availability, target };
+        pool !== undefined &&
+        fixedSpendOffered({ tracked: pool.current !== undefined, costUnavailable: use.costFailed, variableCost: effect.variableCost === true, held, cost: use.cost, alsoChanges: (effect.alsoChange?.length ?? 0) > 0, stock });
+      return { ...base, name: spends ? `Roll ${label} and spend ${use.cost} ${pool.label}` : `Roll ${label}`, label, availability, target, spends };
     }
     case 'attack': {
       const attack = (view.sheet.attacks ?? []).find((a) => a.item.contentId === pin.contentId && a.effectId === pin.effectId);
       if (!attack) return undefined;
-      const availability = attackAvailability(attack, poolFor(resources, attack.resourceId ?? undefined, attack.costResourceContent ?? undefined));
+      const pool = poolFor(resources, attack.resourceId ?? undefined, attack.costResourceContent ?? undefined);
+      const availability = attackAvailability(attack, pool);
       const target: RollTarget = attack.source === 'feature' ? { content: attack.item, effectId: attack.effectId } : { weapon: attack.item };
-      return { ...base, name: `Roll ${attack.name} attack`, label: attack.name, availability, target };
+      // The service links a feature attack's pool on its to-hit record, so the record offers the fixed Spend: the name must say so (R13).
+      const cost = attack.cost ?? 1;
+      const spends =
+        attack.source === 'feature' &&
+        !!attack.resourceId &&
+        pool !== undefined &&
+        fixedSpendOffered({ tracked: pool.current !== undefined, costUnavailable: false, variableCost: false, held: false, cost, alsoChanges: false, stock: pool.current });
+      return { ...base, name: spends ? `Roll ${attack.name} attack and spend ${cost} ${pool.label}` : `Roll ${attack.name} attack`, label: attack.name, availability, target, spends };
     }
     case 'custom': {
       const attack = (view.character.customAttacks ?? []).find((a) => a.id === pin.attackId);
       if (!attack) return undefined;
-      return { ...base, name: `Roll ${attack.name} attack`, label: attack.name, availability: { usable: true, reasons: [] }, target: { customAttack: attack.id } };
+      return { ...base, name: `Roll ${attack.name} attack`, label: attack.name, availability: { usable: true, reasons: [] }, target: { customAttack: attack.id }, spends: false };
     }
     case 'toggle': {
       const t = (view.sheet.toggles ?? []).find((x) => x.content.contentId === pin.contentId && x.effectId === pin.effectId);
@@ -141,7 +152,7 @@ export function resolvePin(view: CharacterView, pin: Pin): QuickAction | undefin
       if (!t || t.auto || t.group) return undefined;
       const availability = toggleAvailability(t, poolFor(resources, t.resourceId, t.costResourceContent ?? t.content.contentId));
       const action: PlayAction = { action: t.on ? 'toggleOff' : 'toggleOn', contentId: t.content.contentId, toggleId: t.toggleId };
-      return { ...base, name: `Turn ${t.label} ${t.on ? 'off' : 'on'}`, label: t.label, availability, action };
+      return { ...base, name: `Turn ${t.label} ${t.on ? 'off' : 'on'}`, label: t.label, availability, action, spends: false };
     }
   }
 }

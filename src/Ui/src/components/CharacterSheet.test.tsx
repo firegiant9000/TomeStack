@@ -1960,6 +1960,87 @@ describe('the quickbar', () => {
     expect(client.play).toHaveBeenCalledTimes(1);
   });
 
+  const lashView = (current = 4): CharacterView => {
+    const v = tideView(current);
+    const lash = { item: tideRef, name: 'Tide Lash', effectId: 'lash', source: 'feature', automation: 'automatic', available: true, resourceId: 'focus', costResourceContent: 'c-tide', cost: 2, properties: [], trace: [], warnings: [], attack: 'melee', toHit: 5, damage: '1d6' };
+    return { ...v, sheet: { ...v.sheet, attacks: [lash] } } as unknown as CharacterView;
+  };
+  const lashPin = { kind: 'attack', contentId: 'c-tide', effectId: 'lash' };
+  const lashRecord = (): RollRecord => ({
+    ...rollRecord('Tide Lash', 14),
+    provenance: { rollId: 'fixture', label: 'Tide Lash', content: tideRef, effectId: 'lash' },
+    spend: { contentId: 'c-tide', resourceId: 'focus', amount: 2 },
+  } as RollRecord);
+
+  it('a pinned feature attack with a cost says "and spend" and spends once', async () => {
+    const user = userEvent.setup();
+    pin(lashPin);
+    vi.mocked(client.roll).mockResolvedValue(lashRecord());
+    vi.mocked(client.play).mockResolvedValue(tideView(2));
+    renderSheet(lashView());
+    await user.click(barButton(/^Roll Tide Lash attack and spend 2 Focus$/));
+    await waitFor(() => expect(client.play).toHaveBeenCalledTimes(1));
+    await settle();
+    expect(vi.mocked(client.play).mock.calls[0]?.[1]).toEqual(spendAction);
+    expect(client.play).toHaveBeenCalledTimes(1);
+  });
+
+  it('a pinned feature attack that costs nothing is named plainly and sends no spend', async () => {
+    const user = userEvent.setup();
+    pin(lashPin);
+    vi.mocked(client.roll).mockResolvedValue({ ...lashRecord(), spend: { contentId: 'c-tide', resourceId: 'focus', amount: 0 } });
+    const free = lashView();
+    renderSheet({ ...free, sheet: { ...free.sheet, attacks: [{ ...free.sheet.attacks![0]!, cost: 0 }] } } as CharacterView);
+    await user.click(barButton(/^Roll Tide Lash attack$/));
+    await waitFor(() => expect(client.roll).toHaveBeenCalledTimes(1));
+    await settle();
+    expect(client.play).not.toHaveBeenCalled();
+  });
+
+  it('a pinned roll whose name does not say "and spend" leaves the Spend on the Last roll', async () => {
+    const user = userEvent.setup();
+    pin(wavePin);
+    const v = tideView();
+    const plain = { ...v, sheet: { ...v.sheet, features: [{ ...v.sheet.features![0]!, effects: [{ ...waveEffect('wave', 'Tide Wave'), variableCost: true }] }] } } as unknown as CharacterView;
+    vi.mocked(client.roll).mockResolvedValue(waveRecord());
+    renderSheet(plain);
+    await user.click(barButton(/^Roll Tide Wave$/));
+    await waitFor(() => expect(client.roll).toHaveBeenCalledTimes(1));
+    await settle();
+    expect(client.play).not.toHaveBeenCalled();
+  });
+
+  it('a roll that resolves after the sheet is gone makes no spend', async () => {
+    pin(wavePin);
+    let resolveRoll!: (r: RollRecord) => void;
+    vi.mocked(client.roll).mockReturnValue(new Promise<RollRecord>((r) => (resolveRoll = r)));
+    const { unmount } = renderSheet(tideView());
+    fireEvent.click(barButton(/^Roll Tide Wave/));
+    unmount();
+    await act(async () => resolveRoll(waveRecord()));
+    await settle();
+    expect(client.play).not.toHaveBeenCalled();
+  });
+
+  it('a refused variable-cost Spend on the Last roll puts the typed amount back and gives the button back', async () => {
+    const user = userEvent.setup();
+    pin(wavePin);
+    const v = tideView();
+    const variable = { ...v, sheet: { ...v.sheet, features: [{ ...v.sheet.features![0]!, effects: [{ ...waveEffect('wave', 'Tide Wave'), variableCost: true }] }] } } as unknown as CharacterView;
+    vi.mocked(client.roll).mockResolvedValue({ ...waveRecord(), provenance: { rollId: 'fixture', label: 'Tide Wave', content: tideRef, effectId: 'wave' } });
+    vi.mocked(client.play).mockRejectedValue(new TomeStackError({ code: 'character.stale', message: 'The character changed.' }));
+    vi.mocked(client.getCharacter).mockResolvedValue(variable);
+    render(<CharacterSheet view={variable} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+    await user.click(barButton(/^Roll Tide Wave$/));
+    const box = await screen.findByLabelText<HTMLInputElement>(/^Focus to spend/);
+    await user.type(box, '2');
+    const spend = screen.getByRole<HTMLButtonElement>('button', { name: /^Spend 2 Focus/ });
+    await user.click(spend);
+    await waitFor(() => expect(client.play).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByLabelText<HTMLInputElement>(/^Focus to spend/).value).toBe('2'));
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: /^Spend 2 Focus/ }).disabled).toBe(false);
+  });
+
   it('two presses before the roll resolves, and two Alt+1 in one tick, each give one roll and one spend', async () => {
     pin(wavePin);
     let resolveRoll!: (r: RollRecord) => void;
