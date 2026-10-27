@@ -86,6 +86,8 @@ export type QuickAction = {
   key: string;
   /** Accessible name, e.g. "Roll Tide Wave and spend 2 Focus", "Use Guard (1 Reaction)", "Roll Longsword attack", "Turn Tide Form on". */
   name: string;
+  /** The short visible text (the effect label, attack name or toggle label); always a part of `name` (WCAG 2.5.3). */
+  label: string;
   availability: Availability;
   /** A roll (mode is added at run time for attacks); absent for a play change. */
   target?: RollTarget;
@@ -109,7 +111,7 @@ export function resolvePin(view: CharacterView, pin: Pin): QuickAction | undefin
       if (!effect.dice) {
         if (effect.resourceId === undefined) return undefined; // nothing to roll and nothing to spend
         const cost = use.costFailed ? '' : ` (${use.cost} ${use.poolName}${use.alsoText})`;
-        return { ...base, name: `Use ${label}${cost}`, availability, action: use.action };
+        return { ...base, name: `Use ${label}${cost}`, label, availability, action: use.action };
       }
       // R13: a per-unit roll carries its base cost; the unit count is chosen at run time.
       const target: RollTarget = { content: feature.content, effectId: effect.id, ...(effect.perUnit && pool?.current !== undefined ? { amount: effect.cost ?? 0 } : {}) };
@@ -119,19 +121,19 @@ export function resolvePin(view: CharacterView, pin: Pin): QuickAction | undefin
       const held = (effect.drawsDown || (effect.alsoChange?.length ?? 0) > 0) && !effect.rollId;
       const spends =
         !held && pool?.current !== undefined && !effect.variableCost && !use.costFailed && !(use.cost < 1 && (effect.alsoChange?.length ?? 0) === 0) && (stock ?? 0) >= use.cost;
-      return { ...base, name: spends ? `Roll ${label} and spend ${use.cost} ${pool.label}` : `Roll ${label}`, availability, target };
+      return { ...base, name: spends ? `Roll ${label} and spend ${use.cost} ${pool.label}` : `Roll ${label}`, label, availability, target };
     }
     case 'attack': {
       const attack = (view.sheet.attacks ?? []).find((a) => a.item.contentId === pin.contentId && a.effectId === pin.effectId);
       if (!attack) return undefined;
       const availability = attackAvailability(attack, poolFor(resources, attack.resourceId ?? undefined, attack.costResourceContent ?? undefined));
       const target: RollTarget = attack.source === 'feature' ? { content: attack.item, effectId: attack.effectId } : { weapon: attack.item };
-      return { ...base, name: `Roll ${attack.name} attack`, availability, target };
+      return { ...base, name: `Roll ${attack.name} attack`, label: attack.name, availability, target };
     }
     case 'custom': {
       const attack = (view.character.customAttacks ?? []).find((a) => a.id === pin.attackId);
       if (!attack) return undefined;
-      return { ...base, name: `Roll ${attack.name} attack`, availability: { usable: true, reasons: [] }, target: { customAttack: attack.id } };
+      return { ...base, name: `Roll ${attack.name} attack`, label: attack.name, availability: { usable: true, reasons: [] }, target: { customAttack: attack.id } };
     }
     case 'toggle': {
       const t = (view.sheet.toggles ?? []).find((x) => x.content.contentId === pin.contentId && x.effectId === pin.effectId);
@@ -139,7 +141,7 @@ export function resolvePin(view: CharacterView, pin: Pin): QuickAction | undefin
       if (!t || t.auto || t.group) return undefined;
       const availability = toggleAvailability(t, poolFor(resources, t.resourceId, t.costResourceContent ?? t.content.contentId));
       const action: PlayAction = { action: t.on ? 'toggleOff' : 'toggleOn', contentId: t.content.contentId, toggleId: t.toggleId };
-      return { ...base, name: `Turn ${t.label} ${t.on ? 'off' : 'on'}`, availability, action };
+      return { ...base, name: `Turn ${t.label} ${t.on ? 'off' : 'on'}`, label: t.label, availability, action };
     }
   }
 }

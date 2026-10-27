@@ -2004,9 +2004,11 @@ describe('the quickbar', () => {
     });
     await settle();
     expect(client.roll).toHaveBeenCalledTimes(1);
-    expect(barButton(/^Roll Tide Wave/).getAttribute('aria-disabled')).toBe('true');
+    const bar = screen.getByRole('region', { name: 'Quickbar' });
+    expect(bar.getAttribute('aria-busy')).toBe('true');
+    expect(barButton(/^Roll Tide Wave/).getAttribute('aria-disabled')).toBeNull(); // busy does not restyle the buttons
     await act(async () => settlePlay(tideView(2)));
-    await waitFor(() => expect(barButton(/^Roll Tide Wave/).getAttribute('aria-disabled')).toBeNull());
+    await waitFor(() => expect(bar.getAttribute('aria-busy')).toBeNull());
   });
 
   it('a refused spend shows the error, gives the Last roll Spend back and plays once', async () => {

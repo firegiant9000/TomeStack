@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { QuickAction } from '../quickbar';
-import { Quickbar, quickLabel } from './Quickbar';
+import { Quickbar } from './Quickbar';
 
 afterEach(cleanup);
 
@@ -11,6 +11,7 @@ const action = (n: number, over: Partial<QuickAction> = {}): QuickAction => ({
   pin: { kind: 'roll', contentId: `c${n}`, effectId: `e${n}` },
   key: `roll:c${n}:e${n}:`,
   name: `Roll Fixture ${n} and spend ${n} Focus`,
+  label: `Fixture ${n}`,
   availability: { usable: true, reasons: [] },
   target: { effectId: `e${n}` },
   ...over,
@@ -41,15 +42,6 @@ describe('Quickbar', () => {
     expect(document.activeElement).toBe(buttons[1]);
   });
 
-  it('shortens each kind of name to a part of itself', () => {
-    expect(quickLabel('Roll Tide Wave and spend 2 Focus')).toBe('Tide Wave');
-    expect(quickLabel('Roll Longsword attack')).toBe('Longsword');
-    expect(quickLabel('Use Guard (1 Reaction)')).toBe('Guard');
-    expect(quickLabel('Use Guard')).toBe('Guard');
-    expect(quickLabel('Turn Tide Form on')).toBe('Tide Form on');
-    expect(quickLabel('Roll Tide Wave')).toBe('Tide Wave');
-  });
-
   it('Alt+1 runs the first action and is prevented; Alt+3 with two actions is not a hit', () => {
     const run = vi.fn();
     render(<Quickbar actions={two} busy={false} run={run} />);
@@ -70,7 +62,8 @@ describe('Quickbar', () => {
     rerender(<Quickbar actions={two} busy run={run} />);
     send(alt('Digit1'));
     expect(run).not.toHaveBeenCalled();
-    expect(screen.getAllByRole('button').every((b) => b.getAttribute('aria-disabled') === 'true')).toBe(true);
+    expect(screen.getByRole('region', { name: 'Quickbar' }).getAttribute('aria-busy')).toBe('true');
+    expect(screen.getAllByRole('button').some((b) => b.hasAttribute('aria-disabled'))).toBe(false); // busy does not restyle the buttons
     fireEvent.click(screen.getAllByRole('button')[0]!);
     expect(run).not.toHaveBeenCalled();
   });

@@ -2,22 +2,10 @@ import { useEffect, useId, useRef } from 'react';
 import { quickbarSlot, isTypingTarget } from '../keys';
 import type { QuickAction } from '../quickbar';
 
-/** The short text on the button; the full `name` stays the accessible name, and this is always a part of it (WCAG 2.5.3). */
-export function quickLabel(name: string): string {
-  return (
-    /^Roll (.+) and spend .+$/.exec(name)?.[1] ??
-    /^Roll (.+) attack$/.exec(name)?.[1] ??
-    /^Use (.+?)(?: \(.*\))?$/.exec(name)?.[1] ??
-    /^Turn (.+)$/.exec(name)?.[1] ??
-    /^Roll (.+)$/.exec(name)?.[1] ??
-    name
-  );
-}
-
 /**
  * D73: the pinned actions as a row of buttons in the summary bar, reachable from every tab. Alt+1 to Alt+8 press them.
- * `aria-disabled`, not `disabled`: an action that cannot be used stays in the Tab order and says why. `busy` holds every
- * button while a press is under way (the sheet's guard is its own ref; this only shows it).
+ * `aria-disabled`, not `disabled`: an action that cannot be used stays in the Tab order and says why. `busy` is shown as
+ * `aria-busy` on the bar, not on the buttons, so they don't flip style on every press (the sheet's guard is its own ref).
  */
 export function Quickbar({ actions, busy, run }: { actions: QuickAction[]; busy: boolean; run: (action: QuickAction) => void }) {
   const idBase = useId();
@@ -49,10 +37,10 @@ export function Quickbar({ actions, busy, run }: { actions: QuickAction[]; busy:
 
   if (actions.length === 0) return null;
   return (
-    <section className="quickbar" aria-label="Quickbar">
+    <section className="quickbar" aria-label="Quickbar" aria-busy={busy || undefined}>
       <ol>
         {actions.map((action, i) => {
-          const held = busy || !action.availability.usable;
+          const unusable = !action.availability.usable;
           const reason = action.availability.reasons.join(' ');
           const hintId = `${idBase}-${i}`;
           return (
@@ -64,16 +52,16 @@ export function Quickbar({ actions, busy, run }: { actions: QuickAction[]; busy:
                 }}
                 aria-label={action.name}
                 aria-keyshortcuts={`Alt+${i + 1}`}
-                aria-disabled={held || undefined}
+                aria-disabled={unusable || undefined}
                 aria-describedby={reason ? hintId : undefined}
                 onClick={() => {
-                  if (!held) run(action);
+                  if (!busy && !unusable) run(action);
                 }}
               >
                 <span aria-hidden="true" className="quick-slot">
                   {i + 1}
                 </span>{' '}
-                {quickLabel(action.name)}
+                {action.label}
               </button>
               {reason && (
                 <span id={hintId} className="visually-hidden">

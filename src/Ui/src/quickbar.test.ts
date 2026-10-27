@@ -125,6 +125,8 @@ it('resolves a roll with dice to a target and says what it spends', () => {
   const f = feature([effect()]);
   const a = resolvePin(view({ features: [f] }), rollPin(f, f.effects[0]!))!;
   expect(a.name).toBe('Roll Tide Wave and spend 2 Focus');
+  expect(a.label).toBe('Tide Wave');
+  expect(a.name).toContain(a.label);
   expect(a.target).toEqual({ content: ref, effectId: 'wave' });
   expect(a.action).toBeUndefined();
   expect(a.availability.usable).toBe(true);
@@ -189,6 +191,8 @@ it('resolves a dice-less Use to a spend', () => {
   const f = feature([e]);
   const a = resolvePin(view({ features: [f] }), rollPin(f, e))!;
   expect(a.name).toBe('Use Guard (1 Focus)');
+  expect(a.label).toBe('Guard');
+  expect(a.name).toContain(a.label);
   expect(a.action).toEqual({ action: 'spend', amount: 1, contentId: 'c1', resourceId: 'focus' });
   expect(a.target).toBeUndefined();
 });
@@ -222,12 +226,16 @@ it('resolves attacks: a weapon, a feature attack and a custom one', () => {
   const v = view({ attacks: [w, fa] });
   const wa = resolvePin(v, attackPin(w))!;
   expect(wa.name).toBe('Roll Longsword attack');
+  expect(wa.label).toBe('Longsword');
+  expect(wa.name).toContain(wa.label);
   expect(wa.target).toEqual({ weapon: w.item });
   const faa = resolvePin(v, attackPin(fa))!;
   expect(faa.target).toEqual({ content: ref, effectId: 'lash' });
   expect(faa.availability.usable).toBe(true);
   const ca = resolvePin(v, customPin(custom))!;
   expect(ca.name).toBe('Roll Fist attack');
+  expect(ca.label).toBe('Fist');
+  expect(ca.name).toContain(ca.label);
   expect(ca.target).toEqual({ customAttack: 'k1' });
   expect(ca.availability).toEqual({ usable: true, reasons: [] });
   expect(resolvePin(v, { kind: 'custom', attackId: 'gone' })).toBeUndefined();
@@ -245,6 +253,8 @@ it('resolves a toggle to the play change it sends, and leaves auto and grouped o
   const pin = togglePin(off);
   const a = resolvePin(view({ toggles: [off] }), pin)!;
   expect(a.name).toBe('Turn Tide Form on');
+  expect(a.label).toBe('Tide Form');
+  expect(a.name).toContain(a.label);
   expect(a.action).toEqual({ action: 'toggleOn', contentId: 'c1', toggleId: 'form' });
   expect(a.target).toBeUndefined();
   const b = resolvePin(view({ toggles: [on] }), pin)!;
