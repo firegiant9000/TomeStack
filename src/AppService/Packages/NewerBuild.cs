@@ -50,9 +50,11 @@ internal static class NewerBuild
         var normal = Normal(backupVersion);
         var version = normal.ToString(normal.Revision > 0 ? 4 : 3);
         var thisBuild = typeof(NewerBuild).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
-        var names = string.Join(", ", characters.Take(5).Select(n => $"'{n}'")) + (characters.Count > 5 ? $" and {characters.Count - 5} more" : "");
+        // At most five names, each clipped: a backup's name is untrusted and no limit is checked on it.
+        var names = string.Join(", ", characters.Take(5).Select(n => $"'{(n.Length > Character.MaxName ? n[..Character.MaxName] + "…" : n)}'"))
+            + (characters.Count > 5 ? $" and {characters.Count - 5} more" : "");
         return new(RestoreCode,
-            $"This backup was made with TomeStack {version}, newer than this one ({thisBuild}). {pins} content pick{(pins == 1 ? "" : "s")} of {characters.Count} character{(characters.Count == 1 ? "" : "s")} ({names}) are neither in the backup nor installed here: most likely content this version does not have. Update TomeStack to {version} or later, then restore the backup. Nothing has been changed.");
+            $"This backup was made with TomeStack {version}, newer than this one ({thisBuild}). {pins} content pick{(pins == 1 ? "" : "s")} of {characters.Count} character{(characters.Count == 1 ? "" : "s")} ({names}) {(pins == 1 ? "is" : "are")} neither in the backup nor installed here: most likely content this version does not have. Update TomeStack to {version} or later, then restore the backup. Nothing has been changed.");
     }
 
     /// <summary>Missing parts count as 0, so 0.8 and 0.8.0 compare equal.</summary>

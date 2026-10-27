@@ -653,6 +653,21 @@ public class LibraryBackupTests
         }
     }
 
+    [Fact]
+    public void The_skew_message_agrees_in_number_names_five_characters_and_clips_long_names()
+    {
+        var one = NewerBuild.Restore(new Version(0, 9, 0), 1, ["Test Solo"]).Message;
+        Assert.Contains("1 content pick of 1 character ('Test Solo') is neither", one, StringComparison.Ordinal);
+
+        var six = NewerBuild.Restore(new Version(0, 9, 0), 6, [.. Enumerable.Range(1, 6).Select(i => $"Test Hero {i}")]).Message;
+        Assert.Contains("6 content picks of 6 characters ('Test Hero 1', 'Test Hero 2', 'Test Hero 3', 'Test Hero 4', 'Test Hero 5' and 1 more) are neither", six, StringComparison.Ordinal);
+
+        var longName = new string('x', Character.MaxName + 50);
+        var clipped = NewerBuild.Restore(new Version(0, 9, 0), 1, [longName]).Message;
+        Assert.Contains($"'{longName[..Character.MaxName]}…'", clipped, StringComparison.Ordinal);
+        Assert.DoesNotContain(longName, clipped, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("0.6.0")] // older
     [InlineData("this build, 2 parts")] // review fix: missing parts count as 0, so x.y.0 equals x.y
