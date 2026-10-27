@@ -4,7 +4,7 @@ namespace TomeStack.RulesCore.Tests.Properties;
 
 /// <summary>
 /// T3 golden revisions (tests/RulesFixtures/golden/revisions.json): one original revision per content schema version, 1 to
-/// 11, and the hash of each as the store writes it. Shared with AppService.Tests, which checks the store's own hash path.
+/// 12, and the hash of each as the store writes it. Shared with AppService.Tests, which checks the store's own hash path.
 /// </summary>
 internal static class GoldenRevisions
 {
@@ -25,6 +25,7 @@ internal static class GoldenRevisions
         "fd177e2950867210d00ff9be73d2557b46b45df97b5bae103c28691e51a35916",
         "153d03675f52e19b2a428f51ff56e3d1c7f87b6a4d7eeb54e6c2d47f5fd960db", // v10, added by Wave 3 (the v1 to v9 hashes above are unchanged)
         "e907e5131d88bdd187132961d3f1eb47fd95eda74f5bb0a9621bd084d3891ade", // v11, added by play mechanics (D43); the v1 to v10 hashes above are unchanged
+        "15ba5fdeeff9356c6314a4604135f581a3aa0246614367e8cc975858053ad012", // v12, added by MECH-X item 0 (weapon.bonus); the v1 to v11 hashes above are unchanged
     ];
 
     /// <summary>The golden revision of content schema <paramref name="version"/>, as written in the fixture.</summary>

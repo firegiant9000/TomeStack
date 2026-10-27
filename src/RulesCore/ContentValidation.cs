@@ -56,6 +56,9 @@ public static class ContentValidator
     /// <summary>The most other pools one roll also changes (content v11, <c>alsoChange</c>).</summary>
     public const int MaxAlsoChanges = 4;
 
+    /// <summary>The largest weapon bonus (content v12, <c>weapon.bonus</c>); the smallest is 0.</summary>
+    internal const int MaxWeaponBonus = 10;
+
     /// <summary>The largest area size or line width a roll declares, in feet (content v11).</summary>
     private const int MaxAreaFeet = 1_000;
 
@@ -169,6 +172,7 @@ public static class ContentValidator
         var needsV9 = false;
         var needsV10 = false; // content v10 (Wave 3, D42): speed/passive targets, autoWhen, activation, damage grants, item
         var needsV11 = false; // content v11 (D43): toggleGroup and upkeep effects, the toggle's group, layer, cost, level and duration keys, and the resource's counts, resourceFull and allowance keys
+        var needsV12 = false; // content v12 (MECH-X item 0): weapon.bonus
         var upkeeps = 0;
         var responses = 0;
         var diceLessRoll = false; // an untyped roll with no dice: publishing it needs v11, where a roll may omit them
@@ -240,6 +244,15 @@ public static class ContentValidator
                 case UnknownEffect { DeclaredType: ResponseEffect.TypeName } unknownResponse when revision.SchemaVersion >= ResponseEffect.SchemaVersion:
                     needsV11 = true;
                     Error("validate.effect-malformed", $"Effect '{unknownResponse.Id}' has type '{unknownResponse.DeclaredType}' but a value or field that does not read (it needs a responseId, a label and a phase of damageReduction, hitPointOutcome or threshold; each outcome needs a kind of spend, regain, toggleOn, offerRoll, regainHitPoints or temporaryHitPoints; a content is an id); fix it before publishing.", unknownResponse.Id);
+                    break;
+                // Content v12 (MECH-X item 0): from v12 a weapon that carries a bonus key is read with it; one that stays unknown did
+                // not read (a bonus that is not a whole number, or another field that does not read), so the bonus would silently do
+                // nothing. Published at a lower version the key is stripped and the weapon reads without it, so it blocks. Without a
+                // bonus key it is what it always was: a warning. Below v12 the key is stripped first, so nothing changes there.
+                case UnknownEffect { DeclaredType: WeaponEffect.TypeName } unreadableWeapon
+                    when revision.SchemaVersion >= ContentRevision.WeaponBonusSchemaVersion && CarriesV11Key(unreadableWeapon, WeaponEffect.V12Keys):
+                    needsV12 = true;
+                    Error("validate.effect-malformed", $"Effect '{unreadableWeapon.Id}' has type 'weapon' but a value or field that does not read (its bonus must be a whole number from 0 to 10; a category, attack, damage, damageType and weaponKey are needed); fix it before publishing.", unreadableWeapon.Id);
                     break;
                 case UnknownEffect unknown:
                     // Content v11 (D43): a roll with no dice is typed only from v11, so below it the roll stays reference-only as it
@@ -550,6 +563,12 @@ public static class ContentValidator
                         Error("validate.weapon-incomplete", $"Weapon '{weapon.Id}' needs a weaponKey and a damageType.", weapon.Id);
                     if (weapon.Has("versatile") != (weapon.Versatile is not null))
                         Warn("validate.weapon-versatile", $"Weapon '{weapon.Id}': the versatile property and versatile damage go together.", weapon.Id);
+                    if (weapon.Bonus is { } weaponBonus)
+                    {
+                        needsV12 = true; // present at all (0 too) is a v12 key
+                        if (weaponBonus is < 0 or > MaxWeaponBonus)
+                            Error("validate.weapon-bonus", $"Weapon '{weapon.Id}' has bonus {weaponBonus}; it must be a whole number from 0 to {MaxWeaponBonus}.", weapon.Id);
+                    }
                     if (revision.Kind != ContentKind.Item)
                         Warn("validate.weapon-kind", $"A weapon gives an attack only on an equipped item; '{revision.Name}' is {revision.Kind.ToString().ToLowerInvariant()} content.", weapon.Id);
                     break;
@@ -647,6 +666,8 @@ public static class ContentValidator
         // Typed v10 details exist only in a v10 revision when read from JSON (below v10 the keys stay extension data); a
         // revision built in code can still declare an older version, and an older build would ignore or refuse them.
         needsV11 |= usedValues.Count > 0;
+        if (needsV12 && revision.SchemaVersion < ContentRevision.WeaponBonusSchemaVersion)
+            Error("validate.requires-v12", $"This revision uses content schema v12 features (a weapon bonus) but declares v{revision.SchemaVersion}; an older build would ignore or refuse them.");
         if (needsV11 && revision.SchemaVersion < ContentRevision.PlayMechanicsSchemaVersion)
             Error("validate.requires-v11", $"This revision uses content schema v11 features (toggle groups, toggle layers, costs, levels or durations, upkeeps, counting-up pools or allowances, attacks, attack riders, a toggle of another content or a resource target, roll saves, areas, ranges, targets or per-unit dice, a roll with no dice, named values or VALUE in a formula, roll modes, damage responses, fly speed, form-only defences) but declares v{revision.SchemaVersion}; an older build would ignore, misread or refuse them.");
         if (needsV10 && revision.SchemaVersion < ContentRevision.PlayDetailsSchemaVersion)
@@ -694,7 +715,8 @@ public static class ContentValidator
         // The same features as the requires-vN checks above, highest first. Typed effects are covered too: armor (v4),
         // spellcasting, spell and weapon (v5) and toggle (v6) are read as typed only from their version.
         var required =
-            needsV11 || diceLessRoll ? ContentRevision.PlayMechanicsSchemaVersion
+            needsV12 ? ContentRevision.WeaponBonusSchemaVersion
+            : needsV11 || diceLessRoll ? ContentRevision.PlayMechanicsSchemaVersion
             : needsV10 ? ContentRevision.PlayDetailsSchemaVersion
             : needsV9 ? ScaleEffect.SchemaVersion
             : needsV8 ? ContentRevision.CombatDetailsSchemaVersion

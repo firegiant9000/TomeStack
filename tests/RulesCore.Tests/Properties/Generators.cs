@@ -417,11 +417,21 @@ internal static class Generators
                 from key in Keys
                 from properties in Gen.Elements("finesse", "light", "thrown", "versatile", "two-handed").ArrayOf().Select(p => p.Distinct().Take(3).ToArray())
                 from range in Optional(Gen.Elements("20/60", "80/320"))
-                select new JsonObject
-                {
-                    ["category"] = category, ["attack"] = attack, ["damage"] = damage, ["damageType"] = damageType, ["weaponKey"] = key,
-                    ["properties"] = new JsonArray([.. properties.Select(p => (JsonNode)p)]),
-                }.With("range", range)),
+                // The v12 key at every version, sometimes absent and in an arbitrary position: from v12 a whole number 0 to 10; below
+                // v12 any JSON value under either spelling, which must stay extension data, written back where it was.
+                from bonus in Gen.Elements(Enumerable.Range(0, 11).Select(n => (JsonNode?)n).Concat([null]))
+                from oddBonus in Gen.Elements<JsonNode?>(2, "2", 1.5, null, true, -3)
+                from spelling in Gen.Elements("bonus", "Bonus")
+                from present in Gen.Elements(false, true, true)
+                from position in Gen.Choose(0, 6)
+                select WithBonus(
+                    new JsonObject
+                    {
+                        ["category"] = category, ["attack"] = attack, ["damage"] = damage, ["damageType"] = damageType, ["weaponKey"] = key,
+                        ["properties"] = new JsonArray([.. properties.Select(p => (JsonNode)p)]),
+                    }.With("range", range),
+                    present, v >= ContentRevision.WeaponBonusSchemaVersion ? "bonus" : spelling,
+                    v >= ContentRevision.WeaponBonusSchemaVersion ? (bonus ?? 0) : oddBonus, position)),
             Common(SpellEffect.TypeName,
                 from level in Gen.Choose(0, SpellcastingEffect.MaxSpellLevel)
                 from school in Optional(Gen.Elements("evocation", "illusion", "conjuration"))
@@ -434,6 +444,13 @@ internal static class Generators
                     ["level"] = level, ["concentration"] = concentration, ["lists"] = new JsonArray([.. lists.Select(l => (JsonNode)l)]), ["attack"] = attack,
                 }.With("school", school).With("dice", dice)),
     ];
+
+    private static JsonObject WithBonus(JsonObject weapon, bool present, string name, JsonNode? value, int position)
+    {
+        if (present)
+            weapon.Insert(Math.Min(position, weapon.Count), name, value?.DeepClone()); // a node has one parent, and the generator reuses values
+        return weapon;
+    }
 
     /// <summary>An effect type no build knows, with nested data, so it must survive unchanged.</summary>
     private static Gen<JsonObject> Unknown() =>

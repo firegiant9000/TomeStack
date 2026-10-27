@@ -131,11 +131,11 @@ public class ToggleGroupTests
     }
 
     [Fact]
-    public void The_play_mechanics_version_is_the_play_details_version_plus_one_and_is_current()
+    public void The_play_mechanics_version_is_the_play_details_version_plus_one_and_the_current_one_follows_it()
     {
         Assert.Equal(ContentRevision.PlayDetailsSchemaVersion + 1, ContentRevision.PlayMechanicsSchemaVersion);
         Assert.Equal(11, ContentRevision.PlayMechanicsSchemaVersion);
-        Assert.Equal(ContentRevision.PlayMechanicsSchemaVersion, ContentRevision.CurrentSchemaVersion);
+        Assert.Equal(ContentRevision.PlayMechanicsSchemaVersion + 1, ContentRevision.CurrentSchemaVersion);
     }
 
     [Fact]

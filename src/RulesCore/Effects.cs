@@ -1107,9 +1107,22 @@ public sealed record WeaponEffect : Effect
     /// <summary>The 2024 Weapon Mastery property, as text (it is not automated).</summary>
     public string? Mastery { get; init; }
 
+    /// <summary>
+    /// Content schema v12 (MECH-X item 0): the weapon's own bonus, 0 to 10, added to to-hit and damage. Below v12 the key stays
+    /// extension data and does nothing.
+    /// </summary>
+    public int? Bonus { get; init; }
+
     public bool Has(string property) => Properties.Contains(property, StringComparer.Ordinal);
 
-    internal static Effect FromUnknown(UnknownEffect unknown) => VersionedEffects.Typed<WeaponEffect>(unknown);
+    /// <summary>The keys content schema v12 adds to this effect; below v12 they stay extension data.</summary>
+    internal static readonly string[] V12Keys = ["bonus"];
+
+    /// <summary>Typed by the revision (see <see cref="VersionedEffects.ByName"/>): the v12 key only from v12.</summary>
+    internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion) =>
+        revisionSchemaVersion >= ContentRevision.WeaponBonusSchemaVersion
+            ? VersionedEffects.Typed<WeaponEffect>(unknown)
+            : VersionedEffects.TypedWithout<WeaponEffect>(unknown, V12Keys);
 }
 
 public enum ArmorCategory { Light, Medium, Heavy, Shield }
@@ -1293,7 +1306,7 @@ internal static class VersionedEffects
             [ArmorEffect.TypeName] = (ArmorEffect.SchemaVersion, (u, _) => ArmorEffect.FromUnknown(u)),
             [SpellcastingEffect.TypeName] = (SpellcastingEffect.SchemaVersion, SpellcastingEffect.FromUnknown),
             [SpellEffect.TypeName] = (SpellcastingEffect.SchemaVersion, (u, _) => SpellEffect.FromUnknown(u)),
-            [WeaponEffect.TypeName] = (SpellcastingEffect.SchemaVersion, (u, _) => WeaponEffect.FromUnknown(u)),
+            [WeaponEffect.TypeName] = (SpellcastingEffect.SchemaVersion, WeaponEffect.FromUnknown),
             [ToggleEffect.TypeName] = (ToggleEffect.SchemaVersion, ToggleEffect.FromUnknown),
             [ScaleEffect.TypeName] = (ScaleEffect.SchemaVersion, (u, _) => ScaleEffect.FromUnknown(u)),
             [ItemEffect.TypeName] = (ItemEffect.SchemaVersion, (u, _) => ItemEffect.FromUnknown(u)),

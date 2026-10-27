@@ -36,6 +36,9 @@ public class RevisionHashProperties
     /// <summary>The grant key content v11 adds (D43, slice 6). Written out here on purpose, like <see cref="ToggleV11Keys"/>.</summary>
     internal static readonly string[] GrantV11Keys = ["whileToggle"];
 
+    /// <summary>The weapon key content v12 adds (MECH-X item 0). Written out here on purpose, like <see cref="ToggleV11Keys"/>.</summary>
+    internal static readonly string[] WeaponV12Keys = ["bonus"];
+
     /// <summary>Content v11 (slice 5): a roll may omit its dice; below v11 a roll with no dice stays an unknown effect, byte for byte.</summary>
     private static bool IsDiceLessRollBelowV11(string type, int version, JsonNode? effect) =>
         type == RollEffect.TypeName && version < ContentRevision.PlayMechanicsSchemaVersion && effect?["dice"] is null;
@@ -101,6 +104,15 @@ public class RevisionHashProperties
                 {
                     if (inputEffects[i]![key] is { } kept && !JsonNode.DeepEquals(kept, outputEffects[i]![key]))
                         return $"effect {i}'s {key} changed below v11";
+                }
+            }
+            // Content v12: below v12 the weapon's bonus key stays extension data with the value it had (any spelling, any value), where it was.
+            if (version < ContentRevision.WeaponBonusSchemaVersion && !unknown && type == WeaponEffect.TypeName)
+            {
+                foreach (var (name, kept) in inputEffects[i]!.AsObject().Where(p => WeaponV12Keys.Contains(p.Key, StringComparer.OrdinalIgnoreCase)))
+                {
+                    if (!JsonNode.DeepEquals(kept, outputEffects[i]![name]))
+                        return $"effect {i}'s {name} changed below v12";
                 }
             }
             if (type == SpellcastingEffect.TypeName && version < SpellcastingEffect.MulticlassTableSchemaVersion
@@ -205,6 +217,9 @@ public class RevisionHashProperties
                 members = ["amount", "when", "resourceId", "resourceContent", "cost", "toggle", "outcomes"];
             if (version >= ContentRevision.PlayMechanicsSchemaVersion && type == RollEffect.TypeName)
                 members = [.. members ?? [], .. RollV11Keys, "dice"];
+            // Content v12: the weapon's bonus is typed only from v12; below it a null stays extension data (and is generated that way).
+            if (version >= ContentRevision.WeaponBonusSchemaVersion && type == WeaponEffect.TypeName)
+                members = [.. members ?? [], .. WeaponV12Keys];
             if (members is null)
                 continue;
             foreach (var name in members.Append("text"))

@@ -130,8 +130,14 @@ public sealed record ContentRevision : IJsonOnDeserialized
     /// the <c>upkeep</c> effect, and the resource fields <c>counts</c>, <c>resourceFull</c> and <c>allowance</c>. All are
     /// optional, so older revisions serialize unchanged; each is read only in a v11 revision, and below v11 a key stays
     /// extension data (a <c>toggleGroup</c> or <c>upkeep</c> stays an unknown effect) and does nothing.
+    /// v12 (MECH-X item 0) adds <c>weapon.bonus</c>, a whole number from 0 to 10 that a weapon adds to its to-hit and damage. It
+    /// is optional, so older revisions serialize unchanged; it is read only in a v12 revision, and below v12 the key stays
+    /// extension data and does nothing.
     /// </summary>
-    public const int CurrentSchemaVersion = 11;
+    public const int CurrentSchemaVersion = 12;
+
+    /// <summary>The content schema version that adds <c>weapon.bonus</c> (MECH-X item 0): <b>v12</b>. A test pins that this is <see cref="PlayMechanicsSchemaVersion"/> plus one.</summary>
+    public const int WeaponBonusSchemaVersion = 12;
 
     /// <summary>
     /// The content schema version that adds the Wave 3 details listed above: <b>v10</b> (speed and passive targets,
