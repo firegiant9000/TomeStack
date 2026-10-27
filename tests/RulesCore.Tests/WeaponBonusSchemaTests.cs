@@ -140,12 +140,16 @@ public class WeaponBonusSchemaTests
     }
 
     /// <summary>The serializer's web defaults read a number written as a string (as for every whole-number field); it is stored as a number.</summary>
-    [Fact]
-    public void A_bonus_written_as_a_numeral_string_reads_as_the_number_like_every_other_whole_number_field()
+    [Theory]
+    [InlineData("2", 2)]
+    [InlineData("+2", 2)]
+    [InlineData("007", 7)]
+    [InlineData("-0", 0)]
+    public void A_bonus_written_as_a_numeral_string_reads_as_the_number_like_every_other_whole_number_field(string numeral, int expected)
     {
-        var revision = Read(Item(12, mid: "\"bonus\":\"2\","));
-        Assert.Equal(2, Assert.IsType<WeaponEffect>(revision.Effects[0]).Bonus);
-        Assert.Contains("\"bonus\":2,", RevisionHashProperties.Write(revision), StringComparison.Ordinal);
+        var revision = Read(Item(12, mid: $"\"bonus\":\"{numeral}\","));
+        Assert.Equal(expected, Assert.IsType<WeaponEffect>(revision.Effects[0]).Bonus);
+        Assert.Contains($"\"bonus\":{expected},", RevisionHashProperties.Write(revision), StringComparison.Ordinal);
     }
 
     [Fact]

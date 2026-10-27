@@ -129,14 +129,15 @@ public class SourcePackTests
         temp.App.Store.AddRevision(Feat(source.Id, "Test Eleven", Guid.NewGuid(), Guid.NewGuid()) with { Status = RevisionStatus.Published, SchemaVersion = 11 });
         Assert.Equal(PackageWarningText, Assert.Single(temp.App.PreviewSourcePack([source.Id]).Warnings, w => w.Code == "package.needs-newer-build").Message);
 
-        // Any revision at v12 counts, with or without a bonus in it (R26).
+        // Any published revision at v12 counts (R26); source packs carry published revisions only.
         temp.App.Store.AddRevision(Feat(source.Id, "Test Twelve", Guid.NewGuid(), Guid.NewGuid()) with { Status = RevisionStatus.Published, SchemaVersion = 12 });
         var warning = Assert.Single(temp.App.PreviewSourcePack([source.Id]).Warnings, w => w.Code == "package.needs-newer-build");
+        Assert.Equal("Opening this needs a TomeStack version that reads content schema 12 or later: it holds content that older versions refuse.", warning.Message);
         Assert.Contains("content schema 12", warning.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("0.7.0", warning.Message, StringComparison.Ordinal);
     }
 
-    private const string PackageWarningText ="Opening this needs TomeStack 0.7.0 or later: it holds content or a character that older versions refuse.";
+    private const string PackageWarningText = "Opening this needs TomeStack 0.7.0 or later: it holds content or a character that older versions refuse.";
 
     [Fact]
     public void A_toggle_that_names_content_in_another_source_gives_a_reference_outside_warning()

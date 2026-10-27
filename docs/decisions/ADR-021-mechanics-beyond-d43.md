@@ -24,7 +24,7 @@ The work is one item at a time. Each item is generic and declarative, with a tra
 
 | # | Item | Decision |
 |---|---|---|
-| 0 | A weapon's own bonus | **Adopt.** `weapon.bonus` (an integer 0..10) adds to the attack's to-hit and to its damage, traced as "+N (weapon)". It is a new field, so it needs a new content version (proposed below). |
+| 0 | A weapon's own bonus | **Adopt.** `weapon.bonus` (an integer 0..10) adds to the attack's to-hit and to its damage, traced as "+N (weapon)". It is a new field, so it needs a new content version (approved below). |
 | 5 | Target marks | **Adopt, no schema.** A mark is a player-set toggle ("Marked target present"), and its riders apply only while it is on, through the D43 rider `toggle` gate. There is no target model. If a mark needs state per target, the item stops: that is a target model (see "D63 clarification"). |
 | 1 | Payment kinds, spell tags, non-slot casting | **Pending the counts.** If hit-point payment appears in fewer than 2 classes, only slot payment and spell tags ship. |
 | 2 | Replaceable choices | **Pending the counts.** Advisory only: the level-up list (D74) or a rest offers "You may replace one pick". If every window is a level-up, the rest windows are dropped. No character history field. |
