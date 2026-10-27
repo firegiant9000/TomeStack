@@ -408,7 +408,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
     { id: 'manage', label: 'Manage' },
   ];
   // The sheet is keyed by character, so this runs once per opened character. A deep link wins over the memory.
-  const [tab, setTabState] = useState<SheetTabId>(() => (panelTakesFocus ? 'features' : undefined) ?? initialTab ??rememberedSheetTab(character.id) ?? 'play');
+  const [tab, setTabState] = useState<SheetTabId>(() => (panelTakesFocus ? 'features' : undefined) ?? initialTab ?? rememberedSheetTab(character.id) ?? 'play');
   function setTab(next: SheetTabId) {
     setTabState(next);
     rememberSheetTab(character.id, next);

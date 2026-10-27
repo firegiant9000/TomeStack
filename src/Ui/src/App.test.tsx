@@ -7,6 +7,13 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { client } from './api/client';
 import type { Character, CharacterSummary, CharacterView } from './api/types';
+import { diffLevelUp } from './levelUpChecklist';
+
+// The real module, except that diffLevelUp is a spy (it throws once in the A3 test).
+vi.mock('./levelUpChecklist', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./levelUpChecklist')>();
+  return { ...actual, diffLevelUp: vi.fn(actual.diffLevelUp) };
+});
 
 vi.mock('./api/client', () => ({
   client: {
@@ -152,6 +159,82 @@ it('a level-up saved while the same character was opened again shows the saved s
   expect(await screen.findByRole('heading', { name: 'Fixture Avery Leveled' })).toBeTruthy();
   release([summary('fixture-a', 'Fixture Avery Leveled')]);
   expect(await screen.findByRole('heading', { name: 'Fixture Avery Leveled' })).toBeTruthy();
+});
+
+/** A level-1 character (hit point maximum 10) and the level-2 view a save returns (maximum 17). */
+function levelUpViews() {
+  const before = viewOf('fixture-a', 'Fixture Avery');
+  before.character = { ...before.character, classes: [{ class: { contentId: 'fixture-class', revisionId: 'fixture-class-r1' }, level: 1 }] };
+  before.sheet = { ...before.sheet, hitPoints: { maximum: 10, current: 10, temporary: 0 } };
+  const saved = viewOf('fixture-a', 'Fixture Avery');
+  saved.character = { ...before.character, level: 2, classes: [{ class: { contentId: 'fixture-class', revisionId: 'fixture-class-r1' }, level: 2 }] };
+  saved.sheet = { ...saved.sheet, hitPoints: { maximum: 17, current: 17, temporary: 0 } };
+  return { before, saved };
+}
+async function toSaveLevelUp(user: ReturnType<typeof userEvent.setup>, before: CharacterView) {
+  vi.mocked(client.getCharacter).mockResolvedValue(before);
+  vi.mocked(client.preview).mockResolvedValue(before);
+  render(<App />);
+  const list = await screen.findByRole('navigation', { name: 'Characters' });
+  await user.click(within(list).getByRole('button', { name: /Fixture Avery/ }));
+  await user.click(await screen.findByRole('button', { name: 'Level up' }));
+  await user.click(await screen.findByRole('button', { name: 'Next: choices' }));
+  return { list, save: await screen.findByRole('button', { name: 'Save level-up' }) };
+}
+
+it('Save level-up opens the sheet on Features with the level-up panel focused, remembers no tab and keeps the list (D74)', async () => {
+  const user = userEvent.setup();
+  const { before, saved } = levelUpViews();
+  vi.mocked(client.saveCharacter).mockResolvedValue(saved);
+  const { save } = await toSaveLevelUp(user, before);
+  await user.click(save);
+  const region = await screen.findByRole('region', { name: 'What changed at level 2' });
+  expect(within(region).getByText('Hit point maximum: 10 → 17')).toBeTruthy();
+  expect(screen.getByRole('tab', { name: /Features/ }).getAttribute('aria-selected')).toBe('true');
+  expect(document.activeElement).toBe(document.getElementById('level-up-heading'));
+  expect(localStorage.getItem('tomestack.levelUpChecklist.fixture-a')).not.toBeNull();
+  expect(localStorage.getItem('tomestack.sheetTab.fixture-a')).toBeNull(); // the deep link is not the user's choice
+});
+
+it('a throwing diff never loses the save: the sheet still opens on Features with no error (D74 A3)', async () => {
+  const user = userEvent.setup();
+  const { before, saved } = levelUpViews();
+  vi.mocked(client.saveCharacter).mockResolvedValue(saved);
+  const { save } = await toSaveLevelUp(user, before);
+  vi.mocked(diffLevelUp).mockImplementationOnce(() => {
+    throw new Error('fixture diff failure');
+  });
+  await user.click(save);
+  expect(await screen.findByRole('heading', { name: 'Fixture Avery' })).toBeTruthy();
+  expect(screen.getByRole('tab', { name: /Features/ }).getAttribute('aria-selected')).toBe('true');
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect(screen.queryByRole('region', { name: /What changed at level/ })).toBeNull();
+  expect(localStorage.getItem('tomestack.levelUpChecklist.fixture-a')).toBeNull();
+});
+
+it('a level-up that lands after the user left the builder writes the list but moves no tab or focus (D74, R38)', async () => {
+  const user = userEvent.setup();
+  const { before, saved } = levelUpViews();
+  let finish: (view: CharacterView) => void = () => {};
+  vi.mocked(client.saveCharacter).mockReturnValue(new Promise<CharacterView>((r) => (finish = r)));
+  const { list, save } = await toSaveLevelUp(user, before);
+  await user.click(save);
+  await user.click(within(list).getByRole('button', { name: /Fixture Avery/ })); // opens the sheet while the save is in flight
+  await screen.findByRole('heading', { name: 'Fixture Avery' });
+  const tabBefore = screen.getAllByRole('tab').find((t) => t.getAttribute('aria-selected') === 'true')?.textContent;
+  finish(saved);
+  await waitFor(() => expect(localStorage.getItem('tomestack.levelUpChecklist.fixture-a')).not.toBeNull());
+  expect(screen.getAllByRole('tab').find((t) => t.getAttribute('aria-selected') === 'true')?.textContent).toBe(tabBefore);
+  expect(document.activeElement).not.toBe(document.getElementById('level-up-heading'));
+});
+
+it('Cancel from a level-up writes no list (D74)', async () => {
+  const user = userEvent.setup();
+  const { before } = levelUpViews();
+  await toSaveLevelUp(user, before);
+  await user.click(screen.getByRole('button', { name: 'Cancel' }));
+  await screen.findByText('Draft discarded. Nothing was changed.');
+  expect(localStorage.getItem('tomestack.levelUpChecklist.fixture-a')).toBeNull();
 });
 
 it('pressing New character during a save mounts a fresh empty builder; the save still reports, and the old draft is gone (R40)', async () => {

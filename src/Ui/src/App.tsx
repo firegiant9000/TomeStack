@@ -9,6 +9,7 @@ import { CharacterSheet } from './components/CharacterSheet';
 import { HomePanel } from './components/HomePanel';
 import { readFileAsBase64 } from './files';
 import { isTypingTarget } from './keys';
+import { diffLevelUp, writeChecklist } from './levelUpChecklist';
 import { applyPreferences, setSidebarCollapsed, sidebarCollapsed } from './settings';
 import type { SheetTabId } from './sheetTab';
 
@@ -36,7 +37,7 @@ type Screen =
   | { kind: 'extensions' }
   | { kind: 'settings' }
   | { kind: 'ddb-import' }
-  | { kind: 'sheet'; view: CharacterView; tab?: SheetTabId }
+  | { kind: 'sheet'; view: CharacterView; tab?: SheetTabId; levelledUp?: true }
   | { kind: 'import'; fileName: string; base64: string; preview: PackagePreview };
 
 function describeError(error: unknown): string {
@@ -360,9 +361,18 @@ export function App() {
                 const builder = screen.mode;
                 const now = screenNow.current;
                 const stillHere = now.kind === 'builder' && now.mode === builder;
+                if (builder.kind === 'levelUp') {
+                  // D74: the list is written before the screen switches (the sheet reads it on mount) and on both branches, so a
+                  // save that lands after the user left still keeps it. A failure here never touches the save.
+                  try {
+                    writeChecklist(view.character.id, diffLevelUp(builder.view, view));
+                  } catch {
+                    /* the save landed; the checklist is a convenience */
+                  }
+                }
                 if (stillHere) {
                   setMessage(undefined);
-                  setScreen({ kind: 'sheet', view });
+                  setScreen(builder.kind === 'levelUp' ? { kind: 'sheet', view, tab: 'features', levelledUp: true } : { kind: 'sheet', view });
                 } else {
                   setMessage({ tone: 'status', text: `Saved ${view.character.name}.` });
                   // A sheet of this character opened while the save was in flight shows the saved version, never the older read
@@ -441,6 +451,7 @@ export function App() {
               key={screen.view.character.id}
               view={screen.view}
               initialTab={screen.tab}
+              focusChecklist={screen.levelledUp}
               onError={onError}
               onLevelUp={() => {
                 setMessage(undefined);
