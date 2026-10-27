@@ -41,7 +41,8 @@ function explainStep(step: TraceEntry, context: StepContext): string {
     case 'add': {
       if (amount === undefined) return description;
       const sign = signed(amount);
-      if (description.includes(sign)) return description;
+      // The amount counts as already written only as a whole number: "+1" is not in "+10", and not in "5+1" either.
+      if (new RegExp(`(?<!\\d)${sign.replace(/[+-]/, '\\$&')}(?!\\d)`).test(description)) return description;
       const from = origin(step.origin);
       const cited = from !== '' && !description.toLowerCase().includes(from.toLowerCase());
       return `${sign} ${description}${cited ? ` (from ${from})` : ''}`;
