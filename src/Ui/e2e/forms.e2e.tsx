@@ -747,3 +747,63 @@ it('"Usable now" leaves out a mode-only roll while the mode is off and lists it 
   expect(filter.checked).toBe(true);
 });
 
+
+it('authors a hit-point roll in the studio, uses it and undoes it (MECH-X item 1)', async () => {
+  const user = userEvent.setup();
+  const source = await client.createHomebrewSource('E2E Rite Book', ['srd-5.2.1']);
+  render(<App />);
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  await waitFor(() => expect(studioButton.disabled).toBe(false));
+  await user.click(studioButton);
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Rite Book/ })).toBeTruthy());
+  await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Rite Book/ }));
+  await screen.findByRole('heading', { name: 'Content in E2E Rite Book' });
+  const editor = () => screen.getByRole('region', { name: /^New |^Edit / });
+  const rule = (name: RegExp) => within(within(editor()).getByRole('group', { name }));
+
+  // A roll that pays 2 hit points and has no pool at all.
+  await user.click(screen.getByRole('button', { name: 'New feature' }));
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Blood Rite Feature');
+  await user.click(within(editor()).getByRole('button', { name: 'Add roll or action' }));
+  const rite = rule(/^Rule 1: Roll or action/);
+  await user.type(rite.getByRole('textbox', { name: 'Roll name' }), 'E2E Blood Rite');
+  const dice = rite.getByRole('textbox', { name: /^Dice/ });
+  await user.clear(dice);
+  await user.type(dice, '1d6');
+  await user.selectOptions(rite.getByRole('combobox', { name: 'Pays with' }), 'Hit points');
+  await user.type(rite.getByRole('textbox', { name: /^Hit points paid/ }), '2');
+  await user.click(within(editor()).getByRole('button', { name: 'Check' }));
+  expect((await within(editor()).findByRole('region', { name: 'Check results' })).textContent).toMatch(/No problems found/);
+  await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
+  await expectStatus(/Published E2E Blood Rite Feature/);
+
+  const published = (await client.contentBySource(source.id)).find((e) => e.name === 'E2E Blood Rite Feature')?.latestPublished;
+  expect(published).toBeTruthy();
+  const created = await client.createCharacter({
+    name: 'E2E Rite Hero',
+    rulesFamily: 'srd-5.2.1',
+    baseAbilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
+    pins: [published!],
+  });
+  await client.saveCharacter({ ...created.character, overrides: [{ field: 'hitPoints', value: 20 }] });
+
+  cleanup();
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: /^E2E Rite Hero/ }));
+  const sheet = await screen.findByRole('article', { name: 'E2E Rite Hero' });
+  await openTab(user, sheet, 'Play');
+  const lastRoll = () => screen.getByRole('region', { name: 'Last roll' });
+  await waitFor(() => expect(screen.getByRole('region', { name: /^Hit points: 20 of 20/ })).toBeTruthy());
+
+  // Rolling pays nothing; the record's "Pay 2 hit points" takes exactly two as one change.
+  await user.click(await screen.findByRole('button', { name: /^Roll E2E Blood Rite/ }));
+  await waitFor(() => expect(lastRoll().textContent).toMatch(/E2E Blood Rite/));
+  expect(screen.getByRole('region', { name: /^Hit points: 20 of 20/ })).toBeTruthy();
+  await user.click(await within(lastRoll()).findByRole('button', { name: /^Pay 2 hit points/ }));
+  await waitFor(() => expect(screen.getByRole('region', { name: /^Hit points: 18 of 20/ })).toBeTruthy());
+
+  // The service undoes the payment: the hit points are back.
+  await user.click(await screen.findByRole('button', { name: 'Undo use E2E Blood Rite' }));
+  await waitFor(() => expect(screen.getByRole('region', { name: /^Hit points: 20 of 20/ })).toBeTruthy());
+});

@@ -1,6 +1,6 @@
 # ADR-021: Mechanics beyond the play-mechanics engine (MECH-X)
 
-Status: accepted in part (owner decision D75, 2026-10-24). Items 0 and 5 are accepted; items 1–4 wait for the sizing counts below. Schema numbers are taken only after the owner approves each one.
+Status: accepted in part (owner decision D75, 2026-10-24). Items 0, 1 and 5 are accepted; items 2–4 wait for the sizing counts below. Schema numbers are taken only after the owner approves each one.
 Date: 2026-10-27
 
 ## Context
@@ -26,7 +26,7 @@ The work is one item at a time. Each item is generic and declarative, with a tra
 |---|---|---|
 | 0 | A weapon's own bonus | **Adopt.** `weapon.bonus` (an integer 0..10) adds to the attack's to-hit and to its damage, traced as "+N (weapon)". It is a new field, so it needs a new content version (approved below). |
 | 5 | Target marks | **Adopt, no schema.** A mark is a player-set toggle ("Marked target present"), and its riders apply only while it is on, through the D43 rider `toggle` gate. There is no target model. If a mark needs state per target, the item stops: that is a target model (see "D63 clarification"). |
-| 1 | Payment kinds, spell tags, non-slot casting | **Pending the counts.** If hit-point payment appears in fewer than 2 classes, only slot payment and spell tags ship. |
+| 1 | Payment kinds, spell tags, non-slot casting | **Adopt.** The counts: hit-point payment appears in 4 classes or subclasses (8 features), above the threshold of 2, so it ships with slot payment and spell tags (about 22 spells carry a tag beyond school). Three shapes fit: a flat cost per use (`cost`), a cost per die (`perUnit`, the player picks the units) and one spell slot per use. **By-slot-level hit-point payment stays by hand** (owner, 2026-10-27): the cost is worked out before a slot is chosen and has no slot-level input, so it would need a further field. Casting a spell without a slot (`castsSpell`) ships because the counts found it in 2 of the 3 sampled sources. |
 | 2 | Replaceable choices | **Pending the counts.** Advisory only: the level-up list (D74) or a rest offers "You may replace one pick". If every window is a level-up, the rest windows are dropped. No character history field. |
 | 3 | Item mods and ammunition | **Pending the counts.** If no mod needs state per item entry, mods apply per item and the character schema is unchanged. |
 | 4 | Content companions | **Pending the counts**, under the D63 clarification below. If companions spend no pools of their own, their pools are dropped. |
@@ -38,6 +38,7 @@ The work is one item at a time. Each item is generic and declarative, with a tra
 | Version | Fields | Status |
 |---|---|---|
 | Content v12 | `weapon.bonus` (item 0) | approved by the owner (2026-10-27) |
+| Content v12 | `payment` (on a roll, a feature attack and a toggle), `castsSpell` (on a roll) and spell `tags` (item 1) | approved by the owner (2026-10-27) |
 | Character v11 | none yet (only if items 3–4 need one) | not proposed |
 
 ## Consequences
@@ -71,6 +72,13 @@ Filled in as each item lands: the tests, the fixture and the feature page.
 - Tests: `WeaponBonusSchemaTests` (bounds, the v12 rung, older revisions keep their bytes and hash), `WeaponBonusCalculationTests` (to-hit, damage, riders, versatile, no effect below v12), the critical-hit test in `AttackCommandTests` (a flat bonus is not doubled), `weaponAuthoring.test.ts` and `HomebrewStudioWeapons.test.tsx` (the studio editor and its strict input), the package preview tests (`SourcePackTests`, the v12 warning without a release number) and the e2e `authors a +1 weapon in the studio, equips it and rolls it`.
 - Fixture: the v12 golden "Fixture Tidal Blade" in `tests/RulesFixtures/golden/revisions.json`.
 - Feature pages: [multiclass-and-attacks.md](../features/multiclass-and-attacks.md), [homebrew-studio.md](../features/homebrew-studio.md), [package-format.md](../features/package-format.md) and [schemas/README.md](../schemas/README.md).
+
+**Item 1 (payment kinds, casting without a slot, spell tags, content v12):**
+
+- Tests: `PaymentSchemaTests` (shape, combinations, bounds, the v12 rung, older revisions keep their bytes and hash), `PaymentCalculationTests` and `SlotPaymentsTests` (payable or not, the slot a payment takes, cast-spell numbers), `PaymentPlayTests` (the service path: paying hit points and slots, the refusals, concentration at 0, the server undo, paying toggles), the payment goldens and hash properties, the Vitest cases for the Last roll's Pay button, the quickbar exception, the studio fields and the spell tag filter, and the e2e `authors a hit-point roll in the studio, uses it and undoes it`.
+- Fixture: the payment goldens in `tests/RulesFixtures/golden/payment-revisions.json`.
+- Feature pages: the "Paying with hit points or a slot" section of [play-mechanics.md](../features/play-mechanics.md), [sheet-play.md](../features/sheet-play.md), [homebrew-studio.md](../features/homebrew-studio.md) and [schemas/README.md](../schemas/README.md).
+- Limits: a damage response's `toggleOn` outcome switches a paying toggle on with no payment, as it does for pool costs; by-slot-level hit-point payment is by hand.
 
 **Item 5 (target marks, no schema):**
 
