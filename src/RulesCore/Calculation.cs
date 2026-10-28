@@ -74,7 +74,8 @@ public sealed record ChoiceStatus(
     int Count,
     IReadOnlyList<ContentReference> Options,
     IReadOnlyList<ContentReference> Selected,
-    bool Resolved);
+    bool Resolved,
+    ChoiceReplaceable? Replaceable = null);
 
 /// <param name="Active">Every content revision that applies to the character (pinned, class, granted or chosen), in resolution order.</param>
 /// <param name="Resources">M2 item 2: every resource an active revision defines, with its calculated maximum and what is spent.</param>
@@ -2568,7 +2569,11 @@ public static class CharacterCalculator
                         revision.Reference,
                         choice.Id));
                 }
-                choices.Add(new(revision.Reference, revision.Name, choice.ChoiceId, choice.Text, choice.Count, options, applied, resolved));
+                // MECH-X item 2: only a v12 revision's replaceable window counts (below v12 it is never typed); the sheet always carries a max.
+                var replaceable = revision.SchemaVersion >= ContentRevision.ReplaceableChoiceSchemaVersion && choice.Replaceable is { } window
+                    ? window with { Max = window.Max ?? 1 }
+                    : null;
+                choices.Add(new(revision.Reference, revision.Name, choice.ChoiceId, choice.Text, choice.Count, options, applied, resolved, replaceable));
             }
         }
 

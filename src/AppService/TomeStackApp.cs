@@ -303,7 +303,10 @@ public sealed partial class TomeStackApp : IDisposable
             return SaveWithPlay(character with { ArchivedAt = null }); // a save never creates an archived character
         if (character.UpdatedAt != stored.UpdatedAt)
             throw new AppValidationException([new("character.stale", StaleMessage)], "character.stale");
-        return SaveWithPlay(character with { Play = WithoutOrphanedCompanionPlay(stored.Play, character), ArchivedAt = stored.ArchivedAt, Equipment = WithStoredCharges(stored.Equipment, character.Equipment) });
+        var view = SaveWithPlay(character with { Play = WithoutOrphanedCompanionPlay(stored.Play, character), ArchivedAt = stored.ArchivedAt, Equipment = WithStoredCharges(stored.Equipment, character.Equipment) });
+        // MECH-X item 2 (R42, R43, R47): advisory only, never stored and never blocking; it rides on this reply alone.
+        var notices = ChoiceReplacements.OutsideWindow(stored, view.Character, view.Sheet.Choices);
+        return notices.Count > 0 ? view with { Notices = notices } : view;
     }
 
     /// <summary>The words of the <c>character.stale</c> refusal (codes and plain words only; the page re-reads the current copy).</summary>
