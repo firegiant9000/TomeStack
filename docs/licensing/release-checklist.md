@@ -2,14 +2,20 @@
 
 The four items ADR-008 left open before the first published installer (LIVING_SPECS D08), closed in writing for **0.4.0** on 2026-10-01. Re-check each one for every later release, and record the result here.
 
-| # | Item | Result for 0.4.0 | Result for 0.5.0 (2026-10-12) | Result for 0.6.0 (2026-10-21) |
-|---|---|---|---|---|
-| 1 | Trademark | **Pass.** No D&D mark in the product | **Pass, with a recorded exception.** The name and branding carry no mark; the importer names "D&D Beyond" only to say which sheet it reads, with a non-affiliation line (owner, 2026-10-12; see [0.5.0 re-check](#050-re-check-2026-10-12)) | **Pass, same exception.** No new kind of use (see [0.6.0 re-check](#060-re-check-2026-10-21)) |
-| 2 | Windows SDK binaries (OCR) | **Done.** Allowed to ship; the owner accepted the license's conditions (option (a), 2026-10-02) and the end-user terms are in `ATTRIBUTION.md` | **Unchanged.** Same package and DLLs as 0.4.0 | **Unchanged.** Same package and DLLs as 0.5.0 |
-| 3 | Velopack `Setup.exe` / `Update.exe` notices | **Done.** Generated and installed | **Unchanged.** Same Velopack version (1.2.161); the notices file stands | **Unchanged.** Same Velopack version (1.2.161) |
-| 4 | Code signing | **Decided: unsigned** (owner, 2026-10-01) | **Unsigned**, as decided | **Unsigned**, as decided |
+| # | Item | Result for 0.4.0 | Result for 0.5.0 (2026-10-12) | Result for 0.6.0 (2026-10-21) | Result for 0.7.0 (2026-10-24) |
+|---|---|---|---|---|---|
+| 1 | Trademark | **Pass.** No D&D mark in the product | **Pass, with a recorded exception.** The name and branding carry no mark; the importer names "D&D Beyond" only to say which sheet it reads, with a non-affiliation line (owner, 2026-10-12; see [0.5.0 re-check](#050-re-check-2026-10-12)) | **Pass, same exception.** No new kind of use (see [0.6.0 re-check](#060-re-check-2026-10-21)) | **Pass, same exception.** No new use (see [0.7.0 re-check](#070-re-check-2026-10-24)) |
+| 2 | Windows SDK binaries (OCR) | **Done.** Allowed to ship; the owner accepted the license's conditions (option (a), 2026-10-02) and the end-user terms are in `ATTRIBUTION.md` | **Unchanged.** Same package and DLLs as 0.4.0 | **Unchanged.** Same package and DLLs as 0.5.0 | **Unchanged.** Same package and DLLs as 0.6.0 |
+| 3 | Velopack `Setup.exe` / `Update.exe` notices | **Done.** Generated and installed | **Unchanged.** Same Velopack version (1.2.161); the notices file stands | **Unchanged.** Same Velopack version (1.2.161) | **Unchanged.** Same Velopack version (1.2.161) |
+| 4 | Code signing | **Decided: unsigned** (owner, 2026-10-01) | **Unsigned**, as decided | **Unsigned**, as decided | **Unsigned**, as decided |
 
-## Next release re-check (after 0.6.0)
+## 0.7.0 re-check (2026-10-24)
+
+- **Dependencies:** no shipped dependency was added or changed since the `v0.6.0` tag. The only `src/Ui/package.json` / `package-lock.json` change is `axe-core` 4.14.0, a development-only dependency (below). No project file's package reference, `.config/dotnet-tools.json`, workflow or packing script changed; `Directory.Build.props` changed only the version.
+- **`npm audit`: five findings, none ships** (`npm audit --omit=dev` reports 0). All are in development-only packages: Vite 8.3.1 (the `launch-editor` and dev-server advisories noted for 0.6.0, plus newer dev-server ones), Vitest 5.0.x through `@vitest/mocker`, and the transitive `undici` and `zod`. Fix: the Vite and Vitest bumps in a separate development-dependency change on `main`.
+- **Trademark:** the same search as 0.6.0, over the lines added since the `v0.6.0` tag in `src/` (excluding the SRD packs). No new "D&D", "Wizards of the Coast", "Dungeons", "fifth edition" or "5e" in anything the product shows (one source-code comment says "5e rule"). Product name, window title, installer title, exe metadata and README tagline unchanged.
+
+## Earlier note for the release after 0.6.0
 
 - **Dependencies:** `axe-core` 4.14.0 was added as a development-only dependency (unit tests only, not shipped; `src/Ui/package.json` devDependencies and `package-lock.json`). Licence MPL-2.0, read from the installed package. Nothing ships it, so there is no notice to add; its source is not modified or redistributed.
 
@@ -120,3 +126,4 @@ Velopack (MIT, Caelan Sayler) builds `Setup.exe` and `Update.exe` in Rust, with 
    4. it creates a **draft** release with `Setup.exe`, the portable zip, the `.nupkg`, the Velopack feed files and notes from the changelog.
 4. Review the draft on GitHub (assets, notes, the unsigned note), then **Publish**. Nothing is public before that.
 5. After publishing: run the upgrade test and the install checks on the published `Setup.exe` (`docs/features/release-0.4.0-verification.md`).
+6. A GitHub ruleset protects `main` and `refs/tags/v*` from force-push and deletion (repository settings, the owner's; check with `gh api repos/firegiant9000/TomeStack/rulesets`).

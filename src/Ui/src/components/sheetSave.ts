@@ -40,7 +40,7 @@ export type QueuedSheetSave = {
    * after every earlier entry has finished, and its reply's character becomes the queue's latest, so a save started meanwhile
    * names the stamp the command left. A failed command changes nothing in the queue.
    */
-  run: <T>(command: () => Promise<T>, characterOf: (reply: T) => Character | undefined) => Promise<T>;
+  run: <T>(command: (latest: Character) => Promise<T>, characterOf: (reply: T) => Character | undefined) => Promise<T>;
 };
 
 export function useSheetSave(view: CharacterView): QueuedSheetSave {
@@ -62,10 +62,13 @@ export function useSheetSave(view: CharacterView): QueuedSheetSave {
     shown.current = fresh.character;
   }, []);
 
-  const run = useCallback(<T,>(command: () => Promise<T>, characterOf: (reply: T) => Character | undefined): Promise<T> => {
+  const run = useCallback(<T,>(command: (latest: Character) => Promise<T>, characterOf: (reply: T) => Character | undefined): Promise<T> => {
     pending.current += 1;
     const step = async () => {
-      const reply = await command();
+      // D44: the command gets the character as it stands when it starts (after every earlier entry), so a compound play change or
+      // an undo can name the stored stamp (`expectedUpdatedAt`), not one captured when the button was pressed.
+      if ((shown.current.updatedAt ?? '') > (latest.current.updatedAt ?? '')) latest.current = shown.current;
+      const reply = await command(latest.current);
       // R188: the command stamped the character itself, so the next save must name that stamp, not the one before it.
       const next = characterOf(reply);
       if (next) {

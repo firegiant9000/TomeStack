@@ -71,6 +71,11 @@ import type {
   PlayAction,
   RestPeriod,
   RestPreview,
+  TurnChoiceOption,
+  TurnMoment,
+  TurnPreview,
+  DamagePreview,
+  ResponseChoice,
   RollRecord,
   RollTarget,
   RestorePreview,
@@ -219,6 +224,17 @@ export function createClient(transport: Transport) {
       call<CharacterView>('character.previewChoice', { draft, source, choiceId, selected }),
     /** One play-state change; `confirm` is always sent because only a deliberate button press calls this (SPEC C-05). */
     play: (characterId: string, action: PlayAction) => call<CharacterView>('character.play', { characterId, ...action, confirm: true }),
+    /** D44: puts the play state back to what the last compound change (a form switch) started from. `updatedAt` is the view's stamp. */
+    undoPlay: (characterId: string, updatedAt: string) => call<CharacterView>('character.undoPlay', { characterId, updatedAt, confirm: true }),
+    /** D43 S3: what a turn start or end would change for the selection (change ids to skip, a choice per shortfall prompt); writes nothing. */
+    /** D43 S7: one hit with the chosen responses, previewed (nothing is written). `type` is any case of a damage type; absent or empty is untyped. */
+    damagePreview: (characterId: string, amount: number, type: string | undefined, responses: ResponseChoice[]) =>
+      call<DamagePreview>('character.damagePreview', { characterId, amount, ...(type ? { type } : {}), responses }),
+    turnPreview: (characterId: string, at: TurnMoment, skip: string[], choices: Record<string, TurnChoiceOption>) =>
+      call<TurnPreview>('character.turnPreview', { characterId, at, skip, choices }),
+    /** Applies exactly the previewed turn. `expectedUpdatedAt` is the preview's `updatedAt` (`turn.preview-stale` when the character changed since). Only the panel's Confirm calls this. */
+    turn: (characterId: string, at: TurnMoment, expectedUpdatedAt: string, skip: string[], choices: Record<string, TurnChoiceOption>) =>
+      call<CharacterView>('character.turn', { characterId, at, confirm: true, expectedUpdatedAt, skip, choices }),
     /** What a rest would change; writes nothing (D01). A short rest spends `hitDice`, each with what the die shows. */
     restPreview: (characterId: string, kind: RestPeriod, hitDice: HitDieRoll[] = [], chargeRolls: ChargeRoll[] = []) =>
       call<RestPreview>('character.restPreview', { characterId, kind, hitDice, chargeRolls }),

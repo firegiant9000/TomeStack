@@ -38,7 +38,7 @@ public class FieldGraphTests
 
         // scores, modifiers, PB, saves, skills, initiative, AC, HP; attacks and critical range (v8); spell attack, save DC,
         // 9 slot levels, pact slots (v5)
-        Assert.Equal(6 + 6 + 1 + 6 + 18 + 1 + 1 + 1 + 2 + 2 + 9 + 1 + 3 + 1, sheet.Fields.Count); // + 3 passives + speed (2026-10-06)
+        Assert.Equal(6 + 6 + 1 + 6 + 18 + 1 + 1 + 1 + 2 + 2 + 9 + 1 + 3 + 1 + 1, sheet.Fields.Count); // + 3 passives + speed (2026-10-06) + fly speed (content v11, D43)
         Assert.Equal((1, 20), (sheet.Field(FieldIds.Attacks).Value, sheet.Field(FieldIds.CriticalRange).Value));
         Assert.Equal(
             ["score", "modifier", "bonus", "modifier", "modifier", "modifier", "modifier", "score", "score"],

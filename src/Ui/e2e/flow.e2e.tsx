@@ -565,6 +565,9 @@ it('authors a homebrew subclass in the studio, plays it, and reviews an update',
 
   // Republish with +3 initiative: the character keeps +2 until the reviewed update is applied.
   await user.click(screen.getByRole('button', { name: 'Homebrew studio' }));
+  // The studio opens on the first source, and the other e2e file creates its own source in the same DevHost: pick ours.
+  const ownSource = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  await user.selectOptions(ownSource, within(ownSource).getByRole('option', { name: /^E2E Homebrew/ }));
   await user.click(await screen.findByRole('button', { name: 'Edit Path of the E2E Storm' }));
   const modifier = rule(/^Rule 1: Modifier/);
   await user.clear(within(modifier).getByRole('textbox', { name: /^Value/ }));
@@ -1626,7 +1629,8 @@ it('starts homebrew from a template as an unsaved draft, publishes a stance, and
   await user.click(screen.getByRole('button', { name: 'Use template' }));
   await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Loose Stance');
   await user.click(within(within(editor()).getByRole('group', { name: /^Rule 3: Toggle/ })).getByRole('button', { name: 'Remove rule 3' }));
-  expect(within(editor()).queryByRole('combobox', { name: 'Applies' })).toBeNull();
+  // D43 S4: the source's other entries (E2E Stance above) offer their toggles, so the choice stays, and it reads "Always".
+  expect((within(editor()).getByRole('combobox', { name: 'Applies' }) as HTMLSelectElement).value).toBe('');
   await user.click(within(editor()).getByRole('button', { name: 'Check' }));
   await waitFor(() => expect(within(editor()).getByRole('region', { name: 'Check results' }).textContent).toMatch(/No problems found/));
 });

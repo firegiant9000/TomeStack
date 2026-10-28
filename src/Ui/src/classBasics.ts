@@ -105,6 +105,14 @@ export function nextScaleKey(effects: Effect[]): string {
   return `column${n}`;
 }
 
+/** Content v11 (D43): a form group's key, like a scale's (a lowercase letter, then letters and digits); the first `groupN` no group of this list uses. */
+export function nextGroupKey(effects: Effect[]): string {
+  const used = new Set(effects.flatMap((e) => (e.type === 'toggleGroup' ? [e.groupId] : [])));
+  let n = 1;
+  while (used.has(`group${n}`)) n++;
+  return `group${n}`;
+}
+
 /**
  * Strict parsing of a list of whole numbers separated by commas or spaces (review fix). Nothing is dropped: a token
  * that is not a whole number from 0 to `max` is a problem the editor shows next to the field, and it blocks saving.

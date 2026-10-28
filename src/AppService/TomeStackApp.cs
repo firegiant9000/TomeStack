@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using TomeStack.AppService.Packages;
 using TomeStack.AppService.Persistence;
@@ -16,6 +17,9 @@ public sealed partial class TomeStackApp : IDisposable
     private readonly SqliteStore _store;
     private readonly PackageService _packages;
     private readonly TimeProvider _time;
+
+    /// <summary>D43 S2: the one-level undo of a compound play change, in memory only (gone when the app closes).</summary>
+    private readonly PlayUndoSlots _undo = new();
 
     /// <summary>Startup warnings (<see cref="AppInfo.Warnings"/>): a sync-root data folder, and bundled revisions that could not be seeded.</summary>
     private readonly List<Diagnostic> _warnings;
@@ -249,7 +253,7 @@ public sealed partial class TomeStackApp : IDisposable
 
     public CharacterView GetCharacter(Guid id) =>
         _store.FindCharacter(id) is { } character
-            ? View(character)
+            ? View(character, stored: true)
             : throw new AppValidationException([new("character.not-found", $"Character {id} does not exist.")]);
 
     public CharacterView CreateCharacter(CreateCharacterRequest request)
@@ -327,15 +331,24 @@ public sealed partial class TomeStackApp : IDisposable
         return remaining.Count == recorded.Count ? play : play with { Companions = remaining };
     }
 
-    /// <summary>Saves the character with the play state it carries: for the confirmed play and rest commands only.</summary>
-    private CharacterView SaveWithPlay(Character character)
+    /// <summary>
+    /// Saves the character with the play state it carries: for the confirmed play and rest commands only. D43 S2: a compound play
+    /// change passes <paramref name="undo"/> (the play state it started from and the button's words) and gets a fresh slot for the
+    /// stamp it wrote, set after the single write; the returned view already carries its label. Any other write leaves an old slot
+    /// where it is: the stamp moved, so it can no longer match (the view offers nothing and the undo says <c>undo.stale</c>), and the
+    /// next compound change replaces it, or the undo removes it after its own write succeeds.
+    /// </summary>
+    private CharacterView SaveWithPlay(Character character, (PlayState Before, string Label)? undo = null)
     {
         var saved = Checked(character) with { UpdatedAt = _time.GetUtcNow() };
         // Calculate before writing: if the sheet cannot be calculated, nothing is stored (the store never holds a
         // character that cannot be opened).
         var view = View(saved);
         _store.InTransaction(() => _store.SaveCharacter(saved));
-        return view;
+        if (undo is not { } slot)
+            return view;
+        _undo.Set(saved.Id, new(slot.Before, saved.UpdatedAt, slot.Label));
+        return view with { UndoLabel = slot.Label };
     }
 
     /// <summary>
@@ -417,8 +430,17 @@ public sealed partial class TomeStackApp : IDisposable
     public PackagePreview PreviewImport(byte[] package) => _packages.Preview(package);
 
     /// <param name="campaignChoices">M6 slice 2: for a campaign pack whose campaign differs from the local one.</param>
-    public ImportResult ApplyImport(byte[] package, IReadOnlyDictionary<Guid, SourceChoice>? sourceChoices = null, IReadOnlyDictionary<Guid, SourceChoice>? campaignChoices = null) =>
-        _packages.Apply(package, sourceChoices, campaignChoices);
+    public ImportResult ApplyImport(byte[] package, IReadOnlyDictionary<Guid, SourceChoice>? sourceChoices = null, IReadOnlyDictionary<Guid, SourceChoice>? campaignChoices = null)
+    {
+        try
+        {
+            return _packages.Apply(package, sourceChoices, campaignChoices);
+        }
+        finally
+        {
+            _undo.ClearAll(); // D44: a replaced character can carry an older stamp that matches a slot again
+        }
+    }
 
     /// <summary>M2.1 "Back up everything": what it would contain (<c>library.backupPreview</c>).</summary>
     public LibraryBackupPreview PreviewLibraryBackup() => _packages.PreviewLibraryBackup();
@@ -429,8 +451,17 @@ public sealed partial class TomeStackApp : IDisposable
     /// <summary>M2.1 "Restore full backup": checks the file completely; writes nothing.</summary>
     public PackagePreview PreviewLibraryRestore(string backupPath) => _packages.PreviewLibraryRestore(backupPath);
 
-    public LibraryRestoreResult ApplyLibraryRestore(string backupPath, IReadOnlyDictionary<Guid, SourceChoice>? sourceChoices = null) =>
-        _packages.ApplyLibraryRestore(backupPath, sourceChoices);
+    public LibraryRestoreResult ApplyLibraryRestore(string backupPath, IReadOnlyDictionary<Guid, SourceChoice>? sourceChoices = null)
+    {
+        try
+        {
+            return _packages.ApplyLibraryRestore(backupPath, sourceChoices);
+        }
+        finally
+        {
+            _undo.ClearAll(); // D44: the restored characters can carry an older stamp that matches a slot again
+        }
+    }
 
     public void Dispose()
     {
@@ -440,14 +471,27 @@ public sealed partial class TomeStackApp : IDisposable
         _folderLock?.Dispose(); // last: the folder is free only once the database is closed
     }
 
-    private CharacterView View(Character character)
+    /// <param name="stored">True only for a character read from the store: it alone can offer an undo. A builder draft (Preview) and the
+    /// sandbox's unsaved copy never do, whatever id and stamp they carry.</param>
+    private CharacterView View(Character character, bool stored = false)
     {
         var sheet = CharacterCalculator.Calculate(character, _store);
-        return new(character, sheet, CampaignOf(character, sheet));
+        return new(character, sheet, CampaignOf(character, sheet), UndoLabel: stored ? _undo.Matching(character.Id, character.UpdatedAt)?.Label : null);
     }
 
+    /// <summary>
+    /// Tests only: keep each parsed bundled pack for the life of the process, so the hundreds of data folders a test run opens
+    /// do not parse the same JSON each time. Off in the app, which opens one folder per process and need not keep the packs.
+    /// </summary>
+    internal static bool CacheBundledPacks { get; set; }
+
+    private static readonly ConcurrentDictionary<string, ContentPack> BundledPackCache = new();
+
     /// <summary>Loads an embedded content pack (bundled with this build, so trusted like code).</summary>
-    public static ContentPack LoadBundledPack(string resourceName)
+    public static ContentPack LoadBundledPack(string resourceName) =>
+        CacheBundledPacks ? BundledPackCache.GetOrAdd(resourceName, ParseBundledPack) : ParseBundledPack(resourceName);
+
+    private static ContentPack ParseBundledPack(string resourceName)
     {
         using var stream = typeof(TomeStackApp).Assembly.GetManifestResourceStream(resourceName)
             ?? throw new InvalidOperationException($"Embedded content pack {resourceName} is missing.");
@@ -519,7 +563,7 @@ public sealed record CharacterSummary(Guid Id, string Name, string RulesFamily, 
 
 /// <param name="Campaign">SPEC P-01: the character's campaign and its warnings (allowed sources, rules family), when it has one.</param>
 /// <param name="Damage">Wave 3 item 21: set only on the view a typed or untyped <see cref="PlayActionKind.Damage"/> command returns; never stored.</param>
-public sealed record CharacterView(Character Character, CharacterSheet Sheet, CampaignStatus? Campaign = null, DamageOutcome? Damage = null);
+public sealed record CharacterView(Character Character, CharacterSheet Sheet, CampaignStatus? Campaign = null, DamageOutcome? Damage = null, string? UndoLabel = null, IReadOnlyList<Diagnostic>? Notices = null);
 
 public sealed record ChooseRequest(Guid CharacterId, ContentReference Source, string ChoiceId, IReadOnlyList<ContentReference>? Selected);
 
