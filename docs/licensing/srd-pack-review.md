@@ -18,7 +18,7 @@ All text in the packs comes from these two files, nowhere else. Each source reco
 | SRD 5.1 | Half-Orc (species, p. 7); Acolyte (background, pp. 60–61) and its feature Shelter of the Faithful (p. 61); Barbarian levels 1–3 (class, pp. 8–9; levels 4–20 in the C2-1 section below): Rage, Unarmored Defense, Reckless Attack, Danger Sense, and the six skill options; Path of the Berserker (subclass, p. 9) with Frenzy; Grappler (feat, p. 75) |
 | SRD 5.2.1 | Dwarf (species, p. 84); Soldier (background, p. 83) with its seven ability score options (from the background rules on p. 83); Savage Attacker (origin feat, p. 87); Barbarian levels 1–3 (class, pp. 28–30): Rage, Unarmored Defense, Weapon Mastery, Danger Sense, Reckless Attack, Primal Knowledge, and the six skill options; Path of the Berserker (subclass, p. 30) with Frenzy |
 
-Since 2026-10-27 (C2-1) the scope also includes `srd-5.2.1-barbarian.json` and `srd-5.1-barbarian.json`, the Barbarian levels 1–20 with the Path of the Berserker (section "C2-1 extension" below); the rows above describe the first slice.
+Since 2026-10-27 (C2-1) the scope also includes `srd-5.2.1-barbarian.json` and `srd-5.1-barbarian.json`, the Barbarian levels 1–20 with the Path of the Berserker (section "C2-1 extension" below); the rows above describe the first slice. Since 2026-10-27 (C2-2) it also includes `srd-5.2.1-rogue.json` and `srd-5.1-rogue.json`, the Rogue levels 1–20 with the Thief (section "C2-2 extension" below).
 
 ## M2 extension: spells (2026-09-27, owner decision: the full SRD casters, levels 1–20, both families)
 
@@ -174,6 +174,29 @@ A 2014/2024 difference the spells show as content: Cure Wounds heals 1d8 (5.1 p.
 - **Not taken:** the starting equipment, the Epic Boon feats (Boon of Irresistible Offense is named in the text only), the 5.1 p. 10 pointer to Primal Path options outside the SRD, and the Weapon Mastery property rules.
 - **Done 2026-10-27:** `srd-5.2.1-barbarian.json` has 22 revisions (the class, the Path of the Berserker and 20 features, among them the new revisions of Rage, Unarmored Defense, Danger Sense and Frenzy). `srd-5.1-barbarian.json` has 17 (the class, the Path of the Berserker and 15 features, among them the new revisions of Rage, Unarmored Defense and Danger Sense). No earlier revision changed.
 - **Checks:** `SrdPackTests` (source records, attribution, every revision validates, the newest Barbarian revision), the PDF-gated `SrdClassTableTests` and `SrdDetectionMeasurementTests` with `TOMESTACK_SRD_PDF_DIR` set (the pack grants match the printed tables, level by level), `HomebrewStudioTests` and `ContentDiagnoseTests`.
+
+## C2-2 extension: the Rogue, levels 1–20 (2026-10-27)
+
+**Documents:** the same two PDFs. Their SHA-256 hashes were checked again on 2026-10-27 and match the table above. The files stay outside the repository.
+
+**Scope reviewed and approved for bundling** (CC-BY-4.0, the same attribution and modification notice as the other packs; nothing outside these pages):
+
+| Pack file | Content | Pages |
+| --- | --- | --- |
+| `srd-5.2.1-rogue.json` | The Rogue, levels 1–20: the class, the Thief (subclass) and the features Expertise, Sneak Attack, Thieves’ Cant, Weapon Mastery, Cunning Action, Steady Aim, Ability Score Improvement, Cunning Strike, Uncanny Dodge, Evasion, Reliable Talent, Improved Cunning Strike, Devious Strikes, Slippery Mind, Elusive, Epic Boon and Stroke of Luck; the Thief’s Fast Hands, Second-Story Work, Supreme Sneak, Use Magic Device and Thief’s Reflexes; ten skill options and eighteen expertise options (one for each SRD skill) | 5.2.1 pp. 61–64; multiclassing pp. 24–25 (already reviewed) |
+| `srd-5.1-rogue.json` | The Rogue, levels 1–20: the class, the Roguish Archetype choice with the Thief, and the features Expertise, Sneak Attack, Thieves’ Cant, Cunning Action, Ability Score Improvement (levels 4, 8, 10, 12, 16 and 19), Uncanny Dodge, Evasion, Reliable Talent, Blindsense, Slippery Mind, Elusive and Stroke of Luck; the Thief’s Fast Hands, Second-Story Work, Supreme Sneak, Use Magic Device and Thief’s Reflexes; eleven skill options and nineteen expertise options (the eighteen skills and Thieves’ Tools) | 5.1 pp. 39–41; multiclassing pp. 56–57 (already reviewed) |
+
+- **Method:** as for the Barbarian. The text comes from pypdf, in plain mode for 5.2.1 and layout mode for 5.1 (each mode splits words in the other SRD; the 5.1 pages are read column by column). Line breaks and hyphenation are repaired, and every sentence is checked against the page. The Rogue Features tables (Sneak Attack, and the feature columns) were parsed twice, once from each extraction mode, and compared cell by cell. All cells agree in both families. The scripts stay outside the repository, like the others.
+- **Encoded as effects** (against the reference text, which stays in each summary):
+  - Sneak Attack dice as a class scale (1d6 at levels 1–2 up to 10d6 at levels 19–20, shown in the class columns on Play; no formula reads it, so the content debugger’s `debug.scale-unused` note for it is expected);
+  - the saving throws, the skills (four of the class list; one as a multiclass character), the weapons (Simple weapons and the Finesse or Light Martial weapons: Rapier, Scimitar, Shortsword, Whip, Hand Crossbow in 5.2.1; Hand Crossbow, Longsword, Rapier and Shortsword in 5.1) and Light armor;
+  - Expertise as two choices (levels 1 and 6) over the skill options, each granting expertise in one skill (the sheet does not check that the skill is a proficiency; the option says so);
+  - Slippery Mind as saving throw proficiencies (5.2.1: Wisdom and Charisma; 5.1: Wisdom);
+  - Stroke of Luck as a pool of one use, restored on a Short or Long Rest, with a Use action that spends it (5.2.1: the use of the 20 is by hand); and in 5.1 the Thief’s Supreme Sneak as an assisted Advantage on Dexterity (Stealth) checks, because of its half-speed condition.
+- **Declined shapes:** a Sneak Attack bonus ladder of ten bands (the rider limit is four bands, and an attack rider’s dice are a literal); a Sneak Attack as an attack effect (it would be its own attack row with its own attack roll, which is wrong, because the extra damage rides on an attack you already make); an Uncanny Dodge damage response of a fixed amount (half of the damage cannot be expressed).
+- **Reference text only** (with its page): Sneak Attack’s conditions, Thieves’ Cant, Weapon Mastery, Cunning Action, Steady Aim, Ability Score Improvement, Cunning Strike, Improved Cunning Strike and Devious Strikes, Uncanny Dodge, Evasion, Reliable Talent, Blindsense, Elusive, Epic Boon, and the Thief’s Fast Hands, Second-Story Work, Use Magic Device and Thief’s Reflexes (5.2.1 also Supreme Sneak). Thieves’ Tools proficiency, the language of Thieves’ Cant and the Expertise in Thieves’ Tools (5.1) are by hand.
+- **Not taken:** the starting equipment, the Epic Boon feats themselves (Boon of the Night Spirit is named in the text only), and the choice of the other language for Thieves’ Cant.
+- **Checks:** `SrdPackTests` (source records, attribution, every revision validates), the PDF-gated `SrdClassTableTests` and `SrdDetectionMeasurementTests` with `TOMESTACK_SRD_PDF_DIR` set (the pack grants match the printed tables, level by level), and `ContentDiagnoseTests`.
 
 ## README screenshots (docs/media, reviewed 2026-09-30)
 
