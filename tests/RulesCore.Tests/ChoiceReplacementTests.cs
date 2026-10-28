@@ -97,6 +97,16 @@ public class ChoiceReplacementTests
     }
 
     [Fact]
+    public void The_same_orphan_entry_in_both_characters_gets_no_notice()
+    {
+        var orphan = new ChoiceSelection(Source(1), "techniques", Picks("3"));
+        var stored = At(3, orphan, new ChoiceSelection(Source(2), "techniques", Picks("1,2", 2)));
+        var saved = At(3, orphan, new ChoiceSelection(Source(2), "techniques", Picks("1,2", 2)));
+
+        Assert.Empty(ChoiceReplacements.OutsideWindow(stored, saved, [Status(new ChoiceReplaceable(ReplaceWindow.LevelUp), 2)]));
+    }
+
+    [Fact]
     public void A_level_in_a_second_class_opens_the_level_up_window()
     {
         var stored = At(3, new ChoiceSelection(Source(), "techniques", Picks("1,2"))) with { Classes = [new(Fixtures.Warden, 3)] };

@@ -295,6 +295,11 @@ public sealed partial class TomeStackApp : IDisposable
     /// match by construction. Both timestamps are the same stored 100 ns value (the <c>json</c> column round-trips it exactly), so
     /// they compare as instants. The message names no character and quotes no text.
     /// </para>
+    /// <para>
+    /// MECH-X item 2 (R43): the reply of a save of an existing character may carry the advisory
+    /// <c>choice.replaced-outside-window</c> notice in <see cref="CharacterView.Notices"/> when it swapped picks of a replaceable
+    /// choice outside its window. It is never stored and never blocks the save.
+    /// </para>
     /// </summary>
     public CharacterView SaveCharacter(Character character)
     {
