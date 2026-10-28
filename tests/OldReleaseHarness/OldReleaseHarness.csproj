@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>OldReleaseHarness</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <AppServicePath Condition="'$(AppServicePath)' == ''">$(MSBuildThisFileDirectory)../../src/AppService/TomeStack.AppService.csproj</AppServicePath>
+  </PropertyGroup>
+
+  <!-- An old tag is built as-is, so its own warnings and advisories must not fail the harness build; the in-repo build keeps budget 0. -->
+  <PropertyGroup Condition="'$(AppServicePath)' != '$(MSBuildThisFileDirectory)../../src/AppService/TomeStack.AppService.csproj'">
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <NuGetAudit>false</NuGetAudit>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="$(AppServicePath)" />
+  </ItemGroup>
+
+</Project>

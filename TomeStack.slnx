@@ -32,6 +32,9 @@
   <Folder Name="/tests/ImportWorker.Tests/">
     <Project Path="tests/ImportWorker.Tests/TomeStack.ImportWorker.Tests.csproj" />
   </Folder>
+  <Folder Name="/tests/OldReleaseHarness/">
+    <Project Path="tests/OldReleaseHarness/OldReleaseHarness.csproj" />
+  </Folder>
   <Folder Name="/tests/RulesCore.Tests/">
     <Project Path="tests/RulesCore.Tests/TomeStack.RulesCore.Tests.csproj" />
   </Folder>
