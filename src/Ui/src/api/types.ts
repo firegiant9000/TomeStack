@@ -1180,6 +1180,13 @@ export interface SourcePackPreview {
   /** Drafts of these sources that stay on this machine. */
   drafts: number;
   warnings: Diagnostic[];
+  opensIn?: string | null;
+  opensInCauses?: OpensInCause[];
+  /** The older release the copy would be made for; null or absent for everything. */
+  target?: string | null;
+  changes?: ExportChange[];
+  /** Sent back with the export so the service can refuse a copy that differs from the one previewed. */
+  changesHash?: string;
 }
 
 // ---- extensions (M6 slice 3, ADR-011 option A: declarative only) ----
@@ -1328,6 +1335,13 @@ export interface CampaignPackPreview {
   leftOut: LeftOutSource[];
   revisions: number;
   warnings: Diagnostic[];
+  opensIn?: string | null;
+  opensInCauses?: OpensInCause[];
+  /** The older release the copy would be made for; null or absent for everything. */
+  target?: string | null;
+  changes?: ExportChange[];
+  /** Sent back with the export so the service can refuse a copy that differs from the one previewed. */
+  changesHash?: string;
 }
 
 export interface ExportPreview {
@@ -1340,6 +1354,45 @@ export interface ExportPreview {
   gapNotes: number;
   /** G6: `package.needs-newer-build` when the package would hold content or a character that TomeStack 0.6.x refuses. */
   warnings?: Diagnostic[];
+  /** The oldest TomeStack release that opens the file; null when it needs a newer one than this. Absent from a service without the feature. */
+  opensIn?: string | null;
+  opensInCauses?: OpensInCause[];
+  /** The older release the copy would be made for; null or absent for everything. */
+  target?: string | null;
+  changes?: ExportChange[];
+  /** Sent back with the export so the service can refuse a copy that differs from the one previewed. */
+  changesHash?: string;
+}
+
+/** The releases a copy can be made for ("Save for an older TomeStack"): offered rows only, newest first; the current row is not in `targets`. */
+export interface PackageTargets {
+  current: string;
+  currentRow: string;
+  previousMinor: string | null;
+  targets: { release: string; characterSchema: number; contentSchema: number }[];
+}
+
+/** Why a file needs a newer TomeStack than the previous minor: one character, content item or gap note. */
+export interface OpensInCause {
+  entry: string;
+  kind: 'character' | 'content' | 'gapNote';
+  id: string;
+  name: string;
+  schemaVersion?: number;
+  bundledPack?: string;
+  message: string;
+}
+
+/** One thing a copy for an older TomeStack drops, blocks on, copies under a new id, or leaves out. */
+export interface ExportChange {
+  entry: string;
+  kind: 'character' | 'content';
+  id: string;
+  name: string;
+  sourceTitle?: string;
+  action: 'dropped' | 'blocks' | 'copied' | 'leftOut';
+  code: string;
+  message: string;
 }
 
 /** `import` (gap-note schema v2, D16b): an item a D&D Beyond sheet import could not match or place, named by its label. Only the importer writes it. */
@@ -2146,6 +2199,13 @@ export interface LibraryBackupPreview {
   linkedPdfs: number;
   /** Sources whose PDF copy is missing or damaged, and would be left out. */
   unreadable: string[];
+  opensIn?: string | null;
+  opensInCauses?: OpensInCause[];
+  /** The older release the copy would be made for; null or absent for everything. */
+  target?: string | null;
+  changes?: ExportChange[];
+  /** Sent back with the save so the service can refuse a copy that differs from the one previewed. */
+  changesHash?: string;
 }
 
 export type LibraryBackupOutcome =

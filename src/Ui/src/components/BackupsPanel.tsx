@@ -35,7 +35,7 @@ export function BackupsPanel({ onError, onStatus, onRestored }: Props) {
   async function backUp() {
     setBusy('backup');
     try {
-      const outcome = await client.saveLibraryBackup();
+      const outcome = await client.libraryBackupSaveAs();
       if (outcome.saved) {
         const left = outcome.warnings.map((w) => ` ${w.message}`).join('');
         onStatus(`Saved the full backup ${outcome.fileName} (${megabytes(outcome.bytes)}).${left}`);
