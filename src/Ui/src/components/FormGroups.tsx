@@ -100,7 +100,8 @@ function FormGroup({
 
   // R40: a form that is off and cannot be paid for now is held with the payment's own reason; one that is on is never held by it (B1).
   const unpayable = (t: ToggleValue) => !t.on && paying(t.payment) && !t.payment.payable;
-  const whyNot = (t: ToggleValue) => (!t.available ? t.unavailableReason : unpayable(t) ? (t.payment?.reason ?? 'Cannot be paid now') : undefined);
+  const whyNot = (t: ToggleValue) =>
+    (!t.available && t.unavailableReason) || (unpayable(t) ? (t.payment?.reason ?? 'Cannot be paid now') : undefined);
   const reasonId = (t: ToggleValue) => (whyNot(t) ? `${id}-${t.content.contentId}-${t.toggleId}-why` : undefined);
   const reason = (t: ToggleValue) =>
     reasonId(t) && (
