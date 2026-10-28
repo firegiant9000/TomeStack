@@ -14,16 +14,17 @@ internal static class NewerBuild
     public const string Code = "package.needs-newer-build";
 
     /// <param name="bundledRevisionIds">The bundled SRD revisions the package carries (checked against each row's bundled set).</param>
+    /// <param name="bundledCarried">False when the file does not hold the bundled revisions (a library backup): their causes point at the pinning character's entry.</param>
     /// <param name="bundledPackTitle">The title of the bundled pack a revision id comes from, for the cause's message.</param>
     public static OpensInResult Evaluate(IEnumerable<ContentRevision> revisions, IEnumerable<Character> characters,
-        int gapNoteSchema, IEnumerable<Guid> bundledRevisionIds, Func<Guid, string> bundledPackTitle)
+        int gapNoteSchema, IEnumerable<Guid> bundledRevisionIds, Func<Guid, string> bundledPackTitle, bool bundledCarried = true)
     {
         var revisionList = revisions.ToList();
         var characterList = characters.ToList();
         var bundled = bundledRevisionIds.Distinct().ToList();
         var row = ReleaseLadder.OpensIn(revisionList, characterList, gapNoteSchema, bundled);
         var opensIn = row?.Release.ToString(3);
-        var previous = ReleaseLadder.PreviousMinor;
+        var previous = ReleaseLadder.PreviousMinorFor(AppVersionStamp.CurrentVersion);
         if (previous is null || (row is not null && row.Release <= previous.Release))
             return new(opensIn, [], []);
 
@@ -40,21 +41,31 @@ internal static class NewerBuild
         foreach (var id in bundled.Where(id => !previous.BundledRevisionIds.Contains(id) && !causedByContent.Contains(id)))
         {
             var name = revisionList.FirstOrDefault(r => r.RevisionId == id)?.Name ?? id.ToString("D");
-            var owner = characterList.FirstOrDefault(c => c.AllReferences().Any(r => r.RevisionId == id)) ?? characterList.FirstOrDefault();
+            var owner = characterList.FirstOrDefault(c => c.AllReferences().Any(r => r.RevisionId == id));
             var pack = bundledPackTitle(id);
             var message = owner is null
                 ? $"'{name}' is from the bundled {pack} pack, which TomeStack {previous.Release.ToString(3)} does not have"
                 : $"'{owner.Name}' uses '{name}' from the bundled {pack} pack, which TomeStack {previous.Release.ToString(3)} does not have";
-            causes.Add(new($"content/{id:D}.json", "content", id, name, null, pack, message));
+            var entry = !bundledCarried && owner is not null ? $"characters/{owner.Id:D}.json" : $"content/{id:D}.json";
+            causes.Add(new(entry, "content", id, name, null, pack, message));
         }
 
         return new(opensIn, causes, [new Diagnostic(Code, WarningText(row, causes, revisionList, characterList, gapNoteSchema))]);
     }
 
+    /// <summary>At most the first three distinct messages, in cause order; three or fewer join with ", and ", more end with ", and N more".</summary>
+    private static string CauseList(List<OpensInCause> causes)
+    {
+        var messages = causes.Select(c => c.Message).Distinct().ToList();
+        return messages.Count <= 3
+            ? string.Join(", and ", messages)
+            : $"{string.Join(", ", messages.Take(3))}, and {messages.Count - 3} more";
+    }
+
     private static string WarningText(LadderRow? row, List<OpensInCause> causes, List<ContentRevision> revisions, List<Character> characters, int gapNoteSchema)
     {
         if (row is not null)
-            return $"Opening this needs TomeStack {row.Release.ToString(3)} or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): {string.Join(", and ", causes.Select(c => c.Message))}. Older versions refuse the file.";
+            return $"Opening this needs TomeStack {row.Release.ToString(3)} or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): {CauseList(causes)}. Older versions refuse the file.";
 
         var last = ReleaseLadder.Rows[^1];
         var content = revisions.Where(r => r.SchemaVersion > last.ContentSchema).Select(r => r.SchemaVersion).DefaultIfEmpty(0).Max();

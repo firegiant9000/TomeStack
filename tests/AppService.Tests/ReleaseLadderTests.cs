@@ -174,6 +174,58 @@ public class ReleaseLadderTests
     }
 
     [Fact]
+    public void Evaluate_caps_the_warning_at_three_distinct_messages()
+    {
+        var heroes = new[] { "Ann", "Bo", "Cy", "Di", "Di" }.Select(n => V10(Hero(n))).ToList();
+
+        var result = NewerBuild.Evaluate([], heroes, 0, [], _ => "");
+
+        Assert.Equal(5, result.Causes.Count);
+        Assert.Equal($"Opening this needs TomeStack 0.7.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Ann' is a character at schema 10, 'Bo' is a character at schema 10, 'Cy' is a character at schema 10, and 1 more. Older versions refuse the file.",
+            Assert.Single(result.Warnings).Message);
+    }
+
+    [Fact]
+    public void Evaluate_keeps_the_joined_form_for_exactly_three_messages()
+    {
+        var heroes = new[] { "Ann", "Bo", "Cy" }.Select(n => V10(Hero(n))).ToList();
+
+        var result = NewerBuild.Evaluate([], heroes, 0, [], _ => "");
+
+        Assert.Equal($"Opening this needs TomeStack 0.7.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Ann' is a character at schema 10, and 'Bo' is a character at schema 10, and 'Cy' is a character at schema 10. Older versions refuse the file.",
+            Assert.Single(result.Warnings).Message);
+    }
+
+    [Fact]
+    public void Evaluate_does_not_borrow_a_character_for_an_unpinned_bundled_revision()
+    {
+        var species = Revision("Example Species", 3);
+
+        var result = NewerBuild.Evaluate([species], [Hero("One"), Hero("Two")], 0, [species.RevisionId], _ => "SRD 5.2.1");
+
+        Assert.Equal("'Example Species' is from the bundled SRD 5.2.1 pack, which TomeStack 0.6.0 does not have", Assert.Single(result.Causes).Message);
+    }
+
+    [Fact]
+    public void Evaluate_points_an_uncarried_bundled_cause_at_the_pinning_character()
+    {
+        var species = Revision("Example Species", 3);
+        var hero = Hero() with { Pins = [species.Reference] };
+
+        var result = NewerBuild.Evaluate([species], [Hero("Other"), hero], 0, [species.RevisionId], _ => "SRD 5.2.1", bundledCarried: false);
+
+        Assert.Equal($"characters/{hero.Id:D}.json", Assert.Single(result.Causes).Entry);
+    }
+
+    [Fact]
+    public void CurrentRowOrLast_falls_back_to_the_last_row_for_a_version_with_no_row()
+    {
+        Assert.Equal(ReleaseLadder.Rows[^1], ReleaseLadder.CurrentRowOrLast("0.9.0"));
+        Assert.Equal(ReleaseLadder.Rows[^2], ReleaseLadder.PreviousMinorFor("0.9.0"));
+        Assert.Equal(Row("0.6.0"), ReleaseLadder.CurrentRowOrLast("0.6.2"));
+    }
+
+    [Fact]
     public void Evaluate_gives_a_bundled_revision_that_is_also_new_content_one_cause()
     {
         var revision = Revision("Example Species", 11);

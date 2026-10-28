@@ -3,10 +3,11 @@
   Writes the revision ids of the SRD packs a release bundled (down-conversion export, docs/superpowers/specs/2026-10-28-down-conversion-export-spec.md).
 .DESCRIPTION
   Reads src/AppService/Content/*.json as they were at <Tag> (git ls-tree, git show), collects the revisionId of every
-  revision in those packs, sorts them ordinally and writes one lowercase Guid per line to <Out>. Run it once per release
-  cut for the new ladder row (src/AppService/Packages/BundledAt/<release>.txt). Fails if the tag has no packs.
+  revision in those packs, sorts them ordinally and writes one lowercase Guid per line to <Out>. Run it once per minor
+  release cut for the new ladder row (src/AppService/Packages/BundledAt/<release>.txt). <Tag> is any git revision: use
+  HEAD in the release PR, where the tag does not exist yet. Fails if the revision has no packs.
 .EXAMPLE
-  scripts/bundled-ids-at.ps1 -Tag v0.6.0 -Out src/AppService/Packages/BundledAt/0.6.0.txt
+  scripts/bundled-ids-at.ps1 -Tag HEAD -Out src/AppService/Packages/BundledAt/0.8.0.txt
 #>
 param(
   [Parameter(Mandatory)] [string] $Tag,

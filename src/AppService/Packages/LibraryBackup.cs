@@ -101,7 +101,7 @@ public sealed partial class PackageService
         var pinned = plan.Characters.SelectMany(c => c.AllReferences()).DistinctBy(r => r.RevisionId)
             .Where(r => _bundledRevisions.Contains(r.RevisionId)).Select(store.FindRevision).OfType<ContentRevision>().ToList();
         var opens = NewerBuild.Evaluate([.. plan.Revisions, .. pinned], plan.Characters, plan.GapNotes.Count > 0 ? GapNote.CurrentSchemaVersion : 0,
-            pinned.Select(r => r.RevisionId), BundledPackTitle(pinned));
+            pinned.Select(r => r.RevisionId), BundledPackTitle(pinned), bundledCarried: false);
         return Summary(plan) with { OpensIn = opens.OpensIn, OpensInCauses = opens.Causes };
     }
 
