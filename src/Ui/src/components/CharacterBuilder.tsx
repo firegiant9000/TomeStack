@@ -771,6 +771,10 @@ function ChoicePicker(props: {
           // D31: an option of the other family is not offered, unless it was chosen when the picker appeared (an imported character).
           const kept = atMount.has(ref.revisionId);
           if (option && !visible(option) && !checked && !kept) return null;
+          // SPEC I-06: a class lists the old and the new revision of an option (an old Berserker stays valid for saved characters);
+          // a new pick sees only the newest, while a character that holds the old one still sees it ticked (and, like any
+          // option ticked when the picker appeared, unticking it never removes the focused row, R33).
+          if (option?.superseded && !checked && !kept) return null;
           // Never natively `disabled`: the count fills, or the campaign reason changes, while a row can hold the focus (2.4.3).
           const inert = !checked && (full || unavailable);
           return (

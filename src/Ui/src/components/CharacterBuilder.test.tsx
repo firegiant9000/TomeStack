@@ -247,6 +247,38 @@ it('keeps a checked option of the other family in a choice, and omits an uncheck
   expect(within(picker).queryByRole('checkbox', { name: /Fixture Absent/ })).toBeNull();
 });
 
+// SPEC I-06: a class lists the old and the new revision of an option; a new pick sees one, a holder of the old one still sees it.
+describe('a superseded option in a choice (I-06)', () => {
+  const source = { contentId: 'fixture-feature', revisionId: 'fixture-feature-r1' };
+  const newest = content(7, 'feature', 'Fixture Path', 'srd-5.1');
+  const older = { ...content(7, 'feature', 'Fixture Path', 'srd-5.1'), reference: { contentId: newest.reference.contentId, revisionId: 'older' }, superseded: true };
+  const choiceOf = (selected: ContentOption[]): CharacterView => {
+    const view = viewWith([]);
+    view.sheet.choices = [
+      { source, sourceName: 'Fixture feature', choiceId: 'pick', count: 1, options: [newest.reference, older.reference], selected: selected.map((o) => o.reference), resolved: selected.length === 1 },
+    ];
+    return view;
+  };
+  const open = (view: CharacterView) => {
+    vi.mocked(client.listContent).mockResolvedValue([newest, older]);
+    render(<CharacterBuilder mode={{ kind: 'choices', view }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+    return screen.findByRole('group', { name: /Fixture feature: choose 1/ });
+  };
+
+  it('shows one checkbox when nobody has picked the older revision', async () => {
+    const picker = await open(choiceOf([]));
+    await within(picker).findByRole('checkbox', { name: /Fixture Path/ });
+    expect(within(picker).getAllByRole('checkbox')).toHaveLength(1);
+  });
+
+  it('shows both when the older revision is the one picked, and the older one is ticked', async () => {
+    const picker = await open(choiceOf([older]));
+    await waitFor(() => expect(within(picker).getAllByRole('checkbox')).toHaveLength(2));
+    const boxes = within(picker).getAllByRole('checkbox') as HTMLInputElement[];
+    expect(boxes.map((b) => b.checked)).toEqual([false, true]);
+  });
+});
+
 // R42 (follow-up F2): another option of the same choice can be ticked while an imported other-family option stays chosen.
 it('previews a tick on an own-family option while a kept other-family option stays in the selection (R42)', async () => {
   const user = userEvent.setup();
