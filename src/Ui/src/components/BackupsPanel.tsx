@@ -1,7 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { client } from '../api/client';
 import { TomeStackError } from '../api/transport';
 import type { LibraryBackupPreview, PackagePreview, SourceChoice } from '../api/types';
+import { ChangeRegion } from './export/ChangeRegion';
+import { ExportConfirmation, hasBlocker, needsConfirmation } from './export/ExportConfirmation';
+import { TargetFieldset } from './export/TargetFieldset';
+import { usePackageTargets } from './export/usePackageTargets';
 import { SourceDecision } from './ImportPreview';
 
 const megabytes = (bytes: number) => `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -28,18 +32,54 @@ export function BackupsPanel({ onError, onStatus, onRestored }: Props) {
   const [restore, setRestore] = useState<{ token: string; fileName: string; preview: PackagePreview }>();
   const [choices, setChoices] = useState<Record<string, SourceChoice>>({});
 
+  const targets = usePackageTargets();
+  const [target, setTarget] = useState<string | null>(null);
+  const [confirmed, setConfirmed] = useState(false);
+  const [previewFailed, setPreviewFailed] = useState(false);
+  const hintId = useId();
+
+  // No target: the call is exactly as it was before there was a target.
+  const previewFor = (release: string | null) => (release ? client.libraryBackupPreview(release) : client.libraryBackupPreview());
+
+  // The preview loads again for each target; a reply for an earlier target is dropped.
   useEffect(() => {
-    client.libraryBackupPreview().then(setContents).catch(onError);
-  }, [onError]);
+    let current = true;
+    previewFor(target)
+      .then((loaded) => {
+        if (!current) return;
+        setContents(loaded);
+        setConfirmed(false);
+      })
+      .catch((error) => {
+        if (!current) return;
+        if (target) setPreviewFailed(true);
+        else onError(error);
+      });
+    return () => {
+      current = false;
+    };
+  }, [target, onError]);
+
+  // The fieldset stays mounted while the preview reloads, so focus stays on the radio that was chosen.
+  function chooseTarget(next: string | null) {
+    setTarget(next);
+    setContents(undefined);
+    setPreviewFailed(false);
+    setConfirmed(false);
+  }
+
+  const blocked = hasBlocker(contents?.changes);
+  const backUpDisabled = busy !== undefined || (target !== null && !contents) || blocked || (needsConfirmation(contents?.changes) && !confirmed);
 
   async function backUp() {
     setBusy('backup');
     try {
-      const outcome = await client.libraryBackupSaveAs();
+      // Only a copy for an older TomeStack carries the target and the preview's hash.
+      const outcome = target ? await client.libraryBackupSaveAs(target, contents?.changesHash) : await client.libraryBackupSaveAs();
       if (outcome.saved) {
         const left = outcome.warnings.map((w) => ` ${w.message}`).join('');
         onStatus(`Saved the full backup ${outcome.fileName} (${megabytes(outcome.bytes)}).${left}`);
-        setContents(outcome.contents);
+        if (!target) setContents(outcome.contents);
       }
     } catch (error) {
       onError(needsDesktop(error, 'Backing up everything'));
@@ -70,7 +110,7 @@ export function BackupsPanel({ onError, onStatus, onRestored }: Props) {
       const result = await client.applyLibraryRestore(restore.token, choices);
       setRestore(undefined);
       onRestored();
-      setContents(await client.libraryBackupPreview());
+      setContents(await previewFor(target));
       onStatus(
         `Restored ${restore.fileName}: ${result.added} added, ${result.replaced} replaced, ${result.unchanged} unchanged, ${result.pdfsCopied} PDF(s) copied.` +
           (result.safetyCopy ? ` Your data as it was before is saved as ${result.safetyCopy} in your data folder.` : '') +
@@ -123,7 +163,16 @@ export function BackupsPanel({ onError, onStatus, onRestored }: Props) {
             These PDF copies are missing or damaged and would be left out: {contents.unreadable.join(', ')}. Attach them again.
           </p>
         )}
-        <button type="button" onClick={backUp} disabled={busy !== undefined}>
+        <p>Restoring a copy made for an older TomeStack: restore it into a new, empty data folder on that version.</p>
+        <p>
+          New version or new PC? A newer version on the same PC opens your library as it is; you do not need to export anything. To move to a
+          new PC, choose Back up everything… here, copy the file across, then on the new PC choose Choose a full backup… and Restore.
+        </p>
+        <TargetFieldset targets={targets} value={target} onChange={chooseTarget} />
+        {contents && <ChangeRegion target={target} opensIn={contents.opensIn} causes={contents.opensInCauses} changes={contents.changes} previousMinor={targets?.previousMinor ?? null} />}
+        {previewFailed && <p>Could not check what the copy for TomeStack {target} leaves out.</p>}
+        <ExportConfirmation changes={contents?.changes} confirmed={confirmed} onConfirmedChange={setConfirmed} hintId={hintId} />
+        <button type="button" onClick={backUp} disabled={backUpDisabled} aria-describedby={blocked ? hintId : undefined}>
           {busy === 'backup' ? 'Backing up…' : 'Back up everything…'}
         </button>
       </section>

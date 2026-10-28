@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Added
+- **Save for an older TomeStack (screens):** the Export panel on a character's sheet, the source and campaign pack forms and "Back up everything" gain "Which TomeStack will open it?". Choosing an older release lists what the copy for it leaves out, blocks the file while something stops it, and asks for a tick when the copy drops something. It needs the service side (lane C1) to take effect: until then the choice is not shown.
+
 ## 0.7.1 (crash reporting and the repo guard)
 
 A patch on 0.7.0: if TomeStack crashes it now leaves a record and tells you where it is. Nothing else in the app changes.

@@ -1,8 +1,12 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type ChangeEvent } from 'react';
 import { client } from '../api/client';
 import { TomeStackError } from '../api/transport';
 import type { AttachmentInfo, DetachPreview, SourcePackPreview, SourceRecord } from '../api/types';
 import { downloadBase64, readFileAsBase64 } from '../files';
+import { ChangeRegion } from './export/ChangeRegion';
+import { ExportConfirmation, hasBlocker, needsConfirmation } from './export/ExportConfirmation';
+import { TargetFieldset } from './export/TargetFieldset';
+import { usePackageTargets } from './export/usePackageTargets';
 import { ImportPanel } from './ImportPanel';
 
 /**
@@ -96,23 +100,64 @@ function PageImportForm({ source, onError, onStatus }: { source: SourceRecord } 
 function SourcePackForm({ sources, onError, onStatus }: { sources: SourceRecord[] } & Props) {
   const [picked, setPicked] = useState<string[]>([]);
   const [preview, setPreview] = useState<SourcePackPreview>();
+  const targets = usePackageTargets();
+  const [target, setTarget] = useState<string | null>(null);
+  const [confirmed, setConfirmed] = useState(false);
+  const [previewRequested, setPreviewRequested] = useState(false);
+  const [previewFailed, setPreviewFailed] = useState(false);
+  const requestId = useRef(0);
+  const hintId = useId();
   const offered = sources.filter(inPack);
   const chosen = picked.filter((id) => offered.some((s) => s.id === id));
 
   function toggle(id: string, on: boolean) {
+    requestId.current++; // a preview of the earlier choice must not arrive
     setPreview(undefined);
+    setPreviewRequested(false);
+    setPreviewFailed(false);
+    setConfirmed(false);
     setPicked((current) => (on ? [...current, id] : current.filter((x) => x !== id)));
   }
 
+  async function runPreview(next: string | null) {
+    const id = ++requestId.current;
+    setPreviewRequested(true);
+    setPreviewFailed(false);
+    try {
+      // No target: the call is exactly as it was before there was a target.
+      const loaded = next ? await client.sourcePackPreview(chosen, next) : await client.sourcePackPreview(chosen);
+      if (requestId.current !== id) return;
+      setPreview(loaded);
+      setConfirmed(false);
+    } catch (error) {
+      if (requestId.current !== id) return;
+      if (next) setPreviewFailed(true);
+      else onError(error);
+    }
+  }
+
+  // The fieldset stays mounted while the preview reloads, so focus stays on the radio that was chosen.
+  function chooseTarget(next: string | null) {
+    setTarget(next);
+    setPreview(undefined);
+    setConfirmed(false);
+    if (previewRequested) void runPreview(next);
+  }
+
+  const blocked = hasBlocker(preview?.changes);
+  const saveDisabled = blocked || (needsConfirmation(preview?.changes) && !confirmed);
+  // Only a copy for an older TomeStack carries the target and the preview's hash.
+  const downConversion = target ? ([target, preview?.changesHash] as const) : ([] as const);
+
   async function save() {
     try {
-      const outcome = await client.saveSourcePackAs(chosen);
+      const outcome = await client.saveSourcePackAs(chosen, ...downConversion);
       if (outcome.saved) onStatus(`Saved the source pack ${outcome.fileName}.`);
     } catch (error) {
       if (error instanceof TomeStackError && error.code === 'unsupported') {
         // Browser development (DevHost) has no native Save dialog: download the pack instead.
         try {
-          const exported = await client.exportSourcePack(chosen);
+          const exported = await client.exportSourcePack(chosen, ...downConversion);
           downloadBase64(exported.fileName, exported.base64);
           onStatus(`Downloaded the source pack ${exported.fileName}.`);
         } catch (inner) {
@@ -134,27 +179,32 @@ function SourcePackForm({ sources, onError, onStatus }: { sources: SourceRecord[
       {offered.length === 0 ? (
         <p>No source is marked as shareable yet.</p>
       ) : (
-        <fieldset>
-          <legend>Sources to share</legend>
-          {offered.map((s) => (
-            <label key={s.id} className="check">
-              <input type="checkbox" checked={chosen.includes(s.id)} onChange={(e) => toggle(s.id, e.target.checked)} />
-              {s.title}
-            </label>
-          ))}
-          <div className="actions">
-            <button type="button" disabled={chosen.length === 0} onClick={() => client.sourcePackPreview(chosen).then(setPreview).catch(onError)}>
-              Preview pack
-            </button>
-          </div>
-        </fieldset>
+        <>
+          <fieldset>
+            <legend>Sources to share</legend>
+            {offered.map((s) => (
+              <label key={s.id} className="check">
+                <input type="checkbox" checked={chosen.includes(s.id)} onChange={(e) => toggle(s.id, e.target.checked)} />
+                {s.title}
+              </label>
+            ))}
+            <div className="actions">
+              <button type="button" disabled={chosen.length === 0} onClick={() => void runPreview(target)}>
+                Preview pack
+              </button>
+            </div>
+          </fieldset>
+          <TargetFieldset targets={targets} value={target} onChange={chooseTarget} />
+        </>
       )}
+      {previewFailed && <p>Could not check what the copy for TomeStack {target} leaves out.</p>}
       {preview && (
         <div role="region" aria-label="Source pack preview">
           <p>
             {preview.fileName}: {preview.sources.length} source{preview.sources.length === 1 ? '' : 's'}, {preview.revisions} published
             revision{preview.revisions === 1 ? '' : 's'}.{preview.drafts > 0 ? ` ${preview.drafts} draft${preview.drafts === 1 ? ' stays' : 's stay'} here.` : ''}
           </p>
+          <ChangeRegion target={target} opensIn={preview.opensIn} causes={preview.opensInCauses} changes={preview.changes} previousMinor={targets?.previousMinor ?? null} />
           {preview.warnings.length > 0 && (
             <ul>
               {preview.warnings.map((w, i) => (
@@ -162,8 +212,9 @@ function SourcePackForm({ sources, onError, onStatus }: { sources: SourceRecord[
               ))}
             </ul>
           )}
+          <ExportConfirmation changes={preview.changes} confirmed={confirmed} onConfirmedChange={setConfirmed} hintId={hintId} />
           <div className="actions">
-            <button type="button" onClick={save}>
+            <button type="button" onClick={save} disabled={saveDisabled} aria-describedby={blocked ? hintId : undefined}>
               Save pack…
             </button>
           </div>
