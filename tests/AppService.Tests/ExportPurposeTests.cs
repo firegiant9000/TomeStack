@@ -153,6 +153,33 @@ public class ExportPurposeTests
     }
 
     [Fact]
+    public void Export_preview_names_a_bundled_revision_that_no_release_has()
+    {
+        using var origin = new TempApp();
+        var srdFeat = origin.App.Store.ListRevisionsInOrder().First(r => TomeStackApp.BundledRevisionIds.Contains(r.RevisionId)
+            && r.Kind == ContentKind.Feat && r.RulesFamilies.Contains(RulesFamilies.Srd51));
+        var stance = HomebrewFeat with
+        {
+            ContentId = Guid.NewGuid(), RevisionId = Guid.NewGuid(), Name = "Compat Tide Stance", SchemaVersion = 3,
+            Provenance = new(srdFeat.Provenance.SourceId, new PageRef(1)),
+        };
+        Assert.DoesNotContain(stance.RevisionId, TomeStackApp.BundledRevisionIds);
+        origin.App.Store.AddRevision(stance);
+        var fixture = TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json");
+        var character = origin.App.SaveCharacter(fixture with { Pins = [.. fixture.Pins, stance.Reference] }).Character;
+
+        foreach (var purpose in new[] { ExportPurpose.Share, ExportPurpose.Backup })
+        {
+            var preview = origin.App.PreviewExport([character.Id], purpose);
+            Assert.Null(preview.OpensIn);
+            var cause = Assert.Single(preview.OpensInCauses!);
+            Assert.Equal(("content", stance.RevisionId, "SRD 5.1"), (cause.Kind, cause.Id, cause.BundledPack));
+            Assert.Equal($"'{character.Name}' uses 'Compat Tide Stance' from the bundled SRD 5.1 pack, which TomeStack 0.6.0 does not have", cause.Message);
+            Assert.Equal("Opening this needs a TomeStack version newer than 0.7.0: it holds bundled SRD content that released versions do not have.", Assert.Single(NewerBuildWarnings(preview)).Message);
+        }
+    }
+
+    [Fact]
     public void Library_backup_preview_with_a_character_pinning_bundled_content_opens_in_0_5_0()
     {
         using var origin = new TempApp();
