@@ -349,7 +349,8 @@ public sealed partial class TomeStackApp
                 throw new AppValidationException([new("use.not-found", $"Content {contentId:D} has no roll '{command.RollId}' for this character.")], "use.not-found");
             return UseFeatureAttack(play, sheet, attacks[0], out label);
         }
-        if (attacks.Count > 0)
+        // Only a paying attack is usable here, so only one can make the roll ambiguous; a plain attack sharing the id never shadows a roll.
+        if (attacks.Any(a => a.Payment is not null))
             throw new AppValidationException([new("use.not-found", $"Content {contentId:D} has both a roll and an attack '{command.RollId}', so it cannot be told which to use.")], "use.not-found");
         var reference = feature.Content;
         if (!calculated.Available)
@@ -357,7 +358,7 @@ public sealed partial class TomeStackApp
         if (calculated.Payment is { } payment)
         {
             label = $"use {(string.IsNullOrWhiteSpace(roll.Label) ? roll.RollId : roll.Label)}";
-            return Pay(play, sheet, payment, PaymentAmount(payment, roll, calculated, command, reference), reference, roll.Id);
+            return Pay(play, sheet, payment, PaymentAmount(sheet, payment, roll, calculated, command, reference), reference, roll.Id);
         }
 
         var changes = new List<PoolChange>();
@@ -425,12 +426,16 @@ public sealed partial class TomeStackApp
     /// evaluated cost, or for a per-unit roll the amount sent (bounded as a pool's is, with no maximum); a cost that did not calculate
     /// refuses with the calculation's own diagnostic, and an amount of 0 changes nothing, so it is refused (<c>use.unavailable</c>).
     /// </summary>
-    private static int PaymentAmount(PaymentValue payment, RollEffect roll, FeatureEffect calculated, PlayCommand command, ContentReference reference)
+    private static int PaymentAmount(CharacterSheet sheet, PaymentValue payment, RollEffect roll, FeatureEffect calculated, PlayCommand command, ContentReference reference)
     {
         if (payment.Kind == PaymentKind.Slot)
             return 1;
         if (roll.Cost is not null && calculated.Cost is null)
-            throw new AppValidationException([new("effect.invalid-formula", $"The cost of roll '{roll.Id}' could not be calculated.", reference, roll.Id)], "effect.invalid-formula");
+        {
+            var failure = sheet.Diagnostics.FirstOrDefault(d => d.Code == "effect.invalid-formula" && d.Content == reference && d.EffectId == roll.Id)
+                ?? new Diagnostic("effect.invalid-formula", $"The cost of roll '{roll.Id}' could not be calculated.", reference, roll.Id);
+            throw new AppValidationException([failure], failure.Code);
+        }
         var amount = calculated.Cost ?? 0;
         if (calculated.PerUnit is { } perUnit)
         {

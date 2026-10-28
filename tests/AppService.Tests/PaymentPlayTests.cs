@@ -55,7 +55,9 @@ public class PaymentPlayTests
     private const string ClashEffects =
         "{\"type\":\"roll\",\"id\":\"r1\",\"rollId\":\"bolt\",\"label\":\"Clash Roll\",\"dice\":\"1d6\",\"cost\":\"2\",\"payment\":{\"kind\":\"hitPoints\"}},"
         + "{\"type\":\"attack\",\"id\":\"bolt\",\"attackId\":\"bolt\",\"label\":\"Clash Bolt\",\"kind\":\"ranged\",\"abilities\":[\"int\"],\"damage\":{\"count\":\"1\",\"die\":\"6\"},\"damageType\":\"fire\",\"cost\":\"2\",\"payment\":{\"kind\":\"hitPoints\"}},"
-        + "{\"type\":\"attack\",\"id\":\"plainbolt\",\"attackId\":\"plainbolt\",\"label\":\"Plain Bolt\",\"kind\":\"ranged\",\"abilities\":[\"int\"],\"damage\":{\"count\":\"1\",\"die\":\"6\"},\"damageType\":\"fire\"}";
+        + "{\"type\":\"attack\",\"id\":\"plainbolt\",\"attackId\":\"plainbolt\",\"label\":\"Plain Bolt\",\"kind\":\"ranged\",\"abilities\":[\"int\"],\"damage\":{\"count\":\"1\",\"die\":\"6\"},\"damageType\":\"fire\"},"
+        + "{\"type\":\"roll\",\"id\":\"r2\",\"rollId\":\"shadow\",\"label\":\"Shadow Roll\",\"dice\":\"1d6\",\"cost\":\"1\",\"payment\":{\"kind\":\"hitPoints\"}},"
+        + "{\"type\":\"attack\",\"id\":\"shadow\",\"attackId\":\"shadow\",\"label\":\"Shadow Bolt\",\"kind\":\"ranged\",\"abilities\":[\"int\"],\"damage\":{\"count\":\"1\",\"die\":\"6\"},\"damageType\":\"fire\"}";
 
     private static ContentRevision Revision(string contentId, string revisionId, string kind, string name, string effects) =>
         JsonSerializer.Deserialize<ContentRevision>(
@@ -235,6 +237,18 @@ public class PaymentPlayTests
         Assert.Equal("use.unavailable", Refused(() => Use(temp, id, "plainbolt", content: ClashRef.ContentId)).Code);
         Assert.Equal("use.not-found", Refused(() => Use(temp, id, "nothing")).Code);
         Assert.Equal(before, Stored(temp, id));
+    }
+
+    [Fact]
+    public void An_attack_without_payment_never_shadows_a_roll_of_the_same_id()
+    {
+        var (temp, id) = Caster(new PlayState { CurrentHitPoints = 12 });
+        using var _ = temp;
+
+        var view = Use(temp, id, "shadow", content: ClashRef.ContentId);
+
+        Assert.Equal(11, view.Sheet.HitPoints!.Current);
+        Assert.Equal("use Shadow Roll", view.UndoLabel);
     }
 
     [Fact]
