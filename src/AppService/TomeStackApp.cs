@@ -54,6 +54,8 @@ public sealed partial class TomeStackApp : IDisposable
         // M2.2: armor before the Fighter, which is proficient with it; the Fighter after the classes it may multiclass with.
         "TomeStack.Content.srd-5.1-armor.json", "TomeStack.Content.srd-5.2.1-armor.json",
         "TomeStack.Content.srd-5.1-fighter.json", "TomeStack.Content.srd-5.2.1-fighter.json",
+        // C2-1: the Barbarian after the fighter pair (new revisions of the M1 and classes-pack Barbarian, which load first).
+        "TomeStack.Content.srd-5.2.1-barbarian.json",
     ];
 
     /// <summary>

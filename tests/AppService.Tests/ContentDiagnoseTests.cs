@@ -115,7 +115,10 @@ public class ContentDiagnoseTests
         {
             var report = temp.App.Diagnose(new(SourceId: source.Id));
             Assert.True(report.Scope.Count > 500, $"{source.Title}: {report.Scope.Count} revisions");
-            Assert.True(report.Findings.Count == 0, $"{source.Title}: " + string.Join("; ", report.Findings.Take(10).Select(f => $"{f.ContentName} {f.Code} {f.EffectId}")));
+            // C2-1: the Barbarian's subclass choice lists the old Berserker revision second on purpose, so that characters who picked
+            // it stay valid after the class update (a choice accepts only its listed options or extensions). That is the one stale pin.
+            var findings = report.Findings.Where(f => !(f is { ContentName: "Barbarian", Code: "debug.reference-stale", EffectId: "barbarian-subclass" })).ToList();
+            Assert.True(findings.Count == 0, $"{source.Title}: " + string.Join("; ", findings.Take(10).Select(f => $"{f.ContentName} {f.Code} {f.EffectId}")));
             Assert.False(report.Truncated);
         }
     }

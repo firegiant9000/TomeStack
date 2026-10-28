@@ -61,6 +61,7 @@ public class SrdDetectionMeasurementTests(ITestOutputHelper output)
     {
         // M2.2: the Fighter and the armor table are bundled too.
         var packs = new[] { $"srd-{version}.json", $"srd-{version}-classes.json", $"srd-{version}-spells.json", $"srd-{version}-equipment.json", $"srd-{version}-fighter.json", $"srd-{version}-armor.json" }
+            .Concat(version == "5.2.1" ? [$"srd-{version}-barbarian.json"] : []) // C2-1: the 5.1 Barbarian pack joins in its own task
             .Select(f => TomeStackApp.LoadBundledPack($"TomeStack.Content.{f}"));
         // The newest revision of each content: later revisions (M2, M3 C3, M2.2) repeat the same entries.
         var newest = packs.SelectMany(p => p.Revisions).GroupBy(r => r.ContentId).Select(g => g.Last());

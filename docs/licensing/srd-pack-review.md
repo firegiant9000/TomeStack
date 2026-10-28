@@ -18,6 +18,8 @@ All text in the packs comes from these two files, nowhere else. Each source reco
 | SRD 5.1 | Half-Orc (species, p. 7); Acolyte (background, pp. 60–61) and its feature Shelter of the Faithful (p. 61); Barbarian levels 1–3 (class, pp. 8–9): Rage, Unarmored Defense, Reckless Attack, Danger Sense, and the six skill options; Path of the Berserker (subclass, p. 9) with Frenzy; Grappler (feat, p. 75) |
 | SRD 5.2.1 | Dwarf (species, p. 84); Soldier (background, p. 83) with its seven ability score options (from the background rules on p. 83); Savage Attacker (origin feat, p. 87); Barbarian levels 1–3 (class, pp. 28–30): Rage, Unarmored Defense, Weapon Mastery, Danger Sense, Reckless Attack, Primal Knowledge, and the six skill options; Path of the Berserker (subclass, p. 30) with Frenzy |
 
+Since 2026-10-27 (C2-1) the scope also includes `srd-5.2.1-barbarian.json` and `srd-5.1-barbarian.json`, the Barbarian levels 1–20 with the Path of the Berserker (section "C2-1 extension" below); the rows above describe the first slice.
+
 ## M2 extension: spells (2026-09-27, owner decision: the full SRD casters, levels 1–20, both families)
 
 **Documents:** the same two PDFs. They were re-downloaded on 2026-09-27 from the official SRD links, and their SHA-256 hashes match the table above.
@@ -151,6 +153,27 @@ A 2014/2024 difference the spells show as content: Cure Wounds heals 1d8 (5.1 p.
 - **Also added:** a content v8 revision of the Paladin's and the Ranger's Extra Attack in both families (the same text, now counted as 2 attacks), and a new class revision that grants it. No new text. The earlier revisions stay for the characters that pin them.
 - **Armor training (PR #12 review fix):** further v8 Paladin and Ranger class revisions (`5xe9…`, identical to the first v8 ones otherwise) carry `armor.*` grants (Paladin: light, medium, shield, and heavy as the starting class only; Ranger: light, medium, shield), and new v8 Wizard and Sorcerer class revisions carry `armor.none`. The grant texts repeat each class's own proficiency line and multiclassing proficiencies already quoted in these packs (5.1 pp. 30, 35, 42, 52 and p. 57; 5.2.1 the Core Traits tables and multiclassing lines). No new SRD text beyond that restatement.
 
+## C2-1 extension: the Barbarian, levels 1–20 (2026-10-27)
+
+**Documents:** the same two PDFs. Their SHA-256 hashes were checked again on 2026-10-27 and match the table above. The files stay outside the repository.
+
+**Scope reviewed and approved for bundling** (CC-BY-4.0, the same attribution and modification notice as the other packs; nothing outside these pages):
+
+| Pack file | Content | Pages |
+| --- | --- | --- |
+| `srd-5.2.1-barbarian.json` | The Barbarian, levels 1–20: a new class revision and new revisions of Rage, Unarmored Defense and Danger Sense; Ability Score Improvement, Extra Attack, Fast Movement, Feral Instinct, Instinctive Pounce, Brutal Strike, Relentless Rage, Improved Brutal Strike (levels 13 and 17), Persistent Rage, Indomitable Might, Epic Boon and Primal Champion; the Path of the Berserker with Frenzy (a new revision), Mindless Rage, Retaliation and Intimidating Presence. Weapon Mastery, Reckless Attack, Primal Knowledge and the six skill options stay the earlier revisions | 5.2.1 pp. 28–30; multiclassing pp. 24–25 (already reviewed) |
+| `srd-5.1-barbarian.json` (added by the next commit of C2-1) | The Barbarian, levels 1–20: a new class revision and new revisions of Rage, Unarmored Defense, Danger Sense and the Path of the Berserker; the levels 4–20 features, including Brutal Critical (levels 9, 13 and 17) and the Berserker's levels 6–14 features | 5.1 pp. 8–10; multiclassing pp. 56–57 (already reviewed) |
+
+- **Method:** as for the Fighter. The text comes from pypdf, in plain mode for 5.2.1 and layout mode for 5.1 (each mode splits words in the other SRD). Line breaks and hyphenation are repaired, and every sentence is checked against the page. The Barbarian Features tables (Rages, Rage Damage, and for 5.2.1 Weapon Mastery) were parsed twice, once from each extraction mode, and compared cell by cell. All cells agree. The scripts stay outside the repository, like the others.
+- **Encoded as effects:**
+  - Rages and Rage Damage as class scales (5.1: "Unlimited" at level 20 is a Rage that spends no use), the Rage toggle with its resource, damage bonus on melee attacks, damage resistance and Strength advantage while it is on, and the hit points of Relentless Rage as a damage response (5.2.1: twice the Barbarian level; 5.1: 1);
+  - Unarmored Defense, Danger Sense (5.2.1 automatic; 5.1 assisted, because of its sight and condition clause), Extra Attack and Fast Movement;
+  - Frenzy (5.2.1) as three assisted damage rolls (2d6, 3d6, 4d6, one for each Rage Damage bonus) and Intimidating Presence (5.2.1) as a once-per-long-rest action with its save DC;
+  - Primal Champion's +4 as a reference-only score change: the player enters it by hand (the sheet then marks the values that read Strength or Constitution as assisted).
+- **Reference text only** (with its page): Weapon Mastery, Reckless Attack, Primal Knowledge, Ability Score Improvement, Feral Instinct, Instinctive Pounce, Brutal Strike and Improved Brutal Strike, Brutal Critical, Persistent Rage, Indomitable Might, Epic Boon, Mindless Rage, Retaliation, and 5.1 Frenzy and Intimidating Presence. The Rage rules that no calculation can check (Heavy armor, extending the Rage, the 10-minute limit, no concentration or spells), the Relentless Rage saving throw and its rising DC, and restoring Intimidating Presence by expending a Rage are by hand.
+- **Not taken:** the starting equipment, the Epic Boon feats (Boon of Irresistible Offense is named in the text only), the Totem Warrior path and the 5.1 appendix references (5.1 p. 10, "Primal Path" options in the Player's Handbook), and the Weapon Mastery property rules.
+- **Checks:** `SrdPackTests` (source records, attribution, every revision validates, the newest Barbarian revision), the PDF-gated `SrdClassTableTests` and `SrdDetectionMeasurementTests` with `TOMESTACK_SRD_PDF_DIR` set (the pack grants match the printed tables, level by level), `HomebrewStudioTests` and `ContentDiagnoseTests`.
+
 ## README screenshots (docs/media, reviewed 2026-09-30)
 
 Two screenshots of the app, shown in the README, reproduce bundled SRD 5.2.1 content as the app renders it. They add no SRD text that the packs above do not already hold, and nothing from outside the two checked PDFs.
@@ -190,3 +213,4 @@ No art, logos, trade dress, product names or other publications. No monsters or 
 - No SRD armor or equipment is bundled. Adding the armor table needs this review extended (SPEC Q-03).
 - Frenzy (5.2.1) offers a 2d6 roll for Rage Damage +2 (Barbarian levels 1–8).
 - Advantage-granting features (Rage, Danger Sense, Reckless Attack) stay text only. Since M2 item 2, the sheet shows them as reference-only features, and the player picks advantage for the roll.
+- **Note (2026-10-27, C2-1):** the four lines about Rages, Unarmored Defense, Frenzy and Advantage above (and the "slice is levels 1–3" wording) describe the M1 and M2 revisions. They are superseded by the new Barbarian revisions of the C2-1 extension (levels 1–20, Rages from the class scale, the Unarmored Defense note corrected, Frenzy at three Rage Damage values, Rage and Danger Sense as automatic or assisted effects). Characters still on the earlier revisions keep those limitations until their class is updated.

@@ -22,8 +22,9 @@ public class SrdPackTests
     private static readonly ContentPack Armor521 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.2.1-armor.json");
     private static readonly ContentPack Fighter51 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.1-fighter.json");
     private static readonly ContentPack Fighter521 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.2.1-fighter.json");
+    private static readonly ContentPack Barbarian521 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.2.1-barbarian.json");
     private static readonly ContentPack Srd51 = Merge(Base51, Spells51, Equipment51, Classes51, Armor51, Fighter51);
-    private static readonly ContentPack Srd521 = Merge(Base521, Spells521, Equipment521, Classes521, Armor521, Fighter521);
+    private static readonly ContentPack Srd521 = Merge(Base521, Spells521, Equipment521, Classes521, Armor521, Fighter521, Barbarian521);
 
     private static ContentPack Merge(params ContentPack[] packs) => new()
     {
@@ -46,7 +47,7 @@ public class SrdPackTests
     {
         foreach (var pack in new[] { Spells51, Equipment51, Classes51, Armor51, Fighter51 })
             Assert.Equal(TempApp.Json(Base51.Sources), TempApp.Json(pack.Sources));
-        foreach (var pack in new[] { Spells521, Equipment521, Classes521, Armor521, Fighter521 })
+        foreach (var pack in new[] { Spells521, Equipment521, Classes521, Armor521, Fighter521, Barbarian521 })
             Assert.Equal(TempApp.Json(Base521.Sources), TempApp.Json(pack.Sources));
     }
 
@@ -136,8 +137,8 @@ public class SrdPackTests
 
         var barbarians = temp.App.ListContent(RulesFamilies.Srd521).Where(o => o.Name == "Barbarian" && o.Compatible).ToList();
 
-        Assert.Equal(2, barbarians.Count); // the M1 revision (still pinned by saved characters) and the content v5 revision
-        Assert.Equal(Classes521.Revisions.Single(r => r.Name == "Barbarian").Reference, Assert.Single(barbarians, o => !o.Superseded).Reference);
+        Assert.Equal(3, barbarians.Count); // the M1 revision and the content v5 revision (both still pinned by saved characters), and the levels 1-20 revision
+        Assert.Equal(Barbarian521.Revisions.Single(r => r.Name == "Barbarian").Reference, Assert.Single(barbarians, o => !o.Superseded).Reference);
     }
 
     [Theory]

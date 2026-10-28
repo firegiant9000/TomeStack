@@ -24,6 +24,12 @@ public class SrdClassTableTests(ITestOutputHelper output)
 
     private static string? Folder => Environment.GetEnvironmentVariable("TOMESTACK_SRD_PDF_DIR");
 
+    /// <summary>The class packs of a family, in bundling order (the Barbarian's later revisions come last). C2-1: the 5.1 Barbarian pack joins in its own task.</summary>
+    private static List<ContentPack> BundledClassPacks(string version) =>
+        [.. new[] { $"srd-{version}-classes.json", $"srd-{version}-fighter.json" }
+            .Concat(version == "5.2.1" ? [$"srd-{version}-barbarian.json"] : [])
+            .Select(f => TomeStackApp.LoadBundledPack($"TomeStack.Content.{f}"))];
+
     public sealed class SrdPdfFactAttribute : FactAttribute
     {
         public SrdPdfFactAttribute()
@@ -54,7 +60,7 @@ public class SrdClassTableTests(ITestOutputHelper output)
             var classPages = CandidateDetector.Detect(pages, new(Guid.NewGuid(), [family], _ => false))
                 .Where(c => c.ProposedKind == ContentKind.Class).Select(c => (c.ProposedName, c.Page.Start)).ToList();
 
-            var packs = new[] { $"srd-{version}-classes.json", $"srd-{version}-fighter.json" }.Select(f => TomeStackApp.LoadBundledPack($"TomeStack.Content.{f}")).ToList();
+            var packs = BundledClassPacks(version);
             var newest = packs.SelectMany(p => p.Revisions).GroupBy(r => r.ContentId).Select(g => g.Last()).ToList();
             var byRevision = packs.SelectMany(p => p.Revisions).GroupBy(r => r.RevisionId).ToDictionary(g => g.Key, g => g.First());
 
@@ -164,7 +170,7 @@ public class SrdClassTableTests(ITestOutputHelper output)
                     pages.Add(new(page.PageNumber, page.Text, page.Blocks ?? [], page.FromOcr));
             }
             var classes = CandidateDetector.Detect(pages, new(Guid.NewGuid(), [family], _ => false)).Where(c => c.ProposedKind == ContentKind.Class).OrderBy(c => c.Page.Start).ToList();
-            var packs = new[] { $"srd-{version}-classes.json", $"srd-{version}-fighter.json" }.Select(f => TomeStackApp.LoadBundledPack($"TomeStack.Content.{f}")).ToList();
+            var packs = BundledClassPacks(version);
             var packCasting = packs.SelectMany(p => p.Revisions).GroupBy(r => r.ContentId).Select(g => g.Last())
                 .SelectMany(r => r.Effects.OfType<SpellcastingEffect>()).GroupBy(e => e.SpellList).ToDictionary(g => g.Key, g => g.First().Ability);
             int hit = 0, saves = 0, armor = 0, armorNone = 0, weapons = 0, weaponsQualified = 0, skills = 0, casting = 0, slotTables = 0, unexplained = 0, abilityRight = 0;

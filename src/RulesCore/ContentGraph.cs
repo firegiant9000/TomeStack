@@ -220,7 +220,7 @@ public sealed class ContentGraph
         return new ContentGraph(current, edges, reaches, published, truncated);
     }
 
-    /// <summary>Every formula a revision holds, with its effect id: modifier values, resource maximums, recovery amounts, roll costs, bonuses, save DCs and also-change amounts, and spellsFormula.</summary>
+    /// <summary>Every formula a revision holds, with its effect id: modifier values, resource maximums, recovery amounts, roll costs, bonuses, save DCs and also-change amounts, attack rider to-hit and damage bonuses, and spellsFormula.</summary>
     public static IEnumerable<(string EffectId, string Source)> Formulas(ContentRevision revision)
     {
         ArgumentNullException.ThrowIfNull(revision);
@@ -249,6 +249,12 @@ public sealed class ContentGraph
                         if (change?.Amount is { } amount)
                             yield return (roll.Id, amount);
                     }
+                    break;
+                case AttackRiderEffect rider:
+                    if (rider.ToHit is { } toHit)
+                        yield return (rider.Id, toHit);
+                    if (rider.DamageBonus is { } damageBonus)
+                        yield return (rider.Id, damageBonus);
                     break;
                 case ValueEffect value:
                     yield return (value.Id, value.Formula);
