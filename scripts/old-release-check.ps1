@@ -9,11 +9,12 @@
      import otherwise), then reads each character's sheet and compares it with expected.json in -Expected
      (characters[id].fields; every expected field must be present and equal, extra fields are fine).
   4. Writes an outcome file (JSON, UTF-8 without BOM) to -Out.
-  -Inputs, -Expected and -Out may contain {target}, replaced per tag by the tag without its leading v.
+  -Inputs, -Expected and -Out may contain {target}, replaced per tag by the tag without its leading v. Quote any argument
+  holding {target}: unquoted, PowerShell reads the braces as a script block.
   The harness refuses to touch %LOCALAPPDATA%\TomeStack, and nothing here runs an installer or the app.
   Exit code: 0 only if every package of every tag passes, 1 otherwise.
 .EXAMPLE
-  scripts/old-release-check.ps1 -Tags v0.6.0,v0.5.0 -Inputs tests/RulesFixtures/upgrade/{target} -Expected tests/RulesFixtures/upgrade/{target} -Out $env:TEMP/out/opened-by-{target}.json -Work $env:TEMP/old-release-work
+  scripts/old-release-check.ps1 -Tags v0.6.0,v0.5.0 -Inputs 'tests/RulesFixtures/upgrade/v{target}' -Expected 'tests/RulesFixtures/upgrade/v{target}' -Out "$env:TEMP/out/opened-by-{target}.json" -Work "$env:TEMP/old-release-work"
 #>
 param(
   [Parameter(Mandatory)] [string[]] $Tags,
