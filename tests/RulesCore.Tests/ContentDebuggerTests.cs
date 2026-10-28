@@ -246,6 +246,31 @@ public class ContentDebuggerTests
     }
 
     [Fact]
+    public void A_scale_read_only_by_a_toggle_duration_is_not_unused()
+    {
+        var toggle = new ToggleEffect { Id = "stance", ToggleId = "stance", Label = "Stance", Duration = "SCALE.arts" };
+        var feature = Revision(Ref(2), ContentKind.Feature, "Debug Stance Feature", toggle);
+        var cls = Revision(Ref(1), ContentKind.Class, "Debug Class", D8, Scale("arts-column", "arts"), Grants("grant-stance", Ref(2), level: 1));
+
+        var report = Diagnose([cls, feature]);
+
+        Assert.DoesNotContain(report.Findings, f => f.Code == "debug.scale-unused");
+    }
+
+    [Fact]
+    public void An_attack_with_no_damage_is_reported_not_thrown()
+    {
+        var broken = Attack("1", "6") with { Damage = null! };
+        var feature = Revision(Ref(2), ContentKind.Feature, "Debug Broken Strike", broken);
+        var cls = Revision(Ref(1), ContentKind.Class, "Debug Class", D8, Grants("grant-strike", Ref(2), level: 1));
+
+        var report = Diagnose([cls, feature]);
+
+        Assert.Contains(report.Findings, f => f.Code == "validate.attack-incomplete");
+        Assert.Empty(ContentGraph.Formulas(feature));
+    }
+
+    [Fact]
     public void Formulas_lists_the_attack_damage_bonus_and_cost_and_the_toggle_cost_and_duration()
     {
         var attack = Revision(Ref(1), ContentKind.Feature, "Debug Attack", Attack("A", "B", bonus: "C", cost: "D"));

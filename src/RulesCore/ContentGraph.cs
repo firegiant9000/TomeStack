@@ -257,8 +257,11 @@ public sealed class ContentGraph
                         yield return (rider.Id, damageBonus);
                     break;
                 case AttackEffect attack:
-                    yield return (attack.Id, attack.Damage.Count);
-                    yield return (attack.Id, attack.Damage.Die);
+                    // Damage is required, but a draft can omit it (the validator reports attack-incomplete); do not throw on it.
+                    if (attack.Damage?.Count is { } damageCount)
+                        yield return (attack.Id, damageCount);
+                    if (attack.Damage?.Die is { } damageDie)
+                        yield return (attack.Id, damageDie);
                     if (attack.DamageBonus is { } attackBonus)
                         yield return (attack.Id, attackBonus);
                     if (attack.Cost is { } attackCost)
