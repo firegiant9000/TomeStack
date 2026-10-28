@@ -56,8 +56,8 @@ public sealed partial class TomeStackApp : IDisposable
         "TomeStack.Content.srd-5.1-fighter.json", "TomeStack.Content.srd-5.2.1-fighter.json",
         // C2-1: the Barbarian after the fighter pair (new revisions of the M1 and classes-pack Barbarian, which load first).
         "TomeStack.Content.srd-5.1-barbarian.json", "TomeStack.Content.srd-5.2.1-barbarian.json",
-        // C2-2: the Rogue after the Barbarian pair (the 5.1 file is added with the 5.1 Rogue).
-        "TomeStack.Content.srd-5.2.1-rogue.json",
+        // C2-2: the Rogue after the Barbarian pair.
+        "TomeStack.Content.srd-5.1-rogue.json", "TomeStack.Content.srd-5.2.1-rogue.json",
     ];
 
     /// <summary>
