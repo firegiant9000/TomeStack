@@ -281,7 +281,9 @@ public class SrdBarbarianTests
         // Primal Knowledge (the unchanged M1 revision) has the skill choice as its only effect: the rest of its text, the
         // Strength-check option while raging, is by hand.
         var knowledge = temp.App.SaveCharacter(Barbarian(RulesFamilies.Srd521, 20)).Sheet.Features!.Single(f => f.Name == "Primal Knowledge");
+        Assert.NotEmpty(knowledge.Effects);
         Assert.All(knowledge.Effects, e => Assert.Equal("choice", e.Type));
+        Assert.NotEqual(AutomationStatus.Reference, knowledge.Automation);
     }
 
     // ---- SPEC I-06: the update --------------------------------------------------------------------------------------------
@@ -341,25 +343,26 @@ public class SrdBarbarianTests
     {
         using var temp = new TempApp();
         foreach (var family in Families)
+        foreach (var start in new[] { M1Class(family), ClassesPackClass(family) })
         {
             // (a) the class only.
-            var a = temp.App.SaveCharacter(OnClass(family, M1Class(family))).Character.Id;
-            var viaClass = temp.App.ApplyUpdate(a, M1Class(family), NewClass(family), confirm: true);
+            var a = temp.App.SaveCharacter(OnClass(family, start)).Character.Id;
+            var viaClass = temp.App.ApplyUpdate(a, start, NewClass(family), confirm: true);
             Assert.Equal(NewClass(family), viaClass.Character.Classes[0].Class);
             AssertUpdatedBarbarian(viaClass.Sheet, family);
             Assert.Contains(viaClass.Sheet.Active!, r => r == OldBerserker(family)); // still the old Berserker revision, still valid
 
             // (b) the Berserker first, on the old class, then the class.
-            var b = temp.App.SaveCharacter(OnClass(family, M1Class(family))).Character.Id;
+            var b = temp.App.SaveCharacter(OnClass(family, start)).Character.Id;
             var offer = Assert.Single(temp.App.AvailableUpdates(b), o => o.From == OldBerserker(family));
             Assert.Equal(NewBerserker(family), offer.To);
             var viaBerserker = temp.App.ApplyUpdate(b, offer.From, offer.To, confirm: true);
-            Assert.Equal(M1Class(family), viaBerserker.Character.Classes[0].Class);
+            Assert.Equal(start, viaBerserker.Character.Classes[0].Class);
             Assert.True(viaBerserker.Sheet.Choices!.Single(c => c.ChoiceId == SubclassChoice(family)).Resolved);
             Assert.Contains(viaBerserker.Sheet.Features!, f => f.Name == "Frenzy");
             AssertClean(viaBerserker.Sheet);
 
-            var both = temp.App.ApplyUpdate(b, M1Class(family), NewClass(family), confirm: true);
+            var both = temp.App.ApplyUpdate(b, start, NewClass(family), confirm: true);
             AssertUpdatedBarbarian(both.Sheet, family);
             Assert.Contains(both.Sheet.Active!, r => r == NewBerserker(family));
         }
