@@ -57,7 +57,20 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
     {
         var plan = Plan(characterIds, purpose);
         var gapNotes = purpose == ExportPurpose.Backup ? plan.Characters.Sum(c => store.ListGapNotes(c.Id).Count) : 0;
-        return new ExportPreview(purpose, plan.FileName, [.. plan.Characters.Select(c => c.Id)], [.. plan.Sources.Select(Notice)], plan.Omitted, gapNotes, NewerBuild.Evaluate(plan.Revisions, plan.Characters, 0, [], _ => "").Warnings);
+        var bundledIds = plan.Revisions.Where(r => _bundledSources.Contains(r.Provenance.SourceId)).Select(r => r.RevisionId).ToList();
+        var opens = NewerBuild.Evaluate(plan.Revisions, plan.Characters, gapNotes > 0 ? GapNote.CurrentSchemaVersion : 0, bundledIds, BundledPackTitle(plan.Revisions));
+        return new ExportPreview(purpose, plan.FileName, [.. plan.Characters.Select(c => c.Id)], [.. plan.Sources.Select(Notice)], plan.Omitted, gapNotes, opens.Warnings, opens.OpensIn, opens.Causes);
+    }
+
+    /// <summary>The bundled pack a revision comes from, as a short label for a cause ("SRD 5.2.1"): its source title with "System Reference Document" shortened.</summary>
+    private Func<Guid, string> BundledPackTitle(IEnumerable<ContentRevision> revisions)
+    {
+        var sourceOf = revisions.GroupBy(r => r.RevisionId).ToDictionary(g => g.Key, g => g.First().Provenance.SourceId);
+        return revisionId =>
+        {
+            var title = sourceOf.TryGetValue(revisionId, out var sourceId) ? store.FindSource(sourceId)?.Title : null;
+            return title?.Replace("System Reference Document", "SRD", StringComparison.Ordinal) ?? "SRD";
+        };
     }
 
     public ExportResult Export(IReadOnlyList<Guid> characterIds, ExportPurpose purpose = ExportPurpose.Backup)

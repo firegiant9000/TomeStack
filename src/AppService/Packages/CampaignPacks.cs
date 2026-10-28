@@ -27,8 +27,9 @@ public sealed partial class PackageService
     public CampaignPackPreview PreviewCampaignPack(Guid campaignId)
     {
         var plan = PlanCampaignPack(campaignId);
+        var opens = NewerBuild.Evaluate(plan.Revisions, [], 0, [], BundledPackTitle(plan.Revisions));
         return new(plan.FileName, plan.Campaign.Id, plan.Campaign.Name, plan.Campaign.RulesFamily,
-            [.. plan.Included.Select(Notice)], [.. plan.Referenced.Select(Notice)], plan.LeftOut, plan.Revisions.Count, [.. plan.Warnings, .. NewerBuild.Evaluate(plan.Revisions, [], 0, [], _ => "").Warnings]);
+            [.. plan.Included.Select(Notice)], [.. plan.Referenced.Select(Notice)], plan.LeftOut, plan.Revisions.Count, [.. plan.Warnings, .. opens.Warnings], opens.OpensIn, opens.Causes);
     }
 
     /// <summary><c>package.campaignPackExport</c> / <c>package.campaignPackSaveAs</c>: the pack's bytes.</summary>

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Changed
+- The export preview names the oldest TomeStack that opens the file and why; the needs-newer-build warning names both versions (D83).
+
 ## 0.7.1 (crash reporting and the repo guard)
 
 A patch on 0.7.0: if TomeStack crashes it now leaves a record and tells you where it is. Nothing else in the app changes.

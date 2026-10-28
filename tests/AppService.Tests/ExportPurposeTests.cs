@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using TomeStack.AppService.Exports;
 using TomeStack.AppService.Packages;
+using TomeStack.AppService.Persistence;
 using TomeStack.RulesCore;
 
 namespace TomeStack.AppService.Tests;
@@ -113,9 +114,45 @@ public class ExportPurposeTests
         var id = SaveMixedCharacter(origin, homebrewSchemaVersion: 11);
 
         var backup = NewerBuildWarnings(origin.App.PreviewExport([id], ExportPurpose.Backup));
-        Assert.Equal("Opening this needs TomeStack 0.7.0 or later: it holds content or a character that older versions refuse.", Assert.Single(backup).Message);
+        Assert.Equal($"Opening this needs TomeStack 0.7.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Homebrew Quick Draw' is content at schema 11. Older versions refuse the file.", Assert.Single(backup).Message);
         // A share leaves the non-redistributable homebrew out, so nothing at v11 would be written.
         Assert.Empty(NewerBuildWarnings(origin.App.PreviewExport([id], ExportPurpose.Share)));
+    }
+
+    [Fact]
+    public void Preview_reports_opensIn_and_causes()
+    {
+        using var origin = new TempApp();
+        var plain = origin.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json")).Character.Id;
+        var preview = origin.App.PreviewExport([plain], ExportPurpose.Backup);
+        Assert.Equal("0.5.0", preview.OpensIn);
+        Assert.NotNull(preview.OpensInCauses);
+        Assert.Empty(preview.OpensInCauses);
+        Assert.Empty(NewerBuildWarnings(preview));
+
+        var fixture = TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json");
+        var v10 = origin.App.SaveCharacter(fixture with { Id = Guid.NewGuid(), Name = "Encounter Hero", Play = (fixture.Play ?? new PlayState()) with { Encounter = new EncounterState(0) } }).Character.Id;
+        var newer = origin.App.PreviewExport([v10], ExportPurpose.Backup);
+        Assert.Equal("0.7.0", newer.OpensIn);
+        var cause = Assert.Single(newer.OpensInCauses!);
+        Assert.Equal(("character", 10), (cause.Kind, cause.SchemaVersion));
+        Assert.Single(NewerBuildWarnings(newer));
+    }
+
+    [Fact]
+    public void Library_backup_preview_reports_opensIn_and_causes()
+    {
+        using var empty = new TempApp();
+        var none = empty.App.PreviewLibraryBackup();
+        Assert.Equal("0.4.0", none.OpensIn);
+        Assert.Empty(none.OpensInCauses!);
+
+        using var origin = new TempApp();
+        var fixture = TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json");
+        origin.App.SaveCharacter(fixture with { Play = (fixture.Play ?? new PlayState()) with { Encounter = new EncounterState(0) } });
+        var preview = origin.App.PreviewLibraryBackup();
+        Assert.Equal("0.7.0", preview.OpensIn);
+        Assert.Equal(("character", 10), (preview.OpensInCauses![0].Kind, preview.OpensInCauses[0].SchemaVersion));
     }
 
     [Fact]
