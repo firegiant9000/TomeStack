@@ -236,13 +236,15 @@ internal static class Generators
                 from options in References.ArrayOf().Select(o => o.Take(4).ToArray())
                 from level in OptionalValue(Gen.Choose(1, 20))
                 from onlyAs in Gen.Elements<string?>(null, "startingClass", "multiclass")
+                // Content v12 (MECH-X item 2), any version: typed from v12, below it extension data written back where it was.
+                from replaceable in V12Slot(v, "replaceable", ReplaceableValue)
                 select new JsonObject
                 {
                     ["choiceId"] = id,
                     ["count"] = count,
                     ["options"] = new JsonArray([.. options.Select(o => (JsonNode)new JsonObject { ["contentId"] = o.ContentId.ToString(), ["revisionId"] = o.RevisionId.ToString() })]),
                 }
-                .With("level", v >= 3 ? level : null).With("onlyAs", v >= SpellcastingEffect.SchemaVersion ? onlyAs : null)),
+                .With("level", v >= 3 ? level : null).With("onlyAs", v >= SpellcastingEffect.SchemaVersion ? onlyAs : null).WithV12(replaceable)),
             .. Versioned(v),
             Unknown(),
         ];
@@ -482,6 +484,11 @@ internal static class Generators
         from drops in OptionalValue(Gen.Elements(true, false))
         from level in OptionalValue(Gen.Choose(1, 9))
         select (JsonNode?)new JsonObject { ["kind"] = kind }.With("mayDropToZero", drops).With("minSlotLevel", level);
+
+    private static Gen<JsonNode?> ReplaceableValue =>
+        from when in Gen.Elements("levelUp", "longRest")
+        from max in OptionalValue(Gen.Choose(1, 20))
+        select (JsonNode?)new JsonObject { ["when"] = when }.With("max", max);
 
     private static JsonObject WithV12(this JsonObject o, V12Key key)
     {

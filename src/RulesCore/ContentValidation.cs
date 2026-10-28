@@ -282,6 +282,15 @@ public static class ContentValidator
                     NeedV12("a weapon bonus");
                     Error("validate.effect-malformed", $"Effect '{unreadableWeapon.Id}' has type 'weapon' but a value or field that does not read (its bonus must be a whole number from 0 to 10; a category, attack, damage, damageType and weaponKey are needed); fix it before publishing.", unreadableWeapon.Id);
                     break;
+                // Content v12 (MECH-X item 2): from v12 a choice that carries replaceable (any spelling) is read with it; one that stays
+                // unknown did not read (a window that is not levelUp or longRest, a max that is not a whole number, a replaceable that is
+                // not an object, or another field that does not read), so the key would silently do nothing. Published at a lower version
+                // the key is stripped and the choice reads without it, so it blocks. Below v12 the key is stripped first.
+                case UnknownEffect { DeclaredType: ChoiceEffect.TypeName } unreadableChoice
+                    when revision.SchemaVersion >= ContentRevision.ReplaceableChoiceSchemaVersion && CarriesV11Key(unreadableChoice, ChoiceEffect.V12Keys):
+                    NeedV12("a replaceable choice");
+                    Error("validate.effect-malformed", $"Effect '{unreadableChoice.Id}' has type 'choice' but a value or field that does not read (replaceable needs a when of levelUp or longRest and, if present, a whole-number max; a choiceId is needed); fix it before publishing.", unreadableChoice.Id);
+                    break;
                 case UnknownEffect unknown:
                     // Content v11 (D43): a roll with no dice is typed only from v11, so below it the roll stays reference-only as it
                     // always did, but publishing it needs v11.
@@ -434,6 +443,15 @@ public static class ContentValidator
                     foreach (var option in choice.Options.Distinct())
                         CheckReference(option, choice.Id, $"option of choice '{choice.ChoiceId}'");
                     needsV5 |= choice.OnlyAs is not null;
+                    if (choice.Replaceable is { } replaceable)
+                    {
+                        NeedV12("a replaceable choice");
+                        var max = replaceable.Max ?? 1;
+                        if (max is < 1 or > ChoiceEffect.MaxReplaceable)
+                            Error("validate.choice-replaceable", $"Choice '{choice.ChoiceId}' lets {max} picks be replaced; the most is {ChoiceEffect.MaxReplaceable} and the least 1.", choice.Id);
+                        else if (choice.Count >= 1 && max > choice.Count)
+                            Error("validate.choice-replaceable", $"Choice '{choice.ChoiceId}' lets {max} picks be replaced but has only {choice.Count}.", choice.Id);
+                    }
                     break;
                 case RestrictionEffect restriction:
                     needsV3 |= restriction.Field is FieldIds.ArmorClass or FieldIds.HitPoints;

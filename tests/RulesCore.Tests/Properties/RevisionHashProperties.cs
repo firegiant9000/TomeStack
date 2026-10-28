@@ -51,6 +51,9 @@ public class RevisionHashProperties
     /// <summary>The spell key content v12 adds (MECH-X item 1). Written out here on purpose, like <see cref="ToggleV11Keys"/>.</summary>
     internal static readonly string[] SpellV12Keys = ["tags"];
 
+    /// <summary>The choice key content v12 adds (MECH-X item 2). Written out here on purpose, like <see cref="ToggleV11Keys"/>.</summary>
+    internal static readonly string[] ChoiceV12Keys = ["replaceable"];
+
     /// <summary>Content v11 (slice 5): a roll may omit its dice; below v11 a roll with no dice stays an unknown effect, byte for byte.</summary>
     private static bool IsDiceLessRollBelowV11(string type, int version, JsonNode? effect) =>
         type == RollEffect.TypeName && version < ContentRevision.PlayMechanicsSchemaVersion && effect?["dice"] is null;
@@ -137,6 +140,7 @@ public class RevisionHashProperties
                     AttackEffect.TypeName => AttackV12Keys,
                     ToggleEffect.TypeName => ToggleV12Keys,
                     SpellEffect.TypeName => SpellV12Keys,
+                    ChoiceEffect.TypeName => ChoiceV12Keys,
                     _ => [],
                 };
                 foreach (var (name, kept) in inputEffects[i]!.AsObject().Where(p => v12Keys.Contains(p.Key, StringComparer.OrdinalIgnoreCase)))
@@ -259,6 +263,7 @@ public class RevisionHashProperties
                     AttackEffect.TypeName => [.. members ?? [], .. AttackV12Keys],
                     ToggleEffect.TypeName => [.. members ?? [], .. ToggleV12Keys],
                     SpellEffect.TypeName => [.. members ?? [], .. SpellV12Keys],
+                    ChoiceEffect.TypeName => [.. members ?? [], .. ChoiceV12Keys],
                     _ => members,
                 };
             }

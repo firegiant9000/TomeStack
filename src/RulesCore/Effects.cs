@@ -536,7 +536,38 @@ public sealed record ChoiceEffect : Effect
 
     /// <summary>Content schema v5: only as the starting class, or only as a later class. Null: always.</summary>
     public ClassEntry? OnlyAs { get; init; }
+
+    /// <summary>Content schema v12 (MECH-X item 2): when picks may be replaced (advisory). Below v12 the key stays extension data and does nothing.</summary>
+    public ChoiceReplaceable? Replaceable { get; init; }
+
+    /// <summary>The keys content schema v12 adds to this effect (MECH-X item 2); below v12 they stay extension data.</summary>
+    internal static readonly string[] V12Keys = ["replaceable"];
+
+    /// <summary>The most picks a choice may let be replaced at once.</summary>
+    public const int MaxReplaceable = 20;
+
+    /// <summary>
+    /// Typed by the revision when the converter hands it over (see <see cref="EffectJsonConverter"/>). Below v12 the key stays
+    /// extension data, in document order, as the build before it wrote it. From v12 the choice is typed only when
+    /// <c>replaceable</c> reads: its <c>when</c> must be exactly a <see cref="ReplaceWindow"/> member (the serializer also binds
+    /// padded or combined names); otherwise the effect stays unknown and the validator refuses it.
+    /// </summary>
+    internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion)
+    {
+        if (revisionSchemaVersion < ContentRevision.ReplaceableChoiceSchemaVersion)
+            return VersionedEffects.TypedWithout<ChoiceEffect>(unknown, V12Keys);
+        return VersionedEffects.ReplaceWindowReads(unknown.Raw) ? VersionedEffects.Typed<ChoiceEffect>(unknown) : unknown;
+    }
 }
+
+/// <summary>Content schema v12 (MECH-X item 2): when a replaceable choice's picks may be changed. Wire names <c>levelUp</c>, <c>longRest</c>.</summary>
+public enum ReplaceWindow { LevelUp, LongRest }
+
+/// <summary>
+/// Content schema v12 (MECH-X item 2): picks of a choice may be replaced at a level-up or after a long rest, up to
+/// <see cref="Max"/> at once (absent: 1). Advisory: the app only notices a replacement outside the window.
+/// </summary>
+public sealed record ChoiceReplaceable([property: JsonRequired] ReplaceWindow When, int? Max = null);
 
 /// <summary>A prerequisite or limitation, for example a minimum ability score.</summary>
 public sealed record RestrictionEffect : Effect
@@ -1387,7 +1418,10 @@ internal static class VersionedEffects
             [AttackRiderEffect.TypeName] = (AttackRiderEffect.SchemaVersion, (u, _) => AttackRiderEffect.FromUnknown(u)),
             // Always typed, except that the converter hands these over when they carry a key or value added after v9 (see
             // EffectJsonConverter.CarriesDetailAbove), so the revision's version decides how they read. A later slice that
-            // gives one of them a v11 key adds it to that type's V11Keys, and nothing else.
+            // gives one of them a v11 key adds it to that type's V11Keys, and nothing else. A choice is handed over for its
+            // v12 key; its first version is the lowest int, so even a revision of schema 0 or less (read, only refused by the
+            // validator) types it the way the build before this one wrote it.
+            [ChoiceEffect.TypeName] = (int.MinValue, ChoiceEffect.FromUnknown),
             [ModifierEffect.TypeName] = (1, ModifierEffect.FromUnknown),
             [GrantEffect.TypeName] = (1, GrantEffect.FromUnknown),
             [ResourceEffect.TypeName] = (1, ResourceEffect.FromUnknown),
@@ -1440,6 +1474,22 @@ internal static class VersionedEffects
         {
             if (string.Equals(p.Name, "payment", StringComparison.OrdinalIgnoreCase) && p.Value.ValueKind == JsonValueKind.Object
                 && !NamesMember<PaymentKind>(p.Value, "kind"))
+                return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Content schema v12 (MECH-X item 2): whether a <c>replaceable</c> (any spelling) that is an object names a
+    /// <see cref="ReplaceWindow"/> member as its <c>when</c> (see <see cref="NamesMember{TEnum}"/>). One that is not an object, or
+    /// has no <c>when</c>, does not read at all; the typed read decides, so this only adds the check the serializer lacks.
+    /// </summary>
+    public static bool ReplaceWindowReads(JsonElement raw)
+    {
+        foreach (var p in raw.EnumerateObject())
+        {
+            if (string.Equals(p.Name, "replaceable", StringComparison.OrdinalIgnoreCase) && p.Value.ValueKind == JsonValueKind.Object
+                && !NamesMember<ReplaceWindow>(p.Value, "when"))
                 return false;
         }
         return true;
@@ -1546,7 +1596,7 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
                 // An always-typed effect that carries a detail added after v9 (v10 grant and resource keys, any v11 key) is
                 // typed by the revision, which knows its version (ContentRevision.OnDeserialized); the others are typed
                 // here, as in every earlier build.
-                ModifierEffect.TypeName or GrantEffect.TypeName or ResourceEffect.TypeName or RollEffect.TypeName
+                ModifierEffect.TypeName or GrantEffect.TypeName or ResourceEffect.TypeName or RollEffect.TypeName or ChoiceEffect.TypeName
                     when CarriesDetailAbove(element, type, UngatedVersion) => UnknownEffect.From(element),
                 ModifierEffect.TypeName => (Effect?)element.Deserialize<ModifierEffect>(options),
                 GrantEffect.TypeName => element.Deserialize<GrantEffect>(options),
@@ -1576,7 +1626,7 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
     /// <summary>
     /// Whether an always-typed effect (<c>modifier</c>, <c>grant</c>, <c>resource</c>, <c>roll</c>) has something a build of
     /// content schema <paramref name="version"/> did not read, so the revision, which knows its own version, must type it
-    /// (<see cref="VersionedEffects.ByName"/>). Detail from v10: a grant that names a damage kind (a value the v9 enum cannot
+    /// (<see cref="VersionedEffects.ByName"/>); a <c>choice</c> is handed over for a v12 key. Detail from v10:a grant that names a damage kind (a value the v9 enum cannot
     /// hold, matched case-insensitively like the serializer) or has a <c>damageType</c> key (any spelling), or a resource with
     /// an <c>activation</c> key. Detail from v11: any key in the type's <c>V11Keys</c> (empty until a later slice adds one).
     /// The names are the ones the serializer binds to those properties.
@@ -1589,6 +1639,7 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
             GrantEffect.TypeName => GrantEffect.V11Keys,
             ResourceEffect.TypeName => ResourceEffect.V11Keys,
             RollEffect.TypeName => [.. RollEffect.V11Keys, .. RollEffect.V12Keys],
+            ChoiceEffect.TypeName => ChoiceEffect.V12Keys,
             _ => [],
         };
         // Content v11: a roll may omit its dice; below v11 it must stay untyped, and only the revision knows its version.

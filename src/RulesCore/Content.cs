@@ -135,12 +135,16 @@ public sealed record ContentRevision : IJsonOnDeserialized
     /// extension data and does nothing.
     /// v12 also carries MECH-X item 1: <c>payment</c> (hit points or a spell slot instead of a pool) on a roll, a feature attack and
     /// a toggle, <c>castsSpell</c> on a roll, and <c>tags</c> on a spell. All are optional and read only in a v12 revision; below
-    /// v12 each key stays extension data and does nothing.
+    /// v12 each key stays extension data and does nothing. MECH-X item 2 adds <c>choice.replaceable</c> (when picks may be replaced:
+    /// a level-up or a long rest, and how many), under the same rule.
     /// </summary>
     public const int CurrentSchemaVersion = 12;
 
     /// <summary>MECH-X item 1: cost payment, roll.castsSpell, spell.tags. <b>v12</b>, the same version as <see cref="WeaponBonusSchemaVersion"/>.</summary>
     public const int PaymentSchemaVersion = 12;
+
+    /// <summary>MECH-X item 2: choice.replaceable. <b>v12</b>, the same version as <see cref="PaymentSchemaVersion"/>.</summary>
+    public const int ReplaceableChoiceSchemaVersion = 12;
 
     /// <summary>The content schema version that adds <c>weapon.bonus</c> (MECH-X item 0): <b>v12</b>. A test pins that this is <see cref="PlayMechanicsSchemaVersion"/> plus one.</summary>
     public const int WeaponBonusSchemaVersion = 12;

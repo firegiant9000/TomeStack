@@ -485,6 +485,28 @@
                 "multiclass"
               ],
               "description": "Content v5 (D04): only as the starting class, or only as a later class."
+            },
+            "replaceable": {
+              "type": "object",
+              "properties": {
+                "when": {
+                  "enum": [
+                    "levelUp",
+                    "longRest"
+                  ],
+                  "description": "The window in which picks of this choice may be replaced."
+                },
+                "max": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 20,
+                  "description": "The most picks replaced at once (default 1); not more than the choice's count (validate.choice-replaceable)."
+                }
+              },
+              "required": [
+                "when"
+              ],
+              "description": "Content v12 (MECH-X item 2): when picks may be replaced. Advisory: the app only notes a replacement outside the window. Below v12 the key does nothing."
             }
           },
           "required": [

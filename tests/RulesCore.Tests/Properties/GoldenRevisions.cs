@@ -39,6 +39,19 @@ internal static class GoldenRevisions
         "3ac62e1b9e877821290a660403a64fe4cfe38a29634690772f09db8ca97463ae", // "Fixture Hourglass Ward"
     ];
 
+    /// <summary>
+    /// The hash of the v12 revision "Fixture Shifting Repertoire", the first of tests/RulesFixtures/golden/choice-revisions.json (MECH-X
+    /// item 2; the rest of that file are its original options). Never update this to make a test pass.
+    /// </summary>
+    public static readonly string[] ChoiceHashes =
+    [
+        "751caa6c057f6c008b0b4d930c41852b59e546db9ce008ef3e1661c6bc738ae8", // "Fixture Shifting Repertoire"
+    ];
+
+    /// <summary>The <paramref name="index"/>th revision of the choice golden file, as written in the fixture.</summary>
+    public static string ChoiceJson(int index) =>
+        JsonNode.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "RulesFixtures", "golden", "choice-revisions.json")))!.AsArray()[index]!.ToJsonString();
+
     /// <summary>The <paramref name="index"/>th revision of the payment golden file, as written in the fixture.</summary>
     public static string PaymentJson(int index) =>
         JsonNode.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "RulesFixtures", "golden", "payment-revisions.json")))!.AsArray()[index]!.ToJsonString();
