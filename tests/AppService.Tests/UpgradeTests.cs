@@ -83,6 +83,18 @@ public class UpgradeTests
         var app = TomeStackApp.Open(live, new FixedTime(TempApp.Now), devFixtures: true);
         try
         {
+            // Seeding writes more than SQLite's 1000-page auto-checkpoint, so empty the WAL first; the save's small commit
+            // then stays in the WAL, as after a real power cut.
+            using (var checkpoint = new SqliteConnection($"Data Source={Path.Combine(live, TomeStackApp.DatabaseFileName)};Pooling=False"))
+            {
+                checkpoint.Open();
+                using var command = checkpoint.CreateCommand();
+                command.CommandText = "PRAGMA wal_checkpoint(TRUNCATE);";
+                using var result = command.ExecuteReader();
+                Assert.True(result.Read());
+                Assert.Equal(0, result.GetInt64(0)); // busy
+                Assert.Equal(result.GetInt64(1), result.GetInt64(2)); // every WAL frame checkpointed
+            }
             app.SaveCharacter(Fixture());
             // Copy the files while the app is still open, like a power cut: the save is committed but not checkpointed.
             foreach (var suffix in new[] { "", "-wal", "-shm" })
@@ -95,8 +107,9 @@ public class UpgradeTests
         var database = Path.Combine(crashed, TomeStackApp.DatabaseFileName);
         var mainFileOnly = Path.Combine(crashed, "main-file-only.db");
         File.Copy(database, mainFileOnly);
-        // A plain copy of the main file loses the save (here even the schema, which is also still in the WAL).
-        Assert.Equal(0, Scalar(mainFileOnly, "SELECT COUNT(*) FROM sqlite_master WHERE name = 'characters';"));
+        // A plain copy of the main file loses the save (the schema was checkpointed, the save was not).
+        Assert.Equal(1, Scalar(mainFileOnly, "SELECT COUNT(*) FROM sqlite_master WHERE name = 'characters';"));
+        Assert.Equal(0, Scalar(mainFileOnly, "SELECT COUNT(*) FROM characters;"));
 
         using (new SqliteStore(database, FutureMigrations)) { }
 
