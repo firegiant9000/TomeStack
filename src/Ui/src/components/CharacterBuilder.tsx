@@ -781,7 +781,7 @@ function ChoicePicker(props: {
             !kept &&
             choice.options.some((o) => {
               const newer = props.optionOf(o);
-              return o.contentId === ref.contentId && o.revisionId !== ref.revisionId && !!newer && !newer.superseded;
+              return o.contentId === ref.contentId && o.revisionId !== ref.revisionId && !!newer && !newer.superseded && visible(newer);
             })
           )
             return null;
