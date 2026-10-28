@@ -25,12 +25,57 @@ public sealed record ContentBelow(ContentRevision Revision, IReadOnlyList<BelowC
     public bool Blocked => Changes.Any(c => c.Action == BelowAction.Blocks);
 }
 
+/// <summary>The stable <c>below.*</c> keys a <see cref="BelowChange"/> carries. The service maps each to a message; <see cref="DownConvert.KnownCodes"/> lists them.</summary>
+public static class BelowCodes
+{
+    public const string EncounterRunning = "below.encounter-running";
+    public const string RoundsLeft = "below.rounds-left";
+    public const string Details = "below.details";
+    public const string CustomItems = "below.custom-items";
+    public const string CustomAttacks = "below.custom-attacks";
+    public const string DamageDefences = "below.damage-defences";
+    public const string Vulnerability = "below.vulnerability";
+    public const string Companions = "below.companions";
+    public const string Xp = "below.xp";
+    public const string EquipmentState = "below.equipment-state";
+    public const string EffectUnsupported = "below.effect-unsupported";
+    public const string RollModeDisadvantage = "below.roll-mode-disadvantage";
+    public const string ValueFormula = "below.value-formula";
+    public const string Upkeep = "below.upkeep";
+    public const string ToggleGroup = "below.toggle-group";
+    public const string ToggleCost = "below.toggle-cost";
+    public const string ToggleLevel = "below.toggle-level";
+    public const string ToggleDuration = "below.toggle-duration";
+    public const string ToggleAutoWhen = "below.toggle-auto-when";
+    public const string ResourceDetail = "below.resource-detail";
+    public const string ResourceCountsUp = "below.resource-counts-up";
+    public const string RollDetail = "below.roll-detail";
+    public const string RollAlsoChange = "below.roll-also-change";
+    public const string DicelessRoll = "below.diceless-roll";
+    public const string ModifierToggleContent = "below.modifier-toggle-content";
+    public const string UnknownTarget = "below.unknown-target";
+    public const string RestrictionLifted = "below.restriction-lifted";
+    public const string DefenceWhileToggle = "below.defence-while-toggle";
+    public const string GrantDefence = "below.grant-defence";
+    public const string ItemAttunement = "below.item-attunement";
+    public const string ItemCharges = "below.item-charges";
+    public const string Activation = "below.activation";
+    public const string ValidationError = "below.validation-error";
+}
+
 /// <summary>
 /// Lowers records to an older schema for a down-conversion export (pure: no I/O, no clock). Each step names what the older reader cannot hold;
 /// anything that would change what the record means blocks instead of being dropped.
 /// </summary>
 public static class DownConvert
 {
+    /// <summary>Every code <see cref="BelowChange.Code"/> can carry (the <see cref="BelowCodes"/> constants).</summary>
+    public static IReadOnlySet<string> KnownCodes { get; } = typeof(BelowCodes)
+        .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+        .Where(f => f.IsLiteral)
+        .Select(f => (string)f.GetRawConstantValue()!)
+        .ToHashSet(StringComparer.Ordinal);
+
     /// <summary>
     /// Lowers <paramref name="character"/> to <paramref name="targetCharacterSchema"/> (8 to <see cref="Character.CurrentSchemaVersion"/>).
     /// Returns the same instance and no changes when nothing is above the target. When any change blocks, returns the input instance
@@ -136,7 +181,7 @@ public static class DownConvert
             if (skipAvailability && error.Code is "validate.source-missing" or "validate.reference-missing")
                 continue;
             var index = error.EffectId is null ? -1 : copy.Effects.ToList().FindIndex(e => e.Id == error.EffectId);
-            changes.Add(new(index < 0 ? "revision" : $"effects[{index}]", BelowAction.Blocks, "below.validation-error", $"'{copy.Name}': {error.Message}"));
+            changes.Add(new(index < 0 ? "revision" : $"effects[{index}]", BelowAction.Blocks, BelowCodes.ValidationError, $"'{copy.Name}': {error.Message}"));
         }
     }
 
@@ -205,11 +250,11 @@ public static class DownConvert
         {
             case ModifierEffect.TypeName when StringOf(Property(effect, "target")) is { } target && IsRemovedTarget(target, scope):
                 changes.Add(StaticallyNonNegative(StringOf(Property(effect, "value")), scope.Values)
-                    ? new(path, BelowAction.Dropped, "below.unknown-target", $"'{name}': its bonus to '{target}', which the older version has no field for.")
-                    : new(path, BelowAction.Blocks, "below.unknown-target", $"'{name}': its change to '{target}', which the older version has no field for; it could reduce the value, so leaving it out would change the result."));
+                    ? new(path, BelowAction.Dropped, BelowCodes.UnknownTarget, $"'{name}': its bonus to '{target}', which the older version has no field for.")
+                    : new(path, BelowAction.Blocks, BelowCodes.UnknownTarget, $"'{name}': its change to '{target}', which the older version has no field for; it could reduce the value, so leaving it out would change the result."));
                 return true;
             case RestrictionEffect.TypeName when StringOf(Property(effect, "field")) is { } field && IsRemovedTarget(field, scope):
-                changes.Add(new(path, BelowAction.Blocks, "below.restriction-lifted", $"'{name}': its limit on '{field}', which the older version has no field for; the limit would be lifted."));
+                changes.Add(new(path, BelowAction.Blocks, BelowCodes.RestrictionLifted, $"'{name}': its limit on '{field}', which the older version has no field for; the limit would be lifted."));
                 return true;
             default:
                 return false;
@@ -239,12 +284,12 @@ public static class DownConvert
         {
             var bonus = string.Equals(StringOf(Property(effect, "operation")), "bonus", StringComparison.OrdinalIgnoreCase);
             changes.Add(bonus && StaticallyNonNegative(StringOf(Property(effect, "value")), scope.Values)
-                ? new(path, BelowAction.Dropped, "below.value-formula", $"'{name}': a bonus that reads a named value, which the older version cannot calculate.")
-                : new(path, BelowAction.Blocks, "below.value-formula", $"'{name}': a modifier that reads a named value, which the older version cannot calculate; leaving it out would change the result."));
+                ? new(path, BelowAction.Dropped, BelowCodes.ValueFormula, $"'{name}': a bonus that reads a named value, which the older version cannot calculate.")
+                : new(path, BelowAction.Blocks, BelowCodes.ValueFormula, $"'{name}': a modifier that reads a named value, which the older version cannot calculate; leaving it out would change the result."));
         }
         else
         {
-            changes.Add(new(path, BelowAction.Blocks, "below.value-formula", $"'{name}': its {field} reads a named value, which the older version cannot calculate."));
+            changes.Add(new(path, BelowAction.Blocks, BelowCodes.ValueFormula, $"'{name}': its {field} reads a named value, which the older version cannot calculate."));
         }
         return true;
     }
@@ -286,14 +331,14 @@ public static class DownConvert
                 switch (type)
                 {
                     case ToggleEffect.TypeName:
-                        RemoveKey(effect, ToggleEffect.AutoWhenProperty, path, declaresV10 ? BelowAction.Blocks : BelowAction.Silent, "below.toggle-auto-when", $"'{name}': when a toggle switches itself on; it would stay off until turned on by hand.", changes);
-                        RemoveKey(effect, ToggleEffect.ActivationProperty, path, BelowAction.Silent, "below.activation", $"'{name}': the kind of action a toggle needs.", changes);
+                        RemoveKey(effect, ToggleEffect.AutoWhenProperty, path, declaresV10 ? BelowAction.Blocks : BelowAction.Silent, BelowCodes.ToggleAutoWhen, $"'{name}': when a toggle switches itself on; it would stay off until turned on by hand.", changes);
+                        RemoveKey(effect, ToggleEffect.ActivationProperty, path, BelowAction.Silent, BelowCodes.Activation, $"'{name}': the kind of action a toggle needs.", changes);
                         break;
                     case ResourceEffect.TypeName:
-                        RemoveKey(effect, ToggleEffect.ActivationProperty, path, BelowAction.Silent, "below.activation", $"'{name}': the kind of action a resource needs.", changes);
+                        RemoveKey(effect, ToggleEffect.ActivationProperty, path, BelowAction.Silent, BelowCodes.Activation, $"'{name}': the kind of action a resource needs.", changes);
                         break;
                     case GrantEffect.TypeName:
-                        RemoveKey(effect, GrantEffect.DamageTypeProperty, path, BelowAction.Silent, "below.grant-defence", $"'{name}': a damage type on a grant that does not use one.", changes);
+                        RemoveKey(effect, GrantEffect.DamageTypeProperty, path, BelowAction.Silent, BelowCodes.GrantDefence, $"'{name}': a damage type on a grant that does not use one.", changes);
                         break;
                 }
             }
@@ -325,13 +370,13 @@ public static class DownConvert
                 var grant = StringOf(Property(effect, "grant"));
                 if (string.Equals(grant, nameof(GrantKind.DamageVulnerability), StringComparison.OrdinalIgnoreCase))
                 {
-                    changes.Add(new(path, BelowAction.Blocks, "below.vulnerability", $"'{name}': its vulnerability to damage; the older version cannot hold it."));
+                    changes.Add(new(path, BelowAction.Blocks, BelowCodes.Vulnerability, $"'{name}': its vulnerability to damage; the older version cannot hold it."));
                     return true;
                 }
                 if (string.Equals(grant, nameof(GrantKind.DamageResistance), StringComparison.OrdinalIgnoreCase)
                     || string.Equals(grant, nameof(GrantKind.DamageImmunity), StringComparison.OrdinalIgnoreCase))
                 {
-                    changes.Add(new(path, BelowAction.Dropped, "below.grant-defence", $"'{name}': its resistance or immunity to damage."));
+                    changes.Add(new(path, BelowAction.Dropped, BelowCodes.GrantDefence, $"'{name}': its resistance or immunity to damage."));
                     return true;
                 }
                 return false;
@@ -339,9 +384,9 @@ public static class DownConvert
                 var attunes = Property(effect, "requiresAttunement") is JsonValue flag && flag.TryGetValue<bool>(out var requires) && requires;
                 var charges = Property(effect, "charges") is not null;
                 if (attunes)
-                    changes.Add(new(path, BelowAction.Blocks, "below.item-attunement", $"'{name}': that the item needs attunement; the older version would let anyone use it."));
+                    changes.Add(new(path, BelowAction.Blocks, BelowCodes.ItemAttunement, $"'{name}': that the item needs attunement; the older version would let anyone use it."));
                 if (charges)
-                    changes.Add(new(path, BelowAction.Dropped, "below.item-charges", $"'{name}': the charges of the item."));
+                    changes.Add(new(path, BelowAction.Dropped, BelowCodes.ItemCharges, $"'{name}': the charges of the item."));
                 if (!attunes && !charges)
                     changes.Add(new(path, BelowAction.Silent, Unsupported, $"'{name}': an item effect that sets nothing."));
                 return true;
@@ -350,7 +395,7 @@ public static class DownConvert
         }
     }
 
-    private const string Unsupported = "below.effect-unsupported";
+    private const string Unsupported = BelowCodes.EffectUnsupported;
 
     /// <summary>
     /// The 11 to 10 step: whole effects and the toggle, resource, roll, modifier and grant fields that v11 added. A revision that declares an
@@ -440,18 +485,18 @@ public static class DownConvert
                 var mode = StringOf(Property(effect, "mode"));
                 changes.Add(string.Equals(mode, "advantage", StringComparison.OrdinalIgnoreCase)
                     ? new(path, BelowAction.Dropped, Unsupported, $"'{name}': its advantage on rolls; the feature stays as text.")
-                    : new(path, BelowAction.Blocks, "below.roll-mode-disadvantage", $"'{name}': its disadvantage on rolls; the older version would leave it out."));
+                    : new(path, BelowAction.Blocks, BelowCodes.RollModeDisadvantage, $"'{name}': its disadvantage on rolls; the older version would leave it out."));
                 return true;
             case UpkeepEffect.TypeName:
                 changes.Add(string.Equals(StringOf(Property(effect, "change")), "regain", StringComparison.OrdinalIgnoreCase)
-                    ? new(path, BelowAction.Dropped, "below.upkeep", $"'{name}': its upkeep that regains a resource.")
-                    : new(path, BelowAction.Blocks, "below.upkeep", $"'{name}': its upkeep that spends a resource; the older version would never charge it."));
+                    ? new(path, BelowAction.Dropped, BelowCodes.Upkeep, $"'{name}': its upkeep that regains a resource.")
+                    : new(path, BelowAction.Blocks, BelowCodes.Upkeep, $"'{name}': its upkeep that spends a resource; the older version would never charge it."));
                 return true;
             case ToggleGroupEffect.TypeName:
-                changes.Add(new(path, BelowAction.Blocks, "below.toggle-group", $"'{name}': the form group; two forms could be on at once."));
+                changes.Add(new(path, BelowAction.Blocks, BelowCodes.ToggleGroup, $"'{name}': the form group; two forms could be on at once."));
                 return true;
             case RollEffect.TypeName when Property(effect, "dice") is null:
-                changes.Add(new(path, BelowAction.Dropped, "below.diceless-roll", $"'{name}': a roll with no dice; the feature stays as text."));
+                changes.Add(new(path, BelowAction.Dropped, BelowCodes.DicelessRoll, $"'{name}': a roll with no dice; the feature stays as text."));
                 return true;
             default:
                 return false;
@@ -464,35 +509,35 @@ public static class DownConvert
         switch (type, key)
         {
             case (ToggleEffect.TypeName, "cost" or "resourceContent"):
-                return new(path, BelowAction.Blocks, "below.toggle-cost", $"'{name}': what a toggle costs; it would turn on for free.");
+                return new(path, BelowAction.Blocks, BelowCodes.ToggleCost, $"'{name}': what a toggle costs; it would turn on for free.");
             case (ToggleEffect.TypeName, "level"):
-                return new(path, BelowAction.Blocks, "below.toggle-level", $"'{name}': the level a toggle is used at; it would work at one fixed level.");
+                return new(path, BelowAction.Blocks, BelowCodes.ToggleLevel, $"'{name}': the level a toggle is used at; it would work at one fixed level.");
             case (ToggleEffect.TypeName, "duration"):
-                return new(path, BelowAction.Dropped, "below.toggle-duration", $"'{name}': how long a toggle lasts; it stays on until turned off.");
+                return new(path, BelowAction.Dropped, BelowCodes.ToggleDuration, $"'{name}': how long a toggle lasts; it stays on until turned off.");
             case (ToggleEffect.TypeName, _):
-                return new(path, BelowAction.Blocks, "below.toggle-group", $"'{name}': the form group ({key}); forms could stack that should not.");
+                return new(path, BelowAction.Blocks, BelowCodes.ToggleGroup, $"'{name}': the form group ({key}); forms could stack that should not.");
             case (ResourceEffect.TypeName, "counts"):
                 return string.Equals(StringOf(value), "up", StringComparison.OrdinalIgnoreCase)
-                    ? new(path, BelowAction.Blocks, "below.resource-counts-up", $"'{name}': a resource that counts up; it would count down instead.")
-                    : new(path, BelowAction.Dropped, "below.resource-detail", $"'{name}': how a resource counts.");
+                    ? new(path, BelowAction.Blocks, BelowCodes.ResourceCountsUp, $"'{name}': a resource that counts up; it would count down instead.")
+                    : new(path, BelowAction.Dropped, BelowCodes.ResourceDetail, $"'{name}': how a resource counts.");
             case (ResourceEffect.TypeName, _):
-                return new(path, BelowAction.Dropped, "below.resource-detail", $"'{name}': the {key} of a resource.");
+                return new(path, BelowAction.Dropped, BelowCodes.ResourceDetail, $"'{name}': the {key} of a resource.");
             case (RollEffect.TypeName, "alsoChange") when value is null:
-                return new(path, BelowAction.Silent, "below.roll-also-change", $"'{name}': an empty also-change on a roll.");
+                return new(path, BelowAction.Silent, BelowCodes.RollAlsoChange, $"'{name}': an empty also-change on a roll.");
             case (RollEffect.TypeName, "alsoChange"):
                 return AlsoChangeSpends(value)
-                    ? new(path, BelowAction.Blocks, "below.roll-also-change", $"'{name}': a roll that also spends a resource; the older version would skip that cost.")
-                    : new(path, BelowAction.Dropped, "below.roll-also-change", $"'{name}': a roll that also regains a resource.");
+                    ? new(path, BelowAction.Blocks, BelowCodes.RollAlsoChange, $"'{name}': a roll that also spends a resource; the older version would skip that cost.")
+                    : new(path, BelowAction.Dropped, BelowCodes.RollAlsoChange, $"'{name}': a roll that also regains a resource.");
             case (RollEffect.TypeName, "drawsDown"):
                 return value is null || (value is JsonValue { } flag && flag.TryGetValue<bool>(out var drawsDown) && !drawsDown)
-                    ? new(path, BelowAction.Silent, "below.roll-detail", $"'{name}': that a roll does not draw a resource down.")
-                    : new(path, BelowAction.Dropped, "below.roll-detail", $"'{name}': that a roll draws a resource down.");
+                    ? new(path, BelowAction.Silent, BelowCodes.RollDetail, $"'{name}': that a roll does not draw a resource down.")
+                    : new(path, BelowAction.Dropped, BelowCodes.RollDetail, $"'{name}': that a roll draws a resource down.");
             case (RollEffect.TypeName, _):
-                return new(path, BelowAction.Dropped, "below.roll-detail", $"'{name}': the {key} of a roll.");
+                return new(path, BelowAction.Dropped, BelowCodes.RollDetail, $"'{name}': the {key} of a roll.");
             case (ModifierEffect.TypeName, _):
-                return new(path, BelowAction.Blocks, "below.modifier-toggle-content", $"'{name}': the toggle a modifier waits for; it would apply all the time.");
+                return new(path, BelowAction.Blocks, BelowCodes.ModifierToggleContent, $"'{name}': the toggle a modifier waits for; it would apply all the time.");
             case (GrantEffect.TypeName, _):
-                return new(path, BelowAction.Blocks, "below.defence-while-toggle", $"'{name}': the toggle a damage defence waits for; it would apply all the time.");
+                return new(path, BelowAction.Blocks, BelowCodes.DefenceWhileToggle, $"'{name}': the toggle a damage defence waits for; it would apply all the time.");
             default:
                 throw new System.Diagnostics.UnreachableException($"No lowering rule for {type}.{key}.");
         }
@@ -515,13 +560,13 @@ public static class DownConvert
     {
         var play = character.Play;
         if (play.Encounter is not null)
-            changes.Add(new("play.encounter", BelowAction.Blocks, "below.encounter-running", $"'{name}': an encounter is running. End it, then export."));
+            changes.Add(new("play.encounter", BelowAction.Blocks, BelowCodes.EncounterRunning, $"'{name}': an encounter is running. End it, then export."));
 
         var toggles = play.Toggles;
         for (var i = 0; i < toggles.Count; i++)
         {
             if (toggles[i]?.RoundsLeft is not null)
-                changes.Add(new($"play.toggles[{i}].roundsLeft", BelowAction.Dropped, "below.rounds-left", $"'{name}': the rounds left on '{toggles[i].ToggleId}'."));
+                changes.Add(new($"play.toggles[{i}].roundsLeft", BelowAction.Dropped, BelowCodes.RoundsLeft, $"'{name}': the rounds left on '{toggles[i].ToggleId}'."));
         }
 
         return character with
@@ -537,11 +582,11 @@ public static class DownConvert
     private static Character BelowV9(Character character, string name, List<BelowChange> changes)
     {
         if (character.Details is not null)
-            changes.Add(new("details", BelowAction.Dropped, "below.details", $"'{name}': backstory and details."));
+            changes.Add(new("details", BelowAction.Dropped, BelowCodes.Details, $"'{name}': backstory and details."));
         if (character.CustomItems is not null)
-            changes.Add(new("customItems", BelowAction.Dropped, "below.custom-items", $"'{name}': the custom items."));
+            changes.Add(new("customItems", BelowAction.Dropped, BelowCodes.CustomItems, $"'{name}': the custom items."));
         if (character.CustomAttacks is not null)
-            changes.Add(new("customAttacks", BelowAction.Dropped, "below.custom-attacks", $"'{name}': the custom attacks."));
+            changes.Add(new("customAttacks", BelowAction.Dropped, BelowCodes.CustomAttacks, $"'{name}': the custom attacks."));
 
         if (character.DamageDefences is { } defences)
         {
@@ -551,20 +596,20 @@ public static class DownConvert
                 if (defences[i]?.Kind == DamageDefenceKind.Vulnerability)
                 {
                     any = true;
-                    changes.Add(new($"damageDefences[{i}]", BelowAction.Blocks, "below.vulnerability",
+                    changes.Add(new($"damageDefences[{i}]", BelowAction.Blocks, BelowCodes.Vulnerability,
                         $"'{name}': a vulnerability to {defences[i].Type} damage, which the older version cannot hold. Remove it, then export."));
                 }
             }
             if (!any)
-                changes.Add(new("damageDefences", BelowAction.Dropped, "below.damage-defences", $"'{name}': the damage resistances and immunities."));
+                changes.Add(new("damageDefences", BelowAction.Dropped, BelowCodes.DamageDefences, $"'{name}': the damage resistances and immunities."));
         }
 
         if (character.Companions is not null)
-            changes.Add(new("companions", BelowAction.Dropped, "below.companions", $"'{name}': the companions."));
+            changes.Add(new("companions", BelowAction.Dropped, BelowCodes.Companions, $"'{name}': the companions."));
         if (character.Play.Companions is not null)
-            changes.Add(new("play.companions", BelowAction.Dropped, "below.companions", $"'{name}': the companions' current hit points."));
+            changes.Add(new("play.companions", BelowAction.Dropped, BelowCodes.Companions, $"'{name}': the companions' current hit points."));
         if (character.Xp is not null)
-            changes.Add(new("xp", BelowAction.Dropped, "below.xp", $"'{name}': the experience points."));
+            changes.Add(new("xp", BelowAction.Dropped, BelowCodes.Xp, $"'{name}': the experience points."));
 
         var equipment = character.Equipment;
         for (var i = 0; i < equipment.Count; i++)
@@ -573,11 +618,11 @@ public static class DownConvert
             if (entry is null)
                 continue;
             if (entry.Attuned is not null)
-                changes.Add(new($"equipment[{i}].attuned", BelowAction.Dropped, "below.equipment-state", $"'{name}': that an item is attuned."));
+                changes.Add(new($"equipment[{i}].attuned", BelowAction.Dropped, BelowCodes.EquipmentState, $"'{name}': that an item is attuned."));
             if (entry.ChargesSpent is not null)
-                changes.Add(new($"equipment[{i}].chargesSpent", BelowAction.Dropped, "below.equipment-state", $"'{name}': the charges spent on an item."));
+                changes.Add(new($"equipment[{i}].chargesSpent", BelowAction.Dropped, BelowCodes.EquipmentState, $"'{name}': the charges spent on an item."));
             if (entry is { Id: not null, Attuned: null, ChargesSpent: null })
-                changes.Add(new($"equipment[{i}].id", BelowAction.Silent, "below.equipment-state", $"'{name}': the id of an item entry."));
+                changes.Add(new($"equipment[{i}].id", BelowAction.Silent, BelowCodes.EquipmentState, $"'{name}': the id of an item entry."));
         }
 
         return character with
