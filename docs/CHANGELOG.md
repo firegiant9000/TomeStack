@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Added
+- **The SRD Barbarian, levels 1–20, in both rules families (C2-1):** a new bundled pack per family (`srd-5.2.1-barbarian.json`, `srd-5.1-barbarian.json`) with the Path of the Berserker. Rage is a toggle you switch on from the sheet: it spends a use, adds the Rage Damage bonus to melee attacks, gives resistance to bludgeoning, piercing and slashing damage, and gives advantage on Strength checks and saves (SRD 5.1 level 20: Rage spends no use). Rages and Rage Damage follow the class table. Extra Attack, Fast Movement, Unarmored Defense, Danger Sense (assisted in SRD 5.1), Relentless Rage (offered when you drop to 0 hit points) and, in SRD 5.2.1, Frenzy's damage rolls and Intimidating Presence are automatic or assisted. Saved Barbarians are not changed: the sheet shows "Updates available", and you choose when to move to the new revision (the Berserker can be updated before or after the class). Stays by hand: Reckless Attack, Brutal Strike and Brutal Critical, Feral Instinct, Persistent Rage, Indomitable Might, Mindless Rage, Weapon Mastery, Ability Score Improvements and the Epic Boon, the Relentless Rage saving throw, the heavy-armor limits on Rage and Fast Movement, and the +4 Strength and Constitution of Primal Champion (enter them yourself; values that read those scores are then marked assisted). No schema, database or earlier-revision change.
+
 ### Changed
 - **Weapon mastery is shown only to characters with a Weapon Mastery feature:** an attack row's mastery property (SRD 5.2.1 weapons) now appears only when the character has a feature named "Weapon Mastery", such as the Barbarian's or the Fighter's; a Wizard with a Dagger no longer sees "Nick". An interim name rule until the feature grants it. No schema, package, content or database change.
 
