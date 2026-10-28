@@ -486,6 +486,19 @@ public class DownConvertTests
         Assert.Equal(input.Kind, lowered.Kind);
     }
 
+    [Theory]
+    [InlineData("""[{"resourceId":"c","change":"regain","amount":"1"},"x"]""")]
+    [InlineData("""[{"resourceId":"c","amount":"1"}]""")]
+    public void Content_below_10_roll_also_change_unreadable_entry_blocks(string alsoChange)
+    {
+        var result = DownConvert.Below(Rev($$"""{"type":"roll","id":"r","rollId":"r","label":"R","dice":"1d6","alsoChange":{{alsoChange}}}"""), 10);
+
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(("effects[0].alsoChange", BelowAction.Blocks, "below.roll-also-change"), (change.Path, change.Action, change.Code));
+        Assert.True(result.Blocked);
+        Assert.DoesNotContain("alsoChange", Written(result));
+    }
+
     [Fact]
     public void Content_below_10_roll_also_change_null_is_silent_and_a_non_array_blocks()
     {
