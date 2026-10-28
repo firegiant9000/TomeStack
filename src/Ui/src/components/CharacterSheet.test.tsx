@@ -2330,10 +2330,14 @@ describe('after your long rest', () => {
   });
 });
 
-it('does not echo a committed view\'s notices through the status line (MECH-X item 2)', () => {
+it('does not echo the save notice through the status line when a play reply carries it (MECH-X item 2)', async () => {
+  const user = userEvent.setup();
   const onStatus = vi.fn();
   const v = view();
-  v.notices = [{ code: 'choice.replaced-outside-window', message: "Choice 'technique' had 2 pick(s) replaced outside its window." }];
+  const reply: CharacterView = { ...v, notices: [{ code: 'choice.replaced-outside-window', message: "Choice 'technique' had 2 pick(s) replaced outside its window." }, { code: 'resource.full', message: 'Fixture pool is full.' }] };
+  vi.mocked(client.play).mockResolvedValue(reply);
   render(<CharacterSheet view={v} onChanged={noop} onError={noop} onStatus={onStatus} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
-  expect(onStatus).not.toHaveBeenCalled();
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' }));
+  await waitFor(() => expect(onStatus).toHaveBeenCalled());
+  expect(onStatus).toHaveBeenCalledWith('Fixture pool is full.'); // other notices still say
 });

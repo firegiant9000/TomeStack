@@ -8,11 +8,18 @@ import { App } from './App';
 import { client } from './api/client';
 import type { Character, CharacterSummary, CharacterView, ChoiceStatus } from './api/types';
 import { diffLevelUp, writeChecklist } from './levelUpChecklist';
+import { noticeText } from './replaceable';
 
 // The real module, except that diffLevelUp is a spy (it throws once in the A3 test).
 vi.mock('./levelUpChecklist', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./levelUpChecklist')>();
   return { ...actual, diffLevelUp: vi.fn(actual.diffLevelUp) };
+});
+
+// The real module, except that noticeText is a spy (it throws once in the R39 notice test).
+vi.mock('./replaceable', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./replaceable')>();
+  return { ...actual, noticeText: vi.fn(actual.noticeText) };
 });
 
 vi.mock('./api/client', () => ({
@@ -407,4 +414,18 @@ it('a save with no notice shows no notice text, and a create has none (MECH-X it
   await user.click(save);
   await screen.findByRole('region', { name: 'What changed at level 2' });
   expect(screen.queryByText(/outside its window|more than the/)).toBeNull();
+});
+
+it('a throw while wording the notice never blocks the screen switch; the generic sentence stands in (MECH-X item 2, R39)', async () => {
+  const user = userEvent.setup();
+  const { before, saved } = replacedViews(2);
+  vi.mocked(client.saveCharacter).mockResolvedValue(saved);
+  const { save } = await toSaveLevelUp(user, before);
+  vi.mocked(noticeText).mockImplementationOnce(() => {
+    throw new Error('fixture wording failure');
+  });
+  await user.click(save);
+  expect(await screen.findByRole('region', { name: 'What changed at level 2' })).toBeTruthy();
+  expect(screen.getByText('A choice had picks replaced outside its window.')).toBeTruthy();
+  expect(screen.queryByRole('alert')).toBeNull();
 });

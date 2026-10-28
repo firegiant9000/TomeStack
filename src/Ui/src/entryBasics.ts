@@ -253,7 +253,7 @@ export function increaseOptions(backgroundName: string, picked: AbilityKey[]): I
 /** The choice a background offers. `keepChoiceId` is the stored id of an existing choice: characters' picks are keyed by it (R63). */
 export function increaseChoice(backgroundName: string, options: ContentReference[], keepChoiceId?: string, existing?: Choice): Choice {
   const id = keepChoiceId ?? increaseChoiceId(backgroundName);
-  return {
+  const choice: Choice = {
     ...existing, // MECH-X item 2 (S2): keeps the stored `replaceable` and any other key this editor does not own
     type: 'choice',
     id,
@@ -262,6 +262,8 @@ export function increaseChoice(backgroundName: string, options: ContentReference
     options,
     text: 'Choose how this background raises your ability scores: +2 to one and +1 to another, or +1 to all three.',
   };
+  if (choice.replaceable?.max !== undefined && choice.replaceable.max > 1) choice.replaceable = { ...choice.replaceable, max: 1 }; // the count is fixed at 1
+  return choice;
 }
 
 /** The abilities the option features raise, in sheet order. */

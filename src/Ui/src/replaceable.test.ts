@@ -1,7 +1,7 @@
 // MECH-X item 2: replaceable choices. Offers, hints, the long-rest list, what a save replaced, and the notice's words.
 import { describe, expect, it } from 'vitest';
 import type { CharacterView, ChoiceStatus, ContentReference, Diagnostic } from './api/types';
-import { afterLongRest, noticeText, replaceHint, replaceOffer, replacedPicks } from './replaceable';
+import { afterLongRest, afterRestPhrase, noticeText, replaceHint, replaceOffer, replacedPicks } from './replaceable';
 
 const ref = (contentId: string, revisionId = 'r1'): ContentReference => ({ contentId, revisionId });
 const choice = (over: Partial<ChoiceStatus> = {}): ChoiceStatus => ({
@@ -43,6 +43,15 @@ describe('afterLongRest', () => {
     const plain = choice({ choiceId: 'd', selected: [ref('x')] });
     expect(afterLongRest([a, empty, level, plain])).toEqual([a]);
     expect(afterLongRest(undefined)).toEqual([]);
+  });
+});
+
+describe('afterRestPhrase', () => {
+  const lr = (sourceName: string, max: number) => choice({ sourceName, replaceable: { when: 'longRest', max } });
+  it('words the max', () => {
+    expect(afterRestPhrase([lr('A', 1), lr('B', 1)])).toBe('one pick of: A, B');
+    expect(afterRestPhrase([lr('A', 3)])).toBe('up to 3 picks of: A');
+    expect(afterRestPhrase([lr('A', 1), lr('B', 3)])).toBe('picks of: A (one), B (up to 3)');
   });
 });
 

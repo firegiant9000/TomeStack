@@ -132,6 +132,8 @@ describe('background ability increase options (mirrors the bundled 5.2.1 backgro
     const rebuilt = increaseChoice('Fixture Scout', [ref(2)], stored.choiceId, stored);
     expect(rebuilt).toMatchObject({ options: [ref(2)], replaceable: { when: 'levelUp', max: 1 } });
     expect(increaseChoice('Fixture Scout', [ref(2)]).replaceable).toBeUndefined();
+    const wide = { ...stored, replaceable: { when: 'longRest' as const, max: 3 } };
+    expect(increaseChoice('Fixture Scout', [ref(2)], wide.choiceId, wide).replaceable).toEqual({ when: 'longRest', max: 1 }); // count is fixed at 1
   });
 
   it('replaces the choice in place and removes it', () => {

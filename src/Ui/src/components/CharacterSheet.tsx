@@ -43,8 +43,8 @@ import { ByHandPanel } from './ByHandPanel';
 import { TabList, TabPanel, tabId, type TabSpec } from './sheet/TabList';
 import { LevelUpChecklist } from './LevelUpChecklist';
 import { dismissChecklist, readChecklist } from '../levelUpChecklist';
-import { afterLongRest } from '../replaceable';
-import { rememberSheetTab,rememberedSheetTab, type SheetTabId } from '../sheetTab';
+import { afterLongRest, afterRestPhrase } from '../replaceable';
+import { rememberSheetTab, rememberedSheetTab, type SheetTabId } from '../sheetTab';
 import { inverseOf, isCompound, type UndoEntry } from '../undo';
 import { recordSpend } from '../actionRows';
 import { editPins, readPins, resolvePin, visiblePins, writePins, type Pin, type QuickAction } from '../quickbar';
@@ -337,7 +337,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   const shortRestButton = useRef<HTMLButtonElement>(null);
   const longRestButton = useRef<HTMLButtonElement>(null);
   /** MECH-X item 2: the sources whose picks may be replaced after the long rest just finished. Page state; Dismiss clears it. */
-  const [afterRest, setAfterRest] = useState<string[]>();
+  const [afterRest, setAfterRest] = useState<string>();
 
   // WCAG 2.4.3: opening a sheet (after create, import or picking from the list) moves focus to its heading instead of
   // leaving it on <body>. The sheet is keyed by character, so this runs once per opened character, not on every save.
@@ -535,7 +535,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   function say(reply: CharacterView) {
     // D43 S7: the damage panel and the Hit points panel show their own notices (rolls to make, responses not chosen) by label, not by id.
     const message = reply.notices
-      ?.filter((n) => n.code !== 'damage.roll-offered' && n.code !== 'damage.responses-skipped')
+      ?.filter((n) => n.code !== 'damage.roll-offered' && n.code !== 'damage.responses-skipped' && n.code !== 'choice.replaced-outside-window')
       .map((n) => n.message)
       .join(' · ');
     if (message && mounted.current) onStatus(message);
@@ -892,7 +892,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
               onStatus(`${kind === 'shortRest' ? 'Short' : 'Long'} rest finished: ${applied} change${applied === 1 ? '' : 's'} applied.`);
               // MECH-X item 2 (R44): page state only, never stored. Shown after a long rest that leaves a choice replaceable.
               const replaceable = kind === 'longRest' ? afterLongRest(rested.sheet.choices) : [];
-              setAfterRest(replaceable.length > 0 ? [...new Set(replaceable.map((c) => c.sourceName))] : undefined);
+              setAfterRest(replaceable.length > 0 ? afterRestPhrase(replaceable) : undefined);
             }}
             replaceable={afterLongRest(sheet.choices)}
           />
@@ -902,7 +902,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
       {afterRest && (
         <section aria-labelledby="after-rest-heading" className="play-panel">
           <h3 id="after-rest-heading">After your long rest</h3>
-          <p>You may replace one pick of: {afterRest.join(', ')}.</p>
+          <p>You may replace {afterRest}.</p>
           <div className="actions">
             <button type="button" onClick={onMakeChoices}>
               Make choices

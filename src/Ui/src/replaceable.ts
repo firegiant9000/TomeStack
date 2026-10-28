@@ -23,6 +23,19 @@ export function afterLongRest(choices: ChoiceStatus[] | undefined): ChoiceStatus
   return (choices ?? []).filter((c) => c.replaceable?.when === 'longRest' && c.selected.length > 0);
 }
 
+/** The phrase after "you may replace": "one pick of: A, B", "up to 3 picks of: A", or per source when the maxima differ. */
+export function afterRestPhrase(choices: ChoiceStatus[]): string {
+  const byName = new Map<string, number>();
+  for (const c of choices) byName.set(c.sourceName, Math.max(byName.get(c.sourceName) ?? 0, c.replaceable?.max ?? 1));
+  const maxima = new Set(byName.values());
+  const names = [...byName.keys()];
+  if (maxima.size === 1) {
+    const max = [...maxima][0]!;
+    return `${max > 1 ? `up to ${max} picks` : 'one pick'} of: ${names.join(', ')}`;
+  }
+  return `picks of: ${names.map((n) => `${n} (${byName.get(n)! > 1 ? `up to ${byName.get(n)}` : 'one'})`).join(', ')}`;
+}
+
 const keyOf = (contentId: string, choiceId: string) => `${contentId}\n${choiceId}`;
 
 /** The option content ids stored per (source content id, choice id): the union over every entry of that pair (S3, I1). */

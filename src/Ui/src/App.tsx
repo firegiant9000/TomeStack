@@ -373,7 +373,12 @@ export function App() {
                   }
                 }
                 // MECH-X item 2: the save's advisory notice (picks replaced outside their window), worded from the sheets. It never blocks.
-                const notice = builder.kind === 'create' ? undefined : noticeText(builder.view, view);
+                let notice: string | undefined;
+                try {
+                  notice = builder.kind === 'create' ? undefined : noticeText(builder.view, view);
+                } catch {
+                  notice = view.notices?.some((n) => n.code === 'choice.replaced-outside-window') ? 'A choice had picks replaced outside its window.' : undefined; // the save landed; the wording must not block the screen (R39)
+                }
                 if (stillHere) {
                   setMessage(undefined);
                   if (notice) setMessage({ tone: 'status', text: notice }); // after the clear above, or it is wiped

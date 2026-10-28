@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { client } from '../api/client';
+import { afterRestPhrase } from '../replaceable';
 import type { ChargeRoll, CharacterView, ChoiceStatus, HitDiceValue, HitDieRoll, RestChange, RestPeriod, RestPreview, RollRecord } from '../api/types';
 
 interface Props {
@@ -245,7 +246,7 @@ export function RestPanel({ characterId, kind, hitDice, version, onRested, onCan
         </>
       )}
       {kind === 'longRest' && replaceable.length > 0 && (
-        <p>After this rest you may replace one pick of: {[...new Set(replaceable.map((c) => c.sourceName))].join(', ')}.</p>
+        <p>After this rest you may replace {afterRestPhrase(replaceable)}.</p>
       )}
       <div className="actions">
         <button type="button" onClick={finish} aria-disabled={!ready || failed || busy || rollingAny}>

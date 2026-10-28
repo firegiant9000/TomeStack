@@ -214,6 +214,12 @@ it('a long rest lists the choices that may be replaced afterwards', async () => 
   expect(await screen.findByText('After this rest you may replace one pick of: Fixture Repertoire.')).toBeTruthy();
 });
 
+it('a long rest words a max above 1 as "up to N picks"', async () => {
+  vi.mocked(client.restPreview).mockResolvedValue({ kind: 'longRest', changes: [], manual: [], basis: 'fixture' });
+  panel({ kind: 'longRest', replaceable: [{ ...technique, replaceable: { when: 'longRest' as const, max: 3 } }] });
+  expect(await screen.findByText('After this rest you may replace up to 3 picks of: Fixture Repertoire.')).toBeTruthy();
+});
+
 it('a short rest, or a long rest with none, lists nothing', async () => {
   panel({ replaceable: [technique] });
   await screen.findByText(/would change nothing/);
