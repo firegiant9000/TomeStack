@@ -32,6 +32,7 @@
     <EmbeddedResource Include="Content\srd-5.2.1-barbarian.json" LogicalName="TomeStack.Content.srd-5.2.1-barbarian.json" />
     <EmbeddedResource Include="Content\srd-5.1-rogue.json" LogicalName="TomeStack.Content.srd-5.1-rogue.json" />
     <EmbeddedResource Include="Content\srd-5.2.1-rogue.json" LogicalName="TomeStack.Content.srd-5.2.1-rogue.json" />
+    <EmbeddedResource Include="Content\srd-5.2.1-monk.json" LogicalName="TomeStack.Content.srd-5.2.1-monk.json" />
     <!-- Character-sheet import: the layout maps (field names only; features/ddb-pdf-import.md). -->
     <EmbeddedResource Include="CharacterImport\Layouts\*.json" LogicalName="TomeStack.CharacterImport.Layouts.%(Filename)%(Extension)" />
     <!-- The original test fixture pack is seeded only by development hosts and tests (TomeStackApp.Open devFixtures). -->

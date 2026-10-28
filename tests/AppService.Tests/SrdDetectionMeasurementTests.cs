@@ -44,7 +44,7 @@ public class SrdDetectionMeasurementTests(ITestOutputHelper output)
         [("5.2.1", ContentKind.Spell)] = (0.99, 0.99),
         [("5.1", ContentKind.Item)] = (0.95, 0.99),
         [("5.2.1", ContentKind.Item)] = (0.95, 0.99),
-        // 83.3% since M2.2 (the Fighter is truth now; the Monk is the only unbundled class since C2-2).
+        // 83.3% since M2.2 (the Fighter is truth now; every SRD class through the Monk is bundled now; the 5.1 Monk joins with its pack, so the 5.1 floors stay as measured).
         [("5.1", ContentKind.Class)] = (0.80, 0.99),
         [("5.2.1", ContentKind.Class)] = (0.80, 0.99),
         [("5.1", ContentKind.Feature)] = (null, 0.85),
@@ -60,7 +60,8 @@ public class SrdDetectionMeasurementTests(ITestOutputHelper output)
     private static IEnumerable<Truth> GroundTruth(string version)
     {
         // M2.2: the Fighter and the armor table are bundled too.
-        var packs = new[] { $"srd-{version}.json", $"srd-{version}-classes.json", $"srd-{version}-spells.json", $"srd-{version}-equipment.json", $"srd-{version}-fighter.json", $"srd-{version}-armor.json", $"srd-{version}-barbarian.json", $"srd-{version}-rogue.json" } // C2-1: the Barbarian, then C2-2 the Rogue, last (new revisions of the earlier packs' contents)
+        var packs = new[] { $"srd-{version}.json", $"srd-{version}-classes.json", $"srd-{version}-spells.json", $"srd-{version}-equipment.json", $"srd-{version}-fighter.json", $"srd-{version}-armor.json", $"srd-{version}-barbarian.json", $"srd-{version}-rogue.json" } // C2-1: the Barbarian, then C2-2 the Rogue, then C2-3 the Monk, last (new revisions of the earlier packs' contents)
+            .Concat(version == "5.2.1" ? [$"srd-{version}-monk.json"] : []) // the 5.1 Monk joins with its pack
             .Select(f => TomeStackApp.LoadBundledPack($"TomeStack.Content.{f}"));
         // The newest revision of each content: later revisions (M2, M3 C3, M2.2) repeat the same entries.
         var newest = packs.SelectMany(p => p.Revisions).GroupBy(r => r.ContentId).Select(g => g.Last());
