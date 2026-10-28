@@ -28,6 +28,21 @@ internal static class GoldenRevisions
         "15ba5fdeeff9356c6314a4604135f581a3aa0246614367e8cc975858053ad012", // v12, added by MECH-X item 0 (weapon.bonus); the v1 to v11 hashes above are unchanged
     ];
 
+    /// <summary>
+    /// The hashes of the two v12 revisions in tests/RulesFixtures/golden/payment-revisions.json (MECH-X item 1: "Fixture Bloodprice
+    /// Rite" and "Fixture Hourglass Ward"), kept apart because the harness above holds one revision per version. Never update these
+    /// to make a test pass.
+    /// </summary>
+    public static readonly string[] PaymentHashes =
+    [
+        "fe7c4ca8cae4454325f80925cf9fe0adcb6e86c0c5b6dc414ae58c07b2694458", // "Fixture Bloodprice Rite"
+        "3ac62e1b9e877821290a660403a64fe4cfe38a29634690772f09db8ca97463ae", // "Fixture Hourglass Ward"
+    ];
+
+    /// <summary>The <paramref name="index"/>th revision of the payment golden file, as written in the fixture.</summary>
+    public static string PaymentJson(int index) =>
+        JsonNode.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "RulesFixtures", "golden", "payment-revisions.json")))!.AsArray()[index]!.ToJsonString();
+
     /// <summary>The golden revision of content schema <paramref name="version"/>, as written in the fixture.</summary>
     public static string Json(int version) =>
         JsonNode.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "RulesFixtures", "golden", "revisions.json")))!.AsArray()[version - 1]!.ToJsonString();

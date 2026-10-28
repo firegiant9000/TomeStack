@@ -114,6 +114,32 @@
       "maximum": 20,
       "description": "Applies from this class level (class content and content belonging to a class) or character level (anything else)."
     },
+    "costPayment": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "resource",
+            "hitPoints",
+            "slot"
+          ]
+        },
+        "mayDropToZero": {
+          "type": "boolean",
+          "description": "Hit points only: the payment may leave 0 hit points."
+        },
+        "minSlotLevel": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9,
+          "description": "Slot only: the lowest slot level that can pay (default 1)."
+        }
+      },
+      "description": "Content v12 (MECH-X item 1): where a cost is paid from. resource (or absent) is the effect's pool, as before. hitPoints pays the effect's cost from current hit points and needs a cost, with no pool. slot spends one spell slot of minSlotLevel or higher and takes no cost or pool. The validator is authoritative (validate.payment-*)."
+    },
     "pageRef": {
       "type": "object",
       "required": [
@@ -692,6 +718,14 @@
             "drawsDown": {
               "type": "boolean",
               "description": "Content v11 (D43): the cost and per-unit amount use up the built-up value of the counting-up resourceId pool instead of adding to it. True needs a counting-up pool and is not allowed with variableCost; false does nothing."
+            },
+            "payment": {
+              "$ref": "#/$defs/costPayment",
+              "description": "Content v12 (MECH-X item 1): pay the cost from hit points or a spell slot instead of a pool. Below v12 the key does nothing."
+            },
+            "castsSpell": {
+              "$ref": "#/$defs/uuid",
+              "description": "Content v12 (MECH-X item 1): the content id of a spell this roll casts without spending a slot; with no dice of its own the roll rolls the spell's dice. Must name spell content (validate.casts-spell), and not with a slot payment."
             }
           },
           "required": [
@@ -925,6 +959,17 @@
               ],
               "minLength": 1,
               "maxLength": 64
+            },
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z][A-Za-z0-9]{0,31}$",
+                "not": {
+                  "const": "all"
+                }
+              },
+              "description": "Content v12 (MECH-X item 1): keys the Spells tab filters on, kept apart from school. all is reserved for attack riders."
             }
           },
           "required": [
@@ -1082,6 +1127,10 @@
             "duration": {
               "$ref": "#/$defs/formula",
               "description": "Content v11 (D43): the rounds the toggle lasts once on. Absent: until switched off."
+            },
+            "payment": {
+              "$ref": "#/$defs/costPayment",
+              "description": "Content v12 (MECH-X item 1): pay the cost of turning the toggle on from hit points or a spell slot instead of a pool."
             }
           },
           "required": [
@@ -1277,6 +1326,10 @@
                   "minLength": 1
                 }
               }
+            },
+            "payment": {
+              "$ref": "#/$defs/costPayment",
+              "description": "Content v12 (MECH-X item 1): pay the cost from hit points or a spell slot instead of a pool."
             }
           },
           "required": [

@@ -133,8 +133,14 @@ public sealed record ContentRevision : IJsonOnDeserialized
     /// v12 (MECH-X item 0) adds <c>weapon.bonus</c>, a whole number from 0 to 10 that a weapon adds to its to-hit and damage. It
     /// is optional, so older revisions serialize unchanged; it is read only in a v12 revision, and below v12 the key stays
     /// extension data and does nothing.
+    /// v12 also carries MECH-X item 1: <c>payment</c> (hit points or a spell slot instead of a pool) on a roll, a feature attack and
+    /// a toggle, <c>castsSpell</c> on a roll, and <c>tags</c> on a spell. All are optional and read only in a v12 revision; below
+    /// v12 each key stays extension data and does nothing.
     /// </summary>
     public const int CurrentSchemaVersion = 12;
+
+    /// <summary>MECH-X item 1: cost payment, roll.castsSpell, spell.tags. <b>v12</b>, the same version as <see cref="WeaponBonusSchemaVersion"/>.</summary>
+    public const int PaymentSchemaVersion = 12;
 
     /// <summary>The content schema version that adds <c>weapon.bonus</c> (MECH-X item 0): <b>v12</b>. A test pins that this is <see cref="PlayMechanicsSchemaVersion"/> plus one.</summary>
     public const int WeaponBonusSchemaVersion = 12;

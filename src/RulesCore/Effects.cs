@@ -438,12 +438,26 @@ public sealed record AttackEffect : Effect
     /// <summary>The attack is available only while this toggle is on (it may be another content's). Null: always.</summary>
     public ToggleRef? WhileToggle { get; init; }
 
-    internal static Effect FromUnknown(UnknownEffect unknown) =>
-        VersionedEffects.NamesMember<WeaponAttack>(unknown.Raw, "kind")
-        && VersionedEffects.NamesMember<Activation>(unknown.Raw, "activation")
-        && VersionedEffects.NamesEveryMember<Ability>(unknown.Raw, "abilities")
-            ? VersionedEffects.Typed<AttackEffect>(unknown)
-            : unknown;
+    /// <summary>
+    /// Content schema v12 (MECH-X item 1): how the attack pays a cost that is not a pool (hit points, or a spell slot). Null: a pool
+    /// cost as today. Below v12 the key stays extension data and does nothing.
+    /// </summary>
+    public CostPayment? Payment { get; init; }
+
+    /// <summary>The keys content schema v12 adds to this effect; below v12 they stay extension data.</summary>
+    internal static readonly string[] V12Keys = ["payment"];
+
+    /// <summary>Typed by the revision (see <see cref="VersionedEffects.ByName"/>): the v12 key, and the check on its kind, only from v12.</summary>
+    internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion)
+    {
+        if (!(VersionedEffects.NamesMember<WeaponAttack>(unknown.Raw, "kind")
+            && VersionedEffects.NamesMember<Activation>(unknown.Raw, "activation")
+            && VersionedEffects.NamesEveryMember<Ability>(unknown.Raw, "abilities")))
+            return unknown;
+        if (revisionSchemaVersion < ContentRevision.PaymentSchemaVersion)
+            return VersionedEffects.TypedWithout<AttackEffect>(unknown, V12Keys);
+        return VersionedEffects.PaymentKindReads(unknown.Raw) ? VersionedEffects.Typed<AttackEffect>(unknown) : unknown;
+    }
 }
 
 /// <summary>
@@ -635,6 +649,18 @@ public sealed record RollEffect : Effect
     /// </summary>
     public bool? DrawsDown { get; init; }
 
+    /// <summary>
+    /// Content schema v12 (MECH-X item 1): where the cost is paid from when it is not a pool (hit points, or a spell slot). Null
+    /// (or kind <c>resource</c>): today's pool cost. Below v12 the key stays extension data and does nothing.
+    /// </summary>
+    public CostPayment? Payment { get; init; }
+
+    /// <summary>
+    /// Content schema v12 (MECH-X item 1): the content id of a spell this roll casts without spending a slot; the roll rolls the
+    /// spell's dice when it has none of its own. Below v12 the key stays extension data and does nothing.
+    /// </summary>
+    public Guid? CastsSpell { get; init; }
+
     /// <summary>The longest <see cref="Range"/> or <see cref="Targets"/>.</summary>
     public const int MaxTextLength = 200;
 
@@ -643,6 +669,9 @@ public sealed record RollEffect : Effect
     /// <summary>The keys content schema v11 adds to this effect; below v11 they stay extension data.</summary>
     internal static readonly string[] V11Keys = ["whileToggle", "save", "area", "range", "targets", "perUnit", "alsoChange", "drawsDown"];
 
+    /// <summary>The keys content schema v12 adds to this effect (MECH-X item 1); below v12 they stay extension data.</summary>
+    internal static readonly string[] V12Keys = ["payment", "castsSpell"];
+
     /// <summary>
     /// Typed by the revision when the converter hands it over (see <see cref="EffectJsonConverter"/>): v11 keys, and a roll with
     /// no <c>dice</c>, only from v11. Below v11 a dice-less roll stays untyped, as it did when dice were required.
@@ -650,8 +679,11 @@ public sealed record RollEffect : Effect
     internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion)
     {
         if (revisionSchemaVersion < ContentRevision.PlayMechanicsSchemaVersion)
-            return LacksDice(unknown.Raw) ? unknown : VersionedEffects.TypedWithout<RollEffect>(unknown, V11Keys);
-        return ReadsEnums(unknown.Raw) ? VersionedEffects.Typed<RollEffect>(unknown) : unknown;
+            return LacksDice(unknown.Raw) ? unknown : VersionedEffects.TypedWithout<RollEffect>(unknown, [.. V11Keys, .. V12Keys]);
+        // v11 does not look at the v12 keys: a malformed payment must not leave the roll unknown and change its bytes.
+        if (revisionSchemaVersion < ContentRevision.PaymentSchemaVersion)
+            return ReadsEnums(unknown.Raw, false) ? VersionedEffects.TypedWithout<RollEffect>(unknown, V12Keys) : unknown;
+        return ReadsEnums(unknown.Raw, true) ? VersionedEffects.Typed<RollEffect>(unknown) : unknown;
     }
 
     /// <summary>Whether the JSON has no <c>dice</c> (no key in any spelling, or a null): what an older build, where it was required, could not type.</summary>
@@ -660,8 +692,10 @@ public sealed record RollEffect : Effect
         && !raw.EnumerateObject().Any(p => string.Equals(p.Name, "dice", StringComparison.OrdinalIgnoreCase) && p.Value.ValueKind != JsonValueKind.Null);
 
     /// <summary>The save ability, area shape and each alsoChange change must be exactly a member name (the serializer also binds padded or combined names, which no schema allows).</summary>
-    private static bool ReadsEnums(JsonElement raw)
+    private static bool ReadsEnums(JsonElement raw, bool v12)
     {
+        if (v12 && !VersionedEffects.PaymentKindReads(raw))
+            return false;
         foreach (var p in raw.EnumerateObject())
         {
             if (string.Equals(p.Name, AlsoChangeProperty, StringComparison.OrdinalIgnoreCase) && p.Value.ValueKind == JsonValueKind.Array)
@@ -682,6 +716,17 @@ public sealed record RollEffect : Effect
         return true;
     }
 }
+
+/// <summary>Content schema v12 (MECH-X item 1): where a cost is paid from. Wire names <c>resource</c>, <c>hitPoints</c>, <c>slot</c>.</summary>
+public enum PaymentKind { Resource, HitPoints, Slot }
+
+/// <summary>
+/// Content schema v12 (MECH-X item 1): how a roll, a feature attack or a toggle pays its cost. <see cref="PaymentKind.Resource"/>
+/// is today's pool. <see cref="PaymentKind.HitPoints"/> pays the effect's <c>cost</c> (a formula) from current hit points;
+/// <see cref="MayDropToZero"/> lets the payment leave 0. <see cref="PaymentKind.Slot"/> spends one spell slot of
+/// <see cref="MinSlotLevel"/> (1 to 9; default 1) or higher.
+/// </summary>
+public sealed record CostPayment([property: JsonRequired] PaymentKind Kind, bool? MayDropToZero = null, int? MinSlotLevel = null);
 
 /// <summary>Content schema v11 (D43): a saving throw an action asks of its targets: the ability, and a DC formula (for example <c>8 + PB + WIS.MOD</c>).</summary>
 public sealed record RollSave([property: JsonRequired] Ability Ability, [property: JsonRequired] string Dc);
@@ -944,6 +989,12 @@ public sealed record ToggleEffect : Effect
     /// <summary>Content schema v11 (D43): rounds the toggle lasts once on (a formula, evaluated for the character). Null: until switched off.</summary>
     public string? Duration { get; init; }
 
+    /// <summary>
+    /// Content schema v12 (MECH-X item 1): how turning the toggle on pays its <see cref="Cost"/> when it is not a pool (hit points,
+    /// or a spell slot). Null: a pool cost as today. Below v12 the key stays extension data and does nothing.
+    /// </summary>
+    public CostPayment? Payment { get; init; }
+
     internal const string AutoWhenProperty = "autoWhen";
 
     internal const string ActivationProperty = "activation";
@@ -952,6 +1003,9 @@ public sealed record ToggleEffect : Effect
 
     /// <summary>The keys content schema v11 adds (matched in every spelling, like the serializer).</summary>
     internal static readonly string[] V11Keys = ["group", "groupContent", LayerProperty, "allowedWith", "allowedInBase", "cost", "resourceContent", "level", "duration"];
+
+    /// <summary>The keys content schema v12 adds (MECH-X item 1; matched in every spelling, like the serializer).</summary>
+    internal static readonly string[] V12Keys = ["payment"];
 
     /// <summary>
     /// Typed from v6, in tiers. Below v10, <c>autoWhen</c> and <c>activation</c> stay extension data; below v11, so do the
@@ -962,12 +1016,16 @@ public sealed record ToggleEffect : Effect
     internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion)
     {
         if (revisionSchemaVersion < ContentRevision.PlayDetailsSchemaVersion)
-            return VersionedEffects.TypedWithout<ToggleEffect>(unknown, [AutoWhenProperty, ActivationProperty, .. V11Keys]);
+            return VersionedEffects.TypedWithout<ToggleEffect>(unknown, [AutoWhenProperty, ActivationProperty, .. V11Keys, .. V12Keys]);
         if (!VersionedEffects.NamesMember<ToggleAutoWhen>(unknown.Raw, AutoWhenProperty) || !VersionedEffects.NamesMember<Activation>(unknown.Raw, ActivationProperty))
             return unknown;
         if (revisionSchemaVersion < ContentRevision.PlayMechanicsSchemaVersion)
-            return VersionedEffects.TypedWithout<ToggleEffect>(unknown, V11Keys);
-        return VersionedEffects.NamesMember<ToggleLayer>(unknown.Raw, LayerProperty) ? VersionedEffects.Typed<ToggleEffect>(unknown) : unknown;
+            return VersionedEffects.TypedWithout<ToggleEffect>(unknown, [.. V11Keys, .. V12Keys]);
+        if (!VersionedEffects.NamesMember<ToggleLayer>(unknown.Raw, LayerProperty))
+            return unknown;
+        if (revisionSchemaVersion < ContentRevision.PaymentSchemaVersion)
+            return VersionedEffects.TypedWithout<ToggleEffect>(unknown, V12Keys);
+        return VersionedEffects.PaymentKindReads(unknown.Raw) ? VersionedEffects.Typed<ToggleEffect>(unknown) : unknown;
     }
 }
 
@@ -1289,7 +1347,20 @@ public sealed record SpellEffect : Effect
     /// <summary>Optional dice the sheet can roll (damage or healing at the spell's base level), for example <c>8d6</c>.</summary>
     public string? Dice { get; init; }
 
-    internal static Effect FromUnknown(UnknownEffect unknown) => VersionedEffects.Typed<SpellEffect>(unknown);
+    /// <summary>
+    /// Content schema v12 (MECH-X item 1): keys (lowercase letter, then letters and digits) the Spells tab filters on, kept apart
+    /// from <see cref="School"/>. <c>all</c> is refused. Below v12 the key stays extension data and does nothing.
+    /// </summary>
+    public IReadOnlyList<string>? Tags { get; init; }
+
+    /// <summary>The keys content schema v12 adds to this effect; below v12 they stay extension data.</summary>
+    internal static readonly string[] V12Keys = ["tags"];
+
+    /// <summary>Typed by the revision (see <see cref="VersionedEffects.ByName"/>): the v12 key only from v12.</summary>
+    internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion) =>
+        revisionSchemaVersion >= ContentRevision.PaymentSchemaVersion
+            ? VersionedEffects.Typed<SpellEffect>(unknown)
+            : VersionedEffects.TypedWithout<SpellEffect>(unknown, V12Keys);
 }
 
 /// <summary>
@@ -1305,14 +1376,14 @@ internal static class VersionedEffects
         {
             [ArmorEffect.TypeName] = (ArmorEffect.SchemaVersion, (u, _) => ArmorEffect.FromUnknown(u)),
             [SpellcastingEffect.TypeName] = (SpellcastingEffect.SchemaVersion, SpellcastingEffect.FromUnknown),
-            [SpellEffect.TypeName] = (SpellcastingEffect.SchemaVersion, (u, _) => SpellEffect.FromUnknown(u)),
+            [SpellEffect.TypeName] = (SpellcastingEffect.SchemaVersion, SpellEffect.FromUnknown),
             [WeaponEffect.TypeName] = (SpellcastingEffect.SchemaVersion, WeaponEffect.FromUnknown),
             [ToggleEffect.TypeName] = (ToggleEffect.SchemaVersion, ToggleEffect.FromUnknown),
             [ScaleEffect.TypeName] = (ScaleEffect.SchemaVersion, (u, _) => ScaleEffect.FromUnknown(u)),
             [ItemEffect.TypeName] = (ItemEffect.SchemaVersion, (u, _) => ItemEffect.FromUnknown(u)),
             [ToggleGroupEffect.TypeName] = (ToggleGroupEffect.SchemaVersion, (u, _) => ToggleGroupEffect.FromUnknown(u)),
             [UpkeepEffect.TypeName] = (UpkeepEffect.SchemaVersion, (u, _) => UpkeepEffect.FromUnknown(u)),
-            [AttackEffect.TypeName] = (AttackEffect.SchemaVersion, (u, _) => AttackEffect.FromUnknown(u)),
+            [AttackEffect.TypeName] = (AttackEffect.SchemaVersion, AttackEffect.FromUnknown),
             [AttackRiderEffect.TypeName] = (AttackRiderEffect.SchemaVersion, (u, _) => AttackRiderEffect.FromUnknown(u)),
             // Always typed, except that the converter hands these over when they carry a key or value added after v9 (see
             // EffectJsonConverter.CarriesDetailAbove), so the revision's version decides how they read. A later slice that
@@ -1357,6 +1428,21 @@ internal static class VersionedEffects
                 extensions[property.Name] = property.Value.Clone(); // document order, as that build keeps it
         }
         return ((Effect)typed) with { Extensions = extensions };
+    }
+
+    /// <summary>
+    /// Content schema v12: whether a <c>payment</c> (any spelling) that is an object names a <see cref="PaymentKind"/> member as its
+    /// <c>kind</c> (see <see cref="NamesMember{TEnum}"/>). A payment that is not an object, or has no kind, does not read at all.
+    /// </summary>
+    public static bool PaymentKindReads(JsonElement raw)
+    {
+        foreach (var p in raw.EnumerateObject())
+        {
+            if (string.Equals(p.Name, "payment", StringComparison.OrdinalIgnoreCase) && p.Value.ValueKind == JsonValueKind.Object
+                && !NamesMember<PaymentKind>(p.Value, "kind"))
+                return false;
+        }
+        return true;
     }
 
     /// <summary>
@@ -1502,7 +1588,7 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
             ModifierEffect.TypeName => ModifierEffect.V11Keys,
             GrantEffect.TypeName => GrantEffect.V11Keys,
             ResourceEffect.TypeName => ResourceEffect.V11Keys,
-            RollEffect.TypeName => RollEffect.V11Keys,
+            RollEffect.TypeName => [.. RollEffect.V11Keys, .. RollEffect.V12Keys],
             _ => [],
         };
         // Content v11: a roll may omit its dice; below v11 it must stay untyped, and only the revision knows its version.

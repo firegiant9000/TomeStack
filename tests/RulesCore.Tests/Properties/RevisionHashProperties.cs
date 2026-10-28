@@ -39,6 +39,18 @@ public class RevisionHashProperties
     /// <summary>The weapon key content v12 adds (MECH-X item 0). Written out here on purpose, like <see cref="ToggleV11Keys"/>.</summary>
     internal static readonly string[] WeaponV12Keys = ["bonus"];
 
+    /// <summary>The roll keys content v12 adds (MECH-X item 1). Written out here on purpose, like <see cref="ToggleV11Keys"/>.</summary>
+    internal static readonly string[] RollV12Keys = ["payment", "castsSpell"];
+
+    /// <summary>The attack key content v12 adds (MECH-X item 1). Written out here on purpose, like <see cref="ToggleV11Keys"/>.</summary>
+    internal static readonly string[] AttackV12Keys = ["payment"];
+
+    /// <summary>The toggle key content v12 adds (MECH-X item 1). Written out here on purpose, like <see cref="ToggleV11Keys"/>.</summary>
+    internal static readonly string[] ToggleV12Keys = ["payment"];
+
+    /// <summary>The spell key content v12 adds (MECH-X item 1). Written out here on purpose, like <see cref="ToggleV11Keys"/>.</summary>
+    internal static readonly string[] SpellV12Keys = ["tags"];
+
     /// <summary>Content v11 (slice 5): a roll may omit its dice; below v11 a roll with no dice stays an unknown effect, byte for byte.</summary>
     private static bool IsDiceLessRollBelowV11(string type, int version, JsonNode? effect) =>
         type == RollEffect.TypeName && version < ContentRevision.PlayMechanicsSchemaVersion && effect?["dice"] is null;
@@ -110,6 +122,24 @@ public class RevisionHashProperties
             if (version < ContentRevision.WeaponBonusSchemaVersion && !unknown && type == WeaponEffect.TypeName)
             {
                 foreach (var (name, kept) in inputEffects[i]!.AsObject().Where(p => WeaponV12Keys.Contains(p.Key, StringComparer.OrdinalIgnoreCase)))
+                {
+                    if (!JsonNode.DeepEquals(kept, outputEffects[i]![name]))
+                        return $"effect {i}'s {name} changed below v12";
+                }
+            }
+            // Content v12 (MECH-X item 1): below v12 the payment, castsSpell and tags keys of these types stay extension data with the
+            // value they had (any spelling, any value), where they were. Each type has its own list.
+            if (version < ContentRevision.PaymentSchemaVersion && !unknown)
+            {
+                var v12Keys = type switch
+                {
+                    RollEffect.TypeName => RollV12Keys,
+                    AttackEffect.TypeName => AttackV12Keys,
+                    ToggleEffect.TypeName => ToggleV12Keys,
+                    SpellEffect.TypeName => SpellV12Keys,
+                    _ => [],
+                };
+                foreach (var (name, kept) in inputEffects[i]!.AsObject().Where(p => v12Keys.Contains(p.Key, StringComparer.OrdinalIgnoreCase)))
                 {
                     if (!JsonNode.DeepEquals(kept, outputEffects[i]![name]))
                         return $"effect {i}'s {name} changed below v12";
@@ -220,6 +250,18 @@ public class RevisionHashProperties
             // Content v12: the weapon's bonus is typed only from v12; below it a null stays extension data (and is generated that way).
             if (version >= ContentRevision.WeaponBonusSchemaVersion && type == WeaponEffect.TypeName)
                 members = [.. members ?? [], .. WeaponV12Keys];
+            // Content v12 (MECH-X item 1): the payment, castsSpell and tags keys are typed only from v12, so only there a null hashes like an absent key.
+            if (version >= ContentRevision.PaymentSchemaVersion)
+            {
+                members = type switch
+                {
+                    RollEffect.TypeName => [.. members ?? [], .. RollV12Keys],
+                    AttackEffect.TypeName => [.. members ?? [], .. AttackV12Keys],
+                    ToggleEffect.TypeName => [.. members ?? [], .. ToggleV12Keys],
+                    SpellEffect.TypeName => [.. members ?? [], .. SpellV12Keys],
+                    _ => members,
+                };
+            }
             if (members is null)
                 continue;
             foreach (var name in members.Append("text"))
