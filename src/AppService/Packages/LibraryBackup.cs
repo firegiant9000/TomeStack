@@ -86,20 +86,24 @@ public sealed partial class PackageService
     {
         var managed = plan.Attachments.Where(a => a.Mode == AttachmentMode.Managed).DistinctBy(a => a.Sha256).ToList();
         var stamp = time.GetUtcNow().ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+        return new(
+            $"TomeStack-full-backup-{stamp}.tomestack.zip",
+            plan.Characters.Count, plan.Campaigns.Count, plan.GapNotes.Count, plan.Sources.Count,
+            plan.Revisions.Count(r => r.Status == RevisionStatus.Published), plan.Revisions.Count(r => r.Status != RevisionStatus.Published),
+            managed.Count, managed.Sum(a => a.ByteLength), plan.LinkedPdfs, plan.Unreadable, plan.Extensions.Count);
+    }
+
+    /// <summary><c>library.backupPreview</c>: what "Back up everything" would write. Nothing is written.</summary>
+    public LibraryBackupPreview PreviewLibraryBackup()
+    {
+        var plan = PlanLibrary(verifyPdfs: false);
         // For the release ladder only: the bundled revisions the characters pin are not written (every install has them) but a build must have them.
         var pinned = plan.Characters.SelectMany(c => c.AllReferences()).DistinctBy(r => r.RevisionId)
             .Where(r => _bundledRevisions.Contains(r.RevisionId)).Select(store.FindRevision).OfType<ContentRevision>().ToList();
         var opens = NewerBuild.Evaluate([.. plan.Revisions, .. pinned], plan.Characters, plan.GapNotes.Count > 0 ? GapNote.CurrentSchemaVersion : 0,
             pinned.Select(r => r.RevisionId), BundledPackTitle(pinned));
-        return new(
-            $"TomeStack-full-backup-{stamp}.tomestack.zip",
-            plan.Characters.Count, plan.Campaigns.Count, plan.GapNotes.Count, plan.Sources.Count,
-            plan.Revisions.Count(r => r.Status == RevisionStatus.Published), plan.Revisions.Count(r => r.Status != RevisionStatus.Published),
-            managed.Count, managed.Sum(a => a.ByteLength), plan.LinkedPdfs, plan.Unreadable, plan.Extensions.Count, opens.OpensIn, opens.Causes);
+        return Summary(plan) with { OpensIn = opens.OpensIn, OpensInCauses = opens.Causes };
     }
-
-    /// <summary><c>library.backupPreview</c>: what "Back up everything" would write. Nothing is written.</summary>
-    public LibraryBackupPreview PreviewLibraryBackup() => Summary(PlanLibrary(verifyPdfs: false));
 
     /// <summary>
     /// Writes the library backup to <paramref name="output"/> (a seekable stream; the shell writes a <c>.partial</c> file

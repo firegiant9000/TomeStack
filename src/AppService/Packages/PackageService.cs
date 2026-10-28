@@ -63,7 +63,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
     }
 
     /// <summary>The bundled pack a revision comes from, as a short label for a cause ("SRD 5.2.1"): its source title with "System Reference Document" shortened.</summary>
-    private Func<Guid, string> BundledPackTitle(IEnumerable<ContentRevision> revisions)
+    internal Func<Guid, string> BundledPackTitle(IEnumerable<ContentRevision> revisions)
     {
         var sourceOf = revisions.GroupBy(r => r.RevisionId).ToDictionary(g => g.Key, g => g.First().Provenance.SourceId);
         return revisionId =>

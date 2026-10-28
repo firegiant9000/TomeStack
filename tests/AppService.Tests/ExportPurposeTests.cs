@@ -136,7 +136,34 @@ public class ExportPurposeTests
         Assert.Equal("0.7.0", newer.OpensIn);
         var cause = Assert.Single(newer.OpensInCauses!);
         Assert.Equal(("character", 10), (cause.Kind, cause.SchemaVersion));
-        Assert.Single(NewerBuildWarnings(newer));
+        Assert.Equal($"Opening this needs TomeStack 0.7.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Encounter Hero' is a character at schema 10. Older versions refuse the file.", Assert.Single(NewerBuildWarnings(newer)).Message);
+        Assert.Equal("'Encounter Hero' is a character at schema 10", cause.Message);
+    }
+
+    [Fact]
+    public void Bundled_pack_labels_use_SRD_and_the_edition()
+    {
+        using var origin = new TempApp();
+        var bundled = origin.App.Store.ListRevisionsInOrder().Where(r => TomeStackApp.BundledRevisionIds.Contains(r.RevisionId)).ToList();
+        var title = new PackageService(origin.App.Store, TimeProvider.System, "unused").BundledPackTitle(bundled);
+        var labels = bundled.Select(r => title(r.RevisionId)).Distinct().Order().ToList();
+        Assert.Contains("SRD 5.1", labels);
+        Assert.Contains("SRD 5.2.1", labels);
+        Assert.DoesNotContain(labels, l => l.Contains("System Reference Document", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Library_backup_preview_with_a_character_pinning_bundled_content_opens_in_0_5_0()
+    {
+        using var origin = new TempApp();
+        var fixture = TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json");
+        var srdFeat = origin.App.Store.ListRevisionsInOrder().First(r => TomeStackApp.BundledRevisionIds.Contains(r.RevisionId)
+            && r.Kind == ContentKind.Feat && r.RulesFamilies.Contains(RulesFamilies.Srd51));
+        var saved = origin.App.SaveCharacter(fixture with { Pins = [.. fixture.Pins, srdFeat.Reference] }).Character;
+        Assert.Contains(saved.AllReferences(), r => r.RevisionId == srdFeat.RevisionId);
+        var preview = origin.App.PreviewLibraryBackup();
+        Assert.Equal("0.5.0", preview.OpensIn);
+        Assert.Empty(preview.OpensInCauses!);
     }
 
     [Fact]
@@ -149,10 +176,12 @@ public class ExportPurposeTests
 
         using var origin = new TempApp();
         var fixture = TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json");
-        origin.App.SaveCharacter(fixture with { Play = (fixture.Play ?? new PlayState()) with { Encounter = new EncounterState(0) } });
+        var saved = origin.App.SaveCharacter(fixture with { Play = (fixture.Play ?? new PlayState()) with { Encounter = new EncounterState(0) } }).Character;
         var preview = origin.App.PreviewLibraryBackup();
         Assert.Equal("0.7.0", preview.OpensIn);
-        Assert.Equal(("character", 10), (preview.OpensInCauses![0].Kind, preview.OpensInCauses[0].SchemaVersion));
+        var cause = Assert.Single(preview.OpensInCauses!);
+        Assert.Equal(("character", 10), (cause.Kind, cause.SchemaVersion));
+        Assert.Equal($"'{saved.Name}' is a character at schema 10", cause.Message);
     }
 
     [Fact]
