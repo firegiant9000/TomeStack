@@ -487,6 +487,129 @@ public class DownConvertTests
     }
 
     [Fact]
+    public void Content_below_10_roll_also_change_null_is_silent_and_a_non_array_blocks()
+    {
+        const string head = """{"type":"roll","id":"r","rollId":"r","label":"R","dice":"1d6","alsoChange":""";
+
+        // A v11 reader treats null as absent, so nothing is there to lower; a v10 revision keeps the null as extension data.
+        Assert.Empty(DownConvert.Below(Rev(head + "null}"), 10).Changes);
+        var empty = DownConvert.Below(Rev(head + "null}", 10), 10);
+        var silent = Assert.Single(empty.Changes);
+        Assert.Equal(("effects[0].alsoChange", BelowAction.Silent, "below.roll-also-change"), (silent.Path, silent.Action, silent.Code));
+        Assert.False(empty.Blocked);
+        Assert.DoesNotContain("alsoChange", Written(empty));
+
+        var scalar = DownConvert.Below(Rev(head + "\"spend\"}"), 10);
+        var blocked = Assert.Single(scalar.Changes);
+        Assert.Equal(("effects[0].alsoChange", BelowAction.Blocks, "below.roll-also-change"), (blocked.Path, blocked.Action, blocked.Code));
+        Assert.True(scalar.Blocked);
+        Assert.DoesNotContain("alsoChange", Written(scalar));
+    }
+
+    [Theory]
+    [InlineData("""{"type":"toggle","id":"t","toggleId":"t","label":"T","DURATION":"3"}""", "DURATION", "effects[0].duration", BelowAction.Dropped, "below.toggle-duration")]
+    [InlineData("""{"type":"toggle","id":"t","toggleId":"t","label":"T","Group":"forms"}""", "Group", "effects[0].group", BelowAction.Blocks, "below.toggle-group")]
+    public void Content_below_10_matches_keys_ignoring_case(string effect, string written, string path, BelowAction action, string code)
+    {
+        var result = DownConvert.Below(Rev(effect), 10);
+
+        var change = Assert.Single(result.Changes);
+        Assert.Equal((path, action, code), (change.Path, change.Action, change.Code));
+        Assert.DoesNotContain($"\"{written}\"", Written(result), StringComparison.OrdinalIgnoreCase);
+        Assert.Null(Assert.IsType<ToggleEffect>(Assert.Single(result.Revision.Effects)).Extensions);
+    }
+
+    [Theory]
+    [InlineData("null", 10)]
+    [InlineData("false", 11)]
+    public void Content_below_10_draws_down_null_or_false_is_silent(string value, int schema)
+    {
+        // A v11 reader drops a null on its own, so null is only visible as extension data of a v10 revision.
+        var result = DownConvert.Below(Rev($$"""{"type":"roll","id":"r","rollId":"r","label":"R","dice":"1d6","drawsDown":{{value}}}""", schema), 10);
+
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(("effects[0].drawsDown", BelowAction.Silent, "below.roll-detail"), (change.Path, change.Action, change.Code));
+        Assert.DoesNotContain("drawsDown", Written(result));
+    }
+
+    // Deliberate: in a revision that declares v11, v11 keys are lowered by the table even when the effect failed to type
+    // (here a roll whose perUnit is malformed stays an UnknownEffect), because the key is still in the file and a v10 reader would see it.
+    [Fact]
+    public void Content_below_10_lowers_v11_keys_on_an_untyped_effect_of_a_v11_revision()
+    {
+        var input = Rev("""{"type":"roll","id":"r","rollId":"r","label":"R","dice":"1d6","range":"30 ft","perUnit":"1d6"}""");
+        Assert.IsType<UnknownEffect>(Assert.Single(input.Effects));
+
+        var result = DownConvert.Below(input, 10);
+
+        Assert.Equal(["effects[0].perUnit", "effects[0].range"], result.Changes.Select(c => c.Path).OrderBy(p => p, StringComparer.Ordinal).ToArray());
+        Assert.All(result.Changes, c => Assert.Equal(BelowAction.Dropped, c.Action));
+        Assert.DoesNotContain("perUnit", Written(result));
+        Assert.DoesNotContain("range", Written(result));
+    }
+
+    public static TheoryData<string, string, string> InertKeys => new()
+    {
+        { """{"type":"resource","id":"p","resourceId":"p","label":"P","maximum":"2","allowance":true}""", "effects[0].allowance", "below.resource-detail" },
+        { """{"type":"resource","id":"p","resourceId":"p","label":"P","maximum":"3","counts":"up"}""", "effects[0].counts", "below.resource-counts-up" },
+        { """{"type":"roll","id":"r","rollId":"r","label":"R","dice":"1d6","range":"30 ft"}""", "effects[0].range", "below.roll-detail" },
+        { """{"type":"roll","id":"r","rollId":"r","label":"R","dice":"1d6","alsoChange":[{"resourceId":"c","change":"spend","amount":"1"}]}""", "effects[0].alsoChange", "below.roll-also-change" },
+        { """{"type":"modifier","id":"m","operation":"bonus","target":"initiative","value":"1","toggle":"t","toggleContent":"6f0dc000-0000-4000-8000-0000000000b1"}""", "effects[0].toggleContent", "below.modifier-toggle-content" },
+        { """{"type":"grant","id":"g","grant":"damageResistance","damageType":"Fire","whileToggle":{"toggleId":"sky"}}""", "effects[0].whileToggle", "below.defence-while-toggle" },
+        { """{"type":"toggle","id":"t","toggleId":"t","label":"T","level":3}""", "effects[0].level", "below.toggle-level" },
+    };
+
+    [Theory]
+    [MemberData(nameof(InertKeys))]
+    public void Content_below_removes_inert_v11_keys_silently_on_every_effect_type(string effect, string path, string code)
+    {
+        var input = Rev(effect, 10);
+        var typed = Assert.Single(input.Effects);
+        Assert.IsNotType<UnknownEffect>(typed);
+        Assert.NotNull(typed.Extensions);
+
+        var result = DownConvert.Below(input, 10);
+
+        var change = Assert.Single(result.Changes);
+        Assert.Equal((path, BelowAction.Silent, code), (change.Path, change.Action, change.Code));
+        Assert.False(result.Blocked);
+        Assert.Null(Assert.Single(result.Revision.Effects).Extensions);
+    }
+
+    [Fact]
+    public void Content_below_is_deterministic()
+    {
+        var input = Rev("""
+            {"type":"attack","id":"a","attackId":"a","label":"Strike","kind":"melee","abilities":["str"]},
+            {"type":"toggle","id":"t","toggleId":"t","label":"T","duration":"3","level":2},
+            {"type":"modifier","id":"m","operation":"bonus","target":"initiative","value":"1"}
+            """);
+
+        var first = DownConvert.Below(input, 9);
+        var second = DownConvert.Below(input, 9);
+
+        Assert.Equal(Written(first), Written(second));
+        Assert.Equal(first.Changes, second.Changes);
+    }
+
+    [Fact]
+    public void Content_below_keeps_grant_content_choice_options_and_extends_choice()
+    {
+        var grantJson = $$$"""{"type":"grant","id":"gc","grant":"content","content":{"contentId":"{{{Other}}}","revisionId":"{{{Other}}}"}}""";
+        var choiceJson = $$$"""{"type":"choice","id":"c","choiceId":"pick","count":1,"options":[{"contentId":"{{{Other}}}","revisionId":"{{{Other}}}"}]}""";
+        var toggleJson = """{"type":"toggle","id":"t","toggleId":"t","label":"T","duration":"3"}""";
+        var input = Rev($"{grantJson},{choiceJson},{toggleJson}") with { ExtendsChoice = new ChoiceExtension(Guid.Parse(Other), "pick") };
+        var before = input.Effects.Take(2).Select(e => JsonSerializer.Serialize(e, RulesJson.Compact)).ToArray();
+
+        var result = DownConvert.Below(input, 10);
+
+        Assert.Equal(input.ExtendsChoice, result.Revision.ExtendsChoice);
+        Assert.Equal(before, result.Revision.Effects.Take(2).Select(e => JsonSerializer.Serialize(e, RulesJson.Compact)).ToArray());
+        Assert.Contains(Other, before[0], StringComparison.Ordinal);
+        Assert.Contains(Other, before[1], StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Content_below_rejects_out_of_range_target()
     {
         var input = Rev("""{"type":"modifier","id":"m","operation":"bonus","target":"initiative","value":"1"}""");

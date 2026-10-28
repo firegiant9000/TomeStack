@@ -221,6 +221,8 @@ public static class DownConvert
                     : new(path, BelowAction.Dropped, "below.resource-detail", $"'{name}': how a resource counts.");
             case (ResourceEffect.TypeName, _):
                 return new(path, BelowAction.Dropped, "below.resource-detail", $"'{name}': the {key} of a resource.");
+            case (RollEffect.TypeName, "alsoChange") when value is null:
+                return new(path, BelowAction.Silent, "below.roll-also-change", $"'{name}': an empty also-change on a roll.");
             case (RollEffect.TypeName, "alsoChange"):
                 return AlsoChangeSpends(value)
                     ? new(path, BelowAction.Blocks, "below.roll-also-change", $"'{name}': a roll that also spends a resource; the older version would skip that cost.")
@@ -236,7 +238,7 @@ public static class DownConvert
             case (GrantEffect.TypeName, _):
                 return new(path, BelowAction.Blocks, "below.defence-while-toggle", $"'{name}': the toggle a damage defence waits for; it would apply all the time.");
             default:
-                return new(path, BelowAction.Blocks, "below.unmapped-key", $"'{name}': its {key}, which the older version cannot hold.");
+                throw new System.Diagnostics.UnreachableException($"No lowering rule for {type}.{key}.");
         }
     }
 
