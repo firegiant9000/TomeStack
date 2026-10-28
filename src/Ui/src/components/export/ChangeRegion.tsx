@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import type { ExportChange, OpensInCause } from '../../api/types';
 
 interface Props {
@@ -29,6 +30,7 @@ export function isNewerThan(a: string, b: string): boolean {
 
 /** What the copy for an older TomeStack changes, or (for the default file) which TomeStack opens it and why. */
 export function ChangeRegion({ target, opensIn, causes, changes, previousMinor }: Props) {
+  const headingId = useId();
   if (target !== null) {
     const all = changes ?? [];
     return (
@@ -39,8 +41,8 @@ export function ChangeRegion({ target, opensIn, causes, changes, previousMinor }
           if (items.length === 0) return null;
           return (
             <div key={action}>
-              <p>{heading}</p>
-              <ul>
+              <p id={`${headingId}-${action}`}>{heading}</p>
+              <ul aria-labelledby={`${headingId}-${action}`}>
                 {items.map((c, i) => (
                   <li key={`${c.entry}:${c.id}:${i}`}>{c.message}</li>
                 ))}
@@ -52,13 +54,14 @@ export function ChangeRegion({ target, opensIn, causes, changes, previousMinor }
     );
   }
   if (opensIn === undefined) return null;
-  const showCauses = (causes ?? []).length > 0 && (opensIn === null || previousMinor === null || isNewerThan(opensIn, previousMinor));
+  const shownCauses = causes ?? [];
+  const showCauses = shownCauses.length > 0 && (opensIn === null || previousMinor === null || isNewerThan(opensIn, previousMinor));
   return (
     <div role="region" aria-label="Compatibility">
       <p>{opensIn === null ? 'This file needs a newer TomeStack than this one.' : `This file opens in TomeStack ${opensIn} or newer.`}</p>
       {showCauses && (
         <ul>
-          {causes!.map((c, i) => (
+          {shownCauses.map((c, i) => (
             <li key={`${c.entry}:${c.id}:${i}`}>{c.message}</li>
           ))}
         </ul>

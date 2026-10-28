@@ -25,9 +25,11 @@ it('lists each non-empty group under its heading, in order, with the message tex
   ];
   render(<ChangeRegion target="0.6.0" changes={changes} previousMinor="0.6.0" />);
   const region = screen.getByRole('region', { name: 'Changed for TomeStack 0.6.0' });
-  const headings = Array.from(region.querySelectorAll('p')).map((p) => p.textContent);
-  expect(headings).toEqual(['Blocks this copy:', 'Left out of this copy:', 'Not in this copy:', 'Copied with a new id:']);
   const lists = within(region).getAllByRole('list');
+  // Each list is named by its heading, so a screen reader hears the heading with the list.
+  const headings = lists.map((l) => document.getElementById(l.getAttribute('aria-labelledby') ?? '')?.textContent);
+  expect(headings).toEqual(['Blocks this copy:', 'Left out of this copy:', 'Not in this copy:', 'Copied with a new id:']);
+  expect(within(region).getByRole('list', { name: 'Left out of this copy:' })).toBe(lists[1]);
   expect(lists.map((l) => within(l).getAllByRole('listitem').map((i) => i.textContent))).toEqual([
     ['Compat Hero cannot be saved for 0.6.0.'],
     ['Compat Steady Hands is left out.'],
@@ -69,6 +71,12 @@ it('shows the causes only when the file needs something newer than the previous 
   expect(shows('0.6.0')).toBe(false);
   expect(shows('0.5.0')).toBe(false);
   expect(shows(null)).toBe(true);
+});
+
+it('shows the causes for 0.10.0 against a previous minor of 0.9.0 (numeric, not string, comparison)', () => {
+  render(<ChangeRegion target={null} opensIn="0.10.0" causes={causes} previousMinor="0.9.0" />);
+  expect(screen.getByText('This file opens in TomeStack 0.10.0 or newer.')).toBeTruthy();
+  expect(screen.getByText('Compat Hero needs TomeStack 0.7.0.')).toBeTruthy();
 });
 
 it('says the file needs a newer TomeStack when opensIn is null', () => {

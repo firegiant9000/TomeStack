@@ -14,6 +14,8 @@ vi.mock('../api/client', () => ({
     packageTargets: vi.fn(),
     libraryBackupPreview: vi.fn(),
     libraryBackupSaveAs: vi.fn(),
+    chooseLibraryRestore: vi.fn(),
+    applyLibraryRestore: vi.fn(),
   },
 }));
 
@@ -134,6 +136,48 @@ it('shows no target control, and reports nothing, when the targets cannot be rea
   expect(screen.queryByText('Which TomeStack will open it?')).toBeNull();
   expect(backUp().disabled).toBe(false);
   expect(onError).not.toHaveBeenCalled();
+});
+
+it('lets the last chosen release win when an earlier reply arrives late', async () => {
+  changesFor['0.5.0'] = [exportChange('dropped', 'Compat Steady Hands is left out.')];
+  const user = await openBackups();
+  let late: (p: LibraryBackupPreview) => void = () => {};
+  vi.mocked(client.libraryBackupPreview).mockReturnValueOnce(new Promise<LibraryBackupPreview>((r) => (late = r)));
+  await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
+  await user.click(screen.getByRole('radio', { name: '0.5.0' }));
+  await screen.findByText('Compat Steady Hands is left out.');
+  late(previewOf('0.6.0'));
+  await new Promise((r) => setTimeout(r, 20));
+  expect(screen.getByRole('region', { name: 'Changed for TomeStack 0.5.0' })).toBeTruthy();
+  expect(screen.queryByRole('region', { name: 'Changed for TomeStack 0.6.0' })).toBeNull();
+  await user.click(screen.getByRole('checkbox', { name: confirmLabel }));
+  await user.click(backUp());
+  expect(vi.mocked(client.libraryBackupSaveAs).mock.lastCall).toEqual(['0.5.0', 'hash-0.5.0']);
+});
+
+it("a restore that finishes after another release was chosen does not overwrite that release's preview", async () => {
+  changesFor['0.6.0'] = [exportChange('dropped', 'Compat Tide Stance is left out.')];
+  vi.mocked(client.chooseLibraryRestore).mockResolvedValue({
+    chosen: true,
+    token: 't',
+    fileName: 'compat-restore.zip',
+    preview: { items: [], errors: [], warnings: [], canApply: true },
+  } as unknown as Awaited<ReturnType<typeof client.chooseLibraryRestore>>);
+  let finish: (r: Awaited<ReturnType<typeof client.applyLibraryRestore>>) => void = () => {};
+  vi.mocked(client.applyLibraryRestore).mockReturnValue(new Promise((r) => (finish = r)));
+  const user = await openBackups();
+  await user.click(screen.getByRole('button', { name: 'Choose a full backup…' }));
+  await user.click(await screen.findByRole('button', { name: 'Restore' }));
+  await user.click(await screen.findByRole('radio', { name: '0.6.0' })); // the radios stay usable during the restore
+  await user.click(await screen.findByRole('checkbox', { name: confirmLabel }));
+  finish({ added: 0, replaced: 0, unchanged: 0, pdfsCopied: 0, warnings: [] });
+  await waitFor(() => expect(vi.mocked(client.libraryBackupPreview).mock.calls.length).toBeGreaterThan(2));
+  await screen.findByRole('region', { name: 'Changed for TomeStack 0.6.0' });
+  expect((screen.getByRole('checkbox', { name: confirmLabel }) as HTMLInputElement).checked).toBe(false); // a new preview: the tick is cleared
+  expect(vi.mocked(client.libraryBackupPreview).mock.lastCall).toEqual(['0.6.0']);
+  await user.click(screen.getByRole('checkbox', { name: confirmLabel }));
+  await user.click(backUp());
+  expect(vi.mocked(client.libraryBackupSaveAs).mock.lastCall).toEqual(['0.6.0', 'hash-0.6.0']);
 });
 
 it('says so plainly, and keeps the backup off, when the preview for a chosen release fails', async () => {

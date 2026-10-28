@@ -131,6 +131,23 @@ it('shows no target control, and reports nothing, when the targets cannot be rea
   expect(onError).not.toHaveBeenCalled();
 });
 
+it('lets the last chosen release win when an earlier reply arrives late', async () => {
+  changesFor['0.5.0'] = [exportChange('dropped', 'Compat Steady Hands is left out.')];
+  const user = await openPreview();
+  let late: (p: SourcePackPreview) => void = () => {};
+  vi.mocked(client.sourcePackPreview).mockReturnValueOnce(new Promise<SourcePackPreview>((r) => (late = r)));
+  await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
+  await user.click(screen.getByRole('radio', { name: '0.5.0' }));
+  await screen.findByText('Compat Steady Hands is left out.');
+  late(previewOf('0.6.0'));
+  await new Promise((r) => setTimeout(r, 20));
+  expect(screen.getByRole('region', { name: 'Changed for TomeStack 0.5.0' })).toBeTruthy();
+  expect(screen.queryByRole('region', { name: 'Changed for TomeStack 0.6.0' })).toBeNull();
+  await user.click(screen.getByRole('checkbox', { name: confirmLabel }));
+  await user.click(save());
+  expect(vi.mocked(client.saveSourcePackAs).mock.lastCall).toEqual([['compat-homebrew-a'], '0.5.0', 'hash-0.5.0']);
+});
+
 it('says so plainly, and has no Save, when the preview for a chosen release fails', async () => {
   vi.mocked(client.sourcePackPreview).mockImplementation(async (_ids, target) => {
     if (target) throw new Error('boom');

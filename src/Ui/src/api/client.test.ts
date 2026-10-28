@@ -80,4 +80,28 @@ describe('client: down-conversion target and changesHash', () => {
       { command: 'library.backupSaveAs', payload: undefined },
     ]);
   });
+
+  it('sends no target key for a source or campaign pack export without a target', async () => {
+    const { client, calls } = recorder();
+    await client.exportSourcePack(['s']);
+    await client.exportCampaignPack('c');
+    expect(calls).toStrictEqual([
+      { command: 'package.sourcePackExport', payload: { sourceIds: ['s'] } },
+      { command: 'package.campaignPackExport', payload: { campaignId: 'c' } },
+    ]);
+  });
+
+  it('treats each key on its own: a hash without a target is sent without one, and null sends nothing', async () => {
+    const { client, calls } = recorder();
+    await client.exportSourcePack(['s'], undefined, 'abc');
+    await client.exportCampaignPack('c', null, 'abc');
+    await client.libraryBackupSaveAs(null, 'abc');
+    await client.exportSourcePack(['s'], null, null);
+    expect(calls).toStrictEqual([
+      { command: 'package.sourcePackExport', payload: { sourceIds: ['s'], changesHash: 'abc' } },
+      { command: 'package.campaignPackExport', payload: { campaignId: 'c', changesHash: 'abc' } },
+      { command: 'library.backupSaveAs', payload: { changesHash: 'abc' } },
+      { command: 'package.sourcePackExport', payload: { sourceIds: ['s'] } },
+    ]);
+  });
 });

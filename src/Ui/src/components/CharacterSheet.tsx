@@ -190,6 +190,11 @@ function ExportPanel({ characterId, active, updatedAt, onError, onStatus }: Expo
       const stale = () => requestId.current !== id || chosen.current !== next || chosenTarget.current !== nextTarget;
       setBackupFailed(false);
       setTargetFailed(false);
+      if (nextTarget) {
+        // A copy for an older TomeStack is sent with its preview's hash: an earlier preview must not stand in while this one loads.
+        setPreview(undefined);
+        setConfirmed(false);
+      }
       try {
         // No target: the call is exactly as it was before there was a target.
         const loaded = nextTarget ? await client.previewExport([characterId], next, nextTarget) : await client.previewExport([characterId], next);

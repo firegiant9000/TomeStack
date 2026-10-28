@@ -41,7 +41,8 @@ export function BackupsPanel({ onError, onStatus, onRestored }: Props) {
   // No target: the call is exactly as it was before there was a target.
   const previewFor = (release: string | null) => (release ? client.libraryBackupPreview(release) : client.libraryBackupPreview());
 
-  // The preview loads again for each target; a reply for an earlier target is dropped.
+  // The preview loads again for each target and after a restore; a reply for an earlier one is dropped.
+  const [refresh, setRefresh] = useState(0);
   useEffect(() => {
     let current = true;
     previewFor(target)
@@ -58,7 +59,7 @@ export function BackupsPanel({ onError, onStatus, onRestored }: Props) {
     return () => {
       current = false;
     };
-  }, [target, onError]);
+  }, [target, refresh, onError]);
 
   // The fieldset stays mounted while the preview reloads, so focus stays on the radio that was chosen.
   function chooseTarget(next: string | null) {
@@ -110,7 +111,9 @@ export function BackupsPanel({ onError, onStatus, onRestored }: Props) {
       const result = await client.applyLibraryRestore(restore.token, choices);
       setRestore(undefined);
       onRestored();
-      setContents(await previewFor(target));
+      // The library changed: preview again through the effect, so a reply for an earlier target or restore never wins.
+      setContents(undefined);
+      setRefresh((n) => n + 1);
       onStatus(
         `Restored ${restore.fileName}: ${result.added} added, ${result.replaced} replaced, ${result.unchanged} unchanged, ${result.pdfsCopied} PDF(s) copied.` +
           (result.safetyCopy ? ` Your data as it was before is saved as ${result.safetyCopy} in your data folder.` : '') +

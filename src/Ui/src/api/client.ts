@@ -91,7 +91,6 @@ import type {
   ValidationReport,
 } from './types';
 
-/** Typed application client. Components use this, never the transport or fetch directly. */
 /** The optional down-conversion payload keys: each is present only when its argument is given. */
 function downConversion(target?: string | null, changesHash?: string | null) {
   return {
@@ -106,6 +105,7 @@ function downConversionOrNone(target?: string | null, changesHash?: string | nul
   return Object.keys(keys).length === 0 ? undefined : keys;
 }
 
+/** Typed application client. Components use this, never the transport or fetch directly. */
 export function createClient(transport: Transport) {
   const call = <T>(command: string, payload?: unknown, options?: CallOptions) => transport(command, payload, options) as Promise<T>;
   return {
@@ -271,10 +271,12 @@ export function createClient(transport: Transport) {
     setGapNoteStatus: (id: string, status: GapNoteStatus) => call<GapNote>('gap.setStatus', { id, status }),
     /** Only the "Delete note" confirmation calls this. */
     deleteGapNote: (id: string) => call<{ deleted: boolean }>('gap.delete', { id, confirm: true }),
-    /** What an export would contain and leave out, without writing anything (ADR-007). */
     /** The releases a copy can be made for ("Save for an older TomeStack"); the current row is not in `targets`. */
     packageTargets: () => call<PackageTargets>('package.targets', {}),
-    // `target` (a release from packageTargets) and `changesHash` (from the preview) are sent only when given, so an omitted target leaves the call as it was.
+    /**
+     * What an export would contain and leave out, without writing anything (ADR-007). `target` (a release from packageTargets) and
+     * `changesHash` (from the preview) are sent only when given, so an omitted target leaves the call as it was.
+     */
     previewExport: (characterIds: string[], purpose: ExportPurpose, target?: string | null) =>
       call<ExportPreview>('package.exportPreview', { characterIds, purpose, ...downConversion(target) }),
     exportCharacters: (characterIds: string[], purpose: ExportPurpose = 'backup', target?: string | null, changesHash?: string | null) =>

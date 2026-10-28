@@ -1228,6 +1228,43 @@ describe('export for an older TomeStack', () => {
     expect(exportButton().disabled).toBe(true);
     expect(onError).not.toHaveBeenCalled();
   });
+
+  it('lets the last chosen release win when an earlier reply arrives late', async () => {
+    changesFor['0.5.0'] = [exportChange('dropped', 'Compat Steady Hands is left out.')];
+    const user = await openManage();
+    await waitFor(() => expect(exportButton().disabled).toBe(false));
+    let late: (p: Preview) => void = () => {};
+    vi.mocked(client.previewExport).mockReturnValueOnce(new Promise<Preview>((r) => (late = r)));
+    await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
+    await user.click(screen.getByRole('radio', { name: '0.5.0' }));
+    await screen.findByText('Compat Steady Hands is left out.');
+    late(previewOf('0.6.0'));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.getByRole('region', { name: 'Changed for TomeStack 0.5.0' })).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Changed for TomeStack 0.6.0' })).toBeNull();
+    await user.click(screen.getByRole('checkbox', { name: confirmLabel }));
+    await user.click(exportButton());
+    expect(vi.mocked(client.saveExportAs).mock.lastCall).toEqual([['fixture-2'], 'backup', '0.5.0', 'hash-0.5.0']);
+  });
+
+  it('drops the preview of a chosen release while the character reloads it, so an old hash is never sent', async () => {
+    changesFor['0.6.0'] = [exportChange('dropped', 'Compat Tide Stance is left out.')];
+    const user = userEvent.setup();
+    const v = view();
+    const { rerender } = renderSheet(v);
+    await user.click(screen.getByRole('tab', { name: 'Manage' }));
+    await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
+    await user.click(await screen.findByRole('checkbox', { name: confirmLabel }));
+    expect(exportButton().disabled).toBe(false);
+    let settle: (p: Preview) => void = () => {};
+    vi.mocked(client.previewExport).mockReturnValueOnce(new Promise<Preview>((r) => (settle = r)));
+    rerender(sheetElement({ ...v, character: { ...v.character, updatedAt: '2026-10-03T00:00:09Z' } }));
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Changed for TomeStack 0.6.0' })).toBeNull());
+    expect(exportButton().disabled).toBe(true);
+    settle(previewOf('0.6.0'));
+    await screen.findByRole('checkbox', { name: confirmLabel });
+    expect((screen.getByRole('checkbox', { name: confirmLabel }) as HTMLInputElement).checked).toBe(false);
+  });
 });
 
 const dieChange = [{ id: 'hitDie:0', kind: 'hitDie', label: 'Spend a d8', from: 3, to: 8, reason: 'Fixture', die: 8, amount: 5 }] as unknown as Changes;
