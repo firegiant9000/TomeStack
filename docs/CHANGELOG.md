@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Internal
+- **Down-conversion engine:** the rules core can now lower a character or a content revision to an older schema version (character v9 or v8, content v10 or v9) and list what the copy loses, what blocks it and what goes silently, then validates the copy at that version. Nothing calls it yet; the export screens come later. No change to the app.
+
 ## 0.7.1 (crash reporting and the repo guard)
 
 A patch on 0.7.0: if TomeStack crashes it now leaves a record and tells you where it is. Nothing else in the app changes.
