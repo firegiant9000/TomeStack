@@ -774,7 +774,8 @@ function ChoicePicker(props: {
           // SPEC I-06: a class lists the old and the new revision of an option (an old Berserker stays valid for saved characters);
           // a new pick sees only the newest, while a character that holds the old one still sees it ticked (and, like any
           // option ticked when the picker appeared, unticking it never removes the focused row, R33). The old revision hides
-          // only when the choice also offers a newer one of the same content; a lone older option stays pickable.
+          // while the choice also offers a newer one of the same content that is shown (an outside-campaign one is shown, as not
+          // allowed, so the old one stays hidden); a lone older option, or one whose newer revision is hidden, stays pickable.
           if (
             option?.superseded &&
             !checked &&

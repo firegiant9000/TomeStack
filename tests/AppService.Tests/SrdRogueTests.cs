@@ -231,30 +231,34 @@ public class SrdRogueTests
             Assert.Equal(ProficiencyMark.Proficient, sheet.Field(FieldIds.Save(Ability.Str)).Mark);
 
             // Light armor comes with every Rogue level: the Rogue's grant is not limited to the starting class.
-            var grant = Assert.Single(RoguePack(family).Revisions.Single(r => r.Reference == rogue).Effects.OfType<GrantEffect>(),g => g.Target == "armor.light");
+            var grant = Assert.Single(RoguePack(family).Revisions.Single(r => r.Reference == rogue).Effects.OfType<GrantEffect>(), g => g.Target == "armor.light");
             Assert.Null(grant.OnlyAs);
         }
     }
 
     [Fact]
-    public void A_wizard_who_took_a_level_of_Rogue_is_trained_for_light_armor()
+    public void A_wizard_who_took_a_level_of_Rogue_gets_light_armor_but_no_rogue_weapons()
     {
         using var temp = new TempApp();
         foreach (var family in Families)
         {
             var wizard = Pack(family, "classes").Revisions.Last(r => r.Name == "Wizard" && r.Kind == ContentKind.Class).Reference;
             var leather = Pack(family, "armor").Revisions.Single(r => r.Name is "Leather" or "Leather Armor").Reference;
+            var rapier = Weapon(family, "Rapier");
             Character Build(params ClassLevel[] classes) => new()
             {
                 Id = Guid.NewGuid(), Name = "Test Wizard Rogue", RulesFamily = family, Level = classes.Sum(c => c.Level),
-                Classes = classes, BaseAbilities = new(10, 14, 12, 14, 10, 8), Equipment = [new(leather, Equipped: true)],
+                Classes = classes, BaseAbilities = new(10, 14, 12, 14, 10, 8), Equipment = [new(leather, Equipped: true), new(rapier, Equipped: true)],
             };
 
-            var wizardOnly = temp.App.SaveCharacter(Build(new ClassLevel(wizard, 1))).Sheet.Field(FieldIds.ArmorClass);
-            Assert.Contains(wizardOnly.Warnings, w => w.Code == "equipment.armor-untrained");
+            var wizardSheet = temp.App.SaveCharacter(Build(new ClassLevel(wizard, 1))).Sheet;
+            Assert.Contains(wizardSheet.Field(FieldIds.ArmorClass).Warnings, w => w.Code == "equipment.armor-untrained");
+            Assert.False(wizardSheet.Attacks!.Single(a => a.Item == rapier).Proficient, $"{family} wizard rapier");
 
-            var both = temp.App.SaveCharacter(Build(new ClassLevel(wizard, 1), new ClassLevel(RogueClass(family), 1))).Sheet.Field(FieldIds.ArmorClass);
-            Assert.DoesNotContain(both.Warnings, w => w.Code == "equipment.armor-untrained");
+            var bothSheet = temp.App.SaveCharacter(Build(new ClassLevel(wizard, 1), new ClassLevel(RogueClass(family), 1))).Sheet;
+            Assert.DoesNotContain(bothSheet.Field(FieldIds.ArmorClass).Warnings, w => w.Code == "equipment.armor-untrained");
+            // The Rogue's weapon training comes only with the starting class (onlyAs), so the Wizard 1 / Rogue 1 has none of it.
+            Assert.False(bothSheet.Attacks!.Single(a => a.Item == rapier).Proficient, $"{family} wizard/rogue rapier");
         }
     }
 

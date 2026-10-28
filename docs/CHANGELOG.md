@@ -8,7 +8,7 @@
 
 ### Changed
 - **Weapon mastery is shown only to characters with a Weapon Mastery feature:** an attack row's mastery property (SRD 5.2.1 weapons) now appears only when the character has a feature named "Weapon Mastery", such as the Barbarian's or the Fighter's; a Wizard with a Dagger no longer sees "Nick". An interim name rule until the feature grants it. No schema, package, content or database change.
-- **The builder keeps an older option when its newer revision is hidden:** a class choice that lists an old and a new revision of the same option hides the old one only while the new one is shown. When the new revision is hidden (for example it needs the other rules family or is outside the campaign), the old revision stays pickable instead of leaving the choice empty. UI only; no schema, content or database change.
+- **The builder keeps an older option when its newer revision is hidden:** a class choice that lists an old and a new revision of the same option hides the old one only while the new one is shown. When the new revision is hidden (for example it supports only the other rules family), the old revision stays pickable instead of leaving the choice empty. UI only; no schema, content or database change.
 
 ## 0.7.1 (crash reporting and the repo guard)
 

@@ -296,6 +296,16 @@ describe('a superseded option in a choice (I-06)', () => {
     const box = (await within(picker).findByRole('checkbox', { name: /Fixture Path/ })) as HTMLInputElement;
     expect(box.getAttribute('aria-disabled')).toBeNull();
   });
+
+  it('keeps the older option hidden when its newer sibling is outside the campaign (shown as not allowed)', async () => {
+    const view = choiceOf([]);
+    vi.mocked(client.listContent).mockResolvedValue([{ ...newest, allowedInCampaign: false }, older]);
+    render(<CharacterBuilder mode={{ kind: 'choices', view }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+    const picker = await screen.findByRole('group', { name: /Fixture feature: choose 1/ });
+    const box = (await within(picker).findByRole('checkbox', { name: /Fixture Path/ })) as HTMLInputElement;
+    expect(box.getAttribute('aria-disabled')).toBe('true');
+    expect(within(picker).getAllByRole('checkbox')).toHaveLength(1);
+  });
 });
 
 // R42 (follow-up F2): another option of the same choice can be ticked while an imported other-family option stays chosen.
