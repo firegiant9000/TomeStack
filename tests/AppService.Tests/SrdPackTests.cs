@@ -22,8 +22,9 @@ public class SrdPackTests
     private static readonly ContentPack Armor521 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.2.1-armor.json");
     private static readonly ContentPack Fighter51 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.1-fighter.json");
     private static readonly ContentPack Fighter521 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.2.1-fighter.json");
+    private static readonly ContentPack Barbarian51 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.1-barbarian.json");
     private static readonly ContentPack Barbarian521 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.2.1-barbarian.json");
-    private static readonly ContentPack Srd51 = Merge(Base51, Spells51, Equipment51, Classes51, Armor51, Fighter51);
+    private static readonly ContentPack Srd51 = Merge(Base51, Spells51, Equipment51, Classes51, Armor51, Fighter51, Barbarian51);
     private static readonly ContentPack Srd521 = Merge(Base521, Spells521, Equipment521, Classes521, Armor521, Fighter521, Barbarian521);
 
     private static ContentPack Merge(params ContentPack[] packs) => new()
@@ -45,7 +46,7 @@ public class SrdPackTests
     [Fact]
     public void A_familys_packs_carry_the_identical_source_record()
     {
-        foreach (var pack in new[] { Spells51, Equipment51, Classes51, Armor51, Fighter51 })
+        foreach (var pack in new[] { Spells51, Equipment51, Classes51, Armor51, Fighter51, Barbarian51 })
             Assert.Equal(TempApp.Json(Base51.Sources), TempApp.Json(pack.Sources));
         foreach (var pack in new[] { Spells521, Equipment521, Classes521, Armor521, Fighter521, Barbarian521 })
             Assert.Equal(TempApp.Json(Base521.Sources), TempApp.Json(pack.Sources));
