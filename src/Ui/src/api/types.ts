@@ -176,6 +176,8 @@ export interface ChoiceStatus {
   options: ContentReference[];
   selected: ContentReference[];
   resolved: boolean;
+  /** Content v12: when picks may be replaced (`max` is always set on the sheet). Absent below v12. */
+  replaceable?: { when: 'levelUp' | 'longRest'; max: number };
 }
 
 export interface Diagnostic {
@@ -1818,7 +1820,7 @@ export type Effect =
       bonus?: number;
     })
   | (EffectBase & { type: 'armor'; category: 'light' | 'medium' | 'heavy' | 'shield'; armorClass: number; dexterityCap?: number })
-  | (EffectBase & { type: 'choice'; choiceId: string; count: number; options: ContentReference[]; level?: number; onlyAs?: ClassEntry })
+  | (EffectBase & { type: 'choice'; choiceId: string; count: number; options: ContentReference[]; level?: number; onlyAs?: ClassEntry; replaceable?: { when: 'levelUp' | 'longRest'; max?: number } })
   // M5 slice 1b: the class editor (content v3/v5 effects, and v9 scale and multiclassCasterTable; ADR-010).
   | (EffectBase & { type: 'hitDie'; die: number })
   | (EffectBase & { type: 'restriction'; field: string; minimum: number; multiclass?: boolean; group?: string })

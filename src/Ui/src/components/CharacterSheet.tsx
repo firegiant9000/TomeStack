@@ -43,7 +43,8 @@ import { ByHandPanel } from './ByHandPanel';
 import { TabList, TabPanel, tabId, type TabSpec } from './sheet/TabList';
 import { LevelUpChecklist } from './LevelUpChecklist';
 import { dismissChecklist, readChecklist } from '../levelUpChecklist';
-import { rememberSheetTab, rememberedSheetTab, type SheetTabId } from '../sheetTab';
+import { afterLongRest } from '../replaceable';
+import { rememberSheetTab,rememberedSheetTab, type SheetTabId } from '../sheetTab';
 import { inverseOf, isCompound, type UndoEntry } from '../undo';
 import { recordSpend } from '../actionRows';
 import { editPins, readPins, resolvePin, visiblePins, writePins, type Pin, type QuickAction } from '../quickbar';
@@ -335,6 +336,8 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   const printButton = useRef<HTMLButtonElement>(null);
   const shortRestButton = useRef<HTMLButtonElement>(null);
   const longRestButton = useRef<HTMLButtonElement>(null);
+  /** MECH-X item 2: the sources whose picks may be replaced after the long rest just finished. Page state; Dismiss clears it. */
+  const [afterRest, setAfterRest] = useState<string[]>();
 
   // WCAG 2.4.3: opening a sheet (after create, import or picking from the list) moves focus to its heading instead of
   // leaving it on <body>. The sheet is keyed by character, so this runs once per opened character, not on every save.
@@ -887,9 +890,34 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
               // rest is saved, but the status would describe a screen the user has left.
               if (!mounted.current) return;
               onStatus(`${kind === 'shortRest' ? 'Short' : 'Long'} rest finished: ${applied} change${applied === 1 ? '' : 's'} applied.`);
+              // MECH-X item 2 (R44): page state only, never stored. Shown after a long rest that leaves a choice replaceable.
+              const replaceable = kind === 'longRest' ? afterLongRest(rested.sheet.choices) : [];
+              setAfterRest(replaceable.length > 0 ? [...new Set(replaceable.map((c) => c.sourceName))] : undefined);
             }}
+            replaceable={afterLongRest(sheet.choices)}
           />
         </div>
+      )}
+
+      {afterRest && (
+        <section aria-labelledby="after-rest-heading" className="play-panel">
+          <h3 id="after-rest-heading">After your long rest</h3>
+          <p>You may replace one pick of: {afterRest.join(', ')}.</p>
+          <div className="actions">
+            <button type="button" onClick={onMakeChoices}>
+              Make choices
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAfterRest(undefined);
+                heading.current?.focus(); // the panel is gone: the sheet heading (WCAG 2.4.3)
+              }}
+            >
+              Dismiss
+            </button>
+          </div>
+        </section>
       )}
 
       {damaging && hasResponses && (

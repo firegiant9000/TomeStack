@@ -256,6 +256,7 @@ function SkillChoice(props: {
           props.onOptionsPublished();
         }
       }
+      // `setChoice` keeps the stored choice's other keys (`replaceable`, MECH-X item 2 S2) and clamps its `max` to this count.
       props.onChoice({ type: 'choice', id: 'skills', choiceId: 'skills', count, options, onlyAs: 'startingClass', text: `Choose ${count} skill${count === 1 ? '' : 's'}` });
       setSelected([]);
       done(`Skill choice added: choose ${count} of ${options.length}. ${created} new option feature${created === 1 ? '' : 's'} published, ${options.length - created} reused.`);

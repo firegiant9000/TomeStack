@@ -1465,3 +1465,53 @@ describe('level-up Next states its reason (R43)', () => {
     expect(screen.queryByText('Choose a class to continue.')).toBeNull();
   });
 });
+
+// MECH-X item 2: the replace offer (level-up) and the window hint (Make choices) are real text in the choice group.
+describe('replaceable choices', () => {
+  const opts = [content(11, 'feature', 'Fixture Alpha', 'srd-5.1'), content(12, 'feature', 'Fixture Beta', 'srd-5.1')];
+  const replaceableView = (picked: ContentOption[], when: 'levelUp' | 'longRest', max = 1): CharacterView => {
+    const view = choiceView(picked, opts);
+    view.sheet.choices![0]!.replaceable = { when, max };
+    view.character = { ...view.character, level: 1, classes: [{ class: { contentId: 'fixture-class', revisionId: 'fixture-class-r1' }, level: 1 }] };
+    if (picked.length > 0) view.character.choices = [{ source: view.sheet.choices![0]!.source, choiceId: 'pick', selected: picked.map((o) => o.reference) }];
+    return view;
+  };
+  const group = () => screen.findByRole('group', { name: /Fixture feature: choose 2/ });
+  beforeEach(() => vi.mocked(client.listContent).mockResolvedValue(opts));
+
+  it('level-up: a levelUp choice that had picks shows the offer, in the choice group', async () => {
+    const user = userEvent.setup();
+    vi.mocked(client.preview).mockResolvedValue(replaceableView([opts[0]!], 'levelUp', 1));
+    render(<CharacterBuilder mode={{ kind: 'levelUp', view: replaceableView([opts[0]!], 'levelUp', 1) }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+    await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+    expect(within(await group()).getByText('You may replace one pick now.')).toBeTruthy();
+  });
+
+  it('level-up: words a max above 1', async () => {
+    const user = userEvent.setup();
+    vi.mocked(client.preview).mockResolvedValue(replaceableView([opts[0]!], 'levelUp', 2));
+    render(<CharacterBuilder mode={{ kind: 'levelUp', view: replaceableView([opts[0]!], 'levelUp', 2) }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+    await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+    expect(within(await group()).getByText('You may replace up to 2 picks now.')).toBeTruthy();
+  });
+
+  it('level-up: a first-time choice, and a longRest choice, show no offer', async () => {
+    const user = userEvent.setup();
+    vi.mocked(client.preview).mockResolvedValue(replaceableView([opts[0]!], 'levelUp', 1));
+    const { unmount } = render(<CharacterBuilder mode={{ kind: 'levelUp', view: replaceableView([], 'levelUp') }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+    await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+    await group();
+    expect(screen.queryByText(/You may replace/)).toBeNull();
+    unmount();
+    vi.mocked(client.preview).mockResolvedValue(replaceableView([opts[0]!], 'longRest'));
+    render(<CharacterBuilder mode={{ kind: 'levelUp', view: replaceableView([opts[0]!], 'longRest') }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+    await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+    await group();
+    expect(screen.queryByText(/You may replace/)).toBeNull();
+  });
+
+  it('choices mode shows the window as a hint', async () => {
+    render(<CharacterBuilder mode={{ kind: 'choices', view: replaceableView([opts[0]!], 'longRest') }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+    expect(within(await group()).getByText('You may replace a pick after a long rest.')).toBeTruthy();
+  });
+});

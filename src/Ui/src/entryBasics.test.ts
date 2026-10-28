@@ -127,6 +127,13 @@ describe('background ability increase options (mirrors the bundled 5.2.1 backgro
     expect(isIncreaseChoice({ type: 'choice', id: 'x', choiceId: 'skills', count: 1, options: [] })).toBe(false);
   });
 
+  it('keeps a stored replaceable and other keys when the choice is rebuilt (MECH-X item 2, S2)', () => {
+    const stored = { ...increaseChoice('Fixture Scout', [ref(1)]), replaceable: { when: 'levelUp' as const, max: 1 } };
+    const rebuilt = increaseChoice('Fixture Scout', [ref(2)], stored.choiceId, stored);
+    expect(rebuilt).toMatchObject({ options: [ref(2)], replaceable: { when: 'levelUp', max: 1 } });
+    expect(increaseChoice('Fixture Scout', [ref(2)]).replaceable).toBeUndefined();
+  });
+
   it('replaces the choice in place and removes it', () => {
     const other: Effect = { type: 'grant', id: 'g', grant: 'proficiency', target: 'skill.arcana' };
     let effects = setIncreaseChoice([other], increaseChoice('Fixture Scout', [ref(1)]));

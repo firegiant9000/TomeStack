@@ -2282,3 +2282,58 @@ describe('D74 level-up checklist', () => {
     expect(document.activeElement).toBe(focused);
   });
 });
+
+// MECH-X item 2: after a long rest the sheet names the choices whose picks may be replaced (page state only).
+describe('after your long rest', () => {
+  const picked = (when: 'levelUp' | 'longRest', selected: number) => ({
+    source: { contentId: 'fixture-src', revisionId: 'fixture-src-r1' },
+    sourceName: 'Fixture Repertoire',
+    choiceId: 'technique',
+    count: 2,
+    options: [],
+    selected: Array.from({ length: selected }, (_, i) => ({ contentId: `p${i}`, revisionId: `p${i}-r1` })),
+    resolved: selected === 2,
+    replaceable: { when, max: 1 },
+  });
+  async function finishRest(user: ReturnType<typeof userEvent.setup>, kind: 'Short' | 'Long', rested: CharacterView, onMakeChoices = noop) {
+    vi.mocked(client.restPreview).mockResolvedValue({ kind: kind === 'Long' ? 'longRest' : 'shortRest', changes: [], manual: [], basis: 'fixture' });
+    vi.mocked(client.rest).mockResolvedValue(rested);
+    render(<CharacterSheet view={view({ choices: [picked('longRest', 1)] })} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={onMakeChoices} onArchiveChanged={noop} />);
+    await user.click(screen.getByRole('button', { name: `${kind} rest…` }));
+    const finish = await screen.findByRole('button', { name: `Finish ${kind.toLowerCase()} rest` });
+    await waitFor(() => expect(finish.getAttribute('aria-disabled')).not.toBe('true'));
+    await user.click(finish);
+  }
+
+  it('shows a labelled region with Make choices and Dismiss; Dismiss removes it and focuses the sheet heading', async () => {
+    const user = userEvent.setup();
+    const onMakeChoices = vi.fn();
+    await finishRest(user, 'Long', view({ choices: [picked('longRest', 1)] }), onMakeChoices);
+    const region = await screen.findByRole('region', { name: 'After your long rest' });
+    expect(within(region).getByText('You may replace one pick of: Fixture Repertoire.')).toBeTruthy();
+    await user.click(within(region).getByRole('button', { name: 'Make choices' }));
+    expect(onMakeChoices).toHaveBeenCalledTimes(1);
+    await user.click(within(region).getByRole('button', { name: 'Dismiss' }));
+    expect(screen.queryByRole('region', { name: 'After your long rest' })).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Fixture Quill' }));
+  });
+
+  it('shows nothing after a short rest, or when no longRest choice has picks', async () => {
+    const user = userEvent.setup();
+    await finishRest(user, 'Short', view({ choices: [picked('longRest', 1)] }));
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Short rest' })).toBeNull());
+    expect(screen.queryByRole('region', { name: 'After your long rest' })).toBeNull();
+    cleanup();
+    await finishRest(user, 'Long', view({ choices: [picked('longRest', 0), picked('levelUp', 1)] }));
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Long rest' })).toBeNull());
+    expect(screen.queryByRole('region', { name: 'After your long rest' })).toBeNull();
+  });
+});
+
+it('does not echo a committed view\'s notices through the status line (MECH-X item 2)', () => {
+  const onStatus = vi.fn();
+  const v = view();
+  v.notices = [{ code: 'choice.replaced-outside-window', message: "Choice 'technique' had 2 pick(s) replaced outside its window." }];
+  render(<CharacterSheet view={v} onChanged={noop} onError={noop} onStatus={onStatus} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+  expect(onStatus).not.toHaveBeenCalled();
+});

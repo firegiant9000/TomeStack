@@ -195,3 +195,32 @@ it('takes a total rolled at the table, can clear it, and counts a row still wait
   await waitFor(() => expect(rested).toEqual([0])); // finished without the roll: the charges are left as they were
   expect(client.rest).toHaveBeenCalledWith('fixture-2', 'longRest', 'b', [], [], []);
 });
+
+// MECH-X item 2: a long rest names the choices whose picks may be replaced afterwards.
+const technique = {
+  source: { contentId: 'fixture-src', revisionId: 'fixture-src-r1' },
+  sourceName: 'Fixture Repertoire',
+  choiceId: 'technique',
+  count: 2,
+  options: [],
+  selected: [{ contentId: 'one', revisionId: 'one-r1' }],
+  resolved: false,
+  replaceable: { when: 'longRest' as const, max: 1 },
+};
+
+it('a long rest lists the choices that may be replaced afterwards', async () => {
+  vi.mocked(client.restPreview).mockResolvedValue({ kind: 'longRest', changes: [], manual: [], basis: 'fixture' });
+  panel({ kind: 'longRest', replaceable: [technique] });
+  expect(await screen.findByText('After this rest you may replace one pick of: Fixture Repertoire.')).toBeTruthy();
+});
+
+it('a short rest, or a long rest with none, lists nothing', async () => {
+  panel({ replaceable: [technique] });
+  await screen.findByText(/would change nothing/);
+  expect(screen.queryByText(/you may replace one pick of/)).toBeNull();
+  cleanup();
+  vi.mocked(client.restPreview).mockResolvedValue({ kind: 'longRest', changes: [], manual: [], basis: 'fixture' });
+  panel({ kind: 'longRest' });
+  await screen.findByText(/would change nothing/);
+  expect(screen.queryByText(/you may replace one pick of/)).toBeNull();
+});

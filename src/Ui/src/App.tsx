@@ -10,6 +10,7 @@ import { HomePanel } from './components/HomePanel';
 import { readFileAsBase64 } from './files';
 import { isTypingTarget } from './keys';
 import { diffLevelUp, dismissChecklist, writeChecklist } from './levelUpChecklist';
+import { noticeText } from './replaceable';
 import { applyPreferences, setSidebarCollapsed, sidebarCollapsed } from './settings';
 import type { SheetTabId } from './sheetTab';
 
@@ -371,11 +372,14 @@ export function App() {
                     dismissChecklist(view.character.id);
                   }
                 }
+                // MECH-X item 2: the save's advisory notice (picks replaced outside their window), worded from the sheets. It never blocks.
+                const notice = builder.kind === 'create' ? undefined : noticeText(builder.view, view);
                 if (stillHere) {
                   setMessage(undefined);
+                  if (notice) setMessage({ tone: 'status', text: notice }); // after the clear above, or it is wiped
                   setScreen(builder.kind === 'levelUp' ? { kind: 'sheet', view, tab: 'features', levelledUp: true } : { kind: 'sheet', view });
                 } else {
-                  setMessage({ tone: 'status', text: `Saved ${view.character.name}.` });
+                  setMessage({ tone: 'status', text: notice ? `Saved ${view.character.name}. ${notice}` : `Saved ${view.character.name}.` });
                   // A sheet of this character opened while the save was in flight shows the saved version, never the older read
                   // (a stale sheet could later be saved over it).
                   setScreen((cur) => (cur.kind === 'sheet' && cur.view.character.id === view.character.id ? { ...cur, view } : cur));

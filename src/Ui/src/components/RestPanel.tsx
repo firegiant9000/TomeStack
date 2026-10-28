@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { client } from '../api/client';
-import type { ChargeRoll, CharacterView, HitDiceValue, HitDieRoll, RestChange, RestPeriod, RestPreview, RollRecord } from '../api/types';
+import type { ChargeRoll, CharacterView, ChoiceStatus, HitDiceValue, HitDieRoll, RestChange, RestPeriod, RestPreview, RollRecord } from '../api/types';
 
 interface Props {
   characterId: string;
@@ -16,6 +16,8 @@ interface Props {
   onRoll?: (record: RollRecord) => void;
   /** R188: runs the finishing command in the sheet's save queue, so a save never starts from the stamp it replaces. Direct when absent. */
   run?: (command: () => Promise<CharacterView>) => Promise<CharacterView>;
+  /** MECH-X item 2: the `longRest` choices with picks (`afterLongRest`); a long rest lists them as replaceable afterwards. */
+  replaceable?: ChoiceStatus[];
 }
 
 /**
@@ -23,7 +25,7 @@ interface Props {
  * no food and drink) and confirms; nothing changes before "Finish … rest". A short rest first asks which hit dice to
  * spend: each is rolled here or entered from the table, and the proposal follows the dice chosen.
  */
-export function RestPanel({ characterId, kind, hitDice, version, onRested, onCancel, onError, onRoll, run }: Props) {
+export function RestPanel({ characterId, kind, hitDice, version, onRested, onCancel, onError, onRoll, run, replaceable = [] }: Props) {
   // The proposal belongs to the view and the hit dice it was worked out for: after any other change (for example "Lose 1 hit
   // point" in the summary, or a die added or removed) it is stale and fetched again. The last proposal stays on screen
   // meanwhile (so a focused control is not unmounted) but "Finish" waits for the one for the current view and dice.
@@ -241,6 +243,9 @@ export function RestPanel({ characterId, kind, hitDice, version, onRested, onCan
             </>
           )}
         </>
+      )}
+      {kind === 'longRest' && replaceable.length > 0 && (
+        <p>After this rest you may replace one pick of: {[...new Set(replaceable.map((c) => c.sourceName))].join(', ')}.</p>
       )}
       <div className="actions">
         <button type="button" onClick={finish} aria-disabled={!ready || failed || busy || rollingAny}>
