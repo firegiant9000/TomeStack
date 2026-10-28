@@ -6,8 +6,8 @@ namespace TomeStack.AppService.Tests;
 /// <summary>
 /// Guards the committed old-release outcome files (spec section 8, "Real older build"). Each
 /// <c>tests/RulesFixtures/downconvert/outcomes/&lt;target&gt;.json</c> is written by <c>scripts/old-release-check.ps1</c> and claims that the
-/// real older release opened the golden packages. This check proves the claim still refers to the goldens in the tree: the outcome
-/// exists, names the right tag, hashes every golden and <c>expected.json</c> to the committed bytes, lists every golden, and records a pass for each.
+/// real older release opened the golden packages. This check ties the committed outcome to the committed bytes (the weekly job is the proof
+/// itself): the outcome exists, names the right tag, hashes every golden and <c>expected.json</c> to the committed bytes, lists them all, and records a pass for each package.
 /// </summary>
 public sealed class OldReleaseOutcomeTests : IDisposable
 {
@@ -81,16 +81,27 @@ public sealed class OldReleaseOutcomeTests : IDisposable
                 continue;
             }
 
-            if (!doc.TryGetProperty("harnessVersion", out var version) || version.ValueKind != JsonValueKind.Number || version.GetInt32() != 1)
+            if (doc.ValueKind != JsonValueKind.Object)
+            {
+                problems.Add($"{label} is not a JSON object.");
+                continue;
+            }
+
+            if (!doc.TryGetProperty("harnessVersion", out var version) || version.ValueKind != JsonValueKind.Number || !version.TryGetInt32(out var versionNumber) || versionNumber != 1)
                 problems.Add($"{label}: harnessVersion is not 1.");
             if (!doc.TryGetProperty("tag", out var tag) || tag.ValueKind != JsonValueKind.String || tag.GetString() != "v" + target)
                 problems.Add($"{label}: tag is not v{target}.");
 
-            var listed = new HashSet<string>(StringComparer.Ordinal);
+            var listed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (doc.TryGetProperty("inputs", out var inputs) && inputs.ValueKind == JsonValueKind.Array)
             {
                 foreach (var input in inputs.EnumerateArray())
                 {
+                    if (input.ValueKind != JsonValueKind.Object)
+                    {
+                        problems.Add($"{label}: an inputs entry is not an object.");
+                        continue;
+                    }
                     var path = input.TryGetProperty("path", out var p) && p.ValueKind == JsonValueKind.String ? p.GetString() : null;
                     var sha = input.TryGetProperty("sha256", out var s) && s.ValueKind == JsonValueKind.String ? s.GetString() : null;
                     if (string.IsNullOrEmpty(path) || sha is null)
@@ -120,6 +131,11 @@ public sealed class OldReleaseOutcomeTests : IDisposable
             {
                 foreach (var result in resultList.EnumerateArray())
                 {
+                    if (result.ValueKind != JsonValueKind.Object)
+                    {
+                        problems.Add($"{label}: a results entry is not an object.");
+                        continue;
+                    }
                     var package = result.TryGetProperty("package", out var p) && p.ValueKind == JsonValueKind.String ? p.GetString() : null;
                     var status = result.TryGetProperty("status", out var s) && s.ValueKind == JsonValueKind.String ? s.GetString() : null;
                     if (package is null) continue;
@@ -128,6 +144,12 @@ public sealed class OldReleaseOutcomeTests : IDisposable
                         problems.Add($"{label}: {package} is {(string.IsNullOrEmpty(status) ? "without a status" : status)}, not pass.");
                 }
             }
+
+            var expectedRelative = $"{Downconvert}/for-{target}/expected.json";
+            if (!File.Exists(Path.Combine(forDir, "expected.json")))
+                problems.Add($"{label}: {expectedRelative} does not exist; the proof needs an expectation.");
+            else if (!listed.Contains(expectedRelative))
+                problems.Add($"{label}: {expectedRelative} is not listed in inputs.");
 
             foreach (var package in packages)
             {
@@ -222,6 +244,78 @@ public sealed class OldReleaseOutcomeTests : IDisposable
     {
         var problems = FindProblems(Build(writeOutcome: false));
         Assert.Contains(problems, p => p.Contains("outcomes/0.6.0.json is missing"));
+    }
+
+    private string OutcomePath => Path.Combine(_root, "tests", "RulesFixtures", "downconvert", "outcomes", "0.6.0.json");
+
+    private void Rewrite(Func<string, string> change) => File.WriteAllText(OutcomePath, change(File.ReadAllText(OutcomePath)));
+
+    [Fact]
+    public void A_changed_byte_in_expected_json_is_a_hash_problem()
+    {
+        Build();
+        File.WriteAllText(Path.Combine(_root, "tests", "RulesFixtures", "downconvert", "for-0.6.0", "expected.json"), "{\"characters\":{\"x\":{}}}");
+        Assert.Contains(FindProblems(_root), p => p.Contains("expected.json") && p.Contains("SHA-256"));
+    }
+
+    [Fact]
+    public void An_expected_json_missing_from_inputs_is_a_problem()
+    {
+        Build();
+        Rewrite(t => t.Replace("for-0.6.0/expected.json", "for-0.6.0/other.json", StringComparison.Ordinal));
+        var problems = FindProblems(_root);
+        Assert.Contains(problems, p => p.Contains("expected.json") && p.Contains("not listed"));
+    }
+
+    [Fact]
+    public void A_missing_expected_json_is_a_problem()
+    {
+        Build();
+        File.Delete(Path.Combine(_root, "tests", "RulesFixtures", "downconvert", "for-0.6.0", "expected.json"));
+        Assert.Contains(FindProblems(_root), p => p.Contains("expected.json") && p.Contains("does not exist"));
+    }
+
+    [Fact]
+    public void A_wrong_harness_version_is_a_problem()
+    {
+        Build();
+        Rewrite(t => t.Replace("\"harnessVersion\":1", "\"harnessVersion\":2", StringComparison.Ordinal));
+        Assert.Contains(FindProblems(_root), p => p.Contains("harnessVersion"));
+    }
+
+    [Fact]
+    public void A_wrong_tag_is_a_problem()
+    {
+        Build();
+        Rewrite(t => t.Replace("\"tag\":\"v0.6.0\"", "\"tag\":\"v0.5.0\"", StringComparison.Ordinal));
+        Assert.Contains(FindProblems(_root), p => p.Contains("tag is not v0.6.0"));
+    }
+
+    [Fact]
+    public void A_golden_without_a_result_is_a_problem()
+    {
+        Build();
+        Rewrite(t => t.Replace("compat-hero.tomestack.zip\",\"status", "other.tomestack.zip\",\"status", StringComparison.Ordinal));
+        Assert.Contains(FindProblems(_root), p => p.Contains("compat-hero.tomestack.zip") && p.Contains("no result"));
+    }
+
+    [Fact]
+    public void An_unparseable_outcome_is_a_problem_not_an_exception()
+    {
+        Build();
+        File.WriteAllText(OutcomePath, "{ not json");
+        Assert.Contains(FindProblems(_root), p => p.Contains("not valid JSON"));
+    }
+
+    [Fact]
+    public void Non_object_entries_and_a_fractional_version_are_problems_not_exceptions()
+    {
+        Build();
+        File.WriteAllText(OutcomePath, "{\"harnessVersion\":1.5,\"tag\":\"v0.6.0\",\"inputs\":[1],\"results\":[\"x\"]}");
+        var problems = FindProblems(_root);
+        Assert.Contains(problems, p => p.Contains("harnessVersion"));
+        Assert.Contains(problems, p => p.Contains("inputs entry is not an object"));
+        Assert.Contains(problems, p => p.Contains("results entry is not an object"));
     }
 
     [Fact]
