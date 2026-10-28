@@ -638,9 +638,167 @@ public class DownConvertTests
     {
         { """{"type":"modifier","id":"m","operation":"bonus","target":"resource.rage","value":"2"}""", 11, 10 },
         { """{"type":"modifier","id":"m","operation":"bonus","target":"speed.fly","value":"10"}""", 11, 10 },
-        { """{"type":"modifier","id":"m","operation":"set","target":"speed","value":"30"}""", 10, 9 },
         { """{"type":"modifier","id":"m","operation":"bonus","target":"passive.perception","value":"5"}""", 10, 9 },
+        { """{"type":"modifier","id":"m","operation":"Bonus","target":"speed","value":"5"}""", 10, 9 },
     };
+
+    public static TheoryData<string, int, int> BlockedSetTargets => new()
+    {
+        { """{"type":"modifier","id":"m","operation":"set","target":"speed","value":"30"}""", 10, 9 },
+        { """{"type":"modifier","id":"m","operation":"set","target":"speed","value":"0"}""", 10, 9 },
+        { """{"type":"modifier","id":"m","operation":"replace","target":"passive.perception","value":"12"}""", 10, 9 },
+        { """{"type":"modifier","id":"m","operation":"set","target":"resource.rage","value":"2"}""", 11, 10 },
+    };
+
+    [Theory]
+    [MemberData(nameof(BlockedSetTargets))]
+    public void Set_or_replace_on_a_removed_target_blocks_even_for_a_non_negative_constant(string effect, int schema, int target)
+    {
+        var result = DownConvert.Below(Rev(effect, schema), target);
+
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(("effects[0]", BelowAction.Blocks, "below.unknown-target"), (change.Path, change.Action, change.Code));
+        Assert.True(result.Blocked);
+        Assert.Empty(result.Revision.Effects);
+        Assert.Equal(target, result.Revision.SchemaVersion);
+    }
+
+    [Fact]
+    public void Set_on_a_removed_target_that_reads_a_value_blocks_directly_and_by_steps()
+    {
+        var input = Rev("""{"type":"value","id":"v","valueId":"x","formula":"2"},{"type":"modifier","id":"m","operation":"set","target":"speed","value":"VALUE.x"}""");
+
+        var direct = DownConvert.Below(input, 9);
+        var viaTen = DownConvert.Below(input, 10);
+        var viaNine = DownConvert.Below(viaTen.Revision, 9);
+
+        Assert.True(direct.Blocked);
+        Assert.Equal("below.unknown-target", Assert.Single(direct.Changes, c => c.Action == BelowAction.Blocks).Code);
+        Assert.True(viaTen.Blocked);
+        Assert.Equal("below.value-formula", Assert.Single(viaTen.Changes, c => c.Action == BelowAction.Blocks).Code);
+        Assert.Equal(Written(direct), Written(viaNine));
+        Assert.Empty(direct.Revision.Effects);
+    }
+
+    private static ContentRevision ChainRevision(int depth)
+    {
+        var effects = new List<string>();
+        for (var i = 0; i < depth; i++)
+            effects.Add($$"""{"type":"value","id":"v{{i}}","valueId":"v{{i}}","formula":"{{string.Join(" + ", Enumerable.Repeat($"VALUE.v{i + 1}", 10))}}"}""");
+        effects.Add($$"""{"type":"value","id":"v{{depth}}","valueId":"v{{depth}}","formula":"1"}""");
+        effects.Add("""{"type":"modifier","id":"m","operation":"bonus","target":"initiative","value":"VALUE.v0"}""");
+        return Rev(string.Join(",", effects));
+    }
+
+    [Fact]
+    public void Value_sign_of_a_deep_chain_is_computed_once_per_value()
+    {
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+
+        var result = DownConvert.Below(ChainRevision(9), 10);
+
+        watch.Stop();
+        var change = At(result, "effects[10]");
+        Assert.Equal((BelowAction.Dropped, "below.value-formula"), (change.Action, change.Code));
+        Assert.False(result.Blocked);
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(5), $"took {watch.Elapsed}");
+    }
+
+    [Fact]
+    public void Value_cycle_is_not_non_negative_so_the_bonus_blocks()
+    {
+        var input = Rev("""
+            {"type":"value","id":"a","valueId":"a","formula":"VALUE.b"},
+            {"type":"value","id":"b","valueId":"b","formula":"VALUE.a"},
+            {"type":"modifier","id":"m","operation":"bonus","target":"initiative","value":"VALUE.a"}
+            """);
+
+        var result = DownConvert.Below(input, 10);
+
+        var change = At(result, "effects[2]");
+        Assert.Equal((BelowAction.Blocks, "below.value-formula"), (change.Action, change.Code));
+        Assert.True(result.Blocked);
+    }
+
+    [Fact]
+    public void Two_spellings_of_one_v10_key_give_one_change_and_neither_is_kept()
+    {
+        var v9 = Rev("""{"type":"toggle","id":"t","toggleId":"t","label":"T","autoWhen":"bloodied","AutoWhen":"bloodied"}""", 9);
+        Assert.NotNull(Assert.Single(v9.Effects).Extensions);
+
+        var low = DownConvert.Below(v9, 9);
+
+        var change = Assert.Single(low.Changes);
+        Assert.Equal(("effects[0].autoWhen", BelowAction.Silent, "below.toggle-auto-when"), (change.Path, change.Action, change.Code));
+        Assert.DoesNotContain("utoWhen", Written(low), StringComparison.OrdinalIgnoreCase);
+        Assert.False(low.Blocked);
+    }
+
+    [Fact]
+    public void Two_spellings_of_one_v11_key_give_one_change_and_neither_is_kept()
+    {
+        var v10 = Rev("""{"type":"toggle","id":"t","toggleId":"t","label":"T","duration":"3","Duration":"3"}""", 10);
+
+        var low = DownConvert.Below(v10, 10);
+
+        var change = Assert.Single(low.Changes);
+        Assert.Equal(("effects[0].duration", BelowAction.Silent, "below.toggle-duration"), (change.Path, change.Action, change.Code));
+        Assert.DoesNotContain("uration", Written(low), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Content_below_rejects_input_from_a_newer_build()
+    {
+        var input = Rev("""{"type":"modifier","id":"m","operation":"bonus","target":"initiative","value":"1"}""", ContentRevision.CurrentSchemaVersion + 1);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => DownConvert.Below(input, 10));
+    }
+
+    [Fact]
+    public void Character_below_rejects_input_from_a_newer_build()
+    {
+        var input = Base() with { SchemaVersion = Character.CurrentSchemaVersion + 1 };
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => DownConvert.Below(input, 9));
+    }
+
+    [Fact]
+    public void Validation_error_path_names_the_original_effect_index()
+    {
+        var input = Rev("""
+            {"type":"attack","id":"a1","attackId":"a1","label":"Strike","kind":"melee","abilities":["str"]},
+            {"type":"modifier","id":"m","operation":"bonus","target":"notAField","value":"1"}
+            """);
+
+        var result = DownConvert.Below(input, 10);
+
+        var error = Assert.Single(result.Changes, c => c.Code == "below.validation-error");
+        Assert.Equal("effects[1]", error.Path);
+    }
+
+    [Fact]
+    public void Character_below_9_with_only_rounds_left_is_written_as_v8()
+    {
+        var input = Base() with { Play = Base().Play with { Toggles = [new ActiveToggle(ContentId, "tideStance", RoundsLeft: 2)] } };
+        Assert.Equal(10, input.SchemaVersion);
+
+        var result = DownConvert.Below(input, 9);
+
+        Assert.False(result.Blocked);
+        Assert.Equal(8, result.Character.SchemaVersion);
+    }
+
+    [Fact]
+    public void Content_below_10_roll_with_an_empty_also_change_array_is_silent()
+    {
+        var result = DownConvert.Below(Rev("""{"type":"roll","id":"r","rollId":"r","label":"R","dice":"1d6","alsoChange":[]}"""), 10);
+
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(("effects[0].alsoChange", BelowAction.Silent, "below.roll-also-change"), (change.Path, change.Action, change.Code));
+        Assert.False(result.Blocked);
+        Assert.DoesNotContain("alsoChange", Written(result));
+    }
+
 
     [Theory]
     [MemberData(nameof(DroppedTargets))]
@@ -966,4 +1124,5 @@ public class DownConvertTests
         Assert.Throws<ArgumentOutOfRangeException>(() => DownConvert.Below(input, ContentRevision.CurrentSchemaVersion + 1));
         Assert.Throws<ArgumentNullException>(() => DownConvert.Below((ContentRevision)null!, 10));
     }
+
 }

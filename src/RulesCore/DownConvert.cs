@@ -79,13 +79,15 @@ public static class DownConvert
     /// <summary>
     /// Lowers <paramref name="character"/> to <paramref name="targetCharacterSchema"/> (8 to <see cref="Character.CurrentSchemaVersion"/>).
     /// Returns the same instance and no changes when nothing is above the target. When any change blocks, returns the input instance
-    /// with the full change list; otherwise the lowered copy, whose <see cref="Character.SchemaVersion"/> is the target.
+    /// with the full change list; otherwise the lowered copy, whose <see cref="Character.SchemaVersion"/> is at most the target (it is computed from the data, so a
+    /// copy left with no v9 field reads as v8).
     /// </summary>
     public static CharacterBelow Below(Character character, int targetCharacterSchema)
     {
         ArgumentNullException.ThrowIfNull(character);
         ArgumentOutOfRangeException.ThrowIfLessThan(targetCharacterSchema, Character.PreviousSchemaVersion);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(targetCharacterSchema, Character.CurrentSchemaVersion);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(character.SchemaVersion, Character.CurrentSchemaVersion);
 
         if (character.SchemaVersion <= targetCharacterSchema)
             return new CharacterBelow(character, []);
@@ -119,9 +121,11 @@ public static class DownConvert
         ArgumentNullException.ThrowIfNull(revision);
         ArgumentOutOfRangeException.ThrowIfLessThan(targetContentSchema, ContentRevision.PlayDetailsSchemaVersion - 1);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(targetContentSchema, ContentRevision.CurrentSchemaVersion);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(revision.SchemaVersion, ContentRevision.CurrentSchemaVersion);
 
         var own = revision.SchemaVersion;
-        var node = JsonSerializer.SerializeToNode(revision, RulesJson.Compact)!.AsObject();
+        // Parsed case-sensitively (the serializer's own node would be case-insensitive and throw on two spellings of one key); lookups ignore case themselves.
+        var node = JsonNode.Parse(JsonSerializer.SerializeToUtf8Bytes(revision, RulesJson.Compact))!.AsObject();
         var changes = new List<BelowChange>();
         var values = revision.Effects.OfType<ValueEffect>().GroupBy(v => v.ValueId, StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.First().Formula, StringComparer.Ordinal);
@@ -140,6 +144,8 @@ public static class DownConvert
                 case ContentRevision.PlayDetailsSchemaVersion:
                     ContentBelowV10(scope, node, changes);
                     break;
+                default:
+                    throw new System.Diagnostics.UnreachableException($"No lowering step for content v{step}.");
             }
         }
 
@@ -148,13 +154,16 @@ public static class DownConvert
 
         node["schemaVersion"] = Math.Min(own, targetContentSchema);
         var copy = node.Deserialize<ContentRevision>(RulesJson.Options)!;
-        ValidateAtTarget(copy, catalog, changes);
+        ValidateAtTarget(copy, catalog, origin, changes);
         return new ContentBelow(copy, changes);
     }
 
     /// <summary>What the steps share: the input, the version being written, its named values and the original effect indexes.</summary>
     private sealed record Scope(ContentRevision Revision, int Target, IReadOnlyDictionary<string, string> Values, List<int> Origin)
     {
+        /// <summary>The sign of each named value, once worked out (true when it can never be below zero).</summary>
+        public Dictionary<string, bool> Signs { get; } = new(StringComparer.Ordinal);
+
         public int Own => Revision.SchemaVersion;
 
         public string Name => Revision.Name;
@@ -168,7 +177,7 @@ public static class DownConvert
         public SourceRecord? FindSource(Guid sourceId) => sourceId == source.Id ? source : null;
     }
 
-    private static void ValidateAtTarget(ContentRevision copy, IContentCatalog? catalog, List<BelowChange> changes)
+    private static void ValidateAtTarget(ContentRevision copy, IContentCatalog? catalog, List<int> origin, List<BelowChange> changes)
     {
         var skipAvailability = catalog is null;
         catalog ??= new SourceOnlyCatalog(new SourceRecord
@@ -181,7 +190,9 @@ public static class DownConvert
             if (skipAvailability && error.Code is "validate.source-missing" or "validate.reference-missing")
                 continue;
             var index = error.EffectId is null ? -1 : copy.Effects.ToList().FindIndex(e => e.Id == error.EffectId);
-            changes.Add(new(index < 0 ? "revision" : $"effects[{index}]", BelowAction.Blocks, BelowCodes.ValidationError, $"'{copy.Name}': {error.Message}"));
+            // The copy's index back to the input's, since earlier steps removed effects.
+            var path = index < 0 ? "revision" : $"effects[{(index < origin.Count ? origin[index] : index)}]";
+            changes.Add(new(path, BelowAction.Blocks, BelowCodes.ValidationError, $"'{copy.Name}': {error.Message}"));
         }
     }
 
@@ -194,11 +205,10 @@ public static class DownConvert
     /// (a <c>VALUE.id</c> only when this revision declares it with a formula that is itself so) and sums and products of those.
     /// Identifiers such as <c>STR.MOD</c> count (spec §2).
     /// </summary>
-    private static bool StaticallyNonNegative(string? source, IReadOnlyDictionary<string, string> values, HashSet<string>? visiting = null)
+    private static bool StaticallyNonNegative(string? source, Scope scope)
     {
         if (!Formula.TryParse(source, AllFeatures, out var formula, out _))
             return false;
-        visiting ??= new HashSet<string>(StringComparer.Ordinal);
         return NonNegative(formula!.Root);
 
         bool NonNegative(FormulaNode node) => node switch
@@ -210,27 +220,22 @@ public static class DownConvert
             _ => false,
         };
 
+        // Each id's sign is worked out once per call; an id being worked out reads as false, which is the cycle guard.
         bool ValueNonNegative(string id)
         {
-            if (!values.TryGetValue(id, out var inner) || !visiting.Add(id))
+            if (scope.Signs.TryGetValue(id, out var known))
+                return known;
+            if (!scope.Values.TryGetValue(id, out var inner))
                 return false;
-            try
-            {
-                return StaticallyNonNegative(inner, values, visiting);
-            }
-            finally
-            {
-                visiting.Remove(id);
-            }
+            scope.Signs[id] = false;
+            var sign = StaticallyNonNegative(inner, scope);
+            scope.Signs[id] = sign;
+            return sign;
         }
     }
 
     private static bool ReadsValue(string? source) =>
         Formula.TryParse(source, AllFeatures, out var formula, out _) && formula!.Identifiers.Any(FormulaIdentifiers.IsValue);
-
-    /// <summary>The actual key of the property with this name in any case; null when absent.</summary>
-    private static string? KeyOf(JsonObject o, string name) =>
-        o.Select(p => p.Key).FirstOrDefault(k => string.Equals(k, name, StringComparison.OrdinalIgnoreCase));
 
     private static string? TypeOf(JsonObject effect) => StringOf(Property(effect, "type"));
 
@@ -249,9 +254,10 @@ public static class DownConvert
         switch (type)
         {
             case ModifierEffect.TypeName when StringOf(Property(effect, "target")) is { } target && IsRemovedTarget(target, scope):
-                changes.Add(StaticallyNonNegative(StringOf(Property(effect, "value")), scope.Values)
+                changes.Add(string.Equals(StringOf(Property(effect, "operation")), nameof(ModifierOperation.Bonus), StringComparison.OrdinalIgnoreCase)
+                    && StaticallyNonNegative(StringOf(Property(effect, "value")), scope)
                     ? new(path, BelowAction.Dropped, BelowCodes.UnknownTarget, $"'{name}': its bonus to '{target}', which the older version has no field for.")
-                    : new(path, BelowAction.Blocks, BelowCodes.UnknownTarget, $"'{name}': its change to '{target}', which the older version has no field for; it could reduce the value, so leaving it out would change the result."));
+                    : new(path, BelowAction.Blocks, BelowCodes.UnknownTarget, $"'{name}': its change to '{target}', which the older version has no field for; it could set or reduce the value, so leaving it out would change the result."));
                 return true;
             case RestrictionEffect.TypeName when StringOf(Property(effect, "field")) is { } field && IsRemovedTarget(field, scope):
                 changes.Add(new(path, BelowAction.Blocks, BelowCodes.RestrictionLifted, $"'{name}': its limit on '{field}', which the older version has no field for; the limit would be lifted."));
@@ -283,7 +289,7 @@ public static class DownConvert
         if (type == ModifierEffect.TypeName)
         {
             var bonus = string.Equals(StringOf(Property(effect, "operation")), "bonus", StringComparison.OrdinalIgnoreCase);
-            changes.Add(bonus && StaticallyNonNegative(StringOf(Property(effect, "value")), scope.Values)
+            changes.Add(bonus && StaticallyNonNegative(StringOf(Property(effect, "value")), scope)
                 ? new(path, BelowAction.Dropped, BelowCodes.ValueFormula, $"'{name}': a bonus that reads a named value, which the older version cannot calculate.")
                 : new(path, BelowAction.Blocks, BelowCodes.ValueFormula, $"'{name}': a modifier that reads a named value, which the older version cannot calculate; leaving it out would change the result."));
         }
@@ -355,9 +361,11 @@ public static class DownConvert
 
     private static void RemoveKey(JsonObject effect, string key, string path, BelowAction action, string code, string message, List<BelowChange> changes)
     {
-        if (KeyOf(effect, key) is not { } actual)
+        var spellings = effect.Select(p => p.Key).Where(k => string.Equals(k, key, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (spellings.Count == 0)
             return;
-        effect.Remove(actual);
+        foreach (var spelling in spellings)
+            effect.Remove(spelling);
         changes.Add(new($"{path}.{key}", action, code, message));
     }
 
@@ -443,11 +451,17 @@ public static class DownConvert
             var typed = i < revision.Effects.Count && revision.Effects[i] is not UnknownEffect;
             if (keys.Length > 0 && (declaresV11 || typed))
             {
+                var done = new HashSet<string>(StringComparer.Ordinal);
                 foreach (var (key, value) in effect.ToList())
                 {
                     var canonical = keys.FirstOrDefault(k => string.Equals(k, key, StringComparison.OrdinalIgnoreCase));
-                    if (canonical is null)
+                    // Every spelling of the key goes, with one change (for the first spelling's value).
+                    if (canonical is null || !done.Add(canonical))
+                    {
+                        if (canonical is not null)
+                            effect.Remove(key);
                         continue;
+                    }
                     effect.Remove(key);
                     changes.Add(declaresV11 ? KeyBelowV11(type!, canonical, value, i, name) : KeyBelowV11(type!, canonical, value, i, name) with { Action = BelowAction.Silent });
                 }
@@ -522,7 +536,7 @@ public static class DownConvert
                     : new(path, BelowAction.Dropped, BelowCodes.ResourceDetail, $"'{name}': how a resource counts.");
             case (ResourceEffect.TypeName, _):
                 return new(path, BelowAction.Dropped, BelowCodes.ResourceDetail, $"'{name}': the {key} of a resource.");
-            case (RollEffect.TypeName, "alsoChange") when value is null:
+            case (RollEffect.TypeName, "alsoChange") when value is null or JsonArray { Count: 0 }:
                 return new(path, BelowAction.Silent, BelowCodes.RollAlsoChange, $"'{name}': an empty also-change on a roll.");
             case (RollEffect.TypeName, "alsoChange"):
                 return AlsoChangeSpends(value)

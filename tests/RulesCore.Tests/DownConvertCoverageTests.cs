@@ -48,6 +48,17 @@ public class DownConvertCoverageTests
             Assert.True(used.Contains(code), $"No requires-vN entry maps to '{code}'.");
 
         foreach (var entry in entries.Where(e => e.Rule is null))
-            Assert.True(entry.Group == "content" && entry.Version is "9" or "12", $"{entry.Group} v{entry.Version} '{entry.Feature}' has no rule.");
+        {
+            var version = int.Parse(entry.Version, System.Globalization.CultureInfo.InvariantCulture);
+            Assert.True(entry.Group == "content" && (version <= 9 || version > ContentRevision.CurrentSchemaVersion),
+                $"{entry.Group} v{entry.Version} '{entry.Feature}' has no rule.");
+        }
+    }
+
+    [Fact]
+    public void A_new_schema_version_needs_a_lowering_step_and_requires_vN_entries()
+    {
+        Assert.True(Character.CurrentSchemaVersion == 10 && ContentRevision.CurrentSchemaVersion == 11,
+            "A new schema version needs a lowering step in DownConvert and requires-vN.json entries (then update this pin).");
     }
 }
