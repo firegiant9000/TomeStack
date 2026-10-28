@@ -646,7 +646,7 @@
     {
       "contentId": "52c00000-0000-4000-8000-000000410002",
       "revisionId": "52e00000-0000-4000-8000-000000410002",
-      "schemaVersion": 4,
+      "schemaVersion": 3,
       "kind": "subclass",
       "name": "Thief",
       "rulesFamilies": [
@@ -659,10 +659,6 @@
         }
       },
       "status": "published",
-      "extendsChoice": {
-        "contentId": "52c00000-0000-4000-8000-000000410001",
-        "choiceId": "rogue-subclass"
-      },
       "summary": "Hunt for Treasure as a Classic Adventurer. A mix of burglar, treasure hunter, and explorer, you are the epitome of an adventurer. In addition to improving your agility and stealth, you gain abilities useful for delving into ruins and getting maximum benefit from the magic items you find there.",
       "effects": [
         {
