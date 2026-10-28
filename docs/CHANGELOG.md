@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Internal
+- **`Calculation.cs` split into partial files:** `CharacterCalculator` now spans `Calculation.cs` (the result records, the static fields and the calculation entry points) and one `Calculation.<Section>.cs` file for each section the file already had (Attacks, Spellcasting, Resources, Resolution, Effects, Graph, Evaluation, Fields). The code was moved without being changed. All static initializers stay in `Calculation.cs`, because C# does not fix their order across partial files; `CalculationSplitTests` enforces this. No change to the app.
+
 ## 0.7.1 (crash reporting and the repo guard)
 
 A patch on 0.7.0: if TomeStack crashes it now leaves a record and tells you where it is. Nothing else in the app changes.
