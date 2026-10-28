@@ -57,7 +57,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
     {
         var plan = Plan(characterIds, purpose);
         var gapNotes = purpose == ExportPurpose.Backup ? plan.Characters.Sum(c => store.ListGapNotes(c.Id).Count) : 0;
-        return new ExportPreview(purpose, plan.FileName, [.. plan.Characters.Select(c => c.Id)], [.. plan.Sources.Select(Notice)], plan.Omitted, gapNotes, NewerBuild.For(plan.Revisions, plan.Characters));
+        return new ExportPreview(purpose, plan.FileName, [.. plan.Characters.Select(c => c.Id)], [.. plan.Sources.Select(Notice)], plan.Omitted, gapNotes, NewerBuild.Evaluate(plan.Revisions, plan.Characters, 0, [], _ => "").Warnings);
     }
 
     public ExportResult Export(IReadOnlyList<Guid> characterIds, ExportPurpose purpose = ExportPurpose.Backup)

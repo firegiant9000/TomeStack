@@ -1,5 +1,6 @@
 using System.Globalization;
 using TomeStack.AppService.Persistence;
+using TomeStack.RulesCore;
 
 namespace TomeStack.AppService.Packages;
 
@@ -9,6 +10,12 @@ namespace TomeStack.AppService.Packages;
 /// </summary>
 public sealed record LadderRow(Version Release, int CharacterSchema, int ContentSchema, int GapNoteSchema,
     int FormatVersion, int DatabaseSchema, IReadOnlySet<Guid> BundledRevisionIds, bool OfferedAsTarget);
+
+/// <summary>One entry that keeps a file from opening in the previous minor release: <paramref name="Entry"/> is its path in the package.</summary>
+public sealed record OpensInCause(string Entry, string Kind, Guid Id, string Name, int? SchemaVersion, string? BundledPack, string Message);
+
+/// <summary>The earliest release that opens a file (null: only an unreleased build), what keeps older ones out, and the one warning.</summary>
+public sealed record OpensInResult(string? OpensIn, IReadOnlyList<OpensInCause> Causes, IReadOnlyList<Diagnostic> Warnings);
 
 /// <summary>
 /// The released versions, ascending, as code (docs/superpowers/specs/2026-10-28-down-conversion-export-spec.md section 1).
@@ -42,6 +49,27 @@ public static class ReleaseLadder
     /// <summary>The offered row whose release is exactly <paramref name="release"/> ("0.6.0"), or null.</summary>
     public static LadderRow? Target(string? release) =>
         Rows.FirstOrDefault(r => r.OfferedAsTarget && string.Equals(r.Release.ToString(3), release, StringComparison.Ordinal));
+
+    /// <summary>
+    /// The first row that reads everything the file would hold: every character and revision within its maxima,
+    /// <paramref name="gapNoteSchema"/> within its gap note maximum (0 when there are no gap notes), and every bundled
+    /// revision id in its set. Null when no released row does: only an unreleased build opens the file.
+    /// </summary>
+    public static LadderRow? OpensIn(IEnumerable<ContentRevision> revisions, IEnumerable<Character> characters,
+        int gapNoteSchema, IEnumerable<Guid> bundledRevisionIds)
+    {
+        var revisionSchemas = revisions.Select(r => r.SchemaVersion).ToList();
+        var characterSchemas = characters.Select(c => c.SchemaVersion).ToList();
+        var bundled = bundledRevisionIds.ToList();
+        return Rows.FirstOrDefault(row =>
+            characterSchemas.All(s => s <= row.CharacterSchema)
+            && revisionSchemas.All(s => s <= row.ContentSchema)
+            && gapNoteSchema <= row.GapNoteSchema
+            && bundled.All(row.BundledRevisionIds.Contains));
+    }
+
+    /// <summary>The row's release ("0.6.0"), or "a newer TomeStack" when no released row opens the file.</summary>
+    public static string Label(LadderRow? row) => row is null ? "a newer TomeStack" : row.Release.ToString(3);
 
     private static int CurrentIndex
     {

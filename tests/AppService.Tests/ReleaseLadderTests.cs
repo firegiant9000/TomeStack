@@ -55,6 +55,135 @@ public class ReleaseLadderTests
         });
     }
 
+    private static readonly Guid FixtureSource = Guid.Parse("7c000000-0000-4000-8000-000000000001");
+
+    private static Character Hero(string name = "Compat Hero") =>
+        new() { Id = Guid.NewGuid(), Name = name, RulesFamily = RulesFamilies.Srd521, BaseAbilities = new(10, 10, 10, 10, 10, 10) };
+
+    private static Character V9(Character c) => c with { Xp = 100 };
+
+    private static Character V10(Character c) => c with { Play = (c.Play ?? new PlayState()) with { Encounter = new EncounterState(0) } };
+
+    private static ContentRevision Revision(string name, int schemaVersion, Guid? revisionId = null) => new()
+    {
+        ContentId = Guid.NewGuid(),
+        RevisionId = revisionId ?? Guid.NewGuid(),
+        Kind = ContentKind.Feature,
+        Name = name,
+        RulesFamilies = [RulesFamilies.Srd521],
+        Provenance = new(FixtureSource, new PageRef(1)),
+        Status = RevisionStatus.Published,
+        SchemaVersion = schemaVersion,
+    };
+
+    private static LadderRow Row(string release) => ReleaseLadder.Rows.Single(r => r.Release.ToString(3) == release);
+
+    [Fact]
+    public void OpensIn_is_0_5_0_for_a_v8_character_and_v9_content()
+    {
+        Assert.Equal(Row("0.5.0"), ReleaseLadder.OpensIn([Revision("Compat Tide Stance", 9)], [Hero()], 0, []));
+    }
+
+    [Fact]
+    public void OpensIn_is_0_6_0_for_v9_character()
+    {
+        Assert.Equal(Row("0.6.0"), ReleaseLadder.OpensIn([], [V9(Hero())], 0, []));
+    }
+
+    [Fact]
+    public void OpensIn_is_0_7_0_for_v11_content_or_v10_character()
+    {
+        Assert.Equal(Row("0.7.0"), ReleaseLadder.OpensIn([Revision("Compat Tide Stance", 11)], [Hero()], 0, []));
+        Assert.Equal(Row("0.7.0"), ReleaseLadder.OpensIn([], [V10(Hero())], 0, []));
+    }
+
+    [Fact]
+    public void OpensIn_is_null_above_every_row()
+    {
+        Assert.Null(ReleaseLadder.OpensIn([Revision("Compat Tide Stance", ContentRevision.CurrentSchemaVersion + 1)], [Hero()], 0, []));
+        Assert.Null(ReleaseLadder.OpensIn([], [Hero() with { SchemaVersion = Character.CurrentSchemaVersion + 1 }], 0, []));
+        Assert.Null(ReleaseLadder.OpensIn([], [], GapNote.CurrentSchemaVersion + 1, []));
+    }
+
+    [Fact]
+    public void OpensIn_skips_rows_lacking_a_bundled_revision()
+    {
+        Assert.Null(ReleaseLadder.OpensIn([], [Hero()], 0, [Guid.Parse("7c00e000-0000-4000-8000-0000000000ff")]));
+        var inEverySet = ReleaseLadder.Rows[0].BundledRevisionIds.First(id => ReleaseLadder.Rows.All(r => r.BundledRevisionIds.Contains(id)));
+        Assert.Equal(Row("0.5.0"), ReleaseLadder.OpensIn([], [Hero()], 0, [inEverySet])); // a v8 character; the id changes nothing
+        Assert.Equal(Row("0.4.0"), ReleaseLadder.OpensIn([], [], 1, []));
+    }
+
+    [Fact]
+    public void Label_names_the_release_or_a_newer_build()
+    {
+        Assert.Equal("0.6.0", ReleaseLadder.Label(Row("0.6.0")));
+        Assert.Equal("a newer TomeStack", ReleaseLadder.Label(null));
+    }
+
+    [Fact]
+    public void Evaluate_warns_only_above_previous_minor()
+    {
+        var quiet = NewerBuild.Evaluate([Revision("Compat Tide Stance", 10)], [V9(Hero())], 0, [], _ => "");
+        Assert.Equal("0.6.0", quiet.OpensIn);
+        Assert.Empty(quiet.Warnings);
+        Assert.Empty(quiet.Causes);
+
+        var hero = V10(Hero());
+        var one = NewerBuild.Evaluate([], [hero], 0, [], _ => "");
+        Assert.Equal("0.7.0", one.OpensIn);
+        var warning = Assert.Single(one.Warnings);
+        Assert.Equal(NewerBuild.Code, warning.Code);
+        Assert.Equal($"Opening this needs TomeStack 0.7.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Compat Hero' is a character at schema 10. Older versions refuse the file.", warning.Message);
+        var cause = Assert.Single(one.Causes);
+        Assert.Equal(new OpensInCause($"characters/{hero.Id:D}.json", "character", hero.Id, "Compat Hero", 10, null, "'Compat Hero' is a character at schema 10"), cause);
+    }
+
+    [Fact]
+    public void Evaluate_joins_causes_in_the_order_characters_content_gap_notes()
+    {
+        var hero = V10(Hero());
+        var stance = Revision("Compat Tide Stance", 11);
+
+        var result = NewerBuild.Evaluate([stance], [hero], 0, [], _ => "");
+
+        Assert.Equal($"Opening this needs TomeStack 0.7.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Compat Hero' is a character at schema 10, and 'Compat Tide Stance' is content at schema 11. Older versions refuse the file.",
+            Assert.Single(result.Warnings).Message);
+        Assert.Equal(["character", "content"], result.Causes.Select(c => c.Kind));
+        Assert.Equal($"content/{stance.RevisionId:D}.json", result.Causes[1].Entry);
+
+        var gap = NewerBuild.Evaluate([], [], ReleaseLadder.PreviousMinor!.GapNoteSchema + 1, [], _ => "");
+        var gapCause = Assert.Single(gap.Causes);
+        Assert.Equal(new OpensInCause("gaps/", "gapNote", Guid.Empty, "gap notes", 3, null, "the gap notes are at schema 3"), gapCause);
+    }
+
+    [Fact]
+    public void Evaluate_names_a_bundled_revision_the_previous_minor_lacks()
+    {
+        var hero = Hero();
+        var species = Revision("Example Species", 3);
+        var heroWithSpecies = hero with { Pins = [species.Reference] };
+
+        var result = NewerBuild.Evaluate([species], [heroWithSpecies], 0, [species.RevisionId], _ => "SRD 5.2.1");
+
+        var cause = Assert.Single(result.Causes);
+        Assert.Equal(new OpensInCause($"content/{species.RevisionId:D}.json", "content", species.RevisionId, "Example Species", null, "SRD 5.2.1",
+            "'Compat Hero' uses 'Example Species' from the bundled SRD 5.2.1 pack, which TomeStack 0.6.0 does not have"), cause);
+        Assert.Null(result.OpensIn);
+        Assert.Equal("Opening this needs a TomeStack version newer than 0.7.0: it holds bundled SRD content that released versions do not have.", Assert.Single(result.Warnings).Message);
+    }
+
+    [Fact]
+    public void Evaluate_uses_the_unreleased_sentence_when_opensIn_is_null()
+    {
+        var content = NewerBuild.Evaluate([Revision("Compat Tide Stance", 12)], [], 0, [], _ => "");
+        Assert.Null(content.OpensIn);
+        Assert.Equal("Opening this needs a TomeStack version that reads content schema 12 or later: it holds content that older versions refuse.", Assert.Single(content.Warnings).Message);
+
+        var character = NewerBuild.Evaluate([], [Hero() with { SchemaVersion = 11 }], 0, [], _ => "");
+        Assert.Equal("Opening this needs a TomeStack version that reads character schema 11 or later: it holds a character that older versions refuse.", Assert.Single(character.Warnings).Message);
+    }
+
     [Theory]
     [InlineData("0.6.0", true)]
     [InlineData("0.5.0", true)]
