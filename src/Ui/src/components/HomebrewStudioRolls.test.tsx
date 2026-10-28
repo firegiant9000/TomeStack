@@ -98,7 +98,8 @@ it('the roll editor edits activation, cost, variable cost, the pool, bonus, save
   await user.clear(size);
   await user.type(size, '60');
   expect(blocked('Publish')).toBe(false);
-});
+  // Many typed fields: it passes alone but ran past the default 5 s under full-suite load (UX close and MECH-X item 1 gates).
+}, 20_000);
 
 it('the variable-cost box clears per-unit dice, and leaving the area or save removes them', async () => {
   const user = userEvent.setup();
