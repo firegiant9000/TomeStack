@@ -1,3 +1,6 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
+
 namespace TomeStack.RulesCore;
 
 /// <summary>What lowering does to one thing: <see cref="Dropped"/> loses it and says so, <see cref="Blocks"/> stops the export, <see cref="Silent"/> loses it with nothing to tell.</summary>
@@ -16,7 +19,7 @@ public sealed record CharacterBelow(Character Character, IReadOnlyList<BelowChan
     public bool Blocked => Changes.Any(c => c.Action == BelowAction.Blocks);
 }
 
-/// <summary>A content revision lowered to an older schema, with what it lost. When <see cref="Blocked"/>, <see cref="Revision"/> is the input, unchanged.</summary>
+/// <summary>A content revision lowered to an older schema, with what it lost. <see cref="Revision"/> is always the lowered copy, blocked fields removed too; when <see cref="Blocked"/> the caller must not write it.</summary>
 public sealed record ContentBelow(ContentRevision Revision, IReadOnlyList<BelowChange> Changes)
 {
     public bool Blocked => Changes.Any(c => c.Action == BelowAction.Blocks);
@@ -55,6 +58,200 @@ public static class DownConvert
             ? new CharacterBelow(character, changes)
             : new CharacterBelow(lowered, changes);
     }
+
+    /// <summary>
+    /// Lowers <paramref name="revision"/> to <paramref name="targetContentSchema"/> (9 to <see cref="ContentRevision.CurrentSchemaVersion"/>).
+    /// Never touches the ids, provenance, status or name, and never rewrites <c>grant.content</c> or <c>choice.options</c> (the service does).
+    /// Blocked fields are removed too: the copy is always the lowered one, and <see cref="ContentBelow.Blocked"/> tells the caller not to write it.
+    /// Returns the same instance and no changes when nothing is above the target. <paramref name="catalog"/> is for the validation of the
+    /// copy at the target (not done yet).
+    /// </summary>
+    public static ContentBelow Below(ContentRevision revision, int targetContentSchema, IContentCatalog? catalog = null)
+    {
+        ArgumentNullException.ThrowIfNull(revision);
+        ArgumentOutOfRangeException.ThrowIfLessThan(targetContentSchema, ContentRevision.PlayDetailsSchemaVersion - 1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(targetContentSchema, ContentRevision.CurrentSchemaVersion);
+        _ = catalog;
+
+        var own = revision.SchemaVersion;
+        var node = JsonSerializer.SerializeToNode(revision, RulesJson.Compact)!.AsObject();
+        var changes = new List<BelowChange>();
+
+        // One step per schema version above the target, newest first. A later task adds the 10 to 9 step.
+        for (var step = ContentRevision.CurrentSchemaVersion; step > targetContentSchema; step--)
+        {
+            switch (step)
+            {
+                case ContentRevision.PlayMechanicsSchemaVersion:
+                    ContentBelowV11(revision, node, changes);
+                    break;
+                case ContentRevision.PlayDetailsSchemaVersion:
+                    ContentBelowV10(revision, node, changes);
+                    break;
+            }
+        }
+
+        if (own <= targetContentSchema && changes.Count == 0)
+            return new ContentBelow(revision, changes);
+
+        node["schemaVersion"] = Math.Min(own, targetContentSchema);
+        return new ContentBelow(node.Deserialize<ContentRevision>(RulesJson.Options)!, changes);
+    }
+
+    /// <summary>The 10 to 9 step (content v10: speed and passive targets, damage defences, <c>item</c>). Filled in by a later task.</summary>
+    private static void ContentBelowV10(ContentRevision revision, JsonObject node, List<BelowChange> changes)
+    {
+        _ = (revision, node, changes);
+    }
+
+    private const string Unsupported = "below.effect-unsupported";
+
+    /// <summary>
+    /// The 11 to 10 step: whole effects and the toggle, resource, roll, modifier and grant fields that v11 added. A revision that declares an
+    /// older version only loses the inert v11 keys that a typed effect carries as extension data (silently); its v11-type effects stay
+    /// as they are, since every reader already treats them as reference-only.
+    /// </summary>
+    private static void ContentBelowV11(ContentRevision revision, JsonObject node, List<BelowChange> changes)
+    {
+        if (node["effects"] is not JsonArray effects)
+            return;
+        var declaresV11 = revision.SchemaVersion >= ContentRevision.PlayMechanicsSchemaVersion;
+        var name = revision.Name;
+        var kept = new List<JsonNode?>(effects.Count);
+
+        for (var i = 0; i < effects.Count; i++)
+        {
+            var element = effects[i];
+            if (element is not JsonObject effect)
+            {
+                kept.Add(element?.DeepClone());
+                continue;
+            }
+
+            var type = effect.FirstOrDefault(p => string.Equals(p.Key, "type", StringComparison.OrdinalIgnoreCase)).Value is JsonValue v && v.TryGetValue<string>(out var t) ? t : null;
+            if (declaresV11 && WholeEffectBelowV11(type, effect, i, name, changes))
+                continue;
+
+            string[] keys = type switch
+            {
+                ToggleEffect.TypeName => ToggleEffect.V11Keys,
+                ResourceEffect.TypeName => ResourceEffect.V11Keys,
+                RollEffect.TypeName => RollEffect.V11Keys,
+                ModifierEffect.TypeName => ModifierEffect.V11Keys,
+                GrantEffect.TypeName => GrantEffect.V11Keys,
+                _ => [],
+            };
+            // Below v11 only a typed effect holds its v11 keys as inert extension data; an untyped one is written back as it is.
+            var typed = i < revision.Effects.Count && revision.Effects[i] is not UnknownEffect;
+            if (keys.Length > 0 && (declaresV11 || typed))
+            {
+                foreach (var (key, value) in effect.ToList())
+                {
+                    var canonical = keys.FirstOrDefault(k => string.Equals(k, key, StringComparison.OrdinalIgnoreCase));
+                    if (canonical is null)
+                        continue;
+                    effect.Remove(key);
+                    changes.Add(declaresV11 ? KeyBelowV11(type!, canonical, value, i, name) : KeyBelowV11(type!, canonical, value, i, name) with { Action = BelowAction.Silent });
+                }
+            }
+            kept.Add(effect);
+        }
+
+        effects.Clear();
+        foreach (var item in kept)
+            effects.Add(item);
+    }
+
+    /// <summary>Handles an effect that v10 cannot hold at all. Returns whether the effect was removed.</summary>
+    private static bool WholeEffectBelowV11(string? type, JsonObject effect, int index, string name, List<BelowChange> changes)
+    {
+        var path = $"effects[{index}]";
+        switch (type)
+        {
+            case AttackEffect.TypeName:
+                changes.Add(new(path, BelowAction.Dropped, Unsupported, $"'{name}': its attack; the feature stays as text."));
+                return true;
+            case AttackRiderEffect.TypeName:
+                changes.Add(new(path, BelowAction.Dropped, Unsupported, $"'{name}': its attack rider; the feature stays as text."));
+                return true;
+            case ResponseEffect.TypeName:
+                changes.Add(new(path, BelowAction.Dropped, Unsupported, $"'{name}': its response; the feature stays as text."));
+                return true;
+            case ValueEffect.TypeName:
+                changes.Add(new(path, BelowAction.Dropped, Unsupported, $"'{name}': its named value; the feature stays as text."));
+                return true;
+            case RollModeEffect.TypeName:
+                var mode = StringOf(Property(effect, "mode"));
+                changes.Add(string.Equals(mode, "advantage", StringComparison.OrdinalIgnoreCase)
+                    ? new(path, BelowAction.Dropped, Unsupported, $"'{name}': its advantage on rolls; the feature stays as text.")
+                    : new(path, BelowAction.Blocks, "below.roll-mode-disadvantage", $"'{name}': its disadvantage on rolls; the older version would leave it out."));
+                return true;
+            case UpkeepEffect.TypeName:
+                changes.Add(string.Equals(StringOf(Property(effect, "change")), "regain", StringComparison.OrdinalIgnoreCase)
+                    ? new(path, BelowAction.Dropped, "below.upkeep", $"'{name}': its upkeep that regains a resource.")
+                    : new(path, BelowAction.Blocks, "below.upkeep", $"'{name}': its upkeep that spends a resource; the older version would never charge it."));
+                return true;
+            case ToggleGroupEffect.TypeName:
+                changes.Add(new(path, BelowAction.Blocks, "below.toggle-group", $"'{name}': the form group; two forms could be on at once."));
+                return true;
+            case RollEffect.TypeName when Property(effect, "dice") is null:
+                changes.Add(new(path, BelowAction.Dropped, "below.diceless-roll", $"'{name}': a roll with no dice; the feature stays as text."));
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private static BelowChange KeyBelowV11(string type, string key, JsonNode? value, int index, string name)
+    {
+        var path = $"effects[{index}].{key}";
+        switch (type, key)
+        {
+            case (ToggleEffect.TypeName, "cost" or "resourceContent"):
+                return new(path, BelowAction.Blocks, "below.toggle-cost", $"'{name}': what a toggle costs; it would turn on for free.");
+            case (ToggleEffect.TypeName, "level"):
+                return new(path, BelowAction.Blocks, "below.toggle-level", $"'{name}': the level a toggle is used at; it would work at one fixed level.");
+            case (ToggleEffect.TypeName, "duration"):
+                return new(path, BelowAction.Dropped, "below.toggle-duration", $"'{name}': how long a toggle lasts; it stays on until turned off.");
+            case (ToggleEffect.TypeName, _):
+                return new(path, BelowAction.Blocks, "below.toggle-group", $"'{name}': the form group ({key}); forms could stack that should not.");
+            case (ResourceEffect.TypeName, "counts"):
+                return string.Equals(StringOf(value), "up", StringComparison.OrdinalIgnoreCase)
+                    ? new(path, BelowAction.Blocks, "below.resource-counts-up", $"'{name}': a resource that counts up; it would count down instead.")
+                    : new(path, BelowAction.Dropped, "below.resource-detail", $"'{name}': how a resource counts.");
+            case (ResourceEffect.TypeName, _):
+                return new(path, BelowAction.Dropped, "below.resource-detail", $"'{name}': the {key} of a resource.");
+            case (RollEffect.TypeName, "alsoChange"):
+                return AlsoChangeSpends(value)
+                    ? new(path, BelowAction.Blocks, "below.roll-also-change", $"'{name}': a roll that also spends a resource; the older version would skip that cost.")
+                    : new(path, BelowAction.Dropped, "below.roll-also-change", $"'{name}': a roll that also regains a resource.");
+            case (RollEffect.TypeName, "drawsDown"):
+                return value is null || (value is JsonValue { } flag && flag.TryGetValue<bool>(out var drawsDown) && !drawsDown)
+                    ? new(path, BelowAction.Silent, "below.roll-detail", $"'{name}': that a roll does not draw a resource down.")
+                    : new(path, BelowAction.Dropped, "below.roll-detail", $"'{name}': that a roll draws a resource down.");
+            case (RollEffect.TypeName, _):
+                return new(path, BelowAction.Dropped, "below.roll-detail", $"'{name}': the {key} of a roll.");
+            case (ModifierEffect.TypeName, _):
+                return new(path, BelowAction.Blocks, "below.modifier-toggle-content", $"'{name}': the toggle a modifier waits for; it would apply all the time.");
+            case (GrantEffect.TypeName, _):
+                return new(path, BelowAction.Blocks, "below.defence-while-toggle", $"'{name}': the toggle a damage defence waits for; it would apply all the time.");
+            default:
+                return new(path, BelowAction.Blocks, "below.unmapped-key", $"'{name}': its {key}, which the older version cannot hold.");
+        }
+    }
+
+    private static bool AlsoChangeSpends(JsonNode? value)
+    {
+        if (value is not JsonArray entries)
+            return true;
+        return entries.Any(e => e is not JsonObject o || !string.Equals(StringOf(Property(o, "change")), "regain", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>The value of the property with this name in any case; null when absent or JSON null.</summary>
+    private static JsonNode? Property(JsonObject o, string name) =>
+        o.FirstOrDefault(p => string.Equals(p.Key, name, StringComparison.OrdinalIgnoreCase)).Value;
+
+    private static string? StringOf(JsonNode? node) => node is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;
 
     private static Character BelowV10(Character character, string name, List<BelowChange> changes)
     {
