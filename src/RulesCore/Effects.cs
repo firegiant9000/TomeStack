@@ -1593,7 +1593,7 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
         {
             return type switch
             {
-                // An always-typed effect that carries a detail added after v9 (v10 grant and resource keys, any v11 key) is
+                // An always-typed effect that carries a detail added after v9 (v10 grant and resource keys, any v11 or v12 key) is
                 // typed by the revision, which knows its version (ContentRevision.OnDeserialized); the others are typed
                 // here, as in every earlier build.
                 ModifierEffect.TypeName or GrantEffect.TypeName or ResourceEffect.TypeName or RollEffect.TypeName or ChoiceEffect.TypeName
@@ -1624,9 +1624,9 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
     private const int UngatedVersion = ContentRevision.PlayDetailsSchemaVersion - 1;
 
     /// <summary>
-    /// Whether an always-typed effect (<c>modifier</c>, <c>grant</c>, <c>resource</c>, <c>roll</c>) has something a build of
-    /// content schema <paramref name="version"/> did not read, so the revision, which knows its own version, must type it
-    /// (<see cref="VersionedEffects.ByName"/>); a <c>choice</c> is handed over for a v12 key. Detail from v10:a grant that names a damage kind (a value the v9 enum cannot
+    /// Whether an always-typed effect (<c>modifier</c>, <c>grant</c>, <c>resource</c>, <c>roll</c>, <c>choice</c>) has something a
+    /// build of content schema <paramref name="version"/> did not read, so the revision, which knows its own version, must type it
+    /// (<see cref="VersionedEffects.ByName"/>); a <c>choice</c> is handed over for a v12 key. Detail from v10: a grant that names a damage kind (a value the v9 enum cannot
     /// hold, matched case-insensitively like the serializer) or has a <c>damageType</c> key (any spelling), or a resource with
     /// an <c>activation</c> key. Detail from v11: any key in the type's <c>V11Keys</c> (empty until a later slice adds one).
     /// The names are the ones the serializer binds to those properties.

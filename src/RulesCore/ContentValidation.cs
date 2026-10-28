@@ -178,7 +178,7 @@ public static class ContentValidator
         var needsV9 = false;
         var needsV10 = false; // content v10 (Wave 3, D42): speed/passive targets, autoWhen, activation, damage grants, item
         var needsV11 = false; // content v11 (D43): toggleGroup and upkeep effects, the toggle's group, layer, cost, level and duration keys, and the resource's counts, resourceFull and allowance keys
-        var needsV12 = false; // content v12 (MECH-X items 0 and 1): weapon.bonus, payment, roll.castsSpell, spell.tags
+        var needsV12 = false; // content v12 (MECH-X items 0–2): weapon.bonus, payment, roll.castsSpell, spell.tags, choice.replaceable
         var v12Phrases = new List<string>(); // what the v12 keys found are called in validate.requires-v12
         void NeedV12(string phrase)
         {
