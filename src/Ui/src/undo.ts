@@ -15,8 +15,8 @@ export interface UndoEntry {
  * D43 S3 adds starting and ending an encounter; slice 7 adds damage with responses; slice 8 adds `useAction`. The server's switch
  * (`CompoundUndo` in Play.cs) and this one are checked against `tests/RulesFixtures/compound-play-actions.json`.
  */
-export const isCompound = (action: PlayAction): boolean =>
-  (action.action === 'toggleOn' && !!action.replace) ||
+export const isCompound = (action: PlayAction, view?: CharacterView): boolean =>
+  (action.action === 'toggleOn' && (!!action.replace || !!findToggle(view, action)?.payment)) ||
   action.action === 'startEncounter' ||
   action.action === 'endEncounter' ||
   action.action === 'useAction' ||
@@ -35,8 +35,8 @@ const droppedOthers = (action: PlayAction, before: CharacterView, after: Charact
       !(o.content.contentId === action.contentId && o.toggleId === action.toggleId) &&
       after.sheet.toggles?.some((n) => n.content.contentId === o.content.contentId && n.toggleId === o.toggleId && !n.on),
   );
-const findToggle =(view: CharacterView, toggle: PlayAction) =>
-  view.sheet.toggles?.find((t) => t.content.contentId === toggle.contentId && t.toggleId === toggle.toggleId);
+const findToggle = (view: CharacterView | undefined, toggle: PlayAction) =>
+  view?.sheet.toggles?.find((t) => t.content.contentId === toggle.contentId && t.toggleId === toggle.toggleId);
 
 /**
  * D23 (owner, 2026-10-06): undo is the inverse play command, computed from the view before and after, never a stored
@@ -48,7 +48,7 @@ const findToggle =(view: CharacterView, toggle: PlayAction) =>
  * by concentrating on the earlier one. A change that changed nothing (a condition already held) has no entry.
  */
 export function inverseOf(action: PlayAction, before: CharacterView, after: CharacterView): UndoEntry | undefined {
-  if (isCompound(action)) return undefined; // D44: the service undoes it (`undoLabel`), exactly
+  if (isCompound(action, before)) return undefined; // D44: the service undoes it (`undoLabel`), exactly
   // Wave 3 item 21: typed damage names its type and what was taken after defences ("damage 13 slashing (6 taken)"); untyped keeps "damage 12".
   const typed = action.action === 'damage' && after.damage?.type ? ` ${after.damage.type} (${after.damage.adjusted} taken)` : '';
   const label = `${action.action === 'setTemporaryHitPoints' ? 'temporary hit points' : action.action.replace(/[A-Z]/g, (c) => ` ${c.toLowerCase()}`)}${action.amount !== undefined ? ` ${action.amount}` : ''}${typed}${action.condition ? ` ${action.condition}` : ''}`;

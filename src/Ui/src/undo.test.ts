@@ -11,14 +11,19 @@ const parity = JSON.parse(readFileSync(resolve(process.cwd(), '../../tests/Rules
   action: PlayActionKind;
   replace?: boolean;
   responses?: boolean;
+  paying?: boolean;
   compound: boolean;
 }[];
 
 it('agrees with the server on which play actions are compound (shared fixture)', () => {
   expect(parity.length).toBeGreaterThan(25);
-  for (const { action, replace, responses, compound } of parity) {
+  for (const { action, replace, responses, paying, compound } of parity) {
     const dummy = responses ? { responses: [{ contentId: 'c', responseId: 'r' }] } : {};
-    expect(isCompound({ action, ...(replace === undefined ? {} : { replace }), ...dummy }), `${action} replace=${String(replace)} responses=${String(responses)}`).toBe(compound);
+    // MECH-X item 1: a toggle whose sheet row has a hit-point or slot payment is compound; the view carries the row.
+    const toggle = { content: { contentId: 'c' }, toggleId: 't', ...(paying ? { payment: { kind: 'hitPoints', payable: true } } : {}) };
+    const sheetView = { sheet: { toggles: [toggle] } } as unknown as CharacterView;
+    const named = { contentId: 'c', toggleId: 't' };
+    expect(isCompound({ action, ...named, ...(replace === undefined ? {} : { replace }), ...dummy }, sheetView), `${action} replace=${String(replace)} responses=${String(responses)} paying=${String(paying)}`).toBe(compound);
   }
 });
 
@@ -33,7 +38,7 @@ it('lists every client play action kind exactly once (plus the toggleOn replace 
   };
   const named = new Set(parity.map((c) => c.action));
   expect([...named].sort()).toEqual(Object.keys(all).sort());
-  expect(parity.filter((c) => c.action === 'toggleOn').map((c) => c.replace).sort()).toEqual([false, true]);
+  expect(parity.filter((c) => c.action === 'toggleOn').map((c) => c.replace).sort()).toEqual([false, false, true]);
 });
 
 const view = (current: number, temporary: number, play: Partial<CharacterView['character']['play']> = {}): CharacterView =>

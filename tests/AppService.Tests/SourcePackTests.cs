@@ -252,6 +252,7 @@ public class SourcePackTests
         "attack whileToggle" => new AttackEffect { Id = "e", AttackId = "bolt", Label = "Bolt", Kind = WeaponAttack.Ranged, Abilities = [Ability.Dex], Damage = new("1", "6"), DamageType = "force", WhileToggle = new(holder, "form") },
         "roll whileToggle" => new RollEffect { Id = "e", RollId = "burst", Label = "Burst", Dice = "1d6", WhileToggle = new(holder, "form") },
         "roll alsoChange" => new RollEffect { Id = "e", RollId = "burst", Label = "Burst", Dice = "1d6", AlsoChange = [new("charge", holder, UpkeepChange.Spend, "1")] },
+        "roll castsSpell" => new RollEffect { Id = "e", RollId = "burst", Label = "Burst", CastsSpell = holder },
         "rollMode toggleContent" => new RollModeEffect { Id = "e", Target = "skill.stealth", Mode = RollMode.Disadvantage, Toggle = "form", ToggleContent = holder },
         "grant whileToggle" => new GrantEffect { Id = "e", Grant = GrantKind.DamageResistance, DamageType = "Fire", WhileToggle = new(holder, "form") },
         "response resourceContent" => new ResponseEffect { Id = "e", ResponseId = "brace", Label = "Brace", Phase = ResponsePhase.DamageReduction, Amount = "1", ResourceId = "grit", ResourceContent = holder, Cost = "1" },
@@ -267,6 +268,7 @@ public class SourcePackTests
     [InlineData("attack whileToggle")]
     [InlineData("roll whileToggle")]
     [InlineData("roll alsoChange")]
+    [InlineData("roll castsSpell")]
     [InlineData("rollMode toggleContent")]
     [InlineData("grant whileToggle")]
     [InlineData("response resourceContent")]
@@ -284,7 +286,7 @@ public class SourcePackTests
         temp.App.Store.AddRevision(Feat(own.Id, "Test Taker", Guid.NewGuid(), Guid.NewGuid()) with
         {
             Status = RevisionStatus.Published,
-            SchemaVersion = 11,
+            SchemaVersion = kind == "roll castsSpell" ? 12 : 11, // castsSpell is read from v12 on; below it the key is kept inert
             Effects = [NamingOtherContent(kind, holder.ContentId)],
         });
 

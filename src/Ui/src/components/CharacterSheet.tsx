@@ -593,7 +593,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
       const encounter = action.action === 'startEncounter' || action.action === 'endEncounter';
       const after = await runQueued(
         (latest) =>
-          client.play(character.id, encounter ? { ...action, expectedUpdatedAt: shownStamp } : isCompound(action) ? { ...action, expectedUpdatedAt: latest.updatedAt } : action),
+          client.play(character.id, encounter ? { ...action, expectedUpdatedAt: shownStamp } : isCompound(action, view) ? { ...action, expectedUpdatedAt: latest.updatedAt } : action),
         (reply) => reply.character,
       );
       const overlapped = startedWhileRunning || started.current !== mine || running.current > 1 || shownView.current !== view;

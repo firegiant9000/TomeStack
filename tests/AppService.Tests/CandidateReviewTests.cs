@@ -449,6 +449,24 @@ public class CandidateReviewTests
     }
 
     [Fact]
+    public void Dependencies_list_the_spell_a_roll_casts()
+    {
+        var (temp, _, jobId) = Imported();
+        using var _t = temp;
+        var feat = Named(temp, jobId, "Fixture Keen Watcher");
+        var installed = temp.App.Store.ListRevisions().First(r => r.Status == RevisionStatus.Published && r.Kind == ContentKind.Feature && r.RulesFamilies.Contains(RulesFamilies.Srd521));
+
+        temp.App.EditCandidate(new(feat.Id, Expected: temp.EtagOf(feat.Id), Effects: [.. feat.Current.ProposedEffects,
+            new RollEffect { Id = "cast", RollId = "cast", Label = "Cast", CastsSpell = installed.ContentId }]));
+        Assert.Contains(temp.App.CheckCandidate(feat.Id).Dependencies, d => d.Kind == "content" && d.Name == installed.Name);
+
+        var missing = Guid.NewGuid();
+        temp.App.EditCandidate(new(feat.Id, Expected: temp.EtagOf(feat.Id), Effects: [.. feat.Current.ProposedEffects,
+            new RollEffect { Id = "gone", RollId = "gone", Label = "Gone", CastsSpell = missing }]));
+        Assert.Contains(temp.App.CheckCandidate(feat.Id).Dependencies, d => d.Kind == "missing-content" && d.Name == missing.ToString());
+    }
+
+    [Fact]
     public void Dependencies_list_the_content_a_response_names()
     {
         var (temp, _, jobId) = Imported();

@@ -363,6 +363,8 @@ export interface ToggleValue {
   /** What switching it on spends from `costResourceContent`'s pool of `resourceId`; absent with a pool means 1. */
   cost?: number;
   costResourceContent?: string;
+  /** Content v12 (MECH-X item 1): a hit-point or slot payment and whether it can be made now; absent for a pool payment. */
+  payment?: { kind: 'resource' | 'hitPoints' | 'slot'; payable: boolean; reason?: string; mayDropToZero?: boolean; minSlotLevel?: number; slot?: { level: number; pact: boolean } };
   /** False when the group rules currently refuse switching it on (`unavailableReason` says why). The server always sends it. */
   available: boolean;
   unavailableReason?: string;

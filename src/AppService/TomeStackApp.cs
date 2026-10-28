@@ -204,7 +204,7 @@ public sealed partial class TomeStackApp : IDisposable
                         r.Provenance.SourceId, source?.Title ?? "(unknown source)", r.Provenance.Page?.ToString(), Preview(r.Summary),
                         allowed?.Contains(r.Provenance.SourceId),
                         r.Effects.OfType<SpellEffect>().FirstOrDefault() is { } spell
-                            ? new SpellSummary(spell.Level, spell.Lists, spell.School, spell.Concentration, spell.Ritual)
+                            ? new SpellSummary(spell.Level, spell.Lists, spell.School, spell.Concentration, spell.Ritual, SpellTagsOf(r, spell))
                             : null,
                         Superseded: newest[r.ContentId] != r.RevisionId,
                         Standalone: !reachable.Contains(r.ContentId));
@@ -212,6 +212,10 @@ public sealed partial class TomeStackApp : IDisposable
                 .OrderBy(o => o.Kind).ThenBy(o => o.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(o => o.SourceTitle, StringComparer.CurrentCultureIgnoreCase),
         ];
     }
+
+    /// <summary>MECH-X item 1 (R39): a spell's tags for the builder, only from a v12 revision (as the sheet does); null when it has none.</summary>
+    private static IReadOnlyList<string>? SpellTagsOf(ContentRevision revision, SpellEffect spell) =>
+        spell.Tags is { Count: > 0 } tags && revision.SchemaVersion >= ContentRevision.PaymentSchemaVersion ? tags : null;
 
     /// <summary>
     /// Item 1 (2026-10-14 plan): how many entries of each kind in <paramref name="rulesFamily"/> have no published revision,
@@ -544,7 +548,7 @@ public sealed record ContentOption(
     bool Standalone = true);
 
 /// <summary>What the builder's spell picker needs to filter and sort a spell option (content schema v5).</summary>
-public sealed record SpellSummary(int Level, IReadOnlyList<string> Lists, string? School, bool Concentration, bool Ritual);
+public sealed record SpellSummary(int Level, IReadOnlyList<string> Lists, string? School, bool Concentration, bool Ritual, IReadOnlyList<string>? Tags = null);
 
 /// <param name="ArchivedAt">SPEC C-08: set while the character is archived; the UI lists it apart, collapsed.</param>
 public sealed record CharacterSummary(Guid Id, string Name, string RulesFamily, DateTimeOffset UpdatedAt, DateTimeOffset? ArchivedAt = null, IReadOnlyList<Guid>? ExceptionContentIds = null, int Level = 1);

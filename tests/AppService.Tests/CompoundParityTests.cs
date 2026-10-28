@@ -11,7 +11,15 @@ namespace TomeStack.AppService.Tests;
 /// </summary>
 public class CompoundParityTests
 {
-    private sealed record Case(PlayActionKind Action, bool? Replace, bool Compound, bool? Responses = null);
+    private sealed record Case(PlayActionKind Action, bool? Replace, bool Compound, bool? Responses = null, bool? Paying = null);
+
+    /// <summary>MECH-X item 1: a minimal sheet with one toggle row; its <c>Payment</c> is a hit-point payment when the case is <c>paying</c>.</summary>
+    private static CharacterSheet SheetWithToggle(Guid contentId, bool paying) =>
+        new(Guid.NewGuid(), "srd-5.2.1", [], [], Toggles:
+        [
+            new ToggleValue(new ContentReference(contentId, Guid.NewGuid()), "Fixture", "e1", "t1", "Fixture toggle", false, null, null,
+                Payment: paying ? new PaymentValue(PaymentKind.HitPoints, true) : null),
+        ]);
 
     private static List<Case> Cases() =>
         JsonSerializer.Deserialize<List<Case>>(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "RulesFixtures", "compound-play-actions.json")), RulesJson.Options)!;
@@ -21,9 +29,10 @@ public class CompoundParityTests
     {
         foreach (var c in Cases())
         {
-            var command = new PlayCommand(Guid.NewGuid(), c.Action, Confirm: true, Replace: c.Replace ?? false,
+            var contentId = Guid.NewGuid();
+            var command = new PlayCommand(Guid.NewGuid(), c.Action, Confirm: true, Replace: c.Replace ?? false, ContentId: contentId, ToggleId: "t1",
                 Responses: c.Responses == true ? [new ResponseChoice(Guid.NewGuid(), "dummy")] : null);
-            Assert.True(c.Compound == TomeStackApp.CompoundUndo(command, null).Compound, $"{c.Action} replace={c.Replace} responses={c.Responses}");
+            Assert.True(c.Compound == TomeStackApp.CompoundUndo(command, SheetWithToggle(contentId, c.Paying == true)).Compound, $"{c.Action} replace={c.Replace} responses={c.Responses} paying={c.Paying}");
         }
     }
 
@@ -33,6 +42,8 @@ public class CompoundParityTests
         var cases = Cases();
         foreach (var kind in Enum.GetValues<PlayActionKind>())
             Assert.Contains(cases, c => c.Action == kind);
-        Assert.Equal([false, true], cases.Where(c => c.Action == PlayActionKind.ToggleOn).Select(c => c.Replace ?? false).Order().ToArray());
+        // MECH-X item 1: the replace values are [false, true] plus a second false, the paying case (compound because its sheet row pays hit points or a slot).
+        Assert.Equal([false, false, true], cases.Where(c => c.Action == PlayActionKind.ToggleOn).Select(c => c.Replace ?? false).Order().ToArray());
+        Assert.Single(cases, c => c is { Action: PlayActionKind.ToggleOn, Paying: true, Compound: true });
     }
 }

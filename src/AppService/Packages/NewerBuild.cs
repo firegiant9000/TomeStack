@@ -18,19 +18,19 @@ internal static class NewerBuild
     public const int ContentSchemaFrom = ContentRevision.PlayMechanicsSchemaVersion;
     public const int CharacterSchemaFrom = Character.EncounterSchemaVersion;
 
-    /// <summary>Content at this schema (a weapon's <c>bonus</c>, v12) gets the version-agnostic text: the release that ships it is not decided (R22).</summary>
-    public const int ContentBonusSchemaFrom = ContentRevision.WeaponBonusSchemaVersion;
+    /// <summary>Content at this schema (v12: a weapon's <c>bonus</c>, a cost <c>payment</c>, <c>castsSpell</c>, spell <c>tags</c>) gets the version-agnostic text: the release that ships it is not decided (R22).</summary>
+    public const int ContentV12SchemaFrom = ContentRevision.WeaponBonusSchemaVersion;
 
     public static readonly Diagnostic Warning = new(Code, $"Opening this needs TomeStack {Version} or later: it holds content or a character that older versions refuse.");
 
-    public static readonly Diagnostic WeaponBonusWarning = new(Code, "Opening this needs a TomeStack version that reads content schema 12 or later: it holds content that older versions refuse.");
+    public static readonly Diagnostic ContentV12Warning = new(Code, "Opening this needs a TomeStack version that reads content schema 12 or later: it holds content that older versions refuse.");
 
     /// <summary>The warning when anything in the package that would be written needs <see cref="Version"/> or content schema 12; otherwise none. At most one; the v12 text wins.</summary>
     public static IReadOnlyList<Diagnostic> For(IEnumerable<ContentRevision> revisions, IEnumerable<Character> characters)
     {
         var revisionList = revisions as IReadOnlyCollection<ContentRevision> ?? revisions.ToList();
-        if (revisionList.Any(r => r.SchemaVersion >= ContentBonusSchemaFrom))
-            return [WeaponBonusWarning];
+        if (revisionList.Any(r => r.SchemaVersion >= ContentV12SchemaFrom))
+            return [ContentV12Warning];
         return revisionList.Any(r => r.SchemaVersion >= ContentSchemaFrom) || characters.Any(c => c.SchemaVersion >= CharacterSchemaFrom)
             ? [Warning]
             : [];
