@@ -178,6 +178,24 @@ it('a compound action is marked compound and gets no client inverse (D44)', () =
   expect(inverseOf(replace, v, v)).toBeUndefined();
 });
 
+// MECH-X item 1 (R36): a toggle that pays hit points or a slot is undone by the service. A client toggleOff + regain would not restore
+// the payment, and a client toggleOn after a switch off would pay again.
+it('switching a paying toggle on is compound and has no client undo; switching it off has none either (R36)', () => {
+  const paying = withToggles({ toggleId: 't', payment: { kind: 'hitPoints', payable: true }, cost: 3 });
+  const on: PlayAction = { action: 'toggleOn', contentId: 'c', toggleId: 't' };
+  expect(isCompound(on, paying)).toBe(true);
+  expect(inverseOf(on, paying, paying)).toBeUndefined();
+  const slot = withToggles({ toggleId: 't', on: true, payment: { kind: 'slot', payable: false, reason: 'No spell slot is left.' } });
+  expect(inverseOf({ action: 'toggleOff', contentId: 'c', toggleId: 't' }, slot, slot)).toBeUndefined();
+});
+
+it('a pool toggle and a toggle with no payment are unchanged (R36)', () => {
+  const pool = withToggles({ toggleId: 't', resourceId: 'focus', cost: 2, costResourceContent: 'pool' });
+  expect(isCompound({ action: 'toggleOn', contentId: 'c', toggleId: 't' }, pool)).toBe(false);
+  const plain = withToggles({ toggleId: 't', on: true });
+  expect(inverseOf({ action: 'toggleOff', contentId: 'c', toggleId: 't' }, plain, plain)!.inverse).toEqual([{ action: 'toggleOn', contentId: 'c', toggleId: 't' }]);
+});
+
 it('turning on a primary that dropped an overlay the new form does not allow has no client undo', () => {
   const before = withToggles({ toggleId: 'p', on: false, group: 'g', layer: 'primary' }, { toggleId: 'o', on: true, group: 'g', layer: 'overlay' });
   const after = withToggles({ toggleId: 'p', on: true, group: 'g', layer: 'primary' }, { toggleId: 'o', on: false, group: 'g', layer: 'overlay' });

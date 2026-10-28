@@ -1,5 +1,6 @@
 // D73: the quickbar's pins, kept per character in the page's own storage, and how a pin finds its action on the current sheet.
-import { attackAvailability, dicelessUse, fixedSpendOffered, poolFor, rollAvailability, toggleAvailability, type Availability } from './actionRows';
+import { attackAvailability, dicelessUse, fixedSpendOffered, hasDice, poolFor, rollAvailability, toggleAvailability, type Availability } from './actionRows';
+import { paying } from './payment';
 import type { AttackEntry, CharacterView, CustomAttack, FeatureEffect, FeatureEntry, PlayAction, RollTarget, ToggleValue } from './api/types';
 
 export type PinKind = 'roll' | 'attack' | 'custom' | 'toggle';
@@ -110,8 +111,10 @@ export function resolvePin(view: CharacterView, pin: Pin): QuickAction | undefin
       const availability = rollAvailability(feature, effect, pool, resources);
       const label = effect.label || effect.id;
       const use = dicelessUse(feature, effect, pool, resources);
-      if (!effect.dice) {
-        if (effect.resourceId === undefined) return undefined; // nothing to roll and nothing to spend
+      // R37: the quickbar never pays hit points or a slot. A paying roll with dice only rolls (its record's Pay button pays); one with nothing to roll would pay on a tap.
+      const pays = paying(effect.payment);
+      if (!hasDice(effect)) {
+        if (effect.resourceId === undefined || pays) return undefined; // nothing to roll and nothing to spend
         const cost = use.costFailed ? '' : ` (${use.cost} ${use.poolName}${use.alsoText})`;
         return { ...base, name: `Use ${label}${cost}`, label, availability, action: use.action, spends: false };
       }
@@ -122,6 +125,7 @@ export function resolvePin(view: CharacterView, pin: Pin): QuickAction | undefin
       // A held roll (compound with no rollId) has no Spend to offer, so its name stays plain.
       const held = (effect.drawsDown || (effect.alsoChange?.length ?? 0) > 0) && !effect.rollId;
       const spends =
+        !pays &&
         pool !== undefined &&
         fixedSpendOffered({ tracked: pool.current !== undefined, costUnavailable: use.costFailed, variableCost: effect.variableCost === true, held, cost: use.cost, alsoChanges: (effect.alsoChange?.length ?? 0) > 0, stock });
       return { ...base, name: spends ? `Roll ${label} and spend ${use.cost} ${pool.label}` : `Roll ${label}`, label, availability, target, spends };
@@ -135,6 +139,7 @@ export function resolvePin(view: CharacterView, pin: Pin): QuickAction | undefin
       // The service links a feature attack's pool on its to-hit record, so the record offers the fixed Spend: the name must say so (R13).
       const cost = attack.cost ?? 1;
       const spends =
+        !paying(attack.payment) &&
         attack.source === 'feature' &&
         !!attack.resourceId &&
         pool !== undefined &&
@@ -150,6 +155,8 @@ export function resolvePin(view: CharacterView, pin: Pin): QuickAction | undefin
       const t = (view.sheet.toggles ?? []).find((x) => x.content.contentId === pin.contentId && x.effectId === pin.effectId);
       // R15: an auto toggle follows the hit points and a grouped one is the form picker's; neither is a one-tap action.
       if (!t || t.auto || t.group) return undefined;
+      // R37: a tap would pay hit points or a slot, so a paying toggle is switched in the Actions panel (a deliberate press), never from the bar.
+      if (paying(t.payment)) return undefined;
       const availability = toggleAvailability(t, poolFor(resources, t.resourceId, t.costResourceContent ?? t.content.contentId));
       const action: PlayAction = { action: t.on ? 'toggleOff' : 'toggleOn', contentId: t.content.contentId, toggleId: t.toggleId };
       return { ...base, name: `Turn ${t.label} ${t.on ? 'off' : 'on'}`, label: t.label, availability, action, spends: false };

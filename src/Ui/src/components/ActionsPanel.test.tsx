@@ -976,3 +976,103 @@ it('with 8 pins an unpinned row cannot be pinned (aria-disabled, no call, descri
   await userEvent.click(own);
   expect(onPin).toHaveBeenCalledTimes(1);
 });
+
+// MECH-X item 1 (R36, R37, R38, R40): hit-point and slot payments and cast-spell rows on the Actions panel.
+const payRef = { contentId: 'c-fury', revisionId: 'r-fury' };
+const payFeature = (effects: object[]) => ({ content: payRef, name: 'Fixture Fury', kind: 'feature', origin: {}, automation: 'automatic', diagnostics: [], effects });
+const payView = (sheet: object) => ({ character: { id: 'fixture' }, sheet: { attacks: [], toggles: [], features: [], resources: [], ...sheet } }) as unknown as CharacterView;
+const payToggle = (extra: object) => ({ content: payRef, contentName: 'Fixture Fury', effectId: 'e-rage', toggleId: 'rage', label: 'Fixture rage', on: false, available: true, cost: 3, ...extra });
+
+it('a toggle row says what it costs in hit points or a slot, and an off toggle that cannot pay has its switch held with the reason (R40)', () => {
+  const hp = payToggle({ payment: { kind: 'hitPoints', payable: true } });
+  const slot = payToggle({ toggleId: 'ward', effectId: 'e-ward', label: 'Fixture ward', cost: undefined, payment: { kind: 'slot', payable: false, reason: 'No spell slot is left.', minSlotLevel: 2 } });
+  render(<ActionsPanel view={payView({ toggles: [hp, slot] })} roll={() => {}} act={() => {}} />);
+  expect(screen.getByText(/Costs 3 hit points/)).toBeTruthy();
+  expect(screen.getByText(/Costs a level 2\+ spell slot/)).toBeTruthy();
+  expect(screen.getByRole<HTMLInputElement>('checkbox', { name: /Fixture rage/ }).disabled).toBe(false);
+  const ward = screen.getByRole<HTMLInputElement>('checkbox', { name: /Fixture ward/ });
+  expect(ward.disabled).toBe(true);
+  expect(screen.getByText('No spell slot is left.')).toBeTruthy();
+});
+
+it('an ON paying toggle stays switchable off even when it could not be paid now (B1)', async () => {
+  const user = userEvent.setup();
+  const act = vi.fn();
+  const on = payToggle({ on: true, payment: { kind: 'hitPoints', payable: false, reason: 'Needs more than 3 current hit points.' } });
+  render(<ActionsPanel view={payView({ toggles: [on] })} roll={() => {}} act={act} />);
+  const box = screen.getByRole<HTMLInputElement>('checkbox', { name: /Fixture rage/ });
+  expect(box.disabled).toBe(false);
+  await user.click(box);
+  expect(act).toHaveBeenCalledExactlyOnceWith({ action: 'toggleOff', contentId: 'c-fury', toggleId: 'rage' });
+});
+
+it('switching a payable paying toggle on sends toggleOn; a paying toggle cannot be pinned (S4)', async () => {
+  const user = userEvent.setup();
+  const act = vi.fn();
+  const pin = vi.fn();
+  render(<ActionsPanel view={payView({ toggles: [payToggle({ payment: { kind: 'hitPoints', payable: true } })] })} roll={() => {}} act={act} onPin={pin} />);
+  await user.click(screen.getByRole('checkbox', { name: /Fixture rage/ }));
+  expect(act).toHaveBeenCalledExactlyOnceWith({ action: 'toggleOn', contentId: 'c-fury', toggleId: 'rage' });
+  expect(screen.queryByRole('button', { name: /^Pin Fixture rage/ })).toBeNull();
+});
+
+it('a paying roll with dice that cannot be paid shows its reason, and Roll still rolls (rolling never pays)', async () => {
+  const user = userEvent.setup();
+  const roll = vi.fn();
+  const effect = { id: 'lash', rollId: 'lash-roll', type: 'roll', automation: 'automatic', label: 'Lash', dice: '2d6', cost: 5, available: true, payment: { kind: 'hitPoints', payable: false, reason: 'Needs more than 5 current hit points.' } };
+  render(<ActionsPanel view={payView({ features: [payFeature([effect])] })} roll={roll} act={() => {}} />);
+  expect(screen.getByText(/Needs more than 5 current hit points\./)).toBeTruthy();
+  expect(screen.getByText(/Costs 5 hit points/)).toBeTruthy();
+  await user.click(screen.getByRole('button', { name: 'Roll Lash (2d6)' }));
+  expect(roll).toHaveBeenCalledExactlyOnceWith({ content: payRef, effectId: 'lash', critical: false });
+});
+
+it('a dice-less paying roll is a Use button that sends useAction with its rollId; held with the reason when it cannot pay', async () => {
+  const user = userEvent.setup();
+  const act = vi.fn();
+  const ok = { id: 'surge', rollId: 'surge-roll', type: 'roll', automation: 'automatic', label: 'Surge', cost: 2, available: true, payment: { kind: 'hitPoints', payable: true } };
+  const broke = { id: 'drain', rollId: 'drain-roll', type: 'roll', automation: 'automatic', label: 'Drain', cost: 9, available: true, payment: { kind: 'hitPoints', payable: false, reason: 'Needs more than 9 current hit points.' } };
+  render(<ActionsPanel view={payView({ features: [payFeature([ok, broke])] })} roll={() => {}} act={act} />);
+  await user.click(screen.getByRole('button', { name: 'Use Surge (2 hit points)' }));
+  expect(act).toHaveBeenCalledExactlyOnceWith({ action: 'useAction', contentId: 'c-fury', rollId: 'surge-roll' });
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Use Drain (9 hit points)' }).disabled).toBe(true);
+  expect(screen.getByText(/Needs more than 9 current hit points\./)).toBeTruthy();
+});
+
+it('a hit-point per-unit roll asks how many points and rolls with that amount, even with no pool', async () => {
+  const user = userEvent.setup();
+  const roll = vi.fn();
+  const effect = { id: 'burn', rollId: 'burn-roll', type: 'roll', automation: 'automatic', label: 'Burn', dice: '1d6', cost: 2, available: true, perUnit: { dice: '1d6', maxUnits: 3 }, payment: { kind: 'hitPoints', payable: true } };
+  render(<ActionsPanel view={payView({ features: [payFeature([effect])] })} roll={roll} act={() => {}} />);
+  const box = screen.getByRole('spinbutton', { name: /Points to spend/ });
+  await user.clear(box);
+  await user.type(box, '4');
+  await user.click(screen.getByRole('button', { name: 'Roll Burn (1d6)' }));
+  expect(roll).toHaveBeenCalledExactlyOnceWith({ content: payRef, effectId: 'burn', critical: false, amount: 4 });
+});
+
+it('a paying feature attack says what it costs and shows its reason when it cannot pay', () => {
+  const lash = {
+    item: payRef, name: 'Fixture Lash', effectId: 'lash', source: 'feature', attack: 'melee', toHit: 4, damage: '1d8', damageType: 'fire', properties: [], trace: [], warnings: [],
+    automation: 'automatic', available: true, replacesAttack: false, cost: 4, payment: { kind: 'hitPoints', payable: false, reason: 'Needs more than 4 current hit points.' },
+  };
+  render(<ActionsPanel view={payView({ attacks: [lash] })} roll={() => {}} act={() => {}} />);
+  expect(screen.getByText(/Needs more than 4 current hit points\./)).toBeTruthy();
+  expect(screen.getByText(/Costs 4 hit points/)).toBeTruthy();
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Roll Fixture Lash attack' }).disabled).toBe(false);
+});
+
+it('a cast-spell roll says which spell it casts, its level and the numbers (R38)', () => {
+  const cast = (extra: object) => ({ spell: { contentId: 's1', revisionId: 'sr1' }, name: 'Fixture Spark', level: 2, attack: 'none', ...extra });
+  const row = (id: string, label: string, castsSpell: object) => ({ id, rollId: `${id}-roll`, type: 'roll', automation: 'automatic', label, available: true, castsSpell });
+  const withDc = row('spark', 'Spark', cast({ dice: '2d8', save: 'dex', saveDc: 14 }));
+  const byHand = row('glow', 'Glow', cast({ name: 'Fixture Glow', level: 1, dice: '1d6', attack: 'ranged' }));
+  const atk = row('bolt', 'Bolt', cast({ name: 'Fixture Bolt', dice: '1d10', attack: 'ranged', attackBonus: 6 }));
+  render(<ActionsPanel view={payView({ features: [payFeature([withDc, byHand, atk])] })} roll={() => {}} act={() => {}} />);
+  expect(screen.getByText(/Casts Fixture Spark \(level 2\) · DC 14/)).toBeTruthy();
+  expect(screen.getByText(/Casts Fixture Glow \(level 1\) · numbers by hand/)).toBeTruthy();
+  expect(screen.getByText(/Casts Fixture Bolt \(level 2\) · \+6 to hit/)).toBeTruthy();
+  // The spell's own dice are what rolls, so the row is a Roll button.
+  expect(screen.getByRole('button', { name: 'Roll Spark (2d8)' })).toBeTruthy();
+});
+

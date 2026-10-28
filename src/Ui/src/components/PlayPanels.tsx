@@ -19,7 +19,8 @@ import type {
   RollTarget,
   ToggleValue,
 } from '../api/types';
-import { attackAvailability, dicelessUse, poolFor, recordSpend, rollAvailability, toggleAvailability, type Availability } from '../actionRows';
+import { attackAvailability, dicelessUse, hasDice, poolFor, recordPayment, recordSpend, rollAvailability, toggleAvailability, type Availability } from '../actionRows';
+import { castsText, paying, paymentText } from '../payment';
 import { explainSteps } from '../explain';
 import { hitDiceText, rollBonus } from '../format';
 import { attackPin, customPin, maxPins, pinKey, rollPin, togglePin, type Pin } from '../quickbar';
@@ -552,12 +553,16 @@ function ToggleRow({ toggle: t, act, availability, pinning }: { toggle: ToggleVa
       </div>
     );
   }
+  // MECH-X item 1 (R40): only switching a paying toggle ON waits on whether it can be paid; switching it off never does.
+  const payment = paying(t.payment) ? t.payment : undefined;
+  const held = !t.on && payment?.payable === false;
   return (
     <>
       <label className="choice">
         <input
           type="checkbox"
           checked={t.on}
+          disabled={held}
           aria-describedby={reason ? reasonId : undefined}
           onChange={() => act({ action: t.on ? 'toggleOff' : 'toggleOn', contentId: t.content.contentId, toggleId: t.toggleId })}
         />
@@ -565,6 +570,7 @@ function ToggleRow({ toggle: t, act, availability, pinning }: { toggle: ToggleVa
         <span className="option-source">
           {t.contentName}
           {t.resourceId ? ' · turning it on spends 1 use' : ''}
+          {payment ? ` · Costs ${paymentText(payment, t.cost)}` : ''}
           {t.text ? ` · ${t.text}` : ''}
         </span>
       </label>
@@ -680,14 +686,15 @@ export function ActionsPanel({
       effect,
       availability: rollAvailability(feature, effect, poolFor(resourcePools, effect.resourceId, effect.resourceContent ?? feature.content.contentId), resourcePools),
       // A roll with nothing to roll and nothing to spend is only text.
-      pin: effect.dice || effect.resourceId !== undefined ? rollPin(feature, effect) : undefined,
+      // (A paying roll with nothing to roll has no resource, so it is not pinned either: a tap would pay, R37.)
+      pin: hasDice(effect) || effect.resourceId !== undefined ? rollPin(feature, effect) : undefined,
     }))
     .filter((r) => listed(r.availability, r.pin));
   const attackRows = attacks
     .map((attack) => ({ attack, availability: attackAvailability(attack, poolFor(resourcePools, attack.resourceId ?? undefined, attack.costResourceContent ?? undefined)), pin: attackPin(attack) }))
     .filter((r) => listed(r.availability, r.pin));
   const toggleRows = plainToggles
-    .map((t) => ({ toggle: t, availability: toggleAvailability(t, poolFor(resourcePools, t.resourceId, t.costResourceContent ?? t.content.contentId)), pin: t.auto ? undefined : togglePin(t) }))
+    .map((t) => ({ toggle: t, availability: toggleAvailability(t, poolFor(resourcePools, t.resourceId, t.costResourceContent ?? t.content.contentId)), pin: t.auto || paying(t.payment) ? undefined : togglePin(t) }))
     .filter((r) => listed(r.availability, r.pin));
   const rowPool = ({ feature, effect }: (typeof rollRows)[number]) => allowanceOf(effect.resourceId, effect.resourceContent ?? feature.content.contentId);
   const poolGroups = allowances
@@ -871,7 +878,10 @@ function RollItem({
   const baseId = `${feature.content.revisionId}-${effect.id}`;
   const baseCost = effect.cost ?? 0;
   // An untracked pool has no points to choose from: the roll goes without an amount and the service charges the base cost.
-  const perUnit = effect.dice && pool?.current !== undefined ? effect.perUnit : undefined;
+  // MECH-X item 1: a per-unit roll that pays hit points has no pool; the points it pays are still the player's to choose.
+  const payment = paying(effect.payment) ? effect.payment : undefined;
+  const rolled = hasDice(effect);
+  const perUnit = rolled && (pool?.current !== undefined || payment?.kind === 'hitPoints') ? effect.perUnit : undefined;
   const drawsDown = effect.drawsDown === true;
   // D43 S8: a release can only draw down what has built up, so its most is limited by the pool's `spent`.
   const unitMax = perUnit ? (perUnit.maxUnits !== undefined ? baseCost + perUnit.maxUnits : pool?.maximum) : undefined;
@@ -890,9 +900,9 @@ function RollItem({
   const amountReasonId = `roll-amount-reason-${baseId}`;
   const details = actionDetails(effect);
   const label = effect.label || effect.id;
-  const diceless = !effect.dice;
+  const diceless = !rolled;
   // D73: the Use (its reason, its cost text and the action it sends) lives in actionRows.ts, shared with the quickbar.
-  const { cost: useCost, costFailed, poolName, alsoText, reason: useReason, action: useAction } = dicelessUse(feature, effect, pool, pools);
+  const { cost: useCost, costFailed, poolName, alsoText, reason: useReason, action: useAction, payText } = dicelessUse(feature, effect, pool, pools);
   // D73: a roll with dice that the pool can't pay stays enabled (the cost is spent from its record) but says so; a locked one reuses the lock's reason.
   const needsId = `roll-needs-${baseId}`;
   const needs = !diceless && !locked ? availability.reasons.join(' ') : '';
@@ -901,7 +911,7 @@ function RollItem({
   return (
     <li className="feature">
       {diceless ? (
-        effect.resourceId ? (
+        effect.resourceId || payment ? (
           <button
             type="button"
             disabled={useReason !== undefined}
@@ -911,7 +921,7 @@ function RollItem({
             }}
           >
             Use {label}
-            {costFailed ? '' : ` (${useCost} ${poolName}${alsoText})`}
+            {payText ? ` (${payText})` : costFailed ? '' : ` (${useCost} ${poolName}${alsoText})`}
           </button>
         ) : (
           <span className="option-name">{label}</span>
@@ -924,12 +934,13 @@ function RollItem({
           onClick={() => roll({ content: feature.content, effectId: effect.id, critical, ...(perUnit ? { amount: chosen } : {}) })}
         >
           Roll {label}
-          {` (${effect.dice}${rollBonus(effect.bonus)})`}
+          {` (${effect.dice ?? effect.castsSpell?.dice}${rollBonus(effect.bonus)})`}
         </button>
       )}{' '}
       <span className="hint">
         {feature.name}
         {effect.resourceId && !diceless ? ' · uses a resource (spend it separately)' : ''}
+        {payment && !diceless ? ` · Costs ${paymentText(payment, effect.cost)} (pay it from the roll)` : ''}
       </span>
       {(locked || (diceless && useReason !== undefined)) && (
         <span id={reasonId} className="hint">
@@ -943,7 +954,8 @@ function RollItem({
           · {needs}
         </span>
       )}
-      {diceless && !effect.resourceId && effect.text && <span className="hint"> · {effect.text}</span>}
+      {diceless && !effect.resourceId && !payment && effect.text && <span className="hint"> · {effect.text}</span>}
+      {effect.castsSpell && <p className="hint">{castsText(effect.castsSpell)}</p>}
       {details && <p className="hint">{details}</p>}
       {effect.saveDc !== undefined && effect.saveTrace && (
         <ExplainList label={`${label} save DC`} steps={effect.saveTrace} summary={`Why DC ${effect.saveDc}?`} />
@@ -1018,6 +1030,7 @@ function AttackItem({
           {attack.properties.length > 0 ? ` · ${attack.properties.join(', ')}` : ''}
           {attack.mastery ? ` · mastery: ${attack.mastery}` : ''}
           {feature && attack.resourceId ? ` · uses ${attack.cost ?? 1} ${pool?.label ?? 'of a resource'} (spend it from the roll)` : ''}
+          {feature && paying(attack.payment) ? ` · Costs ${paymentText(attack.payment, attack.cost)} (pay it from the roll)` : ''}
         </p>
         <ul aria-label={`How the ${attack.name} attack is calculated`}>
           {explainSteps(attack.trace, 'attack').map((sentence, i) => (
@@ -1190,6 +1203,7 @@ export function RollResult({
   const spentFor = spent ? spent.record : ownSpentFor;
   const spentAlready = record !== undefined && spentFor === record;
   const cantUseId = useId();
+  const payReasonId = useId();
   /** Holds the button while the change is under way, and gives it back when the change is refused so it can be retried. */
   function spendOnce(action: PlayAction, refused?: () => void) {
     if (spent) {
@@ -1212,6 +1226,8 @@ export function RollResult({
   const p = record.provenance;
   // D73: which pool a record spends, what it costs and the action that spends it are worked out in actionRows.ts.
   const { linked, cost, costUnavailable, cantUse, variableCost, stockText, most, spendAction, autoAction } = recordSpend(record, resources, features, attacks);
+  // MECH-X item 1 (R37): hit points and slots are paid here, by a deliberate press, once per record through the same `spendOnce`.
+  const payment = recordPayment(record, features, attacks);
   const cantUseText = "Can't be used here";
   const chosen = Number(amount);
   const validChoice = amount !== '' && Number.isInteger(chosen) && chosen >= 1 && chosen <= most;
@@ -1283,6 +1299,25 @@ export function RollResult({
         <span id={cantUseId} className="hint">
           {cantUseText}
         </span>
+      )}
+      {payment && (
+        <>
+          <button
+            type="button"
+            disabled={spentAlready || !payment.payable}
+            aria-describedby={payment.reason ? payReasonId : undefined}
+            onClick={() => spendOnce(payment.action)}
+          >
+            {payment.label}
+          </button>
+          {payment.note && <span className="hint"> {payment.note}</span>}
+          {payment.reason && (
+            <span id={payReasonId} className="hint">
+              {' '}
+              {payment.reason}
+            </span>
+          )}
+        </>
       )}
     </div>
   );

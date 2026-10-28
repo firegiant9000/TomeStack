@@ -281,6 +281,40 @@ export interface ResourceValue {
   allowance?: boolean;
 }
 
+/** Content v12 (MECH-X item 1): how a payment is made. A pool payment is `resource` (the sheet leaves `payment` out for it). */
+export type PaymentKind = 'resource' | 'hitPoints' | 'slot';
+
+/** The slot a slot payment would take now (R35). */
+export interface SlotChoice {
+  level: number;
+  pact: boolean;
+}
+
+/**
+ * Content v12 (MECH-X item 1, R40): a hit-point or slot payment on a roll, an attack or a toggle, and whether it can be made now.
+ * `payable` is false, with `reason`, when it cannot; it never changes `available`.
+ */
+export interface PaymentValue {
+  kind: PaymentKind;
+  payable: boolean;
+  reason?: string;
+  mayDropToZero?: boolean;
+  minSlotLevel?: number;
+  slot?: SlotChoice;
+}
+
+/** Content v12 (R38): the spell a roll casts without a slot; the numbers are the primary caster's (absent without a caster: by hand). */
+export interface CastSpellValue {
+  spell: ContentReference;
+  name: string;
+  level: number;
+  attack: 'none' | 'melee' | 'ranged';
+  save?: Ability;
+  dice?: string;
+  attackBonus?: number;
+  saveDc?: number;
+}
+
 export interface FeatureEffect {
   id: string;
   type: string;
@@ -316,6 +350,10 @@ export interface FeatureEffect {
   drawsDown?: boolean;
   /** The roll's content `rollId` (what `useAction` names); it can differ from `id`. */
   rollId?: string;
+  /** Content v12 (MECH-X item 1): a hit-point or slot payment and whether it can be made now; absent for a pool payment. */
+  payment?: PaymentValue;
+  /** Content v12 (R38): the spell this roll casts without a slot; absent when it casts none or the spell cannot be used. */
+  castsSpell?: CastSpellValue;
 }
 
 export interface AlsoChangeValue {
@@ -364,7 +402,7 @@ export interface ToggleValue {
   cost?: number;
   costResourceContent?: string;
   /** Content v12 (MECH-X item 1): a hit-point or slot payment and whether it can be made now; absent for a pool payment. */
-  payment?: { kind: 'resource' | 'hitPoints' | 'slot'; payable: boolean; reason?: string; mayDropToZero?: boolean; minSlotLevel?: number; slot?: { level: number; pact: boolean } };
+  payment?: PaymentValue;
   /** False when the group rules currently refuse switching it on (`unavailableReason` says why). The server always sends it. */
   available: boolean;
   unavailableReason?: string;
@@ -441,6 +479,8 @@ export interface AttackEntry {
   costResourceContent?: string | null;
   resourceId?: string | null;
   cost?: number | null;
+  /** Content v12 (MECH-X item 1): a hit-point or slot payment (a feature attack); absent for a pool payment. */
+  payment?: PaymentValue | null;
 }
 
 /** SPEC I-05: an active revision with its text and automation status. */
@@ -903,6 +943,18 @@ export interface RollRecord {
   modeSources?: string[];
   /** D72: the sheet's trace for the number rolled (a field, an attack, a caster's spell attack); absent when the roll has none. */
   explain?: TraceEntry[];
+  /** MECH-X item 1: the hit-point or slot payment a roll or a feature attack's to-hit roll implies. Rolling never pays; the Pay button sends `useAction`. */
+  payment?: RollPayment;
+}
+
+/** `contentId` declares the roll; `useId` is what `useAction` names (a roll's `rollId`, or a feature attack's effect id). `amount` is absent for a slot. */
+export interface RollPayment {
+  contentId: string;
+  useId: string;
+  kind: PaymentKind;
+  amount?: number;
+  minSlotLevel?: number;
+  mayDropToZero: boolean;
 }
 
 export interface RollSpend {
@@ -1053,7 +1105,7 @@ export interface ContentOption {
   /** False when another revision grants it or offers it in a choice (class features, skill options): it is not pinned directly. */
   standalone?: boolean;
   /** Spell options only (content schema v5). */
-  spell?: { level: number; lists: string[]; school?: string; concentration: boolean; ritual: boolean };
+  spell?: { level: number; lists: string[]; school?: string; concentration: boolean; ritual: boolean; tags?: string[] };
 }
 
 /** A spell recorded for one caster; `caster` is the content id of the class or subclass with spellcasting. */
@@ -1085,6 +1137,8 @@ export interface SpellEntry {
   duration?: string;
   concentration: boolean;
   ritual: boolean;
+  /** Content v12 (R39): the spell's tags, kept apart from `school`. */
+  tags?: string[];
   attack: 'none' | 'melee' | 'ranged';
   save?: Ability;
   dice?: string;

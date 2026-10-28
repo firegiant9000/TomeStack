@@ -1,4 +1,5 @@
 import type { CharacterView, PlayAction } from './api/types';
+import { paying } from './payment';
 
 export interface UndoEntry {
   /** What is undone, for the button's name ("damage 12"). */
@@ -16,7 +17,7 @@ export interface UndoEntry {
  * (`CompoundUndo` in Play.cs) and this one are checked against `tests/RulesFixtures/compound-play-actions.json`.
  */
 export const isCompound = (action: PlayAction, view?: CharacterView): boolean =>
-  (action.action === 'toggleOn' && (!!action.replace || !!findToggle(view, action)?.payment)) ||
+  (action.action === 'toggleOn' && (!!action.replace || paying(findToggle(view, action)?.payment))) ||
   action.action === 'startEncounter' ||
   action.action === 'endEncounter' ||
   action.action === 'useAction' ||
@@ -112,6 +113,8 @@ export function inverseOf(action: PlayAction, before: CharacterView, after: Char
     case 'toggleOff': {
       // Switching a resource-backed toggle back on would spend a use the player did not spend, so it is not undoable.
       if (backing(action)) return undefined;
+      // MECH-X item 1 (R36): switching a hit-point or slot paying toggle back on would pay again.
+      if (paying(findToggle(before, action)?.payment)) return undefined;
       // A timed toggle that is counting its rounds would restart at the full duration if switched back on, and toggleOff is not compound (no service undo), so it cannot be undone.
       if (before.character.play?.toggles?.some((t) => t.contentId === action.contentId && t.toggleId === action.toggleId && t.roundsLeft != null)) return undefined;
       return droppedOthers(action, before, after) ? undefined : entry([{ action: 'toggleOn', contentId: action.contentId, toggleId: action.toggleId }]);

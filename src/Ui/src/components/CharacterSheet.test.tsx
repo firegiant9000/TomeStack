@@ -282,6 +282,29 @@ it('Use on an action with alsoChange sends useAction stamped with the view (D43 
   expect(vi.mocked(client.play).mock.calls[0]?.[1]).toEqual({ action: 'useAction', contentId: 'c-gather', rollId: 'gather-roll', expectedUpdatedAt: '2026-10-03T00:00:00Z' });
 });
 
+it('Pay on the Last roll sends useAction stamped with the view, once (MECH-X item 1, S6)', async () => {
+  const user = userEvent.setup();
+  const ref = { contentId: 'c-fury', revisionId: 'r-fury' };
+  const lash = { id: 'lash', rollId: 'lash-roll', type: 'roll', automation: 'automatic', label: 'Lash', dice: '2d6', cost: 3, activation: 'action', available: true, payment: { kind: 'hitPoints', payable: true } };
+  const shown = view({ features: [{ content: ref, name: 'Fixture Fury', kind: 'feature', origin: {}, automation: 'automatic', diagnostics: [], effects: [lash] }] } as never);
+  const record = {
+    formula: '2d6', mode: 'normal', critical: false, dice: [], diceTotal: 7, expressionConstant: 0, modifiers: [], total: 7,
+    provenance: { rollId: 'lash-roll', label: 'Lash', content: ref, effectId: 'lash' }, payment: { contentId: 'c-fury', useId: 'lash-roll', kind: 'hitPoints', amount: 3, mayDropToZero: false },
+  } as unknown as RollRecord;
+  vi.mocked(client.roll).mockReset();
+  vi.mocked(client.roll).mockResolvedValue(record);
+  vi.mocked(client.play).mockReset();
+  vi.mocked(client.play).mockResolvedValue(shown);
+  render(<CharacterSheet view={shown} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+  await user.click(screen.getByRole('button', { name: 'Roll Lash (2d6)' }));
+  expect(client.play).not.toHaveBeenCalled(); // rolling never pays
+  const pay = await screen.findByRole('button', { name: 'Pay 3 hit points' });
+  await user.click(pay);
+  await user.click(pay);
+  await waitFor(() => expect(client.play).toHaveBeenCalledTimes(1));
+  expect(vi.mocked(client.play).mock.calls[0]?.[1]).toEqual({ action: 'useAction', contentId: 'c-fury', rollId: 'lash-roll', amount: 3, expectedUpdatedAt: '2026-10-03T00:00:00Z' });
+});
+
 it('says what the reply noticed after a play change (here, ending an encounter), in the status line (D43 S3)', async () => {
   const user = userEvent.setup();
   const onStatus = vi.fn();

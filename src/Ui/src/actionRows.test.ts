@@ -1,6 +1,6 @@
 // D73: the shared availability, Use and Spend rules (the Actions panel and the quickbar read the same answers).
 import { expect, it } from 'vitest';
-import { attackAvailability, poolFor, recordSpend, rollAvailability, toggleAvailability, dicelessUse } from './actionRows';
+import { attackAvailability, hasDice, poolFor, recordPayment, recordSpend, rollAvailability, toggleAvailability, dicelessUse } from './actionRows';
 import type { AttackEntry, FeatureEffect, FeatureEntry, ResourceValue, RollRecord, ToggleValue } from './api/types';
 
 const ref = { contentId: 'c1', revisionId: 'r1' };
@@ -149,4 +149,89 @@ it('recordSpend: says cantUse and costUnavailable for the held and failed record
   expect(spends(held, effect({ drawsDown: true }), pool({ spent: 3 })).cantUse).toBe(true);
   const failed = spends(record({ provenance: { rollId: 'surge-roll', label: 'Surge', content: ref, effectId: 'surge', linkedResourceId: 'focus' } }), effect({ cost: undefined }));
   expect(failed.costUnavailable).toBe(true);
+});
+
+// MECH-X item 1 (R37, R40): hit-point and slot payments. Affordability is the payment's own `payable`, never `available`.
+const hp = (extra: object = {}) => ({ kind: 'hitPoints', payable: true, ...extra });
+const slot = (extra: object = {}) => ({ kind: 'slot', payable: true, ...extra });
+const lowHp = hp({ payable: false, reason: 'Needs more than 5 current hit points.' });
+const noSlot = slot({ payable: false, reason: 'No spell slot of level 2 or higher is left.' });
+
+it.each([
+  ['a paying roll with dice that cannot be paid', rollAvailability(feature(), effect({ resourceId: undefined, cost: 5, payment: lowHp }), undefined, []), { usable: false, reasons: ['Needs more than 5 current hit points.'] }],
+  ['a paying roll with dice that can be paid', rollAvailability(feature(), effect({ resourceId: undefined, cost: 3, payment: hp() }), undefined, []), { usable: true, reasons: [] }],
+  ['a paying use that cannot be paid', rollAvailability(feature(), plain({ resourceId: undefined, cost: 2, payment: noSlot, rollId: 'surge-roll' }), undefined, []), { usable: false, reasons: ['No spell slot of level 2 or higher is left.'] }],
+  ['a paying use that can be paid', rollAvailability(feature(), plain({ resourceId: undefined, cost: 2, payment: slot(), rollId: 'surge-roll' }), undefined, []), { usable: true, reasons: [] }],
+  ['a locked paying roll keeps the lock reason', rollAvailability(feature(), effect({ resourceId: undefined, payment: lowHp, available: false, unavailableReason: 'Needs a form' }), undefined, []), { usable: false, reasons: ['Needs a form'] }],
+  ['a paying feature attack that cannot be paid', attackAvailability(attack({ resourceId: null, cost: 4, payment: lowHp }), undefined), { usable: false, reasons: ['Needs more than 5 current hit points.'] }],
+  ['a paying feature attack that can be paid', attackAvailability(attack({ resourceId: null, cost: 4, payment: hp() }), undefined), { usable: true, reasons: [] }],
+  ['a paying toggle that is off and cannot be paid', toggleAvailability(toggle({ cost: 3, payment: lowHp }), undefined), { usable: false, reasons: ['Needs more than 5 current hit points.'] }],
+  ['a paying toggle that is on never waits on payable', toggleAvailability(toggle({ on: true, cost: 3, payment: lowHp }), undefined), { usable: true, reasons: [] }],
+  ['a paying toggle that is off and can be paid', toggleAvailability(toggle({ cost: 3, payment: hp() }), undefined), { usable: true, reasons: [] }],
+])('payment availability: %s', (_name, got, want) => {
+  expect(got).toEqual(want);
+});
+
+it('dicelessUse: a dice-less paying roll with no pool sends useAction with its rollId and names the payment (S5)', () => {
+  const e = plain({ resourceId: undefined, cost: 3, rollId: 'surge-roll', payment: hp() });
+  const got = dicelessUse(feature([e]), e, undefined, []);
+  expect(got.action).toEqual({ action: 'useAction', contentId: 'c1', rollId: 'surge-roll' });
+  expect(got.reason).toBeUndefined();
+  expect(got.payText).toBe('3 hit points');
+  const slotUse = plain({ resourceId: undefined, cost: undefined, rollId: 'surge-roll', payment: slot({ minSlotLevel: 2, slot: { level: 2, pact: false } }) });
+  expect(dicelessUse(feature([slotUse]), slotUse, undefined, []).payText).toBe('a level 2+ spell slot (level 2 now)');
+});
+
+it('dicelessUse: a dice-less paying roll that cannot be paid, or has no rollId, sends nothing and says why', () => {
+  const broke = plain({ resourceId: undefined, cost: 5, rollId: 'surge-roll', payment: lowHp });
+  const got = dicelessUse(feature([broke]), broke, undefined, []);
+  expect(got.action).toBeUndefined();
+  expect(got.reason).toBe('Needs more than 5 current hit points.');
+  const unnamed = plain({ resourceId: undefined, cost: 3, payment: hp() });
+  expect(dicelessUse(feature([unnamed]), unnamed, undefined, []).reason).toBe("Can't be used here");
+});
+
+it('dicelessUse: a hit-point use that costs 0 is still offered; the server refuses it (use.unavailable)', () => {
+  const e = plain({ resourceId: undefined, cost: 0, rollId: 'surge-roll', payment: hp() });
+  expect(dicelessUse(feature([e]), e, undefined, []).action).toEqual({ action: 'useAction', contentId: 'c1', rollId: 'surge-roll' });
+});
+
+it('hasDice: a roll with its own dice, or one that casts a spell with dice, rolls', () => {
+  expect(hasDice(effect())).toBe(true);
+  expect(hasDice(plain())).toBe(false);
+  expect(hasDice(plain({ castsSpell: { name: 'Testy spark', level: 1, attack: 'none', dice: '2d8' } }))).toBe(true);
+  expect(hasDice(plain({ castsSpell: { name: 'Testy ward', level: 1, attack: 'none' } }))).toBe(false);
+});
+
+const payRecord = (payment: object, extra: object = {}) => record({ payment: { contentId: 'c1', useId: 'surge-roll', mayDropToZero: false, ...payment }, ...extra });
+
+it('recordPayment: a hit-point record offers Pay with the amount, sent as useAction by the record useId', () => {
+  const e = effect({ resourceId: undefined, cost: 3, rollId: 'surge-roll', payment: hp() });
+  const got = recordPayment(payRecord({ kind: 'hitPoints', amount: 3 }), [feature([e])], [])!;
+  expect(got.label).toBe('Pay 3 hit points');
+  expect(got.payable).toBe(true);
+  expect(got.action).toEqual({ action: 'useAction', contentId: 'c1', rollId: 'surge-roll', amount: 3 });
+});
+
+it('recordPayment: a slot record offers Spend and sends no amount; the row says which slot it takes now', () => {
+  const e = effect({ resourceId: undefined, rollId: 'surge-roll', payment: slot({ minSlotLevel: 2, slot: { level: 2, pact: false } }) });
+  const got = recordPayment(payRecord({ kind: 'slot', minSlotLevel: 2 }), [feature([e])], [])!;
+  expect(got.label).toBe('Spend a level 2+ spell slot');
+  expect(got.note).toBe('Slot, level 2 now');
+  expect(got.action).toEqual({ action: 'useAction', contentId: 'c1', rollId: 'surge-roll' });
+});
+
+it('recordPayment: the row that cannot pay holds the button with its reason (R40)', () => {
+  const e = effect({ resourceId: undefined, cost: 5, rollId: 'surge-roll', payment: lowHp });
+  const got = recordPayment(payRecord({ kind: 'hitPoints', amount: 5 }), [feature([e])], [])!;
+  expect(got.payable).toBe(false);
+  expect(got.reason).toBe('Needs more than 5 current hit points.');
+});
+
+it('recordPayment: a feature attack is found by its effect id; a record with no payment offers nothing', () => {
+  const a = attack({ resourceId: null, effectId: 'lash', cost: 4, payment: slot({ slot: { level: 1, pact: true } }) });
+  const got = recordPayment(payRecord({ kind: 'slot', useId: 'lash' }), [], [a])!;
+  expect(got.action).toEqual({ action: 'useAction', contentId: 'c1', rollId: 'lash' });
+  expect(got.note).toBe('Pact slot, level 1 now');
+  expect(recordPayment(record(), [feature([effect()])], [])).toBeUndefined();
 });

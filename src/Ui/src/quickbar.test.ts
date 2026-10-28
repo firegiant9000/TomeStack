@@ -279,3 +279,36 @@ it('resolves a toggle to the play change it sends, and leaves auto and grouped o
   expect(pinnable(view({ toggles: [off] }), pin)).toBe(true);
   expect(pinnable(view(), pin)).toBe(false);
 });
+
+// MECH-X item 1 (R37): the quickbar never pays hit points or a slot.
+const hpPay = { kind: 'hitPoints', payable: true };
+const slotPay = { kind: 'slot', payable: true };
+
+it('a paying roll with dice pins as a plain roll: no "and spend", and a press only rolls (R37)', () => {
+  const e = effect({ resourceId: undefined, cost: 3, payment: hpPay, rollId: 'wave-roll' });
+  const got = resolvePin(view({ features: [feature([e])] }), { kind: 'roll', contentId: 'c1', effectId: 'wave' })!;
+  expect(got.name).toBe('Roll Tide Wave');
+  expect(got.spends).toBe(false);
+  expect(got.action).toBeUndefined();
+  expect(got.target).toEqual({ content: ref, effectId: 'wave' });
+});
+
+it('a paying roll with no dice cannot be pinned, so one tap never pays (R37)', () => {
+  const e = effect({ resourceId: undefined, dice: undefined, cost: 3, payment: slotPay, rollId: 'wave-roll' });
+  const v = view({ features: [feature([e])] });
+  expect(resolvePin(v, { kind: 'roll', contentId: 'c1', effectId: 'wave' })).toBeUndefined();
+  expect(pinnable(v, { kind: 'roll', contentId: 'c1', effectId: 'wave' })).toBe(false);
+});
+
+it('a paying feature attack pins as a plain roll with no "and spend" (R37)', () => {
+  const a = featureAttack({ resourceId: null, costResourceContent: null, cost: 4, payment: hpPay });
+  const got = resolvePin(view({ attacks: [a] }), { kind: 'attack', contentId: 'c1', effectId: 'lash' })!;
+  expect(got.name).toBe('Roll Testy Lash attack');
+  expect(got.spends).toBe(false);
+});
+
+it('a paying toggle cannot be pinned (S4), but a pool toggle still can', () => {
+  const paying = toggle({ cost: 2, payment: hpPay });
+  expect(resolvePin(view({ toggles: [paying] }), { kind: 'toggle', contentId: 'c1', effectId: 'e-form' })).toBeUndefined();
+  expect(resolvePin(view({ toggles: [toggle({ resourceId: 'focus', cost: 2 })] }), { kind: 'toggle', contentId: 'c1', effectId: 'e-form' })).toBeDefined();
+});
