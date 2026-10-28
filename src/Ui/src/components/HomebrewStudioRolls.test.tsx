@@ -25,7 +25,7 @@ beforeEach(() => {
 afterEach(cleanup);
 
 type Raw = Record<string, unknown>;
-type Other = { name: string; contentId: string; effects: Raw[] };
+type Other = { name: string; contentId: string; effects: Raw[]; kind?: string };
 
 const focus: Raw = { type: 'resource', id: 'resource-1', resourceId: 'focus', label: 'Testy Focus', maximum: '5' };
 const burst: Raw = { type: 'roll', id: 'roll-2', rollId: 'roll-2', label: 'Testy Burst', dice: '2d6' };
@@ -41,8 +41,8 @@ async function openDraft(user: ReturnType<typeof userEvent.setup>, effects: Raw[
     latest: { contentId: 'id-m', revisionId: 'r-m', name: 'Testy Mode', kind, status: 'draft', rulesFamilies: ['srd-5.1'], provenance: {}, effects },
   } as unknown as StudioEntry;
   const otherEntries = others.map((o) => {
-    const revision = { contentId: o.contentId, revisionId: `r-${o.contentId}`, name: o.name, kind: 'feature', status: 'published', rulesFamilies: ['srd-5.1'], provenance: {}, effects: o.effects };
-    return { contentId: o.contentId, name: o.name, kind: 'feature', revisions: [revision], latest: revision, latestPublished: revision } as unknown as StudioEntry;
+    const revision = { contentId: o.contentId, revisionId: `r-${o.contentId}`, name: o.name, kind: o.kind ?? 'feature', status: 'published', rulesFamilies: ['srd-5.1'], provenance: {}, effects: o.effects };
+    return { contentId: o.contentId, name: o.name, kind: o.kind ?? 'feature', revisions: [revision], latest: revision, latestPublished: revision } as unknown as StudioEntry;
   });
   vi.mocked(client.contentBySource).mockImplementation((id) => Promise.resolve(id === 'a' ? [entry, ...otherEntries] : []));
   render(<HomebrewStudio info={info} onError={() => {}} onStatus={() => {}} />);
@@ -337,4 +337,98 @@ it('a named value has no Automation choice: it is always calculated', async () =
   const { rule } = await openDraft(user, [{ type: 'value', id: 'value-1', valueId: 'surgeDice', formula: '1' }, { ...burst, id: 'roll-2' }], [], 'subclass');
   expect(rule(/^Rule 1: Named value/).queryByRole('combobox', { name: 'Automation' })).toBeNull();
   expect(rule(/^Rule 2: Roll or action/).getByRole('combobox', { name: 'Automation' })).toBeTruthy();
+});
+
+// MECH-X item 1 (T5): pay with hit points or a spell slot, cast a spell without a slot.
+const fancy: Raw = { ...burst, resourceId: 'focus', cost: '2', drawsDown: true, alsoChange: [{ resourceId: 'focus', change: 'spend', amount: '1' }], variableCost: true, automation: 'manual', text: 'Fixture note', flair: { keep: 1 } };
+
+it('a roll pays with hit points: the pool keys go, the cost and unrelated keys stay, and a pool again removes payment', async () => {
+  const user = userEvent.setup();
+  const { rule, checked } = await openDraft(user, [focus, fancy]);
+  const r = rule(/^Rule 2: Roll or action/);
+  await user.selectOptions(r.getByRole('combobox', { name: 'Pays with' }), 'hitPoints');
+  expect(r.queryByRole('combobox', { name: /^Uses a resource/ })).toBeNull();
+  const sent = (await checked()).effect('roll-2') as Raw;
+  expect(sent.payment).toEqual({ kind: 'hitPoints' });
+  for (const key of ['resourceId', 'resourceContent', 'drawsDown', 'alsoChange', 'variableCost']) expect(sent[key]).toBeUndefined();
+  expect(sent).toMatchObject({ cost: '2', dice: '2d6', automation: 'manual', text: 'Fixture note', flair: { keep: 1 } });
+  expect((r.getByRole('textbox', { name: /^Hit points paid/ }) as HTMLInputElement).value).toBe('2');
+
+  await user.click(r.getByRole('checkbox', { name: 'May drop to 0 hit points' }));
+  expect(((await checked()).effect('roll-2') as Raw).payment).toEqual({ kind: 'hitPoints', mayDropToZero: true });
+
+  await user.selectOptions(r.getByRole('combobox', { name: 'Pays with' }), 'resource');
+  const back = (await checked()).effect('roll-2') as Raw;
+  expect('payment' in back).toBe(false);
+  expect(back).toMatchObject({ cost: '2', automation: 'manual', flair: { keep: 1 } });
+  expect(r.getByRole('combobox', { name: /^Uses a resource/ })).toBeTruthy();
+});
+
+it('a roll pays a spell slot: cost and per-unit dice go, the lowest level is written only above 1', async () => {
+  const user = userEvent.setup();
+  const { rule, checked } = await openDraft(user, [focus, { ...fancy, perUnit: { dice: '1d6' } }]);
+  const r = rule(/^Rule 2: Roll or action/);
+  await user.selectOptions(r.getByRole('combobox', { name: 'Pays with' }), 'slot');
+  const sent = (await checked()).effect('roll-2') as Raw;
+  expect(sent.payment).toEqual({ kind: 'slot' });
+  for (const key of ['resourceId', 'cost', 'perUnit', 'drawsDown', 'alsoChange', 'variableCost']) expect(sent[key]).toBeUndefined();
+  expect(sent).toMatchObject({ text: 'Fixture note', flair: { keep: 1 } });
+  expect(r.queryByRole('checkbox', { name: 'May drop to 0 hit points' })).toBeNull();
+
+  await user.selectOptions(r.getByRole('combobox', { name: 'Lowest slot level' }), '3');
+  expect(((await checked()).effect('roll-2') as Raw).payment).toEqual({ kind: 'slot', minSlotLevel: 3 });
+  await user.selectOptions(r.getByRole('combobox', { name: 'Lowest slot level' }), '');
+  expect(((await checked()).effect('roll-2') as Raw).payment).toEqual({ kind: 'slot' });
+});
+
+it('a roll casts a spell of the source, and the picker is off while it pays a slot', async () => {
+  const user = userEvent.setup();
+  const spark: Other = { name: 'Fixture Spark', contentId: 'spark-id', kind: 'spell', effects: [{ type: 'spell', id: 'spell', level: 2 }] };
+  const { rule, checked } = await openDraft(user, [burst], [spark]);
+  const r = rule(/^Rule 1: Roll or action/);
+  const picker = r.getByRole('combobox', { name: /^Casts a spell/ }) as HTMLSelectElement;
+  expect([...picker.options].map((o) => o.textContent)).toEqual(['No spell', 'Fixture Spark (level 2)']);
+  await user.selectOptions(picker, 'spark-id');
+  expect(((await checked()).effect('roll-2') as Raw).castsSpell).toBe('spark-id');
+  // With a spell chosen, a slot cannot be chosen (the validator refuses both).
+  expect((r.getByRole('option', { name: 'A spell slot' }) as HTMLOptionElement).disabled).toBe(true);
+  await user.selectOptions(picker, '');
+  expect(((await checked()).effect('roll-2') as Raw).castsSpell).toBeUndefined();
+  await user.selectOptions(r.getByRole('combobox', { name: 'Pays with' }), 'slot');
+  expect((r.getByRole('combobox', { name: /^Casts a spell/ }) as HTMLSelectElement).disabled).toBe(true);
+  expect(r.getByText(/cannot also cast a spell without one/)).toBeTruthy();
+});
+
+it('a stored payment of an unknown kind shows read-only and blocks Save', async () => {
+  const user = userEvent.setup();
+  const { rule } = await openDraft(user, [{ ...burst, payment: { kind: 'mystery' } }]);
+  const r = rule(/^Rule 1: Roll or action/);
+  expect(r.getByText(/This payment doesn't read/)).toBeTruthy();
+  expect(r.queryByRole('combobox', { name: 'Pays with' })).toBeNull();
+  await waitFor(() => expect(blocked('Save draft')).toBe(true));
+});
+
+it('a toggle pays with hit points or a slot and keeps what the editor does not touch', async () => {
+  const user = userEvent.setup();
+  const toggle: Raw = { type: 'toggle', id: 'toggle-2', toggleId: 'stance', label: 'Testy Stance', resourceId: 'focus', cost: '1', text: 'Fixture note', flair: 7 };
+  const { rule, checked } = await openDraft(user, [focus, toggle]);
+  const t = rule(/^Rule 2: Toggle/);
+  await user.selectOptions(t.getByRole('combobox', { name: 'Pays with' }), 'hitPoints');
+  expect(t.queryByRole('combobox', { name: 'Turning it on spends' })).toBeNull();
+  let sent = (await checked()).effect('toggle-2') as Raw;
+  expect(sent.payment).toEqual({ kind: 'hitPoints' });
+  expect(sent.resourceId).toBeUndefined();
+  expect(sent).toMatchObject({ cost: '1', text: 'Fixture note', flair: 7 });
+  expect(t.getByRole('textbox', { name: /^Hit points paid/ })).toBeTruthy();
+
+  await user.selectOptions(t.getByRole('combobox', { name: 'Pays with' }), 'slot');
+  await user.selectOptions(t.getByRole('combobox', { name: 'Lowest slot level' }), '3');
+  sent = (await checked()).effect('toggle-2') as Raw;
+  expect(sent.payment).toEqual({ kind: 'slot', minSlotLevel: 3 });
+  expect(sent.cost).toBeUndefined();
+  expect(sent).toMatchObject({ text: 'Fixture note', flair: 7 });
+
+  await user.selectOptions(t.getByRole('combobox', { name: 'Pays with' }), 'resource');
+  expect('payment' in ((await checked()).effect('toggle-2') as Raw)).toBe(false);
+  expect(t.getByRole('combobox', { name: 'Turning it on spends' })).toBeTruthy();
 });

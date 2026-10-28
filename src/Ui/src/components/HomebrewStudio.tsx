@@ -41,7 +41,8 @@ import { AttackFields, RiderFields, ToggleSelect } from './AttackFields';
 import { WeaponFields } from './WeaponFields';
 import { DefenceFields, RollModeFields, isDamageDefence } from './RollModeFields';
 import { ResponseFields } from './ResponseFields';
-import { RollFields } from './RollFields';
+import { PaymentFields } from './PaymentFields';
+import { RollFields, type SpellChoice } from './RollFields';
 import { isValueKey, nextValueKey, type PoolChoice } from '../rollAuthoring';
 import {
   grantOfKind,
@@ -865,6 +866,10 @@ function EntryEditor(props: {
     .flatMap((e) =>
       e.latestPublished!.effects.flatMap((r) => (r.type === 'resource' ? [{ contentId: e.contentId, resourceId: r.resourceId, label: r.label, entryName: e.name, countsUp: r.counts === 'up' }] : [])),
     );
+  // Content v12 (R38): the spells of the source (newest published revision) a roll can cast without a slot.
+  const spells: SpellChoice[] = props.entries
+    .filter((e) => e.contentId !== revision.contentId && e.latestPublished && e.kind === 'spell')
+    .map((e) => ({ contentId: e.contentId, name: e.name, level: spellOf(e.latestPublished!.effects)?.level }));
   const isClass = revision.kind === 'class';
   const classLike = isClass || revision.kind === 'subclass';
   const hasSpellcasting = revision.effects.some((e) => e.type === 'spellcasting');
@@ -1124,6 +1129,7 @@ function EntryEditor(props: {
           groups={revision.effects.filter((e): e is Extract<Effect, { type: 'toggleGroup' }> => e.type === 'toggleGroup')}
           otherToggles={otherToggles}
           otherPools={otherPools}
+          spells={spells}
           rolls={revision.effects.filter((e): e is Extract<Effect, { type: 'roll' }> => e.type === 'roll')}
           diagnostics={(report?.errors ?? []).filter((d) => d.effectId === effect.id)}
           warnings={(report?.warnings ?? []).filter((d) => d.effectId === effect.id)}
@@ -1631,6 +1637,8 @@ function EffectEditor(props: {
   otherToggles: ToggleChoice[];
   /** Content v11 (D43 slice 5): the pools of the source's other entries, which a roll can spend. */
   otherPools: PoolChoice[];
+  /** Content v12 (R38): the published spells of the source, which a roll can cast without a slot. */
+  spells: SpellChoice[];
   /** Content v11 (D43 S7): the rolls this revision declares, which a response outcome can offer. */
   rolls: Extract<Effect, { type: 'roll' }>[];
   /** The last check's errors for this rule (shown inside a response, whose fields cannot each carry one). */
@@ -1743,22 +1751,26 @@ function EffectEditor(props: {
             Toggle name
             <input value={effect.label} onChange={(e) => onChange({ ...effect, label: e.target.value })} />
           </label>
-          <label className="field">
-            Turning it on spends
-            <select value={effect.resourceId ?? ''} onChange={(e) => onChange(e.target.value ? { ...effect, resourceId: e.target.value, resourceContent: undefined } : { ...effect, resourceId: undefined, cost: undefined, resourceContent: undefined })}>
-              <option value="">Nothing</option>
-              {props.resources.map((r) => (
-                <option key={r.id} value={r.resourceId}>
-                  One use of {r.label || r.resourceId}
-                </option>
-              ))}
-            </select>
-          </label>
+          <PaymentFields effect={effect} onChange={onChange} onProblem={onProblem} />
+          {/* Hit points and a slot take no pool (R33), so the pool choice is hidden while either is chosen. */}
+          {(effect.payment === undefined || effect.payment.kind === 'resource') && (
+            <label className="field">
+              Turning it on spends
+              <select value={effect.resourceId ?? ''} onChange={(e) => onChange(e.target.value ? { ...effect, resourceId: e.target.value, resourceContent: undefined } : { ...effect, resourceId: undefined, cost: undefined, resourceContent: undefined })}>
+                <option value="">Nothing</option>
+                {props.resources.map((r) => (
+                  <option key={r.id} value={r.resourceId}>
+                    One use of {r.label || r.resourceId}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {/* Content v11 (D43). The version is not chosen here: the check and publish pick it from what the rules use. */}
-          {effect.resourceId && (
+          {(effect.resourceId || effect.payment?.kind === 'hitPoints') && (
             <>
               <label className="field">
-                Cost (a number or a formula; empty is one use)
+                {effect.payment?.kind === 'hitPoints' ? 'Hit points paid (a number or a formula)' : 'Cost (a number or a formula; empty is one use)'}
                 <input value={effect.cost ?? ''} aria-describedby={`rule-${effect.id}-cost-preview`} onChange={(e) => onChange({ ...effect, cost: e.target.value || undefined })} />
               </label>
               <FormulaPreview id={`rule-${effect.id}-cost-preview`} formula={effect.cost ?? ''} revision={props.previewRevision} floorAtZero />
@@ -2003,7 +2015,7 @@ function EffectEditor(props: {
             Roll name
             <input value={effect.label} onChange={(e) => onChange({ ...effect, label: e.target.value })} />
           </label>
-          <RollFields effect={effect} resources={props.resources} otherPools={props.otherPools} previewRevision={props.previewRevision} onChange={onChange} onProblem={onProblem} />
+          <RollFields effect={effect} resources={props.resources} otherPools={props.otherPools} spells={props.spells} previewRevision={props.previewRevision} onChange={onChange} onProblem={onProblem} />
           {/* Content v11 (D43): a roll that is available only in a form (a toggle of this revision or of another entry). */}
           {(effect.whileToggle || toggles.length > 0 || props.otherToggles.length > 0) && (
             <ToggleSelect

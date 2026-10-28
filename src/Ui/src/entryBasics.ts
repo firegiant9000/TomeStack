@@ -291,7 +291,8 @@ export const spellOf = (effects: Effect[]): Spell | undefined => effects.find((e
 type TextField = 'school' | 'castingTime' | 'range' | 'components' | 'duration' | 'text';
 const textFields: TextField[] = ['school', 'castingTime', 'range', 'components', 'duration', 'text'];
 
-export type SpellPatch = Partial<Pick<Spell, 'level' | 'concentration' | 'ritual' | 'lists'>> & Partial<Record<TextField, string>>;
+/** `tags` undefined removes the key (R39: a spell with no tags carries none). */
+export type SpellPatch = Partial<Pick<Spell, 'level' | 'concentration' | 'ritual' | 'lists' | 'tags'>> & Partial<Record<TextField, string>>;
 
 /**
  * Changes the given fields of the spell effect (creating it, as a level 1 spell on no list, when there is none) and keeps
@@ -302,6 +303,7 @@ export function setSpell(effects: Effect[], patch: SpellPatch): Effect[] {
   const current = spellOf(effects);
   const base: Spell = current ?? { type: 'spell', id: uniqueId(effects, 'spell'), level: 1, concentration: false, ritual: false, lists: [] };
   const next: Spell = { ...base, ...patch };
+  if ('tags' in patch && (patch.tags === undefined || patch.tags.length === 0)) delete next.tags;
   for (const field of textFields) {
     const value = next[field];
     if (typeof value === 'string' && value.trim() === '') delete next[field];

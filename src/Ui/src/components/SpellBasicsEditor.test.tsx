@@ -175,3 +175,34 @@ it('has no inline style and no second status region', async () => {
   expect(container.querySelectorAll('[style]').length).toBe(0);
   expect(container.querySelectorAll('[role="status"]').length).toBe(0);
 });
+
+// MECH-X item 1 (T5, R39): spell tags use the strict tag reading; `all` is refused.
+it('tags: writes the typed keys as the spell tags and removes the key when emptied', async () => {
+  const user = userEvent.setup();
+  const spell: Effect = { type: 'spell', id: 'spell', level: 1, school: 'evocation', lists: [] };
+  render(<Harness initial={revisionOf([spell])} />);
+  const field = await screen.findByRole('textbox', { name: /^Tags/ });
+  await user.type(field, 'time, ritualLike');
+  expect(spellOf(latest.effects)).toMatchObject({ tags: ['time', 'ritualLike'], school: 'evocation' });
+  await user.clear(field);
+  expect('tags' in spellOf(latest.effects)!).toBe(false);
+});
+
+it('tags: an empty token or all blocks saving, never dropped, and the bad text is not written', async () => {
+  const user = userEvent.setup();
+  const problems: Record<string, string | undefined> = {};
+  const spell: Effect = { type: 'spell', id: 'spell', level: 1, lists: [], tags: ['time'] };
+  render(<Harness initial={revisionOf([spell])} onProblem={(field, problem) => { problems[field] = problem; }} />);
+  const field = await screen.findByRole('textbox', { name: /^Tags/ });
+  await user.clear(field);
+  await user.type(field, 'a,,b');
+  expect(problems['spell-tags']).toMatch(/empty/);
+  expect(field.getAttribute('aria-invalid')).toBe('true');
+  await user.clear(field);
+  await user.type(field, 'all');
+  expect(problems['spell-tags']).toMatch(/"all"/);
+  expect(spellOf(latest.effects)).not.toMatchObject({ tags: ['all'] });
+  await user.clear(field);
+  await user.type(field, 'time');
+  expect(problems['spell-tags']).toBeUndefined();
+});

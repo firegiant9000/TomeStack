@@ -3,6 +3,7 @@ import { abilities } from '../classBasics';
 import type { Ability, ContentRevision, Effect } from '../api/types';
 import { parseAreaSize, parseAreaWidth, parseMaxUnits, parsePerUnitDice, parseRollText, poolValue, type PoolChoice } from '../rollAuthoring';
 import { ActivationSelect, FormulaField, StrictField } from './AttackFields';
+import { PaymentFields } from './PaymentFields';
 import { PoolSelect } from './ResponseFields';
 
 type Roll = Extract<Effect, { type: 'roll' }>;
@@ -206,11 +207,58 @@ function DrawsDownField(props: { effect: Roll; countsUp: boolean | undefined; po
   );
 }
 
+/** A spell a roll can cast without a slot: its content id (castsSpell is a bare id), name and level. */
+export interface SpellChoice {
+  contentId: string;
+  name: string;
+  level?: number;
+}
+
+/**
+ * Content v12 (R38): the spell a roll casts without a slot. Disabled, with the reason beside it, while the roll pays a slot (the
+ * validator refuses both). A stored spell that is not listed is kept as it is, never silently moved.
+ */
+function CastsSpellField(props: { effect: Roll; spells: SpellChoice[] | undefined; onChange: (effect: Effect) => void }) {
+  const { effect } = props;
+  const spells = props.spells ?? [];
+  const reasonId = `rule-${effect.id}-casts-reason`;
+  const slot = effect.payment?.kind === 'slot';
+  const listed = effect.castsSpell === undefined || spells.some((s) => s.contentId === effect.castsSpell);
+  return (
+    <>
+      <label className="field">
+        Casts a spell (without spending a slot)
+        <select
+          value={effect.castsSpell ?? ''}
+          disabled={slot}
+          aria-describedby={slot ? reasonId : undefined}
+          onChange={(e) => props.onChange({ ...effect, castsSpell: e.target.value || undefined })}
+        >
+          <option value="">No spell</option>
+          {spells.map((s) => (
+            <option key={s.contentId} value={s.contentId}>
+              {s.level === undefined ? s.name : `${s.name} (${s.level === 0 ? 'cantrip' : `level ${s.level}`})`}
+            </option>
+          ))}
+          {!listed && effect.castsSpell && <option value={effect.castsSpell}>{effect.castsSpell} (other content)</option>}
+        </select>
+      </label>
+      {slot && (
+        <p id={reasonId} className="hint">
+          A roll that pays a spell slot cannot also cast a spell without one.
+        </p>
+      )}
+    </>
+  );
+}
+
 /** Content v11 (D43 slice 5): the editor of a roll or action; every v6 and v11 field. */
 export function RollFields(props: {
   effect: Roll;
   resources: Resource[];
   otherPools: PoolChoice[];
+  /** The spells a roll can cast without a slot (R38): the published spells of the source. */
+  spells?: SpellChoice[];
   previewRevision?: ContentRevision;
   onChange: (effect: Effect) => void;
   onProblem: ReportProblem;
@@ -227,6 +275,7 @@ export function RollFields(props: {
   const countsUp = effect.resourceContent
     ? props.otherPools.find((p) => p.contentId === effect.resourceContent && p.resourceId === effect.resourceId)?.countsUp === true
     : props.resources.some((r) => r.resourceId === effect.resourceId && r.counts === 'up');
+  const poolPays = effect.payment === undefined || effect.payment.kind === 'resource';
   const isCompound = (e: Roll) => e.drawsDown === true || (e.alsoChange?.length ?? 0) > 0;
   const variableAllowed = !isCompound(effect);
   const onCharging = (next: Effect) => onChange(isCompound(next as Roll) ? { ...(next as Roll), variableCost: undefined } : next);
@@ -246,6 +295,30 @@ export function RollFields(props: {
         onChange={(value) => onChange({ ...effect, bonus: value || undefined })}
       />
       <ActivationSelect value={effect.activation} unset="other" onPick={(activation) => onChange({ ...effect, activation })} />
+      <PaymentFields
+        effect={effect}
+        onChange={onChange}
+        onProblem={onProblem}
+        slotRefusal={effect.castsSpell ? 'A roll that casts a spell without a slot cannot also pay a slot.' : undefined}
+      />
+      <CastsSpellField effect={effect} spells={props.spells} onChange={onChange} />
+      {effect.payment?.kind === 'hitPoints' && (
+        <>
+          <FormulaField
+            effectId={effect.id}
+            part="cost"
+            label="Hit points paid (a number or a formula)"
+            value={effect.cost ?? ''}
+            previewRevision={props.previewRevision}
+            floorAtZero
+            onChange={(value) => onChange({ ...effect, cost: value || undefined })}
+          />
+          <PerUnitFields key={effect.dice ? 'dice' : 'no-dice'} effect={effect} onChange={onChange} onProblem={onProblem} />
+        </>
+      )}
+      {/* Hit points and a slot take no pool (R33), so the pool choice is hidden while either is chosen. */}
+      {poolPays && (
+      <>
       <label className="field">
         Uses a resource (a limited-use action)
         <select
@@ -303,6 +376,8 @@ export function RollFields(props: {
           <AlsoChangeFields effect={effect} resources={props.resources} otherPools={props.otherPools} previewRevision={props.previewRevision} onChange={onCharging} />
           <DrawsDownField effect={effect} countsUp={countsUp} poolKnown={poolKnown} onChange={onCharging} onProblem={onProblem} />
         </>
+      )}
+      </>
       )}
       <label className="field">
         Saving throw

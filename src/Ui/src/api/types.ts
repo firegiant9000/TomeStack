@@ -1632,6 +1632,13 @@ export type ClassEntry = 'startingClass' | 'multiclass';
 
 export type SpellcastingAbility = 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha';
 
+/** Content v12 (MECH-X item 1): the payment an authored roll, attack or toggle makes. Absent means the pool cost (never written as `resource`). */
+export interface EffectPayment {
+  kind: PaymentKind;
+  mayDropToZero?: boolean;
+  minSlotLevel?: number;
+}
+
 export type Effect =
   | (EffectBase & {
       type: 'modifier';
@@ -1664,6 +1671,8 @@ export type Effect =
       level?: number;
       /** Content v11 (D43): the rounds it lasts once on, a formula; absent: until switched off. */
       duration?: string;
+      /** Content v12 (MECH-X item 1): pay from hit points or a spell slot instead of a pool. */
+      payment?: EffectPayment;
     })
   | (EffectBase & { type: 'toggleGroup'; groupId: string; label: string })
   // Content v11 (D43): a pool change at the start or end of the turn, while a toggle is on (absent: always). `amount` is a formula, or `all` for a regain.
@@ -1754,6 +1763,10 @@ export type Effect =
       alsoChange?: { resourceId: string; resourceContent?: string; change: 'spend' | 'regain'; amount: string }[];
       /** Content v11 (D43 S8): the roll draws down the built-up charge of its pool (a pool that counts up). */
       drawsDown?: boolean;
+      /** Content v12 (MECH-X item 1): pay from hit points or a spell slot instead of a pool. */
+      payment?: EffectPayment;
+      /** Content v12 (R38): the content id of a spell this roll casts without a slot. */
+      castsSpell?: string;
     })
   // Content v11 (D43, slice 5): a named formula, read as VALUE.<valueId>.
   | (EffectBase & { type: 'value'; valueId: string; formula: string })
@@ -1776,6 +1789,8 @@ export type Effect =
       resourceContent?: string;
       cost?: string;
       whileToggle?: { contentId?: string; toggleId: string };
+      /** Content v12 (MECH-X item 1): pay from hit points or a spell slot instead of a pool. */
+      payment?: EffectPayment;
     })
   | (EffectBase & {
       type: 'attackRider';
@@ -1836,6 +1851,8 @@ export type Effect =
       attack?: 'none' | 'melee' | 'ranged';
       save?: SpellcastingAbility;
       dice?: string;
+      /** Content v12 (R39): tags kept apart from the school; `all` is refused. */
+      tags?: string[];
     });
 
 export interface ChoiceExtension {
