@@ -98,6 +98,10 @@ The extra weapons (the blowgun) and classes (Fighter, Monk, Rogue) are real SRD 
 
 The class precision floor went from 70 % to 80 %; the other floors are unchanged. These are the SRDs, the layouts detection was tuned on. **They do not stand in for the third-party run**, which is still owed, so M4 stays experimental and its gate is not met.
 
+### Re-measured with the Rogue bundled (2026-10-27, C2-2)
+
+`SrdDetectionMeasurementTests` ran again with `TOMESTACK_SRD_PDF_DIR` set, and passed. The records above stay as they were. Classes: 91.7 % / 100 % in both families (12 candidates, 11 in the packs; the only extra is the Monk). Class features: n/a / 87.2 % (136 of 156) in SRD 5.1, n/a / 100 % (204 of 204) in SRD 5.2.1. The 5.1 misses added by the Rogue pack are the five Thief features (Fast Hands, Second-Story Work, Supreme Sneak, Use Magic Device, Thief's Reflexes, pp. 40–41), subclass features with no level in their first sentence. Spells, weapons and armor are unchanged.
+
 ## Could not be verified here
 
 - **The third-party test PDF's precision** (above: the run of 2026-10-14 has counts only; the owner has not reviewed the candidates). Detection was written against SRD layouts, so a third-party book will score lower, especially on class features and tables. Every candidate is still only a proposal (ADR-004).
