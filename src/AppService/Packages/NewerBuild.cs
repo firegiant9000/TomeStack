@@ -36,7 +36,8 @@ internal static class NewerBuild
                 $"'{revision.Name}' is content at schema {revision.SchemaVersion}"));
         if (gapNoteSchema > previous.GapNoteSchema)
             causes.Add(new("gaps/", "gapNote", Guid.Empty, "gap notes", gapNoteSchema, null, $"the gap notes are at schema {gapNoteSchema}"));
-        foreach (var id in bundled.Where(id => !previous.BundledRevisionIds.Contains(id)))
+        var causedByContent = causes.Where(c => c.Kind == "content").Select(c => c.Id).ToHashSet();
+        foreach (var id in bundled.Where(id => !previous.BundledRevisionIds.Contains(id) && !causedByContent.Contains(id)))
         {
             var name = revisionList.FirstOrDefault(r => r.RevisionId == id)?.Name ?? id.ToString("D");
             var owner = characterList.FirstOrDefault(c => c.AllReferences().Any(r => r.RevisionId == id)) ?? characterList.FirstOrDefault();
@@ -47,10 +48,10 @@ internal static class NewerBuild
             causes.Add(new($"content/{id:D}.json", "content", id, name, null, pack, message));
         }
 
-        return new(opensIn, causes, [new Diagnostic(Code, WarningText(row, causes, revisionList, characterList))]);
+        return new(opensIn, causes, [new Diagnostic(Code, WarningText(row, causes, revisionList, characterList, gapNoteSchema))]);
     }
 
-    private static string WarningText(LadderRow? row, List<OpensInCause> causes, List<ContentRevision> revisions, List<Character> characters)
+    private static string WarningText(LadderRow? row, List<OpensInCause> causes, List<ContentRevision> revisions, List<Character> characters, int gapNoteSchema)
     {
         if (row is not null)
             return $"Opening this needs TomeStack {row.Release.ToString(3)} or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): {string.Join(", and ", causes.Select(c => c.Message))}. Older versions refuse the file.";
@@ -62,6 +63,8 @@ internal static class NewerBuild
         var character = characters.Where(c => c.SchemaVersion > last.CharacterSchema).Select(c => c.SchemaVersion).DefaultIfEmpty(0).Max();
         if (character > 0)
             return $"Opening this needs a TomeStack version that reads character schema {character} or later: it holds a character that older versions refuse.";
+        if (gapNoteSchema > last.GapNoteSchema)
+            return $"Opening this needs a TomeStack version that reads gap note schema {gapNoteSchema} or later: it holds gap notes that older versions refuse.";
         return $"Opening this needs a TomeStack version newer than {last.Release.ToString(3)}: it holds bundled SRD content that released versions do not have.";
     }
 }

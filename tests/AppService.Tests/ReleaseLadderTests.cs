@@ -174,6 +174,27 @@ public class ReleaseLadderTests
     }
 
     [Fact]
+    public void Evaluate_gives_a_bundled_revision_that_is_also_new_content_one_cause()
+    {
+        var revision = Revision("Example Species", 11);
+
+        var result = NewerBuild.Evaluate([revision], [Hero()], 0, [revision.RevisionId], _ => "SRD 5.2.1");
+
+        var cause = Assert.Single(result.Causes);
+        Assert.Equal(11, cause.SchemaVersion);
+        Assert.Equal($"content/{revision.RevisionId:D}.json", cause.Entry);
+    }
+
+    [Fact]
+    public void Evaluate_uses_the_gap_note_sentence_when_only_the_gap_notes_are_too_new()
+    {
+        var result = NewerBuild.Evaluate([], [], 3, [], _ => "");
+
+        Assert.Null(result.OpensIn);
+        Assert.Equal("Opening this needs a TomeStack version that reads gap note schema 3 or later: it holds gap notes that older versions refuse.", Assert.Single(result.Warnings).Message);
+    }
+
+    [Fact]
     public void Evaluate_uses_the_unreleased_sentence_when_opensIn_is_null()
     {
         var content = NewerBuild.Evaluate([Revision("Compat Tide Stance", 12)], [], 0, [], _ => "");

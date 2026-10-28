@@ -27,5 +27,6 @@ foreach ($file in $files) {
 }
 $sorted = [string[]]$ids
 [Array]::Sort($sorted, [System.StringComparer]::Ordinal)
-[System.IO.File]::WriteAllText($Out, (($sorted -join "`n") + "`n"), [System.Text.UTF8Encoding]::new($false))
-Write-Output "$($sorted.Count) revision ids at $Tag written to $Out"
+$path = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Out)
+[System.IO.File]::WriteAllText($path, (($sorted -join "`n") + "`n"), [System.Text.UTF8Encoding]::new($false))
+Write-Output "$($sorted.Count) revision ids at $Tag written to $path"
