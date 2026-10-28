@@ -63,30 +63,37 @@ public static class DownConvert
     /// Lowers <paramref name="revision"/> to <paramref name="targetContentSchema"/> (9 to <see cref="ContentRevision.CurrentSchemaVersion"/>).
     /// Never touches the ids, provenance, status or name, and never rewrites <c>grant.content</c> or <c>choice.options</c> (the service does).
     /// Blocked fields are removed too: the copy is always the lowered one, and <see cref="ContentBelow.Blocked"/> tells the caller not to write it.
-    /// Returns the same instance and no changes when nothing is above the target. <paramref name="catalog"/> is for the validation of the
-    /// copy at the target (not done yet).
+    /// Returns the same instance and no changes when nothing is above the target.
+    /// The lowered copy is then validated at the target version (every error blocks, code <c>below.validation-error</c>): with a
+    /// <paramref name="catalog"/>, against it; with none, against a stub that knows the copy's own source and no revisions, so the
+    /// null-catalog mode skips the availability checks (<c>validate.source-missing</c>, <c>validate.reference-missing</c>). The
+    /// service passes its own catalog (lane C should pass it).
     /// </summary>
     public static ContentBelow Below(ContentRevision revision, int targetContentSchema, IContentCatalog? catalog = null)
     {
         ArgumentNullException.ThrowIfNull(revision);
         ArgumentOutOfRangeException.ThrowIfLessThan(targetContentSchema, ContentRevision.PlayDetailsSchemaVersion - 1);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(targetContentSchema, ContentRevision.CurrentSchemaVersion);
-        _ = catalog;
 
         var own = revision.SchemaVersion;
         var node = JsonSerializer.SerializeToNode(revision, RulesJson.Compact)!.AsObject();
         var changes = new List<BelowChange>();
+        var values = revision.Effects.OfType<ValueEffect>().GroupBy(v => v.ValueId, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First().Formula, StringComparer.Ordinal);
+        // Where each effect of the working array was in the input, so paths keep the original index after earlier steps removed effects.
+        var origin = Enumerable.Range(0, revision.Effects.Count).ToList();
+        var scope = new Scope(revision, targetContentSchema, values, origin);
 
-        // One step per schema version above the target, newest first. A later task adds the 10 to 9 step.
+        // One step per schema version above the target, newest first.
         for (var step = ContentRevision.CurrentSchemaVersion; step > targetContentSchema; step--)
         {
             switch (step)
             {
                 case ContentRevision.PlayMechanicsSchemaVersion:
-                    ContentBelowV11(revision, node, changes);
+                    ContentBelowV11(scope, node, changes);
                     break;
                 case ContentRevision.PlayDetailsSchemaVersion:
-                    ContentBelowV10(revision, node, changes);
+                    ContentBelowV10(scope, node, changes);
                     break;
             }
         }
@@ -95,13 +102,252 @@ public static class DownConvert
             return new ContentBelow(revision, changes);
 
         node["schemaVersion"] = Math.Min(own, targetContentSchema);
-        return new ContentBelow(node.Deserialize<ContentRevision>(RulesJson.Options)!, changes);
+        var copy = node.Deserialize<ContentRevision>(RulesJson.Options)!;
+        ValidateAtTarget(copy, catalog, changes);
+        return new ContentBelow(copy, changes);
     }
 
-    /// <summary>The 10 to 9 step (content v10: speed and passive targets, damage defences, <c>item</c>). Filled in by a later task.</summary>
-    private static void ContentBelowV10(ContentRevision revision, JsonObject node, List<BelowChange> changes)
+    /// <summary>What the steps share: the input, the version being written, its named values and the original effect indexes.</summary>
+    private sealed record Scope(ContentRevision Revision, int Target, IReadOnlyDictionary<string, string> Values, List<int> Origin)
     {
-        _ = (revision, node, changes);
+        public int Own => Revision.SchemaVersion;
+
+        public string Name => Revision.Name;
+    }
+
+    /// <summary>A catalog that knows one source and no revisions: validation of a lowered copy with no catalog to hand.</summary>
+    private sealed class SourceOnlyCatalog(SourceRecord source) : IContentCatalog
+    {
+        public ContentRevision? FindRevision(ContentReference reference) => null;
+
+        public SourceRecord? FindSource(Guid sourceId) => sourceId == source.Id ? source : null;
+    }
+
+    private static void ValidateAtTarget(ContentRevision copy, IContentCatalog? catalog, List<BelowChange> changes)
+    {
+        var skipAvailability = catalog is null;
+        catalog ??= new SourceOnlyCatalog(new SourceRecord
+        {
+            Id = copy.Provenance.SourceId, Title = "", Publisher = "", RulesFamilies = copy.RulesFamilies,
+            EditionVersion = "", License = "", Redistributable = false,
+        });
+        foreach (var error in ContentValidator.Validate(copy, catalog).Errors)
+        {
+            if (skipAvailability && error.Code is "validate.source-missing" or "validate.reference-missing")
+                continue;
+            var index = error.EffectId is null ? -1 : copy.Effects.ToList().FindIndex(e => e.Id == error.EffectId);
+            changes.Add(new(index < 0 ? "revision" : $"effects[{index}]", BelowAction.Blocks, "below.validation-error", $"'{copy.Name}': {error.Message}"));
+        }
+    }
+
+    // ---- shared helpers for the by-value classification ----------------------------------------------------------------
+
+    private const FormulaFeatures AllFeatures = FormulaFeatures.Scales | FormulaFeatures.Values;
+
+    /// <summary>
+    /// Whether the formula can never be below zero for any character: it parses and is made only of non-negative numbers, identifiers
+    /// (a <c>VALUE.id</c> only when this revision declares it with a formula that is itself so) and sums and products of those.
+    /// Identifiers such as <c>STR.MOD</c> count (spec §2).
+    /// </summary>
+    private static bool StaticallyNonNegative(string? source, IReadOnlyDictionary<string, string> values, HashSet<string>? visiting = null)
+    {
+        if (!Formula.TryParse(source, AllFeatures, out var formula, out _))
+            return false;
+        visiting ??= new HashSet<string>(StringComparer.Ordinal);
+        return NonNegative(formula!.Root);
+
+        bool NonNegative(FormulaNode node) => node switch
+        {
+            NumberNode n => n.Value >= 0,
+            IdentifierNode i when FormulaIdentifiers.IsValue(i.Name) => ValueNonNegative(FormulaIdentifiers.ValueId(i.Name)),
+            IdentifierNode => true,
+            BinaryNode { Operator: '+' or '*' } b => NonNegative(b.Left) && NonNegative(b.Right),
+            _ => false,
+        };
+
+        bool ValueNonNegative(string id)
+        {
+            if (!values.TryGetValue(id, out var inner) || !visiting.Add(id))
+                return false;
+            try
+            {
+                return StaticallyNonNegative(inner, values, visiting);
+            }
+            finally
+            {
+                visiting.Remove(id);
+            }
+        }
+    }
+
+    private static bool ReadsValue(string? source) =>
+        Formula.TryParse(source, AllFeatures, out var formula, out _) && formula!.Identifiers.Any(FormulaIdentifiers.IsValue);
+
+    /// <summary>The actual key of the property with this name in any case; null when absent.</summary>
+    private static string? KeyOf(JsonObject o, string name) =>
+        o.Select(p => p.Key).FirstOrDefault(k => string.Equals(k, name, StringComparison.OrdinalIgnoreCase));
+
+    private static string? TypeOf(JsonObject effect) => StringOf(Property(effect, "type"));
+
+    private static bool IsRemovedTarget(string? target, Scope scope) =>
+        target is not null
+        && ((scope.Own >= ContentRevision.PlayMechanicsSchemaVersion && scope.Target < ContentRevision.PlayMechanicsSchemaVersion
+                && (target.StartsWith(ContentValidator.ResourceTargetPrefix, StringComparison.Ordinal) || target == FieldIds.FlySpeed))
+            || (scope.Own >= ContentRevision.PlayDetailsSchemaVersion && scope.Target < ContentRevision.PlayDetailsSchemaVersion
+                && CharacterCalculator.IsSpeedOrPassive(target)));
+
+    /// <summary>A modifier or restriction on a target the target version lacks. Returns whether the effect was removed.</summary>
+    private static bool RemovedTargetBelow(JsonObject effect, string? type, int index, Scope scope, List<BelowChange> changes)
+    {
+        var path = $"effects[{scope.Origin[index]}]";
+        var name = scope.Name;
+        switch (type)
+        {
+            case ModifierEffect.TypeName when StringOf(Property(effect, "target")) is { } target && IsRemovedTarget(target, scope):
+                changes.Add(StaticallyNonNegative(StringOf(Property(effect, "value")), scope.Values)
+                    ? new(path, BelowAction.Dropped, "below.unknown-target", $"'{name}': its bonus to '{target}', which the older version has no field for.")
+                    : new(path, BelowAction.Blocks, "below.unknown-target", $"'{name}': its change to '{target}', which the older version has no field for; it could reduce the value, so leaving it out would change the result."));
+                return true;
+            case RestrictionEffect.TypeName when StringOf(Property(effect, "field")) is { } field && IsRemovedTarget(field, scope):
+                changes.Add(new(path, BelowAction.Blocks, "below.restriction-lifted", $"'{name}': its limit on '{field}', which the older version has no field for; the limit would be lifted."));
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private static readonly Dictionary<string, string[]> FormulaFields = new(StringComparer.Ordinal)
+    {
+        [ModifierEffect.TypeName] = ["value"],
+        [ResourceEffect.TypeName] = ["maximum"],
+        [RecoveryEffect.TypeName] = ["amount"],
+        [RollEffect.TypeName] = ["cost", "bonus"],
+        [SpellcastingEffect.TypeName] = ["spellsFormula"],
+    };
+
+    /// <summary>A remaining effect with a formula that reads <c>VALUE.</c>, which v10 cannot evaluate. Returns whether the effect was removed.</summary>
+    private static bool ValueFormulaBelow(JsonObject effect, string? type, int index, Scope scope, List<BelowChange> changes)
+    {
+        if (type is null || !FormulaFields.TryGetValue(type, out var fields))
+            return false;
+        var field = fields.FirstOrDefault(f => ReadsValue(StringOf(Property(effect, f))));
+        if (field is null)
+            return false;
+        var path = $"effects[{scope.Origin[index]}]";
+        var name = scope.Name;
+        if (type == ModifierEffect.TypeName)
+        {
+            var bonus = string.Equals(StringOf(Property(effect, "operation")), "bonus", StringComparison.OrdinalIgnoreCase);
+            changes.Add(bonus && StaticallyNonNegative(StringOf(Property(effect, "value")), scope.Values)
+                ? new(path, BelowAction.Dropped, "below.value-formula", $"'{name}': a bonus that reads a named value, which the older version cannot calculate.")
+                : new(path, BelowAction.Blocks, "below.value-formula", $"'{name}': a modifier that reads a named value, which the older version cannot calculate; leaving it out would change the result."));
+        }
+        else
+        {
+            changes.Add(new(path, BelowAction.Blocks, "below.value-formula", $"'{name}': its {field} reads a named value, which the older version cannot calculate."));
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// The 10 to 9 step (content v10): speed and passive targets, damage defences, <c>autoWhen</c>, <c>activation</c> and <c>item</c>.
+    /// A revision that declares v9 only loses the inert v10 keys that a typed toggle, resource or grant carries as extension data (silently).
+    /// </summary>
+    private static void ContentBelowV10(Scope scope, JsonObject node, List<BelowChange> changes)
+    {
+        if (node["effects"] is not JsonArray effects)
+            return;
+        var declaresV10 = scope.Own >= ContentRevision.PlayDetailsSchemaVersion;
+        var revision = scope.Revision;
+        var name = scope.Name;
+        var kept = new List<JsonNode?>(effects.Count);
+        var keptOrigin = new List<int>(effects.Count);
+
+        for (var i = 0; i < effects.Count; i++)
+        {
+            var element = effects[i];
+            if (element is not JsonObject effect)
+            {
+                kept.Add(element?.DeepClone());
+                keptOrigin.Add(scope.Origin[i]);
+                continue;
+            }
+
+            var type = TypeOf(effect);
+            var path = $"effects[{scope.Origin[i]}]";
+            if (RemovedTargetBelow(effect, type, i, scope, changes) || (declaresV10 && WholeEffectBelowV10(effect, type, path, name, changes)))
+                continue;
+
+            // A v9 revision holds the v10 keys of a typed effect as inert extension data; an untyped one is written back as it is.
+            var originalIndex = scope.Origin[i];
+            var typed = originalIndex < revision.Effects.Count && revision.Effects[originalIndex] is not UnknownEffect;
+            if (declaresV10 || typed)
+            {
+                switch (type)
+                {
+                    case ToggleEffect.TypeName:
+                        RemoveKey(effect, ToggleEffect.AutoWhenProperty, path, declaresV10 ? BelowAction.Blocks : BelowAction.Silent, "below.toggle-auto-when", $"'{name}': when a toggle switches itself on; it would stay off until turned on by hand.", changes);
+                        RemoveKey(effect, ToggleEffect.ActivationProperty, path, BelowAction.Silent, "below.activation", $"'{name}': the kind of action a toggle needs.", changes);
+                        break;
+                    case ResourceEffect.TypeName:
+                        RemoveKey(effect, ToggleEffect.ActivationProperty, path, BelowAction.Silent, "below.activation", $"'{name}': the kind of action a resource needs.", changes);
+                        break;
+                    case GrantEffect.TypeName:
+                        RemoveKey(effect, GrantEffect.DamageTypeProperty, path, BelowAction.Silent, "below.grant-defence", $"'{name}': a damage type on a grant that does not use one.", changes);
+                        break;
+                }
+            }
+            kept.Add(effect);
+            keptOrigin.Add(scope.Origin[i]);
+        }
+
+        effects.Clear();
+        foreach (var item in kept)
+            effects.Add(item);
+        scope.Origin.Clear();
+        scope.Origin.AddRange(keptOrigin);
+    }
+
+    private static void RemoveKey(JsonObject effect, string key, string path, BelowAction action, string code, string message, List<BelowChange> changes)
+    {
+        if (KeyOf(effect, key) is not { } actual)
+            return;
+        effect.Remove(actual);
+        changes.Add(new($"{path}.{key}", action, code, message));
+    }
+
+    /// <summary>Handles an effect that v9 cannot hold at all (damage defence grants, <c>item</c>). Returns whether the effect was removed.</summary>
+    private static bool WholeEffectBelowV10(JsonObject effect, string? type, string path, string name, List<BelowChange> changes)
+    {
+        switch (type)
+        {
+            case GrantEffect.TypeName:
+                var grant = StringOf(Property(effect, "grant"));
+                if (string.Equals(grant, nameof(GrantKind.DamageVulnerability), StringComparison.OrdinalIgnoreCase))
+                {
+                    changes.Add(new(path, BelowAction.Blocks, "below.vulnerability", $"'{name}': its vulnerability to damage; the older version cannot hold it."));
+                    return true;
+                }
+                if (string.Equals(grant, nameof(GrantKind.DamageResistance), StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(grant, nameof(GrantKind.DamageImmunity), StringComparison.OrdinalIgnoreCase))
+                {
+                    changes.Add(new(path, BelowAction.Dropped, "below.grant-defence", $"'{name}': its resistance or immunity to damage."));
+                    return true;
+                }
+                return false;
+            case ItemEffect.TypeName:
+                var attunes = Property(effect, "requiresAttunement") is JsonValue flag && flag.TryGetValue<bool>(out var requires) && requires;
+                var charges = Property(effect, "charges") is not null;
+                if (attunes)
+                    changes.Add(new(path, BelowAction.Blocks, "below.item-attunement", $"'{name}': that the item needs attunement; the older version would let anyone use it."));
+                if (charges)
+                    changes.Add(new(path, BelowAction.Dropped, "below.item-charges", $"'{name}': the charges of the item."));
+                if (!attunes && !charges)
+                    changes.Add(new(path, BelowAction.Silent, Unsupported, $"'{name}': an item effect that sets nothing."));
+                return true;
+            default:
+                return false;
+        }
     }
 
     private const string Unsupported = "below.effect-unsupported";
@@ -111,13 +357,15 @@ public static class DownConvert
     /// older version only loses the inert v11 keys that a typed effect carries as extension data (silently); its v11-type effects stay
     /// as they are, since every reader already treats them as reference-only.
     /// </summary>
-    private static void ContentBelowV11(ContentRevision revision, JsonObject node, List<BelowChange> changes)
+    private static void ContentBelowV11(Scope scope, JsonObject node, List<BelowChange> changes)
     {
         if (node["effects"] is not JsonArray effects)
             return;
+        var revision = scope.Revision;
         var declaresV11 = revision.SchemaVersion >= ContentRevision.PlayMechanicsSchemaVersion;
         var name = revision.Name;
         var kept = new List<JsonNode?>(effects.Count);
+        var keptOrigin = new List<int>(effects.Count);
 
         for (var i = 0; i < effects.Count; i++)
         {
@@ -125,11 +373,16 @@ public static class DownConvert
             if (element is not JsonObject effect)
             {
                 kept.Add(element?.DeepClone());
+                keptOrigin.Add(scope.Origin[i]);
                 continue;
             }
 
-            var type = effect.FirstOrDefault(p => string.Equals(p.Key, "type", StringComparison.OrdinalIgnoreCase)).Value is JsonValue v && v.TryGetValue<string>(out var t) ? t : null;
-            if (declaresV11 && WholeEffectBelowV11(type, effect, i, name, changes))
+            var type = TypeOf(effect);
+            if (declaresV11 && WholeEffectBelowV11(type, effect, scope.Origin[i], name, changes))
+                continue;
+            if (RemovedTargetBelow(effect, type, i, scope, changes))
+                continue;
+            if (declaresV11 && ValueFormulaBelow(effect, type, i, scope, changes))
                 continue;
 
             string[] keys = type switch
@@ -155,11 +408,14 @@ public static class DownConvert
                 }
             }
             kept.Add(effect);
+            keptOrigin.Add(scope.Origin[i]);
         }
 
         effects.Clear();
         foreach (var item in kept)
             effects.Add(item);
+        scope.Origin.Clear();
+        scope.Origin.AddRange(keptOrigin);
     }
 
     /// <summary>Handles an effect that v10 cannot hold at all. Returns whether the effect was removed.</summary>

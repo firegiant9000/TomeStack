@@ -567,7 +567,7 @@ public class DownConvertTests
         { """{"type":"resource","id":"p","resourceId":"p","label":"P","maximum":"3","counts":"up"}""", "effects[0].counts", "below.resource-counts-up" },
         { """{"type":"roll","id":"r","rollId":"r","label":"R","dice":"1d6","range":"30 ft"}""", "effects[0].range", "below.roll-detail" },
         { """{"type":"roll","id":"r","rollId":"r","label":"R","dice":"1d6","alsoChange":[{"resourceId":"c","change":"spend","amount":"1"}]}""", "effects[0].alsoChange", "below.roll-also-change" },
-        { """{"type":"modifier","id":"m","operation":"bonus","target":"initiative","value":"1","toggle":"t","toggleContent":"6f0dc000-0000-4000-8000-0000000000b1"}""", "effects[0].toggleContent", "below.modifier-toggle-content" },
+        { """{"type":"toggle","id":"t0","toggleId":"t","label":"T"},{"type":"modifier","id":"m","operation":"bonus","target":"initiative","value":"1","toggle":"t","timing":"whileActive","toggleContent":"6f0dc000-0000-4000-8000-0000000000b1"}""", "effects[1].toggleContent", "below.modifier-toggle-content" },
         { """{"type":"grant","id":"g","grant":"damageResistance","damageType":"Fire","whileToggle":{"toggleId":"sky"}}""", "effects[0].whileToggle", "below.defence-while-toggle" },
         { """{"type":"toggle","id":"t","toggleId":"t","label":"T","level":3}""", "effects[0].level", "below.toggle-level" },
     };
@@ -577,7 +577,7 @@ public class DownConvertTests
     public void Content_below_removes_inert_v11_keys_silently_on_every_effect_type(string effect, string path, string code)
     {
         var input = Rev(effect, 10);
-        var typed = Assert.Single(input.Effects);
+        var typed = input.Effects[^1];
         Assert.IsNotType<UnknownEffect>(typed);
         Assert.NotNull(typed.Extensions);
 
@@ -586,7 +586,7 @@ public class DownConvertTests
         var change = Assert.Single(result.Changes);
         Assert.Equal((path, BelowAction.Silent, code), (change.Path, change.Action, change.Code));
         Assert.False(result.Blocked);
-        Assert.Null(Assert.Single(result.Revision.Effects).Extensions);
+        Assert.Null(result.Revision.Effects[^1].Extensions);
     }
 
     [Fact]
@@ -620,6 +620,342 @@ public class DownConvertTests
         Assert.Equal(before, result.Revision.Effects.Take(2).Select(e => JsonSerializer.Serialize(e, RulesJson.Compact)).ToArray());
         Assert.Contains(Other, before[0], StringComparison.Ordinal);
         Assert.Contains(Other, before[1], StringComparison.Ordinal);
+    }
+
+    // ---- content: by-value classification, v10 -> v9, validation at the target ----------------------------------------------
+
+    private static readonly SourceRecord FixtureSource = new()
+    {
+        Id = Guid.Parse("6f0d5000-0000-4000-8000-000000000001"), Title = "Compat Source", Publisher = "Compat", RulesFamilies = ["srd-5.2.1"],
+        EditionVersion = "1", License = "test", Redistributable = false,
+    };
+
+    private static InMemoryContentCatalog CatalogWithSource() => new([FixtureSource], []);
+
+    private static BelowChange At(ContentBelow result, string path) => Assert.Single(result.Changes, c => c.Path == path);
+
+    public static TheoryData<string, int, int> DroppedTargets => new()
+    {
+        { """{"type":"modifier","id":"m","operation":"bonus","target":"resource.rage","value":"2"}""", 11, 10 },
+        { """{"type":"modifier","id":"m","operation":"bonus","target":"speed.fly","value":"10"}""", 11, 10 },
+        { """{"type":"modifier","id":"m","operation":"set","target":"speed","value":"30"}""", 10, 9 },
+        { """{"type":"modifier","id":"m","operation":"bonus","target":"passive.perception","value":"5"}""", 10, 9 },
+    };
+
+    [Theory]
+    [MemberData(nameof(DroppedTargets))]
+    public void Modifier_on_removed_target_drops_for_non_negative_constant(string effect, int schema, int target)
+    {
+        var input = Rev(effect, schema);
+
+        var result = DownConvert.Below(input, target);
+
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(("effects[0]", BelowAction.Dropped, "below.unknown-target"), (change.Path, change.Action, change.Code));
+        Assert.StartsWith("'Compat Steady Hands': ", change.Message);
+        Assert.False(result.Blocked);
+        Assert.Empty(result.Revision.Effects);
+        Assert.Equal(target, result.Revision.SchemaVersion);
+    }
+
+    public static TheoryData<string, BelowAction> SignedValues => new()
+    {
+        { """{"type":"modifier","id":"m","operation":"bonus","target":"speed.fly","value":"-2"}""", BelowAction.Blocks },
+        { """{"type":"modifier","id":"m","operation":"bonus","target":"speed.fly","value":"LEVEL - 2"}""", BelowAction.Blocks },
+        { """{"type":"value","id":"v","valueId":"x","formula":"-2"},{"type":"modifier","id":"m","operation":"bonus","target":"speed.fly","value":"VALUE.x"}""", BelowAction.Blocks },
+        { """{"type":"modifier","id":"m","operation":"bonus","target":"speed.fly","value":"VALUE.y"}""", BelowAction.Blocks },
+        { """{"type":"modifier","id":"m","operation":"bonus","target":"speed.fly","value":"PB + 1"}""", BelowAction.Dropped },
+        { """{"type":"modifier","id":"m","operation":"bonus","target":"speed.fly","value":"max(1, 2)"}""", BelowAction.Blocks },
+        { """{"type":"value","id":"v","valueId":"x","formula":"PB * 2"},{"type":"modifier","id":"m","operation":"bonus","target":"speed.fly","value":"VALUE.x + 1"}""", BelowAction.Dropped },
+    };
+
+    [Theory]
+    [MemberData(nameof(SignedValues))]
+    public void Modifier_on_removed_target_blocks_for_negative_or_non_static_formula(string effects, BelowAction expected)
+    {
+        var input = Rev(effects);
+
+        var result = DownConvert.Below(input, 10);
+
+        var change = Assert.Single(result.Changes, c => c.Code == "below.unknown-target");
+        Assert.Equal(expected, change.Action);
+        Assert.Equal(expected == BelowAction.Blocks, result.Blocked);
+        Assert.DoesNotContain(result.Changes, c => c.Code == "below.value-formula");
+        Assert.DoesNotContain("speed.fly", Written(result));
+    }
+
+    public static TheoryData<string, int, int> RestrictionTargets => new()
+    {
+        { "resource.rage", 11, 10 },
+        { "speed.fly", 11, 10 },
+        { "speed", 10, 9 },
+        { "passive.perception", 10, 9 },
+    };
+
+    [Theory]
+    [MemberData(nameof(RestrictionTargets))]
+    public void Restriction_on_removed_target_blocks(string field, int schema, int target)
+    {
+        var input = Rev($$"""{"type":"restriction","id":"r","field":"{{field}}","minimum":5}""", schema);
+
+        var result = DownConvert.Below(input, target);
+
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(("effects[0]", BelowAction.Blocks, "below.restriction-lifted"), (change.Path, change.Action, change.Code));
+        Assert.True(result.Blocked);
+        Assert.Empty(result.Revision.Effects);
+    }
+
+    private const string FuryFixture = """
+        {"type":"value","id":"fury","valueId":"fury","formula":"2"},
+        {"type":"resource","id":"pool","resourceId":"pool","label":"Pool","maximum":"3"},
+        {"type":"modifier","id":"m","operation":"bonus","target":"initiative","value":"VALUE.fury"},
+        {"type":"roll","id":"r","rollId":"r","label":"R","dice":"1d6","resourceId":"pool","cost":"VALUE.fury"}
+        """;
+
+    [Fact]
+    public void Value_formula_drops_a_non_negative_bonus_and_blocks_a_cost()
+    {
+        var input = Rev(FuryFixture);
+
+        var result = DownConvert.Below(input, 10);
+
+        Assert.Equal(("effects[0]", BelowAction.Dropped, "below.effect-unsupported"), (At(result, "effects[0]").Path, At(result, "effects[0]").Action, At(result, "effects[0]").Code));
+        var bonus = At(result, "effects[2]");
+        Assert.Equal((BelowAction.Dropped, "below.value-formula"), (bonus.Action, bonus.Code));
+        var cost = At(result, "effects[3]");
+        Assert.Equal((BelowAction.Blocks, "below.value-formula"), (cost.Action, cost.Code));
+        Assert.Equal(3, result.Changes.Count);
+        Assert.True(result.Blocked);
+        Assert.Equal(["pool"], result.Revision.Effects.Select(e => e.Id).ToArray());
+        AssertNoValueFormula(result.Revision);
+    }
+
+    public static TheoryData<string, string> ValueBlocks => new()
+    {
+        { """{"type":"value","id":"v","valueId":"x","formula":"1"},{"type":"modifier","id":"m","operation":"set","target":"initiative","value":"VALUE.x"}""", "effects[1]" },
+        { """{"type":"value","id":"v","valueId":"x","formula":"1"},{"type":"modifier","id":"m","operation":"bonus","target":"initiative","value":"0 - VALUE.x"}""", "effects[1]" },
+        { """{"type":"value","id":"v","valueId":"x","formula":"1"},{"type":"resource","id":"p","resourceId":"p","label":"P","maximum":"VALUE.x"}""", "effects[1]" },
+        { """{"type":"value","id":"v","valueId":"x","formula":"1"},{"type":"resource","id":"p","resourceId":"p","label":"P","maximum":"2"},{"type":"recovery","id":"rc","resourceId":"p","on":"longRest","amount":"VALUE.x"}""", "effects[2]" },
+        { """{"type":"value","id":"v","valueId":"x","formula":"1"},{"type":"roll","id":"r","rollId":"r","label":"R","dice":"1d6","bonus":"VALUE.x"}""", "effects[1]" },
+    };
+
+    [Theory]
+    [MemberData(nameof(ValueBlocks))]
+    public void Value_formula_blocks_every_other_field(string effects, string path)
+    {
+        var result = DownConvert.Below(Rev(effects), 10);
+
+        var change = At(result, path);
+        Assert.Equal((BelowAction.Blocks, "below.value-formula"), (change.Action, change.Code));
+        Assert.True(result.Blocked);
+        AssertNoValueFormula(result.Revision);
+    }
+
+    [Fact]
+    public void Modifier_on_removed_target_that_reads_value_has_one_change()
+    {
+        var input = Rev("""{"type":"value","id":"v","valueId":"x","formula":"2"},{"type":"modifier","id":"m","operation":"bonus","target":"speed.fly","value":"VALUE.x"}""");
+
+        var result = DownConvert.Below(input, 10);
+
+        var change = At(result, "effects[1]");
+        Assert.Equal((BelowAction.Dropped, "below.unknown-target"), (change.Action, change.Code));
+        Assert.Equal(2, result.Changes.Count);
+    }
+
+    private static void AssertNoValueFormula(ContentRevision copy)
+    {
+        var features = Formula.FeaturesFor(copy);
+        Assert.DoesNotContain("VALUE.", Written(new ContentBelow(copy, [])));
+        foreach (var source in copy.Effects.SelectMany(e => e switch
+        {
+            ModifierEffect m => [m.Value],
+            ResourceEffect r => [r.Maximum],
+            RecoveryEffect rc => [rc.Amount],
+            RollEffect roll => new[] { roll.Cost, roll.Bonus }.OfType<string>(),
+            SpellcastingEffect s => new[] { s.SpellsFormula }.OfType<string>(),
+            _ => [],
+        }).Where(s => s != "all"))
+        {
+            Assert.True(Formula.TryParse(source, features, out _, out var error), $"{source}: {error?.Message}");
+        }
+    }
+
+    [Fact]
+    public void Content_below_9_grant_defences_drop_and_vulnerability_blocks()
+    {
+        var input = Rev("""
+            {"type":"grant","id":"g1","grant":"damageResistance","damageType":"fire"},
+            {"type":"grant","id":"g2","grant":"DamageImmunity","damageType":"cold"},
+            {"type":"grant","id":"g3","grant":"damageVulnerability","damageType":"acid"},
+            {"type":"grant","id":"g4","grant":"proficiency","target":"save.dex","damageType":"fire"}
+            """, 10);
+        Assert.Equal(4, input.Effects.Count);
+
+        var result = DownConvert.Below(input, 9);
+
+        Assert.Equal((BelowAction.Dropped, "below.grant-defence"), (At(result, "effects[0]").Action, At(result, "effects[0]").Code));
+        Assert.Equal((BelowAction.Dropped, "below.grant-defence"), (At(result, "effects[1]").Action, At(result, "effects[1]").Code));
+        Assert.Equal((BelowAction.Blocks, "below.vulnerability"), (At(result, "effects[2]").Action, At(result, "effects[2]").Code));
+        var key = At(result, "effects[3].damageType");
+        Assert.Equal((BelowAction.Silent, "below.grant-defence"), (key.Action, key.Code));
+        Assert.Equal(4, result.Changes.Count);
+        Assert.True(result.Blocked);
+        Assert.Equal(["g4"], result.Revision.Effects.Select(e => e.Id).ToArray());
+        Assert.DoesNotContain("damageType", Written(result));
+        Assert.Equal(9, result.Revision.SchemaVersion);
+    }
+
+    [Fact]
+    public void Content_below_9_blocks_auto_when_and_attunement()
+    {
+        var toggle = Rev("""{"type":"toggle","id":"t","toggleId":"t","label":"T","autoWhen":"bloodied"}""", 10);
+        var toggled = DownConvert.Below(toggle, 9);
+        var change = Assert.Single(toggled.Changes);
+        Assert.Equal(("effects[0].autoWhen", BelowAction.Blocks, "below.toggle-auto-when"), (change.Path, change.Action, change.Code));
+        Assert.True(toggled.Blocked);
+        Assert.DoesNotContain("autoWhen", Written(toggled));
+
+        var item = Rev("""{"type":"item","id":"i","requiresAttunement":true,"charges":{"max":3}}""", 10) with { Kind = ContentKind.Item };
+        var items = DownConvert.Below(item, 9);
+        Assert.Equal([("effects[0]", BelowAction.Blocks, "below.item-attunement"), ("effects[0]", BelowAction.Dropped, "below.item-charges")],
+            items.Changes.Select(c => (c.Path, c.Action, c.Code)).ToArray());
+        Assert.True(items.Blocked);
+        Assert.Empty(items.Revision.Effects);
+    }
+
+    [Fact]
+    public void Content_below_9_drops_item_charges_with_the_item_effect()
+    {
+        var charged = Rev("""{"type":"item","id":"i","requiresAttunement":false,"charges":{"max":3}}""", 10) with { Kind = ContentKind.Item };
+        var result = DownConvert.Below(charged, 9);
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(("effects[0]", BelowAction.Dropped, "below.item-charges"), (change.Path, change.Action, change.Code));
+        Assert.False(result.Blocked);
+        Assert.Empty(result.Revision.Effects);
+
+        var bare = Rev("""{"type":"item","id":"i"}""", 10) with { Kind = ContentKind.Item };
+        var plain = DownConvert.Below(bare, 9);
+        var silent = Assert.Single(plain.Changes);
+        Assert.Equal(("effects[0]", BelowAction.Silent, "below.effect-unsupported"), (silent.Path, silent.Action, silent.Code));
+        Assert.False(plain.Blocked);
+        Assert.Empty(plain.Revision.Effects);
+    }
+
+    [Fact]
+    public void Content_below_9_activation_is_silent()
+    {
+        var input = Rev("""
+            {"type":"toggle","id":"t","toggleId":"t","label":"T","activation":"action"},
+            {"type":"resource","id":"p","resourceId":"p","label":"P","maximum":"2","activation":"bonusAction"}
+            """, 10);
+
+        var result = DownConvert.Below(input, 9);
+
+        Assert.Equal([("effects[0].activation", BelowAction.Silent, "below.activation"), ("effects[1].activation", BelowAction.Silent, "below.activation")],
+            result.Changes.Select(c => (c.Path, c.Action, c.Code)).ToArray());
+        Assert.False(result.Blocked);
+        Assert.Equal(2, result.Revision.Effects.Count);
+        Assert.DoesNotContain("activation", Written(result));
+    }
+
+    [Fact]
+    public void Content_below_9_removes_inert_v10_keys_silently()
+    {
+        var input = Rev("""
+            {"type":"toggle","id":"t","toggleId":"t","label":"T","activation":"action","autoWhen":"bloodied"},
+            {"type":"resource","id":"p","resourceId":"p","label":"P","maximum":"2","activation":"action"},
+            {"type":"grant","id":"g","grant":"proficiency","target":"save.dex","damageType":"fire"}
+            """, 9);
+        Assert.All(input.Effects, e => Assert.NotNull(e.Extensions));
+
+        var result = DownConvert.Below(input, 9);
+
+        Assert.Equal(
+            [("effects[0].activation", "below.activation"), ("effects[0].autoWhen", "below.toggle-auto-when"), ("effects[1].activation", "below.activation"), ("effects[2].damageType", "below.grant-defence")],
+            result.Changes.Select(c => (c.Path, c.Code)).OrderBy(p => p.Path, StringComparer.Ordinal).ToArray());
+        Assert.All(result.Changes, c => Assert.Equal(BelowAction.Silent, c.Action));
+        Assert.False(result.Blocked);
+        Assert.All(result.Revision.Effects, e => Assert.Null(e.Extensions));
+        Assert.Equal(9, result.Revision.SchemaVersion);
+    }
+
+    public static TheoryData<string, int, int> CleanFixtures => new()
+    {
+        { """{"type":"modifier","id":"m","operation":"bonus","target":"resource.rage","value":"2"}""", 11, 10 },
+        { """{"type":"modifier","id":"m","operation":"bonus","target":"passive.perception","value":"5"},{"type":"modifier","id":"m2","operation":"bonus","target":"initiative","value":"1"}""", 10, 9 },
+        { """{"type":"value","id":"v","valueId":"fury","formula":"2"},{"type":"modifier","id":"m","operation":"bonus","target":"initiative","value":"VALUE.fury"}""", 11, 10 },
+        { """{"type":"grant","id":"g","grant":"damageResistance","damageType":"fire"},{"type":"grant","id":"g2","grant":"proficiency","target":"save.dex","damageType":"fire"}""", 10, 9 },
+        { """{"type":"toggle","id":"t","toggleId":"t","label":"T","activation":"action"}""", 10, 9 },
+        { """{"type":"toggle","id":"t","toggleId":"t","label":"T","activation":"action","duration":"3"},{"type":"modifier","id":"m","operation":"bonus","target":"speed","value":"5"}""", 11, 9 },
+    };
+
+    [Theory]
+    [MemberData(nameof(CleanFixtures))]
+    public void Lowered_copy_validates_at_target_with_no_errors(string effects, int schema, int target)
+    {
+        var input = Rev(effects, schema);
+
+        var result = DownConvert.Below(input, target);
+
+        Assert.False(result.Blocked);
+        Assert.DoesNotContain(result.Changes, c => c.Code == "below.validation-error");
+        var errors = ContentValidator.Validate(result.Revision, CatalogWithSource()).Errors;
+        Assert.DoesNotContain(errors, e => e.Code is not ("validate.source-missing" or "validate.reference-missing"));
+        var withNull = DownConvert.Below(input, target, null);
+        Assert.Equal(result.Changes, withNull.Changes);
+    }
+
+    [Fact]
+    public void Validation_error_at_target_becomes_a_block()
+    {
+        var input = Rev("""{"type":"modifier","id":"m","operation":"bonus","target":"notAField","value":"1"}""");
+
+        var result = DownConvert.Below(input, 10);
+
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(("effects[0]", BelowAction.Blocks, "below.validation-error"), (change.Path, change.Action, change.Code));
+        Assert.StartsWith("'Compat Steady Hands': ", change.Message);
+        Assert.Contains("notAField", change.Message, StringComparison.Ordinal);
+        Assert.True(result.Blocked);
+    }
+
+    [Fact]
+    public void Validation_uses_the_given_catalog()
+    {
+        var grant = $$$"""{"type":"grant","id":"gc","grant":"content","content":{"contentId":"{{{Other}}}","revisionId":"{{{Other}}}"}}""";
+        var input = Rev(grant);
+
+        var withCatalog = DownConvert.Below(input, 10, CatalogWithSource());
+        var change = Assert.Single(withCatalog.Changes);
+        Assert.Equal(("effects[0]", BelowAction.Blocks, "below.validation-error"), (change.Path, change.Action, change.Code));
+        Assert.True(withCatalog.Blocked);
+
+        var without = DownConvert.Below(input, 10, catalog: null);
+        Assert.Empty(without.Changes);
+        Assert.False(without.Blocked);
+
+        var emptyCatalog = DownConvert.Below(input, 10, new InMemoryContentCatalog([], []));
+        Assert.Contains(emptyCatalog.Changes, c => c.Code == "below.validation-error" && c.Path == "revision");
+    }
+
+    [Fact]
+    public void Below_is_idempotent_down_the_ladder()
+    {
+        var input = Rev("""
+            {"type":"toggle","id":"t","toggleId":"t","label":"T","duration":"3","activation":"action"},
+            {"type":"resource","id":"p","resourceId":"p","label":"P","maximum":"2"},
+            {"type":"roll","id":"r","rollId":"r","label":"R","dice":"1d6","save":{"ability":"dex","dc":"8"}},
+            {"type":"modifier","id":"m","operation":"bonus","target":"speed","value":"5"},
+            {"type":"grant","id":"g","grant":"damageResistance","damageType":"fire"}
+            """);
+
+        var viaTen = DownConvert.Below(DownConvert.Below(input, 10).Revision, 9).Revision;
+        var direct = DownConvert.Below(input, 9).Revision;
+
+        Assert.Equal(JsonSerializer.Serialize(direct, RulesJson.Compact), JsonSerializer.Serialize(viaTen, RulesJson.Compact));
+        Assert.Equal(9, direct.SchemaVersion);
     }
 
     [Fact]
