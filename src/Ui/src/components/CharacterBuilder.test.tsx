@@ -277,6 +277,16 @@ describe('a superseded option in a choice (I-06)', () => {
     const boxes = within(picker).getAllByRole('checkbox') as HTMLInputElement[];
     expect(boxes.map((b) => b.checked)).toEqual([false, true]);
   });
+
+  it('keeps a lone superseded option pickable when the choice offers no newer revision of it', async () => {
+    const view = choiceOf([]);
+    view.sheet.choices![0]!.options = [older.reference];
+    vi.mocked(client.listContent).mockResolvedValue([newest, older]);
+    render(<CharacterBuilder mode={{ kind: 'choices', view }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+    const picker = await screen.findByRole('group', { name: /Fixture feature: choose 1/ });
+    const box = (await within(picker).findByRole('checkbox', { name: /Fixture Path/ })) as HTMLInputElement;
+    expect(box.getAttribute('aria-disabled')).toBeNull();
+  });
 });
 
 // R42 (follow-up F2): another option of the same choice can be ticked while an imported other-family option stays chosen.
