@@ -224,13 +224,30 @@ public sealed record FeatureEntry(
 /// <param name="AlsoChange">Content v11 (D43): the other pools the use also changes, each amount evaluated for this character (never below 0). Null when the roll has none.</param>
 /// <param name="DrawsDown">Content v11 (D43): the cost and per-unit amount use up the built-up value of the counting-up pool instead of adding to it.</param>
 /// <param name="RollId">The roll's content <c>rollId</c> (what <c>useAction</c> names); it can differ from <paramref name="Id"/>. A computed sheet member, not stored.</param>
+/// <param name="Payment">Content v12 (MECH-X item 1): a hit-point or slot payment and whether it can be made now; null for a pool payment and below v12.</param>
+/// <param name="CastsSpell">Content v12 (MECH-X item 1, R38): the spell this roll casts without a slot; null when it casts none or the spell cannot be used.</param>
 public sealed record FeatureEffect(
     string Id, string Type, AutomationStatus Automation, string? Text, string? Label = null, string? Dice = null, string? ResourceId = null, Activation? Activation = null,
     Guid? ResourceContent = null, int? Cost = null, bool VariableCost = false, int? Bonus = null, bool Available = true, string? UnavailableReason = null,
     Ability? SaveAbility = null, int? SaveDc = null, IReadOnlyList<TraceEntry>? SaveTrace = null,
     RollArea? Area = null, string? Range = null, string? Targets = null,
     RollPerUnit? PerUnit = null,
-    IReadOnlyList<AlsoChangeValue>? AlsoChange = null, bool DrawsDown = false, string? RollId = null);
+    IReadOnlyList<AlsoChangeValue>? AlsoChange = null, bool DrawsDown = false, string? RollId = null,
+    PaymentValue? Payment = null, CastSpellValue? CastsSpell = null);
+
+/// <summary>
+/// Content v12 (MECH-X item 1): how a roll, a feature attack or a toggle pays, and whether it can now (R40). Null on the sheet for a
+/// pool payment (today's behaviour) and for any revision below v12. <paramref name="Payable"/> is false, with
+/// <paramref name="Reason"/>, when the payment cannot be made now (too few hit points for the cost; no slot at or above
+/// <paramref name="MinSlotLevel"/>); it never changes <c>Available</c>. <paramref name="Slot"/> is the slot a slot payment would take now.
+/// </summary>
+public sealed record PaymentValue(PaymentKind Kind, bool Payable, string? Reason = null, bool MayDropToZero = false, int? MinSlotLevel = null, SlotChoice? Slot = null);
+
+/// <summary>
+/// Content v12 (MECH-X item 1, R38): the spell a <c>castsSpell</c> roll casts without a slot. <paramref name="AttackBonus"/> and
+/// <paramref name="SaveDc"/> are the primary caster's; null when the character has no caster (the numbers are by hand).
+/// </summary>
+public sealed record CastSpellValue(ContentReference Spell, string Name, int Level, SpellAttackKind Attack, Ability? Save, string? Dice, int? AttackBonus, int? SaveDc);
 
 /// <summary>
 /// Content v11 (D43): one pool a use also changes, for this character. <paramref name="ResourceContent"/> is the content that
@@ -253,7 +270,8 @@ public sealed record AlsoChangeValue(Guid ResourceContent, string ResourceId, Up
 public sealed record ToggleValue(
     ContentReference Content, string ContentName, string EffectId, string ToggleId, string Label, bool On, string? ResourceId, string? Text, bool? Auto = null, Activation? Activation = null,
     string? Group = null, Guid? GroupContent = null, ToggleLayer? Layer = null, int? Cost = null, Guid? CostResourceContent = null, bool Available = true, string? UnavailableReason = null, string? GroupLabel = null,
-    int? Duration = null, int? RoundsLeft = null, IReadOnlyList<ToggleRef>? AllowedWith = null, bool? AllowedInBase = null);
+    int? Duration = null, int? RoundsLeft = null, IReadOnlyList<ToggleRef>? AllowedWith = null, bool? AllowedInBase = null,
+    PaymentValue? Payment = null);
 
 /// <summary>Where a damage defence on the sheet comes from: the character's own list (<paramref name="Content"/> null) or a v10 damage grant.</summary>
 public sealed record DamageDefenceSource(string Name, ContentReference? Content = null, string? EffectId = null);
@@ -352,7 +370,8 @@ public sealed record AttackEntry(
     Activation? Activation = null,
     Guid? CostResourceContent = null,
     string? ResourceId = null,
-    int? Cost = null);
+    int? Cost = null,
+    PaymentValue? Payment = null);
 
 /// <summary>Content v11 (D43): where an attack on the sheet comes from. Custom attacks are not on the sheet's list.</summary>
 public enum AttackSource { Weapon, Feature }
@@ -379,7 +398,8 @@ public sealed record SpellEntry(
     Ability? Save,
     string? Dice,
     TraceOrigin Origin,
-    IReadOnlyList<Diagnostic> Diagnostics);
+    IReadOnlyList<Diagnostic> Diagnostics,
+    IReadOnlyList<string>? Tags = null);
 
 /// <summary>
 /// Pure, dependency-ordered calculation of derived character values (ARCHITECTURE "Rules execution"; ADR-003).
@@ -716,13 +736,15 @@ public static class CharacterCalculator
         var resources = CollectResources(active, character, resolved.ClassLevels, values, family, resourceBonuses);
         var rollBonuses = RollBonuses(active, character, resolved.ClassLevels, values, diagnostics);
         var rollDetails = RollDetailsOf(active, family, character, resolved.ClassLevels, values, diagnostics);
+        // Before the feature list: a spell that cannot be cast reports on its feature (spells.unusable), like a recorded spell that cannot be listed.
+        var castSpells = CastSpellsOf(active, catalog, character, casters.Count > 0, values, diagnostics);
         // Before the feature list: a response whose formula fails reports on its feature (effect.invalid-formula). HP.MAX is this sheet's own maximum.
         var responses = CollectResponses(active, character, resolved.ClassLevels, values, resources, effective, autoOn, values[FieldIds.HitPoints], diagnostics);
         // Before the feature list: a form-only defence of absent content reports on its feature (modifier.toggle-content-missing).
         var damageDefences = CollectDamageDefences(active, character, resolved.ClassLevels, effective, autoOn, diagnostics);
         var scoped = diagnostics.Concat(warnings.Values.SelectMany(w => w)).Concat(resources.SelectMany(r => r.Warnings)).Where(d => d.Content is not null).Distinct().ToList();
         var features = active.Select(item => Feature(
-            item, family, [.. scoped.Where(d => d.Content == item.Revision.Reference)], rollDetails, rollBonuses, form => OutOfForm(active, item, form, effective, autoOn), resources)).ToList();
+            item, family, [.. scoped.Where(d => d.Content == item.Revision.Reference)], rollDetails, rollBonuses, form => OutOfForm(active, item, form, effective, autoOn), resources, castSpells)).ToList();
         var toggles = active
             .SelectMany(item => item.Revision.Effects.OfType<ToggleEffect>()
                 .Where(t => t.Automation != AutomationStatus.Reference && LevelReached(item, t, character, resolved.ClassLevels))
@@ -764,7 +786,8 @@ public static class CharacterCalculator
                 IsAuto(revision, t) ? true : null, ActivationOf(revision, t.Activation),
                 inGroup ? t.Group : null, inGroup ? t.GroupContent ?? revision.ContentId : null, inGroup ? t.Layer ?? ToggleLayer.Primary : null,
                 cost, t.ResourceContent, allowed, allowed ? null : UnavailableReason(active, item, t), GroupLabelOf(active, item, t), duration, roundsLeft,
-                inGroup && t.Layer == ToggleLayer.Overlay ? t.AllowedWith : null, inGroup && t.Layer == ToggleLayer.Overlay ? t.AllowedInBase : null);
+                inGroup && t.Layer == ToggleLayer.Overlay ? t.AllowedWith : null, inGroup && t.Layer == ToggleLayer.Overlay ? t.AllowedInBase : null,
+                PaymentOf(t.Payment, revision));
         }
         // A response with an outcome that can never run (a form that is not on the sheet, is automatic or is not allowed now; a pool the character lacks) is not offered.
         responses = [.. responses.Select(r => r.Available ? WithRunnableOutcomes(r, toggles, resources) : r)];
@@ -800,6 +823,12 @@ public static class CharacterCalculator
         var pactSlots = values[FieldIds.PactSlots] > 0 || character.Play.PactSlotsSpent > 0
             ? Slot(pactCaster is null ? 0 : PactSlotLevel(Row(pactCaster.Effect.Slots, pactCaster.ClassLevel)), FieldIds.PactSlots, character.Play.PactSlotsSpent)
             : null;
+        // S2/R40: the payment rows were built before hit points and slots existed; settle whether each can be made now. Available is untouched.
+        toggles = [.. toggles.Select(t => t.Payment is { } p ? t with { Payment = Affordability(p, t.Cost, hitPoints, spellSlots, pactSlots) } : t)];
+        attacks = [.. attacks.Select(a => a.Payment is { } p ? a with { Payment = Affordability(p, a.Cost, hitPoints, spellSlots, pactSlots) } : a)];
+        features = [.. features.Select(f => f.Effects.Any(e => e.Payment is not null)
+            ? f with { Effects = [.. f.Effects.Select(e => e.Payment is { } p ? e with { Payment = Affordability(p, e.Cost, hitPoints, spellSlots, pactSlots) } : e)] }
+            : f)];
 
         var scales = resolved.ClassLevels.Scales
             .Where(s => resolved.ClassLevels.ContainsKey(s.Key.Class))
@@ -1450,7 +1479,41 @@ public static class CharacterCalculator
             (invalid is not null || costFailed) && attack.Automation == AutomationStatus.Automatic ? AutomationStatus.Assisted : attack.Automation,
             trace, [], origin,
             AttackSource.Feature, attack.Tags, attack.ReplacesAttack ?? false, appliedRiders, invalid is null && outOfForm is null, invalid ?? outOfForm, attack.Activation,
-            attack.ResourceId is null ? null : attack.ResourceContent ?? revision.ContentId, attack.ResourceId, cost);
+            attack.ResourceId is null ? null : attack.ResourceContent ?? revision.ContentId, attack.ResourceId, cost, PaymentOf(attack.Payment, revision));
+    }
+
+    /// <summary>
+    /// MECH-X item 1: the payment a roll, feature attack or toggle shows, before hit points and slots are known (so
+    /// <see cref="PaymentValue.Payable"/> is true here; <see cref="Affordability"/> settles it). Null for a pool payment, none, and any
+    /// revision below v12 (even one built in code with the property set).
+    /// </summary>
+    private static PaymentValue? PaymentOf(CostPayment? payment, ContentRevision revision) =>
+        payment is { Kind: not PaymentKind.Resource } && revision.SchemaVersion >= ContentRevision.PaymentSchemaVersion
+            ? new(payment.Kind, true, null, payment.Kind == PaymentKind.HitPoints && payment.MayDropToZero == true, payment.Kind == PaymentKind.Slot ? payment.MinSlotLevel : null)
+            : null;
+
+    /// <summary>
+    /// R34, R35, R40: whether <paramref name="payment"/> can be made now. Hit points: the evaluated <paramref name="cost"/> must be below
+    /// current hit points, or at most equal with <c>mayDropToZero</c> (a cost that failed to calculate, or 0, blocks nothing). Slot: the
+    /// slot <see cref="SlotPayments.Pick"/> gives, or none left. Temporary hit points never count.
+    /// </summary>
+    private static PaymentValue Affordability(PaymentValue payment, int? cost, HitPointState hitPoints, IReadOnlyList<SlotValue>? slots, SlotValue? pact)
+    {
+        switch (payment.Kind)
+        {
+            case PaymentKind.HitPoints when cost is > 0 and var amount:
+                var payable = payment.MayDropToZero ? hitPoints.Current >= amount : hitPoints.Current > amount;
+                return payable
+                    ? payment with { Payable = true, Reason = null }
+                    : payment with { Payable = false, Reason = $"Needs {(payment.MayDropToZero ? "at least" : "more than")} {amount} current hit points." };
+            case PaymentKind.Slot:
+                var level = payment.MinSlotLevel ?? 1;
+                return SlotPayments.Pick(slots, pact, level) is { } slot
+                    ? payment with { Payable = true, Reason = null, Slot = slot }
+                    : payment with { Payable = false, Reason = $"No spell slot of level {level} or higher is left.", Slot = null };
+            default:
+                return payment;
+        }
     }
 
     /// <summary>Dice plus a flat modifier, as a dice expression: <c>1d8+3</c>, <c>1d8-1</c>, or <c>1d8</c> for 0.</summary>
@@ -1624,16 +1687,7 @@ public static class CharacterCalculator
         KnownSpell known, IContentCatalog catalog, Character character, string family, SpellcastingEffect caster, int highest, List<Diagnostic> warnings)
     {
         var revision = catalog.FindRevision(known.Spell);
-        string? refused = revision switch
-        {
-            null => "is not available",
-            { Status: not RevisionStatus.Published } => "is not published",
-            { SchemaVersion: > ContentRevision.CurrentSchemaVersion } => "needs a newer version of TomeStack",
-            _ when !revision.RulesFamilies.Contains(character.RulesFamily) => $"supports {string.Join(", ", revision.RulesFamilies)}, not {character.RulesFamily}",
-            _ when revision.Kind != ContentKind.Spell || !revision.Effects.OfType<SpellEffect>().Any() => "is not a spell",
-            _ => null,
-        };
-        if (refused is not null)
+        if (SpellRefusal(revision, character.RulesFamily) is { } refused)
         {
             warnings.Add(new("spells.unusable", $"Spell {revision?.Name ?? known.Spell.RevisionId.ToString()} {refused}; it is not listed.", known.Spell));
             return null;
@@ -1650,7 +1704,55 @@ public static class CharacterCalculator
         return new(
             revision.Reference, revision.Name, data.Level, known.Prepared || caster.Preparation == SpellPreparation.Known, revision.Summary, data.Text,
             data.School, data.CastingTime, data.Range, data.Components, data.Duration, data.Concentration, data.Ritual, data.Attack, data.Save, data.Dice,
-            origin, diagnostics);
+            origin, diagnostics, SpellTagsOf(revision, data));
+    }
+
+    /// <summary>Why a revision cannot be used as a spell for a character of <paramref name="rulesFamily"/> ("is not published", ...), or null when it can. Shared by recorded spells and <c>castsSpell</c>.</summary>
+    private static string? SpellRefusal(ContentRevision? revision, string rulesFamily) =>
+        revision switch
+        {
+            null => "is not available",
+            { Status: not RevisionStatus.Published } => "is not published",
+            { SchemaVersion: > ContentRevision.CurrentSchemaVersion } => "needs a newer version of TomeStack",
+            _ when !revision.RulesFamilies.Contains(rulesFamily) => $"supports {string.Join(", ", revision.RulesFamilies)}, not {rulesFamily}",
+            _ when revision.Kind != ContentKind.Spell || !revision.Effects.OfType<SpellEffect>().Any() => "is not a spell",
+            _ => null,
+        };
+
+    /// <summary>MECH-X item 1 (R39): a spell's tags, only from a v12 revision; null when it has none.</summary>
+    private static IReadOnlyList<string>? SpellTagsOf(ContentRevision revision, SpellEffect data) =>
+        data.Tags is { Count: > 0 } tags && revision.SchemaVersion >= ContentRevision.PaymentSchemaVersion ? tags : null;
+
+    /// <summary>
+    /// MECH-X item 1 (R38): the spell each v12 <c>castsSpell</c> roll casts, by roll. The revision is the one the character pins, else
+    /// the newest published one, and must pass the checks a recorded spell does (<see cref="SpellRefusal"/>); otherwise the roll gets no
+    /// entry and a <c>spells.unusable</c> diagnostic on its feature. The numbers are the primary caster's (null without a caster).
+    /// </summary>
+    private static Dictionary<(ContentReference, string), CastSpellValue> CastSpellsOf(
+        List<ActiveContent> active, IContentCatalog catalog, Character character, bool hasCaster, Dictionary<string, int> values, List<Diagnostic> diagnostics)
+    {
+        var casts = new Dictionary<(ContentReference, string), CastSpellValue>();
+        var pinned = character.AllReferences().ToList();
+        foreach (var item in active.Where(a => a.Revision.SchemaVersion >= ContentRevision.PaymentSchemaVersion))
+        {
+            foreach (var roll in item.Revision.Effects.OfType<RollEffect>().Where(r => r.CastsSpell is not null))
+            {
+                var spellId = roll.CastsSpell!.Value;
+                var revision = pinned.FirstOrDefault(r => r.ContentId == spellId) is { } pin
+                    ? catalog.FindRevision(pin)
+                    : catalog.RevisionsOf(spellId).Where(r => r.Status == RevisionStatus.Published).TakeLast(1).FirstOrDefault();
+                if (SpellRefusal(revision, character.RulesFamily) is { } refused)
+                {
+                    AddOnce(diagnostics, new("spells.unusable", $"Spell {revision?.Name ?? spellId.ToString()} {refused}; '{roll.Label}' does not cast it.", item.Revision.Reference, roll.Id));
+                    continue;
+                }
+                var data = revision!.Effects.OfType<SpellEffect>().First();
+                casts[(item.Revision.Reference, roll.Id)] = new(
+                    revision.Reference, revision.Name, data.Level, data.Attack, data.Save, data.Dice,
+                    hasCaster ? values[FieldIds.SpellAttack] : null, hasCaster ? values[FieldIds.SpellSaveDc] : null);
+            }
+        }
+        return casts;
     }
 
     // ---- resources and features (M2 item 2) -----------------------------------------------------------------
@@ -1904,7 +2006,7 @@ public static class CharacterCalculator
 
     private static FeatureEntry Feature(
         ActiveContent item, string family, IReadOnlyList<Diagnostic> diagnostics, Dictionary<(ContentReference, string), RollDetail> rollDetails, Dictionary<(ContentReference, string), int> bonuses,
-        Func<ToggleRef, string?> outOfForm, IReadOnlyList<ResourceValue> resources)
+        Func<ToggleRef, string?> outOfForm, IReadOnlyList<ResourceValue> resources, Dictionary<(ContentReference, string), CastSpellValue> castSpells)
     {
         var revision = item.Revision;
         // Content v11 (D43): a roll with whileToggle is always listed; it is unavailable, with the reason, while its form is off.
@@ -1927,7 +2029,8 @@ public static class CharacterCalculator
                 roll.ResourceContent, detail?.Cost, roll.VariableCost == true,
                 bonuses.TryGetValue((revision.Reference, roll.Id), out var bonus) ? bonus : null, reason is null, reason,
                 roll.Save?.Ability, detail?.SaveDc, detail?.SaveTrace, roll.Area, roll.Range, roll.Targets, roll.PerUnit,
-                detail?.AlsoChange, roll.DrawsDown == true, roll.RollId);
+                detail?.AlsoChange, roll.DrawsDown == true, roll.RollId,
+                PaymentOf(roll.Payment, revision), castSpells.GetValueOrDefault((revision.Reference, roll.Id)));
         }
         var effects = revision.Effects.Select(e => e switch
         {
