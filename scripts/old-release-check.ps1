@@ -22,9 +22,11 @@ param(
   [Parameter(Mandatory)] [string] $Expected,
   [Parameter(Mandatory)] [string] $Out,
   [Parameter(Mandatory)] [string] $Work,
-  [string] $Repo = (Split-Path -Parent $PSScriptRoot)
+  [string] $Repo = ''
 )
 $ErrorActionPreference = 'Stop'
+# Windows PowerShell 5.1 leaves $PSScriptRoot empty in param() defaults under -File, so the default is set here.
+if (-not $Repo) { $Repo = Split-Path -Parent $PSScriptRoot }
 
 function Quote-Arg([string] $a) {
   if ($a.Length -gt 0 -and $a -notmatch '[\s"]') { return $a }
