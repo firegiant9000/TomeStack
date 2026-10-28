@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Internal
+- **Down-conversion goldens proven on real older builds:** the weekly job now opens the down-conversion goldens with real 0.6.0 and 0.5.0 builds and fails on any package that does not pass, and a test on every PR checks that the committed outcome file still matches the goldens it claims to have proven. No change to the app.
+
 ## 0.7.1 (crash reporting and the repo guard)
 
 A patch on 0.7.0: if TomeStack crashes it now leaves a record and tells you where it is. Nothing else in the app changes.
