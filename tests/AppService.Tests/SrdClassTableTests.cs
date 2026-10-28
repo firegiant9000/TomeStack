@@ -26,8 +26,7 @@ public class SrdClassTableTests(ITestOutputHelper output)
 
     /// <summary>The class packs of a family, in bundling order (the Barbarian's later revisions come last, then the Rogue, then the Monk).</summary>
     private static List<ContentPack> BundledClassPacks(string version) =>
-        [.. new[] { $"srd-{version}-classes.json", $"srd-{version}-fighter.json", $"srd-{version}-barbarian.json", $"srd-{version}-rogue.json" }
-            .Concat(version == "5.2.1" ? [$"srd-{version}-monk.json"] : []) // C2-3: the 5.1 Monk joins with its pack
+        [.. new[] { $"srd-{version}-classes.json", $"srd-{version}-fighter.json", $"srd-{version}-barbarian.json", $"srd-{version}-rogue.json", $"srd-{version}-monk.json" }
             .Select(f => TomeStackApp.LoadBundledPack($"TomeStack.Content.{f}"))];
 
     public sealed class SrdPdfFactAttribute : FactAttribute
