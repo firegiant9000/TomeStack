@@ -33,7 +33,7 @@ export function withPayment<T extends Payer>(effect: T, kind: 'resource' | 'hitP
 export function PaymentFields(props: { effect: Payer; onChange: (effect: Effect) => void; onProblem: ReportProblem; slotRefusal?: string }) {
   const { effect, onChange } = props;
   const payment = effect.payment;
-  const known = payment === undefined || (kinds as readonly string[]).includes(payment.kind);
+  const known = payment == null ||(kinds as readonly string[]).includes(payment.kind);
   const reasonId = useId();
   const { onProblem } = props;
   const problem = known ? undefined : "Pays with: this payment doesn't read.";
@@ -74,7 +74,10 @@ export function PaymentFields(props: { effect: Payer; onChange: (effect: Effect)
             type="checkbox"
             checked={payment.mayDropToZero === true}
             onChange={(e) => {
-              onChange({ ...effect, payment: e.target.checked ? { ...payment, mayDropToZero: true } : { kind: payment.kind } });
+              // Unticking removes only this key, so any other key the payment carries is kept.
+              const next: typeof payment = { ...payment, mayDropToZero: true };
+              if (!e.target.checked) delete next.mayDropToZero;
+              onChange({ ...effect, payment: next });
             }}
           />
           May drop to 0 hit points
@@ -86,7 +89,10 @@ export function PaymentFields(props: { effect: Payer; onChange: (effect: Effect)
           <select
             value={payment.minSlotLevel === undefined || payment.minSlotLevel === 1 ? '' : String(payment.minSlotLevel)}
             onChange={(e) => {
-              onChange({ ...effect, payment: e.target.value === '' ? { kind: payment.kind } : { ...payment, minSlotLevel: Number(e.target.value) } });
+              // Blank (level 1) removes only this key, so any other key the payment carries is kept.
+              const next: typeof payment = { ...payment, minSlotLevel: Number(e.target.value) };
+              if (e.target.value === '') delete next.minSlotLevel;
+              onChange({ ...effect, payment: next });
             }}
           >
             <option value="">1</option>
