@@ -31,7 +31,21 @@ function Quote-Arg([string] $a) {
 }
 
 # Runs a program and captures its streams, so native stderr never trips $ErrorActionPreference on Windows PowerShell 5.1.
-function Invoke-Native([string] $File, [string[]] $Arguments, [string] $WorkingDirectory) {
+$BuildTimeoutMs = 20 * 60 * 1000
+$RunTimeoutMs = 5 * 60 * 1000
+
+function Stop-Tree([System.Diagnostics.Process] $p) {
+  try {
+    $k = [System.Diagnostics.Process]::Start((New-Object System.Diagnostics.ProcessStartInfo -Property @{
+      FileName = 'taskkill'; Arguments = "/T /F /PID $($p.Id)"; UseShellExecute = $false; CreateNoWindow = $true
+      RedirectStandardOutput = $true; RedirectStandardError = $true }))
+    $k.StandardOutput.ReadToEnd() | Out-Null
+    $k.WaitForExit(30000) | Out-Null
+  } catch { }
+  try { if (-not $p.HasExited) { $p.Kill() } } catch { }
+}
+
+function Invoke-Native([string] $File, [string[]] $Arguments, [string] $WorkingDirectory, [int] $TimeoutMs = $RunTimeoutMs) {
   $psi = New-Object System.Diagnostics.ProcessStartInfo
   $psi.FileName = $File
   $psi.Arguments = (($Arguments | ForEach-Object { Quote-Arg $_ }) -join ' ')
@@ -45,16 +59,24 @@ function Invoke-Native([string] $File, [string[]] $Arguments, [string] $WorkingD
   $p = [System.Diagnostics.Process]::Start($psi)
   $outTask = $p.StandardOutput.ReadToEndAsync()
   $errTask = $p.StandardError.ReadToEndAsync()
-  $p.WaitForExit()
-  return [pscustomobject]@{ ExitCode = $p.ExitCode; Out = $outTask.Result; Err = $errTask.Result }
+  $timedOut = -not $p.WaitForExit($TimeoutMs)
+  if ($timedOut) { Stop-Tree $p; $p.WaitForExit(30000) | Out-Null }
+  $stdout = ''
+  $stderr = ''
+  if ($outTask.Wait(10000)) { $stdout = $outTask.Result }
+  if ($errTask.Wait(10000)) { $stderr = $errTask.Result }
+  $code = -1
+  if ($p.HasExited) { $code = $p.ExitCode }
+  return [pscustomobject]@{ ExitCode = $code; Out = $stdout; Err = $stderr; TimedOut = $timedOut }
 }
 
 function Invoke-Git([string[]] $Arguments) {
   return Invoke-Native 'git' (@('-C', $script:Repo) + $Arguments) $null
 }
 
+# Resolves against PowerShell's $PWD, not the process working directory that [IO.Path] would use.
 function Get-FullPath([string] $Path) {
-  return [IO.Path]::GetFullPath($Path)
+  return $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
 }
 
 function Is-Under([string] $Path, [string] $Root) {
@@ -110,6 +132,7 @@ foreach ($f in @('OldReleaseHarness.csproj', 'Program.cs')) {
 }
 
 $anyFailure = $false
+$removalFailed = $false
 
 foreach ($tag in $tagList) {
   $target = $tag.Substring(1)
@@ -120,7 +143,7 @@ foreach ($tag in $tagList) {
   if (-not (Test-Path -LiteralPath $inputsDir -PathType Container)) { throw "inputs folder not found: $inputsDir" }
   $expectedFile = Join-Path $expectedDir 'expected.json'
   if (-not (Test-Path -LiteralPath $expectedFile)) { throw "expected.json not found: $expectedFile" }
-  [string[]] $names = @(Get-ChildItem -LiteralPath $inputsDir -File -Filter '*.tomestack.zip' | ForEach-Object { $_.Name })
+  [string[]] $names = @(Get-ChildItem -LiteralPath $inputsDir -File -Filter '*.tomestack.zip' | Where-Object { $_.Name.EndsWith('.tomestack.zip', [StringComparison]::OrdinalIgnoreCase) } | ForEach-Object { $_.Name })
   [Array]::Sort($names, [StringComparer]::Ordinal)
   if ($names.Count -eq 0) { throw "no *.tomestack.zip in $inputsDir" }
   $expectedDoc = [IO.File]::ReadAllText($expectedFile) | ConvertFrom-Json
@@ -159,12 +182,17 @@ foreach ($tag in $tagList) {
     $buildError = $null
     Push-Location $buildDir
     try {
-      $build = Invoke-Native 'dotnet' @('build', 'OldReleaseHarness.csproj', '-c', 'Release', '-nologo', "-p:AppServicePath=$appService", '-o', $binDir) $buildDir
+      # Global properties reach the tag's own projects too (their Directory.Build.props set warnings-as-errors); the tag tree stays unedited.
+      # No node reuse or shared compiler server, so nothing holds the worktree open when it is removed.
+      $build = Invoke-Native 'dotnet' @('build', 'OldReleaseHarness.csproj', '-c', 'Release', '-nologo', "-p:AppServicePath=$appService", '-p:TreatWarningsAsErrors=false', '-p:NuGetAudit=false', '-nodeReuse:false', '-p:UseSharedCompilation=false', '-o', $binDir) $buildDir $BuildTimeoutMs
     }
     finally { Pop-Location }
     $harnessDll = Join-Path $binDir 'OldReleaseHarness.dll'
-    if ($build.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $harnessDll)) {
-      $first = ($build.Out + "`n" + $build.Err) -split "`r?`n" | Where-Object { $_ -match 'error' } | Select-Object -First 1
+    if ($build.TimedOut) {
+      $buildError = "harness broken: ${tag}: dotnet build timed out after 20 minutes"
+    }
+    elseif ($build.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $harnessDll)) {
+      $first = ($build.Out + "`n" + $build.Err) -split "`r?`n" | Where-Object { $_ -match '\berror\s+[A-Z]+\d+' } | Select-Object -First 1
       if (-not $first) { $first = "dotnet build exited $($build.ExitCode)" }
       $buildError = "harness broken: ${tag}: $($first.Trim())"
     }
@@ -183,10 +211,14 @@ foreach ($tag in $tagList) {
         $detail = ''
         $mode = 'import'
         if ($n.StartsWith('library-backup', [StringComparison]::Ordinal)) { $mode = 'restore' }
-        $run = Invoke-Native 'dotnet' @($harnessDll, $mode, (Join-Path $inputsDir $n), '--data-dir', $dataDir) $Work
+        $run = Invoke-Native 'dotnet' @($harnessDll, $mode, (Join-Path $inputsDir $n), '--data-dir', $dataDir) $Work $RunTimeoutMs
         $doc = $null
         try { $doc = $run.Out | ConvertFrom-Json } catch { $doc = $null }
-        if ($run.ExitCode -ge 2 -or $run.ExitCode -lt 0 -or $null -eq $doc) {
+        if ($run.TimedOut) {
+          $status = 'harness-broken'
+          $detail = "harness broken: ${tag}: $mode timed out after 5 minutes"
+        }
+        elseif ($run.ExitCode -ge 2 -or $run.ExitCode -lt 0 -or $null -eq $doc) {
           $line = ($run.Err -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -First 1)
           if (-not $line) { $line = "exit $($run.ExitCode), unparsable output" }
           $status = 'harness-broken'
@@ -199,9 +231,14 @@ foreach ($tag in $tagList) {
         else {
           $diffs = @()
           foreach ($id in @($doc.characters)) {
-            $sheetRun = Invoke-Native 'dotnet' @($harnessDll, 'sheet', [string] $id, '--data-dir', $dataDir) $Work
+            $sheetRun = Invoke-Native 'dotnet' @($harnessDll, 'sheet', [string] $id, '--data-dir', $dataDir) $Work $RunTimeoutMs
             $sheet = $null
             try { $sheet = $sheetRun.Out | ConvertFrom-Json } catch { $sheet = $null }
+            if ($sheetRun.TimedOut) {
+              $status = 'harness-broken'
+              $detail = "harness broken: ${tag}: sheet timed out after 5 minutes"
+              break
+            }
             if ($sheetRun.ExitCode -ge 2 -or $null -eq $sheet) {
               $line = ($sheetRun.Err -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -First 1)
               if (-not $line) { $line = "exit $($sheetRun.ExitCode), unparsable output" }
@@ -264,10 +301,21 @@ foreach ($tag in $tagList) {
     # f. never leave a tag checked out
     if ($worktreeAdded -or (Test-Path -LiteralPath $worktree)) {
       Invoke-Git @('worktree', 'remove', '--force', $worktree) | Out-Null
+      if (Test-Path -LiteralPath $worktree) {
+        # A lingering build server or compiler node can hold files open: stop them and try once more.
+        Invoke-Native 'dotnet' @('build-server', 'shutdown') $null $RunTimeoutMs | Out-Null
+        Start-Sleep -Seconds 2
+        Invoke-Git @('worktree', 'remove', '--force', $worktree) | Out-Null
+      }
+      if (Test-Path -LiteralPath $worktree) {
+        Write-Warning "could not remove the worktree $worktree; remove it by hand (git worktree remove --force)"
+        $removalFailed = $true
+      }
     }
     Invoke-Git @('worktree', 'prune') | Out-Null
   }
 }
 
+if ($removalFailed) { exit 1 }
 if ($anyFailure) { exit 1 }
 exit 0
