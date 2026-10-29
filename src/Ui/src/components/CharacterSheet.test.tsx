@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { client } from '../api/client';
 import type { Character, CharacterSheet as SheetModel, CharacterView, DerivedValue, FeatureEntry, RollRecord } from '../api/types';
 import { TomeStackError } from '../api/transport';
+import { blockedHint, confirmLabel, describedBy, exportChange, failedLine, firstRadio, packageTargetsFixture } from '../test/downConversion';
 import { CharacterSheet } from './CharacterSheet';
 import { writeChecklist } from '../levelUpChecklist';
 import { RollResult } from './PlayPanels';
@@ -22,6 +23,9 @@ vi.mock('../api/client', () => ({
     snapshots: vi.fn(),
     previewExport: vi.fn(),
     packagePreflight: vi.fn(),
+    saveExportAs: vi.fn(),
+    exportCharacters: vi.fn(),
+    packageTargets: vi.fn(),
     info: vi.fn(),
     play: vi.fn(),
     undoPlay: vi.fn(),
@@ -39,6 +43,7 @@ vi.mock('../api/client', () => ({
 
 beforeEach(() => {
   vi.mocked(client.restPreview).mockResolvedValue({ kind: 'shortRest', changes: [], manual: [], basis: 'fixture' });
+  vi.mocked(client.packageTargets).mockRejectedValue(new Error('package.targets is not offered')); // today's service: no target control
   vi.mocked(client.rest).mockReset();
   vi.mocked(client.listGapNotes).mockResolvedValue([]);
   vi.mocked(client.availableUpdates).mockResolvedValue([]);
@@ -1090,6 +1095,179 @@ it('says so in plain text when the backup export preview cannot be read (G6)', a
   const line = await screen.findByText('Could not check whether this package needs a newer TomeStack.');
   expect(line.closest('[role="status"],[role="alert"]')).toBeNull();
   expect(onError).not.toHaveBeenCalled();
+});
+
+// "Save for an older TomeStack" (D85): the target control, the change region and the confirmation in the Export panel.
+describe('export for an older TomeStack', () => {
+  type Preview = Awaited<ReturnType<typeof client.previewExport>>;
+  const base = { purpose: 'backup', fileName: 'x.tomestack.zip', characters: [], included: [], omitted: [], gapNotes: 0 };
+  const changesFor: Record<string, ReturnType<typeof exportChange>[]> = {};
+  const previewOf = (target?: string | null): Preview =>
+    (target ? { ...base, target, changes: changesFor[target] ?? [], changesHash: `hash-${target}` } : base) as unknown as Preview;
+
+  beforeEach(() => {
+    for (const key of Object.keys(changesFor)) delete changesFor[key];
+    vi.mocked(client.packageTargets).mockReset();
+    vi.mocked(client.packageTargets).mockResolvedValue(packageTargetsFixture);
+    vi.mocked(client.previewExport).mockReset();
+    vi.mocked(client.previewExport).mockImplementation(async (_ids, _purpose, target) => previewOf(target));
+    vi.mocked(client.saveExportAs).mockReset();
+    vi.mocked(client.saveExportAs).mockResolvedValue({ saved: true, fileName: 'x.tomestack.zip' } as Awaited<ReturnType<typeof client.saveExportAs>>);
+  });
+
+  async function openManage() {
+    const user = userEvent.setup();
+    renderSheet(view());
+    await user.click(screen.getByRole('tab', { name: 'Manage' }));
+    return user;
+  }
+  const exportButton = () => screen.getByRole('button', { name: 'Export package' }) as HTMLButtonElement;
+
+  it('re-runs the preview for the chosen release and again without a target for the first choice', async () => {
+    const user = await openManage();
+    await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
+    await waitFor(() => expect(vi.mocked(client.previewExport).mock.lastCall).toEqual([['fixture-2'], 'backup', '0.6.0']));
+    await user.click(screen.getByRole('radio', { name: firstRadio }));
+    await waitFor(() => expect(vi.mocked(client.previewExport).mock.lastCall).toEqual([['fixture-2'], 'backup']));
+  });
+
+  it('keeps focus on the radio that was chosen while the preview reloads', async () => {
+    const user = await openManage();
+    const radio = await screen.findByRole('radio', { name: '0.6.0' });
+    await user.click(radio);
+    await screen.findByRole('region', { name: 'Changed for TomeStack 0.6.0' });
+    expect(screen.getByRole('radio', { name: '0.6.0' })).toBe(radio);
+    expect(document.activeElement).toBe(radio);
+  });
+
+  it('disables Export while something blocks, and describes why', async () => {
+    changesFor['0.6.0'] = [exportChange('blocks', 'Compat Hero needs 0.7.0.')];
+    const user = await openManage();
+    await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
+    await screen.findByText('Compat Hero needs 0.7.0.');
+    expect(exportButton().disabled).toBe(true);
+    expect(describedBy(exportButton())).toBe(blockedHint);
+  });
+
+  it('needs the tick for a dropped item, and a new preview clears it', async () => {
+    changesFor['0.6.0'] = [exportChange('dropped', 'Compat Tide Stance is left out.')];
+    changesFor['0.5.0'] = [exportChange('dropped', 'Compat Steady Hands is left out.')];
+    const user = await openManage();
+    await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
+    const box = (await screen.findByRole('checkbox', { name: confirmLabel })) as HTMLInputElement;
+    expect(exportButton().disabled).toBe(true);
+    await user.click(box);
+    expect(exportButton().disabled).toBe(false);
+    await user.click(screen.getByRole('radio', { name: '0.5.0' }));
+    await screen.findByText('Compat Steady Hands is left out.');
+    expect((screen.getByRole('checkbox', { name: confirmLabel }) as HTMLInputElement).checked).toBe(false);
+    expect(exportButton().disabled).toBe(true);
+  });
+
+  it('waits for the preview of a chosen release before Export is possible', async () => {
+    let settle: (p: Preview) => void = () => {};
+    const user = await openManage();
+    await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
+    await screen.findByRole('region', { name: 'Changed for TomeStack 0.6.0' });
+    vi.mocked(client.previewExport).mockReturnValueOnce(new Promise<Preview>((r) => (settle = r)));
+    await user.click(screen.getByRole('radio', { name: '0.5.0' }));
+    expect(exportButton().disabled).toBe(true);
+    settle(previewOf('0.5.0'));
+    await waitFor(() => expect(exportButton().disabled).toBe(false));
+  });
+
+  it('sends the release and the preview hash when a release is chosen, and neither for the first choice', async () => {
+    const user = await openManage();
+    await waitFor(() => expect(exportButton().disabled).toBe(false));
+    await user.click(exportButton());
+    expect(vi.mocked(client.saveExportAs).mock.lastCall).toEqual([['fixture-2'], 'backup']);
+    await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
+    await screen.findByRole('region', { name: 'Changed for TomeStack 0.6.0' });
+    await user.click(exportButton());
+    expect(vi.mocked(client.saveExportAs).mock.lastCall).toEqual([['fixture-2'], 'backup', '0.6.0', 'hash-0.6.0']);
+  });
+
+  it('offers the control for a share too', async () => {
+    const user = await openManage();
+    await user.click(screen.getByRole('radio', { name: /^Share with someone/ }));
+    await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
+    await waitFor(() => expect(vi.mocked(client.previewExport).mock.lastCall).toEqual([['fixture-2'], 'share', '0.6.0']));
+  });
+
+  it('says which TomeStack opens the default file, and shows nothing when the service does not say', async () => {
+    vi.mocked(client.previewExport).mockResolvedValue({ ...base, opensIn: '0.5.0' } as unknown as Preview);
+    await openManage();
+    expect(await screen.findByText('This file opens in TomeStack 0.5.0 or newer.')).toBeTruthy();
+    cleanup();
+    vi.mocked(client.previewExport).mockResolvedValue(previewOf());
+    await openManage();
+    await waitFor(() => expect(exportButton().disabled).toBe(false));
+    expect(screen.queryByRole('region', { name: 'Compatibility' })).toBeNull();
+  });
+
+  it('shows no target control, and reports nothing, when the targets cannot be read', async () => {
+    vi.mocked(client.packageTargets).mockRejectedValue(new Error('unsupported'));
+    const onError = vi.fn();
+    const user = userEvent.setup();
+    render(<CharacterSheet view={view()} onChanged={noop} onError={onError} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+    await user.click(screen.getByRole('tab', { name: 'Manage' }));
+    await waitFor(() => expect(client.packageTargets).toHaveBeenCalled());
+    await waitFor(() => expect(exportButton().disabled).toBe(false));
+    expect(screen.queryByText('Which TomeStack will open it?')).toBeNull();
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('says so plainly, and keeps Export off, when the preview for a chosen release fails', async () => {
+    vi.mocked(client.previewExport).mockImplementation(async (_ids, _purpose, target) => {
+      if (target) throw new Error('boom');
+      return previewOf();
+    });
+    const onError = vi.fn();
+    const user = userEvent.setup();
+    render(<CharacterSheet view={view()} onChanged={noop} onError={onError} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+    await user.click(screen.getByRole('tab', { name: 'Manage' }));
+    await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
+    expect(await screen.findByText(failedLine('0.6.0'))).toBeTruthy();
+    expect(exportButton().disabled).toBe(true);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('lets the last chosen release win when an earlier reply arrives late', async () => {
+    changesFor['0.5.0'] = [exportChange('dropped', 'Compat Steady Hands is left out.')];
+    const user = await openManage();
+    await waitFor(() => expect(exportButton().disabled).toBe(false));
+    let late: (p: Preview) => void = () => {};
+    vi.mocked(client.previewExport).mockReturnValueOnce(new Promise<Preview>((r) => (late = r)));
+    await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
+    await user.click(screen.getByRole('radio', { name: '0.5.0' }));
+    await screen.findByText('Compat Steady Hands is left out.');
+    late(previewOf('0.6.0'));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.getByRole('region', { name: 'Changed for TomeStack 0.5.0' })).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Changed for TomeStack 0.6.0' })).toBeNull();
+    await user.click(screen.getByRole('checkbox', { name: confirmLabel }));
+    await user.click(exportButton());
+    expect(vi.mocked(client.saveExportAs).mock.lastCall).toEqual([['fixture-2'], 'backup', '0.5.0', 'hash-0.5.0']);
+  });
+
+  it('drops the preview of a chosen release while the character reloads it, so an old hash is never sent', async () => {
+    changesFor['0.6.0'] = [exportChange('dropped', 'Compat Tide Stance is left out.')];
+    const user = userEvent.setup();
+    const v = view();
+    const { rerender } = renderSheet(v);
+    await user.click(screen.getByRole('tab', { name: 'Manage' }));
+    await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
+    await user.click(await screen.findByRole('checkbox', { name: confirmLabel }));
+    expect(exportButton().disabled).toBe(false);
+    let settle: (p: Preview) => void = () => {};
+    vi.mocked(client.previewExport).mockReturnValueOnce(new Promise<Preview>((r) => (settle = r)));
+    rerender(sheetElement({ ...v, character: { ...v.character, updatedAt: '2026-10-03T00:00:09Z' } }));
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Changed for TomeStack 0.6.0' })).toBeNull());
+    expect(exportButton().disabled).toBe(true);
+    settle(previewOf('0.6.0'));
+    await screen.findByRole('checkbox', { name: confirmLabel });
+    expect((screen.getByRole('checkbox', { name: confirmLabel }) as HTMLInputElement).checked).toBe(false);
+  });
 });
 
 const dieChange = [{ id: 'hitDie:0', kind: 'hitDie', label: 'Spend a d8', from: 3, to: 8, reason: 'Fixture', die: 8, amount: 5 }] as unknown as Changes;
