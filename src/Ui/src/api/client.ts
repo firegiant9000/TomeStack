@@ -78,6 +78,7 @@ import type {
   LibraryRestoreResult,
   MechanicsReport,
   PackagePreview,
+  PackageTargets,
   PlayAction,
   RestPeriod,
   RestPreview,
@@ -99,6 +100,20 @@ import type {
   SourceChoice,
   ValidationReport,
 } from './types';
+
+/** The optional down-conversion payload keys: each is present only when its argument is given. */
+function downConversion(target?: string | null, changesHash?: string | null) {
+  return {
+    ...(target == null ? {} : { target }),
+    ...(changesHash == null ? {} : { changesHash }),
+  };
+}
+
+/** As `downConversion`, but `undefined` (no payload) when neither is given. */
+function downConversionOrNone(target?: string | null, changesHash?: string | null) {
+  const keys = downConversion(target, changesHash);
+  return Object.keys(keys).length === 0 ? undefined : keys;
+}
 
 /** Typed application client. Components use this, never the transport or fetch directly. */
 export function createClient(transport: Transport) {
@@ -284,31 +299,40 @@ export function createClient(transport: Transport) {
     setGapNoteStatus: (id: string, status: GapNoteStatus) => call<GapNote>('gap.setStatus', { id, status }),
     /** Only the "Delete note" confirmation calls this. */
     deleteGapNote: (id: string) => call<{ deleted: boolean }>('gap.delete', { id, confirm: true }),
-    /** What an export would contain and leave out, without writing anything (ADR-007). */
-    previewExport: (characterIds: string[], purpose: ExportPurpose) =>
-      call<ExportPreview>('package.exportPreview', { characterIds, purpose }),
-    exportCharacters: (characterIds: string[], purpose: ExportPurpose = 'backup') =>
-      call<ExportedPackage>('package.export', { characterIds, purpose }),
+    /** The releases a copy can be made for ("Save for an older TomeStack"); the current row is not in `targets`. */
+    packageTargets: () => call<PackageTargets>('package.targets', {}),
+    /**
+     * What an export would contain and leave out, without writing anything (ADR-007). `target` (a release from packageTargets) and
+     * `changesHash` (from the preview) are sent only when given, so an omitted target leaves the call as it was.
+     */
+    previewExport: (characterIds: string[], purpose: ExportPurpose, target?: string | null) =>
+      call<ExportPreview>('package.exportPreview', { characterIds, purpose, ...downConversion(target) }),
+    exportCharacters: (characterIds: string[], purpose: ExportPurpose = 'backup', target?: string | null, changesHash?: string | null) =>
+      call<ExportedPackage>('package.export', { characterIds, purpose, ...downConversion(target, changesHash) }),
     /**
      * Native Save dialog in the shell; fails with code `unsupported` on hosts without one (DevHost). No timeout: the
      * response waits for the user to close the dialog.
      */
-    saveExportAs: (characterIds: string[], purpose: ExportPurpose = 'backup') =>
-      call<SaveOutcome>('package.saveAs', { characterIds, purpose }, { timeoutMs: null }),
+    saveExportAs: (characterIds: string[], purpose: ExportPurpose = 'backup', target?: string | null, changesHash?: string | null) =>
+      call<SaveOutcome>('package.saveAs', { characterIds, purpose, ...downConversion(target, changesHash) }, { timeoutMs: null }),
     /** Import Lab L5: what a share export would include, leave out or refuse, by the one sharing rule. Writes nothing; export re-checks. */
     packagePreflight: (request: PreflightRequest) => call<PreflightReport>('package.preflight', request),
     // ---- source packs (M6 slice 1): only sources you marked as shareable; import goes through previewImport/applyImport ----
-    sourcePackPreview: (sourceIds: string[]) => call<SourcePackPreview>('package.sourcePackPreview', { sourceIds }),
-    exportSourcePack: (sourceIds: string[]) => call<ExportedPackage>('package.sourcePackExport', { sourceIds }),
+    sourcePackPreview: (sourceIds: string[], target?: string | null) =>
+      call<SourcePackPreview>('package.sourcePackPreview', { sourceIds, ...downConversion(target) }),
+    exportSourcePack: (sourceIds: string[], target?: string | null, changesHash?: string | null) =>
+      call<ExportedPackage>('package.sourcePackExport', { sourceIds, ...downConversion(target, changesHash) }),
     /** Native Save dialog in the shell; `unsupported` elsewhere (DevHost). No timeout, as for saveExportAs. */
-    saveSourcePackAs: (sourceIds: string[]) =>
-      call<SaveOutcome>('package.sourcePackSaveAs', { sourceIds }, { timeoutMs: null }),
+    saveSourcePackAs: (sourceIds: string[], target?: string | null, changesHash?: string | null) =>
+      call<SaveOutcome>('package.sourcePackSaveAs', { sourceIds, ...downConversion(target, changesHash) }, { timeoutMs: null }),
     // ---- campaign packs (M6 slice 2): the profile and the shareable content of its allowed sources ----
-    campaignPackPreview: (campaignId: string) => call<CampaignPackPreview>('package.campaignPackPreview', { campaignId }),
-    exportCampaignPack: (campaignId: string) => call<ExportedPackage>('package.campaignPackExport', { campaignId }),
+    campaignPackPreview: (campaignId: string, target?: string | null) =>
+      call<CampaignPackPreview>('package.campaignPackPreview', { campaignId, ...downConversion(target) }),
+    exportCampaignPack: (campaignId: string, target?: string | null, changesHash?: string | null) =>
+      call<ExportedPackage>('package.campaignPackExport', { campaignId, ...downConversion(target, changesHash) }),
     /** Native Save dialog in the shell; `unsupported` elsewhere (DevHost). No timeout, as for saveExportAs. */
-    saveCampaignPackAs: (campaignId: string) =>
-      call<SaveOutcome>('package.campaignPackSaveAs', { campaignId }, { timeoutMs: null }),
+    saveCampaignPackAs: (campaignId: string, target?: string | null, changesHash?: string | null) =>
+      call<SaveOutcome>('package.campaignPackSaveAs', { campaignId, ...downConversion(target, changesHash) }, { timeoutMs: null }),
     // ---- extensions (M6 slice 3, ADR-011): declarative only; every run previews first ----
     listExtensions: () => call<InstalledExtension[]>('extension.list'),
     /** Checks an extension file and shows what it asks for; installs nothing. */
@@ -367,9 +391,12 @@ export function createClient(transport: Transport) {
     /** Cancel at any step: drops the read sheet. */
     ddbDiscard: (token: string) => call<{ discarded: boolean }>('ddb.discard', { token }),
     // ---- full library backup (M2.1): native dialogs only; no path or backup bytes cross the bridge ----
-    libraryBackupPreview: () => call<LibraryBackupPreview>('library.backupPreview'),
+    // With no target these send no payload at all, as before.
+    libraryBackupPreview: (target?: string | null) =>
+      call<LibraryBackupPreview>('library.backupPreview', downConversionOrNone(target)),
     /** Native Save dialog, then writes everything (PDFs included). No timeout: it waits for the dialog and the copy. */
-    saveLibraryBackup: () => call<LibraryBackupOutcome>('library.backupSaveAs', undefined, { timeoutMs: null }),
+    libraryBackupSaveAs: (target?: string | null, changesHash?: string | null) =>
+      call<LibraryBackupOutcome>('library.backupSaveAs', downConversionOrNone(target, changesHash), { timeoutMs: null }),
     /** Native Open dialog, then checks the whole file (every PDF too); writes nothing. */
     chooseLibraryRestore: () => call<LibraryRestoreChoice>('library.restoreChoose', undefined, { timeoutMs: null }),
     /** Only the preview's "Restore" button calls this. */
