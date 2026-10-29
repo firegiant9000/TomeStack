@@ -6,6 +6,20 @@ namespace TomeStack.RulesCore.Tests;
 /// </summary>
 public class UpkeepContentTests
 {
+    /// <summary>Capability evidence (ADR-020): an upkeep is delivered automatically, as a line the turn command previews.</summary>
+    [Fact]
+    public void The_capability_registry_ceiling_for_upkeep_is_automatic()
+    {
+        var holder = MechanicsInventoryTests.Holder("Test Upkeep Holder", 11,
+            new ResourceEffect { Id = "pool", ResourceId = "pool", Label = "Pool", Maximum = "3" },
+            new UpkeepEffect { Id = "tick", At = TurnMoment.TurnStart, ResourceId = "pool", Change = UpkeepChange.Regain, Amount = "1" });
+
+        var (report, sheet) = MechanicsInventoryTests.Pinned(holder);
+
+        CapabilityRegistryTests.AssertAutomaticallyDelivered(report, holder, UpkeepEffect.TypeName, "tick");
+        Assert.Contains(sheet.Upkeeps!, u => u.EffectId == "tick" && u.Amount == 1);
+    }
+
     private static ValidationReport Validate(ContentRevision revision) => ContentValidator.Validate(revision, Fixtures.PlayMechanicsCatalog());
 
     private static Character Turns(params ContentReference[] pins) =>

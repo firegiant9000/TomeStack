@@ -159,7 +159,9 @@ The end of the Features tab has "TomeStack won't do these for you" (`ByHandPanel
 - **Partly automatic:** effects that need the player, including one that has a problem (a formula that fails).
 - **Not understood:** effects of a type this build does not know. A row here is not repeated in another group, and a roll listed under Spend by hand is left out of Reference only and Partly automatic (matched on the feature revision, the effect id and the effect type).
 
-It is UI only: it reads the existing `character.mechanics` command (`client.characterMechanics`) for the sources the sheet's features come from. It asks only while the Features tab is open and again when the sheet is recalculated; a reply for an older sheet or another character is ignored. A sheet with no sources makes no call. If the read fails the panel shows "Couldn't list what needs you by hand." and nothing else.
+Import Lab (D62 L1): the group a row falls in is the effective automation, the author's value lowered by what the engine really does (the capability registry), so a `text` effect the author marked automatic is listed under Reference only. The report gives each entry an additive `effective` (`status`, `unsupported`, `ceiling`, `reason`, `evidence`); `automation` stays the author's value, and the calculator and stored data are unchanged. A feature with no effects (the one `text` line with no effect id) is still never listed.
+
+It reads the existing `character.mechanics` command (`client.characterMechanics`) for the sources the sheet's features come from. It asks only while the Features tab is open and again when the sheet is recalculated; a reply for an older sheet or another character is ignored. A sheet with no sources makes no call. If the read fails the panel shows "Couldn't list what needs you by hand." and nothing else.
 
 ## Not in this slice
 

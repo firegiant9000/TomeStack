@@ -1,0 +1,176 @@
+name: Weekly
+
+# Never gating: nothing depends on this workflow, and a red job is a report, not a block. GitHub disables a scheduled
+# workflow after 60 days without repository activity, so the release checklist checks the last run before tagging.
+on:
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: weekly
+  cancel-in-progress: false
+
+jobs:
+  # The SRD-gated tests (class tables, detection measurement, spell metadata) against the two public SRD PDFs. The PDFs
+  # are downloaded to the runner's temp folder, checked against the hashes in docs/licensing/srd-pack-review.md, and
+  # never cached or uploaded.
+  srd-tests:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - name: Download and verify the SRD PDFs
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'srd'
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          $urls = [ordered]@{
+            'SRD_CC_v5.1.pdf'   = 'https://media.wizards.com/2023/downloads/dnd/SRD_CC_v5.1.pdf'
+            'SRD_CC_v5.2.1.pdf' = 'https://media.dndbeyond.com/compendium-images/srd/5.2/SRD_CC_v5.2.1.pdf'
+          }
+          $review = Get-Content -Raw docs/licensing/srd-pack-review.md
+          foreach ($file in $urls.Keys) {
+            $rows = [regex]::Matches($review, '\|\s*`' + [regex]::Escape($file) + '`\s*\|\s*`([0-9a-f]{64})`\s*\|')
+            if ($rows.Count -ne 1) { throw "Expected one SHA-256 row for $file in srd-pack-review.md, found $($rows.Count)" }
+            $expected = $rows[0].Groups[1].Value
+            $path = Join-Path $dir $file
+            Invoke-WebRequest -Uri $urls[$file] -OutFile $path -MaximumRetryCount 3 -RetryIntervalSec 10
+            $actual = (Get-FileHash -Algorithm SHA256 -Path $path).Hash.ToLowerInvariant()
+            if ($actual -ne $expected) { throw "$file has SHA-256 $actual; srd-pack-review.md records $expected" }
+            "$file matches the recorded SHA-256"
+          }
+          "TOMESTACK_SRD_PDF_DIR=$dir" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Build
+        run: dotnet build tests/AppService.Tests -c Release
+
+      - name: SRD-gated tests
+        run: dotnet test tests/AppService.Tests -c Release --no-build --filter "FullyQualifiedName~Srd" --logger "trx;LogFileName=srd-tests.trx" --logger "console;verbosity=normal" --results-directory "${{ runner.temp }}/srd-results"
+
+      - name: Upload the test results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: srd-tests-trx
+          path: ${{ runner.temp }}/srd-results/*.trx
+          if-no-files-found: warn
+          # Counts, plus class names and effect ids from one diagnostic (no SRD prose); kept a week, not the default 90 days.
+          retention-days: 7
+
+  # Stryker.NET on RulesCore with its unit tests. The score is reported, never enforced.
+  stryker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      # Installed here, not in .config/dotnet-tools.json, so the release workflow's `dotnet tool restore` never fetches it.
+      - name: Install Stryker.NET
+        run: dotnet tool install dotnet-stryker --version 5.0.0 --tool-path "${{ runner.temp }}/tools"
+
+      # From the test project's folder Stryker builds that project only; the solution needs the UI bundle.
+      - name: Mutation test RulesCore
+        working-directory: tests/RulesCore.Tests
+        run: >-
+          "$RUNNER_TEMP/tools/dotnet-stryker" --project TomeStack.RulesCore.csproj --configuration Release
+          --reporter Progress --reporter Html --reporter Json --output "$RUNNER_TEMP/stryker" --skip-version-check
+
+      # Stryker's score: (killed + timeout) / (killed + timeout + survived + no coverage).
+      - name: Mutation score
+        if: always()
+        env:
+          REPORT: ${{ runner.temp }}/stryker/reports/mutation-report.json
+        run: |
+          node -e '
+            const fs = require("node:fs");
+            const report = process.env.REPORT;
+            let line = "No mutation report was written.";
+            if (fs.existsSync(report)) {
+              const statuses = Object.values(JSON.parse(fs.readFileSync(report, "utf8")).files).flatMap((f) => f.mutants.map((m) => m.status));
+              const count = (...names) => statuses.filter((s) => names.includes(s)).length;
+              const detected = count("Killed", "Timeout"), undetected = count("Survived", "NoCoverage");
+              const score = detected + undetected ? (100 * detected / (detected + undetected)).toFixed(2) : "0";
+              line = `RulesCore mutation score: ${score}% (${detected} detected, ${undetected} undetected, of ${statuses.length} mutants)`;
+            }
+            console.log(line);
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, line + "\n");
+          '
+
+      - name: Upload the mutation report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: stryker-report
+          path: ${{ runner.temp }}/stryker/reports/
+          if-no-files-found: warn
+
+  # F2: the Foundry dnd5e pin against the latest dnd5e release. Opens or updates one issue when the pinned data-model
+  # files or the compatibility block differ. Fetched text reaches only the body file; nothing from the API is
+  # interpolated into a run script.
+  foundry-pin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Compare the pin with the latest dnd5e release
+        id: pin
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          BODY: ${{ runner.temp }}/foundry-pin-drift.md
+        run: node scripts/foundry-pin.mjs --check --body "$BODY"
+
+      - name: Open or update the drift issue
+        if: steps.pin.outputs.drift == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: Foundry dnd5e pin drift
+          BODY: ${{ runner.temp }}/foundry-pin-drift.md
+        # Only an issue this workflow opened counts (anyone can open one with the same title). A closed issue that already
+        # names the latest release stays closed (the owner chose not to move the pin for it); a newer release reopens it.
+        run: |
+          found=$(gh issue list --repo "$GITHUB_REPOSITORY" --state all --search "\"$TITLE\" in:title" --json number,title,author,state \
+            --jq 'map(select(.title == env.TITLE and .author.is_bot == true and (.author.login | test("^(app/)?github-actions$")))) | .[0] | select(. != null) | "\(.number) \(.state)"')
+          latest=$(grep -m1 '^- Latest:' "$BODY")
+          if [ -z "$found" ]; then
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body-file "$BODY"
+            echo "Opened the drift issue" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          read -r number state <<< "$found"
+          if [ "$state" = "CLOSED" ]; then
+            body=$(gh issue view "$number" --repo "$GITHUB_REPOSITORY" --json body --jq .body)
+            if printf '%s\n' "$body" | tr -d '\r' | grep -qxF -- "$latest"; then
+              echo "Issue #$number is closed for this release; left closed" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            gh issue reopen "$number" --repo "$GITHUB_REPOSITORY"
+          fi
+          gh issue edit "$number" --repo "$GITHUB_REPOSITORY" --body-file "$BODY"
+          echo "Updated issue #$number" >> "$GITHUB_STEP_SUMMARY"

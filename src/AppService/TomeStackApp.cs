@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using TomeStack.AppService.Packages;
 using TomeStack.AppService.Persistence;
@@ -75,6 +76,23 @@ public sealed partial class TomeStackApp : IDisposable
         return ids;
     });
 
+    /// <summary>The revision ids of <see cref="BundledPacks"/>: what the release ladder's bundled sets must stay within (they are insert-only).</summary>
+    internal static IReadOnlySet<Guid> BundledRevisionIds => LazyBundledRevisionIds.Value;
+
+    private static readonly Lazy<IReadOnlySet<Guid>> LazyBundledRevisionIds = new(() =>
+    {
+        var ids = new HashSet<Guid>();
+        foreach (var pack in BundledPacks)
+        {
+            using var stream = typeof(TomeStackApp).Assembly.GetManifestResourceStream(pack)
+                ?? throw new InvalidOperationException($"Embedded content pack {pack} is missing.");
+            using var document = JsonDocument.Parse(stream);
+            foreach (var revision in document.RootElement.GetProperty("revisions").EnumerateArray())
+                ids.Add(revision.GetProperty("revisionId").GetGuid());
+        }
+        return ids;
+    });
+
     /// <param name="syncRoots">Cloud sync roots to warn about (ADR-005); discovered from this machine when null.</param>
     /// <param name="devFixtures">
     /// Also seed the original test fixture pack. Development only (DevHost, tests, <c>TOMESTACK_DEV_FIXTURES=1</c>): the
@@ -83,9 +101,10 @@ public sealed partial class TomeStackApp : IDisposable
     /// </param>
     /// <param name="extractor">PDF extraction for imports (ADR-009); by default the isolated worker next to the app.</param>
     /// <param name="formReader">Character-sheet import: reads a PDF's form fields; by default the isolated worker next to the app.</param>
+    /// <param name="markdownExtractor">Markdown imports (D67); by default the same isolated worker, asked for its <c>extractMarkdown</c> kind.</param>
     /// <param name="appVersion">The version to stamp the data folder with (R75); the running build's, unless a test says otherwise.</param>
     /// <exception cref="DataFolderInUseException">Another process has the folder open (M2.1); nothing was read or changed.</exception>
-    public static TomeStackApp Open(string dataDirectory, TimeProvider? time = null, IEnumerable<string>? syncRoots = null, bool devFixtures = false, ImportWorker.IDocumentExtractor? extractor = null, ImportWorker.Forms.IFormReader? formReader = null, string? appVersion = null)
+    public static TomeStackApp Open(string dataDirectory, TimeProvider? time = null, IEnumerable<string>? syncRoots = null, bool devFixtures = false, ImportWorker.IDocumentExtractor? extractor = null, ImportWorker.Forms.IFormReader? formReader = null, string? appVersion = null, ImportWorker.IDocumentExtractor? markdownExtractor = null)
     {
         // Before the database opens: migration, the leftover-import check and the file cleanup below all assume this
         // process is the only one using the folder.
@@ -97,8 +116,9 @@ public sealed partial class TomeStackApp : IDisposable
             var version = appVersion ?? AppVersionStamp.CurrentVersion;
             AppVersionStamp.CopyBeforeOpen(dataDirectory, Path.Combine(dataDirectory, DatabaseFileName), version, SqliteStore.LatestSchemaVersion);
             var warning = DataFolder.SyncRootWarning(dataDirectory, syncRoots ?? DataFolder.DiscoverSyncRoots());
-            app = new TomeStackApp(dataDirectory, time ?? TimeProvider.System, warning is null ? [] : [warning]) { _extractor = extractor, _sheetExtractor = extractor, _formReader = formReader, _folderLock = folderLock };
+            app = new TomeStackApp(dataDirectory, time ?? TimeProvider.System, warning is null ? [] : [warning]) { _extractor = extractor, _markdownExtractor = markdownExtractor, _sheetExtractor = extractor, _formReader = formReader, _folderLock = folderLock };
             app.DeleteLeftoverDdbFiles(); // a crash during ddb.readData can leave its temporary copy
+            DeleteLeftoverMarkdownCopies(); // and a crash during a Markdown import, its copy
             app.InterruptLeftoverImports();
             var bundled = new HashSet<Guid>();
             foreach (var pack in BundledPacks)
@@ -414,6 +434,9 @@ public sealed partial class TomeStackApp : IDisposable
 
     public ExportPreview PreviewExport(IReadOnlyList<Guid> characterIds, ExportPurpose purpose) => _packages.PreviewExport(characterIds, purpose);
 
+    /// <summary>Import Lab L5, <c>package.preflight</c>: what a share export (package, source pack, campaign pack, sheet) would carry, omit or refuse. Writes nothing.</summary>
+    public PreflightReport PackagePreflight(PreflightRequest request) => _packages.RunPreflight(request);
+
     /// <summary>M6 slice 1: what a source pack of these sources would hold (<c>package.sourcePackPreview</c>). Writes nothing.</summary>
     public SourcePackPreview PreviewSourcePack(IReadOnlyList<Guid> sourceIds) => _packages.PreviewSourcePack(sourceIds);
 
@@ -478,8 +501,19 @@ public sealed partial class TomeStackApp : IDisposable
         return new(character, sheet, CampaignOf(character, sheet), UndoLabel: stored ? _undo.Matching(character.Id, character.UpdatedAt)?.Label : null);
     }
 
+    /// <summary>
+    /// Tests only: keep each parsed bundled pack for the life of the process, so the hundreds of data folders a test run opens
+    /// do not parse the same JSON each time. Off in the app, which opens one folder per process and need not keep the packs.
+    /// </summary>
+    internal static bool CacheBundledPacks { get; set; }
+
+    private static readonly ConcurrentDictionary<string, ContentPack> BundledPackCache = new();
+
     /// <summary>Loads an embedded content pack (bundled with this build, so trusted like code).</summary>
-    public static ContentPack LoadBundledPack(string resourceName)
+    public static ContentPack LoadBundledPack(string resourceName) =>
+        CacheBundledPacks ? BundledPackCache.GetOrAdd(resourceName, ParseBundledPack) : ParseBundledPack(resourceName);
+
+    private static ContentPack ParseBundledPack(string resourceName)
     {
         using var stream = typeof(TomeStackApp).Assembly.GetManifestResourceStream(resourceName)
             ?? throw new InvalidOperationException($"Embedded content pack {resourceName} is missing.");

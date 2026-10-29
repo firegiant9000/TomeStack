@@ -8,6 +8,7 @@ import type {
   ExportPurpose,
   FieldOverride,
   PlayAction,
+  PreflightReport,
   RestPeriod,
   RollMode,
   RollRecord,
@@ -30,6 +31,8 @@ import { DefencesPanel } from './DefencesPanel';
 import { DetailsPanel } from './DetailsPanel';
 import { ExperiencePanel } from './ExperiencePanel';
 import { GapNotesPanel, gapAboutFeature, gapAboutField } from './GapNotesPanel';
+import { PreflightPanel } from './PreflightPanel';
+import { canSaveAfter } from './preflightText';
 import { PrintView } from './PrintView';
 import { RestPanel } from './RestPanel';
 import { logged, rollLogLimit, type LoggedRoll } from './RollLog';
@@ -169,9 +172,11 @@ interface ExportProps {
 }
 
 /** ADR-007: choose backup or share; a share first lists everything it will leave out. */
-function ExportPanel({ characterId, active, updatedAt, onError, onStatus }: ExportProps) {
+export function ExportPanel({ characterId, active, updatedAt, onError, onStatus }: ExportProps) {
   const [purpose, setPurpose] = useState<ExportPurpose>('backup');
   const [preview, setPreview] = useState<ExportPreview>();
+  // Import Lab L5: a share goes through the one sharing rule's preflight; a backup keeps its own rule (everything, personal).
+  const [report, setReport] = useState<PreflightReport>();
 
   const [backupFailed, setBackupFailed] = useState(false);
 
@@ -272,7 +277,10 @@ function ExportPanel({ characterId, active, updatedAt, onError, onStatus }: Expo
         </ul>
       )}
       {backupFailed && purpose === 'backup' && <p>Could not check whether this package needs a newer TomeStack.</p>}
-      <button type="button" onClick={exportCharacter} disabled={purpose === 'share' && !preview}>
+      {purpose === 'share' && active && (
+        <PreflightPanel kind="package" selection={[characterId]} label="shared package" refreshKey={updatedAt} onReport={setReport} onError={onError} />
+      )}
+      <button type="button" onClick={exportCharacter} disabled={purpose === 'share' && (!preview || !canSaveAfter(report))}>
         Export package
       </button>
     </section>
