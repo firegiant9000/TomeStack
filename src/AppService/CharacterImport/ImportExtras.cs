@@ -386,28 +386,28 @@ public sealed record ImportExtras(
 /// <summary>The patterns of <see cref="ImportExtras"/>: anchored where they read a whole value, and time-limited (100 ms).</summary>
 internal static partial class ExtrasPatterns
 {
-    [GeneratedRegex(@"^(?<sign>[+\-−]?)\s*(?<digits>[0-9]{1,5})$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?<sign>[+\-−]?)\s*(?<digits>[0-9]{1,5})$", RegexOptions.None, ImportRegex.TimeoutMs)]
     internal static partial Regex Bonus();
 
     /// <summary>Dice characters up to the last digit, then whatever follows (a damage type, usually).</summary>
-    [GeneratedRegex(@"^(?<dice>[0-9dD\s+\-−]*[0-9])\s*(?<rest>.*)$", RegexOptions.Singleline, 100)]
+    [GeneratedRegex(@"^(?<dice>[0-9dD\s+\-−]*[0-9])\s*(?<rest>.*)$", RegexOptions.Singleline, ImportRegex.TimeoutMs)]
     internal static partial Regex DamageText();
 
-    [GeneratedRegex(@"(?:^|\s)[Dd][Aa][Mm][Aa][Gg][Ee]$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"(?:^|\s)[Dd][Aa][Mm][Aa][Gg][Ee]$", RegexOptions.None, ImportRegex.TimeoutMs)]
     internal static partial Regex TrailingDamage();
 
-    [GeneratedRegex(@"^(?:[-*·]\s+|•\s*)", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?:[-*·]\s+|•\s*)", RegexOptions.None, ImportRegex.TimeoutMs)]
     internal static partial Regex Bullet();
 
-    [GeneratedRegex(@"^(?<q>[0-9]{1,4})\s*[xX×]\s+(?<n>\S.*)$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?<q>[0-9]{1,4})\s*[xX×]\s+(?<n>\S.*)$", RegexOptions.None, ImportRegex.TimeoutMs)]
     internal static partial Regex LeadingCount();
 
-    [GeneratedRegex(@"^(?<n>\S.*?)\s+[xX×](?<q>[0-9]{1,4})$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?<n>\S.*?)\s+[xX×](?<q>[0-9]{1,4})$", RegexOptions.None, ImportRegex.TimeoutMs)]
     internal static partial Regex TrailingTimes();
 
-    [GeneratedRegex(@"^(?<n>\S.*?)\s*\((?<q>[0-9]{1,4})\)$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?<n>\S.*?)\s*\((?<q>[0-9]{1,4})\)$", RegexOptions.None, ImportRegex.TimeoutMs)]
     internal static partial Regex TrailingParen();
 
-    [GeneratedRegex(@"^(?<label>languages?|tools?|tool proficiencies)\s*:\s*(?<rest>.*)$", RegexOptions.IgnoreCase, 100)]
+    [GeneratedRegex(@"^(?<label>languages?|tools?|tool proficiencies)\s*:\s*(?<rest>.*)$", RegexOptions.IgnoreCase, ImportRegex.TimeoutMs)]
     internal static partial Regex ProficiencyLabel();
 }

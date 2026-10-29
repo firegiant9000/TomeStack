@@ -28,6 +28,8 @@ A choice that does not apply to this entry is not offered, so it is never "unres
 
 An item carries `weapon { category: simple | martial, attack: melee | ranged, damage, damageType, properties[], versatile?, range?, weaponKey, mastery? }`. Proficiency is a `grant proficiency` in `weapon.simple`, `weapon.martial` or `weapon.<weaponKey>`, and it may be `onlyAs` like any grant.
 
+An attack row shows the weapon's `mastery` only when the character's active content includes a feature named exactly "Weapon Mastery" (an interim name rule); otherwise the row's mastery is empty.
+
 Each **equipped** weapon gives an entry in `sheet.attacks`:
 
 | Value | Rule (both SRDs) |
@@ -46,9 +48,20 @@ Each **equipped** weapon gives an entry in `sheet.attacks`:
 
 **Rolls:** `roll { customAttack, damage?, mode, critical }` rolls `1d20` under `mode` with one modifier "{name} to hit" (the typed bonus, no origin), or the `damage` dice under normal mode with `critical` doubling them. The record's provenance is `custom.attack` / `custom.damage`, labelled "{name} attack" / "{name} damage ({type})" (the type only when set), with no content or source. An unknown id is `roll.custom-attack-unknown` and a damage roll with no damage is `roll.custom-attack-no-damage`; neither message quotes the name, which goes only into the label. `customAttack` counts toward `roll.ambiguous` like the other targets. On Play, "Attacks and actions" lists each one under "Actions" with "Roll {name} attack" (using the summary's advantage / disadvantage choice) and, when it has damage, "Roll {name} damage" (with the "Critical hit" box). The panel shows even when the character has no weapon attack, roll or toggle.
 
+## Feature attacks and riders (content schema v11, D43 slice 4)
+
+A feature can give an attack with an `attack` effect (an unarmed strike, a bolt) and can add to attacks with an `attackRider` effect. The fields, the validation codes and the calculation are in [play-mechanics.md](play-mechanics.md) "Slice 4"; in short:
+
+- A feature attack is a second kind of entry in `sheet.attacks` (`source: feature`; weapons are `source: weapon`). To hit = the best listed ability modifier + the proficiency bonus (unless the attack says otherwise); damage = `{count}d{die}` (both formulas, so a die can follow a class column such as `SCALE.handDie`), the dice of the riders that apply, and one flat total (the ability modifier or the attack's `damageBonus`, plus the riders' flat parts). It has no weapon category, properties or mastery.
+- **Riders** match by tag. A weapon carries `weapon` and `melee` or `ranged`; a feature attack carries its own tags and `melee` or `ranged`; `all` matches every attack. A rider can be always on or follow a toggle of its own revision or of another entry. A rider adds to-hit, extra dice (`3d8`: a count of 1 to 100, a d4 to d12) and/or flat damage; its dice appear in the damage string (`1d8+3d8+5`) and each part is a step in the trace. A critical hit doubles every die, riders' included, and not the flat total.
+- **Stack groups:** of the matching riders in one `stackGroup`, only the strongest applies (highest average; the first in sheet order on a tie); the others leave a trace note (`rider.not-applied`). Riders with no group all add.
+- **Unavailable attacks:** an attack that is outside the form it needs (`whileToggle` off) is listed disabled with "Available in <form>" and can still be rolled by the service; an attack whose die or count cannot be worked out is unavailable with `attack.die-invalid`, has no damage, and the service refuses to roll it.
+- **Rolls:** `roll { content, effectId, mode, damage?, critical }` with the attack's effect id, like a roll effect; the weapon form (`weapon`) still finds weapons only. A pool the attack spends is offered as "Spend" in the attack roll's record; nothing spends it automatically.
+- **Exports:** feature attacks are not exported in v1 ([export-adapters.md](export-adapters.md)).
+
 ## Actions grouped (SPEC C-04)
 
-`roll` effects may declare `activation: action | bonusAction | reaction | other`. The sheet's **Attacks and actions** panel lists weapon attacks under "Actions", and every feature roll under its activation group ("Other" when none is declared), with the "Critical hit" toggle. A roll that names a resource still spends nothing; "Spend" is offered in the roll's record (`sheet-play.md`). The features list keeps each feature's text, source and "Open page".
+`roll` effects may declare `activation: action | bonusAction | reaction | other`. The sheet's **Attacks and actions** panel lists weapon attacks under "Actions", a feature attack under its own `activation` ("Actions" when none), and every feature roll under its activation group ("Other" when none is declared), with the "Critical hit" toggle. A roll that names a resource still spends nothing; "Spend" is offered in the roll's record (`sheet-play.md`). The features list keeps each feature's text, source and "Open page".
 
 ## Attack count, critical range and roll bonuses (M2.2, content schema v8)
 
@@ -59,6 +72,6 @@ Each **equipped** weapon gives an entry in `sheet.attacks`:
 
 ## Not yet
 
-- The multiclass data of the non-caster classes that are not bundled (Monk, Rogue). The Fighter is bundled since M2.2. Bundled: the eight casters, the weapon tables (`srd-<family>-equipment.json`) and a content v5 revision of the SRD Barbarian (`srd-<family>-classes.json`). Characters that pin the M1 Barbarian revision keep it. Pickers offer the newest revision (`ContentOption.Superseded`), and moving a saved character to it is the reviewed update (SPEC I-06).
+- The multiclass data of the non-caster classes that are not bundled (Monk; the Rogue is bundled since C2-2, with its multiclass data). The Fighter is bundled since M2.2. Bundled: the eight casters, the weapon tables (`srd-<family>-equipment.json`) and a content v5 revision of the SRD Barbarian (`srd-<family>-classes.json`). Characters that pin the M1 Barbarian revision keep it. Pickers offer the newest revision (`ContentOption.Superseded`), and moving a saved character to it is the reviewed update (SPEC I-06).
 - The net and the blowgun: text only, because their damage is not a dice roll.
 - Ammunition tracking, Weapon Mastery effects (text only), fighting styles other than Defense (text only), two-weapon fighting and bonus damage from features. Armor training and its warnings are in `equipment.md` (M2.2).

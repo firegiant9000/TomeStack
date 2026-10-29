@@ -14,7 +14,7 @@ namespace TomeStack.AppService.Packages;
 public sealed partial class PackageService
 {
     /// <summary>At most this many sources in one pack: a pack is a deliberate share, not a library dump.</summary>
-    public const int MaxPackSources = 50;
+    public const int MaxPackSources = Preflight.MaxPackSources;
 
     public const string SourceAttachmentPolicy = "A source pack never includes PDFs, drafts, characters, gap notes or text read from PDFs.";
 
@@ -30,7 +30,8 @@ public sealed partial class PackageService
     public SourcePackPreview PreviewSourcePack(IReadOnlyList<Guid> sourceIds)
     {
         var plan = PlanSourcePack(sourceIds);
-        return new(plan.FileName, [.. plan.Sources.Select(Notice)], plan.Revisions.Count, plan.Drafts, plan.Warnings);
+        var opens = NewerBuild.Evaluate(plan.Revisions, [], 0, [], BundledPackTitle(plan.Revisions));
+        return new(plan.FileName, [.. plan.Sources.Select(Notice)], plan.Revisions.Count, plan.Drafts, [.. plan.Warnings, .. opens.Warnings], opens.OpensIn, opens.Causes);
     }
 
     /// <summary><c>package.sourcePackExport</c> / <c>package.sourcePackSaveAs</c>: the pack's bytes.</summary>
@@ -89,21 +90,9 @@ public sealed partial class PackageService
     /// </summary>
     private SourcePackPlan PlanSourcePack(IReadOnlyList<Guid> sourceIds)
     {
-        ArgumentNullException.ThrowIfNull(sourceIds);
-        var ids = sourceIds.Distinct().ToList();
-        if (ids.Count is 0 or > MaxPackSources)
-            throw new PackageException([new("pack.sources-required", $"Choose 1 to {MaxPackSources} sources to share.")]);
-
-        var errors = new List<Diagnostic>();
-        var sources = new List<SourceRecord>();
-        foreach (var id in ids)
-        {
-            var source = store.FindSource(id);
-            if (ShareProblem(id, source) is { } problem)
-                errors.Add(problem);
-            else
-                sources.Add(source!);
-        }
+        var ids = Preflight.RequirePackSources(sourceIds);
+        var (sources, problems) = Preflight.SplitPackSources(store, ids, _bundledSources);
+        var errors = new List<Diagnostic>([.. problems.Select(p => p.Problem)]);
         if (errors.Count > 0)
             throw new PackageException(errors);
 
@@ -125,13 +114,9 @@ public sealed partial class PackageService
     private (List<ContentRevision> Revisions, int Drafts, List<Diagnostic> Warnings) PackContent(IReadOnlyCollection<SourceRecord> sources, List<Diagnostic> errors)
     {
         var inPack = sources.Select(s => s.Id).ToHashSet();
-        var all = store.ListRevisionsInOrder();
-        var revisions = all.Where(r => inPack.Contains(r.Provenance.SourceId) && r.Status == RevisionStatus.Published).ToList();
-        var drafts = all.Count(r => inPack.Contains(r.Provenance.SourceId) && r.Status != RevisionStatus.Published);
-        // A content's revisions belong to one source. One that another source also holds cannot leave with this one, or
-        // the receiver would get part of its history under the wrong license.
-        var contentIds = revisions.Select(r => r.ContentId).ToHashSet();
-        foreach (var spanning in all.Where(r => contentIds.Contains(r.ContentId) && !inPack.Contains(r.Provenance.SourceId)).DistinctBy(r => r.ContentId))
+        var content = Preflight.PackContentOf(store, sources);
+        var (all, revisions, drafts) = (content.All, content.Published, content.Drafts.Count);
+        foreach (var spanning in content.Spanning)
             errors.Add(new("pack.content-spans-sources", $"'{spanning.Name}' has revisions in another source too, so it cannot be shared from this one.", spanning.Reference));
 
         var warnings = new List<Diagnostic>();
@@ -149,25 +134,27 @@ public sealed partial class PackageService
         return (revisions, drafts, warnings);
     }
 
-    /// <summary>
-    /// The guard (D14 item 6), shared by source packs and campaign packs (M6 slice 2): why a source may not leave in a pack,
-    /// or null when it is homebrew made on this machine, not import-derived, and marked as shareable by its author.
-    /// </summary>
-    private Diagnostic? ShareProblem(Guid id, SourceRecord? source) => source switch
-    {
-        null => new Diagnostic("pack.source-missing", $"Source {id} is not installed."),
-        _ when _bundledSources.Contains(id) => new Diagnostic("pack.source-bundled", $"'{source.Title}' is bundled with TomeStack; everyone has it already, so a pack never carries it."),
-        { ImportDerived: true } => new Diagnostic("pack.source-import-derived", $"'{source.Title}' holds material imported from a PDF, so it is never shared."),
-        { Origin: SourceOrigin.Received } => new Diagnostic("pack.source-received", $"'{source.Title}' came from someone else's package, so you cannot share it as your own work."),
-        { Redistributable: false } or { ShareConfirmedAt: null } => new Diagnostic("pack.source-not-shareable", $"'{source.Title}' is not marked as shareable. Mark it as shareable (you confirm it is your own work) first."),
-        _ => null,
-    };
+    // The guard (D14 item 6) lives in Preflight.ShareProblem, the one sharing rule (Import Lab L5).
 
-    /// <summary>The content ids a revision refers to: granted content, choice options, the choice it extends, a roll's resource.</summary>
+    /// <summary>The other content a v11 toggle names: its group's content, its pool's content and the primaries an overlay is allowed with.</summary>
+    private static IEnumerable<Guid> ToggleReferences(ToggleEffect toggle) =>
+        new[] { toggle.GroupContent, toggle.ResourceContent }.Concat((toggle.AllowedWith ?? []).Select(a => a.ContentId)).OfType<Guid>();
+
+    /// <summary>The content ids a revision refers to: granted content, choice options, the choice it extends, a roll's or toggle's resource, a toggle's group, an upkeep's toggle and pool, an attack's pool and while-toggle, a rider's or modifier's toggle content, a roll's while-toggle, a roll's also-change pools, a roll mode's toggle content, a defence grant's while-toggle, a response's pool, toggle and each outcome's pool, toggle and roll content.</summary>
     private static IEnumerable<Guid> References(ContentRevision revision) =>
         revision.Effects.OfType<GrantEffect>().Where(g => g.Content is not null).Select(g => g.Content!.ContentId)
             .Concat(revision.Effects.OfType<ChoiceEffect>().SelectMany(c => c.Options).Select(o => o.ContentId))
             .Concat(revision.Effects.OfType<RollEffect>().Select(r => r.ResourceContent).OfType<Guid>())
+            .Concat(revision.Effects.OfType<ToggleEffect>().SelectMany(ToggleReferences))
+            .Concat(revision.Effects.OfType<UpkeepEffect>().SelectMany(u => new[] { u.ToggleContent, u.ResourceContent }.OfType<Guid>()))
+            .Concat(revision.Effects.OfType<AttackEffect>().SelectMany(a => new[] { a.ResourceContent, a.WhileToggle?.ContentId }.OfType<Guid>()))
+            .Concat(revision.Effects.OfType<AttackRiderEffect>().Select(r => r.ToggleContent).OfType<Guid>())
+            .Concat(revision.Effects.OfType<ModifierEffect>().Select(m => m.ToggleContent).OfType<Guid>())
+            .Concat(revision.Effects.OfType<RollEffect>().Select(r => r.WhileToggle?.ContentId).OfType<Guid>())
+            .Concat(revision.Effects.OfType<RollEffect>().SelectMany(r => (r.AlsoChange ?? []).Select(a => a?.ResourceContent).OfType<Guid>()))
+            .Concat(revision.Effects.OfType<RollModeEffect>().Select(m => m.ToggleContent).OfType<Guid>())
+            .Concat(revision.Effects.OfType<GrantEffect>().Select(g => g.WhileToggle?.ContentId).OfType<Guid>())
+            .Concat(revision.Effects.OfType<ResponseEffect>().SelectMany(r => r.ReferencedContent()))
             .Concat(revision.ExtendsChoice is { } extends ? new[] { extends.ContentId } : [])
             .Where(id => id != revision.ContentId);
 

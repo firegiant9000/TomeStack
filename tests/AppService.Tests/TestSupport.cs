@@ -8,6 +8,19 @@ internal sealed class FixedTime(DateTimeOffset now) : TimeProvider
     public override DateTimeOffset GetUtcNow() => now;
 }
 
+/// <summary>A clock that moves 1 ms on every read, so each write gets its own <c>UpdatedAt</c> stamp (D43 S2).</summary>
+internal sealed class TickingTime(DateTimeOffset start) : TimeProvider
+{
+    private DateTimeOffset _next = start;
+
+    public override DateTimeOffset GetUtcNow()
+    {
+        var now = _next;
+        _next = _next.AddMilliseconds(1);
+        return now;
+    }
+}
+
 internal static class AppTestExtensions
 {
     /// <summary>
@@ -27,6 +40,8 @@ internal sealed class TempApp : IDisposable
 
     private readonly ImportWorker.IDocumentExtractor _extractor;
 
+    private readonly ImportWorker.IDocumentExtractor _markdownExtractor;
+
     private readonly TimeProvider _time;
 
     private readonly ImportWorker.Forms.IFormReader? _formReader;
@@ -37,13 +52,53 @@ internal sealed class TempApp : IDisposable
     /// <param name="now">The app's clock (default <see cref="Now"/>); a later one shows a restore keeps the original times.</param>
     /// <param name="formReader">Character-sheet import: the form reader (a fake, so no worker runs).</param>
     /// <param name="time">A clock that can move (token expiry); overrides <paramref name="now"/>.</param>
-    public TempApp(ImportWorker.IDocumentExtractor? extractor = null, string? folder = null, DateTimeOffset? now = null, ImportWorker.Forms.IFormReader? formReader = null, TimeProvider? time = null)
+    /// <param name="markdownExtractor">Markdown imports (Import Lab Task 13) also extract in this process by default; the worker's kind is tested in ImportWorker.Tests.</param>
+    /// <param name="fresh">Open an empty folder, as a first launch does, instead of a copy of the seeded <see cref="Template"/>.</param>
+    public TempApp(ImportWorker.IDocumentExtractor? extractor = null, string? folder = null, DateTimeOffset? now = null, ImportWorker.Forms.IFormReader? formReader = null, TimeProvider? time = null, ImportWorker.IDocumentExtractor? markdownExtractor = null, bool fresh = false)
     {
         _time = time ?? new FixedTime(now ?? Now);
         _formReader = formReader;
         _directory = Path.Combine(Path.GetTempPath(), "tomestack-tests", Guid.NewGuid().ToString("N"), folder ?? "data");
         _extractor = extractor ?? new ImportWorker.Extraction.PdfPigExtractor();
-        App = TomeStackApp.Open(_directory, _time, syncRoots: [], devFixtures: true, extractor: _extractor, formReader: _formReader);
+        _markdownExtractor = markdownExtractor ?? new ImportWorker.Extraction.MarkdownExtractor();
+        if (!fresh)
+            CopyTemplate(_directory);
+        App = TomeStackApp.Open(_directory, _time, syncRoots: [], devFixtures: true, extractor: _extractor, formReader: _formReader, markdownExtractor: _markdownExtractor);
+    }
+
+    static TempApp() => TomeStackApp.CacheBundledPacks = true;
+
+    /// <summary>
+    /// A data folder seeded once per test run (migrations, the bundled packs and the dev fixtures). Opening a copy runs the
+    /// same open, whose seeding then finds everything stored: about half the cost of a first launch (CI time, 2026-10-25).
+    /// Seeding does not read the app clock, so one copy serves every <c>now</c>. <see cref="TemplateTests"/> holds it to a first launch.
+    /// </summary>
+    internal static string Template => LazyTemplate.Value;
+
+    private static readonly Lazy<string> LazyTemplate = new(() =>
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tomestack-tests", "template-" + Guid.NewGuid().ToString("N"));
+        var directory = Path.Combine(root, "data");
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => DeleteTree(root);
+        TomeStackApp.Open(directory, new FixedTime(Now), syncRoots: [], devFixtures: true).Dispose();
+        return directory;
+    });
+
+    private static void CopyTemplate(string directory)
+    {
+        var template = Template;
+        System.IO.Directory.CreateDirectory(directory);
+        foreach (var folder in System.IO.Directory.GetDirectories(template, "*", SearchOption.AllDirectories))
+            System.IO.Directory.CreateDirectory(Path.Combine(directory, Path.GetRelativePath(template, folder)));
+        foreach (var file in System.IO.Directory.GetFiles(template, "*", SearchOption.AllDirectories))
+        {
+            var relative = Path.GetRelativePath(template, file);
+            if (relative == DataFolderLock.FileName)
+                continue; // each app takes its own lock
+            var target = Path.Combine(directory, relative);
+            System.IO.Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Copy(file, target);
+        }
     }
 
     public TomeStackApp App { get; private set; }
@@ -100,7 +155,7 @@ internal sealed class TempApp : IDisposable
         if (!_closed)
             App.Dispose();
         _closed = false;
-        App = TomeStackApp.Open(_directory, _time, syncRoots: [], devFixtures: true, extractor: _extractor, formReader: _formReader);
+        App = TomeStackApp.Open(_directory, _time, syncRoots: [], devFixtures: true, extractor: _extractor, formReader: _formReader, markdownExtractor: _markdownExtractor);
     }
 
     /// <summary>Closes the app and releases the folder, keeping it for inspection until <see cref="Dispose"/> (T6 drill).</summary>
@@ -115,10 +170,14 @@ internal sealed class TempApp : IDisposable
     {
         if (!_closed)
             App.Dispose();
+        DeleteTree(Path.GetDirectoryName(_directory)!); // the random folder around the data folder
+    }
+
+    private static void DeleteTree(string root)
+    {
         try
         {
             // Managed PDF copies are read-only (ADR-005); clear that so the folder can be deleted.
-            var root = Path.GetDirectoryName(_directory)!; // the random folder around the data folder
             foreach (var file in System.IO.Directory.Exists(root) ? System.IO.Directory.GetFiles(root, "*", SearchOption.AllDirectories) : [])
                 File.SetAttributes(file, FileAttributes.Normal);
             System.IO.Directory.Delete(root, recursive: true);
@@ -127,9 +186,12 @@ internal sealed class TempApp : IDisposable
     }
 
     /// <summary>Installs a fixture pack (sources and revisions) into this data folder, as if it had been imported.</summary>
-    public ContentPack AddPack(string relativePath)
+    /// <param name="adjust">Changes each revision in memory before it is stored (the fixture file stays as it is).</param>
+    public ContentPack AddPack(string relativePath, Func<ContentRevision, ContentRevision>? adjust = null)
     {
         var pack = LoadFixture<ContentPack>(relativePath);
+        if (adjust is not null)
+            pack = pack with { Revisions = [.. pack.Revisions.Select(adjust)] };
         App.Store.InTransaction(() =>
         {
             foreach (var source in pack.Sources)

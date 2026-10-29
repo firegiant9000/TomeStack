@@ -396,6 +396,91 @@ public class CandidateReviewTests
         Assert.Contains(check.Dependencies, d => d.Kind == "missing-content" && d.Reference == missing);
         Assert.Contains(check.Report.Errors, e => e.Code.StartsWith("validate.", StringComparison.Ordinal)); // the missing reference is an error
         Assert.False(check.CanAccept);
+
+        // A toggle that spends a pool of installed content, or is allowed with it, lists that content too.
+        temp.App.EditCandidate(new(feat.Id, Expected: temp.EtagOf(feat.Id), Effects: [.. feat.Current.ProposedEffects,
+            new ToggleEffect { Id = "shape", ToggleId = "shape", Label = "Shape", Cost = "1", ResourceId = "pool", ResourceContent = installed.ContentId }]));
+        Assert.Contains(temp.App.CheckCandidate(feat.Id).Dependencies, d => d.Kind == "content" && d.Name == installed.Name);
+
+        // So does an upkeep that changes a pool of installed content, or belongs to a toggle of it.
+        temp.App.EditCandidate(new(feat.Id, Expected: temp.EtagOf(feat.Id), Effects: [.. feat.Current.ProposedEffects,
+            new UpkeepEffect { Id = "tick", At = TurnMoment.TurnStart, ResourceId = "pool", ResourceContent = installed.ContentId, Change = UpkeepChange.Regain, Amount = "1" }]));
+        Assert.Contains(temp.App.CheckCandidate(feat.Id).Dependencies, d => d.Kind == "content" && d.Name == installed.Name);
+
+        // So does an attack that spends a pool of installed content.
+        temp.App.EditCandidate(new(feat.Id, Expected: temp.EtagOf(feat.Id), Effects: [.. feat.Current.ProposedEffects,
+            new AttackEffect { Id = "bolt", AttackId = "bolt", Label = "Bolt", Kind = WeaponAttack.Ranged, Abilities = [Ability.Dex], Damage = new("1", "6"), DamageType = "force", ResourceId = "pool", ResourceContent = installed.ContentId }]));
+        Assert.Contains(temp.App.CheckCandidate(feat.Id).Dependencies, d => d.Kind == "content" && d.Name == installed.Name);
+    }
+
+    [Fact]
+    public void Dependencies_list_the_content_a_roll_mode_or_a_defence_follows_while_on()
+    {
+        var (temp, _, jobId) = Imported();
+        using var _t = temp;
+        var feat = Named(temp, jobId, "Fixture Keen Watcher");
+        var installed = temp.App.Store.ListRevisions().First(r => r.Status == RevisionStatus.Published && r.Kind == ContentKind.Feature && r.RulesFamilies.Contains(RulesFamilies.Srd521));
+
+        temp.App.EditCandidate(new(feat.Id, Expected: temp.EtagOf(feat.Id), Effects: [.. feat.Current.ProposedEffects,
+            new RollModeEffect { Id = "stealthy", Target = "skill.stealth", Mode = RollMode.Disadvantage, Toggle = "form", ToggleContent = installed.ContentId }]));
+        Assert.Contains(temp.App.CheckCandidate(feat.Id).Dependencies, d => d.Kind == "content" && d.Name == installed.Name);
+
+        temp.App.EditCandidate(new(feat.Id, Expected: temp.EtagOf(feat.Id), Effects: [.. feat.Current.ProposedEffects,
+            new GrantEffect { Id = "ward", Grant = GrantKind.DamageResistance, DamageType = "Fire", WhileToggle = new(installed.ContentId, "form") }]));
+        Assert.Contains(temp.App.CheckCandidate(feat.Id).Dependencies, d => d.Kind == "content" && d.Name == installed.Name);
+    }
+
+    [Fact]
+    public void Dependencies_list_the_content_a_roll_also_changes()
+    {
+        var (temp, _, jobId) = Imported();
+        using var _t = temp;
+        var feat = Named(temp, jobId, "Fixture Keen Watcher");
+        var installed = temp.App.Store.ListRevisions().First(r => r.Status == RevisionStatus.Published && r.Kind == ContentKind.Feature && r.RulesFamilies.Contains(RulesFamilies.Srd521));
+
+        temp.App.EditCandidate(new(feat.Id, Expected: temp.EtagOf(feat.Id), Effects: [.. feat.Current.ProposedEffects,
+            new RollEffect { Id = "gather", RollId = "gather", Label = "Gather", AlsoChange = [new("charge", installed.ContentId, UpkeepChange.Spend, "1")] }]));
+        Assert.Contains(temp.App.CheckCandidate(feat.Id).Dependencies, d => d.Kind == "content" && d.Name == installed.Name);
+
+        var missing = Guid.NewGuid();
+        temp.App.EditCandidate(new(feat.Id, Expected: temp.EtagOf(feat.Id), Effects: [.. feat.Current.ProposedEffects,
+            new RollEffect { Id = "gone", RollId = "gone", Label = "Gone", AlsoChange = [new("charge", missing, UpkeepChange.Spend, "1")] }]));
+        Assert.Contains(temp.App.CheckCandidate(feat.Id).Dependencies, d => d.Kind == "missing-content" && d.Name == missing.ToString());
+    }
+
+    [Fact]
+    public void Dependencies_list_the_content_a_response_names()
+    {
+        var (temp, _, jobId) = Imported();
+        using var _t = temp;
+        var feat = Named(temp, jobId, "Fixture Keen Watcher");
+        var installed = temp.App.Store.ListRevisions().First(r => r.Status == RevisionStatus.Published && r.Kind == ContentKind.Feature && r.RulesFamilies.Contains(RulesFamilies.Srd521));
+        var missing = Guid.NewGuid();
+
+        ResponseEffect Response(string id, Guid? pool = null, ToggleRef? toggle = null, IReadOnlyList<ResponseOutcome>? outcomes = null) => new()
+        {
+            Id = id, ResponseId = id, Label = "Brace", Phase = outcomes is null ? ResponsePhase.DamageReduction : ResponsePhase.Threshold,
+            Amount = outcomes is null ? "1" : null, When = outcomes is null ? null : new(null, true),
+            ResourceId = pool is null ? null : "pool", ResourceContent = pool, Cost = pool is null ? null : "1", Toggle = toggle, Outcomes = outcomes,
+        };
+
+        // The pool a response spends, the toggle it needs, and each reference of an outcome: a pool, a toggle and a roll.
+        ResponseEffect[] named =
+        [
+            Response("cost", pool: installed.ContentId),
+            Response("toggle", toggle: new(installed.ContentId, "form")),
+            Response("regain", outcomes: [new(ResponseOutcomeKind.Regain, "pool", installed.ContentId, "1", null, null, null)]),
+            Response("on", outcomes: [new(ResponseOutcomeKind.ToggleOn, null, null, null, new(installed.ContentId, "form"), null, null)]),
+            Response("roll", outcomes: [new(ResponseOutcomeKind.OfferRoll, null, null, null, null, "counter", installed.ContentId)]),
+        ];
+        foreach (var response in named)
+        {
+            temp.App.EditCandidate(new(feat.Id, Expected: temp.EtagOf(feat.Id), Effects: [.. feat.Current.ProposedEffects, response]));
+            Assert.Contains(temp.App.CheckCandidate(feat.Id).Dependencies, d => d.Kind == "content" && d.Name == installed.Name);
+        }
+
+        temp.App.EditCandidate(new(feat.Id, Expected: temp.EtagOf(feat.Id), Effects: [.. feat.Current.ProposedEffects, Response("gone", pool: missing)]));
+        Assert.Contains(temp.App.CheckCandidate(feat.Id).Dependencies, d => d.Kind == "missing-content" && d.Name == missing.ToString());
     }
 
     [Fact]

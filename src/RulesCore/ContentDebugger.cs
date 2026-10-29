@@ -115,6 +115,11 @@ public static class ContentDebugger
             {
                 foreach (var roll in revision.Effects.OfType<RollEffect>().Where(r => r.ResourceContent is { } holder && holder != revision.ContentId && r.ResourceId is not null))
                     Set(SpentElsewhere, roll.ResourceContent!.Value).Add(roll.ResourceId!);
+                // Content v11 (D43): a pool of another content that a roll also changes counts as used there.
+                foreach (var change in revision.Effects.OfType<RollEffect>().SelectMany(r => r.AlsoChange ?? []).Where(c => c is { ResourceId: not null, ResourceContent: { } holder } && holder != revision.ContentId))
+                    Set(SpentElsewhere, change.ResourceContent!.Value).Add(change.ResourceId);
+                foreach (var toggle in revision.Effects.OfType<ToggleEffect>().Where(t => t.ResourceContent is { } holder && holder != revision.ContentId && t.ResourceId is not null))
+                    Set(SpentElsewhere, toggle.ResourceContent!.Value).Add(toggle.ResourceId!);
             }
             // The SCALE ids read by what each class reaches, and by what reaches it through each subclass.
             foreach (var (contentId, _) in graph.Current)
@@ -183,7 +188,8 @@ public static class ContentDebugger
         var recovered = revision.Effects.OfType<RecoveryEffect>().Select(r => r.ResourceId).ToHashSet(StringComparer.Ordinal);
         var ownRolls = revision.Effects.OfType<RollEffect>().Where(r => r.ResourceId is not null && (r.ResourceContent is null || r.ResourceContent == revision.ContentId)).ToList();
         var spent = ownRolls.Select(r => r.ResourceId!)
-            .Concat(revision.Effects.OfType<ToggleEffect>().Where(t => t.ResourceId is not null).Select(t => t.ResourceId!))
+            .Concat(revision.Effects.OfType<ToggleEffect>().Where(t => t.ResourceId is not null && (t.ResourceContent is null || t.ResourceContent == revision.ContentId)).Select(t => t.ResourceId!))
+            .Concat(revision.Effects.OfType<RollEffect>().SelectMany(r => r.AlsoChange ?? []).Where(c => c is { ResourceId: not null } && (c.ResourceContent is null || c.ResourceContent == revision.ContentId)).Select(c => c.ResourceId))
             .Concat(index.SpentElsewhere.GetValueOrDefault(revision.ContentId) ?? [])
             .ToHashSet(StringComparer.Ordinal);
 

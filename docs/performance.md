@@ -1,6 +1,6 @@
 # Performance baseline (roadmap T4)
 
-ROADMAP "Revision 2026-09-29", T4 · status: **measured 2026-10-01; first paint owed (owner, by hand).** This page measures; it optimises nothing. A surprising number becomes a follow-up item below, with its measurement.
+ROADMAP "Revision 2026-09-29", T4 · status: **measured 2026-10-01; the slice 7 play-mechanics cases measured 2026-10-24; the Import Lab cases measured 2026-10-25; first paint owed (owner, by hand).** This page measures; it optimises nothing. A surprising number becomes a follow-up item below, with its measurement.
 
 - Code: [`benchmarks/TomeStack.Benchmarks/`](../benchmarks/TomeStack.Benchmarks/) (BenchmarkDotNet 0.15.8). It is in `TomeStack.slnx`, so it builds under the 0-warning rule. It is not a test project: `dotnet test` and CI never run it.
 - Raw results (BenchmarkDotNet's GitHub-markdown and CSV exports, two runs): [`performance/raw/2026-10-01/`](performance/raw/2026-10-01/). The exports name no path, user or machine; the logs, which do, are not committed.
@@ -49,10 +49,11 @@ Use `--filter "*Calculation*"` and so on for one case, and `--job Dry` to check 
    - `ReviewAll` is `character.reviewUpdate` for every character: both sheets calculated and diffed.
    - This goes through the real SQLite store, as the app does.
 5. **Cold start to first paint:** by hand; see "First paint" below.
+6. **Play mechanics** (`PlayMechanicsBenchmarks`, D43 slice 7): case 1's SRD 5.2.1 character with one pinned feature of nine forms, sixteen techniques, riders, upkeep and damage responses; a calculation, a turn preview and a damage preview. See "Play mechanics" below.
 
 ## Results
 
-Time is the mean; P95 and allocations are per operation. "Spread" compares the two means.
+Time is the mean; P95 and allocations are per operation. "Spread" compares the two means. **Units:** BenchmarkDotNet's `KB` and `MB` are 1,024-based. Every "KB" and "MB" on this page is therefore a KiB or a MiB (the raw `KB` column divided by 1,024 gives the "MB" figure), and a delta between rows is taken in the same unit.
 
 | Case | Run 1 mean | Run 1 P95 | Run 2 mean | Run 2 P95 | Spread | Allocated |
 |---|---:|---:|---:|---:|---:|---:|
@@ -72,6 +73,97 @@ Time is the mean; P95 and allocations are per operation. "Spread" compares the t
 **The spread is large, and allocations are not.** Allocations matched to within 1 % in every case; times moved by −14 % to +39 % between two runs minutes apart. The cause is not established. The likely suspects are the hybrid CPU (a thread scheduled on an efficient core runs much slower), heat from the test runs in between, and the power plan. Until that is settled (follow-up P-4):
 - treat a time change below about 40 % on this machine as noise;
 - treat a change in allocations as real.
+
+## Play mechanics (D43 slice 7, measured 2026-10-24)
+
+`PlayMechanicsBenchmarks` (case 6): the case 1 character for SRD 5.2.1 with one original feature pinned, built in code. The feature has nine forms in one exclusive group (form 1 on), sixteen techniques (rolls offered while a form is on), a rider and an upkeep for each form, and five damage responses of all three phases. The sheet has 59 fields. The two previews go through the real SQLite store: `Turn_preview` is `character.turnPreview` in an encounter, `Damage_preview_with_responses` is `character.damagePreview` for a hit that drops a character with 10 hit points to 0, with a reduction, a survival and two thresholds chosen. Raw results: [`performance/raw/2026-10-24/`](performance/raw/2026-10-24/), one run of the Calculation and PlayMechanics cases together.
+
+| Case | Mean | P95 | Allocated | Budget |
+|---|---:|---:|---:|---|
+| 1. Calculate, SRD 5.2.1 (same run, the comparison) | 1.094 ms | 1.115 ms | 1.42 MB | none |
+| 6. Calculate with nine forms and sixteen techniques | 1.172 ms | 1.179 ms | 1.48 MB | P95 up to 1.561 ms, allocations up to 1.56 MB: pass |
+| 6. Turn preview | 16.617 ms | 16.825 ms | 8.02 MB | none (recorded) |
+| 6. Damage preview with responses | 33.119 ms | 33.486 ms | 15.8 MB | none (recorded) |
+
+**Budget (owner's ruling of 2026-10-24, on risk G2 and ruling R15):** the calculation case is held to the P95 of "Calculate, SRD 5.2.1" **in the same run** plus 40 % (the noise band above), which is 1.561 ms, and to that run's allocations plus 10 % (1.56 MB). It measured 1.179 ms and 1.48 MB, so it passes: +5.7 % on P95 and +4 % on allocations over the same-run comparison. The two previews have no budget; they are recorded so a later change can be compared.
+
+## Import Lab (before)
+
+`LabBenchmarks` (Import Lab L3, design 10), measured 2026-10-25 on `import-lab` before the fixes below. The library is the bundled SRD plus N original published features of one homebrew source (N = 250, 500, 1000), and a job with N pending candidates. `Coverage` is `content.coverage` for every source (the real handler path: one store read, grouped in memory). `CandidatesPage` is `import.candidates`, page 3 of 50. `DetectWithLibrary` is a baseline for the library's share of detection, not detection itself: it reads the revisions once to build the name set of published names, then runs the detector over 50 invented pages of spell-shaped blocks (the benchmark repeats those lines, as detection's own method, `DetectOnce`, is private). It leaves out what `DetectOnce` also does: the second library read behind the installed-feature lookup (`InstalledFeaturesByName`), the stored-page read, and the reads of reviewed candidates. `EditCandidate` is `import.candidate.edit` of a candidate with 20 unresolved references, none installed; `EditCandidateOneReference` is the same with one. Two runs; raw results: [`performance/raw/2026-10-25/before-run-1/`](performance/raw/2026-10-25/before-run-1/) and [`before-run-2/`](performance/raw/2026-10-25/before-run-2/). Allocations were the same in both runs to within 0.1 %, so one column is shown; times are the two runs' means.
+
+| Benchmark | N | Mean (run 1 / run 2) | Allocated |
+|---|---:|---:|---:|
+| Coverage | 250 | 27.4 ms / 25.8 ms | 18.9 MB |
+| Coverage | 500 | 33.8 ms / 33.4 ms | 23.0 MB |
+| Coverage | 1000 | 57.2 ms / 53.2 ms | 31.5 MB |
+| CandidatesPage | 250 | 0.41 ms / 0.39 ms | 304 KB |
+| CandidatesPage | 500 | 0.49 ms / 0.52 ms | 373 KB |
+| CandidatesPage | 1000 | 0.80 ms / 0.77 ms | 510 KB |
+| DetectWithLibrary | 250 | 26.9 ms / 25.8 ms | 18.3 MB |
+| DetectWithLibrary | 500 | 33.0 ms / 33.2 ms | 22.3 MB |
+| DetectWithLibrary | 1000 | 49.5 ms / 51.6 ms | 30.1 MB |
+| EditCandidate (20 references) | 250 | 512 ms / 499 ms | 357 MB |
+| EditCandidate (20 references) | 500 | 632 ms / 621 ms | 437 MB |
+| EditCandidate (20 references) | 1000 | 1,014 ms / 1,033 ms | 598 MB |
+| EditCandidateOneReference | 250 | 29.1 ms / 26.7 ms | 17.9 MB |
+| EditCandidateOneReference | 500 | 38.3 ms / 36.0 ms | 21.9 MB |
+| EditCandidateOneReference | 1000 | 52.6 ms / 53.2 ms | 29.9 MB |
+
+What the numbers say:
+- `Coverage` allocates about 17 KiB per added feature (4.2 MiB from 250 to 500, 8.5 MiB from 500 to 1000; from the raw `KB` columns, 4,275 KB and 8,712 KB over 250 and 500 features) on top of about 14.6 MiB for the SRD: linear. At 1000 it takes 53 to 57 ms against a target of 300 ms, so **no database change (DB v12) is proposed** on this evidence.
+- `EditCandidate` read the library once per reference: with 20 references it allocated about 20 times the one-reference cost at every N (the cost per read is linear in N).
+- `CandidatesPage` took well under its 50 ms target, but its allocations grew with N (304 KB, 373 KB, 510 KB): the page turn listed the id, page and name of every candidate to order them.
+
+## Import Lab (after)
+
+The Lab's tasks that have numbers: Task 6 (the tables in this section), Task 11 (Duplicates) and Task 12 (Markdown extractor), both below. Task 7 (the indexed-query change, A4, a database v12) was declined by the owner on 2026-10-25, so it has no after numbers and the database is unchanged.
+
+The same benchmarks after two in-memory fixes, no migration: the edit path builds one `InstalledNames` set per edit (`IsInstalledName` is gone), and a candidate page turn reads the pages its window falls on instead of every candidate's id and name (`SqliteStore.QueryImportCandidates`: two scalar page reads and two counts, then only the rows of those pages). One run; raw results: [`performance/raw/2026-10-25/after/`](performance/raw/2026-10-25/after/). `Coverage` and `DetectWithLibrary` are unchanged code (their rows are a second measurement of the same code).
+
+| Benchmark | N | Mean | Allocated | Target | Met |
+|---|---:|---:|---:|---|---|
+| Coverage | 250 | 25.5 ms | 18.9 MB | | |
+| Coverage | 500 | 33.5 ms | 23.0 MB | | |
+| Coverage | 1000 | 54.7 ms | 31.6 MB | 300 ms; allocations linear | yes |
+| CandidatesPage | 250 | 0.37 ms | 257 KB | | |
+| CandidatesPage | 500 | 0.43 ms | 257 KB | | |
+| CandidatesPage | 1000 | 0.49 ms | 257 KB | 50 ms; allocations independent of N when candidates spread across pages (see below) | yes |
+| DetectWithLibrary | 250 | 25.7 ms | 18.3 MB | | |
+| DetectWithLibrary | 500 | 36.0 ms | 22.3 MB | | |
+| DetectWithLibrary | 1000 | 51.8 ms | 30.1 MB | allocations linear in N | yes |
+| EditCandidate (20 references) | 250 | 26.5 ms | 17.6 MB | | |
+| EditCandidate (20 references) | 500 | 38.1 ms | 21.5 MB | | |
+| EditCandidate (20 references) | 1000 | 45.3 ms | 29.4 MB | linear in N; independent of references | yes |
+| EditCandidateOneReference | 250 | 26.4 ms | 17.5 MB | | |
+| EditCandidateOneReference | 500 | 38.1 ms | 21.5 MB | | |
+| EditCandidateOneReference | 1000 | 45.3 ms | 29.4 MB | | |
+
+`EditCandidate` at 1000 went from 598 MB to 29.4 MB and from about 1.0 s to 45 ms; with 20 references it now allocates 31 KB more than with one (0.1 %). `MarkdownExtract` is measured below.
+
+**Where "independent of N" holds.** A `CandidatesPage` turn reads and deserialises the rows of the 50 it returns, and lists the id, page and name of every row on the pages the window spans (to order them by name within a page). Its allocations therefore do not depend on N when the candidates spread across pages, as in this fixture (4 per page, so the window spans 13 or 14 pages). They are O(rows on the pages the window spans), and the two boundary pages can hold more rows than the window takes from them: a job whose candidates sit on a few pages (a PDF with one dense page, or a Markdown job with long pages) pays for every row on those pages, up to the job's size in the worst case. The benchmark does not measure that case.
+
+### Duplicates (L6)
+
+`content.duplicates` (design 9.2), measured 2026-10-25 on `import-lab`, one run; raw results: [`performance/raw/2026-10-25/duplicates/`](performance/raw/2026-10-25/duplicates/). It makes one whole-library read (`ListRevisionsInOrder()`), picks the latest published revision of each content, computes each entry's name key and fingerprint once, and groups in memory (nothing stored, no migration). `Duplicates` is a job's N pending candidates against the SRD and N original features; `DuplicatesLibrary` is the whole library against itself. The fixture is a worst case for "same rules": the N features share only three distinct rule sets, so the groups are large.
+
+| Benchmark | N | Mean | P95 | Allocated | Target | Met |
+|---|---:|---:|---:|---:|---|---|
+| Duplicates | 250 | 60.3 ms | 63.3 ms | 39.5 MB | | |
+| Duplicates | 500 | 71.6 ms | 74.4 ms | 48.5 MB | | |
+| Duplicates | 1000 | 102.9 ms | 106.9 ms | 66.8 MB | 500 ms | yes |
+| DuplicatesLibrary | 250 | 55.7 ms | 58.9 ms | 37.6 MB | | |
+| DuplicatesLibrary | 500 | 65.1 ms | 70.4 ms | 44.6 MB | | |
+| DuplicatesLibrary | 1000 | 90.5 ms | 92.3 ms | 59.1 MB | | |
+
+### Markdown extractor (L7)
+
+`MarkdownExtractor.Parse` (design 7.2), measured 2026-10-25 on `import-lab`, one run; raw results: [`performance/raw/2026-10-25/markdown/`](performance/raw/2026-10-25/markdown/). `MarkdownExtract` reads an invented document of 20,000 source lines (about 1 MB; headings, paragraphs with emphasis, links and HTML, list items, a pipe table, a run-in head and a comment, repeated), which becomes 334 pages. It is pure: no store, no library. The class's `N` parameter does not affect it, so the same code was measured at all three values (14.2 to 16.4 ms, the run-to-run spread on this machine).
+
+| Benchmark | Lines | Mean | P95 | Allocated | Target | Met |
+|---|---:|---:|---:|---:|---|---|
+| MarkdownExtract | 20,000 | 14.2 to 16.4 ms (three runs of the same code) | 17.4 ms at most | 16.3 MB | 1 s | yes |
+
+A test (`Adversarial_lines_at_the_limits_are_read_in_linear_time`) also reads 4 MB of lines made of one repeated link, tag or table mark each, and each finishes in well under a second.
 
 ## First paint (owed: owner, by hand)
 
