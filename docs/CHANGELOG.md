@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+### Internal
+- **Down-conversion engine:** the rules core can now lower a character or a content revision to an older schema version (character v9 or v8, content v10 or v9) and list what the copy loses, what blocks it and what goes silently, then validates the copy at that version. Nothing calls it yet; the export screens come later. No change to the app.
 ### Changed
 - The export preview names the oldest TomeStack that opens the file and why; the needs-newer-build warning names both versions (D83).
 ### Added
