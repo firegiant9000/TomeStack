@@ -577,4 +577,372 @@ public class LibraryBackupTests
             File.Delete(path);
         }
     }
+
+    /// <summary>
+    /// Edits a backup as a newer build would write it: the manifest names <paramref name="appVersion"/>, and the character
+    /// pins content (new SRD species, say) that this build's bundled packs do not hold. A library backup leaves the
+    /// bundled packs out, so those pins are in neither the backup nor this install.
+    /// </summary>
+    private static void AsWrittenBy(string path, string appVersion, int unseededPins) =>
+        File.WriteAllBytes(path, PackageEditor.Edit(
+            File.ReadAllBytes(path),
+            p => p.StartsWith("characters/", StringComparison.Ordinal),
+            character =>
+            {
+                for (var i = 0; i < unseededPins; i++)
+                    character["pins"]!.AsArray().Add(new System.Text.Json.Nodes.JsonObject { ["contentId"] = $"{Guid.NewGuid()}", ["revisionId"] = $"{Guid.NewGuid()}" });
+            },
+            manifest => manifest["appVersion"] = appVersion));
+
+    [Fact]
+    public void Restore_of_newer_backup_with_unseeded_pins_is_refused_with_count()
+    {
+        // Review focus 3 (S2): a newer build's backup must not pin revisions this build never seeds. The restore refuses it
+        // with one message that names the backup's version and how many picks are missing, not one line per pin.
+        using var origin = new TempApp();
+        Fill(origin.App);
+        var path = TempFile();
+        try
+        {
+            Backup(origin.App, path);
+            AsWrittenBy(path, "99.1.0", unseededPins: 2);
+
+            using var clean = new TempApp();
+            var preview = clean.App.PreviewLibraryRestore(path);
+
+            Assert.False(preview.CanApply);
+            var skew = Assert.Single(preview.Errors);
+            Assert.Equal("restore.needs-newer-build", skew.Code);
+            Assert.Contains("TomeStack 99.1.0", skew.Message, StringComparison.Ordinal);
+            Assert.Contains("2 content picks of 1 character (", skew.Message, StringComparison.Ordinal);
+            Assert.Contains("('Pell (2014 fixture)')", skew.Message, StringComparison.Ordinal); // the fixture's name
+            var refused = Assert.Throws<PackageException>(() => clean.App.ApplyLibraryRestore(path));
+            Assert.Equal("restore.needs-newer-build", Assert.Single(refused.Errors).Code);
+            Assert.Empty(clean.App.ListCharacters()); // nothing was written
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Restore_of_same_build_backup_has_no_skew_warning()
+    {
+        using var origin = new TempApp();
+        Fill(origin.App);
+        var path = TempFile();
+        try
+        {
+            Backup(origin.App, path);
+            using var clean = new TempApp();
+            var preview = clean.App.PreviewLibraryRestore(path);
+            Assert.True(preview.CanApply, string.Join("; ", preview.Errors.Select(e => e.Message)));
+            Assert.DoesNotContain(preview.Warnings.Concat(preview.Errors), d => d.Code == "restore.needs-newer-build");
+
+            // A pin missing from a backup of this same build is damage, not version skew: it is refused per pin, as before.
+            var thisBuild = typeof(PackageService).Assembly.GetName().Version!.ToString(3);
+            AsWrittenBy(path, thisBuild, unseededPins: 1);
+            var damaged = clean.App.PreviewLibraryRestore(path);
+            Assert.Equal("package.pin-missing", Assert.Single(damaged.Errors).Code);
+            Assert.DoesNotContain(damaged.Warnings, d => d.Code == "restore.needs-newer-build");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void The_skew_message_agrees_in_number_names_five_characters_and_clips_long_names()
+    {
+        var one = NewerBuild.Restore(new Version(0, 9, 0), 1, ["Test Solo"]).Message;
+        Assert.Contains("1 content pick of 1 character ('Test Solo') is neither", one, StringComparison.Ordinal);
+
+        var six = NewerBuild.Restore(new Version(0, 9, 0), 6, [.. Enumerable.Range(1, 6).Select(i => $"Test Hero {i}")]).Message;
+        Assert.Contains("6 content picks of 6 characters ('Test Hero 1', 'Test Hero 2', 'Test Hero 3', 'Test Hero 4', 'Test Hero 5' and 1 more) are neither", six, StringComparison.Ordinal);
+
+        var longName = new string('x', Character.MaxName + 50);
+        var clipped = NewerBuild.Restore(new Version(0, 9, 0), 1, [longName]).Message;
+        Assert.Contains($"'{longName[..Character.MaxName]}…'", clipped, StringComparison.Ordinal);
+        Assert.DoesNotContain(longName, clipped, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("0.6.0")] // older
+    [InlineData("this build, 2 parts")] // review fix: missing parts count as 0, so x.y.0 equals x.y
+    [InlineData("this build, 4 parts")]
+    [InlineData("v99.0.0")] // does not parse: no claim of a newer build
+    [InlineData("99.0.0-beta")]
+    [InlineData("")]
+    public void Restore_of_backup_not_from_a_newer_build_keeps_the_per_pin_refusal(string appVersion)
+    {
+        using var origin = new TempApp();
+        Fill(origin.App);
+        var path = TempFile();
+        try
+        {
+            Backup(origin.App, path);
+            var thisBuild = typeof(PackageService).Assembly.GetName().Version!;
+            if (appVersion == "this build, 2 parts")
+                appVersion = thisBuild.ToString(2); // equal when the patch part is 0, otherwise older
+            else if (appVersion == "this build, 4 parts")
+                appVersion = thisBuild.ToString(4);
+            AsWrittenBy(path, appVersion, unseededPins: 1);
+            using var clean = new TempApp();
+            var preview = clean.App.PreviewLibraryRestore(path);
+            Assert.Equal("package.pin-missing", Assert.Single(preview.Errors).Code);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    /// <summary>D77: a clock the test moves; the local time zone is fixed so a copy's name never depends on this machine.</summary>
+    private sealed class SettableTime(DateTimeOffset now, TimeZoneInfo? zone = null) : TimeProvider
+    {
+        public DateTimeOffset Now { get; set; } = now;
+
+        public override DateTimeOffset GetUtcNow() => Now;
+
+        public override TimeZoneInfo LocalTimeZone => zone ?? TimeZoneInfo.Utc;
+    }
+
+    private static string DailyFolder(TempApp temp) => Path.Combine(temp.Directory, PackageService.BackupFolderName, PackageService.DailyFolderName);
+
+    private static string[] DailyCopies(TempApp temp) =>
+        Directory.Exists(DailyFolder(temp)) ? [.. Directory.GetFiles(DailyFolder(temp)).Select(Path.GetFileName).Order(StringComparer.Ordinal)!] : [];
+
+    private static void Change(TomeStackApp app, Guid character, string text) =>
+        app.AddGapNote(new(character, new(GapTargetKind.Field, FieldId: FieldIds.ArmorClass), text));
+
+    [Fact]
+    public void Daily_copy_written_once_per_day()
+    {
+        var clock = new SettableTime(TempApp.Now);
+        using var temp = new TempApp(time: clock);
+        var library = Fill(temp.App);
+
+        var first = temp.App.TakeDailyCopy();
+        Change(temp.App, library.Character, "Test note: changed after the first copy.");
+        var second = temp.App.TakeDailyCopy();
+        clock.Now = TempApp.Now.AddHours(10); // later the same day, after a restart
+        temp.Reopen();
+        var third = temp.App.TakeDailyCopy();
+
+        Assert.Equal((DailyCopyOutcome.Written, "backups/daily/library-2026-09-24.tomestack.zip"), (first.Outcome, first.FileName));
+        Assert.Equal(DailyCopyOutcome.AlreadyTaken, second.Outcome);
+        Assert.Equal(DailyCopyOutcome.AlreadyTaken, third.Outcome);
+        Assert.Equal(["library-2026-09-24.tomestack.zip"], DailyCopies(temp));
+    }
+
+    [Fact]
+    public void A_fresh_data_folder_opened_twice_on_one_day_holds_one_daily_copy()
+    {
+        using var temp = new TempApp(time: new SettableTime(TempApp.Now));
+
+        temp.App.TakeDailyCopy();
+        temp.Reopen();
+        temp.App.TakeDailyCopy();
+
+        Assert.Single(DailyCopies(temp));
+    }
+
+    [Fact]
+    public void No_copy_when_unchanged()
+    {
+        var clock = new SettableTime(TempApp.Now);
+        using var temp = new TempApp(time: clock);
+        var library = Fill(temp.App);
+        temp.App.TakeDailyCopy();
+
+        clock.Now = TempApp.Now.AddDays(1);
+        temp.Reopen();
+        var unchanged = temp.App.TakeDailyCopy();
+        Change(temp.App, library.Character, "Test note: a change on day two.");
+        var changed = temp.App.TakeDailyCopy();
+
+        Assert.Equal(DailyCopyOutcome.Unchanged, unchanged.Outcome);
+        Assert.Equal(DailyCopyOutcome.Written, changed.Outcome);
+        Assert.Equal(["library-2026-09-24.tomestack.zip", "library-2026-09-25.tomestack.zip"], DailyCopies(temp));
+    }
+
+    [Fact]
+    public void Keeps_seven_deletes_eighth()
+    {
+        var clock = new SettableTime(TempApp.Now);
+        using var temp = new TempApp(time: clock);
+        var library = Fill(temp.App);
+
+        for (var day = 0; day < 8; day++)
+        {
+            clock.Now = TempApp.Now.AddDays(day);
+            Change(temp.App, library.Character, $"Test note: day {day}.");
+            Assert.Equal(DailyCopyOutcome.Written, temp.App.TakeDailyCopy().Outcome);
+        }
+
+        Assert.Equal([.. Enumerable.Range(1, 7).Select(d => $"library-{TempApp.Now.AddDays(d):yyyy-MM-dd}.tomestack.zip")], DailyCopies(temp));
+    }
+
+    [Theory]
+    [InlineData("changed")] // the same size, other content: only a full hash finds it
+    [InlineData("cut short")] // the quick check already leaves it out
+    [InlineData("deleted")]
+    public void A_damaged_pdf_neither_makes_a_copy_every_day_nor_rotates_out_the_copy_that_holds_it(string damage)
+    {
+        var clock = new SettableTime(TempApp.Now);
+        using var temp = new TempApp(time: clock);
+        var library = Fill(temp.App);
+        temp.App.TakeDailyCopy(); // day 0: the PDF is intact, so this copy holds it
+        var managed = AttachmentFiles.ManagedPath(temp.App.Store, temp.App.Store.ListAttachments().Single(a => a.Mode == AttachmentMode.Managed).Sha256!);
+        File.SetAttributes(managed, FileAttributes.Normal);
+        var bytes = File.ReadAllBytes(managed);
+        bytes[^2] ^= 0x20;
+        switch (damage)
+        {
+            case "changed":
+                File.WriteAllBytes(managed, bytes);
+                break;
+            case "cut short":
+                File.WriteAllBytes(managed, bytes[..^10]);
+                break;
+            default:
+                File.Delete(managed);
+                break;
+        }
+
+        for (var day = 1; day <= 8; day++)
+        {
+            clock.Now = TempApp.Now.AddDays(day);
+            Change(temp.App, library.Character, $"Test note: day {day}.");
+            var written = temp.App.TakeDailyCopy();
+            Assert.Equal(DailyCopyOutcome.Written, written.Outcome);
+            Assert.Equal(["backup.pdf-unreadable"], written.LeftOut);
+        }
+        clock.Now = TempApp.Now.AddDays(9);
+        var unchanged = temp.App.TakeDailyCopy();
+
+        Assert.Equal(DailyCopyOutcome.Unchanged, unchanged.Outcome);
+        Assert.Contains("library-2026-09-24.tomestack.zip", DailyCopies(temp)); // the only copy with the intact PDF
+        Assert.Equal(8, DailyCopies(temp).Length); // the newest 7, and that one: the folder stays bounded
+        Assert.Contains("backup.pdf-unreadable", File.ReadAllText(Path.Combine(temp.Directory, "logs", FileErrorLog.FileName)), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Two_pdfs_lost_on_different_days_each_spare_the_newest_copy_that_holds_them()
+    {
+        var clock = new SettableTime(TempApp.Now);
+        using var temp = new TempApp(time: clock);
+        var library = Fill(temp.App);
+        var second = temp.App.CreateHomebrewSource(new("Test Second Homebrew", [RulesFamilies.Srd51]));
+        temp.App.AttachPdf(second.Id, "second-notes.pdf", Encoding.ASCII.GetBytes("%PDF-1.4\n% TomeStack second test PDF\n%%EOF\n"));
+        var paths = temp.App.Store.ListAttachments().Where(a => a.Mode == AttachmentMode.Managed)
+            .Select(a => AttachmentFiles.ManagedPath(temp.App.Store, a.Sha256!)).ToList();
+        foreach (var path in paths)
+            File.SetAttributes(path, FileAttributes.Normal);
+
+        temp.App.TakeDailyCopy(); // day 0 holds both
+        File.Delete(paths[0]);
+        clock.Now = TempApp.Now.AddDays(1);
+        Change(temp.App, library.Character, "Test note: day 1.");
+        temp.App.TakeDailyCopy(); // day 1 holds only the second
+        File.Delete(paths[1]);
+        for (var day = 2; day <= 10; day++)
+        {
+            clock.Now = TempApp.Now.AddDays(day);
+            Change(temp.App, library.Character, $"Test note: day {day}.");
+            Assert.Equal(DailyCopyOutcome.Written, temp.App.TakeDailyCopy().Outcome);
+        }
+
+        var kept = DailyCopies(temp);
+        Assert.Contains("library-2026-09-24.tomestack.zip", kept); // the newest with the first PDF
+        Assert.Contains("library-2026-09-25.tomestack.zip", kept); // the newest with the second
+        Assert.Equal(9, kept.Length); // the newest 7, and one per PDF left out
+    }
+
+    [Fact]
+    public void A_copy_dated_after_today_is_neither_compared_with_nor_deleted()
+    {
+        var clock = new SettableTime(TempApp.Now);
+        using var temp = new TempApp(time: clock);
+        var library = Fill(temp.App);
+        temp.App.TakeDailyCopy();
+        var ahead = Path.Combine(DailyFolder(temp), "library-2099-01-01.tomestack.zip");
+        File.WriteAllText(ahead, "left by a clock that was once ahead; not a backup");
+
+        clock.Now = TempApp.Now.AddDays(1);
+        var unchanged = temp.App.TakeDailyCopy(); // compared with day 0's copy, not the unreadable one "after" it
+        for (var day = 2; day <= 9; day++)
+        {
+            clock.Now = TempApp.Now.AddDays(day);
+            Change(temp.App, library.Character, $"Test note: day {day}.");
+            temp.App.TakeDailyCopy();
+        }
+
+        Assert.Equal(DailyCopyOutcome.Unchanged, unchanged.Outcome);
+        Assert.True(File.Exists(ahead));
+        Assert.Equal(DailyCopyOutcome.AlreadyTaken, temp.App.TakeDailyCopy().Outcome);
+        Assert.Equal(8, DailyCopies(temp).Length); // days 3 to 9, and the one dated 2099
+    }
+
+    [Fact]
+    public void Setting_off_writes_nothing()
+    {
+        using var temp = new TempApp(time: new SettableTime(TempApp.Now));
+        Fill(temp.App);
+
+        Assert.True(temp.App.DailyCopies().On); // on by default
+        temp.App.SetDailyCopies(false);
+        var off = temp.App.TakeDailyCopy();
+        temp.Reopen();
+
+        Assert.Equal(DailyCopyOutcome.Off, off.Outcome);
+        Assert.False(temp.App.DailyCopies().On); // kept across a restart
+        Assert.Empty(DailyCopies(temp));
+        Assert.True(temp.App.SetDailyCopies(true).On);
+        Assert.Equal(DailyCopyOutcome.Written, temp.App.TakeDailyCopy().Outcome);
+    }
+
+    [Fact]
+    public void The_copy_is_named_for_the_local_day()
+    {
+        var plusTwo = TimeZoneInfo.CreateCustomTimeZone("Test+02", TimeSpan.FromHours(2), "Test+02", "Test+02");
+        using var temp = new TempApp(time: new SettableTime(new(2026, 9, 24, 23, 30, 0, TimeSpan.Zero), plusTwo));
+
+        Assert.Equal("backups/daily/library-2026-09-25.tomestack.zip", temp.App.TakeDailyCopy().FileName);
+    }
+
+    [Fact]
+    public void A_failed_daily_copy_is_logged_and_opening_goes_on()
+    {
+        using var temp = new TempApp(time: new SettableTime(TempApp.Now));
+        Directory.CreateDirectory(Path.GetDirectoryName(DailyFolder(temp))!);
+        File.WriteAllText(DailyFolder(temp), "a file where the folder should be");
+
+        var result = temp.App.TakeDailyCopy();
+
+        Assert.Equal(DailyCopyOutcome.Failed, result.Outcome);
+        Assert.Contains(Directory.GetFiles(Path.Combine(temp.Directory, "logs")), f => File.ReadAllText(f).Contains("library.dailyCopy", StringComparison.Ordinal));
+        Assert.NotNull(temp.App.GetInfo()); // the app is still usable
+    }
+
+    [Fact]
+    public void The_daily_copy_setting_round_trips_through_the_commands()
+    {
+        using var temp = new TempApp(time: new SettableTime(TempApp.Now));
+        var dispatcher = new CommandDispatcher(temp.App);
+        temp.App.TakeDailyCopy();
+
+        var off = Ok(dispatcher, "library.setDailyCopies", new { on = false });
+        var read = Ok(dispatcher, "library.dailyCopies");
+
+        Assert.Contains("library.dailyCopies", CommandDispatcher.Commands);
+        Assert.Contains("library.setDailyCopies", CommandDispatcher.Commands);
+        Assert.False(off.GetProperty("on").GetBoolean());
+        Assert.False(read.GetProperty("on").GetBoolean());
+        Assert.Equal("library-2026-09-24.tomestack.zip", read.GetProperty("copies")[0].GetString()); // turning it off keeps the copies
+        Assert.True(read.GetProperty("bytes").GetInt64() > 0);
+        Assert.DoesNotContain(Path.GetTempPath(), read.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
 }

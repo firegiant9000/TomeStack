@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useId, useRef, useState, type ChangeEvent } from 'react';
 import { client } from '../api/client';
 import { TomeStackError } from '../api/transport';
-import type { AttachmentInfo, DetachPreview, SourcePackPreview, SourceRecord } from '../api/types';
+import type { AttachmentInfo, DetachPreview, PreflightReport, SourcePackPreview, SourceRecord } from '../api/types';
 import { downloadBase64, readFileAsBase64 } from '../files';
 import { ChangeRegion } from './export/ChangeRegion';
 import { ExportConfirmation, hasBlocker, needsConfirmation } from './export/ExportConfirmation';
 import { TargetFieldset } from './export/TargetFieldset';
 import { usePackageTargets } from './export/usePackageTargets';
 import { ImportPanel } from './ImportPanel';
+import { PreflightPanel } from './PreflightPanel';
+import { canSaveAfter } from './preflightText';
 
 /**
  * What the author confirms to mark a source as shareable (M6 slice 1). The same words as the service's
@@ -21,7 +23,7 @@ const inPack = (s: SourceRecord) => s.redistributable && !s.importDerived && s.o
 
 /** M6 slice 1: how a homebrew source may be shared, in words. */
 function sharing(source: SourceRecord): string {
-  if (source.importDerived) return 'Holds material imported from a PDF: never shared, even after the PDF is removed.';
+  if (source.importDerived) return 'Holds imported material (from a PDF or a Markdown file): never shared, and that never changes.';
   if (source.origin === 'received') return source.redistributable ? 'Received from someone else; may travel on in character shares.' : 'Received from someone else; not shared.';
   if (inPack(source)) return 'Marked as shareable: your own work, can go in a source pack.';
   if (source.redistributable) return 'Shared in character shares, but not confirmed as your own work, so not in a source pack.';
@@ -100,6 +102,8 @@ function PageImportForm({ source, onError, onStatus }: { source: SourceRecord } 
 function SourcePackForm({ sources, onError, onStatus }: { sources: SourceRecord[] } & Props) {
   const [picked, setPicked] = useState<string[]>([]);
   const [preview, setPreview] = useState<SourcePackPreview>();
+  // Import Lab L5: the one sharing rule's answer for the ticked sources; Save waits for it and stops on anything blocking.
+  const [report, setReport] = useState<PreflightReport>();
   const targets = usePackageTargets();
   const [target, setTarget] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
@@ -197,6 +201,7 @@ function SourcePackForm({ sources, onError, onStatus }: { sources: SourceRecord[
           <TargetFieldset targets={targets} value={target} onChange={chooseTarget} />
         </>
       )}
+      {chosen.length > 0 && <PreflightPanel kind="sourcePack" selection={chosen} label="source pack" onReport={setReport} onError={onError} />}
       {previewFailed && <p>Could not check what the copy for TomeStack {target} leaves out.</p>}
       {preview && (
         <div role="region" aria-label="Source pack preview">
@@ -214,7 +219,7 @@ function SourcePackForm({ sources, onError, onStatus }: { sources: SourceRecord[
           )}
           <ExportConfirmation changes={preview.changes} confirmed={confirmed} onConfirmedChange={setConfirmed} hintId={hintId} />
           <div className="actions">
-            <button type="button" onClick={save} disabled={saveDisabled} aria-describedby={blocked ? hintId : undefined}>
+            <button type="button" onClick={save} disabled={saveDisabled || !canSaveAfter(report)} aria-describedby={blocked ? hintId : undefined}>
               Save pack…
             </button>
           </div>
@@ -394,11 +399,10 @@ export function SourcesPanel({ onError, onStatus, onOpenStudio }: Props & { onOp
                   </div>
                 </div>
               )}
-              {pdf && pdf.status !== 'missing' && source.editionVersion === 'homebrew' && (
-                <>
-                  <PageImportForm source={source} onError={onError} onStatus={onStatus} />
-                  <ImportPanel source={source} onError={onError} onStatus={onStatus} onOpenStudio={onOpenStudio} />
-                </>
+              {pdf && pdf.status !== 'missing' && source.editionVersion === 'homebrew' && <PageImportForm source={source} onError={onError} onStatus={onStatus} />}
+              {/* D67: a Markdown import needs no PDF, so every homebrew source gets the panel; the PDF reads show only with a PDF. */}
+              {source.editionVersion === 'homebrew' && (
+                <ImportPanel source={source} hasPdf={!!pdf && pdf.status !== 'missing'} onError={onError} onStatus={onStatus} onOpenStudio={onOpenStudio} />
               )}
               {removing?.sourceId === source.id && (
                 <div role="alertdialog" aria-label={`Remove ${removing.originalFileName}?`} className="play-panel">

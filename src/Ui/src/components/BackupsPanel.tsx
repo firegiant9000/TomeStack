@@ -1,7 +1,7 @@
 import { useEffect, useId, useState } from 'react';
 import { client } from '../api/client';
 import { TomeStackError } from '../api/transport';
-import type { LibraryBackupPreview, PackagePreview, SourceChoice } from '../api/types';
+import type { DailyCopies, LibraryBackupPreview, PackagePreview, SourceChoice } from '../api/types';
 import { ChangeRegion } from './export/ChangeRegion';
 import { ExportConfirmation, hasBlocker, needsConfirmation } from './export/ExportConfirmation';
 import { TargetFieldset } from './export/TargetFieldset';
@@ -31,6 +31,12 @@ export function BackupsPanel({ onError, onStatus, onRestored }: Props) {
   const [busy, setBusy] = useState<'backup' | 'choose' | 'restore'>();
   const [restore, setRestore] = useState<{ token: string; fileName: string; preview: PackagePreview }>();
   const [choices, setChoices] = useState<Record<string, SourceChoice>>({});
+
+  const [daily, setDaily] = useState<DailyCopies>();
+
+  useEffect(() => {
+    client.dailyCopies().then(setDaily).catch(onError);
+  }, [onError]);
 
   const targets = usePackageTargets();
   const [target, setTarget] = useState<string | null>(null);
@@ -71,6 +77,14 @@ export function BackupsPanel({ onError, onStatus, onRestored }: Props) {
 
   const blocked = hasBlocker(contents?.changes);
   const backUpDisabled = busy !== undefined || (target !== null && !contents) || blocked || (needsConfirmation(contents?.changes) && !confirmed);
+
+  async function setDailyOn(on: boolean) {
+    try {
+      setDaily(await client.setDailyCopies(on));
+    } catch (error) {
+      onError(error);
+    }
+  }
 
   async function backUp() {
     setBusy('backup');
@@ -178,6 +192,27 @@ export function BackupsPanel({ onError, onStatus, onRestored }: Props) {
         <button type="button" onClick={backUp} disabled={backUpDisabled} aria-describedby={blocked ? hintId : undefined}>
           {busy === 'backup' ? 'Backing up…' : 'Back up everything…'}
         </button>
+      </section>
+
+      <section aria-labelledby="daily-copies-heading">
+        <h3 id="daily-copies-heading">Daily copies</h3>
+        <p>
+          The first time you open TomeStack on a day, if your library changed since the last copy, it saves a full backup in the
+          backups\daily folder of your data folder (normally %LOCALAPPDATA%\TomeStack) and keeps the newest 7. Each copy
+          includes your PDF copies, so they take about 7 times that space (more while a PDF is damaged); a copy is skipped if it would leave less than 2 GB
+          free. They stay on this computer, so they help if something goes wrong in TomeStack, not if the computer fails. To use
+          one, choose it with &quot;Choose a full backup…&quot; below.
+        </p>
+        {daily && (
+          <>
+            <label className="choice">
+              <input type="checkbox" checked={daily.on} onChange={(e) => void setDailyOn(e.target.checked)} /> Keep 7 daily copies
+            </label>
+            <p className="hint">
+              {daily.copies.length === 0 ? 'No daily copies yet.' : `Newest: ${daily.copies[0]} (${daily.copies.length} kept, ${megabytes(daily.bytes)}).`}
+            </p>
+          </>
+        )}
       </section>
 
       <section aria-labelledby="restore-heading">

@@ -2,7 +2,8 @@
 // The dice display (ADR-015): the service's dice, drawn beside the text and hidden from assistive tech. The region's text
 // is unchanged, so what a screen reader hears and what the e2e asserts stay the same. Nothing is rolled in the UI.
 import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, expect, it } from 'vitest';
+import userEvent from '@testing-library/user-event';
+import { afterEach, expect, it, vi } from 'vitest';
 import type { CharacterView, DieResult, RollRecord } from '../api/types';
 import { ActionsPanel, RollResult } from './PlayPanels';
 
@@ -110,4 +111,24 @@ it('drops aria-live from the Last roll region when "Announce each roll" is off, 
   localStorage.removeItem('tomestack.announceRolls');
   render(<RollResult record={record()} resources={[]} features={[]} act={() => {}} />);
   expect(region().getAttribute('aria-live')).toBe('polite');
+});
+
+// D73: the sheet's lifted "spent" pair. The record it names is the spent one, and Spend goes through the sheet's spender.
+it('with a lifted spent pair, a record named as spent disables Spend and a press goes through the pair (D73)', async () => {
+  const user = userEvent.setup();
+  const spendRecord = record({ spend: { contentId: 'c1', resourceId: 'pool', amount: 1 } });
+  const pool = [
+    {
+      content: { contentId: 'c1', revisionId: 'r1' }, contentName: 'Fixture', effectId: 'e1', resourceId: 'pool', label: 'Fixture pool',
+      maximum: 3, spent: 0, current: 3, trace: [], warnings: [], automation: 'automatic' as const, recoveries: [],
+    },
+  ];
+  const spendOnce = vi.fn().mockResolvedValue(true);
+  const act = vi.fn();
+  const { rerender } = render(<RollResult record={spendRecord} resources={pool} features={[]} act={act} spent={{ record: undefined, spendOnce }} />);
+  await user.click(screen.getByRole('button', { name: 'Spend 1 Fixture pool (3 left)' }));
+  expect(spendOnce).toHaveBeenCalledExactlyOnceWith(spendRecord, { action: 'spend', amount: 1, contentId: 'c1', resourceId: 'pool' }, undefined);
+  expect(act).not.toHaveBeenCalled(); // the pair spends, not the component
+  rerender(<RollResult record={spendRecord} resources={pool} features={[]} act={act} spent={{ record: spendRecord, spendOnce }} />);
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Spend 1 Fixture pool (3 left)' }).disabled).toBe(true);
 });

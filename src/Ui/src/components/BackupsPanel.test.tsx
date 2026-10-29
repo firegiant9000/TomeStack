@@ -16,6 +16,8 @@ vi.mock('../api/client', () => ({
     libraryBackupSaveAs: vi.fn(),
     chooseLibraryRestore: vi.fn(),
     applyLibraryRestore: vi.fn(),
+    dailyCopies: vi.fn(),
+    setDailyCopies: vi.fn(),
   },
 }));
 
@@ -46,6 +48,7 @@ beforeEach(() => {
   vi.mocked(client.libraryBackupPreview).mockImplementation(async (target) => previewOf(target));
   vi.mocked(client.libraryBackupSaveAs).mockReset();
   vi.mocked(client.libraryBackupSaveAs).mockResolvedValue({ saved: false });
+  vi.mocked(client.dailyCopies).mockResolvedValue({ on: false, copies: [], bytes: 0 });
 });
 
 async function openBackups(onError: (e: unknown) => void = () => {}) {

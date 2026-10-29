@@ -9,9 +9,12 @@ import type {
   CandidateEdit,
   CandidateFilter,
   CandidatePage,
+  DailyCopies,
+  DiagnosticsText,
   ImportJob,
   ImportSearchHit,
   StoredCandidate,
+  StoredPage,
   DetachPreview,
   OpenPageOutcome,
   ContentKind,
@@ -25,6 +28,10 @@ import type {
   SpellListKeyCount,
   SourcePackPreview,
   CampaignPackPreview,
+  PreflightReport,
+  PreflightRequest,
+  DuplicateGroup,
+  DuplicatesRequest,
   ExtensionInstallPreview,
   ExtensionRunPreview,
   ExtensionRunRequest,
@@ -55,6 +62,9 @@ import type {
   ExportPreview,
   ExportPurpose,
   FormulaPreviewResult,
+  ClassTableView,
+  CoverageReport,
+  CoverageRequest,
   GapNote,
   GapNoteListing,
   GapNoteStatus,
@@ -153,6 +163,10 @@ export function createClient(transport: Transport) {
     /** A formula's value at sample class levels (D61). Read-only; `revision` is the unsaved draft whose scales `SCALE.<id>` reads. */
     previewFormula: (formula: string, revision?: ContentRevision, floorAtZero?: boolean) =>
       call<FormulaPreviewResult>('content.previewFormula', { formula, revision, floorAtZero }),
+    /** What the engine really does with each effect of a source's content (Import Lab, D62 L1). Read-only; drafts only when asked. */
+    contentCoverage: (args: CoverageRequest = {}) => call<CoverageReport>('content.coverage', args),
+    contentDuplicates: (args: DuplicatesRequest = {}) => call<DuplicateGroup[]>('content.duplicates', args),
+    contentClassTable: (revisionId: string) => call<ClassTableView>('content.classTable', { revisionId }),
     listSources: () => call<SourceRecord[]>('source.list'),
     createHomebrewSource: (title: string, rulesFamilies: RulesFamilyId[]) =>
       call<SourceRecord>('source.createHomebrew', { title, rulesFamilies }),
@@ -184,12 +198,26 @@ export function createClient(transport: Transport) {
     // ---- PDF import (M4): extraction jobs, search and candidate review. Accepting creates a draft only (ADR-004). ----
     startImport: (sourceId: string, request: { firstPage?: number; lastPage?: number; wholeDocument?: boolean; writtenFor?: RulesFamilyId[] }) =>
       call<ImportJob>('import.start', { sourceId, ...request }),
+    /**
+     * D67: native Open dialog for a `.md` file, then a Markdown import of it (import pages only; no copy of the file is kept).
+     * Resolves to `undefined` when the dialog was cancelled; fails with `unsupported` outside the desktop app. No timeout: it waits for the dialog.
+     */
+    startMarkdownImport: (sourceId: string, writtenFor?: RulesFamilyId[]) =>
+      call<ImportJob | undefined>('import.startMarkdown', { sourceId, ...(writtenFor ? { writtenFor } : {}) }, { timeoutMs: null }),
+    /** D67, browser development: the chosen file's bytes. */
+    startMarkdownImportData: (sourceId: string, fileName: string, base64: string, writtenFor?: RulesFamilyId[]) =>
+      call<ImportJob>('import.startMarkdownData', { sourceId, fileName, base64, ...(writtenFor ? { writtenFor } : {}) }, { timeoutMs: null }),
     importStatus: (jobId: string) => call<ImportJob>('import.status', { jobId }),
     listImports: (sourceId: string) => call<ImportJob[]>('import.list', { sourceId }),
     cancelImport: (jobId: string) => call<ImportJob>('import.cancel', { jobId }, { timeoutMs: null }),
     resumeImport: (jobId: string) => call<ImportJob>('import.resume', { jobId }),
     /** SPEC I-03: pages of one source whose extracted text contains the query; writes nothing. */
     searchImport: (sourceId: string, query: string) => call<ImportSearchHit[]>('import.search', { sourceId, query }),
+    /**
+     * D64: the stored extraction of one page of the source's current PDF, or with `sha256` of the PDF a candidate was read from
+     * (`import.page-not-extracted` when it was never read).
+     */
+    importedPage: (sourceId: string, page: number, sha256?: string) => call<StoredPage>('import.page', { sourceId, page, ...(sha256 ? { sha256 } : {}) }),
     /** One page (50 unless `limit` says; at most 200) of a job's candidates in page order, and the total the filter matches. */
     candidates: (jobId: string, filter: CandidateFilter = {}, paging: { offset?: number; limit?: number } = {}) =>
       call<CandidatePage>('import.candidates', { jobId, ...filter, ...paging }),
@@ -287,6 +315,8 @@ export function createClient(transport: Transport) {
      */
     saveExportAs: (characterIds: string[], purpose: ExportPurpose = 'backup', target?: string | null, changesHash?: string | null) =>
       call<SaveOutcome>('package.saveAs', { characterIds, purpose, ...downConversion(target, changesHash) }, { timeoutMs: null }),
+    /** Import Lab L5: what a share export would include, leave out or refuse, by the one sharing rule. Writes nothing; export re-checks. */
+    packagePreflight: (request: PreflightRequest) => call<PreflightReport>('package.preflight', request),
     // ---- source packs (M6 slice 1): only sources you marked as shareable; import goes through previewImport/applyImport ----
     sourcePackPreview: (sourceIds: string[], target?: string | null) =>
       call<SourcePackPreview>('package.sourcePackPreview', { sourceIds, ...downConversion(target) }),
@@ -372,6 +402,12 @@ export function createClient(transport: Transport) {
     /** Only the preview's "Restore" button calls this. */
     applyLibraryRestore: (token: string, sourceChoices: Record<string, SourceChoice> = {}) =>
       call<LibraryRestoreResult>('library.restoreApply', { token, sourceChoices, confirm: true }, { timeoutMs: null }),
+    /** Settings "Copy diagnostics": versions and the newest error-log entries, redacted by the service; reads only. */
+    copyDiagnostics: () => call<DiagnosticsText>('diagnostics.copy'),
+    /** D77: the daily copies setting and the copies kept. */
+    dailyCopies: () => call<DailyCopies>('library.dailyCopies'),
+    /** Turning it off keeps the copies already taken. */
+    setDailyCopies: (on: boolean) => call<DailyCopies>('library.setDailyCopies', { on }),
   };
 }
 

@@ -46,6 +46,11 @@ public sealed record ImportJobRecord
     public bool? TruncatedCandidates { get; init; }
     /// <summary>Tester feedback item 13: the first page detection did not read, when it stopped for size. Omitted otherwise.</summary>
     public int? DetectionLimitedFromPage { get; init; }
+    /// <summary>
+    /// D67: <c>markdown</c> for a Markdown import (import pages only: no attachment, not resumable); absent for a PDF job, so a PDF
+    /// job's JSON is unchanged. A build before D67 keeps the key in <see cref="Extensions"/> and treats the job as a PDF one.
+    /// </summary>
+    public string? Format { get; init; }
     public DateTimeOffset CreatedAt { get; init; }
     public DateTimeOffset UpdatedAt { get; init; }
 
@@ -58,6 +63,12 @@ public sealed record ImportJobRecord
 
     [JsonIgnore]
     public bool Active => Status is ImportJobStatus.Queued or ImportJobStatus.Running;
+
+    /// <summary>The value of <see cref="Format"/> for a Markdown job.</summary>
+    public const string MarkdownFormat = "markdown";
+
+    [JsonIgnore]
+    public bool IsMarkdown => Format == MarkdownFormat;
 }
 
 /// <summary>One extracted page (ADR-009): its text, blocks with page coordinates, warnings and an error code.</summary>
@@ -87,7 +98,8 @@ public sealed record ImportSearchRequest(Guid SourceId, string Query);
 
 public sealed record ImportSearchHit(int Page, string Snippet);
 
-public sealed record ImportPageRequest(Guid SourceId, int Page);
+/// <param name="Sha256">D64: read the page of the PDF with this hash, if one of the source's import jobs read it; null: the source's current PDF.</param>
+public sealed record ImportPageRequest(Guid SourceId, int Page, string? Sha256 = null);
 
 public sealed partial class TomeStackApp
 {
@@ -102,6 +114,13 @@ public sealed partial class TomeStackApp
     private volatile bool _disposing;
 
     private IDocumentExtractor Extractor => _extractor ??= new ImportWorker.Extraction.WorkerProcessExtractor(Path.Combine(AppContext.BaseDirectory, WorkerFileName));
+
+    private IDocumentExtractor? _markdownExtractor;
+
+    /// <summary>D67: the same worker, asked for its <c>extractMarkdown</c> kind (a host or test may pass an in-process reader to <see cref="Open"/>).</summary>
+    private IDocumentExtractor MarkdownReader => _markdownExtractor ??= new ImportWorker.Extraction.WorkerProcessExtractor(Path.Combine(AppContext.BaseDirectory, WorkerFileName)) { Kind = ImportWorker.Extraction.WorkerRequest.MarkdownKind };
+
+    private const string MarkdownCopyPrefix = "tomestack-markdown-";
 
     /// <summary>The running job's task (tests wait on it); null when no job runs.</summary>
     internal Task? RunningImport
@@ -129,14 +148,7 @@ public sealed partial class TomeStackApp
         if (first < 1 || first > MaxPage || last is < 1 or > MaxPage || (last is { } end && end < first))
             throw new AppValidationException([new("source.page-range-invalid", $"Pages go from 1 to {MaxPage}, and the last page cannot come before the first.")]);
 
-        // 2026-10-14 item 3: the answer must name at least one family, each known and each declared by the source (ids only in the message).
-        string[]? writtenFor = null;
-        if (request.WrittenFor is { } asked)
-        {
-            writtenFor = [.. asked.Distinct(StringComparer.Ordinal)];
-            if (writtenFor.Length == 0 || writtenFor.Any(f => !RulesFamilies.IsKnown(f) || !source.RulesFamilies.Contains(f)))
-                throw new AppValidationException([new("import.family-not-in-source", $"The book can only be written for families the source declares ({string.Join(", ", source.RulesFamilies)}).")]);
-        }
+        var writtenFor = CheckWrittenFor(source, request.WrittenFor);
 
         var now = _time.GetUtcNow();
         var job = new ImportJobRecord
@@ -157,6 +169,149 @@ public sealed partial class TomeStackApp
             Launch(job.Id, "started");
         }
         return job;
+    }
+
+    /// <summary>
+    /// 2026-10-14 item 3: the answer must name at least one family, each known and each declared by the source (ids only in the
+    /// message). Null (not asked) stays null.
+    /// </summary>
+    private static string[]? CheckWrittenFor(SourceRecord source, IReadOnlyList<string>? asked)
+    {
+        if (asked is null)
+            return null;
+        var writtenFor = asked.Distinct(StringComparer.Ordinal).ToArray();
+        if (writtenFor.Length == 0 || writtenFor.Any(f => !RulesFamilies.IsKnown(f) || !source.RulesFamilies.Contains(f)))
+            throw new AppValidationException([new("import.family-not-in-source", $"The book can only be written for families the source declares ({string.Join(", ", source.RulesFamilies)}).")]);
+        return writtenFor;
+    }
+
+    private SourceRecord HomebrewSourceOrThrow(Guid sourceId)
+    {
+        var source = FindSourceOrThrow(sourceId);
+        if (source.EditionVersion != "homebrew")
+            throw new AppValidationException([new("source.not-editable", $"'{source.Title}' is a bundled source. Create your own source for the book in the studio, then import it there.")]);
+        return source;
+    }
+
+    private static AppValidationException MarkdownTooLarge() =>
+        new([new("markdown.too-large", $"The Markdown file is larger than {ExtractionLimits.MarkdownMaxBytes / (1024 * 1024)} MB.")]);
+
+    /// <summary>
+    /// <c>import.startMarkdown</c> (D67): reads the file the user chose once and starts a Markdown import of it. A missing file is
+    /// <c>markdown.missing</c>, one that cannot be read <c>markdown.unreadable</c>, one over the size limit
+    /// <c>markdown.too-large</c>; none of them creates a job. <paramref name="path"/> comes from the native dialog, never the UI.
+    /// </summary>
+    public ImportJobRecord StartMarkdownImportFile(Guid sourceId, string path, IReadOnlyList<string>? writtenFor = null)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(path);
+        HomebrewSourceOrThrow(sourceId); // before the file is read
+        byte[] bytes;
+        try
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            if (stream.Length > ExtractionLimits.MarkdownMaxBytes)
+                throw MarkdownTooLarge();
+            bytes = new byte[stream.Length];
+            stream.ReadExactly(bytes);
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+        {
+            throw new AppValidationException([new("markdown.missing", "The Markdown file could not be found. Choose it again.")]);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new AppValidationException([new("markdown.unreadable", "The Markdown file could not be opened. Close it in other programs and check you can read it, then try again.")]);
+        }
+        return StartMarkdownImport(sourceId, bytes, writtenFor);
+    }
+
+    /// <summary>
+    /// <c>import.startMarkdownData</c> (D67; browser development and tests send the bytes): starts a Markdown import of the whole
+    /// document. Only import pages are kept, stored under the SHA-256 of these bytes: no attachment, no copy of the file, and the
+    /// job cannot be resumed (the file has to be imported again). The worker reads a temporary copy, deleted when the run ends.
+    /// Same source rules as <see cref="StartImport"/>.
+    /// </summary>
+    public ImportJobRecord StartMarkdownImport(Guid sourceId, byte[] bytes, IReadOnlyList<string>? writtenFor = null)
+    {
+        ArgumentNullException.ThrowIfNull(bytes);
+        var source = HomebrewSourceOrThrow(sourceId);
+        var families = CheckWrittenFor(source, writtenFor);
+        if (bytes.LongLength > ExtractionLimits.MarkdownMaxBytes)
+            throw MarkdownTooLarge();
+
+        var now = _time.GetUtcNow();
+        var job = new ImportJobRecord
+        {
+            Id = Guid.NewGuid(), SourceId = source.Id, Sha256 = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes)),
+            FirstPage = 1, LastPage = null, WholeDocument = true, WrittenFor = families, Format = ImportJobRecord.MarkdownFormat, NextPage = 1, CreatedAt = now, UpdatedAt = now,
+        };
+        var copy = Path.Combine(Path.GetTempPath(), $"{MarkdownCopyPrefix}{Guid.NewGuid():N}.md");
+        var handedOver = false;
+        try
+        {
+            try
+            {
+                File.WriteAllBytes(copy, bytes);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                throw new AppValidationException([new("markdown.unreadable", "TomeStack could not prepare the Markdown file for reading. Check that the temporary folder is writable, then try again.")]);
+            }
+            lock (_importGate)
+            {
+                if (_running is not null)
+                    throw new AppValidationException([new("import.busy", "Another import is running. Wait for it, or cancel it, then start this one.")]);
+                _store.InTransaction(() =>
+                {
+                    MarkImportDerived(source.Id);
+                    _store.SaveImportJob(job);
+                    _store.AddImportAudit(job.Id, now, "created", "markdown, whole document" + (families is null ? "" : $"; written for {string.Join(", ", families)}"));
+                });
+                Launch(job.Id, "started", copy);
+                handedOver = true; // the run deletes the copy when it ends
+            }
+        }
+        finally
+        {
+            if (!handedOver)
+                DeleteMarkdownCopy(copy);
+        }
+        return job;
+    }
+
+    /// <summary>Best effort: another program (a virus scanner) can hold the copy for a moment.</summary>
+    private static void DeleteMarkdownCopy(string path)
+    {
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            try
+            {
+                File.Delete(path);
+                return;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                if (attempt < 2)
+                    Thread.Sleep(100 * (attempt + 1));
+            }
+        }
+    }
+
+    /// <summary>At start: a copy a crashed run left in the temporary folder (older than any run can last) is deleted.</summary>
+    private static void DeleteLeftoverMarkdownCopies()
+    {
+        try
+        {
+            foreach (var file in Directory.EnumerateFiles(Path.GetTempPath(), $"{MarkdownCopyPrefix}*.md"))
+            {
+                if (File.GetLastWriteTimeUtc(file) < DateTime.UtcNow.AddHours(-2))
+                    DeleteMarkdownCopy(file);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Best effort.
+        }
     }
 
     /// <summary><c>import.status</c>: the job as stored now. Writes nothing.</summary>
@@ -205,6 +360,8 @@ public sealed partial class TomeStackApp
         var job = ImportStatus(jobId);
         if (job.Status is not (ImportJobStatus.Cancelled or ImportJobStatus.Failed or ImportJobStatus.Interrupted))
             throw new AppValidationException([new("import.not-resumable", $"Only a cancelled, failed or interrupted import can be resumed; this one is {job.Status.ToString().ToLowerInvariant()}.")]);
+        if (job.IsMarkdown)
+            throw new AppValidationException([new("import.markdown-read-again", "Import the Markdown file again.")]); // D67: no copy of the file is kept
         var sha = AvailablePdf(FindSourceOrThrow(job.SourceId));
         if (sha != job.Sha256)
             throw new AppValidationException([new("import.pdf-changed", "The source's PDF changed since this import started. Start a new import instead.")]);
@@ -230,9 +387,23 @@ public sealed partial class TomeStackApp
         if (query.Length is < 2 or > 100)
             throw new AppValidationException([new("import.query-invalid", "Search for 2 to 100 characters.")]);
         var source = FindSourceOrThrow(request.SourceId);
-        if (source.AttachmentId is not { } id || _store.FindAttachment(id) is not { Sha256: { } sha })
+        if (SourceTextSha(source) is not { } sha)
             return [];
         return [.. _store.SearchImportPages(sha, query, MaxSearchResults).Select(hit => new ImportSearchHit(hit.Page, Snippet(hit.Text, query)))];
+    }
+
+    /// <summary>
+    /// The hash whose stored pages stand for the source when a request names none: the source's PDF, when it has one (unchanged),
+    /// otherwise the newest Markdown job's (D67). Null when neither exists.
+    /// </summary>
+    private string? SourceTextSha(SourceRecord source)
+    {
+        if (source.AttachmentId is { } id && _store.FindAttachment(id) is { Sha256: { } sha })
+            return sha;
+        // R22: a newer failed or cancelled re-import that stored no pages must not hide an earlier good one, so jobs with pages
+        // come first; with none, the newest Markdown job. Newest first, so a tie on CreatedAt (one clock tick) goes to the later job.
+        var markdown = _store.ListImportJobs().Where(j => j.SourceId == source.Id && j.IsMarkdown).Reverse().ToList();
+        return (markdown.Where(j => j.PagesDone > 0).MaxBy(j => j.CreatedAt) ?? markdown.MaxBy(j => j.CreatedAt))?.Sha256;
     }
 
     /// <summary><c>import.page</c>: the stored extraction of one page of the source's current PDF, or <c>import.page-not-extracted</c>.</summary>
@@ -240,7 +411,14 @@ public sealed partial class TomeStackApp
     {
         ArgumentNullException.ThrowIfNull(request);
         var source = FindSourceOrThrow(request.SourceId);
-        if (source.AttachmentId is { } id && _store.FindAttachment(id) is { Sha256: { } sha } && _store.FindImportPage(sha, request.Page) is { } page)
+        if (request.Sha256 is { } wanted)
+        {
+            // D64: the page a candidate was read from, even after the source's PDF was replaced; only a document one of this source's jobs read.
+            if (_store.ListImportJobs().Any(j => j.SourceId == request.SourceId && string.Equals(j.Sha256, wanted, StringComparison.OrdinalIgnoreCase))
+                && _store.FindImportPage(wanted, request.Page) is { } stored)
+                return stored;
+        }
+        else if (SourceTextSha(source) is { } sha && _store.FindImportPage(sha, request.Page) is { } page)
             return page;
         throw new AppValidationException([new("import.page-not-extracted", $"Page {request.Page} of '{source.Title}' has not been extracted. Import it first; the page still opens in the PDF viewer.")]);
     }
@@ -281,14 +459,14 @@ public sealed partial class TomeStackApp
     }
 
     /// <summary>Starts the background run. The caller holds <see cref="_importGate"/>.</summary>
-    private void Launch(Guid jobId, string eventName)
+    private void Launch(Guid jobId, string eventName, string? markdownCopy = null)
     {
         var cancel = new CancellationTokenSource();
-        var task = Task.Run(() => RunImportAsync(jobId, eventName, cancel.Token));
+        var task = Task.Run(() => RunImportAsync(jobId, eventName, cancel.Token, markdownCopy));
         _running = (jobId, cancel, task);
     }
 
-    private async Task RunImportAsync(Guid jobId, string eventName, CancellationToken cancellationToken)
+    private async Task RunImportAsync(Guid jobId, string eventName, CancellationToken cancellationToken, string? markdownCopy = null)
     {
         var job = _store.FindImportJob(jobId)!;
         try
@@ -299,17 +477,28 @@ public sealed partial class TomeStackApp
                 _store.SaveImportJob(job);
                 _store.AddImportAudit(jobId, _time.GetUtcNow(), eventName, $"from page {job.NextPage ?? job.FirstPage}");
             });
-            var source = _store.FindSource(job.SourceId);
-            var attachment = source?.AttachmentId is { } attachmentId ? _store.FindAttachment(attachmentId) : null;
-            if (source is null || attachment?.Sha256 != job.Sha256)
-                throw new ExtractionException("import.pdf-changed", "The source's PDF changed or was removed since this import started.");
-            // The file itself, not only its record: a linked PDF can change on disk, and its pages are stored under this hash.
-            var info = Info(source.Id, attachment, checkHash: true);
-            if (info.Status == "changed")
-                throw new ExtractionException("import.pdf-changed", "The source's PDF changed since this import started. Start a new import instead.");
-            var path = AttachmentFiles.PathOf(_store, attachment);
-            if (info.Status != "available" || !File.Exists(path))
-                throw new ExtractionException("attachment.missing", "The PDF is missing. Attach it again.");
+            var markdown = job.IsMarkdown;
+            string path;
+            if (markdown)
+            {
+                // D67: no attachment to look up. The worker reads the temporary copy of the bytes the job's hash was taken from.
+                path = markdownCopy ?? throw new ExtractionException("import.markdown-read-again", "Import the Markdown file again.");
+            }
+            else
+            {
+                var source = _store.FindSource(job.SourceId);
+                var attachment = source?.AttachmentId is { } attachmentId ? _store.FindAttachment(attachmentId) : null;
+                if (source is null || attachment?.Sha256 != job.Sha256)
+                    throw new ExtractionException("import.pdf-changed", "The source's PDF changed or was removed since this import started.");
+                // The file itself, not only its record: a linked PDF can change on disk, and its pages are stored under this hash.
+                var info = Info(source.Id, attachment, checkHash: true);
+                if (info.Status == "changed")
+                    throw new ExtractionException("import.pdf-changed", "The source's PDF changed since this import started. Start a new import instead.");
+                path = AttachmentFiles.PathOf(_store, attachment);
+                if (info.Status != "available" || !File.Exists(path))
+                    throw new ExtractionException("attachment.missing", "The PDF is missing. Attach it again.");
+            }
+            var extractor = markdown ? MarkdownReader : Extractor;
 
             var skipped = 0;
             while (true)
@@ -317,14 +506,15 @@ public sealed partial class TomeStackApp
                 var opened = false;
                 try
                 {
-                    await foreach (var item in Extractor.ExtractAsync(path, new PageScope(job.NextPage ?? job.FirstPage, job.LastPage), cancellationToken).ConfigureAwait(false))
+                    await foreach (var item in extractor.ExtractAsync(path, new PageScope(job.NextPage ?? job.FirstPage, job.LastPage), cancellationToken).ConfigureAwait(false))
                     {
                         switch (item)
                         {
                             case DocumentOpened document:
                                 opened = true;
                                 job = job with { PageCount = document.PageCount, UpdatedAt = _time.GetUtcNow() };
-                                if (job.FirstPage > document.PageCount)
+                                // A Markdown file can hold no page at all (an empty file), which is not a range error.
+                                if (!markdown && job.FirstPage > document.PageCount)
                                     throw new ExtractionException("source.page-range-invalid", $"The PDF has {document.PageCount} pages.");
                                 _store.InTransaction(() => _store.SaveImportJob(job));
                                 break;
@@ -335,7 +525,7 @@ public sealed partial class TomeStackApp
                     }
                     break;
                 }
-                catch (ExtractionException ex) when (opened && PageFailures.Contains(ex.Code) && skipped < MaxSkippedPagesPerRun && job.NextPage is { } bad && bad <= (job.ScopeEnd ?? bad))
+                catch (ExtractionException ex) when (!markdown && opened && PageFailures.Contains(ex.Code) && skipped < MaxSkippedPagesPerRun && job.NextPage is { } bad && bad <= (job.ScopeEnd ?? bad))
                 {
                     // The worker died on this page (a crash, a timeout, too much memory or output). Only the page fails:
                     // it is stored as unreadable, and a fresh worker continues with the next one (review 2026-09-28).
@@ -365,12 +555,14 @@ public sealed partial class TomeStackApp
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            var id = Guid.NewGuid().ToString("N")[..8];
+            var id = FileErrorLog.NewCorrelationId();
             ErrorLog.Record(id, "import.run", ex); // TomeStack's own code threw: no PDF text in it (the worker's never reach here)
             Finish(job, ImportJobStatus.Failed, "failed", "import.internal", ("import.internal", $"The import failed unexpectedly (reference {id})."));
         }
         finally
         {
+            if (markdownCopy is not null)
+                DeleteMarkdownCopy(markdownCopy);
             lock (_importGate)
             {
                 if (_running?.JobId == jobId)

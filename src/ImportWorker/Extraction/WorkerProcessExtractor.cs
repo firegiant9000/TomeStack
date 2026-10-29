@@ -25,13 +25,20 @@ public sealed class WorkerProcessExtractor(string workerPath, ExtractionLimits? 
     /// <summary>Called with the managed-heap limit the child reported (tests check that the cap applies).</summary>
     public Action<long>? HeapLimitReported { get; init; }
 
+    /// <summary>
+    /// The request kind: null is a PDF (<c>extract</c>); <see cref="WorkerRequest.MarkdownKind"/> reads a Markdown file. Markdown
+    /// pages are sparse (a page with no content is not sent), so their numbers must rise but need not be consecutive.
+    /// </summary>
+    public string? Kind { get; init; }
+
     public async IAsyncEnumerable<ExtractionEvent> ExtractAsync(string path, PageScope scope, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(path);
         ArgumentNullException.ThrowIfNull(scope);
         await using var session = WorkerSession.Start(workerPath, _limits, WorkerJson.MaxMessageChars(_limits), cancellationToken);
         ProcessStarted?.Invoke(session.ProcessId);
-        await session.SendAsync(new WorkerRequest(Path.GetFullPath(path), scope.FirstPage, scope.LastPage, _limits, Environment.ProcessId)).ConfigureAwait(false);
+        var sparse = Kind == WorkerRequest.MarkdownKind;
+        await session.SendAsync(new WorkerRequest(Path.GetFullPath(path), scope.FirstPage, scope.LastPage, _limits, Environment.ProcessId, Kind)).ConfigureAwait(false);
         var heap = await session.ReadHelloAsync(cancellationToken).ConfigureAwait(false);
         HeapLimitReported?.Invoke(heap);
 
@@ -49,13 +56,17 @@ public sealed class WorkerProcessExtractor(string workerPath, ExtractionLimits? 
                     expected = pages.Value.First;
                     yield return new DocumentOpened(count);
                     break;
-                case "page" when message.Page is { } page && pages is { } range && page.PageNumber == expected && expected <= range.Last:
+                case "page" when message.Page is { } page && pages is { } range && !sparse && page.PageNumber == expected && expected <= range.Last:
                     expected++;
                     yield return page;
                     break;
+                case "page" when message.Page is { } sparsePage && pages is { } sparseRange && sparse && sparsePage.PageNumber >= expected && sparsePage.PageNumber <= sparseRange.Last:
+                    expected = sparsePage.PageNumber + 1;
+                    yield return sparsePage;
+                    break;
                 case "error":
                     throw new ExtractionException(message.Code ?? "worker.failed", message.Message ?? "The import worker failed.");
-                case "done" when pages is { } range && expected > range.Last:
+                case "done" when pages is { } range && (sparse || expected > range.Last):
                     finished = true;
                     break;
                 default:

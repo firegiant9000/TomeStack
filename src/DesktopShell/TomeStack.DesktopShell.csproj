@@ -6,6 +6,10 @@
          keeps its name, so the gate, the scripts and CI find TomeStack.exe where they always did. -->
     <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
     <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <!-- Release checklist §2 option (b): the shell calls no WinRT API and the worker embeds its own projection, so the
+         Windows SDK projection (Microsoft.Windows.SDK.NET.dll, WinRT.Runtime.dll) is not referenced and does not ship.
+         tests/DesktopShell.Tests/PublishedOutputTests.cs and scripts/pack-installer.ps1 check it. -->
+    <IncludeWindowsSDKRefFrameworkReferences>false</IncludeWindowsSDKRefFrameworkReferences>
     <OutputPath>bin\$(Configuration)\net10.0-windows\</OutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <UseWPF>true</UseWPF>

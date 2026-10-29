@@ -1170,6 +1170,9 @@ public static class CharacterCalculator
         var attacks = new List<AttackEntry>();
         var rules = new TraceOrigin(TraceOriginKind.RulesPolicy, family);
         var riders = CollectRiders(active, values, character, classLevels, effective, autoOn, diagnostics);
+        // Interim rule (F0): a weapon's mastery property is shown only to a character with a feature named "Weapon Mastery".
+        // A real grant replaces this name check later.
+        var hasWeaponMastery = active.Any(a => a.Revision.Kind == ContentKind.Feature && string.Equals(a.Revision.Name, "Weapon Mastery", StringComparison.Ordinal));
         foreach (var item in active)
         {
             foreach (var attack in item.Revision.Effects.OfType<AttackEffect>().Where(a => a.Automation != AutomationStatus.Reference))
@@ -1216,7 +1219,7 @@ public static class CharacterCalculator
                 attacks.Add(new(
                     item.Revision.Reference, item.Revision.Name, weapon.Id, weapon.Attack, weapon.Category, ability, toHit,
                     DamageWith(weapon.Damage, applied, damageBonus), weapon.Versatile is { } versatile ? DamageWith(versatile, applied, damageBonus) : null,
-                    weapon.DamageType, weapon.Properties, weapon.Range, weapon.Mastery, proficiency is not null, automation, trace, warnings,
+                    weapon.DamageType, weapon.Properties, weapon.Range, hasWeaponMastery ? weapon.Mastery : null, proficiency is not null, automation, trace, warnings,
                     ContentOrigin(family, item, weapon),
                     Riders: applied.Count == 0 ? null : [.. applied.Select(r => r.Value)]));
             }
@@ -3292,8 +3295,8 @@ public static class CharacterCalculator
                 return value;
             }));
         }
-        // D24: speed. The bundled species carry no speed data, so the base is the SRD's common 30 feet by rules policy. From
-        // content v10 a species (homebrew) sets its own with a `replace` modifier on speed, which replaces this base before
+        // D24: speed. Some bundled species (the SRD 5.1 Half-Orc, most SRD 5.2.1 species) carry no speed data, so the base is the SRD's common 30 feet by rules policy. From
+        // content v10 a species (homebrew, the SRD 5.2.1 Goliath and Wood Elf, or the SRD 5.1 races of srd-5.1-origins.json) sets its own with a `replace` modifier on speed, which replaces this base before
         // bonuses; otherwise a different speed is an override on Stats.
         specs.Add(new(FieldIds.Speed, "Speed", "feet", [], (c, steps) =>
         {

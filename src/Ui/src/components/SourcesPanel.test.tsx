@@ -17,6 +17,8 @@ vi.mock('../api/client', () => ({
     sourcePackPreview: vi.fn(),
     saveSourcePackAs: vi.fn(),
     exportSourcePack: vi.fn(),
+    packagePreflight: vi.fn(),
+    listImports: vi.fn(),
   },
 }));
 
@@ -49,6 +51,8 @@ beforeEach(() => {
   vi.mocked(client.sourcePackPreview).mockImplementation(async (_ids, target) => previewOf(target));
   vi.mocked(client.saveSourcePackAs).mockReset();
   vi.mocked(client.saveSourcePackAs).mockResolvedValue({ saved: true, fileName: 'compat.zip' } as Awaited<ReturnType<typeof client.saveSourcePackAs>>);
+  vi.mocked(client.packagePreflight).mockResolvedValue({ included: [], omitted: [], blocking: [], notices: [] });
+  vi.mocked(client.listImports).mockResolvedValue([]); // D67: every homebrew source shows the import panel
 });
 
 async function openPreview(onError: (e: unknown) => void = () => {}) {

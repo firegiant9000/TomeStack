@@ -1,12 +1,14 @@
 import { useEffect, useId, useState, type SubmitEvent } from 'react';
 import { client } from '../api/client';
 import { TomeStackError } from '../api/transport';
-import type { Campaign, CampaignPackPreview, RulesFamilyId, RulesFamilyPolicy, SourceRecord } from '../api/types';
+import type { Campaign, CampaignPackPreview, PreflightReport, RulesFamilyId, RulesFamilyPolicy, SourceRecord } from '../api/types';
 import { downloadBase64 } from '../files';
 import { ChangeRegion } from './export/ChangeRegion';
 import { ExportConfirmation, hasBlocker, needsConfirmation } from './export/ExportConfirmation';
 import { TargetFieldset } from './export/TargetFieldset';
 import { usePackageTargets } from './export/usePackageTargets';
+import { PreflightPanel } from './PreflightPanel';
+import { canSaveAfter } from './preflightText';
 
 interface Props {
   rulesFamilies: RulesFamilyPolicy[];
@@ -22,13 +24,17 @@ const blank = (family: RulesFamilyId): Campaign => ({ id: '00000000-0000-0000-00
  */
 function CampaignPackForm({ campaign, onError, onStatus }: { campaign: Campaign } & Omit<Props, 'rulesFamilies'>) {
   const [preview, setPreview] = useState<CampaignPackPreview>();
+  // Import Lab L5: the one sharing rule's answer; Save waits for it and stops on anything blocking.
+  const [report, setReport] = useState<PreflightReport>();
   const targets = usePackageTargets();
   const [target, setTarget] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const [previewFailed, setPreviewFailed] = useState(false);
   const hintId = useId();
 
-  // The preview loads again for each target; a reply for an earlier target (or campaign) is dropped.
+  // The preview is asked again when the campaign is saved with other sources, and for each target; a reply for an
+  // earlier one is dropped.
+  const version = `${campaign.updatedAt ?? ''}~${campaign.allowedSources.join(',')}`;
   useEffect(() => {
     let current = true;
     // No target: the call is exactly as it was before there was a target.
@@ -46,7 +52,7 @@ function CampaignPackForm({ campaign, onError, onStatus }: { campaign: Campaign 
     return () => {
       current = false;
     };
-  }, [campaign.id, target, onError]);
+  }, [campaign.id, version, target, onError]);
 
   // The fieldset stays mounted while the preview reloads, so focus stays on the radio that was chosen.
   function chooseTarget(next: string | null) {
@@ -122,9 +128,10 @@ function CampaignPackForm({ campaign, onError, onStatus }: { campaign: Campaign 
               ))}
             </ul>
           )}
+          <PreflightPanel kind="campaignPack" selection={[campaign.id]} label="campaign pack" refreshKey={version} onReport={setReport} onError={onError} />
           <ExportConfirmation changes={preview.changes} confirmed={confirmed} onConfirmedChange={setConfirmed} hintId={hintId} />
           <div className="actions">
-            <button type="button" onClick={save} disabled={saveDisabled} aria-describedby={blocked ? hintId : undefined}>
+            <button type="button" onClick={save} disabled={saveDisabled || !canSaveAfter(report)} aria-describedby={blocked ? hintId : undefined}>
               Save campaign pack…
             </button>
           </div>
@@ -143,7 +150,9 @@ export function CampaignsPanel({ rulesFamilies, onError, onStatus }: Props) {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [sources, setSources] = useState<SourceRecord[]>([]);
   const [editing, setEditing] = useState<Campaign>();
-  const [sharing, setSharing] = useState<Campaign>();
+  // Only the id is kept, so the share form always shows the campaign as last saved (an edit made while it is open reaches it).
+  const [sharingId, setSharingId] = useState<string>();
+  const sharing = campaigns.find((c) => c.id === sharingId);
 
   useEffect(() => {
     Promise.all([client.listCampaigns(), client.listSources()])
@@ -191,7 +200,7 @@ export function CampaignsPanel({ rulesFamilies, onError, onStatus }: Props) {
               <button type="button" onClick={() => setEditing(c)}>
                 Edit {c.name}
               </button>{' '}
-              <button type="button" onClick={() => setSharing(sharing?.id === c.id ? undefined : c)} aria-expanded={sharing?.id === c.id}>
+              <button type="button" onClick={() => setSharingId(sharingId === c.id ? undefined : c.id)} aria-expanded={sharingId === c.id}>
                 Share {c.name}…
               </button>
               {pendingOf(c).length > 0 && (

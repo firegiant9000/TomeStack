@@ -17,6 +17,7 @@ vi.mock('../api/client', () => ({
     campaignPackPreview: vi.fn(),
     saveCampaignPackAs: vi.fn(),
     exportCampaignPack: vi.fn(),
+    packagePreflight: vi.fn(),
   },
 }));
 
@@ -48,6 +49,7 @@ beforeEach(() => {
   vi.mocked(client.campaignPackPreview).mockImplementation(async (_id, target) => previewOf(target));
   vi.mocked(client.saveCampaignPackAs).mockReset();
   vi.mocked(client.saveCampaignPackAs).mockResolvedValue({ saved: true, fileName: 'compat.zip' } as Awaited<ReturnType<typeof client.saveCampaignPackAs>>);
+  vi.mocked(client.packagePreflight).mockResolvedValue({ included: [], omitted: [], blocking: [], notices: [] });
 });
 
 const families = [{ id: 'srd-5.1', displayName: 'SRD 5.1' }] as unknown as RulesFamilyPolicy[];

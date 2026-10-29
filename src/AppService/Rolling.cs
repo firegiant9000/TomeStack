@@ -54,6 +54,8 @@ public sealed partial class TomeStackApp
 
         RollRequest request;
         RollSpend? spend = null;
+        // D72: the sheet's trace for the number rolled (a field, an attack, a caster's spell attack); null for every other roll.
+        IReadOnlyList<TraceEntry>? explain = null;
         (RollMode Automatic, IReadOnlyList<string> Sources)? modeNote = null;
         // An amount means something only on a content roll effect (a per-unit amount); on any other roll it is refused, not ignored.
         var amountMeansSomething = false;
@@ -82,6 +84,7 @@ public sealed partial class TomeStackApp
         {
             var attack = sheet.Attacks?.FirstOrDefault(a => a.Source == AttackSource.Weapon && a.Item == weaponReference)
                 ?? throw new AppValidationException([new("roll.weapon-unknown", "This character has no such weapon equipped.", weaponReference)]);
+            explain = attack.Trace;
             var provenance = new RollProvenance(
                 $"weapon.{(command.Damage ? "damage" : "attack")}", command.Damage ? $"{attack.Name} damage ({attack.DamageType})" : $"{attack.Name} attack",
                 attack.Item, attack.Name, attack.EffectId, attack.Origin.SourceId, attack.Origin.SourceTitle, attack.Origin.Page);
@@ -113,7 +116,8 @@ public sealed partial class TomeStackApp
             {
                 if (spell.Attack == SpellAttackKind.None)
                     throw new AppValidationException([new("roll.spell-no-attack", $"'{spell.Name}' makes no attack roll.", spellReference)]);
-                request = new RollRequest("1d20", command.Mode, false, [new RollModifier($"{caster!.Name} spell attack", caster.AttackBonus, caster.Origin)], provenance);
+                explain = caster!.AttackTrace;
+                request = new RollRequest("1d20", command.Mode, false, [new RollModifier($"{caster.Name} spell attack", caster.AttackBonus, caster.Origin)], provenance);
             }
             else
             {
@@ -146,6 +150,7 @@ public sealed partial class TomeStackApp
         {
             // D43 S4: an attack a feature gives, rolled like a weapon. Rider dice are in the formula, so a critical doubles them; the flat total does not double.
             request = FeatureAttackRequest(featureAttack, sheet.Diagnostics, command);
+            explain = featureAttack.Trace;
         }
         else if (command.Content is { } reference)
         {
@@ -193,6 +198,7 @@ public sealed partial class TomeStackApp
             request = new RollRequest("1d20", mode, command.Critical, [new RollModifier(value.Label, value.Value, origin)], new RollProvenance(field, label));
             if (automatic is { Count: > 0 })
                 modeNote = (value.Mode!.Automatic, [.. automatic.Select(r => r.Source)]);
+            explain = value.Trace;
         }
         else
         {
@@ -205,6 +211,8 @@ public sealed partial class TomeStackApp
             throw new AppValidationException([new(error!.Code, error.Message, command.Content, command.EffectId)]);
         if (modeNote is { } note)
             record = record! with { AutomaticMode = note.Automatic, ModeSources = note.Sources };
+        if (explain is not null)
+            record = record! with { Explain = explain };
         return spend is null ? record! : record! with { Spend = spend };
     }
 
