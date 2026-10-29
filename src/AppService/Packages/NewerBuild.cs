@@ -78,11 +78,6 @@ internal static class NewerBuild
             return $"Opening this needs a TomeStack version that reads gap note schema {gapNoteSchema} or later: it holds gap notes that older versions refuse.";
         return $"Opening this needs a TomeStack version newer than {last.Release.ToString(3)}: it holds bundled SRD content that released versions do not have.";
     }
-    /// <summary>The warning when anything in the package that would be written needs <see cref="Version"/>; otherwise none. At most one.</summary>
-    public static IReadOnlyList<Diagnostic> For(IEnumerable<ContentRevision> revisions, IEnumerable<Character> characters) =>
-        revisions.Any(r => r.SchemaVersion >= ContentSchemaFrom) || characters.Any(c => c.SchemaVersion >= CharacterSchemaFrom)
-            ? [Warning]
-            : [];
 
     /// <summary>S2: a library backup from a newer build whose characters pin content this build's bundled packs do not hold.</summary>
     public const string RestoreCode = "restore.needs-newer-build";
