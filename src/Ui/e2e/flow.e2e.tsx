@@ -2739,7 +2739,12 @@ it('imports a D&D Beyond sheet, resolves a choice, keeps one sheet number as an 
   const veil = await within(matches).findByRole('combobox', { name: 'Match for Fixture Veil' });
   await user.click(within(matches).getByRole('radio', { name: 'Needs a choice' }));
   expect(within(matches).getAllByRole('rowheader').map((h) => h.textContent)).toEqual(['Fixture Veil']);
-  const chanter = within(veil).getAllByRole<HTMLOptionElement>('option').find((o) => /Fixture Chanter/.test(o.textContent ?? ''))!;
+  // The caster names come from content.list, which can answer after the rows show (more bundled packs make it slower).
+  const chanter = await waitFor(() => {
+    const option = within(veil).getAllByRole<HTMLOptionElement>('option').find((o) => /Fixture Chanter/.test(o.textContent ?? ''));
+    expect(option).toBeDefined();
+    return option!;
+  });
   await user.selectOptions(veil, chanter);
   await waitFor(() => expect(within(matches).queryAllByRole('rowheader')).toHaveLength(0));
   // Not installed (the background, a feat, two items, the features): listed, and kept as gap notes.
