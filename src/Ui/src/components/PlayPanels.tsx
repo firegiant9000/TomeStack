@@ -769,15 +769,16 @@ export function ActionsPanel({
             <ul className="features">
               {groupAttacks.map(({ attack, availability, pin }) => (
                 <AttackItem
-                  key={`${attack.item.revisionId}-${attack.effectId}`}
+                  key={`${attack.item.revisionId}-${attack.effectId}-${attack.entryIndex ?? ''}`}
                   attack={attack}
+                  label={attackLabel(attack, attacks)}
                   critical={critical}
                   rollMode={rollMode}
                   roll={roll}
                   rollDamage={rollDamage}
                   pool={poolFor(resourcePools, attack.resourceId ?? undefined, attack.costResourceContent ?? undefined)}
                   availability={availability}
-                  pinning={pinning(pin, attack.name)}
+                  pinning={pinning(pin, attackLabel(attack, attacks))}
                 />
               ))}
               {groupCustom.map((attack) => (
@@ -986,8 +987,17 @@ function RollItem({
   );
 }
 
+/** MECH-X item 3: a weapon carried as several copies has one row per copy (`entryIndex`); they are told apart as "(copy N of M)". */
+function attackLabel(attack: AttackEntry, all: AttackEntry[]): string {
+  if (attack.entryIndex === undefined || attack.entryIndex === null) return attack.name;
+  const copies = all.filter((a) => a.source !== 'feature' && a.entryIndex !== undefined && a.entryIndex !== null && a.item.revisionId === attack.item.revisionId);
+  const n = copies.indexOf(attack) + 1;
+  return copies.length > 1 && n > 0 ? `${attack.name} (copy ${n} of ${copies.length})` : attack.name;
+}
+
 function AttackItem({
   attack,
+  label,
   critical,
   rollMode,
   roll,
@@ -997,6 +1007,8 @@ function AttackItem({
   pinning,
 }: {
   attack: AttackEntry;
+  /** The name shown and used in control names: the attack's, with its copy number when the weapon is carried several times. */
+  label: string;
   critical: boolean;
   rollMode: RollMode;
   roll: (target: RollTarget) => void;
@@ -1020,7 +1032,7 @@ function AttackItem({
     <li className="feature">
       <details>
         <summary>
-          <span className="option-name">{attack.name}</span>: {signed(attack.toHit)} to hit, {attack.damage ? `${attack.damage} ` : ''}{attack.damageType}
+          <span className="option-name">{label}</span>: {signed(attack.toHit)} to hit, {attack.damage ? `${attack.damage} ` : ''}{attack.damageType}
           {attack.versatileDamage ? ` (${attack.versatileDamage} two-handed)` : ''}
           {attack.automation !== 'automatic' && <span className="warn"> {automationLabels[attack.automation]}</span>}
         </summary>
@@ -1032,13 +1044,13 @@ function AttackItem({
           {feature && attack.resourceId ? ` · uses ${attack.cost ?? 1} ${pool?.label ?? 'of a resource'} (spend it from the roll)` : ''}
           {feature && paying(attack.payment) ? ` · Costs ${paymentText(attack.payment, attack.cost)} (pay it from the roll)` : ''}
         </p>
-        <ul aria-label={`How the ${attack.name} attack is calculated`}>
+        <ul aria-label={`How the ${label} attack is calculated`}>
           {explainSteps(attack.trace, 'attack').map((sentence, i) => (
             <li key={i}>{sentence}</li>
           ))}
         </ul>
         {attack.warnings.length > 0 && (
-          <ul className="warnings" aria-label={`${attack.name} warnings`}>
+          <ul className="warnings" aria-label={`${label} warnings`}>
             {attack.warnings.map((w) => (
               <li key={`${w.code}-${w.effectId ?? ''}`}>{w.message}</li>
             ))}
@@ -1047,10 +1059,10 @@ function AttackItem({
       </details>
       {feature && attack.replacesAttack && <p className="hint">replaces one attack of the Attack action</p>}
       <button type="button" disabled={locked} aria-describedby={described} onClick={() => roll({ ...target, mode: rollMode })}>
-        Roll {attack.name} attack
+        Roll {label} attack
       </button>
       <button type="button" disabled={locked} aria-describedby={described} onClick={() => rollDamage({ ...target, damage: true, critical }, attack.damageType)}>
-        Roll {attack.name} damage{attack.damage ? ` (${attack.damage})` : ''}
+        Roll {label} damage{attack.damage ? ` (${attack.damage})` : ''}
       </button>
       {locked && (
         <span id={reasonId} className="hint">
@@ -1066,7 +1078,7 @@ function AttackItem({
       )}
       {attack.versatileDamage && (
         <button type="button" onClick={() => rollDamage({ weapon: attack.item, damage: true, versatile: true, critical }, attack.damageType)}>
-          Roll {attack.name} two-handed damage ({attack.versatileDamage})
+          Roll {label} two-handed damage ({attack.versatileDamage})
         </button>
       )}
       {pinning && <PinButton {...pinning} />}

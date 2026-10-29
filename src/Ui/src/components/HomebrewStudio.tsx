@@ -1701,6 +1701,7 @@ function EffectEditor(props: {
     toggleGroup: 'Form group',
     upkeep: 'Upkeep',
     item: 'Item rules',
+    itemMod: 'Item mod',
     attack: 'Attack',
     attackRider: 'Attack rider',
   };

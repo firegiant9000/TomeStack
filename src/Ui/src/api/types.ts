@@ -90,6 +90,8 @@ export interface EquipmentEntry {
   attuned?: boolean;
   /** Character schema v9: absent means none spent. */
   chargesSpent?: number;
+  /** Character schema v11 (MECH-X item 3): mods attached to this one copy, at most 4. Absent means none; an emptied list is dropped. */
+  mods?: ContentReference[];
 }
 
 /** Character schema v9 (D42): how the character looks, as free text. */
@@ -469,6 +471,8 @@ export interface AttackEntry {
   origin: TraceOrigin;
   /** Content v11 (D43): where the row comes from. A feature attack is rolled by `item` + `effectId` (`content` + `effectId`), not as a weapon. */
   source: 'weapon' | 'feature';
+  /** MECH-X item 3: the position of the equipment entry, set only when the weapon is carried as several copies (one row per copy). */
+  entryIndex?: number;
   tags?: string[] | null;
   /** The attack can stand in for one attack of the Attack action. */
   replacesAttack: boolean;
@@ -578,7 +582,7 @@ export interface CharacterSheet {
   bloodied?: boolean;
   /** Wave 3 item 21: the character's own damage defences and the v10 damage grants, merged; absent when there are none. */
   damageDefences?: DamageDefenceValue[];
-  /** Wave 3 item 25: each equipment entry of an item that needs attunement or has charges, carried or equipped; absent when there are none. */
+  /** Wave 3 item 25: each equipment entry of an item that needs attunement or has charges, or (MECH-X item 3) any weapon or armor entry or one with mods, carried or equipped; absent when there are none. */
   itemUses?: ItemUseValue[];
   /** Wave 3 item 27: experience points are tracked and the total has reached the next level's threshold. Display only; absent otherwise. */
   levelUpAvailable?: boolean;
@@ -611,6 +615,18 @@ export interface ItemUseValue {
   chargesSpent: number;
   chargesLeft?: number;
   recovery?: ItemChargeRecovery;
+  /** MECH-X item 3: the mods attached to this entry. */
+  mods: ItemModInfo[];
+  /** MECH-X item 3: which kinds of mod this entry can host (a weapon, armor or shield effect on its item); empty for other items. */
+  hosts: ('weapon' | 'armor')[];
+}
+
+/** MECH-X item 3: one mod on an equipment entry, named by the service. */
+export interface ItemModInfo {
+  reference: ContentReference;
+  name: string;
+  appliesTo: 'weapon' | 'armor' | 'any';
+  bonus?: number;
 }
 
 /** What the player rolled for the `regain` dice of one entry's charges on a rest: the whole total. */
@@ -1120,6 +1136,8 @@ export interface ContentOption {
   standalone?: boolean;
   /** Spell options only (content schema v5). */
   spell?: { level: number; lists: string[]; school?: string; concentration: boolean; ritual: boolean; tags?: string[] };
+  /** Item options only (content schema v12): the item is a mod and attaches to a weapon, armor, or either. */
+  modOf?: 'weapon' | 'armor' | 'any';
 }
 
 /** A spell recorded for one caster; `caster` is the content id of the class or subclass with spellcasting. */
@@ -1837,6 +1855,7 @@ export type Effect =
       allowance?: boolean;
     })
   | (EffectBase & { type: 'item'; requiresAttunement?: boolean; charges?: { max: number; recovery?: { period: RestPeriod; regain?: string } } })
+  | (EffectBase & { type: 'itemMod'; appliesTo: 'weapon' | 'armor' | 'any'; bonus?: number; modifiers?: Extract<Effect, { type: 'modifier' }>[] })
   | (EffectBase & { type: 'recovery'; resourceId: string; on: RestPeriod; amount: string })
   | (EffectBase & {
       type: 'roll';
