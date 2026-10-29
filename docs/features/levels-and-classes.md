@@ -60,4 +60,4 @@ Each proposed effect has its own confirm tick. Accepting as a draft needs the hi
 
 ## Not in scope (M2+)
 
-Spellcasting (D04 in LIVING_SPECS), multiclass prerequisites and multiclass proficiency rules (the data model supports several classes; the SRD multiclass tables are M2 builder work), rolled hit points, and speed data in most bundled species (they carry none, so speed is 30 feet by rules policy; a species can set one from content v10, as the SRD 5.2.1 Goliath and Wood Elf do since 2026-10-26). Equipment-based armor class is M2 item 4.
+Spellcasting (D04 in LIVING_SPECS), multiclass prerequisites and multiclass proficiency rules (the data model supports several classes; the SRD multiclass tables are M2 builder work), rolled hit points, and speed data in some bundled species (the SRD 5.1 Half-Orc and most SRD 5.2.1 species carry none, so their speed is 30 feet by rules policy; a species can set one from content v10, as each SRD 5.1 race in `srd-5.1-origins.json` and the SRD 5.2.1 Goliath and Wood Elf do since 2026-10-26). Equipment-based armor class is M2 item 4.

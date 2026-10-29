@@ -56,6 +56,11 @@ public sealed partial class TomeStackApp : IDisposable
         "TomeStack.Content.srd-5.1-fighter.json", "TomeStack.Content.srd-5.2.1-fighter.json",
         // Track 1 (D60): the feats before the species and backgrounds that grant or offer them.
         "TomeStack.Content.srd-5.2.1-feats.json", "TomeStack.Content.srd-5.2.1-origins.json",
+        "TomeStack.Content.srd-5.1-origins.json", // the other eight SRD 5.1 races, with their subraces
+        // C2-1: the Barbarian after the fighter pair (new revisions of the M1 and classes-pack Barbarian, which load first).
+        "TomeStack.Content.srd-5.1-barbarian.json", "TomeStack.Content.srd-5.2.1-barbarian.json",
+        // C2-2: the Rogue after the Barbarian pair.
+        "TomeStack.Content.srd-5.1-rogue.json", "TomeStack.Content.srd-5.2.1-rogue.json",
     ];
 
     /// <summary>

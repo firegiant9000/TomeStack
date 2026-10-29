@@ -16,6 +16,9 @@ public static partial class CharacterCalculator
         var attacks = new List<AttackEntry>();
         var rules = new TraceOrigin(TraceOriginKind.RulesPolicy, family);
         var riders = CollectRiders(active, values, character, classLevels, effective, autoOn, diagnostics);
+        // Interim rule (F0): a weapon's mastery property is shown only to a character with a feature named "Weapon Mastery".
+        // A real grant replaces this name check later.
+        var hasWeaponMastery = active.Any(a => a.Revision.Kind == ContentKind.Feature && string.Equals(a.Revision.Name, "Weapon Mastery", StringComparison.Ordinal));
         foreach (var item in active)
         {
             foreach (var attack in item.Revision.Effects.OfType<AttackEffect>().Where(a => a.Automation != AutomationStatus.Reference))
@@ -62,7 +65,7 @@ public static partial class CharacterCalculator
                 attacks.Add(new(
                     item.Revision.Reference, item.Revision.Name, weapon.Id, weapon.Attack, weapon.Category, ability, toHit,
                     DamageWith(weapon.Damage, applied, damageBonus), weapon.Versatile is { } versatile ? DamageWith(versatile, applied, damageBonus) : null,
-                    weapon.DamageType, weapon.Properties, weapon.Range, weapon.Mastery, proficiency is not null, automation, trace, warnings,
+                    weapon.DamageType, weapon.Properties, weapon.Range, hasWeaponMastery ? weapon.Mastery : null, proficiency is not null, automation, trace, warnings,
                     ContentOrigin(family, item, weapon),
                     Riders: applied.Count == 0 ? null : [.. applied.Select(r => r.Value)]));
             }
