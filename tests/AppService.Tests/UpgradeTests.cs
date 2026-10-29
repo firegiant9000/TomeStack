@@ -83,6 +83,19 @@ public class UpgradeTests
         var app = TomeStackApp.Open(live, new FixedTime(TempApp.Now), devFixtures: true);
         try
         {
+            // Seeding writes more than SQLite's 1000-page auto-checkpoint, so empty the WAL first; the save's small commit
+            // then stays in the WAL, as after a real power cut.
+            using (var checkpoint = new SqliteConnection($"Data Source={Path.Combine(live, TomeStackApp.DatabaseFileName)};Pooling=False"))
+            {
+                checkpoint.Open();
+                using var command = checkpoint.CreateCommand();
+                command.CommandText = "PRAGMA wal_checkpoint(TRUNCATE);";
+                using var result = command.ExecuteReader();
+                Assert.True(result.Read());
+                Assert.Equal(0, result.GetInt64(0)); // busy
+            }
+            // The TRUNCATE checkpoint leaves the WAL file empty.
+            Assert.Equal(0, new FileInfo(Path.Combine(live, TomeStackApp.DatabaseFileName + "-wal")).Length);
             app.SaveCharacter(Fixture());
             // Copy the files while the app is still open, like a power cut: the save is committed but not checkpointed.
             foreach (var suffix in new[] { "", "-wal", "-shm" })
@@ -95,10 +108,9 @@ public class UpgradeTests
         var database = Path.Combine(crashed, TomeStackApp.DatabaseFileName);
         var mainFileOnly = Path.Combine(crashed, "main-file-only.db");
         File.Copy(database, mainFileOnly);
-        // A plain copy of the main file loses the save. Seeding the bundled packs can pass SQLite's 1000-page auto-checkpoint,
-        // so the schema may already be in the main file; the save after it is still only in the WAL.
-        if (Scalar(mainFileOnly, "SELECT COUNT(*) FROM sqlite_master WHERE name = 'characters';") == 1)
-            Assert.Equal(0, Scalar(mainFileOnly, "SELECT COUNT(*) FROM characters;"));
+        // A plain copy of the main file loses the save (the schema was checkpointed, the save was not).
+        Assert.Equal(1, Scalar(mainFileOnly, "SELECT COUNT(*) FROM sqlite_master WHERE name = 'characters';"));
+        Assert.Equal(0, Scalar(mainFileOnly, "SELECT COUNT(*) FROM characters;"));
 
         using (new SqliteStore(database, FutureMigrations)) { }
 

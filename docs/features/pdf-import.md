@@ -107,6 +107,8 @@ Code: `src/ImportWorker/Detection/CandidateDetector.cs`; the service runs it whe
 
 **Re-measured 2026-10-27 (C2-2, the Rogue is now bundled; the table above is the 2026-09-28 record and is not rewritten):** classes 12 candidates / 11 in the packs, precision 91.7 %, recall 100 % in both families; class-feature recall 87.2 % (136 of 156) in SRD 5.1 and 100 % (204 of 204) in SRD 5.2.1. The Rogue is no longer an "extra". The remaining extras are the Monk and the blowgun. The new 5.1 misses are the Thief's Fast Hands, Second-Story Work, Supreme Sneak, Use Magic Device and Thief's Reflexes (pp. 40–41), subclass features with no level in their first sentence, like the earlier ones.
 
+**Re-measured 2026-10-27 (C2-3, the Monk is now bundled; the tables above are the earlier records and are not rewritten):** classes 12 of 12 candidates in the packs, precision and recall 100 % in both families; class-feature recall 86.5 % in SRD 5.1 (floor 85 %) and 100 % (229 of 229) in SRD 5.2.1. The Monk is no longer an "extra"; the remaining extra is the blowgun.
+
 **What these numbers do not show:** they measure the SRD layouts the detectors were written against. A third-party book with its own layout will score lower, especially on class features and tables. That is why every candidate needs review (ADR-004), and why the M4 exit gate runs a third-party test PDF (D6).
 
 ### Per-effect source spans (Import Lab L4, D64)

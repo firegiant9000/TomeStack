@@ -61,6 +61,8 @@ public sealed partial class TomeStackApp : IDisposable
         "TomeStack.Content.srd-5.1-barbarian.json", "TomeStack.Content.srd-5.2.1-barbarian.json",
         // C2-2: the Rogue after the Barbarian pair.
         "TomeStack.Content.srd-5.1-rogue.json", "TomeStack.Content.srd-5.2.1-rogue.json",
+        // C2-3: the Monk after the Rogue pair.
+        "TomeStack.Content.srd-5.1-monk.json", "TomeStack.Content.srd-5.2.1-monk.json",
     ];
 
     /// <summary>

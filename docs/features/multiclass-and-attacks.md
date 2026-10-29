@@ -72,6 +72,6 @@ A feature can give an attack with an `attack` effect (an unarmed strike, a bolt)
 
 ## Not yet
 
-- The multiclass data of the non-caster classes that are not bundled (Monk; the Rogue is bundled since C2-2, with its multiclass data). The Fighter is bundled since M2.2. Bundled: the eight casters, the weapon tables (`srd-<family>-equipment.json`) and a content v5 revision of the SRD Barbarian (`srd-<family>-classes.json`). Characters that pin the M1 Barbarian revision keep it. Pickers offer the newest revision (`ContentOption.Superseded`), and moving a saved character to it is the reviewed update (SPEC I-06).
+- The multiclass data of the non-caster classes that are not bundled (none: the Rogue is bundled since C2-2 and the Monk since C2-3, each with its multiclass data). The Fighter is bundled since M2.2. Bundled: the eight casters, the weapon tables (`srd-<family>-equipment.json`) and a content v5 revision of the SRD Barbarian (`srd-<family>-classes.json`). Characters that pin the M1 Barbarian revision keep it. Pickers offer the newest revision (`ContentOption.Superseded`), and moving a saved character to it is the reviewed update (SPEC I-06).
 - The net and the blowgun: text only, because their damage is not a dice roll.
 - Ammunition tracking, Weapon Mastery effects (text only), fighting styles other than Defense (text only), two-weapon fighting and bonus damage from features. Armor training and its warnings are in `equipment.md` (M2.2).

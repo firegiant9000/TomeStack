@@ -220,7 +220,7 @@ public sealed class ContentGraph
         return new ContentGraph(current, edges, reaches, published, truncated);
     }
 
-    /// <summary>Every formula a revision holds, with its effect id: modifier values, resource maximums, recovery amounts, roll costs, bonuses, save DCs and also-change amounts, attack rider to-hit and damage bonuses, and spellsFormula.</summary>
+    /// <summary>Every formula a revision holds, with its effect id: modifier values, resource maximums, recovery amounts, roll costs, bonuses, save DCs and also-change amounts, attack rider to-hit and damage bonuses, attack damage count, die, bonus and cost, toggle cost and duration, and spellsFormula.</summary>
     public static IEnumerable<(string EffectId, string Source)> Formulas(ContentRevision revision)
     {
         ArgumentNullException.ThrowIfNull(revision);
@@ -255,6 +255,23 @@ public sealed class ContentGraph
                         yield return (rider.Id, toHit);
                     if (rider.DamageBonus is { } damageBonus)
                         yield return (rider.Id, damageBonus);
+                    break;
+                case AttackEffect attack:
+                    // Damage is required, but a draft can omit it (the validator reports attack-incomplete); do not throw on it.
+                    if (attack.Damage?.Count is { } damageCount)
+                        yield return (attack.Id, damageCount);
+                    if (attack.Damage?.Die is { } damageDie)
+                        yield return (attack.Id, damageDie);
+                    if (attack.DamageBonus is { } attackBonus)
+                        yield return (attack.Id, attackBonus);
+                    if (attack.Cost is { } attackCost)
+                        yield return (attack.Id, attackCost);
+                    break;
+                case ToggleEffect toggle:
+                    if (toggle.Cost is { } toggleCost)
+                        yield return (toggle.Id, toggleCost);
+                    if (toggle.Duration is { } duration)
+                        yield return (toggle.Id, duration);
                     break;
                 case ValueEffect value:
                     yield return (value.Id, value.Formula);
