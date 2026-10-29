@@ -10,6 +10,17 @@ A `choice` effect offers `count` of its `options` (exact pins), for example "two
 
 An option is ordinary content: a feature that grants a skill proficiency, a subclass, a feature with an ability increase. So everything an option does is traced like any other content.
 
+## Replaceable choices (MECH-X item 2, content v12)
+
+A choice can say its picks may be replaced: `"replaceable": { "when": "levelUp" | "longRest", "max": 1 }`. `when` is required; `max` is optional (1 when absent) and from 1 to 20. A `max` above the choice's `count` is refused (`validate.choice-replaceable`). `shortRest` is not a window (the counts found none), so a choice that says it, or anything else, does not read: from v12 that is `validate.effect-malformed`.
+
+It is advisory. Nothing stops a replacement; the player is told. The service counts a replacement as an option (by content id) that was in the stored picks and is not in the saved ones. A first pick, a choice that grows and a move to a newer revision of the same content are not replacements; clearing a pick is one. On save, a notice `choice.replaced-outside-window` ("Choice '{choiceId}' had {n} pick(s) replaced outside its window.") is added, once per choice, when:
+
+- a `levelUp` choice has a pick replaced and the character's level did not rise; or
+- either kind has more picks replaced than its `max`.
+
+A long rest's timing is not checked, because nothing records a rest, so a `longRest` choice only warns about more than `max`. The save always goes through. The sheet's status line shows the notice once, worded from the sheets ("{source}: you replaced 2 picks, more than the 1 it allows at once." or "… outside its window (at a level-up)."); it is not stored. A `levelUp` choice's picks can be swapped outside a level-up only through Make choices, which shows while a choice is open or from the "After your long rest" panel. There is no studio field: `replaceable` is written in the content JSON, and the class and background editors keep it when they save. Tested in `ReplaceableChoice*` tests, `replaceable.test.ts` and the e2e `a replaceable choice offers a swap at level-up and notes one made outside it`.
+
 ## Character
 
 `choices: [{ source, choiceId, selected: [pins] }]` (character schema v3). `source` is the exact revision offering the choice. There is one entry per choice (`character.choice-duplicate`). Chosen revisions count as the character's references, so packages include them.

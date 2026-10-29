@@ -287,6 +287,10 @@ Acceptance:
 - `AppService.Tests/DesignFeedbackCommandTests`;
 - the e2e flow "shows design feedback only once it is switched on, as hints that do not block".
 
+## Replaceable choices (MECH-X item 2)
+
+The studio has no field for `replaceable` on a choice: it has no general choice editor (the class editor covers only the skills and subclass choices). It is written in the content JSON (packages, imports, fixtures). The class and background editors keep a stored `replaceable`, and any other key, when they rebuild a choice ([choices.md](choices.md)). A studio choice editor would be a later item.
+
 ## A homebrew subclass in an SRD class (content schema v4)
 
 A class's choice options are exact pins in a published revision, so the SRD Barbarian cannot list a homebrew subclass. Content schema v4 adds **`extendsChoice: { contentId, choiceId }`** to a revision. It says "I am also an option of that choice", naming the content by id, never by name. The calculator offers every *published* revision that extends a choice after the declared options (`IContentCatalog.ChoiceExtensions`). A draft is never offered to a saved character (the studio sandbox alone offers one draft, in memory; see "Try it"). `character.choose` accepts it like any option, and chosen from the class, its features follow the class level and `CLASS_LEVEL`.

@@ -27,7 +27,7 @@ The work is one item at a time. Each item is generic and declarative, with a tra
 | 0 | A weapon's own bonus | **Adopt.** `weapon.bonus` (an integer 0..10) adds to the attack's to-hit and to its damage, traced as "+N (weapon)". It is a new field, so it needs a new content version (approved below). |
 | 5 | Target marks | **Adopt, no schema.** A mark is a player-set toggle ("Marked target present"), and its riders apply only while it is on, through the D43 rider `toggle` gate. There is no target model. If a mark needs state per target, the item stops: that is a target model (see "D63 clarification"). |
 | 1 | Payment kinds, spell tags, non-slot casting | **Adopt.** The counts: hit-point payment appears in 4 classes or subclasses (8 features), above the threshold of 2, so it ships with slot payment and spell tags (about 22 spells carry a tag beyond school). Three shapes fit: a flat cost per use (`cost`), a cost per die (`perUnit`, the player picks the units) and one spell slot per use. **By-slot-level hit-point payment stays by hand** (owner, 2026-10-27): the cost is worked out before a slot is chosen and has no slot-level input, so it would need a further field. Casting a spell without a slot (`castsSpell`) ships because the counts found it in 2 of the 3 sampled classes. |
-| 2 | Replaceable choices | **Pending the counts.** Advisory only: the level-up list (D74) or a rest offers "You may replace one pick". If every window is a level-up, the rest windows are dropped. No character history field. |
+| 2 | Replaceable choices | **Adopt, advisory.** The counts: in the sampled classes: long rest 3, short rest 0, level-up 0; across the book at least 9 level-up and 4 long-rest windows, no short-rest one. So `shortRest` is dropped, and `levelUp` and `longRest` ship. Nothing is enforced and no character history field is added. The level-up builder, Make choices, the D74 list and a long rest offer or list the swap, and a save that replaces picks outside the window shows a notice once (`choice.replaced-outside-window`; it is not stored). A long rest's timing is not checked, because nothing records a rest (R43). |
 | 3 | Item mods and ammunition | **Pending the counts.** If no mod needs state per item entry, mods apply per item and the character schema is unchanged. |
 | 4 | Content companions | **Pending the counts**, under the D63 clarification below. If companions spend no pools of their own, their pools are dropped. |
 
@@ -39,6 +39,7 @@ The work is one item at a time. Each item is generic and declarative, with a tra
 |---|---|---|
 | Content v12 | `weapon.bonus` (item 0) | approved by the owner (2026-10-27) |
 | Content v12 | `payment` (on a roll, a feature attack and a toggle), `castsSpell` (on a roll) and spell `tags` (item 1) | approved by the owner (2026-10-27) |
+| Content v12 | `replaceable` on a choice (item 2) | approved by the owner (2026-10-27) |
 | Character v11 | none yet (only if items 3–4 need one) | not proposed |
 
 ## Consequences
@@ -79,6 +80,13 @@ Filled in as each item lands: the tests, the fixture and the feature page.
 - Fixture: the payment goldens in `tests/RulesFixtures/golden/payment-revisions.json`.
 - Feature pages: the "Paying with hit points or a slot" section of [play-mechanics.md](../features/play-mechanics.md), [sheet-play.md](../features/sheet-play.md), [homebrew-studio.md](../features/homebrew-studio.md) and [schemas/README.md](../schemas/README.md).
 - Limits: a damage response's `toggleOn` outcome switches a paying toggle on with no payment, as it does for pool costs; by-slot-level hit-point payment is by hand.
+
+**Item 2 (replaceable choices, content v12):**
+
+- Tests: the schema and hash theories (`replaceable` bounds, the v12 rung, older revisions keep their bytes and hash), the save-notice tests in `AppService.Tests` (the window checks, the max edge, a content update gives no notice), `replaceable.test.ts` (the offers, the hint and the notice wording), the Vitest cases for the Choices step, the after-rest panel and the studio editors keeping the key, and the e2e `a replaceable choice offers a swap at level-up and notes one made outside it`.
+- Fixture: the golden "Fixture Shifting Repertoire" in `tests/RulesFixtures/golden/choice-revisions.json`.
+- Feature pages: [choices.md](../features/choices.md), [builder.md](../features/builder.md), [rests.md](../features/rests.md), [sheet-layout.md](../features/sheet-layout.md), [homebrew-studio.md](../features/homebrew-studio.md) and [schemas/README.md](../schemas/README.md).
+- Limits: the studio has no field for it (content JSON only); the long-rest window is not checked; the notice is not stored.
 
 **Item 5 (target marks, no schema):**
 

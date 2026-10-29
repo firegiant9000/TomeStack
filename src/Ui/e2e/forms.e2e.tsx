@@ -807,3 +807,97 @@ it('authors a hit-point roll in the studio, uses it and undoes it (MECH-X item 1
   await user.click(await screen.findByRole('button', { name: 'Undo use E2E Blood Rite' }));
   await waitFor(() => expect(screen.getByRole('region', { name: /^Hit points: 20 of 20/ })).toBeTruthy());
 });
+
+it('a replaceable choice offers a swap at level-up and notes one made outside it (MECH-X item 2)', async () => {
+  const user = userEvent.setup();
+  const source = await client.createHomebrewSource('E2E Swap Book', ['srd-5.2.1']);
+  const id = (n: number) => `e2e5a000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+  const draftOf = (n: number, name: string, effects: ContentRevision['effects']): ContentRevision => ({
+    contentId: id(n),
+    revisionId: id(n + 1000),
+    schemaVersion: 12,
+    kind: 'feature',
+    name,
+    rulesFamilies: ['srd-5.2.1'],
+    provenance: { sourceId: source.id },
+    status: 'draft',
+    effects,
+  });
+  const publishOne = async (revision: ContentRevision): Promise<ContentReference> => {
+    const result = await client.publish(await client.saveDraft(revision));
+    expect(result.report.errors).toEqual([]);
+    return result.published;
+  };
+
+  // Original options first (a draft's options name published revisions), then one feature with two replaceable choices:
+  // a level-up one (count 1) and a long-rest one (count 2, at most 1 swapped at once).
+  const upOptions = [await publishOne(draftOf(1, 'Fixture Stance One', [])), await publishOne(draftOf(2, 'Fixture Stance Two', []))];
+  const restOptions: ContentReference[] = [];
+  for (const [n, name] of [[3, 'Fixture Drill One'], [4, 'Fixture Drill Two'], [5, 'Fixture Drill Three'], [6, 'Fixture Drill Four']] as const) {
+    restOptions.push(await publishOne(draftOf(n, name, [])));
+  }
+  const feature = await publishOne(
+    draftOf(10, 'E2E Swap Feature', [
+      { type: 'choice', id: 'swap-up', choiceId: 'swap-up', count: 1, options: upOptions, replaceable: { when: 'levelUp' } },
+      { type: 'choice', id: 'swap-rest', choiceId: 'swap-rest', count: 2, options: restOptions, replaceable: { when: 'longRest', max: 1 } },
+    ] as ContentRevision['effects']),
+  );
+
+  // A Fighter 1 with every other choice made, and the two picks of each choice.
+  const srd = (n: number) => ({ contentId: `52c00000-0000-4000-8000-${String(n).padStart(12, '0')}`, revisionId: `52e00000-0000-4000-8000-${String(n).padStart(12, '0')}` });
+  await client.createCharacter({
+    name: 'E2E Swapper',
+    rulesFamily: 'srd-5.2.1',
+    baseAbilities: { str: 16, dex: 14, con: 14, int: 10, wis: 12, cha: 8 },
+    pins: [srd(1), srd(2), feature],
+    classes: [{ class: srd(408000), level: 1 }],
+    choices: [
+      { source: srd(2), choiceId: 'soldier-ability-scores', selected: [srd(4)] },
+      { source: srd(408000), choiceId: 'fighter-skills', selected: [srd(408800), srd(408802)] },
+      { source: srd(408001), choiceId: 'fighting-style', selected: [srd(408601)] },
+      { source: feature, choiceId: 'swap-up', selected: [upOptions[0]!] },
+      { source: feature, choiceId: 'swap-rest', selected: [restOptions[0]!, restOptions[1]!] },
+    ],
+  });
+  const pickIn = async (legend: RegExp, option: RegExp) => {
+    const group = await screen.findByRole('group', { name: legend });
+    await user.click(await within(group).findByRole('checkbox', { name: option }));
+  };
+
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: /^E2E Swapper/ }));
+  let sheet = await screen.findByRole('article', { name: 'E2E Swapper' });
+
+  // Level up: the Choices step offers the swap; replacing the one pick is inside the window, so there is no notice.
+  await user.click(within(sheet).getByRole('button', { name: 'Level up' }));
+  await user.click(await screen.findByRole('radio', { name: /Fighter \(level 1 → 2\)/ }));
+  await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+  const upGroup = await screen.findByRole('group', { name: /^E2E Swap Feature: choose 1/ });
+  expect(within(upGroup).getByText('You may replace one pick now.')).toBeTruthy();
+  await pickIn(/^E2E Swap Feature: choose 1/, /^Fixture Stance One/); // untick the old pick
+  await pickIn(/^E2E Swap Feature: choose 1/, /^Fixture Stance Two/);
+  await user.click(await screen.findByRole('button', { name: 'Save level-up' }));
+
+  sheet = await screen.findByRole('article', { name: 'E2E Swapper' });
+  const changed = within(sheet).getByRole('region', { name: 'What changed at level 2' });
+  expect(within(changed).getByText('Replaced 1 pick: E2E Swap Feature')).toBeTruthy();
+  expect(screen.queryByText(/outside its window|more than the/)).toBeNull();
+
+  // Long rest: the preview and the after-rest panel name the long-rest choice; swapping both picks exceeds the one it allows.
+  await openTab(user, sheet, 'Play');
+  await user.click(screen.getByRole('button', { name: 'Long rest…' }));
+  const rest = await screen.findByRole('region', { name: 'Long rest' });
+  await waitFor(() => expect(rest.textContent).toMatch(/you may replace one pick of: E2E Swap Feature/));
+  await user.click(within(rest).getByRole('button', { name: 'Finish long rest' }));
+  const after = await screen.findByRole('region', { name: 'After your long rest' });
+  expect(after.textContent).toMatch(/You may replace one pick of: E2E Swap Feature\./);
+  await user.click(within(after).getByRole('button', { name: 'Make choices' }));
+
+  const legend = /^E2E Swap Feature: choose 2/;
+  await pickIn(legend, /^Fixture Drill One/);
+  await pickIn(legend, /^Fixture Drill Two/);
+  await pickIn(legend, /^Fixture Drill Three/);
+  await pickIn(legend, /^Fixture Drill Four/);
+  await user.click(await screen.findByRole('button', { name: 'Save choices' }));
+  await expectStatus(/E2E Swap Feature: you replaced 2 picks, more than the 1 it allows at once\./);
+});
