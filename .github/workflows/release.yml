@@ -43,7 +43,8 @@ jobs:
           if ($props -ne $version) { throw "Tag $tag does not match Directory.Build.props Version $props" }
           if (-not (Select-String -Path docs/CHANGELOG.md -Pattern "^## $([regex]::Escape($version))(\s|$)" -Quiet)) { throw "docs/CHANGELOG.md has no '## $version' section" }
           $vpk = (Get-Content .config/dotnet-tools.json -Raw | ConvertFrom-Json).tools.vpk.version
-          $lib = ([xml](Get-Content src/DesktopShell/TomeStack.DesktopShell.csproj -Raw)).Project.ItemGroup.PackageReference | Where-Object { $_.Include -eq 'Velopack' } | ForEach-Object { $_.Version }
+          $lib = ([xml](Get-Content Directory.Packages.props -Raw)).Project.ItemGroup.PackageVersion | Where-Object { $_.Include -eq 'Velopack' } | ForEach-Object { $_.Version }
+          if (-not $vpk -or -not $lib) { throw "Could not read the vpk version ($vpk) or the Velopack version in Directory.Packages.props ($lib)" }
           if ($vpk -ne $lib) { throw "vpk $vpk does not match the Velopack library $lib" }
           "version=$version" >> $env:GITHUB_OUTPUT
           "Releasing $version (vpk and Velopack $vpk)"
