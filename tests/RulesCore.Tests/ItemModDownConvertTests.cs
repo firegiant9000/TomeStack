@@ -112,7 +112,7 @@ public class ItemModDownConvertTests
         Assert.False(to10.Blocked);
         Assert.Equal(2, to10.Character.Equipment.Count);
         Assert.Null(to10.Character.Equipment[1]);
-        Assert.NotEmpty(to10.Character.Validate());
+        Assert.Contains(to10.Character.Validate(), d => d.Code == "character.empty-entry");
     }
 
     [Fact]
