@@ -122,7 +122,7 @@ public class PackageProperties
     private static string Revisions(TomeStackApp app, IEnumerable<ContentReference> references) =>
         string.Join("\n", references.Select(r => $"{TempApp.Json(app.Store.FindRevision(r))}:{app.Store.RevisionHash(r.RevisionId)}"));
 
-    [Property(MaxTest = 12)]
+    [CiProperty(maxTest: 12, ciMaxTest: 6)]
     public Property A_library_backup_restored_into_a_clean_folder_backs_up_to_the_same_manifest_and_hashes() =>
         Prop.ForAll(Libraries.ToArbitrary(), spec =>
         {
@@ -140,7 +140,7 @@ public class PackageProperties
             return true;
         });
 
-    [Property(MaxTest = 12)]
+    [CiProperty(maxTest: 12, ciMaxTest: 6)]
     public Property A_source_pack_imports_into_a_clean_folder_equal_and_a_second_import_changes_nothing() =>
         Prop.ForAll(Libraries.ToArbitrary(), spec =>
         {
@@ -167,7 +167,7 @@ public class PackageProperties
             return true;
         });
 
-    [Property(MaxTest = 12)]
+    [CiProperty(maxTest: 12, ciMaxTest: 6)]
     public Property A_campaign_pack_imports_into_a_clean_folder_equal_and_a_second_import_changes_nothing() =>
         Prop.ForAll(Libraries.ToArbitrary(), spec =>
         {

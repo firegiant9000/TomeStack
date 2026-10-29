@@ -577,4 +577,125 @@ public class LibraryBackupTests
             File.Delete(path);
         }
     }
+
+    /// <summary>
+    /// Edits a backup as a newer build would write it: the manifest names <paramref name="appVersion"/>, and the character
+    /// pins content (new SRD species, say) that this build's bundled packs do not hold. A library backup leaves the
+    /// bundled packs out, so those pins are in neither the backup nor this install.
+    /// </summary>
+    private static void AsWrittenBy(string path, string appVersion, int unseededPins) =>
+        File.WriteAllBytes(path, PackageEditor.Edit(
+            File.ReadAllBytes(path),
+            p => p.StartsWith("characters/", StringComparison.Ordinal),
+            character =>
+            {
+                for (var i = 0; i < unseededPins; i++)
+                    character["pins"]!.AsArray().Add(new System.Text.Json.Nodes.JsonObject { ["contentId"] = $"{Guid.NewGuid()}", ["revisionId"] = $"{Guid.NewGuid()}" });
+            },
+            manifest => manifest["appVersion"] = appVersion));
+
+    [Fact]
+    public void Restore_of_newer_backup_with_unseeded_pins_is_refused_with_count()
+    {
+        // Review focus 3 (S2): a newer build's backup must not pin revisions this build never seeds. The restore refuses it
+        // with one message that names the backup's version and how many picks are missing, not one line per pin.
+        using var origin = new TempApp();
+        Fill(origin.App);
+        var path = TempFile();
+        try
+        {
+            Backup(origin.App, path);
+            AsWrittenBy(path, "99.1.0", unseededPins: 2);
+
+            using var clean = new TempApp();
+            var preview = clean.App.PreviewLibraryRestore(path);
+
+            Assert.False(preview.CanApply);
+            var skew = Assert.Single(preview.Errors);
+            Assert.Equal("restore.needs-newer-build", skew.Code);
+            Assert.Contains("TomeStack 99.1.0", skew.Message, StringComparison.Ordinal);
+            Assert.Contains("2 content picks of 1 character (", skew.Message, StringComparison.Ordinal);
+            Assert.Contains("('Pell (2014 fixture)')", skew.Message, StringComparison.Ordinal); // the fixture's name
+            var refused = Assert.Throws<PackageException>(() => clean.App.ApplyLibraryRestore(path));
+            Assert.Equal("restore.needs-newer-build", Assert.Single(refused.Errors).Code);
+            Assert.Empty(clean.App.ListCharacters()); // nothing was written
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Restore_of_same_build_backup_has_no_skew_warning()
+    {
+        using var origin = new TempApp();
+        Fill(origin.App);
+        var path = TempFile();
+        try
+        {
+            Backup(origin.App, path);
+            using var clean = new TempApp();
+            var preview = clean.App.PreviewLibraryRestore(path);
+            Assert.True(preview.CanApply, string.Join("; ", preview.Errors.Select(e => e.Message)));
+            Assert.DoesNotContain(preview.Warnings.Concat(preview.Errors), d => d.Code == "restore.needs-newer-build");
+
+            // A pin missing from a backup of this same build is damage, not version skew: it is refused per pin, as before.
+            var thisBuild = typeof(PackageService).Assembly.GetName().Version!.ToString(3);
+            AsWrittenBy(path, thisBuild, unseededPins: 1);
+            var damaged = clean.App.PreviewLibraryRestore(path);
+            Assert.Equal("package.pin-missing", Assert.Single(damaged.Errors).Code);
+            Assert.DoesNotContain(damaged.Warnings, d => d.Code == "restore.needs-newer-build");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void The_skew_message_agrees_in_number_names_five_characters_and_clips_long_names()
+    {
+        var one = NewerBuild.Restore(new Version(0, 9, 0), 1, ["Test Solo"]).Message;
+        Assert.Contains("1 content pick of 1 character ('Test Solo') is neither", one, StringComparison.Ordinal);
+
+        var six = NewerBuild.Restore(new Version(0, 9, 0), 6, [.. Enumerable.Range(1, 6).Select(i => $"Test Hero {i}")]).Message;
+        Assert.Contains("6 content picks of 6 characters ('Test Hero 1', 'Test Hero 2', 'Test Hero 3', 'Test Hero 4', 'Test Hero 5' and 1 more) are neither", six, StringComparison.Ordinal);
+
+        var longName = new string('x', Character.MaxName + 50);
+        var clipped = NewerBuild.Restore(new Version(0, 9, 0), 1, [longName]).Message;
+        Assert.Contains($"'{longName[..Character.MaxName]}…'", clipped, StringComparison.Ordinal);
+        Assert.DoesNotContain(longName, clipped, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("0.6.0")] // older
+    [InlineData("this build, 2 parts")] // review fix: missing parts count as 0, so x.y.0 equals x.y
+    [InlineData("this build, 4 parts")]
+    [InlineData("v99.0.0")] // does not parse: no claim of a newer build
+    [InlineData("99.0.0-beta")]
+    [InlineData("")]
+    public void Restore_of_backup_not_from_a_newer_build_keeps_the_per_pin_refusal(string appVersion)
+    {
+        using var origin = new TempApp();
+        Fill(origin.App);
+        var path = TempFile();
+        try
+        {
+            Backup(origin.App, path);
+            var thisBuild = typeof(PackageService).Assembly.GetName().Version!;
+            if (appVersion == "this build, 2 parts")
+                appVersion = thisBuild.ToString(2); // equal when the patch part is 0, otherwise older
+            else if (appVersion == "this build, 4 parts")
+                appVersion = thisBuild.ToString(4);
+            AsWrittenBy(path, appVersion, unseededPins: 1);
+            using var clean = new TempApp();
+            var preview = clean.App.PreviewLibraryRestore(path);
+            Assert.Equal("package.pin-missing", Assert.Single(preview.Errors).Code);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
 }

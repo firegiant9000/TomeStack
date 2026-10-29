@@ -29,6 +29,10 @@
     <EmbeddedResource Include="Content\srd-5.1-fighter.json" LogicalName="TomeStack.Content.srd-5.1-fighter.json" />
     <EmbeddedResource Include="Content\srd-5.2.1-fighter.json" LogicalName="TomeStack.Content.srd-5.2.1-fighter.json" />
     <EmbeddedResource Include="Content\srd-5.1-origins.json" LogicalName="TomeStack.Content.srd-5.1-origins.json" />
+    <EmbeddedResource Include="Content\srd-5.2.1-feats.json" LogicalName="TomeStack.Content.srd-5.2.1-feats.json" />
+    <EmbeddedResource Include="Content\srd-5.2.1-origins.json" LogicalName="TomeStack.Content.srd-5.2.1-origins.json" />
+    <!-- The revision ids each released ladder row bundled (Packages/ReleaseLadder.cs; scripts/bundled-ids-at.ps1 -Tag HEAD in a minor release PR; bundled SRD content ships only in a minor, so no patch rows). -->
+    <EmbeddedResource Include="Packages\BundledAt\*.txt" LogicalName="TomeStack.BundledAt.%(Filename)%(Extension)" />
     <!-- Character-sheet import: the layout maps (field names only; features/ddb-pdf-import.md). -->
     <EmbeddedResource Include="CharacterImport\Layouts\*.json" LogicalName="TomeStack.CharacterImport.Layouts.%(Filename)%(Extension)" />
     <!-- The original test fixture pack is seeded only by development hosts and tests (TomeStackApp.Open devFixtures). -->

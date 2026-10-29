@@ -106,7 +106,8 @@ public static class SheetExportBuilder
     public static bool LetsOut(SourceRecord source, SheetPurpose purpose, IReadOnlySet<Guid> bundled)
     {
         ArgumentNullException.ThrowIfNull(source);
-        if (source.MayBeShared || bundled.Contains(source.Id))
+        // The share rule is Preflight's (Import Lab L5): the one place that says what may leave the machine.
+        if (Packages.Preflight.MayShareContent(source, bundled))
             return true;
         if (purpose != SheetPurpose.Personal || source.ImportDerived == true)
             return false;
@@ -223,7 +224,8 @@ public static class SheetExportBuilder
         List<SheetAttack> attacks = [];
         foreach (var attack in sheet.Attacks ?? [])
         {
-            if (Out(attack.Item, out var source))
+            // D43 S4: attacks a feature gives (an unarmed strike, a bolt) are not exported in v1; the model lists equipped weapons.
+            if (attack.Source == AttackSource.Weapon && Out(attack.Item, out var source))
                 attacks.Add(new(attack.Name, attack.ToHit, attack.Damage, attack.VersatileDamage, attack.DamageType, attack.Properties, attack.Range, attack.Proficient, attack.Item, source));
         }
         List<SheetFeature> features = [];

@@ -136,11 +136,27 @@ public class PersistenceAndDispatchTests
         Assert.Contains("System.InvalidOperationException: boom", text, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void File_error_log_writes_a_text_detail_in_the_same_entry_format()
+    {
+        using var temp = new TempApp();
+        var log = (FileErrorLog)temp.App.ErrorLog;
+
+        log.Record("ABCD1234", "task", "plain detail");
+
+        var lines = File.ReadAllText(log.FilePath).Split(Environment.NewLine);
+        Assert.Matches(@"^\[\d{4}-\d{2}-\d{2}T[\d:.]+(Z|\+00:00)\] ABCD1234 command=task$", lines[0]);
+        Assert.Equal("plain detail", lines[1]);
+        Assert.Equal(["", ""], lines[2..]);
+    }
+
     private sealed class RecordingErrorLog : IErrorLog
     {
         public List<(string CorrelationId, string Command, Exception Exception)> Entries { get; } = [];
 
         public void Record(string correlationId, string command, Exception exception) => Entries.Add((correlationId, command, exception));
+
+        public void Record(string correlationId, string command, string detail) => Entries.Add((correlationId, command, new InvalidOperationException(detail)));
     }
 
     [Theory]

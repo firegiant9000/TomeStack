@@ -23,21 +23,21 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "content.bySource", "content.diagnose", "content.sandbox", "content.compare", "content.tree", "content.feedback", "source.list", "source.createHomebrew", "source.setShareable",
         "source.attachment", "source.attachPdf", "source.attachPdfData", "source.detachPreview", "source.detach", "source.openPage", "source.importPages",
         "character.list", "character.get", "character.create", "character.save", "character.choose", "character.preview", "character.previewChoice",
-        "character.play", "character.restPreview", "character.rest", "character.reviewUpdate", "character.applyUpdate", "character.updates", "character.mechanics", "roll", "dice.roll",
+        "character.play", "character.undoPlay", "character.restPreview", "character.rest", "character.turnPreview", "character.turn", "character.damagePreview", "character.reviewUpdate", "character.applyUpdate", "character.updates", "character.mechanics", "roll", "dice.roll",
         "character.archivePreview", "character.archive", "character.unarchive",
         "character.snapshot", "character.snapshots", "character.restorePreview", "character.restoreSnapshot",
         "gap.list", "gap.listAll", "gap.add", "gap.setStatus", "gap.delete",
-        "import.start", "import.status", "import.list", "import.cancel", "import.resume", "import.audit", "import.search", "import.page", "import.candidates",
+        "import.start", "import.startMarkdown", "import.startMarkdownData", "import.status", "import.list", "import.cancel", "import.resume", "import.audit", "import.search", "import.page", "import.candidates",
         "import.candidate.check", "import.candidate.edit", "import.candidate.accept", "import.candidate.acceptMany", "import.candidate.addToSpellList", "import.candidate.ignore",
         "package.exportPreview", "package.export", "package.saveAs", "package.preview", "package.apply",
         "package.sourcePackPreview", "package.sourcePackExport", "package.sourcePackSaveAs",
-        "package.campaignPackPreview", "package.campaignPackExport", "package.campaignPackSaveAs",
+        "package.campaignPackPreview", "package.campaignPackExport", "package.campaignPackSaveAs", "package.preflight",
         "extension.list", "extension.installPreview", "extension.installChoose", "extension.install", "extension.review", "extension.setEnabled", "extension.remove",
         "extension.chooseInput", "extension.runPreview", "extension.runImport", "extension.runExport", "extension.runSaveAs",
         "export.preview", "export.saveAs", "export.download",
         "library.backupPreview", "library.backupSaveAs", "library.restoreChoose", "library.restoreApply",
         "ddb.read", "ddb.readData", "ddb.readText", "ddb.preview", "ddb.apply", "ddb.discard",
-        "content.previewFormula",
+        "content.previewFormula", "content.coverage", "content.classTable", "content.duplicates",
     ];
 
     /// <summary>
@@ -93,7 +93,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         }
     }
 
-    private object Execute(string command, JsonElement? payload) => command switch
+    private object? Execute(string command, JsonElement? payload) => command switch
     {
         "app.info" => app.GetInfo(),
         "content.list" => ListContent(Payload<RulesFamilyPayload>(payload)),
@@ -117,6 +117,9 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "content.tree" => app.Tree(Payload<DiagnoseRequest>(payload)),
         "content.feedback" => app.Feedback(Payload<DiagnoseRequest>(payload)),
         "content.previewFormula" => app.PreviewFormula(Payload<FormulaPreviewRequest>(payload)),
+        "content.coverage" => app.Coverage(Payload<CoverageRequest>(payload)),
+        "content.classTable" => app.ClassTable(Payload<ClassTableRequest>(payload)),
+        "content.duplicates" => app.ContentDuplicates(Payload<DuplicatesRequest>(payload)),
         "source.list" => app.ListSources(),
         "source.createHomebrew" => app.CreateHomebrewSource(Payload<HomebrewSourceRequest>(payload)),
         "source.setShareable" => app.SetShareable(Payload<ShareableRequest>(payload)),
@@ -146,8 +149,12 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "character.preview" => app.Preview(Payload<Character>(payload)),
         "character.previewChoice" => app.PreviewChoice(Payload<PreviewChoiceRequest>(payload)),
         "character.play" => app.Play(Payload<PlayCommand>(payload)),
+        "character.undoPlay" => app.UndoPlay(Payload<UndoPlayRequest>(payload)),
         "character.restPreview" => PreviewRest(Payload<RestPreviewPayload>(payload)),
         "character.rest" => app.Rest(Payload<RestRequest>(payload)),
+        "character.turnPreview" => app.PreviewTurn(Payload<TurnRequest>(payload)),
+        "character.turn" => app.Turn(Payload<TurnRequest>(payload)),
+        "character.damagePreview" => app.PreviewDamage(Payload<DamagePreviewRequest>(payload)),
         "character.mechanics" => app.Mechanics(Payload<MechanicsRequest>(payload)),
         "character.archivePreview" => app.PreviewArchive(Payload<CharacterIdPayload>(payload).CharacterId),
         "character.archive" => app.Archive(Payload<ArchiveRequest>(payload)),
@@ -159,6 +166,8 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "gap.list" => app.ListGapNotes(Payload<CharacterIdPayload>(payload).CharacterId),
         "gap.listAll" => app.ListAllGapNotes(),
         "import.start" => app.StartImport(Payload<ImportStartRequest>(payload)),
+        "import.startMarkdown" => StartMarkdown(Payload<MarkdownPayload>(payload)),
+        "import.startMarkdownData" => StartMarkdownData(Payload<MarkdownDataPayload>(payload)),
         "import.status" => app.ImportStatus(Payload<ImportJobRequest>(payload).JobId),
         "import.list" => app.ListImports(payload is { ValueKind: JsonValueKind.Object } ? Payload<ImportListRequest>(payload).SourceId : null),
         "import.cancel" => app.CancelImport(Payload<ImportJobRequest>(payload).JobId),
@@ -185,6 +194,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "package.sourcePackExport" => ExportSourcePack(Payload<SourcePackPayload>(payload)),
         "package.sourcePackSaveAs" => SaveSourcePackAs(Payload<SourcePackPayload>(payload)),
         "package.campaignPackPreview" => app.PreviewCampaignPack(Payload<CampaignIdPayload>(payload).CampaignId),
+        "package.preflight" => app.PackagePreflight(Payload<Packages.PreflightRequest>(payload)),
         "package.campaignPackExport" => ExportCampaignPack(Payload<CampaignIdPayload>(payload)),
         "package.campaignPackSaveAs" => SaveCampaignPackAs(Payload<CampaignIdPayload>(payload)),
         "extension.list" => app.ListExtensions(),
@@ -257,6 +267,24 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
 
     private AttachmentInfo AttachPdfData(AttachDataPayload payload) =>
         app.AttachPdf(payload.SourceId, payload.FileName, Convert.FromBase64String(payload.Base64));
+
+    /// <summary>
+    /// D67: the native Open dialog picks the Markdown file and its path never crosses the bridge (ADR-005, ADR-006). A cancelled
+    /// dialog starts nothing and replies with no result.
+    /// </summary>
+    private ImportJobRecord? StartMarkdown(MarkdownPayload payload)
+    {
+        if (host is null || !host.CanOpenFiles)
+            throw new AppValidationException([new("host.unsupported", "This host has no native Open dialog.")], "unsupported");
+        var path = host.ChooseOpenFile("Markdown", ".md");
+        if (path is null)
+            return null;
+        LocalDrivePath.Require(path, ".md"); // R116: a network or device path is refused before it is opened
+        return app.StartMarkdownImportFile(payload.SourceId, path, payload.WrittenFor);
+    }
+
+    private ImportJobRecord StartMarkdownData(MarkdownDataPayload payload) =>
+        app.StartMarkdownImport(payload.SourceId, Convert.FromBase64String(payload.Base64), payload.WrittenFor);
 
     /// <summary>
     /// Character-sheet import: the native Open dialog picks the sheet, and its path never crosses the bridge (ADR-006), as
@@ -612,6 +640,11 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     private sealed record AttachPayload(Guid SourceId, AttachmentMode Mode = AttachmentMode.Managed);
 
     private sealed record AttachDataPayload(Guid SourceId, string FileName, string Base64);
+
+    private sealed record MarkdownPayload(Guid SourceId, IReadOnlyList<string>? WrittenFor = null);
+
+    /// <param name="FileName">Sent for parity with <c>source.attachPdfData</c>; the content decides what is read, not the name.</param>
+    private sealed record MarkdownDataPayload(Guid SourceId, string FileName, string Base64, IReadOnlyList<string>? WrittenFor = null);
 
     private sealed record DdbDataPayload(string? FileName, string? Data);
 

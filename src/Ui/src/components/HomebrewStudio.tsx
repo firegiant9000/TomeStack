@@ -12,6 +12,7 @@ import type {
   DebugFinding,
   DebugReport,
   DesignHint,
+  Diagnostic,
   Effect,
   PublishResult,
   RulesFamilyId,
@@ -29,12 +30,21 @@ import type { BeforeSave } from './OriginPieces';
 import { DebugFindings } from './DebugFindings';
 import { SandboxPanel } from './SandboxPanel';
 import { ComparePanel } from './ComparePanel';
+import { CoveragePanel } from './CoveragePanel';
+import { DuplicateChip } from './DuplicateChip';
+import { duplicateOf, useDuplicates } from './duplicates';
 import { PublishManyPanel, type PendingDraft } from './PublishManyPanel';
 import { SpellListForm } from './SpellListForm';
 import { TreeView } from './TreeView';
 import { fromTemplate, templates, type TemplateId } from '../templates';
 import { designFeedbackOn, setDesignFeedback } from '../designFeedback';
-import { abilities, nextScaleKey, parseSlotRows, parseTwenty } from '../classBasics';
+import { abilities, nextGroupKey, nextScaleKey, parseSlotRows, parseTwenty } from '../classBasics';
+import { nextAttackKey, type ToggleChoice } from '../attackAuthoring';
+import { AttackFields, RiderFields, ToggleSelect } from './AttackFields';
+import { DefenceFields, RollModeFields, isDamageDefence } from './RollModeFields';
+import { ResponseFields } from './ResponseFields';
+import { RollFields } from './RollFields';
+import { isValueKey, nextValueKey, type PoolChoice } from '../rollAuthoring';
 import {
   grantOfKind,
   isBackgroundBasic,
@@ -127,6 +137,8 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
   }, [loadSources]);
 
   const source = sources.find((s) => s.id === sourceId) ?? sources[0];
+  // Import Lab L6: library rows that look like another entry get a chip (advice only; nothing is merged). Asked again when the rows change.
+  const duplicates = useDuplicates({ sourceId: source?.id }, entries);
 
   // Item 9: a content is pending when its newest revision is a draft; "Publish all drafts" previews them.
   const [publishingAll, setPublishingAll] = useState(false);
@@ -250,6 +262,20 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
     }
   }
 
+  /** The class grid's "Edit {feature}" (Import Lab, D62 L2): opens a feature of this source, never over unsaved changes. */
+  function openFeature(contentId: string) {
+    const entry = entries.find((e) => e.contentId === contentId);
+    if (!entry) {
+      onStatus('That feature is not in this source, so it cannot be edited here.');
+      return;
+    }
+    if (editorDirty) {
+      onStatus('Save or close the open entry before opening another one: it has changes that are not saved.');
+      return;
+    }
+    edit(entry);
+  }
+
   /** Opens the finding's entry (unless it is already open, which keeps unsaved edits) and focuses its rule. */
   function show(finding: DebugFinding) {
     const entry = entries.find((e) => e.contentId === finding.content.contentId);
@@ -341,6 +367,7 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
                     {entry.latest.status === 'published' ? 'published' : entry.latestPublished ? 'published, with a newer draft' : 'draft'} ·{' '}
                     {entry.revisions.length} revision{entry.revisions.length === 1 ? '' : 's'}
                   </span>{' '}
+                  <DuplicateChip other={duplicateOf(duplicates, (m) => m.contentId === entry.contentId)} />{' '}
                   <button type="button" onClick={() => edit(entry)}>
                     Edit {entry.name}
                   </button>
@@ -481,6 +508,8 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
         </section>
       )}
 
+      {source && <CoveragePanel sourceId={source.id} refreshKey={entries} />}
+
       {editing && source && (
         <EntryEditor
           key={`${editing.contentId}-${editing.revisionId}`}
@@ -492,6 +521,7 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
           designFeedback={feedbackOn}
           onError={onError}
           onDirty={setEditorDirty}
+          onEditFeature={openFeature}
           onClose={() => setEditing(undefined)}
           onEntriesChanged={() => void loadEntries(source.id)}
           onPublished={async (result, name) => {
@@ -669,6 +699,8 @@ function EntryEditor(props: {
   onDirty: (dirty: boolean) => void;
   /** The class helper published option features: reload the source's content. */
   onEntriesChanged: () => void;
+  /** The class grid asks the studio to open one of the class's features for editing. */
+  onEditFeature: (contentId: string) => void;
   /** `pinned` counts the unpublished drafts the saved entry points at. */
   onDraftSaved: (name: string, pinned: number) => void;
   /** "Publish all drafts" published the entry this editor saved: the editor shows a superseded draft and is closed. */
@@ -816,7 +848,8 @@ function EntryEditor(props: {
   const previewKey = JSON.stringify({
     kind: revision.kind,
     schemaVersion: revision.schemaVersion,
-    scales: revision.effects.filter((e) => e.type === 'scale'),
+    // Class columns and named values: the two things a preview reads from the draft (VALUE.<key> in a formula of the same class).
+    scales: revision.effects.filter((e) => e.type === 'scale' || e.type === 'value'),
   });
   const previewRevision = useMemo<ContentRevision>(() => {
     const { kind, schemaVersion, scales } = JSON.parse(previewKey) as { kind: ContentRevision['kind']; schemaVersion?: number; scales: Effect[] };
@@ -842,6 +875,20 @@ function EntryEditor(props: {
   };
   const resources = revision.effects.filter((e): e is Extract<Effect, { type: 'resource' }> => e.type === 'resource');
   const grantable = props.entries.filter((e) => e.contentId !== revision.contentId && e.latestPublished && (e.kind === 'feature' || e.kind === 'feat'));
+  // Content v11 (D43): the toggles of the source's other entries (their newest published revision, the one a character gets), which a
+  // modifier, roll, attack or rider can follow.
+  const otherToggles: ToggleChoice[] = props.entries
+    .filter((e) => e.contentId !== revision.contentId && e.latestPublished)
+    .flatMap((e) =>
+      e.latestPublished!.effects.flatMap((t) => (t.type === 'toggle' ? [{ contentId: e.contentId, toggleId: t.toggleId, label: t.label, entryName: e.name }] : [])),
+    );
+  // Content v11 (D43 slice 5): the pools of the source's other entries (newest published revision), which a roll can spend. Keyed
+  // by content and id, so one id in two entries never collides.
+  const otherPools: PoolChoice[] = props.entries
+    .filter((e) => e.contentId !== revision.contentId && e.latestPublished)
+    .flatMap((e) =>
+      e.latestPublished!.effects.flatMap((r) => (r.type === 'resource' ? [{ contentId: e.contentId, resourceId: r.resourceId, label: r.label, entryName: e.name, countsUp: r.counts === 'up' }] : [])),
+    );
   const isClass = revision.kind === 'class';
   const classLike = isClass || revision.kind === 'subclass';
   const hasSpellcasting = revision.effects.some((e) => e.type === 'spellcasting');
@@ -859,8 +906,46 @@ function EntryEditor(props: {
             : false;
   const listed = revision.effects.map((effect, index) => ({ effect, index })).filter(({ effect }) => !shownByEditor(effect));
 
-  function add(type: 'modifier' | 'resource' | 'recovery' | 'roll' | 'armor' | 'grant' | 'scale' | 'spellcasting') {
-    const id = nextId(type);
+  function add(type: 'modifier' | 'resource' | 'recovery' | 'roll' | 'armor' | 'grant' | 'scale' | 'value' | 'spellcasting' | 'toggle' | 'toggleGroup' | 'upkeep' | 'attack' | 'attackRider' | 'rollMode' | 'damageDefence' | 'response') {
+    const id = nextId(type === 'damageDefence' ? 'grant' : type);
+    if (type === 'response') {
+      // Content v11 (D43 S7): a valid start (take 1 less damage). The response id is set once, like a resource's.
+      update({ effects: [...revision.effects, { type, id, responseId: id, label: '', phase: 'damageReduction', amount: '1' }] });
+      return;
+    }
+    if (type === 'rollMode') {
+      // Content v11 (D43 slice 6): a valid start (advantage on a Dexterity save).
+      update({ effects: [...revision.effects, { type, id, target: 'save.dex', mode: 'advantage' }] });
+      return;
+    }
+    if (type === 'damageDefence') {
+      update({ effects: [...revision.effects, { type: 'grant', id, grant: 'damageResistance', damageType: 'fire' }] });
+      return;
+    }
+    if (type === 'attack') {
+      // Content v11 (D43): a valid start (one ability, 1d6 bludgeoning); the key is set once, like a resource's.
+      update({
+        effects: [
+          ...revision.effects,
+          { type, id, attackId: nextAttackKey(revision.effects), label: '', kind: 'melee', abilities: ['str'], proficient: true, damage: { count: '1', die: '6' }, damageType: 'bludgeoning' },
+        ],
+      });
+      return;
+    }
+    if (type === 'attackRider') {
+      update({ effects: [...revision.effects, { type, id, tags: ['all'], dice: '1d6' }] });
+      return;
+    }
+    if (type === 'value') {
+      // Content v11 (D43 slice 5): a key like a scale's, set to a fresh one; the formula starts as 1 (a valid one).
+      update({ effects: [...revision.effects, { type, id, valueId: nextValueKey(revision.effects), formula: '1' }] });
+      return;
+    }
+    if (type === 'upkeep') {
+      // Content v11 (D43): spends one from the first pool of this revision at the start of the turn; the button needs a pool.
+      update({ effects: [...revision.effects, { type, id, at: 'turnStart', resourceId: resources[0]?.resourceId ?? '', change: 'spend', amount: '1' }] });
+      return;
+    }
     const effect: Effect =
       type === 'modifier'
         ? { type, id, operation: 'bonus', target: 'initiative', value: '1' }
@@ -878,7 +963,13 @@ function EntryEditor(props: {
                     { type, id, scaleId: nextScaleKey(revision.effects), label: '', values: Array<number>(20).fill(1) }
                   : type === 'spellcasting'
                     ? { type, id, ability: 'int', preparation: 'prepared', spellList: '', slotKind: 'spellSlots', slots: Array.from({ length: 20 }, () => [] as number[]) }
-                    : { type: 'grant', id, grant: 'content', content: grantable[0]?.latestPublished && reference(grantable[0].latestPublished), level: isClass ? 1 : 3 };
+                    : type === 'toggle'
+                      ? // Set once like a resource's id: modifiers, overlays and saved play state name it.
+                        { type, id, toggleId: id, label: '' }
+                      : type === 'toggleGroup'
+                        ? // Content v11 (D43): a key like a scale's (a lowercase letter, then letters and digits), set once; the label is for the sheet.
+                          { type, id, groupId: nextGroupKey(revision.effects), label: '' }
+                        : { type: 'grant', id, grant: 'content', content: grantable[0]?.latestPublished && reference(grantable[0].latestPublished), level: isClass ? 1 : 3 };
     update({ effects: [...revision.effects, effect] });
   }
 
@@ -1016,6 +1107,7 @@ function EntryEditor(props: {
           onBusy={setClassBusy}
           onOptionsPublished={props.onEntriesChanged}
           onError={onError}
+          onEditFeature={props.onEditFeature}
         />
       )}
 
@@ -1049,6 +1141,12 @@ function EntryEditor(props: {
           fields={props.info.fields}
           resources={resources}
           toggles={revision.effects.filter((e): e is Extract<Effect, { type: 'toggle' }> => e.type === 'toggle')}
+          groups={revision.effects.filter((e): e is Extract<Effect, { type: 'toggleGroup' }> => e.type === 'toggleGroup')}
+          otherToggles={otherToggles}
+          otherPools={otherPools}
+          rolls={revision.effects.filter((e): e is Extract<Effect, { type: 'roll' }> => e.type === 'roll')}
+          diagnostics={(report?.errors ?? []).filter((d) => d.effectId === effect.id)}
+          warnings={(report?.warnings ?? []).filter((d) => d.effectId === effect.id)}
           grantable={grantable}
           previewRevision={previewRevision}
           onChange={(e) => setEffect(index, e)}
@@ -1057,16 +1155,44 @@ function EntryEditor(props: {
             // Rules that named the removed one no longer do (review fix): a modifier switched by a removed toggle is always
             // on again, and a toggle that spent a removed resource spends nothing.
             const removedToggle = effect.type === 'toggle' ? effect.toggleId : undefined;
+            const removedGroup = effect.type === 'toggleGroup' ? effect.groupId : undefined;
             const removedResource = effect.type === 'resource' ? effect.resourceId : undefined;
             const remaining = revision.effects.filter((_, i) => i !== index);
             const resourceStillDefined = remaining.some((e) => e.type === 'resource' && e.resourceId === removedResource);
+            // D43 slice 3: an upkeep goes with the pool it changed or the toggle it belonged to, when that is in this revision (left
+            // behind it would change a pool nothing declares, or silently apply always).
+            // D43 slice 4: a rider that followed the toggle goes with it, and so does a modifier that raised the removed pool's maximum.
+            const goesWith = (e: Effect) =>
+              (e.type === 'upkeep' &&
+                ((removedResource !== undefined && !resourceStillDefined && !e.resourceContent && e.resourceId === removedResource) ||
+                  (removedToggle !== undefined && !e.toggleContent && e.toggle === removedToggle))) ||
+              (e.type === 'attackRider' && removedToggle !== undefined && !e.toggleContent && e.toggle === removedToggle) ||
+              (e.type === 'modifier' && removedResource !== undefined && !resourceStillDefined && e.target === `resource.${removedResource}`);
+            const kept = remaining.filter((e) => !goesWith(e));
+            // D43 slice 8: a roll stops also changing the removed pool (its own pool goes through the reset below).
+            const withoutRemovedPool = (e: Effect): Effect => {
+              if (e.type !== 'roll' || removedResource === undefined || resourceStillDefined || !e.alsoChange) return e;
+              const rows = e.alsoChange.filter((row) => row.resourceContent || row.resourceId !== removedResource);
+              return rows.length === e.alsoChange.length ? e : { ...e, alsoChange: rows.length === 0 ? undefined : rows };
+            };
             update({
-              effects: remaining.map((e) =>
-                e.type === 'modifier' && removedToggle !== undefined && e.toggle === removedToggle
+              effects: kept.map(withoutRemovedPool).map((e) =>
+                e.type === 'modifier' && removedToggle !== undefined && !e.toggleContent && e.toggle === removedToggle
                   ? { ...e, toggle: undefined, timing: undefined }
-                  : e.type === 'toggle' && removedResource !== undefined && !resourceStillDefined && e.resourceId === removedResource
-                    ? { ...e, resourceId: undefined }
-                    : e,
+                  : (e.type === 'attack' || e.type === 'roll') && removedToggle !== undefined && !e.whileToggle?.contentId && e.whileToggle?.toggleId === removedToggle
+                    ? { ...e, whileToggle: undefined }
+                    : e.type === 'roll' && removedResource !== undefined && !resourceStillDefined && !e.resourceContent && e.resourceId === removedResource
+                      ? { ...e, resourceId: undefined, resourceContent: undefined, cost: undefined, variableCost: undefined, perUnit: undefined, alsoChange: undefined, drawsDown: undefined }
+                    : e.type === 'attack' && removedResource !== undefined && !resourceStillDefined && !e.resourceContent && e.resourceId === removedResource
+                      ? { ...e, resourceId: undefined, cost: undefined }
+                      : e.type === 'toggle' && removedResource !== undefined && !resourceStillDefined && e.resourceId === removedResource
+                        ? { ...e, resourceId: undefined, cost: undefined, resourceContent: undefined }
+                        : // D43: a toggle leaves a removed group (it would name a group nothing declares), and an overlay forgets a removed primary.
+                          e.type === 'toggle' && removedGroup !== undefined && e.group === removedGroup && !e.groupContent
+                          ? { ...e, group: undefined, layer: undefined, allowedWith: undefined, allowedInBase: undefined }
+                          : e.type === 'toggle' && removedToggle !== undefined && e.allowedWith?.some((r) => !r.contentId && r.toggleId === removedToggle)
+                            ? { ...e, allowedWith: e.allowedWith.filter((r) => r.contentId || r.toggleId !== removedToggle) }
+                            : e,
               ),
             });
             // Field keys start with the effect id: a removed rule's problems no longer block saving.
@@ -1088,6 +1214,30 @@ function EntryEditor(props: {
         <button type="button" onClick={() => add('roll')}>
           Add roll or action
         </button>
+        <button type="button" onClick={() => add('attack')}>
+          Add attack
+        </button>
+        <button type="button" onClick={() => add('attackRider')}>
+          Add attack rider
+        </button>
+        <button type="button" onClick={() => add('rollMode')}>
+          Add roll mode
+        </button>
+        <button type="button" onClick={() => add('damageDefence')}>
+          Add damage defence
+        </button>
+        <button type="button" onClick={() => add('response')}>
+          Add damage response
+        </button>
+        <button type="button" onClick={() => add('toggle')}>
+          Add toggle
+        </button>
+        <button type="button" onClick={() => add('toggleGroup')}>
+          Add form group
+        </button>
+        <button type="button" onClick={() => add('upkeep')} disabled={resources.length === 0}>
+          Add upkeep
+        </button>
         {(classLike || revision.kind === 'feat') && (
           <button type="button" onClick={() => add('grant')} disabled={grantable.length === 0}>
             Grant a feature
@@ -1096,6 +1246,11 @@ function EntryEditor(props: {
         {classLike && (
           <button type="button" onClick={() => add('scale')}>
             Add class column
+          </button>
+        )}
+        {classLike && (
+          <button type="button" onClick={() => add('value')}>
+            Add named value
           </button>
         )}
         {classLike && (
@@ -1335,6 +1490,44 @@ function ScaleFields(props: { effect: Extract<Effect, { type: 'scale' }>; onChan
   );
 }
 
+/** Content v11 (D43 slice 5): a named formula of a class, read as VALUE.<key> by the other formulas of the same class. */
+function ValueFields(props: { effect: Extract<Effect, { type: 'value' }>; previewRevision?: ContentRevision; onChange: (effect: Effect) => void; onProblem: ReportProblem }) {
+  const { effect, onChange, onProblem } = props;
+  const keyProblem = isValueKey(effect.valueId) ? undefined : 'Key: use a lowercase letter, then up to 31 letters or digits.';
+  const keyId = `${effect.id}-key`;
+  // Reported when the rule appears too, so a stored bad key blocks saving on load.
+  useEffect(() => {
+    onProblem(keyId, keyProblem);
+    return () => onProblem(keyId, undefined);
+  }, [keyId, keyProblem, onProblem]);
+  const formulaId = `rule-${effect.id}-formula-preview`;
+  return (
+    <>
+      <div className="field">
+        <label>
+          Key (formulas read it as VALUE.key; a lowercase letter, then letters or digits)
+          <input
+            value={effect.valueId}
+            aria-invalid={keyProblem ? true : undefined}
+            aria-describedby={keyProblem ? `${keyId}-error` : undefined}
+            onChange={(e) => onChange({ ...effect, valueId: e.target.value.trim() })}
+          />
+        </label>
+        {keyProblem && (
+          <p id={`${keyId}-error`} className="error">
+            {keyProblem}
+          </p>
+        )}
+      </div>
+      <label className="field">
+        Formula (a number or a formula, such as CLASS_LEVEL / 2)
+        <input value={effect.formula} aria-describedby={formulaId} onChange={(e) => onChange({ ...effect, formula: e.target.value })} />
+      </label>
+      <FormulaPreview id={formulaId} formula={effect.formula} revision={props.previewRevision} />
+    </>
+  );
+}
+
 /**
  * Content v5 spellcasting, with the v9 multiclass table (ADR-010). The slot table is one line per class level, each the
  * slots of spell levels 1, 2, … separated by commas (an empty line: no slots at that level).
@@ -1447,6 +1640,18 @@ function EffectEditor(props: {
   fields: { id: string; label: string }[];
   resources: Extract<Effect, { type: 'resource' }>[];
   toggles: Extract<Effect, { type: 'toggle' }>[];
+  /** Content v11 (D43): the form groups this revision declares. */
+  groups: Extract<Effect, { type: 'toggleGroup' }>[];
+  /** Content v11 (D43): the toggles of the source's other entries. */
+  otherToggles: ToggleChoice[];
+  /** Content v11 (D43 slice 5): the pools of the source's other entries, which a roll can spend. */
+  otherPools: PoolChoice[];
+  /** Content v11 (D43 S7): the rolls this revision declares, which a response outcome can offer. */
+  rolls: Extract<Effect, { type: 'roll' }>[];
+  /** The last check's errors for this rule (shown inside a response, whose fields cannot each carry one). */
+  diagnostics: Diagnostic[];
+  /** The last check's warnings for this rule, shown apart from the errors. */
+  warnings: Diagnostic[];
   grantable: StudioEntry[];
   /** The draft the formula previews are worked out against (D61). */
   previewRevision?: ContentRevision;
@@ -1458,7 +1663,9 @@ function EffectEditor(props: {
   const n = props.index + 1;
   const names: Record<Effect['type'], string> = {
     modifier: 'Modifier',
-    grant: 'Granted feature',
+    rollMode: 'Roll mode',
+    response: 'Damage response',
+    grant: isDamageDefence(effect) ? 'Damage defence' : 'Granted feature',
     resource: 'Resource',
     recovery: 'Recovery',
     roll: 'Roll or action',
@@ -1467,13 +1674,21 @@ function EffectEditor(props: {
     hitDie: 'Hit die',
     restriction: 'Prerequisite',
     scale: 'Class column',
+    value: 'Named value',
     spellcasting: 'Spellcasting',
     spell: 'Spell data',
     toggle: 'Toggle',
+    toggleGroup: 'Form group',
+    upkeep: 'Upkeep',
     item: 'Item rules',
+    attack: 'Attack',
+    attackRider: 'Attack rider',
   };
   const toggles = props.toggles;
+  const toggleChoices = { own: toggles, others: props.otherToggles };
   const legend = `Rule ${n}: ${names[effect.type]}`;
+  // "all" is a word, not a formula, so a regain of "all" has no preview.
+  const upkeepAmountPreviewed = effect.type === 'upkeep' && effect.amount.trim() !== '' && !(effect.change === 'regain' && effect.amount.trim() === 'all');
 
   return (
     <fieldset className="effect-editor" id={ruleElementId(effect.id)} tabIndex={-1}>
@@ -1488,6 +1703,17 @@ function EffectEditor(props: {
                   {f.label}
                 </option>
               ))}
+              {/* Content v11 (D43): a bonus can raise the maximum of a pool of this revision. Another operation cannot, so the
+                  targets are offered for a bonus (and kept while the modifier already names one, for the check to explain). */}
+              {(effect.operation === 'bonus' || effect.target.startsWith('resource.')) &&
+                props.resources.map((r) => (
+                  <option key={r.id} value={`resource.${r.resourceId}`}>
+                    Maximum of {r.label || r.resourceId}
+                  </option>
+                ))}
+              {effect.target.startsWith('resource.') && !props.resources.some((r) => `resource.${r.resourceId}` === effect.target) && (
+                <option value={effect.target}>{effect.target} (other content)</option>
+              )}
             </select>
           </label>
           <label className="field">
@@ -1505,25 +1731,23 @@ function EffectEditor(props: {
           <FormulaPreview id={`rule-${effect.id}-value-preview`} formula={effect.value} revision={props.previewRevision} />
           {/* Only for a modifier that is always on or switched by a toggle: another timing (such as onRoll, from imported
               content) is left as it is, never turned into "always" (review fix). */}
-          {(effect.toggle || ((effect.timing ?? 'always') === 'always' && toggles.length > 0)) && (
-            <label className="field">
-              Applies
-              <select
-                value={effect.toggle ?? ''}
-                onChange={(e) =>
-                  // Content v6: a toggled modifier applies only while its toggle is on, so its timing is whileActive; without
-                  // the toggle it is always on again (its timing was whileActive only because of the toggle).
-                  onChange(e.target.value ? { ...effect, toggle: e.target.value, timing: 'whileActive' } : { ...effect, toggle: undefined, timing: undefined })
-                }
-              >
-                <option value="">Always</option>
-                {toggles.map((t) => (
-                  <option key={t.id} value={t.toggleId}>
-                    While {t.label || t.toggleId} is on
-                  </option>
-                ))}
-              </select>
-            </label>
+          {(effect.toggle || ((effect.timing ?? 'always') === 'always' && (toggles.length > 0 || props.otherToggles.length > 0))) && (
+            <ToggleSelect
+              label="Applies"
+              alwaysLabel="Always"
+              choices={toggleChoices}
+              current={{ contentId: effect.toggleContent, toggleId: effect.toggle }}
+              // Content v6: a toggled modifier applies only while its toggle is on, so its timing is whileActive; without
+              // the toggle it is always on again (its timing was whileActive only because of the toggle). Content v11: the
+              // toggle may be another entry's (toggleContent).
+              onPick={(toggle) =>
+                onChange(
+                  toggle
+                    ? { ...effect, toggle: toggle.toggleId, toggleContent: toggle.contentId, timing: 'whileActive' }
+                    : { ...effect, toggle: undefined, toggleContent: undefined, timing: undefined },
+                )
+              }
+            />
           )}
         </>
       )}
@@ -1535,7 +1759,7 @@ function EffectEditor(props: {
           </label>
           <label className="field">
             Turning it on spends
-            <select value={effect.resourceId ?? ''} onChange={(e) => onChange({ ...effect, resourceId: e.target.value || undefined })}>
+            <select value={effect.resourceId ?? ''} onChange={(e) => onChange(e.target.value ? { ...effect, resourceId: e.target.value, resourceContent: undefined } : { ...effect, resourceId: undefined, cost: undefined, resourceContent: undefined })}>
               <option value="">Nothing</option>
               {props.resources.map((r) => (
                 <option key={r.id} value={r.resourceId}>
@@ -1544,6 +1768,109 @@ function EffectEditor(props: {
               ))}
             </select>
           </label>
+          {/* Content v11 (D43). The version is not chosen here: the check and publish pick it from what the rules use. */}
+          {effect.resourceId && (
+            <>
+              <label className="field">
+                Cost (a number or a formula; empty is one use)
+                <input value={effect.cost ?? ''} aria-describedby={`rule-${effect.id}-cost-preview`} onChange={(e) => onChange({ ...effect, cost: e.target.value || undefined })} />
+              </label>
+              <FormulaPreview id={`rule-${effect.id}-cost-preview`} formula={effect.cost ?? ''} revision={props.previewRevision} floorAtZero />
+            </>
+          )}
+          <label className="field">
+            Form group
+            <select
+              value={effect.group ?? ''}
+              onChange={(e) =>
+                // Leaving the group drops what only means something inside one; a group of this revision is named without a content.
+                onChange(
+                  e.target.value
+                    ? { ...effect, group: e.target.value, groupContent: undefined, allowedWith: undefined }
+                    : { ...effect, group: undefined, groupContent: undefined, layer: undefined, allowedWith: undefined, allowedInBase: undefined },
+                )
+              }
+            >
+              <option value="">Not in a group</option>
+              {props.groups.map((g) => (
+                <option key={g.id} value={g.groupId}>
+                  {g.label || g.groupId}
+                </option>
+              ))}
+              {/* A group declared by other content is kept as it is, not silently moved. */}
+              {effect.group && (effect.groupContent || !props.groups.some((g) => g.groupId === effect.group)) && <option value={effect.group}>{effect.group} (other content)</option>}
+            </select>
+          </label>
+          {effect.group && (
+            <>
+              <label className="field">
+                Kind
+                <select
+                  value={effect.layer ?? 'primary'}
+                  onChange={(e) =>
+                    onChange(e.target.value === 'overlay' ? { ...effect, layer: 'overlay' } : { ...effect, layer: undefined, allowedWith: undefined, allowedInBase: undefined })
+                  }
+                >
+                  <option value="primary">Form (one at a time)</option>
+                  <option value="overlay">Overlay (on top of a form)</option>
+                </select>
+              </label>
+              {effect.layer === 'overlay' && (
+                <>
+                  <label className="choice">
+                    <input type="checkbox" checked={effect.allowedInBase ?? false} onChange={(e) => onChange({ ...effect, allowedInBase: e.target.checked || undefined })} />
+                    Can be on with no form chosen (Base)
+                  </label>
+                  <fieldset>
+                    <legend>Can be on with these forms</legend>
+                    {toggles
+                      .filter((t) => t.id !== effect.id && t.group === effect.group && t.layer !== 'overlay')
+                      .map((t) => {
+                        const on = (effect.allowedWith ?? []).some((r) => !r.contentId && r.toggleId === t.toggleId);
+                        return (
+                          <label key={t.id} className="choice">
+                            <input
+                              type="checkbox"
+                              checked={on}
+                              onChange={(e) => {
+                                const others = (effect.allowedWith ?? []).filter((r) => r.contentId || r.toggleId !== t.toggleId);
+                                const next = e.target.checked ? [...others, { toggleId: t.toggleId }] : others;
+                                onChange({ ...effect, allowedWith: next.length > 0 ? next : undefined });
+                              }}
+                            />
+                            {t.label || t.toggleId}
+                          </label>
+                        );
+                      })}
+                  </fieldset>
+                </>
+              )}
+            </>
+          )}
+          <label className="field">
+            Available from level (class level for class features)
+            <input
+              type="number"
+              min={1}
+              max={20}
+              value={effect.level ?? ''}
+              onChange={(e) => onChange({ ...effect, level: e.target.value ? Number(e.target.value) : undefined })}
+            />
+          </label>
+          <label className="field">
+            Lasts (rounds: a number or a formula; empty is until switched off)
+            <input value={effect.duration ?? ''} aria-describedby={`rule-${effect.id}-duration-preview`} onChange={(e) => onChange({ ...effect, duration: e.target.value || undefined })} />
+          </label>
+          <FormulaPreview id={`rule-${effect.id}-duration-preview`} formula={effect.duration ?? ''} revision={props.previewRevision} floorAtZero />
+        </>
+      )}
+      {effect.type === 'toggleGroup' && (
+        <>
+          <label className="field">
+            Group name (shown on the sheet)
+            <input value={effect.label} onChange={(e) => onChange({ ...effect, label: e.target.value })} />
+          </label>
+          <p className="hint">Key: {effect.groupId}. Toggles join this group from their own Form group choice.</p>
         </>
       )}
       {effect.type === 'resource' && (
@@ -1557,6 +1884,99 @@ function EffectEditor(props: {
             <input value={effect.maximum} aria-describedby={`rule-${effect.id}-maximum-preview`} onChange={(e) => onChange({ ...effect, maximum: e.target.value })} />
           </label>
           <FormulaPreview id={`rule-${effect.id}-maximum-preview`} formula={effect.maximum} revision={props.previewRevision} floorAtZero />
+          {/* Content v11 (D43). Words, not colour: a built-up pool reads "built up N of M" on the sheet. */}
+          <label className="choice">
+            <input
+              type="checkbox"
+              checked={effect.counts === 'up'}
+              onChange={(e) => onChange(e.target.checked ? { ...effect, counts: 'up' } : { ...effect, counts: undefined, resourceFull: undefined })}
+            />
+            Counts up (built up from 0 to the most, instead of uses left)
+          </label>
+          {effect.counts === 'up' && (
+            <label className="field">
+              When full, say (shown on the sheet and in the turn preview; empty says nothing)
+              <input value={effect.resourceFull?.text ?? ''} onChange={(e) => onChange({ ...effect, resourceFull: e.target.value ? { text: e.target.value } : undefined })} />
+            </label>
+          )}
+          <label className="choice">
+            <input type="checkbox" checked={effect.allowance ?? false} onChange={(e) => onChange({ ...effect, allowance: e.target.checked || undefined })} />
+            Allowance (a per-turn pool such as one reaction; an upkeep regain refreshes it)
+          </label>
+        </>
+      )}
+      {effect.type === 'upkeep' && (
+        <>
+          <label className="field">
+            Toggle
+            <select
+              value={effect.toggle ?? ''}
+              onChange={(e) =>
+                // Without a toggle there is nothing to end, so the shortfall choice goes too.
+                onChange(e.target.value ? { ...effect, toggle: e.target.value, toggleContent: undefined } : { ...effect, toggle: undefined, toggleContent: undefined, ifShort: undefined })
+              }
+            >
+              <option value="">Always (no toggle)</option>
+              {toggles.map((t) => (
+                <option key={t.id} value={t.toggleId}>
+                  While {t.label || t.toggleId} is on
+                </option>
+              ))}
+              {/* A toggle of other content is kept as it is, not silently moved. */}
+              {effect.toggle && (effect.toggleContent || !toggles.some((t) => t.toggleId === effect.toggle)) && <option value={effect.toggle}>{effect.toggle} (other content)</option>}
+            </select>
+          </label>
+          <label className="field">
+            When
+            <select value={effect.at} onChange={(e) => onChange({ ...effect, at: e.target.value as typeof effect.at })}>
+              <option value="turnStart">Start of my turn</option>
+              <option value="turnEnd">End of my turn</option>
+            </select>
+          </label>
+          <label className="field">
+            Pool
+            <select value={effect.resourceId} onChange={(e) => onChange({ ...effect, resourceId: e.target.value, resourceContent: undefined })}>
+              {props.resources.map((r) => (
+                <option key={r.id} value={r.resourceId}>
+                  {r.label || r.resourceId}
+                </option>
+              ))}
+              {/* A pool of other content is kept as it is, not silently moved. */}
+              {(effect.resourceContent || !props.resources.some((r) => r.resourceId === effect.resourceId)) && <option value={effect.resourceId}>{effect.resourceId} (other content)</option>}
+            </select>
+          </label>
+          <label className="field">
+            Change
+            <select
+              value={effect.change}
+              onChange={(e) => {
+                const change = e.target.value as typeof effect.change;
+                // "all" means a regain and the shortfall choice means a spend: each goes when it stops making sense.
+                onChange(change === 'spend' ? { ...effect, change, amount: effect.amount.trim() === 'all' ? '1' : effect.amount } : { ...effect, change, ifShort: undefined });
+              }}
+            >
+              <option value="spend">Spend from the pool</option>
+              <option value="regain">Regain to the pool</option>
+            </select>
+          </label>
+          <label className="field">
+            {effect.change === 'regain' ? 'Amount (all, a number or a formula)' : 'Amount (a number or a formula)'}
+            <input
+              value={effect.amount}
+              aria-describedby={upkeepAmountPreviewed ? `rule-${effect.id}-amount-preview` : undefined}
+              onChange={(e) => onChange({ ...effect, amount: e.target.value })}
+            />
+          </label>
+          {upkeepAmountPreviewed && <FormulaPreview id={`rule-${effect.id}-amount-preview`} formula={effect.amount} revision={props.previewRevision} floorAtZero />}
+          {effect.change === 'spend' && effect.toggle && (
+            <label className="field">
+              If the pool is short
+              <select value={effect.ifShort ?? 'ask'} onChange={(e) => onChange({ ...effect, ifShort: e.target.value === 'end' ? 'end' : undefined })}>
+                <option value="ask">Ask me (End the toggle is preselected)</option>
+                <option value="end">End the toggle</option>
+              </select>
+            </label>
+          )}
         </>
       )}
       {effect.type === 'recovery' && (
@@ -1597,23 +2017,40 @@ function EffectEditor(props: {
             Roll name
             <input value={effect.label} onChange={(e) => onChange({ ...effect, label: e.target.value })} />
           </label>
-          <label className="field">
-            Dice (such as 1d8 + 2)
-            <input value={effect.dice} onChange={(e) => onChange({ ...effect, dice: e.target.value })} />
-          </label>
-          <label className="field">
-            Uses a resource (a limited-use action)
-            <select value={effect.resourceId ?? ''} onChange={(e) => onChange({ ...effect, resourceId: e.target.value || undefined })}>
-              <option value="">No resource</option>
-              {props.resources.map((r) => (
-                <option key={r.id} value={r.resourceId}>
-                  {r.label || r.resourceId}
-                </option>
-              ))}
-            </select>
-          </label>
+          <RollFields effect={effect} resources={props.resources} otherPools={props.otherPools} previewRevision={props.previewRevision} onChange={onChange} onProblem={onProblem} />
+          {/* Content v11 (D43): a roll that is available only in a form (a toggle of this revision or of another entry). */}
+          {(effect.whileToggle || toggles.length > 0 || props.otherToggles.length > 0) && (
+            <ToggleSelect
+              label="Available"
+              alwaysLabel="Always"
+              choices={toggleChoices}
+              current={effect.whileToggle}
+              onPick={(toggle) => onChange({ ...effect, whileToggle: toggle })}
+            />
+          )}
         </>
       )}
+      {effect.type === 'attack' && (
+        <AttackFields effect={effect} resources={props.resources} toggles={toggleChoices} previewRevision={props.previewRevision} onChange={onChange} onProblem={onProblem} />
+      )}
+      {effect.type === 'attackRider' && <RiderFields effect={effect} toggles={toggleChoices} previewRevision={props.previewRevision} onChange={onChange} onProblem={onProblem} />}
+      {effect.type === 'rollMode' && (
+        <RollModeFields effect={effect} toggles={toggleChoices} showToggle={toggles.length > 0 || props.otherToggles.length > 0} onChange={onChange} onProblem={onProblem} />
+      )}
+      {effect.type === 'response' && (
+        <ResponseFields
+          effect={effect}
+          resources={props.resources}
+          otherPools={props.otherPools}
+          toggles={toggleChoices}
+          rolls={props.rolls}
+          previewRevision={props.previewRevision}
+          diagnostics={props.diagnostics}
+          warnings={props.warnings}
+          onChange={onChange}
+        />
+      )}
+      {isDamageDefence(effect) && <DefenceFields effect={effect} toggles={toggleChoices} showToggle={toggles.length > 0 || props.otherToggles.length > 0} onChange={onChange} />}
       {effect.type === 'grant' && effect.grant === 'content' && (
         <>
           <label className="field">
@@ -1665,8 +2102,12 @@ function EffectEditor(props: {
         </>
       )}
       {effect.type === 'scale' && <ScaleFields effect={effect} onChange={onChange} onProblem={onProblem} />}
+      {effect.type === 'value' && <ValueFields effect={effect} previewRevision={props.previewRevision} onChange={onChange} onProblem={onProblem} />}
       {effect.type === 'spellcasting' && <SpellcastingFields effect={effect} previewRevision={props.previewRevision} onChange={onChange} onProblem={onProblem} />}
-      {effect.type !== 'grant' && (
+      {/* An upkeep is previewed and confirmed by a turn, never applied by calculation, so it has no automation to choose. */}
+      {/* A named value is always calculated (the validator refuses any other automation), so it has none to choose either. */}
+      {/* A response is chosen by the player when the hit is taken, so it has no automation to choose either. */}
+      {effect.type !== 'grant' && effect.type !== 'upkeep' && effect.type !== 'value' && effect.type !== 'response' && (
         <label className="field">
           Automation
           <select

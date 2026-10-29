@@ -110,10 +110,10 @@ public static class TextSheetParser
         return lines;
     }
 
-    // ---- the patterns: no backtracking, 100 ms each ----
+    // ---- the patterns: no backtracking, ImportRegex.TimeoutMs each ----
 
     private static Regex Rx(string pattern, bool ignoreCase = false) =>
-        new(pattern, RegexOptions.NonBacktracking | RegexOptions.CultureInvariant | (ignoreCase ? RegexOptions.IgnoreCase : RegexOptions.None), TimeSpan.FromMilliseconds(100));
+        new(pattern, RegexOptions.NonBacktracking | RegexOptions.CultureInvariant | (ignoreCase ? RegexOptions.IgnoreCase : RegexOptions.None), TimeSpan.FromMilliseconds(ImportRegex.TimeoutMs));
 
     private static readonly Regex Rule = Rx(@"^[-_*=]{3,}$");
     private static readonly Regex Marker = Rx(@"^(?:[-*•·]\s+|[0-9]{1,3}[.)]\s+)");

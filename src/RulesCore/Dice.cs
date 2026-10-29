@@ -213,6 +213,8 @@ public sealed record DieResult(int Term, int Sides, int Value, bool Kept, bool F
 /// <summary>
 /// SPEC C-04: formula, component dice, modifiers and provenance of one roll. A record is data only. Producing one
 /// never changes a character, resource or any other state (ARCHITECTURE "commands vs calculation").
+/// <paramref name="Explain"/> (D72) is the sheet's trace for the number rolled (a field, an attack, a caster's spell attack):
+/// the roll command copies it, the record is never stored. Null when the roll has no such number.
 /// </summary>
 public sealed record RollRecord(
     string Formula,
@@ -223,7 +225,18 @@ public sealed record RollRecord(
     int ExpressionConstant,
     IReadOnlyList<RollModifier> Modifiers,
     int Total,
-    RollProvenance? Provenance);
+    RollProvenance? Provenance,
+    RollSpend? Spend = null,
+    RollMode? AutomaticMode = null,
+    IReadOnlyList<string>? ModeSources = null,
+    IReadOnlyList<TraceEntry>? Explain = null);
+
+/// <summary>
+/// D43 S5: the uses a roll implies spending from a pool (informational: rolling never spends; the Spend button sends
+/// <c>character.play</c>). <see cref="ContentId"/> is the content that defines the pool. D43 S8: <see cref="DrawsDown"/> is true for a
+/// roll that draws a counting-up pool down: applying it takes <see cref="Amount"/> off the pool's built-up value instead of adding to it.
+/// </summary>
+public sealed record RollSpend(Guid ContentId, string ResourceId, int Amount, bool DrawsDown = false);
 
 /// <summary>Rolls dice. Pure apart from the injected <see cref="IRandomSource"/>; takes no character or resource state.</summary>
 public static class DiceRoller
@@ -316,7 +329,33 @@ public static class DiceRoller
         return true;
     }
 
-    /// <summary>Builds a request for a content <see cref="RollEffect"/>, citing its revision and source.</summary>
+    /// <summary>
+    /// The formula of a per-unit roll: the base <paramref name="dice"/> plus <c>(amount − baseCost)</c> groups of
+    /// <paramref name="perUnitDice"/> (<c>NdM</c>), summed into one term (<c>4d10</c> + 2 × <c>1d10</c> → <c>4d10+2d10</c>).
+    /// At the base cost the formula is just <paramref name="dice"/>. A per-unit die that is not one plain, positive <c>NdM</c> term
+    /// (malformed, several terms, a constant, negative) fails, so the dice never disagree with the amount spent; validation already
+    /// guarantees the shape and bounds of published content, so this is a defence for stored content from elsewhere.
+    /// </summary>
+    public static bool TryPerUnitFormula(string dice, string perUnitDice, int baseCost, int amount, out string formula)
+    {
+        formula = dice;
+        if (!DiceExpression.TryParse(perUnitDice, out var parsed, out _) || parsed!.Terms is not [{ IsDice: true, Sign: 1 } term])
+            return false;
+        var units = amount - baseCost;
+        if (units > 0)
+        {
+            // More per-unit dice than one roll may throw can never be rolled; refusing also keeps the product from wrapping an int.
+            if ((long)term.Count * units > DiceLimits.MaxDice)
+                return false;
+            formula = $"{dice}+{term.Count * units}d{term.Sides}";
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Builds a request for a content <see cref="RollEffect"/>, citing its revision and source. A roll with no dice (content
+    /// v11) has nothing to roll: its request has an empty formula, which <see cref="TryRoll"/> refuses with a dice error.
+    /// </summary>
     public static RollRequest FromEffect(
         RollEffect effect, ContentRevision revision, SourceRecord? source, RollMode mode = RollMode.Normal, bool critical = false,
         IReadOnlyList<RollModifier>? modifiers = null)
@@ -324,7 +363,7 @@ public static class DiceRoller
         ArgumentNullException.ThrowIfNull(effect);
         ArgumentNullException.ThrowIfNull(revision);
         return new RollRequest(
-            effect.Dice,
+            effect.Dice ?? "",
             mode,
             critical,
             modifiers,

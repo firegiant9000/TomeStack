@@ -33,6 +33,13 @@ afterEach(() => {
   for (const key of Object.keys(document.documentElement.dataset)) delete document.documentElement.dataset[key];
 });
 
+/**
+ * A row of the review panel's Candidates list. After a filter or kind change the panel says "No candidates match." until the
+ * new `import.candidates` reply arrives, so the list itself may not exist yet: the whole lookup is retried, never read once.
+ */
+const candidateButton = (panel: () => HTMLElement, name: string) =>
+  waitFor(() => within(within(panel()).getByRole('list', { name: 'Candidates' })).getByRole('button', { name }), { timeout: 10000 });
+
 function bytesOf(base64: string): Uint8Array<ArrayBuffer> {
   return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
 }
@@ -123,6 +130,10 @@ it('creates a character, shows its traced sheet, overrides, exports and re-impor
   const leftOut = await screen.findByRole('region', { name: 'Left out of the shared package' });
   expect(leftOut.textContent).toMatch(/Nothing is left out/);
   expect(leftOut.textContent).not.toMatch(/session note/i);
+  // L5: the one sharing rule's list is there, and Export waits for it.
+  const shareCheck = await screen.findByRole('region', { name: 'Preflight: shared package' });
+  expect(shareCheck.textContent).toMatch(/Nothing is left out/);
+  await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Export package' }).disabled).toBe(false));
   await user.click(screen.getByRole('button', { name: 'Export package' }));
   await waitFor(() => expect(downloadBase64).toHaveBeenCalledTimes(2));
   expect(vi.mocked(downloadBase64).mock.calls[1]![0]).toBe('E2E-Pell.tomestack.zip');
@@ -255,6 +266,20 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
 
   sheet = await screen.findByRole('article', { name: 'E2E Brenna' });
   expect(within(sheet).getByText('Level 3')).toBeTruthy();
+
+  // D74: Save level-up opens the sheet on Features with "What changed at level 3" focused (the level-2 list was overwritten).
+  const changed = within(sheet).getByRole('region', { name: 'What changed at level 3' });
+  await waitFor(() => expect(document.activeElement).toBe(within(changed).getByRole('heading', { name: 'What changed at level 3' })));
+  expect(within(changed).getByText(/^Hit point maximum:/)).toBeTruthy();
+  expect(within(changed).getByText(/^New choice: Primal Knowledge/)).toBeTruthy();
+  await user.click(within(changed).getByRole('button', { name: 'Dismiss' }));
+  expect(within(sheet).queryByRole('region', { name: /^What changed at level/ })).toBeNull();
+  // Gone for good: leaving the sheet and opening the character again shows no panel.
+  await user.click(screen.getByRole('button', { name: 'Characters' }));
+  await user.click(within(await screen.findByRole('navigation', { name: 'Characters' })).getByRole('button', { name: /E2E Brenna/ }));
+  sheet = await screen.findByRole('article', { name: 'E2E Brenna' });
+  expect(within(sheet).queryByRole('region', { name: /^What changed at level/ })).toBeNull();
+
   const open = within(sheet).getByRole('heading', { name: 'Choices to make' }).parentElement!;
   expect(open.textContent).toMatch(/Primal Knowledge: choose 1 \(0 chosen\)/);
 
@@ -318,6 +343,13 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   await waitFor(() => expect(lastRoll.textContent).toMatch(/Strength saving throw \(d20 test\): \d+ \(1d20, advantage\)/));
   expect(lastRoll.textContent).toMatch(/\(dropped\)/);
   expect(lastRoll.textContent).toMatch(/Strength saving throw \+5/);
+  // D72: "Why?" sits beside the Last roll (not inside it) and explains the +5 in words, naming the proficiency bonus.
+  const why = within(screen.getByRole('region', { name: 'Summary' })).getByText('Why?').closest('details')!;
+  expect(why.open).toBe(false);
+  expect(lastRoll.contains(why)).toBe(false);
+  await user.click(within(why).getByText('Why?'));
+  expect(why.open).toBe(true);
+  expect(within(why).getByRole('list', { name: 'Why this roll came out this way' }).textContent).toMatch(/proficiency bonus/i);
   // D28: the roll before it is in Previous rolls, outside the live region.
   await user.click(within(sheet).getByText('Previous rolls (1)'));
   expect(within(sheet).getByText('Previous rolls (1)').closest('details')!.textContent).toMatch(/Frenzy extra damage.*: \d+ \(2d6, critical\)/);
@@ -565,6 +597,9 @@ it('authors a homebrew subclass in the studio, plays it, and reviews an update',
 
   // Republish with +3 initiative: the character keeps +2 until the reviewed update is applied.
   await user.click(screen.getByRole('button', { name: 'Homebrew studio' }));
+  // The studio opens on the first source, and the other e2e file creates its own source in the same DevHost: pick ours.
+  const ownSource = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  await user.selectOptions(ownSource, within(ownSource).getByRole('option', { name: /^E2E Homebrew/ }));
   await user.click(await screen.findByRole('button', { name: 'Edit Path of the E2E Storm' }));
   const modifier = rule(/^Rule 1: Modifier/);
   await user.clear(within(modifier).getByRole('textbox', { name: /^Value/ }));
@@ -592,6 +627,26 @@ it('authors a homebrew subclass in the studio, plays it, and reviews an update',
   const remaining = () => within(within(screen.getByRole('article', { name: 'E2E Storm' })).getByRole('region', { name: 'Updates available' }));
   await waitFor(() => expect(remaining().queryByRole('button', { name: 'Review update: Path of the E2E Storm' })).toBeNull());
   expect(remaining().getByRole('button', { name: 'Review update: Barbarian' })).toBeTruthy(); // still only offered
+
+  // Import Lab (D62 L1): the studio's Coverage view for this source counts what the engine does with the rules just authored.
+  await user.click(screen.getByRole('button', { name: 'Homebrew studio' }));
+  const coverageSource = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  await user.selectOptions(coverageSource, within(coverageSource).getByRole('option', { name: /^E2E Homebrew/ }));
+  const coverage = await screen.findByRole('region', { name: 'Coverage' });
+  const totals = await within(coverage).findByText(/^\d+ automatic · \d+ by hand \(assisted\) · \d+ reference · \d+ not understood$/);
+  expect(totals.textContent).toMatch(/ · 0 not understood$/);
+  expect(within(coverage).getByText(/E2E Sky Lore/).closest('li')!.textContent).toContain('1 reference');
+  expect(within(coverage).getByText(/E2E Storm Ward/).closest('li')!.textContent).toMatch(/^E2E Storm Ward: 2 automatic · 1 by hand \(assisted\) · 0 reference/); // resource and recovery; the roll that spends it is assisted
+  expect(coverage.querySelector('[role="status"], [role="alert"], [aria-live], output')).toBeNull(); // no live region of its own
+
+  // Import Lab (D62 L2): a class of this source opens with its 20-row progression grid once a draft is saved.
+  await user.click(screen.getByRole('button', { name: 'New class' }));
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Warden');
+  expect(within(editor()).getByText('Save a draft of this class to see its progression.')).toBeTruthy();
+  await user.click(within(editor()).getByRole('button', { name: 'Save draft' }));
+  const progression = await within(editor()).findByRole('region', { name: 'Class progression, scrollable' });
+  await waitFor(() => expect(within(within(progression).getByRole('table', { name: 'Class progression' })).getAllByRole('row')).toHaveLength(21)); // header + 20 levels
+  expect(within(editor()).getByText('Draft: not yet published')).toBeTruthy();
 });
 
 it('attaches a PDF to a source, offers the cited page on a feature, and removes it after a warning', async () => {
@@ -682,7 +737,7 @@ it('marks a source as shareable after confirming it is your own work, saves a so
   expect(within(mine).getByText('Not shared.')).toBeTruthy();
   // A source a PDF was attached to is import-derived for good: it offers no way to share it.
   const theirs = screen.getByRole('listitem', { name: 'E2E Scanned Notes' });
-  expect(within(theirs).getByText(/Holds material imported from a PDF: never shared/)).toBeTruthy();
+  expect(within(theirs).getByText(/Holds imported material \(from a PDF or a Markdown file\): never shared/)).toBeTruthy();
   expect(within(theirs).queryByRole('button', { name: 'Mark as shareable…' })).toBeNull();
 
   // Marking needs the author's confirmation.
@@ -702,6 +757,11 @@ it('marks a source as shareable after confirming it is your own work, saves a so
   await user.click(within(packForm).getByRole('button', { name: 'Preview pack' }));
   const preview = await within(packForm).findByRole('region', { name: 'Source pack preview' });
   expect(preview.textContent).toMatch(/1 source, 1 published revision/);
+  // L5: the preflight lists what goes (and what stays), and Save waits for it.
+  const preflight = await within(packForm).findByRole('region', { name: 'Preflight: source pack' });
+  expect(preflight.textContent).toMatch(/Included: 1 item\. Left out: 1\./);
+  expect(preflight.textContent).toMatch(/E2E Own Feat \(E2E Own Notes\): a draft; only published content is shared/); // the draft stays here
+  await waitFor(() => expect(within(preview).getByRole<HTMLButtonElement>('button', { name: 'Save pack…' }).disabled).toBe(false));
   const downloads = vi.mocked(downloadBase64).mock.calls.length;
   await user.click(within(preview).getByRole('button', { name: 'Save pack…' }));
   await waitFor(() => expect(vi.mocked(downloadBase64).mock.calls.length).toBe(downloads + 1));
@@ -714,6 +774,15 @@ it('marks a source as shareable after confirming it is your own work, saves a so
   expect(within(importing).getByText(/This is a source pack\. Its sender stated that each source is their own work/)).toBeTruthy();
   await user.click(within(importing).getByRole('button', { name: 'Apply import' }));
   await expectStatus(/unchanged/);
+
+  // L5: a shareable source with nothing published blocks the pack, in words (the export would refuse it too).
+  const late = await client.createHomebrewSource('E2E Late Notes', ['srd-5.1']);
+  await client.setShareable(late.id, true, true);
+  await user.click(screen.getByRole('button', { name: 'Sources' }));
+  const lateForm = await screen.findByRole('region', { name: 'Share sources as a pack' });
+  await user.click(await within(lateForm).findByRole('checkbox', { name: 'E2E Late Notes' }));
+  const blocked = await within(lateForm).findByRole('region', { name: 'Preflight: source pack' });
+  expect(within(blocked).getByRole('alert').textContent).toMatch(/E2E Late Notes: nothing is published yet/);
 });
 
 it('shares a campaign as a campaign pack that names what it leaves out, and imports it over a changed copy by choice (M6 slice 2)', async () => {
@@ -758,6 +827,10 @@ it('shares a campaign as a campaign pack that names what it leaves out, and impo
   expect(leftOut.textContent).toMatch(/E2E Secret Notes .*not marked as shareable/);
 
   // DevHost has no Save dialog, so it downloads.
+  // L5: the preflight names the same source in words, and Save waits for it.
+  const campaignCheck = await within(share).findByRole('region', { name: 'Preflight: campaign pack' });
+  expect(campaignCheck.textContent).toMatch(/E2E Secret Notes.*not marked as your own shareable work/);
+  await waitFor(() => expect(within(share).getByRole<HTMLButtonElement>('button', { name: 'Save campaign pack…' }).disabled).toBe(false));
   const downloads = vi.mocked(downloadBase64).mock.calls.length;
   await user.click(within(share).getByRole('button', { name: 'Save campaign pack…' }));
   await waitFor(() => expect(vi.mocked(downloadBase64).mock.calls.length).toBe(downloads + 1));
@@ -862,6 +935,8 @@ it('exports a character for Foundry VTT and as sheet JSON after a preview, with 
   expect(preview.textContent).toMatch(/E2E-VTT-Hero\.foundry-dnd5e\.json.*checked against Foundry VTT 14\.367 with dnd5e 6\.0\.5/);
   expect(preview.textContent).toMatch(/not affiliated with Foundry Gaming LLC/);
   const downloads = vi.mocked(downloadBase64).mock.calls.length;
+  await within(panel).findByRole('region', { name: 'Preflight: shared sheet' });
+  await waitFor(() => expect(within(preview).getByRole<HTMLButtonElement>('button', { name: 'Save export file…' }).disabled).toBe(false));
   await user.click(within(preview).getByRole('button', { name: 'Save export file…' }));
   await waitFor(() => expect(vi.mocked(downloadBase64).mock.calls.length).toBe(downloads + 1));
   const [foundryName, foundry64] = vi.mocked(downloadBase64).mock.calls[downloads]!;
@@ -874,7 +949,9 @@ it('exports a character for Foundry VTT and as sheet JSON after a preview, with 
   // The neutral sheet JSON.
   await user.click(within(panel).getByRole('radio', { name: /TomeStack sheet \(JSON\)/ }));
   await user.click(within(panel).getByRole('button', { name: 'Preview export' }));
-  await user.click(within(await within(panel).findByRole('region', { name: 'Export preview' })).getByRole('button', { name: 'Save export file…' }));
+  const sheetPreview = await within(panel).findByRole('region', { name: 'Export preview' });
+  await waitFor(() => expect(within(sheetPreview).getByRole<HTMLButtonElement>('button', { name: 'Save export file…' }).disabled).toBe(false));
+  await user.click(within(sheetPreview).getByRole('button', { name: 'Save export file…' }));
   await waitFor(() => expect(vi.mocked(downloadBase64).mock.calls.length).toBe(downloads + 2));
   const [sheetName, sheet64] = vi.mocked(downloadBase64).mock.calls[downloads + 1]!;
   expect(sheetName).toBe('E2E-VTT-Hero.tomestack-sheet.json');
@@ -923,6 +1000,72 @@ it('follows the authoring guides: the extension guide, packed as written, instal
   await client.removeExtension((await client.listExtensions()).find((x) => x.manifest.name === 'Example feature list')!.id);
 });
 
+// The gate runs in srd-5.1. It publishes the placeholder class's features ("Fixture Beacon" and the like), and an installed feature of
+// a class-table name in the same rules family is linked instead of becoming a stub candidate. The PDF tests import fixture-import.pdf
+// into srd-5.2.1 sources and expect 19 candidates, so keeping this test's content in the other family leaves them untouched wherever
+// this test sits in the file.
+it('D60 gate: a Markdown class is reviewed, accepted with its confirm tick and published, then its coverage and 20-level grid open in the studio', async () => {
+  const user = userEvent.setup();
+  const source = await client.createHomebrewSource('E2E Gate Book', ['srd-5.1']);
+  const markdown = readFileSync(resolve(process.cwd(), '../../tests/RulesFixtures/lab/placeholder-class.md'));
+  await client.startMarkdownImportData(source.id, 'placeholder-class.md', markdown.toString('base64'));
+
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: 'Sources' }));
+  const reader = () => within(screen.getByRole('listitem', { name: 'E2E Gate Book' })).getByRole('region', { name: 'Read the text of E2E Gate Book' });
+  await screen.findByRole('listitem', { name: 'E2E Gate Book' });
+  await user.click(await within(reader()).findByRole('button', { name: /^Review \d+ candidates?$/ }, { timeout: 30000 }));
+  const panel = () => within(reader()).getByRole('region', { name: 'Candidates from E2E Gate Book' });
+  await within(reader()).findByRole('region', { name: 'Candidates from E2E Gate Book' });
+  await user.selectOptions(within(panel()).getByRole('combobox', { name: 'Kind' }), 'class');
+  await user.click(await candidateButton(panel, 'Placeholder'));
+  const details = () => within(panel()).getByRole('region', { name: 'Candidate: Placeholder' });
+  await waitFor(() => expect(within(details()).getByRole('region', { name: 'Check before accepting' })).toBeTruthy());
+
+  // Accept stays held until the hit die is confirmed against the page; the proficiencies are left as reference.
+  await waitFor(() => expect(within(details()).getByRole('button', { name: 'Accept as a draft' }).getAttribute('aria-disabled')).toBe('true'));
+  await user.click(await waitFor(() => within(details()).getByRole('checkbox', { name: /^Confirm the hit die/ })));
+  await waitFor(() => expect(within(details()).getByRole('button', { name: 'Accept as a draft' }).getAttribute('aria-disabled')).toBeNull());
+  await user.click(within(details()).getByRole('button', { name: 'Accept as a draft' }));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Placeholder is now a draft granting 10 features in the studio/));
+  const drafts = await client.contentBySource(source.id);
+  expect(drafts).toHaveLength(11);
+  expect(drafts.every((e) => e.latest.status === 'draft')).toBe(true);
+  expect(drafts.find((e) => e.name === 'Placeholder')!.latest.effects.find((e) => e.type === 'hitDie')!.automation).toBe('automatic');
+
+  // Publish all drafts of the source through the studio panel.
+  await user.click(screen.getByRole('button', { name: 'Homebrew studio' }));
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Gate Book/ })).toBeTruthy());
+  await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Gate Book/ }));
+  await user.click(await screen.findByRole('button', { name: 'Publish all drafts in this source…' }));
+  const region = screen.getByRole('region', { name: 'Publish drafts of E2E Gate Book' });
+  const publish = await within(region).findByRole('button', { name: 'Publish 11 drafts' });
+  await waitFor(() => expect(publish.getAttribute('aria-disabled')).toBeNull());
+  await user.click(publish);
+  await within(region).findByText('Published 11 drafts.');
+  expect((await client.contentBySource(source.id)).every((e) => e.latest.status === 'published')).toBe(true);
+
+  // Coverage: the totals the fixture plants, and the features whose text sounds like a mechanic are flagged for hand play.
+  const coverage = await screen.findByRole('region', { name: 'Coverage' });
+  const totals = '1 automatic · 0 by hand (assisted) · 14 reference · 0 not understood';
+  await waitFor(() => expect(within(coverage).getAllByText(totals)).toHaveLength(2)); // the source line and the class line
+  const flagged = (name: string) => within(coverage).getByText(new RegExp(`^${name}:`)).closest('li')!.textContent!;
+  for (const name of ['Fixture Pool', 'Fixture Lull', 'Fixture Finale']) expect(flagged(name)).toContain('May need a mechanic');
+  expect(flagged('Fixture Edge')).not.toContain('May need a mechanic');
+  expect(coverage.textContent).not.toContain("can't calculate this");
+
+  // The class opens with its 20-row grid; level 20 grants the finale, and a level with no feature shows a dash.
+  await user.click(await screen.findByRole('button', { name: 'Edit Placeholder' }));
+  const progression = await screen.findByRole('region', { name: 'Class progression, scrollable' });
+  const grid = within(progression).getByRole('table', { name: 'Class progression' });
+  await waitFor(() => expect(within(grid).getAllByRole('row')).toHaveLength(21)); // header + 20 levels
+  const row = (level: number) => within(grid).getByRole('rowheader', { name: String(level) }).closest('tr')!;
+  expect(within(row(20)).getByRole('button', { name: 'Edit Fixture Finale' })).toBeTruthy();
+  expect(within(row(1)).getByRole('button', { name: 'Edit Fixture Pool' })).toBeTruthy();
+  expect(row(4).textContent).toContain('—');
+});
+
 it('reads the fixture PDF, reviews its candidates, and publishes an accepted one through the studio', async () => {
   // M4 D5 (SPEC I-02): the original fixture book, read by the real worker next to the DevHost.
   const user = userEvent.setup();
@@ -957,7 +1100,7 @@ it('reads the fixture PDF, reviews its candidates, and publishes an accepted one
   // A clean spell: excerpt, page, what was read; the check passes; accepting makes a draft.
   await user.selectOptions(kind, 'spell');
   await waitFor(() => expect(within(list()).getAllByRole('listitem')).toHaveLength(2));
-  await user.click(await within(list()).findByRole('button', { name: 'Fixture Ember Lance' })); // a slow PDF worker may still be filling the list
+  await user.click(await candidateButton(panel, 'Fixture Ember Lance')); // a slow PDF worker may still be filling the list
   const ember = await detail('Fixture Ember Lance');
   await waitFor(() => expect(document.activeElement).toBe(within(ember).getByRole('heading', { name: 'Candidate: Fixture Ember Lance' })));
   expect(within(ember).getByRole('figure').textContent).toMatch(/Excerpt from p\. 2.*Fixture Ember Lance.*3d6 Fire/s);
@@ -974,13 +1117,13 @@ it('reads the fixture PDF, reviews its candidates, and publishes an accepted one
   expect(within(panel()).getByRole('button', { name: 'Open E2E Grimoire in the studio' })).toBeTruthy();
 
   // Ignore the other spell.
-  await user.click(await within(list()).findByRole('button', { name: 'Fixture Frost Veil' }));
+  await user.click(await candidateButton(panel, 'Fixture Frost Veil'));
   await user.click(within(await detail('Fixture Frost Veil')).getByRole('button', { name: 'Ignore' }));
   await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Ignored Fixture Frost Veil/));
 
   // An unresolved reference blocks "Accept as a draft"; "Accept as reference" keeps the text and page only.
   await user.selectOptions(kind, 'feature');
-  await user.click(await within(list()).findByRole('button', { name: 'Fixture Stormcall' }));
+  await user.click(await candidateButton(panel, 'Fixture Stormcall'));
   const stormcall = await detail('Fixture Stormcall');
   expect(within(within(stormcall).getByRole('group', { name: 'Unresolved references' })).getByRole('checkbox', { name: 'Dismiss Fixture Thunder Word' })).toBeTruthy();
   await within(stormcall).findByRole('list', { name: 'Blocks accepting' });
@@ -990,7 +1133,7 @@ it('reads the fixture PDF, reviews its candidates, and publishes an accepted one
 
   // The feat: accepted as a draft, then published in the studio, which validates it again.
   await user.selectOptions(kind, 'feat');
-  await user.click(await within(list()).findByRole('button', { name: 'Fixture Keen Watcher' }));
+  await user.click(await candidateButton(panel, 'Fixture Keen Watcher'));
   const feat = await detail('Fixture Keen Watcher');
   const acceptFeat = within(feat).getByRole('button', { name: 'Accept as a draft' });
   await waitFor(() => expect(acceptFeat.getAttribute('aria-disabled')).toBeNull());
@@ -1032,7 +1175,7 @@ it('imports a fixture class: the table is checked, the hit die and slots are con
   const panel = () => within(reader()).getByRole('region', { name: 'Candidates from E2E Class Book' });
   await within(reader()).findByRole('region', { name: 'Candidates from E2E Class Book' });
   await user.selectOptions(within(panel()).getByRole('combobox', { name: 'Kind' }), 'class');
-  await user.click(await within(within(panel()).getByRole('list', { name: 'Candidates' })).findByRole('button', { name: 'Fixture Lamplighter' }));
+  await user.click(await candidateButton(panel, 'Fixture Lamplighter'));
   const lamplighter = await within(panel()).findByRole('region', { name: 'Candidate: Fixture Lamplighter' });
 
   // The slot table and the linked features are on screen to check against the page.
@@ -1067,6 +1210,70 @@ it('imports a fixture class: the table is checked, the hit die and slots are con
   const grants = cls.latest.effects.filter((e) => e.type === 'grant' && e.grant === 'content').length;
   expect(grants).toBeGreaterThan(3);
   expect(granting).toBe(grants);
+});
+
+it('selects a proposed effect of a fixture class and sees its lines highlighted on the stored page text (D64)', async () => {
+  const user = userEvent.setup();
+  const source = await client.createHomebrewSource('E2E Span Book', ['srd-5.2.1']);
+  const book = readFileSync(resolve(process.cwd(), '../../tests/RulesFixtures/pdf/fixture-import.pdf'));
+  await client.attachPdfData(source.id, 'fixture-import.pdf', book.toString('base64'));
+
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: 'Sources' }));
+  const reader = () => within(screen.getByRole('listitem', { name: 'E2E Span Book' })).getByRole('region', { name: 'Read the text of E2E Span Book' });
+  await user.click(within(await screen.findByRole('listitem', { name: 'E2E Span Book' })).getByRole('button', { name: 'Read the whole document' }));
+  await user.click(await within(reader()).findByRole('button', { name: 'Review 19 candidates' }, { timeout: 30000 }));
+  const panel = () => within(reader()).getByRole('region', { name: 'Candidates from E2E Span Book' });
+  await within(reader()).findByRole('region', { name: 'Candidates from E2E Span Book' });
+  await user.selectOptions(within(panel()).getByRole('combobox', { name: 'Kind' }), 'class');
+  await user.click(await candidateButton(panel, 'Fixture Lamplighter'));
+  const lamplighter = await within(panel()).findByRole('region', { name: 'Candidate: Fixture Lamplighter' });
+
+  // Before a choice the whole excerpt shows, as always.
+  expect(lamplighter.querySelector('pre.excerpt')).not.toBeNull();
+  const effects = within(lamplighter).getByRole('list', { name: /^Proposed effects/ });
+  await user.click(within(effects).getByRole('button', { name: /^The hit die/ }));
+  const region = await within(lamplighter).findByRole('region', { name: /^The hit die/ });
+  expect(within(region).getByText(/^Lines \d+–\d+$/)).toBeTruthy();
+  expect(region.querySelector('mark')!.textContent!.length).toBeGreaterThan(0);
+  expect(lamplighter.querySelector('pre.excerpt')).toBeNull();
+});
+
+it('imports a fixture Markdown class into a source with no PDF: pages only, candidates to review, and the stored page text opens in the app (D67)', async () => {
+  const user = userEvent.setup();
+  const source = await client.createHomebrewSource('E2E Markdown Book', ['srd-5.2.1']);
+  const markdown = readFileSync(resolve(process.cwd(), '../../tests/RulesFixtures/lab/placeholder-class.md'));
+  const job = await client.startMarkdownImportData(source.id, 'placeholder-class.md', markdown.toString('base64'));
+  expect(job.format).toBe('markdown');
+
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: 'Sources' }));
+  const reader = () => within(screen.getByRole('listitem', { name: 'E2E Markdown Book' })).getByRole('region', { name: 'Read the text of E2E Markdown Book' });
+  // No PDF: the Markdown import is offered, the PDF reads are not.
+  expect(within(await screen.findByRole('listitem', { name: 'E2E Markdown Book' })).getByRole('button', { name: 'Import a Markdown file…' })).toBeTruthy();
+  expect(within(reader()).queryByRole('button', { name: 'Read the whole document' })).toBeNull();
+
+  const review = await within(reader()).findByRole('button', { name: /^Review \d+ candidates?$/ }, { timeout: 30000 });
+  expect(Number(/\d+/.exec(review.textContent ?? '')?.[0])).toBeGreaterThan(0);
+  expect(within(reader()).getByText(/^Markdown file: completed, \d+ pages? read/)).toBeTruthy();
+  expect(within(reader()).queryByRole('button', { name: 'Resume' })).toBeNull();
+
+  // The candidates list opens and holds a row for each candidate found (awaited: the list appears with the first reply).
+  await user.click(review);
+  const panel = () => within(reader()).getByRole('region', { name: 'Candidates from E2E Markdown Book' });
+  await within(reader()).findByRole('region', { name: 'Candidates from E2E Markdown Book' });
+  const rows = await waitFor(() => within(within(panel()).getByRole('list', { name: 'Candidates' })).getAllByRole('listitem'));
+  expect(rows.length).toBeGreaterThan(0);
+  expect(within(rows[0]!).getByRole('button')).toBeTruthy();
+
+  // The read text is searchable, and "Open page" shows what was stored, since there is no PDF to open.
+  await user.type(within(reader()).getByRole('textbox', { name: 'Search the text of E2E Markdown Book' }), 'Placeholder Class');
+  await user.click(within(reader()).getByRole('button', { name: 'Search' }));
+  const results = await within(reader()).findByRole('list', { name: 'Search results' });
+  await user.click(within(results).getAllByRole('button', { name: /^Open page \d+$/ })[0]!);
+  const stored = await within(reader()).findByRole('region', { name: /^Stored text of page \d+ of E2E Markdown Book$/ });
+  expect(stored.textContent).toContain('Placeholder Class');
+  expect(await client.attachment(source.id)).toBeUndefined(); // import pages only: nothing was attached
 });
 
 it('accepts two fixture candidates in bulk, publishes both through the studio panel, and the builder offers them (item 9, D33)', async () => {
@@ -1477,7 +1684,7 @@ it('compares the published revision with the unsaved one by rules, text and on a
   await user.type(value, '3');
 
   const panel = within(editor()).getByRole('region', { name: 'Compare revisions' });
-  await user.click(within(panel).getByRole('checkbox', { name: 'E2E Diff Hero' }));
+  await user.click(await within(panel).findByRole('checkbox', { name: 'E2E Diff Hero' })); // the character list loads after the panel opens
   await user.click(within(panel).getByRole('button', { name: 'Compare' }));
   const results = await within(panel).findByRole('region', { name: 'Comparison results' });
   expect(within(results).getByRole('table', { name: 'Rule changes' }).textContent).toMatch(/quick.*changed/);
@@ -1626,7 +1833,8 @@ it('starts homebrew from a template as an unsaved draft, publishes a stance, and
   await user.click(screen.getByRole('button', { name: 'Use template' }));
   await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Loose Stance');
   await user.click(within(within(editor()).getByRole('group', { name: /^Rule 3: Toggle/ })).getByRole('button', { name: 'Remove rule 3' }));
-  expect(within(editor()).queryByRole('combobox', { name: 'Applies' })).toBeNull();
+  // D43 S4: the source's other entries (E2E Stance above) offer their toggles, so the choice stays, and it reads "Always".
+  expect((within(editor()).getByRole('combobox', { name: 'Applies' }) as HTMLSelectElement).value).toBe('');
   await user.click(within(editor()).getByRole('button', { name: 'Check' }));
   await waitFor(() => expect(within(editor()).getByRole('region', { name: 'Check results' }).textContent).toMatch(/No problems found/));
 });

@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using TomeStack.AppService.Exports;
 using TomeStack.AppService.Packages;
+using TomeStack.AppService.Persistence;
 using TomeStack.RulesCore;
 
 namespace TomeStack.AppService.Tests;
@@ -25,7 +26,7 @@ public class ExportPurposeTests
     };
 
     /// <summary>A character pinning seeded (redistributable) fixture content plus one non-redistributable homebrew feat.</summary>
-    private static Guid SaveMixedCharacter(TempApp app)
+    private static Guid SaveMixedCharacter(TempApp app, int homebrewSchemaVersion = ContentRevision.CurrentSchemaVersion)
     {
         app.App.Store.UpsertSource(new SourceRecord
         {
@@ -37,7 +38,7 @@ public class ExportPurposeTests
             License = "Personal homebrew",
             Redistributable = false,
         });
-        app.App.Store.AddRevision(HomebrewFeat);
+        app.App.Store.AddRevision(HomebrewFeat with { SchemaVersion = homebrewSchemaVersion });
         var character = TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json");
         return app.App.SaveCharacter(character with { Pins = [.. character.Pins, HomebrewFeat.Reference] }).Character.Id;
     }
@@ -102,6 +103,134 @@ public class ExportPurposeTests
         var backup = origin.App.PreviewExport([id], ExportPurpose.Backup);
         Assert.Empty(backup.Omitted);
         Assert.Contains(backup.Included, n => n.SourceId == HomebrewSource);
+    }
+
+    private static IEnumerable<Diagnostic> NewerBuildWarnings(ExportPreview preview) => (preview.Warnings ?? []).Where(w => w.Code == "package.needs-newer-build");
+
+    [Fact]
+    public void Export_preview_warns_once_when_a_pinned_revision_is_at_schema_v11()
+    {
+        using var origin = new TempApp();
+        var id = SaveMixedCharacter(origin, homebrewSchemaVersion: 11);
+
+        var backup = NewerBuildWarnings(origin.App.PreviewExport([id], ExportPurpose.Backup));
+        Assert.Equal($"Opening this needs TomeStack 0.7.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Homebrew Quick Draw' is content at schema 11. Older versions refuse the file.", Assert.Single(backup).Message);
+        // A share leaves the non-redistributable homebrew out, so nothing at v11 would be written.
+        Assert.Empty(NewerBuildWarnings(origin.App.PreviewExport([id], ExportPurpose.Share)));
+    }
+
+    [Fact]
+    public void Preview_reports_opensIn_and_causes()
+    {
+        using var origin = new TempApp();
+        var plain = origin.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json")).Character.Id;
+        var preview = origin.App.PreviewExport([plain], ExportPurpose.Backup);
+        Assert.Equal("0.5.0", preview.OpensIn);
+        Assert.NotNull(preview.OpensInCauses);
+        Assert.Empty(preview.OpensInCauses);
+        Assert.Empty(NewerBuildWarnings(preview));
+
+        var fixture = TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json");
+        var v10 = origin.App.SaveCharacter(fixture with { Id = Guid.NewGuid(), Name = "Encounter Hero", Play = (fixture.Play ?? new PlayState()) with { Encounter = new EncounterState(0) } }).Character.Id;
+        var newer = origin.App.PreviewExport([v10], ExportPurpose.Backup);
+        Assert.Equal("0.7.0", newer.OpensIn);
+        var cause = Assert.Single(newer.OpensInCauses!);
+        Assert.Equal(("character", 10), (cause.Kind, cause.SchemaVersion));
+        Assert.Equal($"Opening this needs TomeStack 0.7.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Encounter Hero' is a character at schema 10. Older versions refuse the file.", Assert.Single(NewerBuildWarnings(newer)).Message);
+        Assert.Equal("'Encounter Hero' is a character at schema 10", cause.Message);
+    }
+
+    [Fact]
+    public void Bundled_pack_labels_use_SRD_and_the_edition()
+    {
+        using var origin = new TempApp();
+        var bundled = origin.App.Store.ListRevisionsInOrder().Where(r => TomeStackApp.BundledRevisionIds.Contains(r.RevisionId)).ToList();
+        var title = new PackageService(origin.App.Store, TimeProvider.System, "unused").BundledPackTitle(bundled);
+        var labels = bundled.Select(r => title(r.RevisionId)).Distinct().Order().ToList();
+        Assert.Contains("SRD 5.1", labels);
+        Assert.Contains("SRD 5.2.1", labels);
+        Assert.DoesNotContain(labels, l => l.Contains("System Reference Document", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Export_preview_names_a_bundled_revision_that_no_release_has()
+    {
+        using var origin = new TempApp();
+        var srdFeat = origin.App.Store.ListRevisionsInOrder().First(r => TomeStackApp.BundledRevisionIds.Contains(r.RevisionId)
+            && r.Kind == ContentKind.Feat && r.RulesFamilies.Contains(RulesFamilies.Srd51));
+        var stance = HomebrewFeat with
+        {
+            ContentId = Guid.NewGuid(), RevisionId = Guid.NewGuid(), Name = "Compat Tide Stance", SchemaVersion = 3,
+            Provenance = new(srdFeat.Provenance.SourceId, new PageRef(1)),
+        };
+        Assert.DoesNotContain(stance.RevisionId, TomeStackApp.BundledRevisionIds);
+        origin.App.Store.AddRevision(stance);
+        var fixture = TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json");
+        var character = origin.App.SaveCharacter(fixture with { Pins = [.. fixture.Pins, stance.Reference] }).Character;
+
+        foreach (var purpose in new[] { ExportPurpose.Share, ExportPurpose.Backup })
+        {
+            var preview = origin.App.PreviewExport([character.Id], purpose);
+            Assert.Null(preview.OpensIn);
+            var cause = Assert.Single(preview.OpensInCauses!);
+            Assert.Equal(("content", stance.RevisionId, "SRD 5.1"), (cause.Kind, cause.Id, cause.BundledPack));
+            Assert.Equal($"'{character.Name}' uses 'Compat Tide Stance' from the bundled SRD 5.1 pack, which TomeStack 0.6.0 does not have", cause.Message);
+            Assert.Equal("Opening this needs a TomeStack version newer than 0.7.0: it holds bundled SRD content that released versions do not have.", Assert.Single(NewerBuildWarnings(preview)).Message);
+        }
+    }
+
+    [Fact]
+    public void Library_backup_preview_with_a_character_pinning_bundled_content_opens_in_0_5_0()
+    {
+        using var origin = new TempApp();
+        var fixture = TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json");
+        var srdFeat = origin.App.Store.ListRevisionsInOrder().First(r => TomeStackApp.BundledRevisionIds.Contains(r.RevisionId)
+            && r.Kind == ContentKind.Feat && r.RulesFamilies.Contains(RulesFamilies.Srd51));
+        var saved = origin.App.SaveCharacter(fixture with { Pins = [.. fixture.Pins, srdFeat.Reference] }).Character;
+        Assert.Contains(saved.AllReferences(), r => r.RevisionId == srdFeat.RevisionId);
+        var preview = origin.App.PreviewLibraryBackup();
+        Assert.Equal("0.5.0", preview.OpensIn);
+        Assert.Empty(preview.OpensInCauses!);
+    }
+
+    [Fact]
+    public void Library_backup_preview_reports_opensIn_and_causes()
+    {
+        using var empty = new TempApp();
+        var none = empty.App.PreviewLibraryBackup();
+        Assert.Equal("0.4.0", none.OpensIn);
+        Assert.Empty(none.OpensInCauses!);
+
+        using var origin = new TempApp();
+        var fixture = TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json");
+        var saved = origin.App.SaveCharacter(fixture with { Play = (fixture.Play ?? new PlayState()) with { Encounter = new EncounterState(0) } }).Character;
+        var preview = origin.App.PreviewLibraryBackup();
+        Assert.Equal("0.7.0", preview.OpensIn);
+        var cause = Assert.Single(preview.OpensInCauses!);
+        Assert.Equal(("character", 10), (cause.Kind, cause.SchemaVersion));
+        Assert.Equal($"'{saved.Name}' is a character at schema 10", cause.Message);
+    }
+
+    [Fact]
+    public void Export_preview_does_not_warn_for_v9_character_and_old_content()
+    {
+        using var origin = new TempApp();
+        var id = SaveMixedCharacter(origin, homebrewSchemaVersion: 3);
+        Assert.True(origin.App.Store.FindCharacter(id)!.SchemaVersion <= Character.DetailsSchemaVersion);
+        Assert.Empty(NewerBuildWarnings(origin.App.PreviewExport([id], ExportPurpose.Backup)));
+        Assert.Empty(NewerBuildWarnings(origin.App.PreviewExport([id], ExportPurpose.Share)));
+    }
+
+    [Fact]
+    public void Export_preview_warns_for_a_character_mid_encounter_even_with_only_old_content()
+    {
+        using var origin = new TempApp();
+        var character = TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json");
+        var id = origin.App.SaveCharacter(character with { Play = (character.Play ?? new PlayState()) with { Encounter = new EncounterState(0) } }).Character.Id;
+        Assert.Equal(Character.EncounterSchemaVersion, origin.App.Store.FindCharacter(id)!.SchemaVersion);
+
+        Assert.Single(NewerBuildWarnings(origin.App.PreviewExport([id], ExportPurpose.Share)));
+        Assert.Single(NewerBuildWarnings(origin.App.PreviewExport([id], ExportPurpose.Backup)));
     }
 
     [Fact]
@@ -222,7 +351,7 @@ public class ExportPurposeTests
         var shared = ReadPackageCharacter(origin.App.ExportCharacters([id], ExportPurpose.Share).Content, id);
         Assert.Equal(AsJson(FixtureDetails), AsJson(shared.Details)); // D36: the details travel
         Assert.Empty(shared.Notes); // D22: the journal does not
-        Assert.Equal(Character.CurrentSchemaVersion, shared.SchemaVersion);
+        Assert.Equal(Character.DetailsSchemaVersion, shared.SchemaVersion);
 
         var backup = ReadPackageCharacter(origin.App.ExportCharacters([id], ExportPurpose.Backup).Content, id);
         Assert.Equal(AsJson(FixtureDetails), AsJson(backup.Details));

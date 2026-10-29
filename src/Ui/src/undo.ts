@@ -9,7 +9,34 @@ export interface UndoEntry {
   after: CharacterView;
 }
 
+/**
+ * D44: a compound play change decides several writes from one view (a form switch also turns the other form and its overlays off).
+ * It must name the stored `updatedAt` (`expectedUpdatedAt`) and is undone by the service, never by a client inverse.
+ * D43 S3 adds starting and ending an encounter; slice 7 adds damage with responses; slice 8 adds `useAction`. The server's switch
+ * (`CompoundUndo` in Play.cs) and this one are checked against `tests/RulesFixtures/compound-play-actions.json`.
+ */
+export const isCompound = (action: PlayAction): boolean =>
+  (action.action === 'toggleOn' && !!action.replace) ||
+  action.action === 'startEncounter' ||
+  action.action === 'endEncounter' ||
+  action.action === 'useAction' ||
+  (action.action === 'damage' && (action.responses?.length ?? 0) > 0);
+
 const hp = (view: CharacterView) => view.sheet.hitPoints;
+/**
+ * D43: switching a primary on or off also drops the overlays its group no longer allows, and the client cannot restore them. True
+ * when a toggle other than the one acted on was on before and is off after, so the change has no client undo.
+ */
+const droppedOthers = (action: PlayAction, before: CharacterView, after: CharacterView) =>
+  (before.sheet.toggles ?? []).some(
+    (o) =>
+      o.on &&
+      !o.auto &&
+      !(o.content.contentId === action.contentId && o.toggleId === action.toggleId) &&
+      after.sheet.toggles?.some((n) => n.content.contentId === o.content.contentId && n.toggleId === o.toggleId && !n.on),
+  );
+const findToggle =(view: CharacterView, toggle: PlayAction) =>
+  view.sheet.toggles?.find((t) => t.content.contentId === toggle.contentId && t.toggleId === toggle.toggleId);
 
 /**
  * D23 (owner, 2026-10-06): undo is the inverse play command, computed from the view before and after, never a stored
@@ -21,14 +48,14 @@ const hp = (view: CharacterView) => view.sheet.hitPoints;
  * by concentrating on the earlier one. A change that changed nothing (a condition already held) has no entry.
  */
 export function inverseOf(action: PlayAction, before: CharacterView, after: CharacterView): UndoEntry | undefined {
+  if (isCompound(action)) return undefined; // D44: the service undoes it (`undoLabel`), exactly
   // Wave 3 item 21: typed damage names its type and what was taken after defences ("damage 13 slashing (6 taken)"); untyped keeps "damage 12".
   const typed = action.action === 'damage' && after.damage?.type ? ` ${after.damage.type} (${after.damage.adjusted} taken)` : '';
   const label = `${action.action === 'setTemporaryHitPoints' ? 'temporary hit points' : action.action.replace(/[A-Z]/g, (c) => ` ${c.toLowerCase()}`)}${action.amount !== undefined ? ` ${action.amount}` : ''}${typed}${action.condition ? ` ${action.condition}` : ''}`;
   const b = before.character.play;
   const entry = (inverse: PlayAction[]): UndoEntry => ({ label, inverse, after });
   const hadCondition = (condition?: string) => !!condition && (b?.conditions ?? []).some((c) => c.toLowerCase() === condition.toLowerCase());
-  const backing = (toggle: PlayAction) =>
-    before.sheet.toggles?.find((t) => t.content.contentId === toggle.contentId && t.toggleId === toggle.toggleId)?.resourceId;
+  const backing = (toggle: PlayAction) => findToggle(before, toggle)?.resourceId;
   switch (action.action) {
     case 'damage':
     case 'heal':
@@ -72,13 +99,23 @@ export function inverseOf(action: PlayAction, before: CharacterView, after: Char
     case 'regainPactSlot':
       return entry([{ action: 'spendPactSlot' }]);
     case 'toggleOn': {
-      const resourceId = backing(action);
-      // A resource-backed toggle spent a use when it went on: switching it off gives that use back.
-      return entry([{ action: 'toggleOff', contentId: action.contentId, toggleId: action.toggleId }, ...(resourceId ? [{ action: 'regain' as const, amount: 1, contentId: action.contentId, resourceId }] : [])]);
+      // A replace switch is compound (D44, handled above). A plain switch that still dropped another toggle has no client undo either.
+      if (droppedOthers(action, before, after)) return undefined;
+      const t = findToggle(before, action);
+      const resourceId = t?.resourceId;
+      // A resource-backed toggle spent its cost when it went on (1 when it names a pool but no cost, D43), from the pool it names
+      // (its own content when none): switching it off gives back exactly that, to that pool. A cost of 0 spent nothing.
+      const amount = t?.cost ?? 1;
+      const regain: PlayAction[] = resourceId && amount > 0 ? [{ action: 'regain', amount, contentId: t?.costResourceContent ?? action.contentId, resourceId }] : [];
+      return entry([{ action: 'toggleOff', contentId: action.contentId, toggleId: action.toggleId }, ...regain]);
     }
-    case 'toggleOff':
+    case 'toggleOff': {
       // Switching a resource-backed toggle back on would spend a use the player did not spend, so it is not undoable.
-      return backing(action) ? undefined : entry([{ action: 'toggleOn', contentId: action.contentId, toggleId: action.toggleId }]);
+      if (backing(action)) return undefined;
+      // A timed toggle that is counting its rounds would restart at the full duration if switched back on, and toggleOff is not compound (no service undo), so it cannot be undone.
+      if (before.character.play?.toggles?.some((t) => t.contentId === action.contentId && t.toggleId === action.toggleId && t.roundsLeft != null)) return undefined;
+      return droppedOthers(action, before, after) ? undefined : entry([{ action: 'toggleOn', contentId: action.contentId, toggleId: action.toggleId }]);
+    }
     case 'companionDamage':
     case 'companionHeal':
     case 'companionSetHitPoints':

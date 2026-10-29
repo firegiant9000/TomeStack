@@ -49,11 +49,12 @@ public sealed partial class TomeStackApp
         if (request.Basis != Basis(character, plan))
             throw new AppValidationException([new("rest.preview-stale", "The character changed since this rest was previewed. Preview the rest again.")]);
         var skip = (request.Skip ?? []).Where(s => s is not null).ToHashSet(StringComparer.Ordinal);
-        var maximum = CharacterCalculator.Calculate(character, _store).HitPoints?.Maximum ?? 0;
+        var sheet = CharacterCalculator.Calculate(character, _store);
+        var maximum = sheet.HitPoints?.Maximum ?? 0;
         // Item charges (Wave 3 item 25, R160) are on the equipment entries, so a rest writes them here, through the play path.
         return SaveWithPlay(character with
         {
-            Play = RestPlanner.Apply(character.Play, plan, skip, maximum),
+            Play = RestPlanner.Apply(character.Play, plan, skip, maximum, sheet.Toggles),
             Equipment = RestPlanner.ApplyEquipment(character.Equipment, plan, skip),
         });
     }

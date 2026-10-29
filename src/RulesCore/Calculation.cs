@@ -59,7 +59,8 @@ public sealed record DerivedValue(
     AutomationStatus Automation,
     FieldOverride? Override,
     string Units = "",
-    ProficiencyMark Mark = ProficiencyMark.None);
+    ProficiencyMark Mark = ProficiencyMark.None,
+    RollModeSummary? Mode = null);
 
 /// <summary>
 /// SPEC C-01: one choice an active revision offers (and whose level is reached), what was selected for it, and whether
@@ -104,7 +105,9 @@ public sealed record CharacterSheet(
     IReadOnlyList<DamageDefenceValue>? DamageDefences = null,
     IReadOnlyList<ItemUseValue>? ItemUses = null,
     bool? LevelUpAvailable = null,
-    int? XpForNextLevel = null)
+    int? XpForNextLevel = null,
+    IReadOnlyList<UpkeepValue>? Upkeeps = null,
+    IReadOnlyList<ResponseValue>? Responses = null)
 {
     public DerivedValue Field(string field) => Fields.Single(f => f.Field == field);
 }
@@ -160,7 +163,22 @@ public sealed record ResourceValue(
     AutomationStatus Automation,
     IReadOnlyList<RecoveryInfo> Recoveries,
     string? Text,
-    Activation? Activation = null);
+    Activation? Activation = null,
+    bool CountsUp = false,
+    string? FullText = null,
+    bool Allowance = false);
+
+/// <summary>
+/// Content v11 (D43): an upkeep the character's active content declares, for the turn planner. <paramref name="Content"/> and
+/// <paramref name="EffectId"/> name the effect. <paramref name="ToggleContent"/> and <paramref name="ToggleId"/> name the toggle it
+/// belongs to (both null: always); <paramref name="ResourceContent"/> and <paramref name="ResourceId"/> the pool. <paramref name="Amount"/>
+/// is the formula evaluated for the character (never negative), null with <paramref name="All"/> (regain everything) or when the
+/// formula fails (an invalid-formula warning). <paramref name="IfShort"/> is what a spend the pool cannot cover does.
+/// <paramref name="Label"/> is a short generated name for a list.
+/// </summary>
+public sealed record UpkeepValue(
+    ContentReference Content, string EffectId, Guid? ToggleContent, string? ToggleId, TurnMoment At, Guid ResourceContent, string ResourceId,
+    UpkeepChange Change, int? Amount, bool All, UpkeepShortfall IfShort, string Label);
 
 /// <summary>
 /// A <c>recovery</c> effect of the same revision for this resource. Rests preview it; calculation never applies it.
@@ -194,16 +212,48 @@ public sealed record FeatureEntry(
 /// Content v8: the roll's bonus formula evaluated for this character (for example the Fighter level, or a negative
 /// Strength modifier), added to the dice. Null when the roll has none, or when it failed (a diagnostic; the roll is refused).
 /// </param>
+/// <param name="Available">Content v11 (D43): false while a form-only roll (<c>whileToggle</c>) is out of its form; the roll is still listed.</param>
+/// <param name="UnavailableReason">Why it is not available ("Available in Kindled mode"); null when it is.</param>
+/// <param name="SaveAbility">Content v11 (D43): the ability of the save the roll forces; set whenever the roll has a save.</param>
+/// <param name="SaveDc">The save DC evaluated for this character; null when the roll has no save or the formula failed (a diagnostic; the row is assisted).</param>
+/// <param name="SaveTrace">How <paramref name="SaveDc"/> was worked out; null when it has no DC.</param>
+/// <param name="Area">The area the roll covers, as written. Shown, never automated.</param>
+/// <param name="Range">The roll's range, as written. Shown, never automated.</param>
+/// <param name="Targets">Who the roll affects, as written. Shown, never automated.</param>
+/// <param name="PerUnit">Extra dice per unit spent, as written; the roll command applies it (Task 5.3).</param>
+/// <param name="AlsoChange">Content v11 (D43): the other pools the use also changes, each amount evaluated for this character (never below 0). Null when the roll has none.</param>
+/// <param name="DrawsDown">Content v11 (D43): the cost and per-unit amount use up the built-up value of the counting-up pool instead of adding to it.</param>
+/// <param name="RollId">The roll's content <c>rollId</c> (what <c>useAction</c> names); it can differ from <paramref name="Id"/>. A computed sheet member, not stored.</param>
 public sealed record FeatureEffect(
     string Id, string Type, AutomationStatus Automation, string? Text, string? Label = null, string? Dice = null, string? ResourceId = null, Activation? Activation = null,
-    Guid? ResourceContent = null, int? Cost = null, bool VariableCost = false, int? Bonus = null);
+    Guid? ResourceContent = null, int? Cost = null, bool VariableCost = false, int? Bonus = null, bool Available = true, string? UnavailableReason = null,
+    Ability? SaveAbility = null, int? SaveDc = null, IReadOnlyList<TraceEntry>? SaveTrace = null,
+    RollArea? Area = null, string? Range = null, string? Targets = null,
+    RollPerUnit? PerUnit = null,
+    IReadOnlyList<AlsoChangeValue>? AlsoChange = null, bool DrawsDown = false, string? RollId = null);
+
+/// <summary>
+/// Content v11 (D43): one pool a use also changes, for this character. <paramref name="ResourceContent"/> is the content that
+/// defines the pool (the roll's own when the content named none); <paramref name="Amount"/> is the evaluated formula, never below 0,
+/// or null when it could not be calculated (a diagnostic; the row is assisted).
+/// </summary>
+public sealed record AlsoChangeValue(Guid ResourceContent, string ResourceId, UpkeepChange Change, int? Amount);
 
 /// <summary>
 /// Content v6 (M3 B2): a toggle the player switches on and off, and whether it is on now. <paramref name="Auto"/> (content v10,
 /// D38): true when the sheet switches it itself (<c>autoWhen</c>); it has no switch, is never stored and never spends a use.
 /// Null otherwise, so nothing is written for an ordinary toggle.
+/// Content v11 (D43): <paramref name="Group"/>, <paramref name="GroupContent"/> and <paramref name="Layer"/> name the form group the toggle
+/// joins (null for an ungrouped toggle); <paramref name="Cost"/> is its pool cost for this character (null when it has none, or the
+/// formula fails) spent from <paramref name="CostResourceContent"/>'s pool; <paramref name="Available"/> is false, with a reason, when
+/// an overlay may not be switched on with the form that is on now.
+/// <paramref name="AllowedWith"/> and <paramref name="AllowedInBase"/> (overlays in a group only) are the overlay's own rule as declared, so
+/// <see cref="ToggleGroups.EndingWith"/> can tell which overlays a primary that goes off takes with it.
 /// </summary>
-public sealed record ToggleValue(ContentReference Content, string ContentName, string EffectId, string ToggleId, string Label, bool On, string? ResourceId, string? Text, bool? Auto = null, Activation? Activation = null);
+public sealed record ToggleValue(
+    ContentReference Content, string ContentName, string EffectId, string ToggleId, string Label, bool On, string? ResourceId, string? Text, bool? Auto = null, Activation? Activation = null,
+    string? Group = null, Guid? GroupContent = null, ToggleLayer? Layer = null, int? Cost = null, Guid? CostResourceContent = null, bool Available = true, string? UnavailableReason = null, string? GroupLabel = null,
+    int? Duration = null, int? RoundsLeft = null, IReadOnlyList<ToggleRef>? AllowedWith = null, bool? AllowedInBase = null);
 
 /// <summary>Where a damage defence on the sheet comes from: the character's own list (<paramref name="Content"/> null) or a v10 damage grant.</summary>
 public sealed record DamageDefenceSource(string Name, ContentReference? Content = null, string? EffectId = null);
@@ -268,13 +318,18 @@ public sealed record SpellcastingEntry(
 /// SPEC C-02, C-04: an attack with an equipped weapon. <paramref name="ToHit"/> = the ability modifier (Strength for
 /// melee, Dexterity for ranged, the better one with finesse) + the proficiency bonus if proficient + the weapon's own
 /// bonus; <paramref name="Damage"/> is the dice plus the same modifier and bonus. <paramref name="Trace"/> explains to-hit.
+/// Content v11 (D43): a feature can give an attack too (<see cref="AttackSource.Feature"/>; <paramref name="Category"/> is null,
+/// <paramref name="Item"/> is the declaring content's revision and <paramref name="EffectId"/> the attack effect's id), and toggled
+/// riders add to either kind. An attack whose die is not a die is listed with <paramref name="Available"/> false and the reason.
 /// </summary>
+/// <param name="Riders">The riders that apply now, in sheet content order; null when none.</param>
+/// <param name="Cost">Uses of <paramref name="ResourceId"/> an explicit action spends; the pool is declared by <paramref name="CostResourceContent"/>.</param>
 public sealed record AttackEntry(
     ContentReference Item,
     string Name,
     string EffectId,
     WeaponAttack Attack,
-    WeaponCategory Category,
+    WeaponCategory? Category,
     Ability Ability,
     int ToHit,
     string Damage,
@@ -287,7 +342,23 @@ public sealed record AttackEntry(
     AutomationStatus Automation,
     IReadOnlyList<TraceEntry> Trace,
     IReadOnlyList<Diagnostic> Warnings,
-    TraceOrigin Origin);
+    TraceOrigin Origin,
+    AttackSource Source = AttackSource.Weapon,
+    IReadOnlyList<string>? Tags = null,
+    bool ReplacesAttack = false,
+    IReadOnlyList<RiderValue>? Riders = null,
+    bool Available = true,
+    string? UnavailableReason = null,
+    Activation? Activation = null,
+    Guid? CostResourceContent = null,
+    string? ResourceId = null,
+    int? Cost = null);
+
+/// <summary>Content v11 (D43): where an attack on the sheet comes from. Custom attacks are not on the sheet's list.</summary>
+public enum AttackSource { Weapon, Feature }
+
+/// <summary>Content v11 (D43): an attack rider that applies to an attack now, with its numbers (formulas evaluated).</summary>
+public sealed record RiderValue(ContentReference Content, string EffectId, string? Dice, int ToHit, int DamageBonus, string? DamageType);
 
 /// <summary>A known or prepared spell with its game data, for the sheet (a spell is never active content).</summary>
 public sealed record SpellEntry(
@@ -363,6 +434,14 @@ public static class CharacterCalculator
     public static bool IsCharacterOnlyField(string field, int schemaVersion) =>
         IsSpeedOrPassive(field) && schemaVersion < ContentRevision.PlayDetailsSchemaVersion;
 
+    /// <summary>
+    /// Content schema v11 (D43): fly speed is a content target only from v11. Below it the validator refuses it and the
+    /// calculator ignores such a modifier with the same diagnostic as <see cref="IsCharacterOnlyField"/>, so a stored older
+    /// revision never moves it, whatever it says.
+    /// </summary>
+    public static bool IsPlayMechanicsOnlyField(string field, int schemaVersion) =>
+        field == FieldIds.FlySpeed && schemaVersion < ContentRevision.PlayMechanicsSchemaVersion;
+
     /// <summary>Speed and the passive scores: the fields content may target only from schema v10.</summary>
     public static bool IsSpeedOrPassive(string field) =>
         field == FieldIds.Speed || field.StartsWith("passive.", StringComparison.Ordinal);
@@ -384,7 +463,7 @@ public static class CharacterCalculator
         var modifiers = new List<Modifier>();
         foreach (var effect in revision.Effects.OfType<ModifierEffect>())
         {
-            if (SpecIndex.ContainsKey(effect.Target) && !IsCharacterOnlyField(effect.Target, revision.SchemaVersion) && Formula.TryParse(effect.Value, AllowsScales(revision), out var formula, out _))
+            if (SpecIndex.ContainsKey(effect.Target) && !IsCharacterOnlyField(effect.Target, revision.SchemaVersion) && !IsPlayMechanicsOnlyField(effect.Target, revision.SchemaVersion) && Formula.TryParse(effect.Value, Formula.FeaturesFor(revision), out var formula, out _))
                 modifiers.Add(new(content, effect, formula!, [.. formula!.Identifiers.Select(FormulaIdentifiers.FieldFor).OfType<string>().Distinct(StringComparer.Ordinal)]));
         }
         var diagnostics = new List<Diagnostic>();
@@ -481,7 +560,7 @@ public static class CharacterCalculator
                         revision.Reference, restriction.Id);
                     continue;
                 }
-                if (IsCharacterOnlyField(restriction.Field, revision.SchemaVersion))
+                if (IsCharacterOnlyField(restriction.Field, revision.SchemaVersion) || IsPlayMechanicsOnlyField(restriction.Field, revision.SchemaVersion))
                 {
                     // As in an older build, where the field is not a content target: the content is not applied.
                     yield return new(
@@ -561,7 +640,12 @@ public static class CharacterCalculator
         // Fields with an effect the calculator could not apply (not automatic, invalid or disabled): the user may need to
         // account for it by hand, so the field and its dependents are only assisted.
         var manual = new HashSet<string>(StringComparer.Ordinal);
-        var modifiers = CollectModifiers(active, character, policy, diagnostics, warnings, manual, autoOn);
+        // Content v11 (D43): one primary per form group and the allowed overlays, resolved in every pass.
+        var declaredToggles = DeclaredToggles(active, character, resolved.ClassLevels);
+        var effective = ToggleGroups.Resolve(character.Play, declaredToggles, diagnostics, active.Select(a => a.Revision.ContentId).ToHashSet());
+        var resourceBonuses = new List<ResourceBonus>();
+        var modifiers = CollectModifiers(active, character, policy, diagnostics, warnings, manual, effective, autoOn, resourceBonuses, resolved.ClassLevels);
+        var rollModes = CollectRollModes(active, effective, autoOn, diagnostics);
         var weaponProficiencies = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         var armorTraining = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         var unseenArmor = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
@@ -623,23 +707,68 @@ public static class CharacterCalculator
                 closure.Any(manual.Contains) ? AutomationStatus.Assisted : AutomationStatus.Automatic,
                 results[spec.Id].Override,
                 spec.Units,
-                MarkOf(spec.Id, proficiencies));
+                MarkOf(spec.Id, proficiencies),
+                rollModes.GetValueOrDefault(spec.Id));
         }).ToList();
 
-        var resources = CollectResources(active, character, resolved.ClassLevels, values, family);
+        // Before the feature list: an attack whose die is invalid reports on its feature (attack.die-invalid).
+        var attacks = CollectAttacks(active, values, family, weaponProficiencies, character, resolved.ClassLevels, effective, autoOn, diagnostics);
+        var resources = CollectResources(active, character, resolved.ClassLevels, values, family, resourceBonuses);
         var rollBonuses = RollBonuses(active, character, resolved.ClassLevels, values, diagnostics);
+        var rollDetails = RollDetailsOf(active, family, character, resolved.ClassLevels, values, diagnostics);
+        // Before the feature list: a response whose formula fails reports on its feature (effect.invalid-formula). HP.MAX is this sheet's own maximum.
+        var responses = CollectResponses(active, character, resolved.ClassLevels, values, resources, effective, autoOn, values[FieldIds.HitPoints], diagnostics);
+        // Before the feature list: a form-only defence of absent content reports on its feature (modifier.toggle-content-missing).
+        var damageDefences = CollectDamageDefences(active, character, resolved.ClassLevels, effective, autoOn, diagnostics);
         var scoped = diagnostics.Concat(warnings.Values.SelectMany(w => w)).Concat(resources.SelectMany(r => r.Warnings)).Where(d => d.Content is not null).Distinct().ToList();
-        // A roll's cost is a number of uses, so never negative.
-        int? Cost(ActiveContent item, string source) =>
-            Formula.TryParse(source, AllowsScales(item.Revision), out var formula, out _) && formula!.TryEvaluate(id => Resolve(id, item, character, resolved.ClassLevels, values, []), out var value, out _)
-                ? Math.Max(value, 0)
-                : null;
-        var features = active.Select(item => Feature(item, family, [.. scoped.Where(d => d.Content == item.Revision.Reference)], Cost, rollBonuses)).ToList();
+        var features = active.Select(item => Feature(
+            item, family, [.. scoped.Where(d => d.Content == item.Revision.Reference)], rollDetails, rollBonuses, form => OutOfForm(active, item, form, effective, autoOn), resources)).ToList();
         var toggles = active
-            .SelectMany(item => item.Revision.Effects.OfType<ToggleEffect>().Where(t => t.Automation != AutomationStatus.Reference).Select(t => new ToggleValue(
-                item.Revision.Reference, item.Revision.Name, t.Id, t.ToggleId, t.Label, ToggleIsOn(item.Revision, t, character, autoOn), t.ResourceId, t.Text,
-                IsAuto(item.Revision, t) ? true : null, ActivationOf(item.Revision, t.Activation))))
+            .SelectMany(item => item.Revision.Effects.OfType<ToggleEffect>()
+                .Where(t => t.Automation != AutomationStatus.Reference && LevelReached(item, t, character, resolved.ClassLevels))
+                .Select(t => ToggleOf(item, t)))
             .ToList();
+        ToggleValue ToggleOf(ActiveContent item, ToggleEffect t)
+        {
+            var revision = item.Revision;
+            var allowed = effective.IsAllowed(revision.ContentId, t.ToggleId);
+            int? cost = null;
+            if (t.Cost is { } source)
+            {
+                // Like a resource maximum: a formula that fails gives no cost and the invalid-formula warning.
+                if (!Formula.TryParse(source, Formula.FeaturesFor(revision), out var formula, out var failure)
+                    || !formula!.TryEvaluate(id => Resolve(id, item, character, resolved.ClassLevels, values, []), out var amount, out failure))
+                    diagnostics.Add(InvalidFormula(revision, t, failure!));
+                else
+                    cost = Math.Max(amount, 0);
+            }
+            int? duration = null;
+            if (t.Duration is { } rounds)
+            {
+                // Rounds: a formula that fails gives no duration and the invalid-formula warning.
+                if (!Formula.TryParse(rounds, Formula.FeaturesFor(revision), out var durationFormula, out var durationFailure)
+                    || !durationFormula!.TryEvaluate(id => Resolve(id, item, character, resolved.ClassLevels, values, []), out var roundCount, out durationFailure))
+                    diagnostics.Add(InvalidFormula(revision, t, durationFailure!));
+                else
+                    duration = Math.Clamp(roundCount, 0, PlayState.MaxRounds);
+            }
+            var isOn = ToggleIsOn(revision, t, effective, autoOn);
+            // The count means something only inside an encounter and while the content still has a duration; otherwise a stored count is inert.
+            var roundsLeft = isOn && character.Play.Encounter is not null && duration is not null
+                ? character.Play.Toggles.FirstOrDefault(a => a.ContentId == revision.ContentId && a.ToggleId == t.ToggleId)?.RoundsLeft
+                : null;
+            // A toggle whose group content is not on the character is a group of one (C6): it shows as a plain toggle.
+            var inGroup = t.Group is not null && active.Any(a => a.Revision.ContentId == (t.GroupContent ?? revision.ContentId));
+            return new ToggleValue(
+                revision.Reference, revision.Name, t.Id, t.ToggleId, t.Label, isOn, t.ResourceId, t.Text,
+                IsAuto(revision, t) ? true : null, ActivationOf(revision, t.Activation),
+                inGroup ? t.Group : null, inGroup ? t.GroupContent ?? revision.ContentId : null, inGroup ? t.Layer ?? ToggleLayer.Primary : null,
+                cost, t.ResourceContent, allowed, allowed ? null : UnavailableReason(active, item, t), GroupLabelOf(active, item, t), duration, roundsLeft,
+                inGroup && t.Layer == ToggleLayer.Overlay ? t.AllowedWith : null, inGroup && t.Layer == ToggleLayer.Overlay ? t.AllowedInBase : null);
+        }
+        // A response with an outcome that can never run (a form that is not on the sheet, is automatic or is not allowed now; a pool the character lacks) is not offered.
+        responses = [.. responses.Select(r => r.Available ? WithRunnableOutcomes(r, toggles, resources) : r)];
+        var upkeeps = CollectUpkeeps(active, character, resolved.ClassLevels, values, diagnostics);
         var maximum = values[FieldIds.HitPoints];
         var hitPoints = new HitPointState(maximum, Math.Clamp(character.Play.CurrentHitPoints ?? maximum, 0, Math.Max(maximum, 0)), character.Play.TemporaryHitPoints);
         // R168: bloodied = a maximum of at least 1 and current hit points at or below half of it, rounded down. Temporary hit points do not count.
@@ -672,9 +801,6 @@ public static class CharacterCalculator
             ? Slot(pactCaster is null ? 0 : PactSlotLevel(Row(pactCaster.Effect.Slots, pactCaster.ClassLevel)), FieldIds.PactSlots, character.Play.PactSlotsSpent)
             : null;
 
-        var attacks = CollectAttacks(active, values, family, weaponProficiencies);
-        var damageDefences = CollectDamageDefences(active, character, resolved.ClassLevels);
-
         var scales = resolved.ClassLevels.Scales
             .Where(s => resolved.ClassLevels.ContainsKey(s.Key.Class))
             .Select(s =>
@@ -690,7 +816,182 @@ public static class CharacterCalculator
             character.Id, family, fields, diagnostics, resolved.Choices, [.. active.Select(a => a.Revision.Reference)], resources, features, hitPoints, hitDice,
             spellcasting, spellSlots, pactSlots, attacks, toggles, scales.Count > 0 ? scales : null, bloodied ? true : null,
             damageDefences.Count > 0 ? damageDefences : null, null, // the item uses are added once by Calculate (WithItemUses)
-            xpForNextLevel is { } next && character.Xp >= next ? true : null, xpForNextLevel), active);
+            xpForNextLevel is { } next && character.Xp >= next ? true : null, xpForNextLevel, upkeeps.Count > 0 ? upkeeps : null,
+            responses.Count > 0 ? responses : null), active);
+    }
+
+    /// <summary>
+    /// A response whose toggleOn outcome names a form that is missing, automatic or unavailable, or whose spend or regain outcome names a pool
+    /// the character does not have, is unavailable. Apply checks the same again as a backstop.
+    /// </summary>
+    private static ResponseValue WithRunnableOutcomes(ResponseValue response, List<ToggleValue> toggles, List<ResourceValue> resources)
+    {
+        foreach (var outcome in response.Outcomes ?? [])
+        {
+            switch (outcome.Kind)
+            {
+                case ResponseOutcomeKind.ToggleOn:
+                    var toggle = outcome.Toggle is { ContentId: { } contentId } reference
+                        ? toggles.FirstOrDefault(t => t.Content.ContentId == contentId && t.ToggleId == reference.ToggleId)
+                        : null;
+                    if (toggle is null || toggle.Auto == true || !toggle.Available)
+                        return response with { Available = false, UnavailableReason = "Form not available" };
+                    break;
+                case ResponseOutcomeKind.Spend or ResponseOutcomeKind.Regain:
+                    if (!resources.Any(r => r.Content.ContentId == outcome.ResourceContent && r.ResourceId == outcome.ResourceId))
+                        return response with { Available = false, UnavailableReason = "Pool not found" };
+                    break;
+            }
+        }
+        return response;
+    }
+
+    /// <summary>The most damage responses one sheet lists (risk C5); later ones are dropped in sheet order with <c>response.too-many</c>.</summary>
+    public const int MaxResponses = 64;
+
+    /// <summary>
+    /// Content v11 (D43, D45): the damage responses of the active content, in active-content order and then effect order. Reference-only
+    /// and conditional (timing) responses are not calculated. Every formula is evaluated here, once the hit point maximum is known:
+    /// <c>amount</c>, <c>cost</c>, each outcome's amount and a threshold's <c>atOrBelow</c> (the only place <c>HP.MAX</c> resolves, to
+    /// <paramref name="hitPointMaximum"/>); an evaluated amount is within 0 and <see cref="PlayState.MaxHitPoints"/>. A formula that fails, or
+    /// a roll the character does not have, makes the response unavailable and the formula failure an <c>effect.invalid-formula</c>
+    /// diagnostic. A response is also unavailable while its toggle is off or when its pool cannot pay its cost.
+    /// </summary>
+    private static List<ResponseValue> CollectResponses(
+        List<ActiveContent> active, Character character, ClassLevelMap classLevels, Dictionary<string, int> values, List<ResourceValue> resources,
+        EffectiveToggles effective, bool autoOn, int hitPointMaximum, List<Diagnostic> diagnostics)
+    {
+        var candidates = active
+            .SelectMany(item => item.Revision.Effects.OfType<ResponseEffect>()
+                .Where(r => r.Automation != AutomationStatus.Reference && r.Timing == EffectTiming.Always)
+                .Select(r => (Item: item, Effect: r)))
+            .ToList();
+        if (candidates.Count > MaxResponses)
+        {
+            AddOnce(diagnostics, new("response.too-many", $"The character has {candidates.Count} damage responses; only the first {MaxResponses} are listed."));
+            candidates = candidates.GetRange(0, MaxResponses);
+        }
+
+        ResponseValue ResponseOf(ActiveContent item, ResponseEffect response)
+        {
+            var revision = item.Revision;
+            var own = revision.ContentId;
+            var failed = false;
+            int? Evaluate(string? source, bool threshold = false)
+            {
+                if (source is null)
+                    return null;
+                var features = Formula.FeaturesFor(revision) | (threshold ? FormulaFeatures.HitPointMaximum : FormulaFeatures.None);
+                FormulaError? failure;
+                if (Formula.TryParse(source, features, out var formula, out failure)
+                    && formula!.TryEvaluate(
+                        id => threshold && id == FormulaIdentifiers.HitPointMaximum ? hitPointMaximum : Resolve(id, item, character, classLevels, values, []),
+                        out var value, out failure))
+                    return Math.Clamp(value, 0, PlayState.MaxHitPoints);
+                failed = true;
+                AddOnce(diagnostics, InvalidFormula(revision, response, failure!));
+                return null;
+            }
+
+            var amount = Evaluate(response.Amount);
+            var cost = Evaluate(response.Cost);
+            var atOrBelow = Evaluate(response.When?.AtOrBelow, threshold: true);
+            var rollMissing = false;
+            var outcomes = new List<ResponseOutcomeValue>();
+            foreach (var outcome in response.Outcomes ?? [])
+            {
+                switch (outcome.Kind)
+                {
+                    case ResponseOutcomeKind.Spend:
+                    case ResponseOutcomeKind.Regain:
+                        outcomes.Add(new(outcome.Kind, outcome.ResourceContent ?? own, outcome.ResourceId, Evaluate(outcome.Amount), null, null, null, null));
+                        break;
+                    case ResponseOutcomeKind.RegainHitPoints:
+                    case ResponseOutcomeKind.TemporaryHitPoints:
+                        outcomes.Add(new(outcome.Kind, null, null, Evaluate(outcome.Amount), null, null, null, null));
+                        break;
+                    case ResponseOutcomeKind.ToggleOn:
+                        outcomes.Add(new(outcome.Kind, null, null, null, outcome.Toggle is { } toggle ? new ToggleRef(toggle.ContentId ?? own, toggle.ToggleId) : null, null, null, null));
+                        break;
+                    default:
+                        var rollContent = outcome.RollContent ?? own;
+                        var owner = active.FirstOrDefault(a => a.Revision.ContentId == rollContent);
+                        var roll = owner?.Revision.Effects.OfType<RollEffect>().FirstOrDefault(r => r.RollId == outcome.RollId);
+                        rollMissing |= roll is null;
+                        outcomes.Add(new(outcome.Kind, null, null, null, null, roll is null ? null : owner!.Revision.Reference, roll?.Id, outcome.RollId));
+                        break;
+                }
+            }
+
+            var poolContent = response.ResourceId is null ? (Guid?)null : response.ResourceContent ?? own;
+            string? reason = null;
+            if (failed)
+            {
+                reason = "Formula failed";
+            }
+            else if (rollMissing)
+            {
+                reason = "Roll not found";
+            }
+            else if (response.Toggle is { } form)
+            {
+                var formOwner = active.FirstOrDefault(a => a.Revision.ContentId == (form.ContentId ?? own));
+                var formToggle = formOwner?.Revision.Effects.OfType<ToggleEffect>().FirstOrDefault(t => t.ToggleId == form.ToggleId);
+                if (formOwner is null || formToggle is null || !ToggleIsOn(formOwner.Revision, formToggle, effective, autoOn))
+                    reason = $"Available in {formOwner?.Revision.Name ?? form.ToggleId}";
+            }
+            if (reason is null && cost is { } needed && response.ResourceId is { } poolId)
+            {
+                var pool = resources.FirstOrDefault(r => r.Content.ContentId == poolContent && r.ResourceId == poolId);
+                if (pool is null)
+                    reason = $"Needs {needed} {poolId} (0 left)";
+                else if (pool.Current is not { } left)
+                    reason = $"Needs {needed} {pool.Label} (not tracked)";
+                else if (left < needed)
+                    reason = $"Needs {needed} {pool.Label} ({left} left)";
+            }
+            return new(
+                own, revision.Name, response.ResponseId, response.Label, response.Phase, amount, poolContent, response.ResourceId, cost,
+                reason is null, reason, response.Text, atOrBelow, response.When?.Survived == true, outcomes.Count > 0 ? outcomes : null);
+        }
+
+        return [.. candidates.Select(c => ResponseOf(c.Item, c.Effect))];
+    }
+
+    /// <summary>
+    /// Content v11 (D43): the upkeeps of the active content, in active-content order and then effect order. An amount is a formula
+    /// evaluated like a resource maximum (never negative); one that fails is null with the invalid-formula warning, and the
+    /// calculation goes on. <c>all</c> is a regain of everything and has no amount. A pool that names no content is the declarer's.
+    /// </summary>
+    private static List<UpkeepValue> CollectUpkeeps(
+        List<ActiveContent> active, Character character, ClassLevelMap classLevels, Dictionary<string, int> values, List<Diagnostic> diagnostics)
+    {
+        var upkeeps = new List<UpkeepValue>();
+        foreach (var item in active)
+        {
+            var revision = item.Revision;
+            foreach (var upkeep in revision.Effects.OfType<UpkeepEffect>())
+            {
+                var all = upkeep.Change == UpkeepChange.Regain && string.Equals(upkeep.Amount.Trim(), "all", StringComparison.Ordinal);
+                int? amount = null;
+                if (!all)
+                {
+                    if (!Formula.TryParse(upkeep.Amount, Formula.FeaturesFor(revision), out var formula, out var failure)
+                        || !formula!.TryEvaluate(id => Resolve(id, item, character, classLevels, values, []), out var value, out failure))
+                        diagnostics.Add(InvalidFormula(revision, upkeep, failure!));
+                    else
+                        amount = Math.Max(value, 0);
+                }
+                var poolContent = upkeep.ResourceContent ?? revision.ContentId;
+                var toggleContent = upkeep.Toggle is null ? (Guid?)null : upkeep.ToggleContent ?? revision.ContentId;
+                var label = (upkeep.Toggle is null ? null : active.FirstOrDefault(a => a.Revision.ContentId == toggleContent)?.Revision.Effects.OfType<ToggleEffect>().FirstOrDefault(t => t.ToggleId == upkeep.Toggle)?.Label)
+                    ?? active.FirstOrDefault(a => a.Revision.ContentId == poolContent)?.Revision.Effects.OfType<ResourceEffect>().FirstOrDefault(r => r.ResourceId == upkeep.ResourceId)?.Label
+                    ?? upkeep.ResourceId;
+                upkeeps.Add(new(revision.Reference, upkeep.Id, toggleContent, upkeep.Toggle, upkeep.At, poolContent, upkeep.ResourceId, upkeep.Change, amount, all,
+                    upkeep.IfShort ?? UpkeepShortfall.Ask, $"{label} upkeep"));
+            }
+        }
+        return upkeeps;
     }
 
     /// <summary>
@@ -725,7 +1026,8 @@ public static class CharacterCalculator
     /// here. Several sources of one type and kind are one entry (R169), ordered by damage type, then kind. A damage grant in
     /// a revision below v10 is an unknown effect (Task 1) and never arrives here.
     /// </summary>
-    private static List<DamageDefenceValue> CollectDamageDefences(List<ActiveContent> active, Character character, ClassLevelMap classLevels)
+    private static List<DamageDefenceValue> CollectDamageDefences(
+        List<ActiveContent> active, Character character, ClassLevelMap classLevels, EffectiveToggles effective, bool autoOn, List<Diagnostic> diagnostics)
     {
         var found = new List<(string Type, DamageDefenceKind Kind, DamageDefenceSource Source)>();
         foreach (var defence in character.DamageDefences ?? [])
@@ -742,6 +1044,10 @@ public static class CharacterCalculator
                 if (grant.Level is { } needed && GateLevel(item, character, classLevels) < needed)
                     continue;
                 if (!EntryApplies(item, grant.OnlyAs, character) || !DamageTypes.TryNormalize(grant.DamageType, out var type))
+                    continue;
+                // Content v11 (D43): a form-only defence is listed only while its toggle is on, gated like a toggled modifier.
+                if (grant.WhileToggle is { } form
+                    && GateOnToggle(active, item.Revision, grant.Id, form.ToggleId, form.ContentId ?? item.Revision.ContentId, effective, autoOn, diagnostics, out _) != ToggleGate.Applies)
                     continue;
                 var kind = grant.Grant switch
                 {
@@ -768,8 +1074,60 @@ public static class CharacterCalculator
         revision.SchemaVersion >= ContentRevision.PlayDetailsSchemaVersion ? activation : null;
 
     /// <summary>An auto toggle is on only when the pass says so; a stored <c>ActiveToggle</c> naming it is ignored. Any other toggle follows the play state.</summary>
-    private static bool ToggleIsOn(ContentRevision revision, ToggleEffect toggle, Character character, bool autoOn) =>
-        IsAuto(revision, toggle) ? autoOn : character.Play.IsOn(revision.ContentId, toggle.ToggleId);
+    private static bool ToggleIsOn(ContentRevision revision, ToggleEffect toggle, EffectiveToggles effective, bool autoOn) =>
+        IsAuto(revision, toggle) ? autoOn : effective.IsOn(revision.ContentId, toggle.ToggleId);
+
+    /// <summary>
+    /// Content v11 (D43): why a form-only action (<c>whileToggle</c>) is unavailable now, or null when its toggle is on. The toggle belongs to
+    /// the named content, or to <paramref name="item"/> when none is named. A toggle that is not declared by active content is off and is
+    /// named by its id (the validator already warns about the reference).
+    /// </summary>
+    private static string? OutOfForm(List<ActiveContent> active, ActiveContent item, ToggleRef whileToggle, EffectiveToggles effective, bool autoOn)
+    {
+        var owner = active.FirstOrDefault(a => a.Revision.ContentId == (whileToggle.ContentId ?? item.Revision.ContentId));
+        var toggle = owner?.Revision.Effects.OfType<ToggleEffect>().FirstOrDefault(t => t.ToggleId == whileToggle.ToggleId);
+        if (owner is null || toggle is null)
+            return $"Available in {whileToggle.ToggleId}";
+        return ToggleIsOn(owner.Revision, toggle, effective, autoOn) ? null : $"Available in {toggle.Label}";
+    }
+
+    /// <summary>Content v11 (D43): the label of the <c>toggleGroup</c> effect that declares the toggle's group, found on the group content among the active content; null when ungrouped or the declarer is not active.</summary>
+    private static string? GroupLabelOf(List<ActiveContent> active, ActiveContent item, ToggleEffect toggle) =>
+        toggle.Group is not { } group
+            ? null
+            : active.FirstOrDefault(a => a.Revision.ContentId == (toggle.GroupContent ?? item.Revision.ContentId))?.Revision.Effects
+                .OfType<ToggleGroupEffect>().FirstOrDefault(g => g.GroupId == group)?.Label;
+
+    /// <summary>Content v11 (D43): why an overlay cannot be switched on now, naming the form content it needs.</summary>
+    private static string UnavailableReason(List<ActiveContent> active, ActiveContent item, ToggleEffect overlay)
+    {
+        // Name the form (the toggle's label); add the content name only when the reference points at other content.
+        var needed = (overlay.AllowedWith ?? [])
+            .Select(r =>
+            {
+                var owner = active.FirstOrDefault(a => a.Revision.ContentId == (r.ContentId ?? item.Revision.ContentId));
+                var label = owner?.Revision.Effects.OfType<ToggleEffect>().FirstOrDefault(t => t.ToggleId == r.ToggleId)?.Label;
+                if (string.IsNullOrWhiteSpace(label))
+                    label = r.ToggleId;
+                return owner is not null && owner.Revision.ContentId != item.Revision.ContentId ? $"{label} ({owner.Revision.Name})" : label;
+            })
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (needed.Count == 0)
+            return "Only available when no other form of its group is on.";
+        return $"Needs {string.Join(" or ", needed)}" + (overlay.AllowedInBase == true ? ", or no other form of its group on." : ".");
+    }
+
+    /// <summary>Content v11 (D43): the toggles the groups are resolved over. Automatic toggles follow their condition and a toggle whose <c>level</c> is not reached is not offered.</summary>
+    private static List<DeclaredToggle> DeclaredToggles(List<ActiveContent> active, Character character, ClassLevelMap classLevels) =>
+    [
+        .. active.SelectMany(item => item.Revision.Effects.OfType<ToggleEffect>()
+            .Where(t => !IsAuto(item.Revision, t) && LevelReached(item, t, character, classLevels))
+            .Select(t => new DeclaredToggle(item.Revision.ContentId, item.Revision.Name, t, item.Revision.Reference))),
+    ];
+
+    private static bool LevelReached(ActiveContent item, ToggleEffect toggle, Character character, ClassLevelMap classLevels) =>
+        toggle.Level is not { } needed || GateLevel(item, character, classLevels) >= needed;
 
     /// <summary>
     /// Content v8 (M2.2): the attack count is at least 1, and the critical range is a d20 roll, 1 to 20. Content that takes
@@ -800,12 +1158,26 @@ public static class CharacterCalculator
 
     // ---- attacks (content schema v5; SPEC C-02, C-04) --------------------------------------------------------
 
-    private static List<AttackEntry> CollectAttacks(List<ActiveContent> active, Dictionary<string, int> values, string family, Dictionary<string, Proficiency> weapons)
+    /// <summary>
+    /// The attacks on the sheet, in active-content order: an equipped weapon's, then the attacks a feature gives (content v11, D43).
+    /// Every attack effect is its own row (keyed by content and effect id); duplicate attack ids are not merged. Riders that are on
+    /// now add to the attacks they match. Pure: reads the toggle state, never writes play state.
+    /// </summary>
+    private static List<AttackEntry> CollectAttacks(
+        List<ActiveContent> active, Dictionary<string, int> values, string family, Dictionary<string, Proficiency> weapons,
+        Character character, ClassLevelMap classLevels, EffectiveToggles effective, bool autoOn, List<Diagnostic> diagnostics)
     {
         var attacks = new List<AttackEntry>();
         var rules = new TraceOrigin(TraceOriginKind.RulesPolicy, family);
-        foreach (var item in active.Where(a => a.Revision.Kind == ContentKind.Item))
+        var riders = CollectRiders(active, values, character, classLevels, effective, autoOn, diagnostics);
+        foreach (var item in active)
         {
+            foreach (var attack in item.Revision.Effects.OfType<AttackEffect>().Where(a => a.Automation != AutomationStatus.Reference))
+                attacks.Add(FeatureAttack(
+                    active, item, attack, values, family, character, classLevels, riders, diagnostics,
+                    attack.WhileToggle is { } form ? OutOfForm(active, item, form, effective, autoOn) : null));
+            if (item.Revision.Kind != ContentKind.Item)
+                continue;
             foreach (var weapon in item.Revision.Effects.OfType<WeaponEffect>().Where(w => w.Automation != AutomationStatus.Reference))
             {
                 var str = values[FieldIds.Modifier(Ability.Str)];
@@ -838,15 +1210,235 @@ public static class CharacterCalculator
                 {
                     warnings.Add(new("attack.not-proficient", $"Not proficient with '{item.Revision.Name}' ({category}): no proficiency bonus.", item.Revision.Reference, weapon.Id));
                 }
-                var damageBonus = mod;
+                // Riders that match (the tags weapon and melee or ranged) add to the numbers; none matching leaves them as they were.
+                var applied = ApplyRiders(family, riders, ["weapon", weapon.Attack == WeaponAttack.Ranged ? "ranged" : "melee"], trace, ref toHit, out var riderBonus);
+                var damageBonus = mod + riderBonus;
                 attacks.Add(new(
                     item.Revision.Reference, item.Revision.Name, weapon.Id, weapon.Attack, weapon.Category, ability, toHit,
-                    WithBonus(weapon.Damage, damageBonus), weapon.Versatile is { } versatile ? WithBonus(versatile, damageBonus) : null,
+                    DamageWith(weapon.Damage, applied, damageBonus), weapon.Versatile is { } versatile ? DamageWith(versatile, applied, damageBonus) : null,
                     weapon.DamageType, weapon.Properties, weapon.Range, weapon.Mastery, proficiency is not null, automation, trace, warnings,
-                    ContentOrigin(family, item, weapon)));
+                    ContentOrigin(family, item, weapon),
+                    Riders: applied.Count == 0 ? null : [.. applied.Select(r => r.Value)]));
             }
         }
         return attacks;
+    }
+
+    /// <summary>An attack rider that is on now: its numbers are evaluated in its own content's context.</summary>
+    private sealed record ActiveRider(ActiveContent Item, AttackRiderEffect Effect, RiderValue Value, double Expected);
+
+    /// <summary>
+    /// The riders of the active content whose toggle is on (no toggle: always), in sheet content order. A rider's toggle may be another
+    /// content's; an automatic toggle follows its condition, and a toggle nothing declares is off. A rider whose formula fails or whose
+    /// dice are not <c>NdM</c> with an allowed die is left out (the invalid-formula warning names a formula).
+    /// </summary>
+    private static List<ActiveRider> CollectRiders(
+        List<ActiveContent> active, Dictionary<string, int> values, Character character, ClassLevelMap classLevels,
+        EffectiveToggles effective, bool autoOn, List<Diagnostic> diagnostics)
+    {
+        var riders = new List<ActiveRider>();
+        foreach (var item in active)
+        {
+            foreach (var rider in item.Revision.Effects.OfType<AttackRiderEffect>().Where(r => r.Automation != AutomationStatus.Reference))
+            {
+                if (rider.Toggle is { } toggleId)
+                {
+                    var owner = rider.ToggleContent is { } ownerId ? active.FirstOrDefault(a => a.Revision.ContentId == ownerId) : item;
+                    var toggle = owner?.Revision.Effects.OfType<ToggleEffect>().FirstOrDefault(t => t.ToggleId == toggleId);
+                    if (owner is null || toggle is null || !ToggleIsOn(owner.Revision, toggle, effective, autoOn))
+                        continue;
+                }
+                var toHit = 0;
+                var bonus = 0;
+                if (rider.ToHit is { } toHitSource && !TryEvaluate(toHitSource, item, character, classLevels, values, [], out toHit, out var toHitFailure))
+                {
+                    diagnostics.Add(InvalidFormula(item.Revision, rider, toHitFailure!));
+                    continue;
+                }
+                if (rider.DamageBonus is { } bonusSource && !TryEvaluate(bonusSource, item, character, classLevels, values, [], out bonus, out var bonusFailure))
+                {
+                    diagnostics.Add(InvalidFormula(item.Revision, rider, bonusFailure!));
+                    continue;
+                }
+                var average = (double)toHit + bonus;
+                if (rider.Dice is not null)
+                {
+                    if (!AttackRiderEffect.TryParseDice(rider.Dice, out var count, out var sides))
+                        continue;
+                    average += count * (sides + 1) / 2.0;
+                }
+                riders.Add(new(item, rider, new(item.Revision.Reference, rider.Id, rider.Dice, toHit, bonus, rider.DamageType), average));
+            }
+        }
+        return riders;
+    }
+
+    /// <summary>
+    /// Applies the riders that match <paramref name="tags"/> (a rider tagged <c>all</c> matches every attack) to an attack, adding a traced
+    /// step for each part that applies. Within one stack group only the rider with the highest expected value applies, the first in
+    /// sheet content order on a tie; a rider that loses adds a <c>rider.not-applied</c> trace note. Riders without a group all stack.
+    /// </summary>
+    private static List<ActiveRider> ApplyRiders(
+        string family, List<ActiveRider> riders, IReadOnlyCollection<string> tags, List<TraceEntry> trace, ref int toHit, out int bonus)
+    {
+        var matching = riders.Where(r => r.Effect.Tags.Contains(AttackRiderEffect.AllTag) || r.Effect.Tags.Any(tags.Contains)).ToList();
+        var winners = matching
+            .Where(r => r.Effect.StackGroup is not null)
+            .GroupBy(r => r.Effect.StackGroup!, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.Aggregate((best, next) => next.Expected > best.Expected ? next : best), StringComparer.Ordinal);
+        var applied = new List<ActiveRider>();
+        bonus = 0;
+        foreach (var rider in matching)
+        {
+            var name = rider.Item.Revision.Name;
+            var origin = ContentOrigin(family, rider.Item, rider.Effect);
+            if (rider.Effect.StackGroup is { } group && !ReferenceEquals(winners[group], rider))
+            {
+                trace.Add(new(trace.Count + 1, "rider.not-applied", $"{name}: attack rider not applied; '{winners[group].Item.Revision.Name}' is stronger in stack group '{group}'", null, toHit, origin));
+                continue;
+            }
+            applied.Add(rider);
+            var value = rider.Value;
+            if (value.ToHit != 0)
+            {
+                toHit += value.ToHit;
+                trace.Add(new(trace.Count + 1, "add", $"{name}: {value.ToHit:+0;-0} to hit (attack rider)", value.ToHit, toHit, origin));
+            }
+            if (value.Dice is not null)
+                trace.Add(new(trace.Count + 1, "add", $"{name}: +{value.Dice}{(value.DamageType is null ? "" : $" {value.DamageType}")} damage (attack rider)", null, toHit, origin));
+            if (value.DamageBonus != 0)
+            {
+                bonus += value.DamageBonus;
+                trace.Add(new(trace.Count + 1, "add", $"{name}: {value.DamageBonus:+0;-0} damage (attack rider)", value.DamageBonus, toHit, origin));
+            }
+        }
+        return applied;
+    }
+
+    /// <summary>The dice, each applied rider's dice, then the flat total: <c>1d8+3d8+3</c> (the same format <see cref="WithBonus"/> gives a weapon).</summary>
+    private static string DamageWith(string dice, List<ActiveRider> applied, int flat) =>
+        WithBonus(dice + string.Concat(applied.Where(r => r.Value.Dice is not null).Select(r => "+" + r.Value.Dice)), flat);
+
+    private static bool TryEvaluate(
+        string source, ActiveContent item, Character character, ClassLevelMap classLevels, Dictionary<string, int> values, List<TraceInput> inputs,
+        out int value, out FormulaError? failure)
+    {
+        value = 0;
+        if (!Formula.TryParse(source, Formula.FeaturesFor(item.Revision), out var formula, out failure))
+            return false;
+        return formula!.TryEvaluate(id => Resolve(id, item, character, classLevels, values, inputs), out value, out failure);
+    }
+
+    /// <summary>
+    /// An attack a feature gives (content v11, D43). To hit = the best of the listed abilities' modifiers (ties: the first listed) plus
+    /// the proficiency bonus unless the attack says it is not proficient; damage = <c>{count}d{die}</c> (formulas in the declaring
+    /// content's context, so a scale resolves in its class), the applied riders' dice, then the damage bonus (default: that modifier).
+    /// A die that is not a d4, d6, d8, d10 or d12, a count outside 1 to the dice limit, or a formula that fails lists the attack as
+    /// unavailable with the reason and reports <c>attack.die-invalid</c> on the feature; it never throws.
+    /// </summary>
+    private static AttackEntry FeatureAttack(
+        List<ActiveContent> active, ActiveContent item, AttackEffect attack, Dictionary<string, int> values, string family, Character character,
+        ClassLevelMap classLevels, List<ActiveRider> riders, List<Diagnostic> diagnostics, string? outOfForm)
+    {
+        var revision = item.Revision;
+        var origin = ContentOrigin(family, item, attack);
+        var rules = new TraceOrigin(TraceOriginKind.RulesPolicy, family);
+        var trace = new List<TraceEntry>();
+        var pb = values[FieldIds.ProficiencyBonus];
+
+        var ability = attack.Abilities.Count > 0 ? attack.Abilities[0] : Ability.Str;
+        var mod = values[FieldIds.Modifier(ability)];
+        foreach (var listed in attack.Abilities.Skip(1))
+        {
+            if (values[FieldIds.Modifier(listed)] > mod)
+            {
+                ability = listed;
+                mod = values[FieldIds.Modifier(listed)];
+            }
+        }
+        var best = attack.Abilities.Count > 1 ? $" (best of {string.Join(", ", attack.Abilities)})" : "";
+        trace.Add(new(1, "base", $"{AbilityNames[ability]} modifier{best}", mod, mod, rules, FieldIds.Modifier(ability), [new(FieldIds.Modifier(ability), mod)]));
+        var toHit = mod;
+        var proficient = attack.Proficient ?? true;
+        if (proficient)
+        {
+            toHit += pb;
+            trace.Add(new(trace.Count + 1, "add", $"Proficiency bonus: '{attack.Label}' adds it", pb, toHit, origin, null, [new(FieldIds.ProficiencyBonus, pb)]));
+        }
+
+        var inputs = new List<TraceInput>();
+        string? invalid = null;
+        var countOk = TryEvaluate(attack.Damage.Count, item, character, classLevels, values, inputs, out var count, out var countFailure);
+        var dieOk = TryEvaluate(attack.Damage.Die, item, character, classLevels, values, inputs, out var die, out var dieFailure);
+        if (attack.Abilities.Count == 0)
+            invalid = "The attack lists no ability.";
+        else if (!dieOk)
+            invalid = $"The die formula '{attack.Damage.Die}' could not be evaluated: {dieFailure!.Message}";
+        else if (!AttackRiderEffect.AllowedDice.Contains(die))
+            invalid = $"d{die} is not a die this app rolls (d4, d6, d8, d10 or d12).";
+        else if (!countOk)
+            invalid = $"The dice count formula '{attack.Damage.Count}' could not be evaluated: {countFailure!.Message}";
+        else if (count < 1 || count > DiceLimits.MaxDice)
+            invalid = $"A dice count of {count} is outside 1 to {DiceLimits.MaxDice}.";
+        var damageBonus = mod;
+        if (invalid is null && attack.DamageBonus is { } bonusSource)
+        {
+            if (TryEvaluate(bonusSource, item, character, classLevels, values, inputs, out var bonus, out var bonusFailure))
+            {
+                damageBonus = bonus;
+            }
+            else
+            {
+                invalid = $"The damage bonus formula '{bonusSource}' could not be evaluated: {bonusFailure!.Message}";
+                diagnostics.Add(InvalidFormula(revision, attack, bonusFailure));
+            }
+        }
+        else if (invalid is not null)
+        {
+            diagnostics.Add(new("attack.die-invalid", $"'{revision.Name}' attack '{attack.Label}' is unavailable: {invalid}", revision.Reference, attack.Id));
+        }
+
+        var tags = (attack.Tags ?? []).Append(attack.Kind == WeaponAttack.Ranged ? "ranged" : "melee").ToList();
+        string damage = "";
+        List<RiderValue>? appliedRiders = null;
+        if (invalid is null)
+        {
+            var classRoot = item.ClassRoot is { } root ? active.FirstOrDefault(a => a.Revision.Reference == root)?.Revision.Name : null;
+            var scales = inputs.Where(i => FormulaIdentifiers.IsScale(i.Name)).Select(i => $"{classRoot} {FormulaIdentifiers.ScaleId(i.Name)}".Trim()).Distinct(StringComparer.Ordinal).ToList();
+            var from = scales.Count == 0 ? "" : $", the die from {string.Join(" and ", scales)}";
+            var plus = attack.DamageBonus is null ? $"{AbilityNames[ability]} modifier" : "its damage bonus";
+            trace.Add(new(trace.Count + 1, "set", $"Damage {count}d{die}{from}, plus {plus}", null, toHit, origin, null, inputs));
+            var applied = ApplyRiders(family, riders, tags, trace, ref toHit, out var riderBonus);
+            damage = DamageWith($"{count}d{die}", applied, damageBonus + riderBonus);
+            appliedRiders = applied.Count == 0 ? null : [.. applied.Select(r => r.Value)];
+        }
+
+        int? cost = null;
+        var costFailed = false;
+        if (attack.Cost is { } costSource)
+        {
+            if (TryEvaluate(costSource, item, character, classLevels, values, [], out var spent, out var costFailure))
+            {
+                cost = Math.Max(spent, 0);
+            }
+            else
+            {
+                costFailed = true; // the row stays available; the player works out what it costs
+                diagnostics.Add(InvalidFormula(revision, attack, costFailure!));
+            }
+        }
+        else if (attack.ResourceId is not null)
+        {
+            cost = 1;
+        }
+        return new(
+            revision.Reference, attack.Label, attack.Id, attack.Kind, null, ability, toHit, damage, null, attack.DamageType, [], attack.Range, null,
+            proficient,
+            // An attack that cannot be calculated, or whose cost cannot, is assisted (the player works it out); one that is only out of its form keeps its automation.
+            (invalid is not null || costFailed) && attack.Automation == AutomationStatus.Automatic ? AutomationStatus.Assisted : attack.Automation,
+            trace, [], origin,
+            AttackSource.Feature, attack.Tags, attack.ReplacesAttack ?? false, appliedRiders, invalid is null && outOfForm is null, invalid ?? outOfForm, attack.Activation,
+            attack.ResourceId is null ? null : attack.ResourceContent ?? revision.ContentId, attack.ResourceId, cost);
     }
 
     /// <summary>Dice plus a flat modifier, as a dice expression: <c>1d8+3</c>, <c>1d8-1</c>, or <c>1d8</c> for 0.</summary>
@@ -967,7 +1559,7 @@ public static class CharacterCalculator
             int? allowed = effect.SpellsTable?[level - 1];
             if (effect.SpellsFormula is { } source)
             {
-                if (Formula.TryParse(source, AllowsScales(content.Revision), out var formula, out var failure)
+                if (Formula.TryParse(source, Formula.FeaturesFor(content.Revision), out var formula, out var failure)
                     && formula!.TryEvaluate(id => Resolve(id, content, character, classLevels, values, []), out var value, out failure))
                 {
                     allowed = Math.Max(value, 0);
@@ -1057,7 +1649,7 @@ public static class CharacterCalculator
     /// and a failing formula disables only that resource, with a warning (SPEC C-03).
     /// </summary>
     private static List<ResourceValue> CollectResources(
-        List<ActiveContent> active, Character character, ClassLevelMap classLevels, Dictionary<string, int> values, string family)
+        List<ActiveContent> active, Character character, ClassLevelMap classLevels, Dictionary<string, int> values, string family, List<ResourceBonus> bonuses)
     {
         var resources = new List<ResourceValue>();
         foreach (var item in active)
@@ -1076,12 +1668,13 @@ public static class CharacterCalculator
                 var spent = character.Play.SpentOf(revision.ContentId, effect.ResourceId);
                 var origin = ContentOrigin(family, item, effect);
                 int? maximum = null;
+                var bonusByHand = false;
                 var trace = new List<TraceEntry>();
                 if (effect.Automation == AutomationStatus.Reference)
                 {
                     trace.Add(new(1, "base", $"Reference only: {Describe(item)} does not track this resource; track it by hand", null, 0, origin));
                 }
-                else if (!Formula.TryParse(effect.Maximum, AllowsScales(revision), out var formula, out var parseError))
+                else if (!Formula.TryParse(effect.Maximum, Formula.FeaturesFor(revision), out var formula, out var parseError))
                 {
                     warnings.Add(InvalidFormula(revision, effect, parseError!));
                 }
@@ -1092,6 +1685,35 @@ public static class CharacterCalculator
                     {
                         maximum = Math.Max(value, 0);
                         trace.Add(new(1, "derive", $"Maximum from {Describe(item)}: {formula.Source}", value, maximum.Value, origin, null, inputs.Count > 0 ? inputs : null));
+                        // Content v11: bonuses to this maximum from the same revision, in content order; each is a trace step.
+                        // The bonuses are summed and the total clamped once; a bonus the player must apply by hand, or whose formula fails, leaves the pool assisted.
+                        var total = value;
+                        foreach (var bonus in bonuses.Where(b => ReferenceEquals(b.Content, item) && b.Effect.Target == ResourceTargetPrefix + effect.ResourceId))
+                        {
+                            if (bonus.Manual)
+                            {
+                                bonusByHand = true;
+                                continue;
+                            }
+                            var bonusInputs = new List<TraceInput>();
+                            if (!Formula.TryParse(bonus.Effect.Value, Formula.FeaturesFor(revision), out var bonusFormula, out var bonusError))
+                            {
+                                warnings.Add(InvalidFormula(revision, bonus.Effect, bonusError!));
+                                bonusByHand = true;
+                            }
+                            else if (!bonusFormula!.TryEvaluate(id => Resolve(id, item, character, classLevels, values, bonusInputs), out var amount, out bonusError))
+                            {
+                                warnings.Add(InvalidFormula(revision, bonus.Effect, bonusError!));
+                                bonusByHand = true;
+                            }
+                            else
+                            {
+                                total += amount;
+                                var text = bonus.FollowedToggle ?? (bonus.Effect.Toggle is { } own ? revision.Effects.OfType<ToggleEffect>().FirstOrDefault(t => t.ToggleId == own)?.Label : null);
+                                trace.Add(new(trace.Count + 1, "add", text is null ? $"{amount:+0;-0}" : $"{amount:+0;-0} while {text}", amount, Math.Max(total, 0), ContentOrigin(family, item, bonus.Effect), null, bonusInputs.Count > 0 ? bonusInputs : null));
+                            }
+                        }
+                        maximum = Math.Max(total, 0);
                     }
                     else
                     {
@@ -1100,10 +1722,11 @@ public static class CharacterCalculator
                 }
                 var automation = maximum is null
                     ? (effect.Automation == AutomationStatus.Reference ? AutomationStatus.Reference : AutomationStatus.Assisted)
-                    : effect.Automation;
+                    : bonusByHand && effect.Automation == AutomationStatus.Automatic ? AutomationStatus.Assisted : effect.Automation;
                 resources.Add(new(
                     revision.Reference, revision.Name, effect.Id, effect.ResourceId, effect.Label, maximum, spent,
-                    maximum is { } max ? Math.Max(max - spent, 0) : null, trace, warnings, automation, recoveries, effect.Text, ActivationOf(revision, effect.Activation)));
+                    maximum is { } max ? Math.Max(max - spent, 0) : null, trace, warnings, automation, recoveries, effect.Text, ActivationOf(revision, effect.Activation),
+                    effect.Counts == ResourceCounting.Up, effect.Counts == ResourceCounting.Up ? effect.ResourceFull?.Text : null, effect.Allowance == true));
             }
         }
         return resources;
@@ -1118,7 +1741,7 @@ public static class CharacterCalculator
         if (recovery.Automation != AutomationStatus.Automatic)
             return new(recovery.Id, recovery.On, recovery.Amount, recovery.Text); // the player applies it
         FormulaError? failure;
-        if (Formula.TryParse(recovery.Amount, AllowsScales(item.Revision), out var formula, out failure)
+        if (Formula.TryParse(recovery.Amount, Formula.FeaturesFor(item.Revision), out var formula, out failure)
             && formula!.TryEvaluate(id => Resolve(id, item, character, classLevels, values, []), out var value, out failure))
         {
             return new(recovery.Id, recovery.On, recovery.Amount, recovery.Text, Math.Max(value, 0));
@@ -1143,7 +1766,7 @@ public static class CharacterCalculator
                 if (roll.Bonus is not { } source)
                     continue;
                 FormulaError? failure;
-                if (Formula.TryParse(source, AllowsScales(item.Revision), out var formula, out failure)
+                if (Formula.TryParse(source, Formula.FeaturesFor(item.Revision), out var formula, out failure)
                     && formula!.TryEvaluate(id => Resolve(id, item, character, classLevels, values, []), out var value, out failure))
                     bonuses[(item.Revision.Reference, roll.Id)] = value;
                 else
@@ -1153,16 +1776,150 @@ public static class CharacterCalculator
         return bonuses;
     }
 
+    /// <summary>What a roll's cost and save DC came to for this character (<see cref="RollDetailsOf"/>).</summary>
+    private sealed record RollDetail(int? Cost, int? SaveDc, IReadOnlyList<TraceEntry>? SaveTrace, bool Failed, IReadOnlyList<AlsoChangeValue>? AlsoChange = null);
+
+    /// <summary>
+    /// Each roll's <c>cost</c> (a number of uses, never negative; one when it has a resource and no formula) and, from content v11
+    /// (D43), its save DC with the trace of how it was reached. A formula that fails gives null and the <c>effect.invalid-formula</c>
+    /// diagnostic, and the row is assisted (<see cref="RollDetail.Failed"/>); it stays available, like a feature attack's cost.
+    /// </summary>
+    private static Dictionary<(ContentReference, string), RollDetail> RollDetailsOf(
+        List<ActiveContent> active, string family, Character character, ClassLevelMap classLevels, Dictionary<string, int> values, List<Diagnostic> diagnostics)
+    {
+        var details = new Dictionary<(ContentReference, string), RollDetail>();
+        foreach (var item in active)
+        {
+            var revision = item.Revision;
+            foreach (var roll in revision.Effects.OfType<RollEffect>())
+            {
+                var failed = false;
+                int? cost = null;
+                if (roll.Cost is { } costSource)
+                {
+                    if (TryEvaluate(costSource, item, character, classLevels, values, [], out var spent, out var costFailure))
+                    {
+                        cost = Math.Max(spent, 0);
+                    }
+                    else
+                    {
+                        failed = true;
+                        AddOnce(diagnostics, InvalidFormula(revision, roll, costFailure!));
+                    }
+                }
+                else if (roll.ResourceId is not null)
+                {
+                    cost = 1;
+                }
+
+                int? saveDc = null;
+                List<TraceEntry>? saveTrace = null;
+                if (roll.Save is { } save)
+                {
+                    var inputs = new List<TraceInput>();
+                    if (TryEvaluate(save.Dc, item, character, classLevels, values, inputs, out var dc, out var dcFailure))
+                    {
+                        saveDc = dc;
+                        var read = inputs.DistinctBy(i => i.Name, StringComparer.Ordinal).ToList();
+                        var classRoot = item.ClassRoot is { } root ? active.FirstOrDefault(a => a.Revision.Reference == root)?.Revision.Name : null;
+                        // A named value is traced under the content that declares it.
+                        string? ValueOwner(string name) =>
+                            item.ClassRoot is { } ownerRoot && classLevels.NamedValues.TryGetValue((ownerRoot, FormulaIdentifiers.ValueId(name)), out var ownerValue) ? ownerValue.Content.Revision.Name : null;
+                        var from = read.Count == 0 ? "" : $", from {string.Join(" and ", read.Select(i => $"{InputLabel(i.Name, classRoot, FormulaIdentifiers.IsValue(i.Name) ? ValueOwner(i.Name) : null)} {i.Value}"))}";
+                        saveTrace = [new(1, "set", $"{AbilityNames[save.Ability]} save DC{from}", null, dc, ContentOrigin(family, item, roll), null, read)];
+                    }
+                    else
+                    {
+                        failed = true;
+                        AddOnce(diagnostics, InvalidFormula(revision, roll, dcFailure!));
+                    }
+                }
+                List<AlsoChangeValue>? alsoChange = null;
+                if (roll.AlsoChange is { } changes)
+                {
+                    alsoChange = [];
+                    foreach (var change in changes.OfType<AlsoChange>())
+                    {
+                        int? amount = null;
+                        if (TryEvaluate(change.Amount ?? "", item, character, classLevels, values, [], out var evaluated, out var amountFailure))
+                        {
+                            amount = Math.Max(evaluated, 0);
+                        }
+                        else
+                        {
+                            failed = true;
+                            AddOnce(diagnostics, InvalidFormula(revision, roll, amountFailure!));
+                        }
+                        alsoChange.Add(new(change.ResourceContent ?? revision.ContentId, change.ResourceId, change.Change, amount));
+                    }
+                }
+                details[(revision.Reference, roll.Id)] = new(cost, saveDc, saveTrace, failed, alsoChange);
+            }
+        }
+        return details;
+    }
+
+    /// <summary>Adds a diagnostic unless an identical one (same code, content, effect and message) is already there.</summary>
+    private static void AddOnce(List<Diagnostic> diagnostics, Diagnostic diagnostic)
+    {
+        if (!diagnostics.Contains(diagnostic))
+            diagnostics.Add(diagnostic);
+    }
+
+    /// <summary>A formula identifier in words for a trace: "Proficiency bonus", "Wisdom modifier", "Strength score", a scale as "{class} {scaleId}"; any other identifier stays as written.</summary>
+    private static string InputLabel(string identifier, string? classRoot, string? valueOwner)
+    {
+        if (FormulaIdentifiers.IsScale(identifier))
+            return $"{classRoot} {FormulaIdentifiers.ScaleId(identifier)}".Trim();
+        if (FormulaIdentifiers.IsValue(identifier))
+            return $"{valueOwner} {FormulaIdentifiers.ValueId(identifier)}".Trim();
+        if (identifier == FormulaIdentifiers.ProficiencyBonus)
+            return "Proficiency bonus";
+        if (identifier == FormulaIdentifiers.Level)
+            return "Character level";
+        if (identifier == FormulaIdentifiers.ClassLevel)
+            return "Class level";
+        foreach (var ability in Enum.GetValues<Ability>())
+        {
+            var name = ability.ToString().ToUpperInvariant();
+            if (identifier == $"{name}.MOD")
+                return $"{AbilityNames[ability]} modifier";
+            if (identifier == $"{name}.SCORE")
+                return $"{AbilityNames[ability]} score";
+        }
+        return identifier;
+    }
+
     private static FeatureEntry Feature(
-        ActiveContent item, string family, IReadOnlyList<Diagnostic> diagnostics, Func<ActiveContent, string, int?> cost, Dictionary<(ContentReference, string), int> bonuses)
+        ActiveContent item, string family, IReadOnlyList<Diagnostic> diagnostics, Dictionary<(ContentReference, string), RollDetail> rollDetails, Dictionary<(ContentReference, string), int> bonuses,
+        Func<ToggleRef, string?> outOfForm, IReadOnlyList<ResourceValue> resources)
     {
         var revision = item.Revision;
+        // Content v11 (D43): a roll with whileToggle is always listed; it is unavailable, with the reason, while its form is off.
+        FeatureEffect Roll(RollEffect roll)
+        {
+            var reason = roll.WhileToggle is { } form ? outOfForm(form) : null;
+            // A roll that draws down needs a pool that counts up on this sheet (a pinned revision may have an ordinary one): it is unavailable
+            // with the reason, never given a spent use back.
+            if (reason is null && roll.DrawsDown == true && roll.ResourceId is { } drawnPool)
+            {
+                var drawnContent = roll.ResourceContent ?? revision.ContentId;
+                if (!resources.Any(r => r.Content.ContentId == drawnContent && r.ResourceId == drawnPool && r.CountsUp))
+                    reason = $"Pool '{drawnPool}' does not count up for this character, so it cannot be drawn down.";
+            }
+            var detail = rollDetails.GetValueOrDefault((revision.Reference, roll.Id));
+            // A cost or save DC that cannot be calculated: the row stays available and the player works it out.
+            var automation = detail is { Failed: true } && roll.Automation == AutomationStatus.Automatic ? AutomationStatus.Assisted : roll.Automation;
+            return new(
+                roll.Id, roll.Type, automation, roll.Text, roll.Label, roll.Dice, roll.ResourceId, roll.Activation,
+                roll.ResourceContent, detail?.Cost, roll.VariableCost == true,
+                bonuses.TryGetValue((revision.Reference, roll.Id), out var bonus) ? bonus : null, reason is null, reason,
+                roll.Save?.Ability, detail?.SaveDc, detail?.SaveTrace, roll.Area, roll.Range, roll.Targets, roll.PerUnit,
+                detail?.AlsoChange, roll.DrawsDown == true, roll.RollId);
+        }
         var effects = revision.Effects.Select(e => e switch
         {
-            RollEffect roll => new FeatureEffect(
-                e.Id, e.Type, e.Automation, e.Text, roll.Label, roll.Dice, roll.ResourceId, roll.Activation,
-                roll.ResourceContent, roll.Cost is { } spend ? cost(item, spend) : roll.ResourceId is null ? null : 1, roll.VariableCost == true,
-                bonuses.TryGetValue((revision.Reference, roll.Id), out var bonus) ? bonus : null),
+            RollEffect roll => Roll(roll),
             ResourceEffect resource => new FeatureEffect(e.Id, e.Type, e.Automation, e.Text, resource.Label, ResourceId: resource.ResourceId),
             RecoveryEffect recovery => new FeatureEffect(e.Id, e.Type, e.Automation, e.Text, ResourceId: recovery.ResourceId),
             // A damage defence that is conditional is not applied by the calculator: the player applies it (D19 amended).
@@ -1197,6 +1954,8 @@ public static class CharacterCalculator
                 && classLevels.Scales.TryGetValue((scaleRoot, FormulaIdentifiers.ScaleId(identifier)), out var scale)
                 ? scale.Effect.Values[Math.Clamp(scaleLevel, 1, scale.Effect.Values.Count) - 1]
                 : null,
+            // Content v11 (D43): a named value its class declares, evaluated where it is declared (ResolveValue).
+            _ when FormulaIdentifiers.IsValue(identifier) => ResolveValue(identifier, content, character, classLevels, values),
             _ when FormulaIdentifiers.FieldFor(identifier) is { } read && values.TryGetValue(read, out var v) => v,
             _ => null,
         };
@@ -1236,6 +1995,21 @@ public static class CharacterCalculator
     private sealed class ClassLevelMap : Dictionary<ContentReference, int>
     {
         public Dictionary<(ContentReference Class, string ScaleId), (ActiveContent Content, ScaleEffect Effect)> Scales { get; } = [];
+
+        /// <summary>Content v11 (D43): the named values of each class root, keyed by the class and the value id (<see cref="CollectValues"/>).</summary>
+        public Dictionary<(ContentReference Class, string ValueId), (ActiveContent Content, ValueEffect Effect)> NamedValues { get; } = [];
+
+        /// <summary>What each value came to in this pass (null: it is disabled). Values are evaluated lazily, once.</summary>
+        public Dictionary<(ContentReference Class, string ValueId), int?> ValueResults { get; } = [];
+
+        /// <summary>The values being evaluated right now, outermost first; a read of one of them again is a cycle.</summary>
+        public List<(ContentReference Class, string ValueId)> ValueStack { get; } = [];
+
+        /// <summary>The values that lie on a cycle; they stay disabled for the whole pass.</summary>
+        public HashSet<(ContentReference Class, string ValueId)> ValueCycles { get; } = [];
+
+        /// <summary>The pass's diagnostics, where a value read that fails says why (set by <see cref="CollectValues"/>).</summary>
+        public List<Diagnostic>? Diagnostics { get; set; }
     }
 
     /// <summary>
@@ -1265,6 +2039,157 @@ public static class CharacterCalculator
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Content v11 (D43): the named values of every class root, from all active content of that root (any kind) in sheet order.
+    /// When two declare one value id, the later applies and <c>value.duplicate</c> says so (informational: it carries the content
+    /// but no effect id, so it does not downgrade the content's automation). A value on content with no class root can never be
+    /// read, so it is ignored; so is one that is not automatic or has no usable id (validation refuses both with
+    /// <c>validate.value-incomplete</c> on publish and import, so this is a defence for stored content from elsewhere).
+    /// </summary>
+    private static void CollectValues(List<ActiveContent> active, ClassLevelMap classLevels, List<Diagnostic> diagnostics)
+    {
+        classLevels.Diagnostics = diagnostics;
+        foreach (var owner in active.Where(a => a.ClassRoot is not null && a.Revision.SchemaVersion >= ValueEffect.SchemaVersion))
+        {
+            foreach (var value in owner.Revision.Effects.OfType<ValueEffect>().Where(v => v.Automation == AutomationStatus.Automatic))
+            {
+                if (!ScaleEffect.IsValidScaleId(value.ValueId) || string.IsNullOrWhiteSpace(value.Formula))
+                    continue;
+                var key = (owner.ClassRoot!, value.ValueId);
+                if (classLevels.NamedValues.TryGetValue(key, out var earlier))
+                {
+                    diagnostics.Add(new(
+                        "value.duplicate",
+                        $"'{owner.Revision.Name}' declares value '{value.ValueId}', which '{earlier.Content.Revision.Name}' also declares for this class; the later one, from '{owner.Revision.Name}', is used.",
+                        owner.Revision.Reference));
+                }
+                classLevels.NamedValues[key] = (owner, value);
+            }
+        }
+    }
+
+    /// <summary>
+    /// <c>VALUE.&lt;id&gt;</c> read by <paramref name="reader"/>: the named value its class root declares, evaluated in the context of
+    /// the content that declares it (its class level, scales, and the fields calculated so far), once per pass. Null when the read
+    /// is outside a class (<c>value.no-class</c>), nothing declares the value (<c>value.unknown</c>), the value is disabled because
+    /// it lies on a cycle or reads one (<c>value.cycle</c>), or its own formula fails (<c>effect.invalid-formula</c> on the
+    /// declaring content). It never reads as 0; the caller's formula fails like any unresolved identifier.
+    /// </summary>
+    private static int? ResolveValue(string identifier, ActiveContent reader, Character character, ClassLevelMap classLevels, Dictionary<string, int> values)
+    {
+        var valueId = FormulaIdentifiers.ValueId(identifier);
+        var readerRevision = reader.Revision;
+        if (reader.ClassRoot is not { } root)
+        {
+            ReportValue(classLevels, new("value.no-class", $"'{readerRevision.Name}' reads {identifier}, but it is not part of a class; named values are read within a class, so the formula is disabled.", readerRevision.Reference));
+            return null;
+        }
+        var key = (root, valueId);
+        if (!classLevels.NamedValues.TryGetValue(key, out var declared))
+        {
+            ReportValue(classLevels, new("value.unknown", $"'{readerRevision.Name}' reads {identifier}, which no content of this class declares; the formula is disabled.", readerRevision.Reference));
+            return null;
+        }
+
+        int? result;
+        if (classLevels.ValueResults.TryGetValue(key, out var done))
+        {
+            result = done;
+        }
+        else if (classLevels.ValueStack.Contains(key))
+        {
+            // Re-entry: every value from the first read of this one to the top of the stack is on the cycle.
+            foreach (var member in classLevels.ValueStack.Skip(classLevels.ValueStack.IndexOf(key)))
+                classLevels.ValueCycles.Add(member);
+            result = null;
+        }
+        else if (classLevels.ValueStack.Count >= MaxValueDepth)
+        {
+            // Nested too deep (bounds the recursion): the read fails, and the formula that made it reports itself through the usual path.
+            // The cut value is cached as null for this sheet pass, and so is every value waiting on it up the stack (each fails and caches
+            // null in turn), so the outcome never depends on how often or from where a value is read.
+            result = null;
+            classLevels.ValueResults[key] = result;
+        }
+        else
+        {
+            classLevels.ValueStack.Add(key);
+            try
+            {
+                var revision = declared.Content.Revision;
+                FormulaError? failure;
+                if (Formula.TryParse(declared.Effect.Formula, Formula.FeaturesFor(revision), out var formula, out failure)
+                    && formula!.TryEvaluate(id => Resolve(id, declared.Content, character, classLevels, values, []), out var value, out failure))
+                {
+                    result = value;
+                }
+                else
+                {
+                    result = null;
+                    // A value that fails because a value it reads is on a cycle is disabled with it, so its readers hear value.cycle too.
+                    if (formula is not null && formula.Identifiers.Any(i => FormulaIdentifiers.IsValue(i)
+                        && declared.Content.ClassRoot is { } declaredRoot && classLevels.ValueCycles.Contains((declaredRoot, FormulaIdentifiers.ValueId(i)))))
+                        classLevels.ValueCycles.Add(key);
+                    if (!classLevels.ValueCycles.Contains(key))
+                        ReportValue(classLevels, InvalidFormula(revision, declared.Effect, failure!));
+                }
+            }
+            finally
+            {
+                classLevels.ValueStack.RemoveAt(classLevels.ValueStack.Count - 1);
+            }
+            classLevels.ValueResults[key] = result;
+        }
+
+        if (result is null && classLevels.ValueCycles.Contains(key))
+        {
+            ReportValue(classLevels, new(
+                "value.cycle",
+                $"'{readerRevision.Name}' reads {identifier}, which depends on itself through '{declared.Content.Revision.Name}'; the value and every formula reading it are disabled.",
+                readerRevision.Reference));
+        }
+        return result;
+    }
+
+    /// <summary>How many named values may be read inside one another; a deeper chain fails (content is validated far below this).</summary>
+    private const int MaxValueDepth = 32;
+
+    private static void ReportValue(ClassLevelMap classLevels, Diagnostic diagnostic)
+    {
+        if (classLevels.Diagnostics is { } diagnostics)
+            AddOnce(diagnostics, diagnostic);
+    }
+
+    /// <summary>
+    /// The fields a formula of <paramref name="reader"/> reads, including (content v11) those read by the value formulas it names,
+    /// transitively; a value met again is not followed, so a cycle among values ends here (the value resolution disables it).
+    /// </summary>
+    private static List<string> FieldReads(Formula formula, ActiveContent reader, ClassLevelMap classLevels)
+    {
+        var fields = new List<string>();
+        var followed = new HashSet<(ContentReference, string)>();
+        void Collect(Formula source, ActiveContent context, int depth)
+        {
+            foreach (var identifier in source.Identifiers)
+            {
+                if (FormulaIdentifiers.FieldFor(identifier) is { } field)
+                {
+                    if (!fields.Contains(field, StringComparer.Ordinal))
+                        fields.Add(field);
+                }
+                else if (depth < MaxValueDepth && FormulaIdentifiers.IsValue(identifier) && context.ClassRoot is { } root
+                    && classLevels.NamedValues.TryGetValue((root, FormulaIdentifiers.ValueId(identifier)), out var declared)
+                    && followed.Add((root, declared.Effect.ValueId))
+                    && Formula.TryParse(declared.Effect.Formula, Formula.FeaturesFor(declared.Content.Revision), out var inner, out _))
+                {
+                    Collect(inner!, declared.Content, depth + 1);
+                }
+            }
+        }
+        Collect(formula, reader, 0);
+        return fields;
     }
 
     private sealed record ResolvedContent(
@@ -1535,6 +2460,7 @@ public static class CharacterCalculator
         foreach (var orphan in character.Choices.Where(c => !answered.Contains((c.Source, c.ChoiceId))))
             diagnostics.Add(new("choice.orphaned", $"A selection is recorded for choice '{orphan.ChoiceId}' of revision {orphan.Source.RevisionId}, which is not active or does not offer that choice (yet); it is not applied.", orphan.Source));
         CollectScales(active, classLevels, diagnostics);
+        CollectValues(active, classLevels, diagnostics);
         return new(active, classes, classLevels, choices);
     }
 
@@ -1557,7 +2483,23 @@ public static class CharacterCalculator
     // ---- effects --------------------------------------------------------------------------------------------
 
     /// <param name="SkipReason">Set when the rules say this modifier does not apply now (for example, Unarmored Defense while armor is worn); it is traced as not used.</param>
-    private sealed record Modifier(ActiveContent Content, ModifierEffect Effect, Formula Formula, IReadOnlyList<string> ReadsFields, string? SkipReason = null);
+    /// <param name="FollowedToggle">Set when the modifier follows another entry's toggle (content v11 <c>toggleContent</c>): that toggle's label, named in the trace.</param>
+    private sealed record Modifier(ActiveContent Content, ModifierEffect Effect, Formula Formula, IReadOnlyList<string> ReadsFields, string? SkipReason = null, string? FollowedToggle = null);
+
+    private const string ResourceTargetPrefix = ContentValidator.ResourceTargetPrefix;
+
+    private static bool IsResourceTarget(ContentRevision revision, ModifierEffect effect) =>
+        revision.SchemaVersion >= ContentRevision.PlayMechanicsSchemaVersion && effect.Target.StartsWith(ResourceTargetPrefix, StringComparison.Ordinal);
+
+    private static bool IsResourceBonus(ContentRevision revision, ModifierEffect effect) =>
+        IsResourceTarget(revision, effect) && effect.Operation == ModifierOperation.Bonus;
+
+    /// <summary>
+    /// A bonus to a resource's maximum (content v11); the resource is found in the same revision. <paramref name="Manual"/> is set when the
+    /// modifier cannot be applied automatically (assisted, or not always on), so the resource it names reads assisted. One that is only
+    /// gated off by its toggle is never listed.
+    /// </summary>
+    private sealed record ResourceBonus(ActiveContent Content, ModifierEffect Effect, string? FollowedToggle, bool Manual = false);
 
     /// <summary>
     /// M2 item 4: worn armor and a shield as Armor Class modifiers. Body armor is a <c>replace</c> of the base (light: AC +
@@ -1682,9 +2624,104 @@ public static class CharacterCalculator
         return new(content, effect, formula, [.. formula.Identifiers.Select(FormulaIdentifiers.FieldFor).OfType<string>().Distinct(StringComparer.Ordinal)]);
     }
 
+    /// <summary>How an effect's toggle gate came out: it applies now, it does not apply now, or the effect names no toggle the gate can resolve.</summary>
+    private enum ToggleGate { Applies, Skips, Unresolved }
+
+    /// <summary>
+    /// The toggle gate modifiers and roll modes share. Content v11 (D43): an effect that names another content's toggle (<paramref name="toggleContent"/>)
+    /// applies while that toggle is on. Content that is not active, or that does not declare the toggle, is a broken reference the user should see:
+    /// the effect does not apply and the sheet says why (<see cref="ToggleGate.Skips"/> plus a diagnostic). Without toggleContent (content v6, M3 B2),
+    /// an effect that names a toggle of its revision applies while that toggle is on and simply does not apply while it is off (the rules say so;
+    /// nothing is left to the player). A toggle the revision does not declare is <see cref="ToggleGate.Unresolved"/>. <paramref name="followedLabel"/>
+    /// is the other content's toggle label when the gate follows one.
+    /// </summary>
+    private static ToggleGate GateOnToggle(
+        List<ActiveContent> active, ContentRevision revision, string effectId, string toggleId, Guid? toggleContent,
+        EffectiveToggles effective, bool autoOn, List<Diagnostic> diagnostics, out string? followedLabel)
+    {
+        followedLabel = null;
+        if (toggleContent is { } ownerId)
+        {
+            var owner = active.FirstOrDefault(a => a.Revision.ContentId == ownerId);
+            var declared = owner?.Revision.Effects.OfType<ToggleEffect>().FirstOrDefault(t => t.ToggleId == toggleId);
+            if (owner is null || declared is null)
+            {
+                diagnostics.Add(new(
+                    "modifier.toggle-content-missing",
+                    $"'{revision.Name}' effect '{effectId}' follows toggle '{toggleId}' of content {ownerId}, which is not active or does not declare it; the effect is not applied.",
+                    revision.Reference,
+                    effectId));
+                return ToggleGate.Skips;
+            }
+            if (!ToggleIsOn(owner.Revision, declared, effective, autoOn))
+                return ToggleGate.Skips;
+            followedLabel = declared.Label;
+            return ToggleGate.Applies;
+        }
+        if (revision.Effects.OfType<ToggleEffect>().FirstOrDefault(t => t.ToggleId == toggleId) is { } named)
+            return ToggleIsOn(revision, named, effective, autoOn) ? ToggleGate.Applies : ToggleGate.Skips;
+        return ToggleGate.Unresolved;
+    }
+
+    /// <summary>
+    /// Content v11 (D43): the roll modes of the active content, by the sheet fields they reach (<c>save.&lt;x&gt;</c>, <c>skill.&lt;s&gt;</c>;
+    /// <c>ability.&lt;x&gt;.check</c> reaches <c>ability.&lt;x&gt;.mod</c> and every skill of that ability, and Dexterity also initiative).
+    /// Toggled entries are gated like modifiers. A rollMode has no timing, so only its toggle gates it. Order is sheet content order.
+    /// </summary>
+    private static Dictionary<string, RollModeSummary> CollectRollModes(
+        List<ActiveContent> active, EffectiveToggles effective, bool autoOn, List<Diagnostic> diagnostics)
+    {
+        var byField = new Dictionary<string, List<RollModeReason>>(StringComparer.Ordinal);
+        foreach (var item in active)
+        {
+            var revision = item.Revision;
+            foreach (var effect in revision.Effects.OfType<RollModeEffect>())
+            {
+                if (effect.Toggle is { } toggle
+                    && GateOnToggle(active, revision, effect.Id, toggle, effect.ToggleContent, effective, autoOn, diagnostics, out _) != ToggleGate.Applies)
+                    continue;
+                var reason = new RollModeReason(effect.Mode, revision.Name, revision.Reference, effect.Against, effect.Automation);
+                foreach (var field in RollModeFields(effect.Target))
+                {
+                    if (!byField.TryGetValue(field, out var reasons))
+                        byField[field] = reasons = [];
+                    reasons.Add(reason);
+                }
+            }
+        }
+        // Automatic combines only the reasons that need no confirmation (no against) from an automatic effect; the rest are listed notes.
+        return byField.ToDictionary(
+            p => p.Key,
+            p => new RollModeSummary(
+                RollModes.Combine(p.Value.Where(r => r.IsAutomatic).Select(r => r.Mode)),
+                [.. p.Value]),
+            StringComparer.Ordinal);
+    }
+
+    private static IEnumerable<string> RollModeFields(string target)
+    {
+        if (target.StartsWith("save.", StringComparison.Ordinal) || target.StartsWith("skill.", StringComparison.Ordinal))
+        {
+            if (SpecIndex.ContainsKey(target))
+                yield return target;
+            yield break;
+        }
+        foreach (var ability in Enum.GetValues<Ability>())
+        {
+            var mod = FieldIds.Modifier(ability);
+            if (target != string.Concat(mod.AsSpan(0, mod.Length - ".mod".Length), ".check"))
+                continue;
+            yield return mod;
+            foreach (var skill in Skills.Where(s => s.Ability == ability))
+                yield return FieldIds.Skill(skill.Key);
+            if (ability == Ability.Dex)
+                yield return FieldIds.Initiative;
+        }
+    }
+
     private static List<Modifier> CollectModifiers(
         List<ActiveContent> active, Character character, RulesFamilyPolicy policy, List<Diagnostic> diagnostics, Dictionary<string, List<Diagnostic>> warnings,
-        HashSet<string> manual, bool autoOn)
+        HashSet<string> manual, EffectiveToggles effective, bool autoOn, List<ResourceBonus> resourceBonuses, ClassLevelMap classLevels)
     {
         var modifiers = new List<Modifier>();
         foreach (var item in active)
@@ -1692,18 +2729,26 @@ public static class CharacterCalculator
             var revision = item.Revision;
             foreach (var effect in revision.Effects.OfType<ModifierEffect>())
             {
-                // Content v6 (M3 B2): a whileActive modifier that names a toggle of its revision applies while that toggle
-                // is on, and simply does not apply while it is off (the rules say so; nothing is left to the player).
-                if (effect.Automation == AutomationStatus.Automatic && effect.Timing == EffectTiming.WhileActive && effect.Toggle is { } toggle
-                    && revision.Effects.OfType<ToggleEffect>().FirstOrDefault(t => t.ToggleId == toggle) is { } named)
-                {
-                    if (!ToggleIsOn(revision, named, character, autoOn))
-                        continue;
-                }
-                else if (effect.Automation != AutomationStatus.Automatic || effect.Timing != EffectTiming.Always)
+                string? followedToggle = null;
+                var gate = effect.Automation == AutomationStatus.Automatic && effect.Timing == EffectTiming.WhileActive && effect.Toggle is { } followed
+                    ? GateOnToggle(active, revision, effect.Id, followed, effect.ToggleContent, effective, autoOn, diagnostics, out followedToggle)
+                    : ToggleGate.Unresolved;
+                if (gate == ToggleGate.Skips)
+                    continue;
+                if (gate == ToggleGate.Unresolved && (effect.Automation != AutomationStatus.Automatic || effect.Timing != EffectTiming.Always))
                 {
                     if (SpecIndex.ContainsKey(effect.Target))
                         manual.Add(effect.Target);
+                    else if (IsResourceBonus(revision, effect))
+                        resourceBonuses.Add(new(item, effect, null, Manual: true)); // the player adds it; the pool reads assisted
+                    continue;
+                }
+                // Content v11 (D43): resource.<id> raises that resource's maximum (CollectResources applies it). It is not a field, so it never
+                // enters the field pipeline; only a bonus counts, and one naming no resource of its revision changes nothing (validation errors).
+                if (IsResourceTarget(revision, effect))
+                {
+                    if (effect.Operation == ModifierOperation.Bonus)
+                        resourceBonuses.Add(new(item, effect, followedToggle));
                     continue;
                 }
                 if (!SpecIndex.ContainsKey(effect.Target))
@@ -1711,7 +2756,7 @@ public static class CharacterCalculator
                     diagnostics.Add(new("effect.unknown-target", $"'{revision.Name}' effect '{effect.Id}' targets '{effect.Target}', which is not a calculated field; it is ignored.", revision.Reference, effect.Id));
                     continue;
                 }
-                if (IsCharacterOnlyField(effect.Target, revision.SchemaVersion))
+                if (IsCharacterOnlyField(effect.Target, revision.SchemaVersion) || IsPlayMechanicsOnlyField(effect.Target, revision.SchemaVersion))
                 {
                     diagnostics.Add(new("effect.character-only-field", $"'{revision.Name}' effect '{effect.Id}' targets '{effect.Target}', which content may not target yet; it is ignored.", revision.Reference, effect.Id));
                     continue;
@@ -1740,14 +2785,15 @@ public static class CharacterCalculator
                     manual.Add(effect.Target);
                     continue;
                 }
-                if (!Formula.TryParse(effect.Value, AllowsScales(revision), out var formula, out var error))
+                if (!Formula.TryParse(effect.Value, Formula.FeaturesFor(revision), out var formula, out var error))
                 {
                     warnings[effect.Target].Add(InvalidFormula(revision, effect, error!));
                     manual.Add(effect.Target);
                     continue;
                 }
-                var reads = formula!.Identifiers.Select(FormulaIdentifiers.FieldFor).OfType<string>().Distinct(StringComparer.Ordinal).ToList();
-                modifiers.Add(new(item, effect, formula, reads));
+                // A named value this formula reads counts as the fields that value reads (content v11), so the order and the cycle check see them.
+                var reads = FieldReads(formula!, item, classLevels);
+                modifiers.Add(new(item, effect, formula!, reads, null, followedToggle));
             }
         }
         return modifiers;
@@ -1807,12 +2853,6 @@ public static class CharacterCalculator
     /// imported or hand-edited revision can carry it; the calculator ignores the field, as an older build would.
     /// </summary>
     private static bool IgnoresV8(ContentRevision revision) => revision.SchemaVersion < ContentRevision.CombatDetailsSchemaVersion;
-
-    /// <summary>
-    /// Content v9 (ADR-010): <c>SCALE.&lt;id&gt;</c> is a known identifier only in a v9 revision. Below v9 it is an unknown
-    /// identifier, as in builds before v9, so a stored revision never calculates differently on this build.
-    /// </summary>
-    private static bool AllowsScales(ContentRevision revision) => revision.SchemaVersion >= ScaleEffect.SchemaVersion;
 
     /// <summary>The fields content v8 adds (<see cref="FieldIds.Attacks"/>, <see cref="FieldIds.CriticalRange"/>); older builds do not know them.</summary>
     private static bool IsV8Field(string field) => field is FieldIds.Attacks or FieldIds.CriticalRange;
@@ -2065,7 +3105,7 @@ public static class CharacterCalculator
         }
 
         TraceOrigin Origin(Modifier m) => ContentOrigin(family, m.Content, m.Effect);
-        string Name(Modifier m) => Describe(m.Content);
+        string Name(Modifier m) => m.FollowedToggle is { } followed ? $"{Describe(m.Content)} while {followed} is on" : Describe(m.Content);
         IReadOnlyList<TraceInput>? Inputs(List<TraceInput> i) => i.Count > 0 ? i : null;
 
         var replacements = evaluated.Where(e => e.Modifier.Effect.Operation == ModifierOperation.Replace).ToList();
@@ -2252,13 +3292,20 @@ public static class CharacterCalculator
                 return value;
             }));
         }
-        // D24: speed. The M1 species (Half-Orc, SRD 5.2.1 Dwarf) carry no speed data, so the base is the SRD's common 30 feet by rules policy. From
-        // content v10 a species (homebrew, or the SRD 5.1 races of srd-5.1-origins.json) sets its own with a `replace` modifier on speed, which replaces this base before
+        // D24: speed. Some bundled species (the SRD 5.1 Half-Orc, most SRD 5.2.1 species) carry no speed data, so the base is the SRD's common 30 feet by rules policy. From
+        // content v10 a species (homebrew, the SRD 5.2.1 Goliath and Wood Elf, or the SRD 5.1 races of srd-5.1-origins.json) sets its own with a `replace` modifier on speed, which replaces this base before
         // bonuses; otherwise a different speed is an override on Stats.
         specs.Add(new(FieldIds.Speed, "Speed", "feet", [], (c, steps) =>
         {
             steps.Add(new(FieldIds.Speed, "base", "Speed starts at 30 feet (rules policy, unless the species sets it; override it if yours differs)", 30, 30, new(TraceOriginKind.RulesPolicy, c.Family)));
             return 30;
+        }));
+        // Content v11 (D43): a flying speed. None by default; a form or species sets it with a v11 modifier (the validator and
+        // the calculator refuse it below v11, IsPlayMechanicsOnlyField).
+        specs.Add(new(FieldIds.FlySpeed, "Fly speed", "feet", [], (c, steps) =>
+        {
+            steps.Add(new(FieldIds.FlySpeed, "base", "No flying speed unless content gives one", 0, 0, new(TraceOriginKind.RulesPolicy, c.Family)));
+            return 0;
         }));
         specs.Add(new(FieldIds.Initiative, "Initiative", "modifier", [FieldIds.Modifier(Ability.Dex)], (c, steps) =>
         {
