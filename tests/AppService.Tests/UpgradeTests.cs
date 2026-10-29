@@ -95,8 +95,10 @@ public class UpgradeTests
         var database = Path.Combine(crashed, TomeStackApp.DatabaseFileName);
         var mainFileOnly = Path.Combine(crashed, "main-file-only.db");
         File.Copy(database, mainFileOnly);
-        // A plain copy of the main file loses the save (here even the schema, which is also still in the WAL).
-        Assert.Equal(0, Scalar(mainFileOnly, "SELECT COUNT(*) FROM sqlite_master WHERE name = 'characters';"));
+        // A plain copy of the main file loses the save. Seeding the bundled packs can pass SQLite's 1000-page auto-checkpoint,
+        // so the schema may already be in the main file; the save after it is still only in the WAL.
+        if (Scalar(mainFileOnly, "SELECT COUNT(*) FROM sqlite_master WHERE name = 'characters';") == 1)
+            Assert.Equal(0, Scalar(mainFileOnly, "SELECT COUNT(*) FROM characters;"));
 
         using (new SqliteStore(database, FutureMigrations)) { }
 
