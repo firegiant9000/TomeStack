@@ -77,7 +77,8 @@ it('adds a weapon to an item and edits every field', async () => {
     type: 'weapon', category: 'martial', attack: 'ranged', damage: '1d8+1', damageType: 'piercing', properties: ['light', 'finesse'], versatile: 'd10', range: '80/320',
     weaponKey: 'testyblade', mastery: 'testmastery', bonus: 1,
   });
-});
+  // Every weapon field typed: it ran just past the default 5 s on a loaded machine (MECH-X item 2 gate), alone and in the full suite.
+}, 20_000);
 
 it('a blank or zero bonus sends no bonus key', async () => {
   const user = userEvent.setup();
