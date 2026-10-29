@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using TomeStack.AppService.Packages;
+using TomeStack.AppService.Persistence;
 using TomeStack.RulesCore;
 
 namespace TomeStack.AppService.Tests;
@@ -109,7 +110,8 @@ public class CampaignPackTests
         }
         var campaign = Campaign(temp, "Test Newer Table", Srd521Source, old.Id, newer.Id);
         var warning = Assert.Single(temp.App.PreviewCampaignPack(campaign.Id).Warnings, w => w.Code == "package.needs-newer-build");
-        Assert.Equal("Opening this needs TomeStack 0.7.0 or later: it holds content or a character that older versions refuse.", warning.Message);
+        Assert.Equal($"Opening this needs TomeStack 0.7.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Test Newer One' is content at schema 11, and 'Test Newer Two' is content at schema 11. Older versions refuse the file.", warning.Message);
+        Assert.Equal("0.7.0", temp.App.PreviewCampaignPack(campaign.Id).OpensIn);
     }
 
     [Fact]

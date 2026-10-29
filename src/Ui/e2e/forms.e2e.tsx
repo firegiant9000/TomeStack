@@ -481,7 +481,8 @@ async function publishFixturePack(file: string, title: string, order: string[]):
   const published: ContentReference[] = [];
   for (const contentId of order) {
     const revision = pack.revisions.find((r) => r.contentId === contentId)!;
-    const effects = revision.kind === 'class' ? revision.effects.filter((e) => e.type !== 'grant') : revision.effects;
+    // A choice's options name revision ids that a draft does not keep either, so the class's choices are left out too.
+    const effects = revision.kind === 'class' ? revision.effects.filter((e) => e.type !== 'grant' && e.type !== 'choice') : revision.effects;
     const draft = await client.saveDraft({ ...revision, status: 'draft', effects, provenance: { ...revision.provenance, sourceId: source.id } });
     const result = await client.publish(draft);
     expect(result.report.errors).toEqual([]);
@@ -644,5 +645,105 @@ it('gather twice, release with the charge, then end the encounter with nothing l
   await user.click(screen.getByRole('button', { name: 'End encounter' }));
   expect(screen.queryByRole('group', { name: 'End encounter' })).toBeNull();
   await screen.findByRole('button', { name: 'Start encounter' });
+});
+
+// ---- D73: the quickbar and "Usable now" against the real DevHost ----
+
+const fixtureCharacterAbilities = (file: string) => (JSON.parse(readFileSync(resolve(fixtureFolder(), file), 'utf8')) as { baseAbilities: Record<string, number> }).baseAbilities;
+
+let waveDetailsPack: Promise<ContentReference[]> | undefined;
+
+/** The action-details pack (`fixture-pack-action-details.json`): the class with its pool, the Wisdom focus feature, then the one with the per-unit roll. Once per run. */
+function installWaveDetailsPack(): Promise<ContentReference[]> {
+  waveDetailsPack ??= publishFixturePack('fixture-pack-action-details.json', 'E2E Wave Book', ['50', '52', '53'].map((n) => `6f0dc000-0000-4000-8000-0000000000${n}`));
+  return waveDetailsPack;
+}
+
+let modesPack: Promise<ContentReference[]> | undefined;
+
+/** The feature-attacks pack (`fixture-pack-feature-attacks.json`): the class with the "Modes" group, then the mode feature that owns a roll only that mode allows. Once per run. */
+function installModesPack(): Promise<ContentReference[]> {
+  modesPack ??= publishFixturePack('fixture-pack-feature-attacks.json', 'E2E Modes Book', ['40', '42'].map((n) => `6f0dc000-0000-4000-8000-0000000000${n}`));
+  return modesPack;
+}
+
+it('pins a per-unit roll, presses it with Alt+1: it rolls and spends once, Undo restores the pool, and the pin survives opening the character again (D73)', async () => {
+  const user = userEvent.setup();
+  const pins = await installWaveDetailsPack();
+  await client.createCharacter({
+    name: 'E2E Quickbar Wave',
+    rulesFamily: 'srd-5.2.1',
+    baseAbilities: fixtureCharacterAbilities('characters/pm-wave-adept-l5.json') as never,
+    pins,
+    classes: [{ class: pins[0]!, level: 5 }],
+  });
+
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: /^E2E Quickbar Wave/ }));
+  const sheet = await screen.findByRole('article', { name: 'E2E Quickbar Wave' });
+  await openTab(user, sheet, 'Play');
+  const resources = () => screen.getByRole('region', { name: 'Resources' });
+  const lastRoll = () => screen.getByRole('region', { name: 'Last roll' });
+  const quickbar = () => screen.getByRole('region', { name: 'Quickbar' });
+  const focus = async () => Number(/^Focus: (\d+) of 9$/.exec((await within(resources()).findByRole('heading', { name: /^Focus: \d+ of 9$/ })).textContent!)![1]);
+  expect(await focus()).toBe(9);
+  expect(screen.queryByRole('region', { name: 'Quickbar' })).toBeNull();
+
+  await user.click(await screen.findByRole('button', { name: 'Pin Tide wave to the quickbar' }));
+  const pinned = await within(quickbar()).findByRole('button', { name: /^Roll Tide wave/ });
+  expect(pinned.getAttribute('aria-keyshortcuts')).toBe('Alt+1');
+
+  // Alt+1 (a button named "and spend") rolls and then makes that spend once, through the same play change, so nothing waits on a click.
+  await user.keyboard('{Alt>}1{/Alt}');
+  await waitFor(() => expect(lastRoll().textContent).toMatch(/Tide wave/));
+  const spendButton = await within(lastRoll()).findByRole('button', { name: /^Spend \d+ Focus/ });
+  const spent = Number(/^Spend (\d+) Focus/.exec(spendButton.getAttribute('aria-label') ?? spendButton.textContent!)![1]);
+  expect(spent).toBe(2); // the roll's base cost (R13: a pinned per-unit roll spends no extra units)
+  await waitFor(async () => expect(await focus()).toBe(9 - spent));
+  expect(within(lastRoll()).getByRole<HTMLButtonElement>('button', { name: /^Spend \d+ Focus/ }).disabled).toBe(true); // spent once; the record cannot spend again
+  await waitFor(() => expect(quickbar().getAttribute('aria-busy')).toBeNull()); // `finally` clears busy after the pool renders
+
+  // The service undoes the spend: the pool is back.
+  await user.click(await screen.findByRole('button', { name: /^Undo/ }));
+  await waitFor(async () => expect(await focus()).toBe(9));
+
+  // Leaving the sheet and opening the character again (a fresh mount reads the page storage): the pin is still there.
+  cleanup();
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: /^E2E Quickbar Wave/ }));
+  await screen.findByRole('article', { name: 'E2E Quickbar Wave' });
+  expect(await within(quickbar()).findByRole('button', { name: /^Roll Tide wave/ })).toBeTruthy();
+});
+
+it('"Usable now" leaves out a mode-only roll while the mode is off and lists it again when the mode is switched on, with no reload (D73)', async () => {
+  const user = userEvent.setup();
+  const pins = await installModesPack();
+  await client.createCharacter({
+    name: 'E2E Usable Modes',
+    rulesFamily: 'srd-5.2.1',
+    baseAbilities: fixtureCharacterAbilities('characters/pm-adept-l5.json') as never,
+    pins,
+    classes: [{ class: pins[0]!, level: 1 }],
+  });
+
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: /^E2E Usable Modes/ }));
+  const sheet = await screen.findByRole('article', { name: 'E2E Usable Modes' });
+  await openTab(user, sheet, 'Play');
+  const roll = () => screen.queryByRole('button', { name: /^Roll Flash step/ });
+  const modes = () => within(screen.getByRole('region', { name: 'Combat' })).getByRole('radiogroup', { name: 'Modes' });
+
+  // Listed with its reason while the filter is off; the form is off.
+  await screen.findByRole('button', { name: /^Roll Flash step/ });
+  const filter = screen.getByRole<HTMLInputElement>('checkbox', { name: 'Usable now' });
+  expect(filter.checked).toBe(false);
+  await user.click(filter);
+  await waitFor(() => expect(roll()).toBeNull());
+
+  // Switching the mode on lists it at once.
+  await user.click(within(modes()).getByRole('radio', { name: /^Kindled mode/ }));
+  await waitFor(() => expect(within(modes()).getByRole('radio', { name: /^Kindled mode/ }).getAttribute('aria-checked')).toBe('true'));
+  await waitFor(() => expect(roll()).not.toBeNull());
+  expect(filter.checked).toBe(true);
 });
 

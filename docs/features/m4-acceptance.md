@@ -65,10 +65,10 @@ The other kinds did not move (class 8, feat 47, spell 116, item 66); review samp
 
 | | SRD 5.1 (classes / links / stubs) | SRD 5.2.1 (classes / links / stubs) |
 | --- | --- | --- |
-| Old (before this change) | to be measured by the owner (`TOMESTACK_SRD_PDF_DIR` not set) | to be measured by the owner (`TOMESTACK_SRD_PDF_DIR` not set) |
-| New | to be measured by the owner (`TOMESTACK_SRD_PDF_DIR` not set) | to be measured by the owner (`TOMESTACK_SRD_PDF_DIR` not set) |
+| Old (before this change) | not measured (`TOMESTACK_SRD_PDF_DIR` was not set then) | not measured (`TOMESTACK_SRD_PDF_DIR` was not set then) |
+| New | 12 / 159 / 57 (measured 2026-10-26 on the Import Lab build, see below) | 12 / 172 / 14 (measured 2026-10-26 on the Import Lab build, see below) |
 
-"Old" is the build before this change (`788bc60`), "new" the build with it. No number is recorded: the PDFs were not available where the change was made. The SRD floors are unchanged; the new test line has no floor until it has been measured.
+"Old" is the build before this change (`788bc60`), "new" the build with it. Only "new" is measured (2026-10-26, on the Import Lab build, with both SRD PDFs); "old" is not, because the PDFs were not available where the change was made. The SRD floors are unchanged; the new test line has no floor.
 
 ## Precision and recall (D3)
 
@@ -101,6 +101,53 @@ The class precision floor went from 70 % to 80 %; the other floors are unchanged
 ### Re-measured with the Rogue bundled (2026-10-27, C2-2)
 
 `SrdDetectionMeasurementTests` ran again with `TOMESTACK_SRD_PDF_DIR` set, and passed. The records above stay as they were. Classes: 91.7 % / 100 % in both families (12 candidates, 11 in the packs; the only extra is the Monk). Class features: n/a / 87.2 % (136 of 156) in SRD 5.1, n/a / 100 % (204 of 204) in SRD 5.2.1. The 5.1 misses added by the Rogue pack are the five Thief features (Fast Hands, Second-Story Work, Supreme Sneak, Use Magic Device, Thief's Reflexes, pp. 40–41), subclass features with no level in their first sentence. Spells, weapons and armor are unchanged.
+
+## Import Lab evidence (2026-10-26, branch `import-lab` at 0064303)
+
+The Lab (D62) changed detection only by recording spans (D64), so these runs say whether it moved any number. `SrdDetectionMeasurementTests`, `SrdClassTableTests` and the other `SrdPdfFact` tests ran with `TOMESTACK_SRD_PDF_DIR` pointing to a scratch folder holding both SRD PDFs, downloaded from the official links on this date; their SHA-256 hashes match `licensing/srd-pack-review.md`. The files stayed outside the repository. Every number below equals the 2026-09-28 and 2026-10-14 numbers above where the cell exists in both.
+
+### SRD precision and recall, per family
+
+Same match rule as above (name key and page within one of the bundled pack's page).
+
+| Kind | SRD 5.1: count (candidates / truth / matched) | SRD 5.1: precision / recall | SRD 5.2.1: count (candidates / truth / matched) | SRD 5.2.1: precision / recall |
+| --- | --- | --- | --- | --- |
+| Spells | 319 / 319 / 319 | 100 % / 100 % (levels 319/319) | 339 / 339 / 339 | 100 % / 100 % (levels 339/339) |
+| Weapons | 36 / 35 / 35 | 97.2 % / 100 % (damage 35/35) | 38 / 37 / 37 | 97.4 % / 100 % (damage 37/37) |
+| Armor | 13 / 13 / 13 | 100 % / 100 % (Armor Class 13/13) | 13 / 13 / 13 | 100 % / 100 % (Armor Class 13/13) |
+| Classes | 12 / 10 / 10 | 83.3 % / 100 % | 12 / 10 / 10 | 83.3 % / 100 % |
+| Class features | 236 / 127 / 112 | n/a (partial truth) / 88.2 % | 254 / 166 / 166 | n/a (partial truth) / 100 % |
+| Feats | 1 / 1 / 1 | n/a / 100 % | 17 / 5 / 5 | n/a / 100 % |
+
+Whole document: SRD 5.1 403 pages, 617 candidates; SRD 5.2.1 364 pages, 673 candidates. Class links: 5.1 classes 12, links 159, linked features 154, of them reference stubs 57; 5.2.1 classes 12, links 172, linked features 167, stubs 14. The reconstructed class tables (`SrdClassTableTests`) match the bundled packs cell for cell: 5.1 tables read 11 of 12 pages (1 unreadable), proficiency bonus 11/11, spellcasting cells 300/300, granted features found at their level 71/71; 5.2.1 tables read 12 of 12, proficiency bonus 12/12, spellcasting cells 440/440, granted features 114/114. The class proposals: hit die 12 of 12 on both, saves 11 (5.1) and 12 (5.2.1) of 12.
+
+The old/new link-and-stub table above can now be filled for "new": **SRD 5.1 12 / 159 / 57; SRD 5.2.1 12 / 172 / 14** (classes / links / stubs), measured on this build. "Old" (`788bc60`) is still not measured.
+
+**One SRD test fails, and it is not from the Lab.** `SrdClassTableTests.No_SRD_class_gets_the_add_spellcasting_by_hand_note` finds the slotless note on 2 of 12 classes (5.1) and 4 of 12 (5.2.1). The same counts come from a build of `play-mechanics` at `cc0201c` (the Lab's base), so the Lab did not cause it. Why it fails is not established: whether the note is right on those classes or the test's expectation is wrong needs a look and an owner call. Not fixed here (a docs task). CI never runs it (no PDFs).
+
+### Markdown route, the synthetic class (D60 gate)
+
+`ImportLabGateTests` imports an original 20-level class from Markdown and from PDF (`tests/RulesFixtures/lab/placeholder-class.md`, the PDF made from the same text). Both routes give the same candidates by kind, name and level (`Pdf_route_gives_the_same_candidates`).
+
+| Measure | Markdown route |
+| --- | --- |
+| Candidates | 12: class 1, feature 11 (the repeated rider is two of them) |
+| Active before review | 0 |
+| After accepting the class (hit die confirmed) and publishing the drafts | 1 class and 10 features published; 1 candidate left pending |
+| Class table rows with features | levels 1, 2, 3, 5, 6, 9, 11, 15, 18 and 20 |
+| Coverage after publishing | Automatic 1, Assisted 0, Reference 14, Unsupported 0 |
+| "May need a mechanic" | 3 features |
+| Second identical import | offers only the one candidate left pending; no new revisions; the published class hash unchanged |
+
+The fixture plants no effect type the engine does not know, so Unsupported is 0 by construction; the "may need a mechanic" flags are the check that unsupported mechanics are shown. An unconfirmed proficiency publishes as reference (`Unconfirmed_effects_publish_as_reference`). One known limit shows in the gate: a feature name repeated at a later level is granted once, at the lowest level (the level-12 row is empty).
+
+### The third-party run (private, owed by the owner)
+
+**Not run, and not to be run by an assistant.** It is the owner's private run from `tests/RulesFixtures/local/`. When it is done, record **counts only** here: no title, no names, no text. The M4 gate stays **not met** until the owner has reviewed the candidates, and the owed-checks row in ROADMAP keeps its status.
+
+### Library-scale numbers
+
+The "after" benchmarks for the Lab (coverage, candidate paging, candidate edits, duplicates, Markdown) are in [performance.md](../performance.md).
 
 ## Could not be verified here
 

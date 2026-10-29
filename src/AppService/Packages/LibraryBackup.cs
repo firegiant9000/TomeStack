@@ -94,7 +94,16 @@ public sealed partial class PackageService
     }
 
     /// <summary><c>library.backupPreview</c>: what "Back up everything" would write. Nothing is written.</summary>
-    public LibraryBackupPreview PreviewLibraryBackup() => Summary(PlanLibrary(verifyPdfs: false));
+    public LibraryBackupPreview PreviewLibraryBackup()
+    {
+        var plan = PlanLibrary(verifyPdfs: false);
+        // For the release ladder only: the bundled revisions the characters pin are not written (every install has them) but a build must have them.
+        var pinned = plan.Characters.SelectMany(c => c.AllReferences()).DistinctBy(r => r.RevisionId)
+            .Where(r => _bundledRevisions.Contains(r.RevisionId)).Select(store.FindRevision).OfType<ContentRevision>().ToList();
+        var opens = NewerBuild.Evaluate([.. plan.Revisions, .. pinned], plan.Characters, plan.GapNotes.Count > 0 ? GapNote.CurrentSchemaVersion : 0,
+            pinned.Select(r => r.RevisionId), BundledPackTitle(pinned), bundledCarried: false);
+        return Summary(plan) with { OpensIn = opens.OpensIn, OpensInCauses = opens.Causes };
+    }
 
     /// <summary>
     /// Writes the library backup to <paramref name="output"/> (a seekable stream; the shell writes a <c>.partial</c> file
