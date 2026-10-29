@@ -230,7 +230,7 @@ public static partial class ClassProposals
     }
 
     [GeneratedRegex(@"^Core .{1,60} Traits$", RegexOptions.IgnoreCase, DetectionLimits.RegexTimeoutMs)]
-    private static partial Regex CoreHeading();
+    internal static partial Regex CoreHeading();
 
     private static List<string> JoinedLabels(IReadOnlyList<TextLine> lines)
     {

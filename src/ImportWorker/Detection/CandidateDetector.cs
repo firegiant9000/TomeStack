@@ -1024,18 +1024,21 @@ public static partial class CandidateDetector
         text.EndsWith("Features", StringComparison.Ordinal) || text.EndsWith("FEATURES", StringComparison.Ordinal);
 
     /// <summary>
-    /// The text of the pages that follow a class table page, up to the next class's table (at most four pages): the class's
+    /// The text of the pages that follow a class table page, up to the next class (at most four pages): the class's
     /// feature descriptions, where its spellcasting ability is named (item 11).
     /// </summary>
-    private static List<string> FollowingText(IReadOnlyList<DetectionPage> pages, DetectionPage page, HashSet<string> boilerplate)
+    internal static List<string> FollowingText(IReadOnlyList<DetectionPage> pages, DetectionPage page, HashSet<string> boilerplate)
     {
         var following = new List<string>();
         foreach (var next in pages.Where(p => p.Page > page.Page).OrderBy(p => p.Page).Take(4))
         {
             var nextLines = PageLines(next, boilerplate);
-            // The next class's table (its "Level" and "Features" header cells) ends this class's text; a heading-shaped prose
-            // line ("The DC equals 8 plus") must not.
-            if (nextLines.Any(l => l.Line.Text.Trim() is "Level" or "LEVEL") && nextLines.Any(l => l.Line.Text.Trim() is "Features" or "FEATURES"))
+            // The next class's table (its "Level" and "Features" or "Class Features" header cells) ends this class's text; a
+            // heading-shaped prose line ("The DC equals 8 plus") must not. So does the next class's "Core … Traits" heading, which
+            // the 2024 SRD prints with the class's first features a page before its table.
+            if (nextLines.Any(l => l.Line.Text.Trim() is "Level" or "LEVEL") && nextLines.Any(l => l.Line.Text.Trim() is "Features" or "FEATURES" or "Class Features" or "CLASS FEATURES"))
+                break;
+            if (nextLines.Any(l => ClassProposals.CoreHeading().IsMatch(l.Line.Text.Trim())))
                 break;
             following.AddRange(nextLines.Select(l => l.Line.Text));
         }

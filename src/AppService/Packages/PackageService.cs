@@ -562,21 +562,33 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                     omitted.TryAdd(revision.Reference, source); // a repeated entry in the untrusted manifest is harmless
             }
         }
+        // S2: in a newer build's full backup, a missing pin is most likely bundled content this build lacks (NewerBuild.Restore).
+        var newerBackup = parsed.Manifest.Scope == PackageScope.Library ? NewerBuild.NewerThanThisBuild(parsed.Manifest.AppVersion) : null;
+        var unseeded = new HashSet<ContentReference>();
+        var unseededCharacters = new List<string>();
         foreach (var character in parsed.Characters)
         {
             var problems = character.Validate();
             foreach (var problem in problems)
                 errors.Add(problem with { Message = $"'{character.Name}': {problem.Message}" });
             var malformed = problems.Any(p => p.Code == "character.empty-entry"); // its references cannot be read
+            var missesBundled = false;
             foreach (var pin in malformed ? Enumerable.Empty<ContentReference>() : character.AllReferences())
             {
                 if (packageRevisions.ContainsKey(pin) || store.FindRevision(pin) is not null)
                     continue;
                 if (omitted.TryGetValue(pin, out var source))
                     warnings.Add(new("package.content-omitted", $"'{character.Name}' uses content from '{source.Title}' ({source.Publisher}), which the sender left out because it may not be shared. It shows as missing until you install that source yourself.", pin));
+                else if (newerBackup is not null)
+                {
+                    unseeded.Add(pin);
+                    missesBundled = true;
+                }
                 else
                     errors.Add(new("package.pin-missing", $"'{character.Name}' pins revision {pin.RevisionId}, which is neither in the package nor installed.", pin));
             }
+            if (missesBundled)
+                unseededCharacters.Add(character.Name);
             var exists = store.FindCharacter(character.Id) is not null;
             if (exists && parsed.Manifest.Scope == PackageScope.Library)
                 warnings.Add(new("restore.character-replace", $"'{character.Name}' already exists and will be replaced by the backup's copy. Your whole database is copied to the {BackupFolderName} folder first (pre-restore-….db); to go back, close TomeStack and put that file in place of {TomeStackApp.DatabaseFileName}."));
@@ -584,6 +596,8 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                 warnings.Add(new("package.character-replace", $"'{character.Name}' already exists and will be replaced by the imported copy. The current copy is saved to the {BackupFolderName} folder in your data folder first, and you can restore it by importing that file."));
             items.Add(new("character", character.Id, character.Name, exists ? PackageItemAction.Replace : PackageItemAction.Add, character.RulesFamily));
         }
+        if (unseeded.Count > 0)
+            errors.Add(NewerBuild.Restore(newerBackup!, unseeded.Count, unseededCharacters));
 
         // M3 B3: gap notes travel only in a v5+ backup, and only with their character.
         if (parsed.GapNotes.Count > 0 && (parsed.Manifest.FormatVersion < 5 || parsed.Manifest.Purpose != ExportPurpose.Backup))
