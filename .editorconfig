@@ -1,0 +1,32 @@
+# Whitespace only, matching the code as it is (LF per .gitattributes, no BOM), so editors stop drifting. Not a CI
+# gate: `dotnet format whitespace` would also split the compact one-line initializers, switch arms and `with`
+# expressions the code uses on purpose. ESLint covers the UI.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.cs]
+indent_size = 4
+# Formatting options that differ from the dotnet format defaults, set to what the code does.
+csharp_new_line_before_members_in_object_initializers = false
+csharp_new_line_before_members_in_anonymous_types = false
+csharp_indent_case_contents_when_block = false
+
+# Markdown uses trailing spaces as hard line breaks.
+[*.md]
+trim_trailing_whitespace = false
+
+# Byte-exact data: goldens, upgrade fixtures and bundled content are hashed or compared byte for byte, so an
+# editor must never rewrite them on save.
+[{tests/RulesFixtures/**,tests/**/Golden/**,src/AppService/Content/**,src/AppService/Packages/BundledAt/**,examples/extensions/**,.config/dotnet-tools.json}]
+charset = unset
+end_of_line = unset
+indent_size = unset
+insert_final_newline = unset
+trim_trailing_whitespace = unset

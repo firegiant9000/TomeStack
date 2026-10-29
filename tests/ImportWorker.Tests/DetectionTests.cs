@@ -253,7 +253,7 @@ public class DetectionTests
     [Fact]
     public void A_header_whose_only_list_cannot_be_a_key_has_no_lists_and_says_so()
     {
-        var found = DetectPages(new DetectionPage(7, "", [Heading("Fixture Spells"), Body(EmberLance.Replace("Fixture Mage", "Seer's Rite",StringComparison.Ordinal))], false));
+        var found = DetectPages(new DetectionPage(7, "", [Heading("Fixture Spells"), Body(EmberLance.Replace("Fixture Mage", "Seer's Rite", StringComparison.Ordinal))], false));
 
         var lance = Named(found, "Fixture Ember Lance");
         Assert.Empty(Assert.IsType<SpellEffect>(Assert.Single(lance.ProposedEffects)).Lists);
@@ -674,7 +674,7 @@ public class DetectionTests
             new TextBlock($"Fixture Wide Stance\nPrerequisites: {longText} {longText}\nYou stand wide.", 50, 400, 200, 40, 10, false),
             new TextBlock($"Fixture Deep Stance\nPrerequisites: {longText}\nYou stand deep.", 50, 300, 200, 40, 10, false));
 
-        Assert.Equal(671,Assert.Single(found, c => c.ProposedName == "Fixture Steady Aim").Fields["prerequisite"].Length);
+        Assert.Equal(671, Assert.Single(found, c => c.ProposedName == "Fixture Steady Aim").Fields["prerequisite"].Length);
         Assert.DoesNotContain(found, c => c.ProposedName == "Fixture Wide Stance");
         Assert.Single(found, c => c.ProposedName == "Fixture Deep Stance");
     }

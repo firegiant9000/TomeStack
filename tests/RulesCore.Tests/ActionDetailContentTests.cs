@@ -409,7 +409,7 @@ internal static class ActionDetailVariants
         "per-unit-max-zero" => WithWave(r => r with { PerUnit = new("1d10", 0) }),
         "per-unit-max-too-big" => WithWave(r => r with { PerUnit = new("1d10", 101) }),
         "per-unit-too-many-dice" => WithWave(r => r with { PerUnit = new("1d10", 100) }),
-        "per-unit-variable-cost" =>WithWave(r => r with { VariableCost = true }),
+        "per-unit-variable-cost" => WithWave(r => r with { VariableCost = true }),
         "per-unit-no-dice" => WithWave(r => r with { Dice = null }),
         // Eight terms already: one more per-unit term would be a ninth, which the dice parser refuses.
         "per-unit-unrollable-formula" => WithWave(r => r with { Dice = "1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4", PerUnit = new("1d10", 4) }),

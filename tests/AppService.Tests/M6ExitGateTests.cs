@@ -107,7 +107,8 @@ public class M6ExitGateTests
         foreach (var reference in new[] { library.Feature, library.Class })
             Assert.Equal(TempApp.Json(author.App.Store.FindRevision(reference)), TempApp.Json(clean.App.Store.FindRevision(reference)));
         var received = clean.App.Store.FindSource(library.Source.Id)!;
-        Assert.Equal((SourceOrigin.Received, (DateTimeOffset?)null), (received.Origin, received.ShareConfirmedAt));    }
+        Assert.Equal((SourceOrigin.Received, (DateTimeOffset?)null), (received.Origin, received.ShareConfirmedAt));
+    }
 
     [Fact]
     public void A_library_backup_round_trips_into_a_clean_data_folder_and_compares_equal_and_the_extension_runs_again()

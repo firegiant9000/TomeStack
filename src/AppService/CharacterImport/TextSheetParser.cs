@@ -906,8 +906,8 @@ public static class TextSheetParser
             lines.AddRange(_notes);
 
             var abilities = Enum.GetValues<Ability>().ToDictionary(a => a, a => _abilities.TryGetValue(a, out var read) ? read : Read<int>.Missing);
-            var saves = Enum.GetValues<Ability>().ToDictionary(a => a, a => _saveListSeen ?Read<bool>.Ok(_saves.ContainsKey(a)) : Read<bool>.Missing);
-            var skills = CharacterCalculator.Skills.ToDictionary(s => s.Key, s => _skillListSeen ?Read<bool>.Ok(_skills.ContainsKey(s.Key)) : Read<bool>.Missing, StringComparer.Ordinal);
+            var saves = Enum.GetValues<Ability>().ToDictionary(a => a, a => _saveListSeen ? Read<bool>.Ok(_saves.ContainsKey(a)) : Read<bool>.Missing);
+            var skills = CharacterCalculator.Skills.ToDictionary(s => s.Key, s => _skillListSeen ? Read<bool>.Ok(_skills.ContainsKey(s.Key)) : Read<bool>.Missing, StringComparer.Ordinal);
 
             var proficiencies = new List<string>();
             if (_languages.Count > 0)

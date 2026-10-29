@@ -142,7 +142,7 @@ public sealed partial class PackageService
                 extensionsLeftOut.Add(installed.Manifest.Name);
         }
         var withExtensions = files.Keys.Any(p => p.StartsWith(ExtensionFolder, StringComparison.Ordinal));
-        var pdfs =plan.Attachments.Where(a => a.Mode == AttachmentMode.Managed).DistinctBy(a => a.Sha256).OrderBy(a => a.Sha256, StringComparer.Ordinal).ToList();
+        var pdfs = plan.Attachments.Where(a => a.Mode == AttachmentMode.Managed).DistinctBy(a => a.Sha256).OrderBy(a => a.Sha256, StringComparer.Ordinal).ToList();
 
         // The reader's limits, checked before anything is written: a backup that could not be restored is worse than none.
         // A restore reads every entry with the package entry limit too.

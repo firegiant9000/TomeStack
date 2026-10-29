@@ -763,7 +763,7 @@ public class DdbImportTests
 
         // The 2014 layout has no death-save or spent-hit-dice fields (S0): those stay rested even when play state is asked for.
         var play = h.Preview(sheet, RulesFamilies.Srd521, play: true).Character.Play;
-        Assert.Equal((7, 3, 0, true, 0),(play.CurrentHitPoints, play.TemporaryHitPoints, play.DeathSaves.Failures, play.Inspiration, play.HitDiceSpentOf(12)));
+        Assert.Equal((7, 3, 0, true, 0), (play.CurrentHitPoints, play.TemporaryHitPoints, play.DeathSaves.Failures, play.Inspiration, play.HitDiceSpentOf(12)));
     }
 
     [Fact]
