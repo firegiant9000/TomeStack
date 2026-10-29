@@ -93,8 +93,9 @@ public class UpgradeTests
                 using var result = command.ExecuteReader();
                 Assert.True(result.Read());
                 Assert.Equal(0, result.GetInt64(0)); // busy
-                Assert.Equal(result.GetInt64(1), result.GetInt64(2)); // every WAL frame checkpointed
             }
+            // The TRUNCATE checkpoint leaves the WAL file empty.
+            Assert.Equal(0, new FileInfo(Path.Combine(live, TomeStackApp.DatabaseFileName + "-wal")).Length);
             app.SaveCharacter(Fixture());
             // Copy the files while the app is still open, like a power cut: the save is committed but not checkpointed.
             foreach (var suffix in new[] { "", "-wal", "-shm" })
