@@ -35,6 +35,25 @@ public class ChoiceTests
         return CharacterCalculator.Calculate(character, new InMemoryContentCatalog([.. m0.Sources, .. m1.Sources], [.. m0.Revisions, .. m1.Revisions, .. extra]));
     }
 
+    /// <summary>Capability evidence (ADR-020): a choice is delivered automatically; the sheet lists it for the player to resolve.</summary>
+    [Fact]
+    public void The_capability_registry_ceiling_for_choice_is_automatic()
+    {
+        var holder = MechanicsInventoryTests.Holder("Test Choice Holder", 10,
+            new ChoiceEffect { Id = "pick", ChoiceId = "pick", Count = 1, Options = [Fixtures.WardenAthletics, Fixtures.WardenSurvival] });
+
+        var (report, sheet) = MechanicsInventoryTests.Pinned(holder);
+
+        // Unresolved, it is by hand until the player picks (choice.unresolved lowers the listed mechanic to Assisted); the ceiling stays Automatic.
+        Assert.Empty(report.Unsupported);
+        Assert.Contains(sheet.Choices ?? [], c => c.ChoiceId == "pick" && !c.Resolved);
+        Assert.Contains(sheet.Diagnostics, d => d.Code == "choice.unresolved" && d.EffectId == "pick");
+        Assert.Equal(AutomationStatus.Assisted, Assert.Single(report.Mechanics, m => m.EffectId == "pick").Automation);
+        var effect = holder.Effects.Single();
+        Assert.Equal(AutomationStatus.Automatic, CapabilityRegistry.Ceiling(effect));
+        Assert.Equal(AutomationStatus.Assisted, CapabilityRegistry.Effective(effect, AutomationStatus.Automatic, hasDiagnostic: true).Status);
+    }
+
     [Fact]
     public void Unresolved_choices_are_flagged_and_choices_above_the_class_level_are_not_offered_yet()
     {

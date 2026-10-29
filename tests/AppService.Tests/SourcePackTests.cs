@@ -118,10 +118,11 @@ public class SourcePackTests
         temp.App.Store.AddRevision(Feat(newer.Id, "Test Newer Two", Guid.NewGuid(), Guid.NewGuid()) with { Status = RevisionStatus.Published, SchemaVersion = 11 });
         var warning = Assert.Single(temp.App.PreviewSourcePack([newer.Id]).Warnings, w => w.Code == "package.needs-newer-build");
         Assert.Equal(PackageWarningText, warning.Message);
+        Assert.Equal("0.7.0", temp.App.PreviewSourcePack([newer.Id]).OpensIn);
         Assert.Single(temp.App.PreviewSourcePack([old.Id, newer.Id]).Warnings, w => w.Code == "package.needs-newer-build");
     }
 
-    private const string PackageWarningText = "Opening this needs TomeStack 0.7.0 or later: it holds content or a character that older versions refuse.";
+    private static readonly string PackageWarningText = $"Opening this needs TomeStack 0.7.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Test Newer One' is content at schema 11, and 'Test Newer Two' is content at schema 11. Older versions refuse the file.";
 
     [Fact]
     public void A_toggle_that_names_content_in_another_source_gives_a_reference_outside_warning()

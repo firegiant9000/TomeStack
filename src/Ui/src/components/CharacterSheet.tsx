@@ -8,6 +8,7 @@ import type {
   ExportPurpose,
   FieldOverride,
   PlayAction,
+  PreflightReport,
   RestPeriod,
   RollMode,
   RollRecord,
@@ -30,18 +31,26 @@ import { DefencesPanel } from './DefencesPanel';
 import { DetailsPanel } from './DetailsPanel';
 import { ExperiencePanel } from './ExperiencePanel';
 import { GapNotesPanel, gapAboutFeature, gapAboutField } from './GapNotesPanel';
+import { PreflightPanel } from './PreflightPanel';
+import { canSaveAfter } from './preflightText';
 import { PrintView } from './PrintView';
 import { RestPanel } from './RestPanel';
 import { logged, rollLogLimit, type LoggedRoll } from './RollLog';
 import { SheetSummary } from './SheetSummary';
 import { SpellsPanel } from './SpellsPanel';
+import { ExplainList } from './ExplainList';
 import { TraceTable } from './TraceTable';
 import { UpdatesPanel } from './UpdatesPanel';
 import { VttExportPanel } from './VttExportPanel';
 import { ByHandPanel } from './ByHandPanel';
 import { TabList, TabPanel, tabId, type TabSpec } from './sheet/TabList';
+import { LevelUpChecklist } from './LevelUpChecklist';
+import { dismissChecklist, readChecklist } from '../levelUpChecklist';
 import { rememberSheetTab, rememberedSheetTab, type SheetTabId } from '../sheetTab';
 import { inverseOf, isCompound, type UndoEntry } from '../undo';
+import { recordSpend } from '../actionRows';
+import { editPins, readPins, resolvePin, visiblePins, writePins, type Pin, type QuickAction } from '../quickbar';
+import { Quickbar } from './Quickbar';
 import { applyPreferences, compactPlay, setCompactPlay } from '../settings';
 
 import { assistedNotes, rollButtonSuffix } from '../rollModes';
@@ -119,6 +128,7 @@ function FieldCard({ value, labels, onOverride, onRoll, onReportGap }: FieldProp
             ))}
           </ul>
         )}
+        <ExplainList label={value.label} steps={value.trace} />
         <TraceTable label={value.label} trace={value.trace} labels={labels} />
         {value.warnings.length > 0 && (
           <ul className="warnings" aria-label={`${value.label} warnings`}>
@@ -162,9 +172,11 @@ interface ExportProps {
 }
 
 /** ADR-007: choose backup or share; a share first lists everything it will leave out. */
-function ExportPanel({ characterId, active, updatedAt, onError, onStatus }: ExportProps) {
+export function ExportPanel({ characterId, active, updatedAt, onError, onStatus }: ExportProps) {
   const [purpose, setPurpose] = useState<ExportPurpose>('backup');
   const [preview, setPreview] = useState<ExportPreview>();
+  // Import Lab L5: a share goes through the one sharing rule's preflight; a backup keeps its own rule (everything, personal).
+  const [report, setReport] = useState<PreflightReport>();
 
   const [backupFailed, setBackupFailed] = useState(false);
 
@@ -265,7 +277,10 @@ function ExportPanel({ characterId, active, updatedAt, onError, onStatus }: Expo
         </ul>
       )}
       {backupFailed && purpose === 'backup' && <p>Could not check whether this package needs a newer TomeStack.</p>}
-      <button type="button" onClick={exportCharacter} disabled={purpose === 'share' && !preview}>
+      {purpose === 'share' && active && (
+        <PreflightPanel kind="package" selection={[characterId]} label="shared package" refreshKey={updatedAt} onReport={setReport} onError={onError} />
+      )}
+      <button type="button" onClick={exportCharacter} disabled={purpose === 'share' && (!preview || !canSaveAfter(report))}>
         Export package
       </button>
     </section>
@@ -285,9 +300,11 @@ interface Props {
   onArchiveChanged: () => Promise<void> | void;
   /** The tab to open on (a deep link, for example from the Gap notes screen); Play when absent (ADR-014). */
   initialTab?: SheetTabId;
+  /** D74 R19: true only right after a level-up save; the "What changed" heading takes focus instead of the sheet heading. */
+  focusChecklist?: boolean;
 }
 
-export function CharacterSheet({ view, onChanged, onError: reportError, onStatus, onLevelUp, onMakeChoices, onArchiveChanged, initialTab }: Props) {
+export function CharacterSheet({ view, onChanged, onError: reportError, onStatus, onLevelUp, onMakeChoices, onArchiveChanged, initialTab, focusChecklist }: Props) {
   const { character, sheet } = view;
   // D43: `toggle.group-absent` is information (the toggle works as a group of one), not content that failed to apply.
   const notApplied = sheet.diagnostics.filter((d) => d.code !== 'toggle.group-absent');
@@ -329,7 +346,20 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
 
   // WCAG 2.4.3: opening a sheet (after create, import or picking from the list) moves focus to its heading instead of
   // leaving it on <body>. The sheet is keyed by character, so this runs once per opened character, not on every save.
-  useEffect(() => heading.current?.focus(), []);
+  // D74 R19: on the save path the "What changed" panel takes focus instead; child effects run first, so it must be skipped here.
+  const [checklist, setChecklist] = useState(() => readChecklist(character.id, character.level));
+  const [checklistLevel, setChecklistLevel] = useState(character.level);
+  // A5: a save that lands on this open sheet changes the level; read the list again (no focus moves).
+  const [panelTakesFocus, setPanelTakesFocus] = useState(() => !!focusChecklist && checklist !== undefined);
+  const skipHeadingFocus = useRef(panelTakesFocus);
+  if (character.level !== checklistLevel) {
+    setChecklistLevel(character.level);
+    setChecklist(readChecklist(character.id, character.level));
+    setPanelTakesFocus(false); // a panel that appears later never takes focus
+  }
+  useEffect(() => {
+    if (!skipHeadingFocus.current) heading.current?.focus();
+  }, []);
 
   const [rollMode, setRollMode] = useState<RollMode>('normal');
   const [lastRoll, setLastRoll] = useState<RollRecord>();
@@ -386,7 +416,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
     { id: 'manage', label: 'Manage' },
   ];
   // The sheet is keyed by character, so this runs once per opened character. A deep link wins over the memory.
-  const [tab, setTabState] = useState<SheetTabId>(() => initialTab ?? rememberedSheetTab(character.id) ?? 'play');
+  const [tab, setTabState] = useState<SheetTabId>(() => (panelTakesFocus ? 'features' : undefined) ?? initialTab ?? rememberedSheetTab(character.id) ?? 'play');
   function setTab(next: SheetTabId) {
     setTabState(next);
     rememberSheetTab(character.id, next);
@@ -430,6 +460,22 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   function editDetails() {
     setTab('notes');
     setDetailsFocus((n) => n + 1);
+  }
+  // D74: the checklist's links and Dismiss. Focus waits for the render, so it is an effect on a fresh object per press.
+  const [checklistFocus, setChecklistFocus] = useState<{ id: string }>();
+  useEffect(() => {
+    if (checklistFocus) document.getElementById(checklistFocus.id)?.focus();
+  }, [checklistFocus]);
+  function goFromChecklist(target: 'play' | 'spells' | 'choices') {
+    // The choices section shows on every tab, so that link changes no tab (A6).
+    if (target === 'spells' && !showSpells) return; // not offered: the panel shows no such button
+    if (target !== 'choices') setTab(target);
+    setChecklistFocus({ id: target === 'choices' ? 'choices-heading' : tabId('sheet', target) });
+  }
+  function dismissLevelUp() {
+    dismissChecklist(character.id);
+    setChecklist(undefined);
+    setChecklistFocus({ id: tabId('sheet', 'features') });
   }
   const [pdfSources, setPdfSources] = useState<ReadonlySet<string>>(new Set());
 
@@ -666,6 +712,60 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
     setLastRoll(record);
   }
 
+  // D73: a roll record's Spend is used once, whether the Spend button or a quickbar press spends it. The state lives here (not in
+  // Last roll) so both go through one `spendOnce`; the record it was used for stays spent, and a new record starts fresh.
+  const [spentFor, setSpentFor] = useState<RollRecord>();
+  /** Holds the record's Spend while the change is under way, gives it back when the change is refused (and calls `refused`); resolves to whether it applied. */
+  async function spendOnce(record: RollRecord, action: PlayAction, refused?: () => void): Promise<boolean> {
+    setSpentFor(record);
+    const applied = await Promise.resolve(act(action))
+      .then((result) => result !== false) // a caller that returns nothing is taken to have applied it
+      .catch(() => false);
+    if (!applied) {
+      setSpentFor((current) => (current === record ? undefined : current));
+      refused?.();
+    }
+    return applied;
+  }
+
+  // D73: the pins are this character's, kept in the page's storage; the sheet is keyed by character, so another one never sees them.
+  const [pins, setPins] = useState(() => readPins(character.id));
+  const visible = visiblePins(view, pins);
+  const quickActions = visible.map((p) => resolvePin(view, p)).filter((a): a is QuickAction => a !== undefined);
+  function pinAction(pin: Pin) {
+    const next = editPins(view, pins, pin);
+    writePins(character.id, next);
+    setPins(next);
+  }
+  // The ref is the guard: two native keydowns can arrive before a re-render, so state could still read "not busy". `quickBusy` only shows it.
+  const busyRef = useRef(false);
+  const [quickBusy, setQuickBusy] = useState(false);
+  /** A quickbar press: rolls or changes the play state, and, only when the button's name says "and spend", makes that spend once. The next press waits for it to settle. */
+  async function quickRun(a: QuickAction) {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setQuickBusy(true);
+    try {
+      if (a.action) {
+        await act(a.action);
+      } else if (a.target) {
+        // A d20 attack follows the sheet's roll mode; a roll effect takes none and is never critical.
+        const withMode = a.pin.kind === 'attack' || a.pin.kind === 'custom';
+        const record = await client.roll(character.id, withMode ? { ...a.target, mode: rollMode } : a.target);
+        showRoll(record);
+        // Only a button named "... and spend" spends (R13); any other pin leaves the record's Spend on the Last roll.
+        if (!a.spends || !mounted.current) return;
+        const { autoAction } = recordSpend(record, view.sheet.resources ?? [], view.sheet.features ?? [], view.sheet.attacks ?? []);
+        if (autoAction) await spendOnce(record, autoAction);
+      }
+    } catch (error) {
+      onError(error);
+    } finally {
+      busyRef.current = false;
+      setQuickBusy(false);
+    }
+  }
+
   /** A roll the strip does not show (hit dice in a rest, dice-engine.md "Display"): logged only. */
   function logRoll(record: RollRecord) {
     const entry = logged(record);
@@ -767,7 +867,13 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
         </button>
       </header>
 
-      <SheetSummary view={view} rollMode={rollMode} onRollMode={setRollMode} lastRoll={lastRoll} rollLog={rollLog} act={act} onDamage={openDamage} spellsTab={showSpells} onRoll={(f) => roll({ field: f, mode: rollMode })} onRollDice={rollDice} />
+      <SheetSummary view={view} rollMode={rollMode} onRollMode={setRollMode} lastRoll={lastRoll} rollLog={rollLog} act={act} onDamage={openDamage} spellsTab={showSpells}
+        onRoll={(f) => roll({ field: f, mode: rollMode })}
+        onRollDice={rollDice}
+        quickbar={<Quickbar actions={quickActions} busy={quickBusy} run={quickRun} />}
+        hasQuickbar={quickActions.length > 0}
+        spent={{ record: spentFor, spendOnce }}
+      />
 
       {resting && (
         <div className="rest-sheet" id="rest-panel">
@@ -844,7 +950,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
       {/* Open choices and content problems stay visible whatever tab is open (SPEC C-03). */}
       {sheet.choices?.some((c) => !c.resolved) && (
         <section aria-labelledby="choices-heading">
-          <h3 id="choices-heading">Choices to make</h3>
+          <h3 id="choices-heading" tabIndex={-1}>Choices to make</h3>
           <ul className="warnings">
             {sheet.choices
               .filter((c) => !c.resolved)
@@ -937,7 +1043,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
           <ClassColumnsPanel view={view} />
         </div>
         <div className="play-column">
-          <ActionsPanel view={view} roll={roll} act={act} rollMode={rollMode} onDamageType={setDamageType} />
+          <ActionsPanel view={view} roll={roll} act={act} rollMode={rollMode} onDamageType={setDamageType} pins={visible} onPin={pinAction} />
           <CompanionsPanel view={view} act={act} roll={roll} rollMode={rollMode} onChanged={onChanged} onError={onError} onStatus={onStatus} saveCharacter={saveCharacter} />
         </div>
       </TabPanel>
@@ -967,6 +1073,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
       </TabPanel>
 
       <TabPanel idPrefix="sheet" id="features" active={active === 'features'}>
+        {checklist && <LevelUpChecklist checklist={checklist} sheet={sheet} focusOnOpen={panelTakesFocus} spellsOffered={showSpells} onGo={goFromChecklist} onDismiss={dismissLevelUp} />}
         {(sheet.features ?? []).length === 0 && <p className="hint">No features yet.</p>}
         <FeaturesPanel view={view} pdfSources={pdfSources} openPage={openPage} reportGap={(id) => reportGap(gapAboutFeature(id))} />
         <ByHandPanel characterId={character.id} sheet={sheet} active={active === 'features'} />

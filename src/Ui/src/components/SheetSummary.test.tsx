@@ -78,6 +78,10 @@ it('names the Spells tab in the rolling hint only when it is offered', () => {
   expect(screen.getByText('Rolling never spends anything. Roll a check here; a save, skill or initiative from its field on Stats; or an attack or feature on Play.')).toBeTruthy();
   rerender(<SheetSummary view={fixtureView()} rollMode="normal" onRollMode={() => {}} rollLog={[]} act={() => {}} onRoll={() => {}} onRollDice={async () => {}} spellsTab />);
   expect(screen.getByText('Rolling never spends anything. Roll a check here; a save, skill or initiative from its field on Stats; an attack or feature on Play; or a spell on Spells.')).toBeTruthy();
+  rerender(<SheetSummary view={fixtureView()} rollMode="normal" onRollMode={() => {}} rollLog={[]} act={() => {}} onRoll={() => {}} onRollDice={async () => {}} spellsTab hasQuickbar />);
+  expect(screen.getByText('Rolling from here never spends anything; a quickbar button that says "and spend" rolls and then spends. Roll a check here; a save, skill or initiative from its field on Stats; an attack or feature on Play; or a spell on Spells.')).toBeTruthy();
+  rerender(<SheetSummary view={fixtureView()} rollMode="normal" onRollMode={() => {}} rollLog={[]} act={() => {}} onRoll={() => {}} onRollDice={async () => {}} hasQuickbar />);
+  expect(screen.getByText('Rolling from here never spends anything; a quickbar button that says "and spend" rolls and then spends. Roll a check here; a save, skill or initiative from its field on Stats; or an attack or feature on Play.')).toBeTruthy();
 });
 
 it('lists the core numbers as terms and definitions, with no heading or named region of its own', () => {
@@ -348,4 +352,49 @@ it('shows a "Bloodied" chip as text when the sheet says bloodied, in the hit poi
   expect(chip.closest('[aria-live]')).toBeNull();
   expect(chip.getAttribute('role')).toBeNull();
   expect(dd('Hit points')).toBe('17 of 35'); // the Hit points text itself is unchanged
+});
+
+it('puts the Why? disclosure in the roll strip, outside the Last roll live region', () => {
+  const record: RollRecord = {
+    formula: '1d20+3',
+    mode: 'normal',
+    critical: false,
+    dice: [{ term: 0, sides: 20, value: 14, kept: true, fromCritical: false }],
+    diceTotal: 14,
+    expressionConstant: 0,
+    modifiers: [{ label: 'Strength modifier', amount: 3 }],
+    total: 17,
+  };
+  const { container } = render(
+    <SheetSummary view={fixtureView()} rollMode="normal" onRollMode={() => {}} lastRoll={record} rollLog={[]} act={() => {}} onRoll={() => {}} onRollDice={async () => {}} />,
+  );
+  const why = container.querySelector('details.roll-why') as HTMLElement;
+  expect(why).toBeTruthy();
+  expect(why.closest('.roll-strip')).toBeTruthy();
+  expect(screen.getByRole('region', { name: 'Last roll' }).contains(why)).toBe(false);
+  expect(why.closest('[aria-live]')).toBeNull();
+});
+
+it('puts a quickbar slot inside the summary, after the summary line and outside the roll strip (D73)', () => {
+  const { container } = render(
+    <SheetSummary
+      view={fixtureView()}
+      rollMode="normal"
+      onRollMode={() => {}}
+      rollLog={[]}
+      act={() => {}}
+      onRoll={() => {}}
+      onRollDice={async () => {}}
+      quickbar={
+        <section className="quickbar" aria-label="Quickbar">
+          <button type="button">Fixture</button>
+        </section>
+      }
+    />,
+  );
+  const bar = screen.getByRole('region', { name: 'Quickbar' });
+  expect(bar.closest('.sheet-summary')).toBeTruthy();
+  expect(bar.closest('.roll-strip')).toBeNull();
+  expect(bar.parentElement).toBe(container.querySelector('.sheet-summary')); // a direct child: the grid's `quick` row
+  expect(container.querySelector('.summary-line')!.nextElementSibling).toBe(bar);
 });

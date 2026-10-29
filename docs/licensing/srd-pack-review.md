@@ -143,7 +143,7 @@ A 2014/2024 difference the spells show as content: Cure Wounds heals 1d8 (5.1 p.
   - the Defense style's +1 while armored, and the armor table.
   
   Everything else is reference text with its page: Fighting Styles other than Defense, Tactical Mind's reroll, Remarkable Athlete, Heroic Warrior, Survivor, ASIs and Weapon Mastery. The player applies those by hand.
-- **Not taken:** Epic Boon feats (Boon of Combat Prowess is named in the text only), starting equipment, the armor descriptions, magic armor, and the Weapon Mastery property rules (Push, Sap, Slow and the others). Weapon Mastery's chosen kinds are tracked by the player.
+- **Not taken:** Epic Boon feats (Boon of Combat Prowess is named in the text only; the boons are bundled since 2026-10-26, see the next section), starting equipment, the armor descriptions, magic armor, and the Weapon Mastery property rules (Push, Sap, Slow and the others). Weapon Mastery's chosen kinds are tracked by the player.
 - **Checks:** `SrdFighterTests` (both families, levels 1–20, side by side), `SrdPackTests` (source records, attribution, every revision validates, the armor numbers), and `SchemaTests`.
 - **Done 2026-09-28:**
   - `srd-5.1-fighter.json` has 28 revisions: the class, 7 features, the Champion with 5 features, 6 Fighting Style options and 8 skill options.
@@ -152,6 +152,50 @@ A 2014/2024 difference the spells show as content: Cure Wounds heals 1d8 (5.1 p.
   - The generating script's armor-row check found every row in both extraction modes of each PDF. For 5.2.1 layout mode, the comparison ignores the spaces it inserts inside words. The script also checked the Second Wind and Weapon Mastery columns of the 5.2.1 Fighter Features table against the plain extraction. The script stays outside the repository, like the others.
 - **Also added:** a content v8 revision of the Paladin's and the Ranger's Extra Attack in both families (the same text, now counted as 2 attacks), and a new class revision that grants it. No new text. The earlier revisions stay for the characters that pin them.
 - **Armor training (PR #12 review fix):** further v8 Paladin and Ranger class revisions (`5xe9…`, identical to the first v8 ones otherwise) carry `armor.*` grants (Paladin: light, medium, shield, and heavy as the starting class only; Ranger: light, medium, shield), and new v8 Wizard and Sorcerer class revisions carry `armor.none`. The grant texts repeat each class's own proficiency line and multiclassing proficiencies already quoted in these packs (5.1 pp. 30, 35, 42, 52 and p. 57; 5.2.1 the Core Traits tables and multiclassing lines). No new SRD text beyond that restatement.
+
+## SRD 5.2.1 species, backgrounds and feats (2026-10-26, Track 1 under D60)
+
+**Document:** `SRD_CC_v5.2.1.pdf`, downloaded again on 2026-10-26 from media.dndbeyond.com. Its SHA-256 matches the table above. The file stays outside the repository.
+
+**Scope reviewed and approved for bundling** (CC-BY-4.0, the same source record, attribution and modification notice as the other 5.2.1 packs; nothing outside these pages):
+
+| Pack file | Content | Pages |
+| --- | --- | --- |
+| `srd-5.2.1-origins.json` | Backgrounds Acolyte, Criminal and Sage: ability scores (seven options each, from the background rules already quoted for the Soldier), feat, skill proficiencies, tool proficiency and equipment lines | p. 83 |
+| `srd-5.2.1-origins.json` | Species Dragonborn (with the Draconic Ancestors table), Elf (with the Elven Lineages table), Gnome, Goliath, Halfling, Human, Orc and Tiefling (with the Fiendish Legacies table): creature type, size, speed and every special trait | pp. 84–86 |
+| `srd-5.2.1-feats.json` | Origin feats Alert, Magic Initiate and Skilled; General feats Ability Score Improvement and Grappler; the seven Epic Boon feats (Combat Prowess, Dimensional Travel, Fate, Irresistible Offense, Spell Recall, the Night Spirit, Truesight) | pp. 87–88 |
+
+With the M1 Dwarf, Soldier and Savage Attacker and the four Fighting Style feats of the Fighter section, SRD 5.2.1 is now bundled with all 9 species, 4 backgrounds and 17 feats it prints. Left out, as for the M1 slice: the introductory "Parts of a Background", "Parts of a Species" and "Parts of a Feat" rules (except the background ability score paragraph, already bundled).
+
+- **Method:** two independent parses of pp. 83–88 with pypdf, plain mode and layout mode, compared by a script that stays outside the repository:
+  - **Text:** 345 sentences of the bundled summaries and effect texts, each found verbatim in the plain parse (whitespace, line breaks and hyphenation ignored). Clearly marked "TomeStack:" notes and the table rows are not SRD sentences and are not counted.
+  - **Cells:** 90 cells compared in both parses: the 20 cells of the Draconic Ancestors table, the 30 cells of the Elven Lineages and Fiendish Legacies tables, the size and speed lines of the 8 new species, the Ability Scores, Feat, Skill Proficiencies and Tool Proficiency lines of the 3 new backgrounds, and the category and prerequisite line of the 12 new feats. Both parses agree with the packs on every cell. The script also checks the encoded data against those cells: each ancestry's and legacy's damage type, the speed modifiers, and each background's skills, ability options and feat.
+  - A control run with one changed cell and one changed sentence was caught by both checks.
+- **Encoded as effects (content v3, v5, v8 or v10, each revision at the lowest version it needs):**
+  - speed 35 (Goliath, Wood Elf);
+  - damage resistance (each Draconic Ancestry and Fiendish Legacy);
+  - skill proficiencies (backgrounds, Elf Keen Senses, Human Skillful, Skilled), as choices of one feature per skill like the class skill options;
+  - the background ability score options;
+  - Human Versatile as a choice of the four Origin feats;
+  - the background feats as content grants;
+  - uses per rest: Breath Weapon, Draconic Flight, Forest Gnome Speak with Animals, Giant Ancestry, Large Form, Adrenaline Rush, Relentless Endurance, Magic Initiate's level 1 spell and Boon of Fate;
+  - Draconic Flight and Large Form granted at character level 5;
+  - dice rolls: Breath Weapon 1d10, the Giant Ancestry dice (Stone's Endurance adds the Constitution modifier), Improve Fate 2d4 and Free Casting 1d4;
+  - Alert's Proficiency Bonus to Initiative;
+  - Ability Score Improvement as 21 options (six +2, fifteen pairs of +1);
+  - Grappler's +1 option and its prerequisite (Strength or Dexterity 13, a restriction group).
+- **Text only, because no effect type for them exists on content v10 (each named in a "TomeStack:" note where the player acts):**
+  - size, darkvision, truesight, tool proficiencies and languages;
+  - spells granted by a species or feat (Elven Lineage, Gnomish Lineage, Fiendish Legacy, Otherworldly Presence, Magic Initiate);
+  - the Breath Weapon's damage above level 4: the roll stays 1d10, and the text says 2d10, 3d10 and 4d10 at character levels 5, 11 and 17;
+  - the "Level 4+", "Level 19+" and "Spellcasting Feature" prerequisites;
+  - the Epic Boons' Ability Score Increase "to a maximum of 30": the calculator caps increases at 20, so encoding it would be wrong at 20;
+  - conditional benefits (advantage, Shadowy Form's resistance in dim light);
+  - a second copy of a repeatable feat (Ability Score Improvement, Magic Initiate, Skilled): a character holds a feat once, so later copies are recorded by hand or as overrides;
+  - a tool picked through Skilled (the choice then stays open), and Improve Fate coming back when Initiative is rolled.
+- **The M1 Dwarf** stays at content v3, so its Dwarven Resilience poison resistance stays text (a v10 Dwarf revision is a follow-up).
+- **Not changed:** `srd-5.2.1.json` (the Dwarf, the Soldier and Savage Attacker stay as published) and every other bundled revision. `BundledContentInsertOnlyTests` checks every revision bundled at 66d5515 against its recorded hash.
+- **Checks:** `SrdOrigins521Tests` (a fixture character per species with a mechanic, each background, the feats), `SrdPackTests` (9 species, 4 backgrounds, 17 feats; source record, families, validation), `BundledContentInsertOnlyTests` and `SchemaTests`.
 
 ## C2-1 extension: the Barbarian, levels 1–20 (2026-10-27)
 
@@ -234,6 +278,10 @@ Two screenshots of the app, shown in the README, reproduce bundled SRD 5.2.1 con
 - **License:** CC-BY-4.0, as for the packs. The README links [ATTRIBUTION.md](../../ATTRIBUTION.md), which carries the approved SRD 5.2.1 statement and the modification notice, and each image's alt text names System Reference Document 5.2.1.
 - **Rule for later screenshots:** a screenshot may show SRD text only from the bundled packs. Add it to this table, with its pages, in the same change.
 
+## Sharing rule (Import Lab L5, wording only)
+
+Preflight is the single rule for what may leave the machine in a share: `package.preflight` and the character-package share, the source pack, the campaign pack and the shared sheet all ask the same code (`Preflight` in `src/AppService/Packages/Preflight.cs`) when they export. It lists what is included and what is left out or blocked, with the reason, and shows each included source's license notice once. It never adds a rule or any text to the packs above: the bundled SRD sources pass it as before (CC-BY-4.0, redistributable, never import-derived), and a PDF or the text read from it is never in a share. Backups keep their own rule (a personal backup holds everything).
+
 ## How it was modified (recorded in each source's `modificationNotice`)
 
 - Passages are excerpted. Descriptive text not needed for play (for example age and alignment) is left out, and some passages are shortened. Nothing is reworded to change a rule.
@@ -258,7 +306,51 @@ No art, logos, trade dress, product names or other publications. No monsters or 
 - "None of these increases can raise a score above 20" (5.2.1 background ability scores) is enforced since M2 item 4 (owner decision 2026-09-27): bonuses to ability scores stop at 20 in both families (`features/equipment.md`).
 - Rages use `min(2 + floor(CLASS_LEVEL / 3), 4)`, which matches both tables for levels 1–11. The slice is levels 1–3.
 - Unarmored Defense applies only while no armor is worn since M2 item 4: the calculator treats every Armor Class replacement as an unarmored alternative. Its effect text in the published revisions still says "armor is not modeled yet, so TomeStack assumes none". Published revisions are insert-only, so the note stays until a new SRD pack revision (the trace gives the current behavior).
-- No SRD armor or equipment is bundled. Adding the armor table needs this review extended (SPEC Q-03).
+- The SRD weapon and armor tables are bundled (sections above); other SRD equipment is not. Adding it needs this review extended (SPEC Q-03).
 - Frenzy (5.2.1) offers a 2d6 roll for Rage Damage +2 (Barbarian levels 1–8).
 - Advantage-granting features (Rage, Danger Sense, Reckless Attack) stay text only. Since M2 item 2, the sheet shows them as reference-only features, and the player picks advantage for the roll.
 - **Note (2026-10-27, C2-1):** the four lines about Rages, Unarmored Defense, Frenzy and Advantage above (and the "slice is levels 1–3" wording) describe the M1 and M2 revisions. They are superseded by the new Barbarian revisions of the C2-1 extension (levels 1–20, Rages from the class scale, the Unarmored Defense note corrected, Frenzy at three Rage Damage values, Rage and Danger Sense as automatic or assisted effects). Characters still on the earlier revisions keep those limitations until their class is updated.
+
+## SRD 5.1 races (2026-10-26, D60 amended 2026-10-26)
+
+**Document:** `SRD_CC_v5.1.pdf`, downloaded again on 2026-10-26 from media.wizards.com. Its SHA-256 matches the table above. The file stays outside the repository.
+
+**Scope reviewed and approved for bundling** (CC-BY-4.0, the same source record, attribution and modification notice as the other SRD 5.1 packs; nothing outside these pages):
+
+| Pack file | Content | Pages |
+| --- | --- | --- |
+| `srd-5.1-origins.json` | Dwarf (p. 3) with Hill Dwarf (p. 4) | pp. 3–4 |
+| | Elf with High Elf | p. 4 |
+| | Halfling (pp. 4–5) with Lightfoot (p. 5) | pp. 4–5 |
+| | Human | p. 5 |
+| | Dragonborn (pp. 5–6), with the ten rows of the Draconic Ancestry table (p. 5) | pp. 5–6 |
+| | Gnome with Rock Gnome | p. 6 |
+| | Half-Elf (pp. 6–7), with its ability score and skill choices | pp. 6–7 |
+| | Tiefling, with Infernal Legacy's 3rd- and 5th-level spells | p. 7 |
+| | The "Subraces" paragraph (its first two sentences, in each subrace choice's text) | p. 3 |
+
+- **Method:** the scripted method of the casters and the Fighter. The text was transcribed from pypdf layout mode, with line breaks and hyphenation repaired. A second script then checked the pack against **two independent parses** of pp. 3–7: layout mode, with the two columns split by position and read in order, and plain mode (reading order, with its mid-word spaces ignored).
+  - **Every SRD sentence** in a summary or effect text was found in both parses: 234 sentences, 0 mismatches.
+  - **Numbers and table cells** were read from each parse by pattern and compared with the encoded effects: each race's speed, ability increases (subrace included) and darkvision range, and the three cells of each Draconic Ancestry row plus the resistance it encodes. 72 cells, 0 mismatches.
+  - The check was run once on a copy with one changed number and one changed word; it reported both.
+  - The scripts stay outside the repository, like the others.
+- **Structure:**
+  - Each race is a `species` revision. Its summary keeps the race's introduction, Size, Speed, Darkvision, the traits that stay text, and the Languages line shortened to the languages, as the Half-Orc's does. Age, Alignment and the descriptive sentences are left out.
+  - A subrace is a `feature` revision offered by a one-option `choice` on its race, the SRD's own structure ("Members of a subrace have the traits of the parent race in addition to the traits specified for their subrace", p. 3), as the M1 Barbarian offers its one SRD path. A chosen subrace is species content, so its ability increase applies under 2014 rules (`RulesFamilyPolicy.AbilityIncreaseSource`).
+  - The Dragonborn chooses one of ten `Draconic Ancestry: <dragon>` features, each restating its table row ("Dragon: Red. Damage Type: Fire. Breath Weapon: 15 ft. cone (Dex. save).") and granting the resistance.
+  - The Half-Elf chooses two of five ability score features (not Charisma: "two other ability scores") and two of eighteen skill features.
+- **Encoded as effects:**
+  - ability increases;
+  - walking speed as a `replace` on `speed` (25 or 30 feet; content schema v10, so these races are published at v10);
+  - damage resistances (Dwarf poison, Dragonborn by ancestry, Tiefling fire; content v10);
+  - skill proficiencies (Keen Senses; Skill Versatility);
+  - weapon proficiencies (Dwarven Combat Training: battleaxe, handaxe, light hammer, warhammer; Elf Weapon Training: longsword, shortsword, shortbow, longbow);
+  - Dwarven Toughness (+1 hit point per level);
+  - the Breath Weapon's use (1, back on a short or long rest);
+  - Infernal Legacy's hellish rebuke (from 3rd level) and darkness (from 5th level), each once per long rest, as features the Tiefling grants at those character levels.
+
+  Each revision is published at the lowest content schema version it needs (`SrdOrigins51Tests`).
+- **Reference text only** (no field or effect type exists for them on `main`): size; darkvision; languages; tool proficiencies (Dwarf, Rock Gnome); the High Elf cantrip and the Tiefling's thaumaturgy; advantage on saves (Dwarven Resilience's half, Fey Ancestry, Brave, Gnome Cunning); Lucky; Trance; Stonecunning; Artificer's Lore; Tinker; Halfling Nimbleness; Naturally Stealthy. **The Breath Weapon's damage** (2d6, 3d6 at 6th level, 4d6 at 11th, 5d6 at 16th) and its save DC (8 + Constitution modifier + proficiency bonus) stay in its text: dice that grow with character level need a scale that species content cannot use on `main` (`scale` belongs to classes and subclasses), so the player rolls it by hand. **The Dwarf's heavy-armor speed** ("Your speed is not reduced by wearing heavy armor") has no field either: the armor Strength warning (`equipment.armor-strength`) still tells a Dwarf below the armor's Strength to lower Speed by an override, which the player ignores. The calculated speed is not changed. `SrdOrigins51Tests` pins this known gap.
+- **Not taken:** Age, Alignment, the races' descriptive and Language flavour sentences, and the "Racial Traits" introduction (p. 3) apart from the two "Subraces" sentences.
+- **Checks:** `SrdOrigins51Tests` (each race through an invented level-1 fixture, `tests/RulesFixtures/characters/srd51-<race>-l1.json`: scores, speed, size, choices, resistances, proficiencies, the level-gated Infernal Legacy uses; every revision validates at its lowest version; no id collides with other bundled content), and `SrdPackTests` (the source record, the nine races once each).
+- **Done 2026-10-26:** `srd-5.1-origins.json` has 47 revisions: 8 races, 4 subraces, 10 draconic ancestries, 5 Half-Elf ability score options, 18 Half-Elf skill options and 2 Infernal Legacy features. `srd-5.1.json` is unchanged.
