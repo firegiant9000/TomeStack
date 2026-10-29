@@ -28,6 +28,19 @@ public static class FormulaIdentifiers
     /// </summary>
     public const string ScalePrefix = "SCALE.";
 
+    /// <summary>
+    /// Content schema v11 (D43): <c>VALUE.&lt;valueId&gt;</c> reads a named formula a feature declares (<see cref="ValueEffect"/>)
+    /// for the class the content belongs to. A value reads no field itself, so it adds no dependency edge here.
+    /// </summary>
+    public const string ValuePrefix = "VALUE.";
+
+    /// <summary>
+    /// Content schema v11 (D43): <c>HP.MAX</c>, the hit point maximum before a damage event. Only the <c>atOrBelow</c> of a response's
+    /// threshold reads it (<see cref="FormulaFeatures.HitPointMaximum"/>). It is not a derived field here: the field evaluator never
+    /// sees it, so it can form no dependency cycle.
+    /// </summary>
+    public const string HitPointMaximum = "HP.MAX";
+
     private static readonly Dictionary<string, string?> Fields = Build();
 
     public static IEnumerable<string> All => Fields.Keys;
@@ -40,6 +53,13 @@ public static class FormulaIdentifiers
 
     /// <summary>The scale id of a <c>SCALE.</c> identifier.</summary>
     public static string ScaleId(string identifier) => identifier[ScalePrefix.Length..];
+
+    /// <summary>Whether <paramref name="identifier"/> is <c>VALUE.</c> followed by a valid value id (the same shape as a scale id).</summary>
+    public static bool IsValue(string identifier) =>
+        identifier.StartsWith(ValuePrefix, StringComparison.Ordinal) && ScaleEffect.IsValidScaleId(identifier[ValuePrefix.Length..]);
+
+    /// <summary>The value id of a <c>VALUE.</c> identifier.</summary>
+    public static string ValueId(string identifier) => identifier[ValuePrefix.Length..];
 
     /// <summary>The field an identifier reads, or null for inputs that are not derived fields (LEVEL, CLASS_LEVEL).</summary>
     public static string? FieldFor(string identifier) => Fields.GetValueOrDefault(identifier);
@@ -60,6 +80,19 @@ public static class FormulaIdentifiers
         }
         return fields;
     }
+}
+
+/// <summary>
+/// The version-gated identifiers a formula may use: <c>SCALE.</c> from content schema v9, <c>VALUE.</c> from v11 (D43). Also
+/// <c>HP.MAX</c>, which no revision gets by default: it is passed only to check a response threshold's <c>atOrBelow</c>.
+/// </summary>
+[Flags]
+public enum FormulaFeatures
+{
+    None = 0,
+    Scales = 1,
+    Values = 2,
+    HitPointMaximum = 4,
 }
 
 /// <summary>Immutable formula AST. Only these node kinds exist; there is no way to express a call to user code.</summary>
@@ -101,15 +134,34 @@ public sealed class Formula
     /// <summary>Every identifier the formula reads. These become dependency edges (item 11).</summary>
     public IReadOnlySet<string> Identifiers { get; }
 
+    /// <summary>
+    /// The identifiers a revision's formulas may use. Content v9 (ADR-010): <c>SCALE.&lt;id&gt;</c> from v9. Content v11 (D43):
+    /// <c>VALUE.&lt;id&gt;</c> from v11. Below those versions they are unknown identifiers, as in earlier builds, so a stored
+    /// revision never calculates differently on this build.
+    /// </summary>
+    public static FormulaFeatures FeaturesFor(ContentRevision revision)
+    {
+        ArgumentNullException.ThrowIfNull(revision);
+        return (revision.SchemaVersion >= ScaleEffect.SchemaVersion ? FormulaFeatures.Scales : FormulaFeatures.None)
+            | (revision.SchemaVersion >= ValueEffect.SchemaVersion ? FormulaFeatures.Values : FormulaFeatures.None);
+    }
+
     public static bool TryParse(string? source, out Formula? formula, out FormulaError? error) =>
-        TryParse(source, allowScales: false, out formula, out error);
+        TryParse(source, FormulaFeatures.None, out formula, out error);
 
     /// <param name="allowScales">
     /// Whether <c>SCALE.&lt;id&gt;</c> is a known identifier: only in a content schema v9 (or newer) revision
     /// (<see cref="ScaleEffect.SchemaVersion"/>). Below v9 it is <c>formula.unknown-identifier</c>, exactly as in builds
     /// before v9, so one stored revision never means two things (ADR-010).
     /// </param>
-    public static bool TryParse(string? source, bool allowScales, out Formula? formula, out FormulaError? error)
+    public static bool TryParse(string? source, bool allowScales, out Formula? formula, out FormulaError? error) =>
+        TryParse(source, allowScales ? FormulaFeatures.Scales : FormulaFeatures.None, out formula, out error);
+
+    /// <param name="features">
+    /// Which version-gated identifiers are known (<see cref="FormulaFeatures"/>). One that is not allowed is
+    /// <c>formula.unknown-identifier</c>, so a stored revision never means two things.
+    /// </param>
+    public static bool TryParse(string? source, FormulaFeatures features, out Formula? formula, out FormulaError? error)
     {
         formula = null;
         if (string.IsNullOrWhiteSpace(source))
@@ -125,7 +177,7 @@ public sealed class Formula
         try
         {
             var tokens = Tokenize(source);
-            var parser = new Parser(tokens, allowScales);
+            var parser = new Parser(tokens, features);
             var root = parser.ParseFormula();
             formula = new Formula(source, root, parser.Identifiers);
             error = null;
@@ -256,7 +308,7 @@ public sealed class Formula
     private static string Printable(char c) => char.IsControl(c) || char.IsSurrogate(c) ? $"U+{(int)c:X4}" : c.ToString();
 
     /// <summary>Recursive descent. Recursion consumes a token per level, so it is bounded by the token limit and MaxDepth.</summary>
-    private sealed class Parser(List<Token> tokens, bool allowScales)
+    private sealed class Parser(List<Token> tokens, FormulaFeatures features)
     {
         private int _position;
         private int _depth;
@@ -320,7 +372,10 @@ public sealed class Formula
                 case TokenKind.Identifier when Peek(TokenKind.LeftParen, "("):
                     return ParseCall(token);
                 case TokenKind.Identifier:
-                    if (!FormulaIdentifiers.IsKnown(token.Text) && !(allowScales && FormulaIdentifiers.IsScale(token.Text)))
+                    if (!FormulaIdentifiers.IsKnown(token.Text)
+                        && !(features.HasFlag(FormulaFeatures.Scales) && FormulaIdentifiers.IsScale(token.Text))
+                        && !(features.HasFlag(FormulaFeatures.Values) && FormulaIdentifiers.IsValue(token.Text))
+                        && !(features.HasFlag(FormulaFeatures.HitPointMaximum) && token.Text == FormulaIdentifiers.HitPointMaximum))
                         throw new FormulaException("formula.unknown-identifier", $"'{Truncate(token.Text)}' is not a known value. Use one of: {string.Join(", ", FormulaIdentifiers.All)}.");
                     Identifiers.Add(token.Text);
                     return new IdentifierNode(token.Text);

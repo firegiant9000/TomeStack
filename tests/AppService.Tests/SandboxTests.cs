@@ -198,6 +198,36 @@ public class SandboxTests
     }
 
     [Fact]
+    public void The_sandbox_never_writes_encounter_state()
+    {
+        using var temp = new TempApp();
+        var app = temp.App;
+        var source = app.CreateHomebrewSource(new("Test Sandbox Source", [RulesFamilies.Srd521]));
+        var classId = Guid.NewGuid();
+        var published = Publish(app, Draft(source, classId, ContentKind.Class, "Test Sandbox Class", D8, Initiative("1")));
+        var created = app.CreateCharacter(new("Test Sandbox Hero", RulesFamilies.Srd521, new(10, 10, 10, 10, 10, 10), null, [new(published, 3)])).Character;
+        var pack = temp.AddPack("fixture-pack-turns.json");
+        created = app.SaveCharacter(created with { Pins = [.. created.Pins, .. pack.Revisions.Select(r => r.Reference)] }).Character;
+        var ironContent = Guid.Parse("6f0dc000-0000-4000-8000-000000000031");
+        app.Play(new(created.Id, PlayActionKind.StartEncounter, Confirm: true, ExpectedUpdatedAt: created.UpdatedAt));
+        var saved = app.Play(new(created.Id, PlayActionKind.ToggleOn, Confirm: true, ContentId: ironContent, ToggleId: "iron")).Character;
+        Assert.Equal(3, saved.Play.Toggles.Single().RoundsLeft);
+        var draft = app.SaveDraft(Draft(source, classId, ContentKind.Class, "Test Sandbox Class", D8, Initiative("CLASS_LEVEL")));
+        var before = Snapshot(app);
+
+        var result = app.Sandbox(new(Reference: draft, CharacterId: saved.Id));
+
+        Assert.Equal(0, result.View.Character.Play.Encounter!.Round); // the copy is calculated as it stands
+        Assert.Null(result.View.UndoLabel); // no play basis: the stamp-free view is the sandbox's
+        Assert.Null(result.View.Notices);
+        Assert.Equal(3, result.View.Character.Play.Toggles.Single().RoundsLeft); // the copy carries the count; nothing is counted down or cleared
+        Assert.Equal(before, Snapshot(app));
+        Assert.Equal(0, app.GetCharacter(saved.Id).Character.Play.Encounter!.Round);
+        Assert.Equal(3, app.GetCharacter(saved.Id).Character.Play.Toggles.Single().RoundsLeft);
+        Assert.Equal(10, app.GetCharacter(saved.Id).Character.SchemaVersion);
+    }
+
+    [Fact]
     public void A_selection_keyed_to_another_revision_of_the_class_is_left_alone_and_the_draft_is_selected_on_the_class_the_copy_has()
     {
         using var temp = new TempApp();

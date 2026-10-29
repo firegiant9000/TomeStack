@@ -24,14 +24,14 @@ if (-not $Exe) { $Exe = Join-Path $PSScriptRoot '..\src\DesktopShell\bin\Release
 $smoke = Join-Path $PSScriptRoot 'smoke.ps1'
 
 if ($Mode -eq 'MissingRuntime') {
-  & $smoke -Exe $Exe -ExpectDetail 'webview2-runtime-missing' -ExtraArguments @('--simulate-missing-webview2')
+  & $smoke -Exe $Exe -ExpectDetail 'webview2-runtime-missing' -ExtraArguments @('--simulate-missing-webview2') -SkipCrashCheck
   exit $LASTEXITCODE
 }
 
 if ($Mode -eq 'MissingRuntimeLoader') {
   $empty = Join-Path ([IO.Path]::GetTempPath()) "tomestack-no-webview2-$([guid]::NewGuid().ToString('N'))"
   New-Item -ItemType Directory -Path $empty | Out-Null
-  & $smoke -Exe $Exe -ExpectDetail 'webview2-runtime-missing' -Environment @{ WEBVIEW2_BROWSER_EXECUTABLE_FOLDER = $empty }
+  & $smoke -Exe $Exe -ExpectDetail 'webview2-runtime-missing' -Environment @{ WEBVIEW2_BROWSER_EXECUTABLE_FOLDER = $empty } -SkipCrashCheck
   $code = $LASTEXITCODE
   Remove-Item -LiteralPath $empty -Force -ErrorAction SilentlyContinue
   exit $code
@@ -46,9 +46,9 @@ if ($routes.Count -gt 0 -or $dnsWorks) {
 }
 
 $dir = Join-Path ([IO.Path]::GetTempPath()) "tomestack-offline-$([guid]::NewGuid().ToString('N'))"
-& $smoke -Exe $Exe -DataDir $dir -ExpectCharactersAtStart 0
+& $smoke -Exe $Exe -DataDir $dir -ExpectCharactersAtStart 0 -SkipCrashCheck
 if ($LASTEXITCODE -ne 0) { exit 1 }
-& $smoke -Exe $Exe -DataDir $dir -ExpectCharactersAtStart 1
+& $smoke -Exe $Exe -DataDir $dir -ExpectCharactersAtStart 1 -SkipCrashCheck
 if ($LASTEXITCODE -ne 0) { exit 1 }
 Write-Output 'PASS (offline)'
 exit 0

@@ -161,6 +161,54 @@ it('lists toggles as named check boxes and conditions as a blank list', async ()
   expect(preview.textContent).not.toContain('Continued on the full sheet');
 });
 
+// B10: a counting-up pool (D43) prints what has built up, not room left.
+const countUpView: CharacterView = {
+  ...combatView,
+  sheet: {
+    ...combatSheet,
+    resources: [
+      { content: { revisionId: 'u1' }, resourceId: 'fixture-charge', label: 'Fixture Charge', maximum: 5, spent: 3, current: 2, countsUp: true, recoveries: [] },
+      { content: { revisionId: 'r1' }, resourceId: 'fixture-surge', label: 'Fixture Surge', maximum: 3, spent: 1, current: 2, recoveries: [] },
+    ],
+  } as unknown as CharacterSheet,
+};
+
+it('full sheet prints a counting-up pool as built up and a normal pool as before', () => {
+  render(<PrintView view={countUpView} onError={() => {}} onClose={() => {}} />);
+  const preview = screen.getByRole('region', { name: 'Print preview' });
+  const row = (name: string) => within(preview).getByRole('rowheader', { name }).closest('tr')!;
+  expect(row('Fixture Charge').textContent).toContain('3 built up of 5');
+  expect(row('Fixture Charge').textContent).not.toContain('2 of 5');
+  expect(row('Fixture Surge').textContent).toContain('2 of 3');
+  expect(row('Fixture Surge').textContent).not.toContain('built up');
+});
+
+it('full sheet prints a counting-up pool with no maximum as built up, tracked by hand', () => {
+  const noMax = {
+    ...countUpView,
+    sheet: {
+      ...countUpView.sheet,
+      resources: [
+        { content: { revisionId: 'u2' }, resourceId: 'fixture-rage', label: 'Fixture Rage', spent: 4, current: 0, countsUp: true, recoveries: [] },
+        { content: { revisionId: 'u3' }, resourceId: 'fixture-pool', label: 'Fixture Pool', spent: 2, current: 0, recoveries: [] },
+      ],
+    } as unknown as CharacterSheet,
+  };
+  render(<PrintView view={noMax} onError={() => {}} onClose={() => {}} />);
+  const preview = screen.getByRole('region', { name: 'Print preview' });
+  const row = (name: string) => within(preview).getByRole('rowheader', { name }).closest('tr')!;
+  expect(row('Fixture Rage').textContent).toContain('4 built up (tracked by hand)');
+  expect(row('Fixture Pool').textContent).toContain('2 spent (tracked by hand)');
+});
+
+it('combat card labels the ticks of a counting-up pool "to build up" and a normal pool "uses"', async () => {
+  const preview = await openCombat(userEvent.setup(), countUpView);
+  const row = (name: string) => within(preview).getByRole('rowheader', { name }).closest('tr')!;
+  expect(row('Fixture Charge').querySelectorAll('.tick')).toHaveLength(5);
+  expect(row('Fixture Charge').textContent).toContain('5 to build up');
+  expect(row('Fixture Surge').textContent).toContain('3 uses');
+});
+
 const largeVar = () => document.documentElement.style.getPropertyValue('--print-font-size');
 
 it.each([

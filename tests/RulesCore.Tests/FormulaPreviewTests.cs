@@ -55,6 +55,51 @@ public class FormulaPreviewTests
     }
 
     [Fact]
+    public void A_named_value_this_draft_declares_is_previewed_and_any_other_is_not()
+    {
+        var own = new ValueEffect { Id = "v", ValueId = "bump", Formula = "PB + SCALE.column1" };
+        var revision = Revision(ContentKind.Class, Column(), own) with { SchemaVersion = 11 };
+
+        Assert.Equal<int?>([3, 8, 15, 21, 26], Values(FormulaPreview.Preview("VALUE.bump", revision)));
+        Assert.Equal<int?>([4, 9, 16, 22, 27], Values(FormulaPreview.Preview("VALUE.bump + 1", revision)));
+
+        var foreign = FormulaPreview.Preview("VALUE.elsewhere", revision);
+        Assert.Null(foreign.Error);
+        Assert.NotNull(foreign.Unavailable);
+        Assert.Empty(foreign.Points);
+
+        var cycle = FormulaPreview.Preview("VALUE.loop", Revision(ContentKind.Class, new ValueEffect { Id = "v", ValueId = "loop", Formula = "VALUE.loop + 1" }) with { SchemaVersion = 11 });
+        Assert.NotNull(cycle.Unavailable);
+
+        // Below v11 the draft cannot use VALUE at all: it is a parse error, as in the validator.
+        Assert.NotNull(FormulaPreview.Preview("VALUE.bump", revision with { SchemaVersion = 10 }).Error);
+    }
+
+    private static ContentRevision ValueChain(int links, string read)
+    {
+        var effects = new List<Effect>();
+        for (var i = 0; i < links; i++)
+            effects.Add(new ValueEffect { Id = $"c{i}", ValueId = $"c{i}", Formula = i == links - 1 ? "PB" : string.Format(System.Globalization.CultureInfo.InvariantCulture, read, $"VALUE.c{i + 1}") });
+        return Revision(ContentKind.Class, [.. effects]) with { SchemaVersion = 11 };
+    }
+
+    [Fact]
+    public void A_long_chain_of_values_each_read_several_times_previews_promptly()
+    {
+        var result = FormulaPreview.Preview("VALUE.c0", ValueChain(30, "{0} - {0} + {0}"));
+
+        Assert.Null(result.Unavailable);
+        Assert.Equal<int?>([2, 3, 4, 5, 6], Values(result)); // the last link is PB
+    }
+
+    [Fact]
+    public void A_chain_of_values_nested_deeper_than_the_limit_is_not_previewable()
+    {
+        Assert.NotNull(FormulaPreview.Preview("VALUE.c0", ValueChain(3000, "{0}")).Unavailable);
+        Assert.Null(FormulaPreview.Preview("VALUE.c0", ValueChain(25, "{0}")).Unavailable);
+    }
+
+    [Fact]
     public void Only_automatic_scales_with_20_values_are_used()
     {
         Assert.NotNull(FormulaPreview.Preview("SCALE.column1", Revision(ContentKind.Class, Column(automation: AutomationStatus.Assisted))).Unavailable);

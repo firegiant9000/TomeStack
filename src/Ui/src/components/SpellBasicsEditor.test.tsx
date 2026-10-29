@@ -8,6 +8,7 @@ import { client } from '../api/client';
 import type { AppInfo, ContentRevision, Effect, SourceRecord } from '../api/types';
 import { spellOf } from '../entryBasics';
 import { SpellBasicsEditor } from './SpellBasicsEditor';
+import { fill } from '../test/fill';
 
 vi.mock('../api/client', () => ({ client: { spellListKeys: vi.fn() } }));
 
@@ -88,11 +89,11 @@ it('writes each field into the spell effect and leaves the other effects and fie
   render(<Harness initial={revisionOf([other, spell])} />);
   await user.selectOptions(await screen.findByRole('combobox', { name: 'Level' }), '3');
   await user.selectOptions(screen.getByRole('combobox', { name: 'School' }), 'illusion');
-  await user.type(screen.getByRole('textbox', { name: 'Casting time' }), '1 bonus action');
-  await user.type(screen.getByRole('textbox', { name: 'Range' }), 'Self');
+  await fill(user, screen.getByRole('textbox', { name: 'Casting time' }), '1 bonus action');
+  await fill(user, screen.getByRole('textbox', { name: 'Range' }), 'Self');
   await user.type(screen.getByRole('textbox', { name: 'Components' }), 'V');
-  await user.type(screen.getByRole('textbox', { name: 'Duration' }), 'Up to 1 minute');
-  await user.type(screen.getByRole('textbox', { name: 'Spell text' }), 'It glows.');
+  await fill(user, screen.getByRole('textbox', { name: 'Duration' }), 'Up to 1 minute');
+  await fill(user, screen.getByRole('textbox', { name: 'Spell text' }), 'It glows.');
   await user.click(screen.getByRole('checkbox', { name: 'Concentration' }));
   await user.click(screen.getByRole('checkbox', { name: 'Ritual' }));
 

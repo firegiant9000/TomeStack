@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using TomeStack.AppService.Packages;
+using TomeStack.AppService.Persistence;
 using TomeStack.RulesCore;
 
 namespace TomeStack.AppService.Tests;
@@ -86,6 +87,31 @@ public class CampaignPackTests
 
         var again = destination.App.ApplyImport(pack.Content);
         Assert.Equal((0, (string?)null), (again.Added, again.BackupFile));
+    }
+
+    [Fact]
+    public void A_campaign_pack_preview_warns_once_when_a_revision_is_at_schema_v11_and_not_for_older_content()
+    {
+        using var temp = new TempApp();
+        var old = Homebrew(temp, "Test Old Notes");
+        Assert.All(temp.App.Store.ListRevisionsInOrder().Where(r => r.Provenance.SourceId == old.Id && r.Status == RevisionStatus.Published), r => Assert.True(r.SchemaVersion < 11));
+        var oldCampaign = Campaign(temp, "Test Old Table", Srd521Source, old.Id);
+        Assert.DoesNotContain(temp.App.PreviewCampaignPack(oldCampaign.Id).Warnings, w => w.Code == "package.needs-newer-build");
+
+        var newer = Homebrew(temp, "Test Newer Notes", withContent: false);
+        foreach (var name in new[] { "One", "Two" })
+        {
+            temp.App.Store.AddRevision(new ContentRevision
+            {
+                ContentId = Guid.NewGuid(), RevisionId = Guid.NewGuid(), Kind = ContentKind.Feat, Name = $"Test Newer {name}", RulesFamilies = [RulesFamilies.Srd521],
+                Provenance = new(newer.Id), Status = RevisionStatus.Published, SchemaVersion = 11,
+                Effects = [new ModifierEffect { Id = "init", Operation = ModifierOperation.Bonus, Target = FieldIds.Initiative, Value = "1" }],
+            });
+        }
+        var campaign = Campaign(temp, "Test Newer Table", Srd521Source, old.Id, newer.Id);
+        var warning = Assert.Single(temp.App.PreviewCampaignPack(campaign.Id).Warnings, w => w.Code == "package.needs-newer-build");
+        Assert.Equal($"Opening this needs TomeStack 0.7.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Test Newer One' is content at schema 11, and 'Test Newer Two' is content at schema 11. Older versions refuse the file.", warning.Message);
+        Assert.Equal("0.7.0", temp.App.PreviewCampaignPack(campaign.Id).OpensIn);
     }
 
     [Fact]

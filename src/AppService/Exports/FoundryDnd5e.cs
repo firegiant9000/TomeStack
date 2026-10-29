@@ -45,6 +45,9 @@ public static partial class FoundryDnd5e
     [GeneratedRegex("^(?<n>[0-9]{1,2})d(?<d>4|6|8|10|12|20)\\b", RegexOptions.CultureInvariant)]
     private static partial Regex Dice();
 
+    [GeneratedRegex("[0-9]+d[0-9]+", RegexOptions.CultureInvariant)]
+    private static partial Regex DiceTerms();
+
     /// <summary>The Actor document for <paramref name="sheet"/>. Keys are sorted, so the same sheet gives the same bytes.</summary>
     public static JsonObject Map(SheetExport sheet)
     {
@@ -295,6 +298,9 @@ public static partial class FoundryDnd5e
             yield return $"Pact Magic slots: level {pact.Level} in TomeStack; Foundry shows them as level 1 because the file carries no class spellcasting progression.";
         foreach (var klass in sheet.Character.Classes.Where(c => c.HitDie is null))
             yield return $"{klass.Name}: no hit die in TomeStack; Foundry gives the class d8 hit dice.";
+        // A weapon's damage can have more dice than the one base part dnd5e's weapon data holds (a rider's dice); the text keeps them all.
+        foreach (var attack in sheet.Attacks.Where(a => DiceTerms().Count(a.Damage) > 1))
+            yield return $"{attack.Name}: damage {attack.Damage} has more than one dice term; Foundry's weapon data holds only the first as its base damage, and the description has them all.";
         var features = sheet.Features.Select(f => f.Ref.ContentId).ToHashSet();
         foreach (var resource in sheet.Resources.Where(r => r.Maximum is not null && features.Contains(r.Ref.ContentId)))
         {
