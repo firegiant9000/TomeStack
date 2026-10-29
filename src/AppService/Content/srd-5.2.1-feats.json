@@ -1,0 +1,1682 @@
+{
+  "packId": "srd-5.2.1-feats",
+  "formatVersion": 1,
+  "notice": "The feats of the System Reference Document 5.2.1 (CC-BY-4.0) not bundled before: Alert, Magic Initiate, Skilled, Ability Score Improvement, Grappler and the seven Epic Boons, pp. 87-88. Taken from SRD_CC_v5.2.1.pdf (SHA-256 8974902d109d6e63672d7c490bde9ccf052410503d9cfa768237154fbc5e3d87). See docs/licensing/srd-pack-review.md.",
+  "sources": [
+    {
+      "id": "52500000-0000-4000-8000-000000000001",
+      "title": "System Reference Document 5.2.1",
+      "publisher": "SRD 5.2.1 (CC-BY-4.0)",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "editionVersion": "5.2.1",
+      "license": "CC-BY-4.0",
+      "redistributable": true,
+      "attribution": "This work includes material from the System Reference Document 5.2.1 (\"SRD 5.2.1\") by Wizards of the Coast LLC, available at https://www.dndbeyond.com/srd. The SRD 5.2.1 is licensed under the Creative Commons Attribution 4.0 International License, available at https://creativecommons.org/licenses/by/4.0/legalcode.",
+      "modificationNotice": "Modified: TomeStack adapted this material into structured data. Selected passages are excerpted or shortened, with line breaks and hyphenation repaired, and rules are encoded as machine-readable effects.",
+      "sha256": "8974902d109d6e63672d7c490bde9ccf052410503d9cfa768237154fbc5e3d87"
+    }
+  ],
+  "revisions": [
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520100",
+      "revisionId": "52e00000-0000-4000-8000-000000520100",
+      "schemaVersion": 3,
+      "kind": "feat",
+      "name": "Alert",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "summary": "Origin Feat\n\nYou gain the following benefits.\n\nInitiative Proficiency. When you roll Initiative, you can add your Proficiency Bonus to the roll.\n\nInitiative Swap. Immediately after you roll Initiative, you can swap your Initiative with the Initiative of one willing ally in the same combat. You can’t make this swap if you or the ally has the Incapacitated condition.",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "initiative-proficiency",
+          "operation": "bonus",
+          "target": "initiative",
+          "value": "PB",
+          "text": "Initiative Proficiency. When you roll Initiative, you can add your Proficiency Bonus to the roll."
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520200",
+      "revisionId": "52e00000-0000-4000-8000-000000520200",
+      "schemaVersion": 3,
+      "kind": "feat",
+      "name": "Magic Initiate",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "summary": "Origin Feat\n\nYou gain the following benefits.\n\nTwo Cantrips. You learn two cantrips of your choice from the Cleric, Druid, or Wizard spell list. Intelligence, Wisdom, or Charisma is your spellcasting ability for this feat’s spells (choose when you select this feat).\n\nLevel 1 Spell. Choose a level 1 spell from the same list you selected for this feat’s cantrips. You always have that spell prepared. You can cast it once without a spell slot, and you regain the ability to cast it in that way when you finish a Long Rest. You can also cast the spell using any spell slots you have.\n\nSpell Change. Whenever you gain a new level, you can replace one of the spells you chose for this feat with a different spell of the same level from the chosen spell list.\n\nRepeatable. You can take this feat more than once, but you must choose a different spell list each time.\n\nTomeStack: the chosen spells are recorded by hand (a feat cannot grant spells yet). A character takes this feat only once here; note any later copy by hand.",
+      "effects": [
+        {
+          "type": "resource",
+          "id": "magic-initiate",
+          "resourceId": "magic-initiate",
+          "label": "Magic Initiate: level 1 spell without a slot",
+          "maximum": "1",
+          "text": "You can cast it once without a spell slot, and you regain the ability to cast it in that way when you finish a Long Rest."
+        },
+        {
+          "type": "recovery",
+          "id": "magic-initiate-long-rest",
+          "timing": "onLongRest",
+          "resourceId": "magic-initiate",
+          "on": "longRest",
+          "amount": "all"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520300",
+      "revisionId": "52e00000-0000-4000-8000-000000520300",
+      "schemaVersion": 3,
+      "kind": "feat",
+      "name": "Skilled",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "summary": "Origin Feat\n\nYou gain proficiency in any combination of three skills or tools of your choice.\n\nRepeatable. You can take this feat more than once.\n\nTomeStack: tools are not tracked; for a tool, choose fewer skills and note the tool by hand (the choice then stays marked as open). A character takes this feat only once here; note any later copy by hand.",
+      "effects": [
+        {
+          "type": "choice",
+          "id": "skilled-proficiencies",
+          "choiceId": "skilled-proficiencies",
+          "count": 3,
+          "text": "You gain proficiency in any combination of three skills or tools of your choice.",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520301",
+              "revisionId": "52e00000-0000-4000-8000-000000520301"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520302",
+              "revisionId": "52e00000-0000-4000-8000-000000520302"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520303",
+              "revisionId": "52e00000-0000-4000-8000-000000520303"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520304",
+              "revisionId": "52e00000-0000-4000-8000-000000520304"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520305",
+              "revisionId": "52e00000-0000-4000-8000-000000520305"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520306",
+              "revisionId": "52e00000-0000-4000-8000-000000520306"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520307",
+              "revisionId": "52e00000-0000-4000-8000-000000520307"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520308",
+              "revisionId": "52e00000-0000-4000-8000-000000520308"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520309",
+              "revisionId": "52e00000-0000-4000-8000-000000520309"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520310",
+              "revisionId": "52e00000-0000-4000-8000-000000520310"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520311",
+              "revisionId": "52e00000-0000-4000-8000-000000520311"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520312",
+              "revisionId": "52e00000-0000-4000-8000-000000520312"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520313",
+              "revisionId": "52e00000-0000-4000-8000-000000520313"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520314",
+              "revisionId": "52e00000-0000-4000-8000-000000520314"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520315",
+              "revisionId": "52e00000-0000-4000-8000-000000520315"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520316",
+              "revisionId": "52e00000-0000-4000-8000-000000520316"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520317",
+              "revisionId": "52e00000-0000-4000-8000-000000520317"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520318",
+              "revisionId": "52e00000-0000-4000-8000-000000520318"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520301",
+      "revisionId": "52e00000-0000-4000-8000-000000520301",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Skilled: Acrobatics",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.acrobatics"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520302",
+      "revisionId": "52e00000-0000-4000-8000-000000520302",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Skilled: Animal Handling",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.animalHandling"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520303",
+      "revisionId": "52e00000-0000-4000-8000-000000520303",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Skilled: Arcana",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.arcana"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520304",
+      "revisionId": "52e00000-0000-4000-8000-000000520304",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Skilled: Athletics",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.athletics"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520305",
+      "revisionId": "52e00000-0000-4000-8000-000000520305",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Skilled: Deception",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.deception"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520306",
+      "revisionId": "52e00000-0000-4000-8000-000000520306",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Skilled: History",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.history"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520307",
+      "revisionId": "52e00000-0000-4000-8000-000000520307",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Skilled: Insight",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.insight"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520308",
+      "revisionId": "52e00000-0000-4000-8000-000000520308",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Skilled: Intimidation",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.intimidation"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520309",
+      "revisionId": "52e00000-0000-4000-8000-000000520309",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Skilled: Investigation",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.investigation"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520310",
+      "revisionId": "52e00000-0000-4000-8000-000000520310",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Skilled: Medicine",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.medicine"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520311",
+      "revisionId": "52e00000-0000-4000-8000-000000520311",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Skilled: Nature",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.nature"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520312",
+      "revisionId": "52e00000-0000-4000-8000-000000520312",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Skilled: Perception",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.perception"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520313",
+      "revisionId": "52e00000-0000-4000-8000-000000520313",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Skilled: Performance",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.performance"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520314",
+      "revisionId": "52e00000-0000-4000-8000-000000520314",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Skilled: Persuasion",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.persuasion"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520315",
+      "revisionId": "52e00000-0000-4000-8000-000000520315",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Skilled: Religion",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.religion"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520316",
+      "revisionId": "52e00000-0000-4000-8000-000000520316",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Skilled: Sleight of Hand",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.sleightOfHand"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520317",
+      "revisionId": "52e00000-0000-4000-8000-000000520317",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Skilled: Stealth",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.stealth"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520318",
+      "revisionId": "52e00000-0000-4000-8000-000000520318",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Skilled: Survival",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.survival"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520400",
+      "revisionId": "52e00000-0000-4000-8000-000000520400",
+      "schemaVersion": 3,
+      "kind": "feat",
+      "name": "Ability Score Improvement",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "summary": "General Feat (Prerequisite: Level 4+)\n\nIncrease one ability score of your choice by 2, or increase two ability scores of your choice by 1. This feat can’t increase an ability score above 20.\n\nRepeatable. You can take this feat more than once.\n\nTomeStack: the level prerequisite is not checked. A character takes this feat only once here; record later increases as overrides.",
+      "effects": [
+        {
+          "type": "choice",
+          "id": "ability-score-improvement",
+          "choiceId": "ability-score-improvement",
+          "count": 1,
+          "text": "Increase one ability score of your choice by 2, or increase two ability scores of your choice by 1. This feat can’t increase an ability score above 20.",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520401",
+              "revisionId": "52e00000-0000-4000-8000-000000520401"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520402",
+              "revisionId": "52e00000-0000-4000-8000-000000520402"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520403",
+              "revisionId": "52e00000-0000-4000-8000-000000520403"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520404",
+              "revisionId": "52e00000-0000-4000-8000-000000520404"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520405",
+              "revisionId": "52e00000-0000-4000-8000-000000520405"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520406",
+              "revisionId": "52e00000-0000-4000-8000-000000520406"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520407",
+              "revisionId": "52e00000-0000-4000-8000-000000520407"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520408",
+              "revisionId": "52e00000-0000-4000-8000-000000520408"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520409",
+              "revisionId": "52e00000-0000-4000-8000-000000520409"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520410",
+              "revisionId": "52e00000-0000-4000-8000-000000520410"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520411",
+              "revisionId": "52e00000-0000-4000-8000-000000520411"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520412",
+              "revisionId": "52e00000-0000-4000-8000-000000520412"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520413",
+              "revisionId": "52e00000-0000-4000-8000-000000520413"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520414",
+              "revisionId": "52e00000-0000-4000-8000-000000520414"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520415",
+              "revisionId": "52e00000-0000-4000-8000-000000520415"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520416",
+              "revisionId": "52e00000-0000-4000-8000-000000520416"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520417",
+              "revisionId": "52e00000-0000-4000-8000-000000520417"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520418",
+              "revisionId": "52e00000-0000-4000-8000-000000520418"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520419",
+              "revisionId": "52e00000-0000-4000-8000-000000520419"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520420",
+              "revisionId": "52e00000-0000-4000-8000-000000520420"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520421",
+              "revisionId": "52e00000-0000-4000-8000-000000520421"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520401",
+      "revisionId": "52e00000-0000-4000-8000-000000520401",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Ability Score Improvement: Strength +2",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "str",
+          "operation": "bonus",
+          "target": "ability.str.score",
+          "value": "2"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520402",
+      "revisionId": "52e00000-0000-4000-8000-000000520402",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Ability Score Improvement: Dexterity +2",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "dex",
+          "operation": "bonus",
+          "target": "ability.dex.score",
+          "value": "2"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520403",
+      "revisionId": "52e00000-0000-4000-8000-000000520403",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Ability Score Improvement: Constitution +2",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "con",
+          "operation": "bonus",
+          "target": "ability.con.score",
+          "value": "2"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520404",
+      "revisionId": "52e00000-0000-4000-8000-000000520404",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Ability Score Improvement: Intelligence +2",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "int",
+          "operation": "bonus",
+          "target": "ability.int.score",
+          "value": "2"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520405",
+      "revisionId": "52e00000-0000-4000-8000-000000520405",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Ability Score Improvement: Wisdom +2",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "wis",
+          "operation": "bonus",
+          "target": "ability.wis.score",
+          "value": "2"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520406",
+      "revisionId": "52e00000-0000-4000-8000-000000520406",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Ability Score Improvement: Charisma +2",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "cha",
+          "operation": "bonus",
+          "target": "ability.cha.score",
+          "value": "2"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520407",
+      "revisionId": "52e00000-0000-4000-8000-000000520407",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Ability Score Improvement: Strength +1, Dexterity +1",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "str",
+          "operation": "bonus",
+          "target": "ability.str.score",
+          "value": "1"
+        },
+        {
+          "type": "modifier",
+          "id": "dex",
+          "operation": "bonus",
+          "target": "ability.dex.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520408",
+      "revisionId": "52e00000-0000-4000-8000-000000520408",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Ability Score Improvement: Strength +1, Constitution +1",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "str",
+          "operation": "bonus",
+          "target": "ability.str.score",
+          "value": "1"
+        },
+        {
+          "type": "modifier",
+          "id": "con",
+          "operation": "bonus",
+          "target": "ability.con.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520409",
+      "revisionId": "52e00000-0000-4000-8000-000000520409",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Ability Score Improvement: Strength +1, Intelligence +1",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "str",
+          "operation": "bonus",
+          "target": "ability.str.score",
+          "value": "1"
+        },
+        {
+          "type": "modifier",
+          "id": "int",
+          "operation": "bonus",
+          "target": "ability.int.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520410",
+      "revisionId": "52e00000-0000-4000-8000-000000520410",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Ability Score Improvement: Strength +1, Wisdom +1",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "str",
+          "operation": "bonus",
+          "target": "ability.str.score",
+          "value": "1"
+        },
+        {
+          "type": "modifier",
+          "id": "wis",
+          "operation": "bonus",
+          "target": "ability.wis.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520411",
+      "revisionId": "52e00000-0000-4000-8000-000000520411",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Ability Score Improvement: Strength +1, Charisma +1",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "str",
+          "operation": "bonus",
+          "target": "ability.str.score",
+          "value": "1"
+        },
+        {
+          "type": "modifier",
+          "id": "cha",
+          "operation": "bonus",
+          "target": "ability.cha.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520412",
+      "revisionId": "52e00000-0000-4000-8000-000000520412",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Ability Score Improvement: Dexterity +1, Constitution +1",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "dex",
+          "operation": "bonus",
+          "target": "ability.dex.score",
+          "value": "1"
+        },
+        {
+          "type": "modifier",
+          "id": "con",
+          "operation": "bonus",
+          "target": "ability.con.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520413",
+      "revisionId": "52e00000-0000-4000-8000-000000520413",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Ability Score Improvement: Dexterity +1, Intelligence +1",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "dex",
+          "operation": "bonus",
+          "target": "ability.dex.score",
+          "value": "1"
+        },
+        {
+          "type": "modifier",
+          "id": "int",
+          "operation": "bonus",
+          "target": "ability.int.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520414",
+      "revisionId": "52e00000-0000-4000-8000-000000520414",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Ability Score Improvement: Dexterity +1, Wisdom +1",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "dex",
+          "operation": "bonus",
+          "target": "ability.dex.score",
+          "value": "1"
+        },
+        {
+          "type": "modifier",
+          "id": "wis",
+          "operation": "bonus",
+          "target": "ability.wis.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520415",
+      "revisionId": "52e00000-0000-4000-8000-000000520415",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Ability Score Improvement: Dexterity +1, Charisma +1",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "dex",
+          "operation": "bonus",
+          "target": "ability.dex.score",
+          "value": "1"
+        },
+        {
+          "type": "modifier",
+          "id": "cha",
+          "operation": "bonus",
+          "target": "ability.cha.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520416",
+      "revisionId": "52e00000-0000-4000-8000-000000520416",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Ability Score Improvement: Constitution +1, Intelligence +1",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "con",
+          "operation": "bonus",
+          "target": "ability.con.score",
+          "value": "1"
+        },
+        {
+          "type": "modifier",
+          "id": "int",
+          "operation": "bonus",
+          "target": "ability.int.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520417",
+      "revisionId": "52e00000-0000-4000-8000-000000520417",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Ability Score Improvement: Constitution +1, Wisdom +1",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "con",
+          "operation": "bonus",
+          "target": "ability.con.score",
+          "value": "1"
+        },
+        {
+          "type": "modifier",
+          "id": "wis",
+          "operation": "bonus",
+          "target": "ability.wis.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520418",
+      "revisionId": "52e00000-0000-4000-8000-000000520418",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Ability Score Improvement: Constitution +1, Charisma +1",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "con",
+          "operation": "bonus",
+          "target": "ability.con.score",
+          "value": "1"
+        },
+        {
+          "type": "modifier",
+          "id": "cha",
+          "operation": "bonus",
+          "target": "ability.cha.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520419",
+      "revisionId": "52e00000-0000-4000-8000-000000520419",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Ability Score Improvement: Intelligence +1, Wisdom +1",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "int",
+          "operation": "bonus",
+          "target": "ability.int.score",
+          "value": "1"
+        },
+        {
+          "type": "modifier",
+          "id": "wis",
+          "operation": "bonus",
+          "target": "ability.wis.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520420",
+      "revisionId": "52e00000-0000-4000-8000-000000520420",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Ability Score Improvement: Intelligence +1, Charisma +1",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "int",
+          "operation": "bonus",
+          "target": "ability.int.score",
+          "value": "1"
+        },
+        {
+          "type": "modifier",
+          "id": "cha",
+          "operation": "bonus",
+          "target": "ability.cha.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520421",
+      "revisionId": "52e00000-0000-4000-8000-000000520421",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Ability Score Improvement: Wisdom +1, Charisma +1",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "wis",
+          "operation": "bonus",
+          "target": "ability.wis.score",
+          "value": "1"
+        },
+        {
+          "type": "modifier",
+          "id": "cha",
+          "operation": "bonus",
+          "target": "ability.cha.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520500",
+      "revisionId": "52e00000-0000-4000-8000-000000520500",
+      "schemaVersion": 5,
+      "kind": "feat",
+      "name": "Grappler",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "summary": "General Feat (Prerequisite: Level 4+, Strength or Dexterity 13+)\n\nYou gain the following benefits.\n\nAbility Score Increase. Increase your Strength or Dexterity score by 1, to a maximum of 20.\n\nPunch and Grab. When you hit a creature with an Unarmed Strike as part of the Attack action on your turn, you can use both the Damage and the Grapple option. You can use this benefit only once per turn.\n\nAttack Advantage. You have Advantage on attack rolls against a creature Grappled by you.\n\nFast Wrestler. You don’t have to spend extra movement to move a creature Grappled by you if the creature is your size or smaller.\n\nTomeStack: the level prerequisite is not checked.",
+      "effects": [
+        {
+          "type": "restriction",
+          "id": "grappler-strength",
+          "field": "ability.str.score",
+          "minimum": 13,
+          "group": "grappler-ability",
+          "text": "Strength or Dexterity 13+"
+        },
+        {
+          "type": "restriction",
+          "id": "grappler-dexterity",
+          "field": "ability.dex.score",
+          "minimum": 13,
+          "group": "grappler-ability",
+          "text": "Strength or Dexterity 13+"
+        },
+        {
+          "type": "choice",
+          "id": "grappler-ability-score",
+          "choiceId": "grappler-ability-score",
+          "count": 1,
+          "text": "Ability Score Increase. Increase your Strength or Dexterity score by 1, to a maximum of 20.",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520501",
+              "revisionId": "52e00000-0000-4000-8000-000000520501"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520502",
+              "revisionId": "52e00000-0000-4000-8000-000000520502"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520501",
+      "revisionId": "52e00000-0000-4000-8000-000000520501",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Grappler: Strength +1",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "str",
+          "operation": "bonus",
+          "target": "ability.str.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520502",
+      "revisionId": "52e00000-0000-4000-8000-000000520502",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Grappler: Dexterity +1",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 87
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "dex",
+          "operation": "bonus",
+          "target": "ability.dex.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520600",
+      "revisionId": "52e00000-0000-4000-8000-000000520600",
+      "schemaVersion": 3,
+      "kind": "feat",
+      "name": "Boon of Combat Prowess",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 88
+        }
+      },
+      "status": "published",
+      "summary": "Epic Boon Feat (Prerequisite: Level 19+)\n\nYou gain the following benefits.\n\nAbility Score Increase. Increase one ability score of your choice by 1, to a maximum of 30.\n\nPeerless Aim. When you miss with an attack roll, you can hit instead. Once you use this benefit, you can’t use it again until the start of your next turn.\n\nTomeStack: the level prerequisite is not checked, and the Ability Score Increase (to a maximum of 30) is not applied: record it as an override."
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520601",
+      "revisionId": "52e00000-0000-4000-8000-000000520601",
+      "schemaVersion": 3,
+      "kind": "feat",
+      "name": "Boon of Dimensional Travel",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 88
+        }
+      },
+      "status": "published",
+      "summary": "Epic Boon Feat (Prerequisite: Level 19+)\n\nYou gain the following benefits.\n\nAbility Score Increase. Increase one ability score of your choice by 1, to a maximum of 30.\n\nBlink Steps. Immediately after you take the Attack action or the Magic action, you can teleport up to 30 feet to an unoccupied space you can see.\n\nTomeStack: the level prerequisite is not checked, and the Ability Score Increase (to a maximum of 30) is not applied: record it as an override."
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520602",
+      "revisionId": "52e00000-0000-4000-8000-000000520602",
+      "schemaVersion": 3,
+      "kind": "feat",
+      "name": "Boon of Fate",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 88
+        }
+      },
+      "status": "published",
+      "summary": "Epic Boon Feat (Prerequisite: Level 19+)\n\nYou gain the following benefits.\n\nAbility Score Increase. Increase one ability score of your choice by 1, to a maximum of 30.\n\nImprove Fate. When you or another creature within 60 feet of you succeeds on or fails a D20 Test, you can roll 2d4 and apply the total rolled as a bonus or penalty to the d20 roll. Once you use this benefit, you can’t use it again until you roll Initiative or finish a Short or Long Rest.\n\nTomeStack: the level prerequisite is not checked, and the Ability Score Increase (to a maximum of 30) is not applied: record it as an override.",
+      "effects": [
+        {
+          "type": "resource",
+          "id": "improve-fate",
+          "resourceId": "improve-fate",
+          "label": "Improve Fate",
+          "maximum": "1",
+          "text": "Once you use this benefit, you can’t use it again until you roll Initiative or finish a Short or Long Rest.\n\nTomeStack: only a rest restores it; when you roll Initiative, restore it by hand."
+        },
+        {
+          "type": "recovery",
+          "id": "improve-fate-short-rest",
+          "timing": "onShortRest",
+          "resourceId": "improve-fate",
+          "on": "shortRest",
+          "amount": "all"
+        },
+        {
+          "type": "recovery",
+          "id": "improve-fate-long-rest",
+          "timing": "onLongRest",
+          "resourceId": "improve-fate",
+          "on": "longRest",
+          "amount": "all"
+        },
+        {
+          "type": "roll",
+          "id": "improve-fate-roll",
+          "automation": "assisted",
+          "timing": "onRoll",
+          "rollId": "improve-fate-roll",
+          "label": "Improve Fate",
+          "dice": "2d4",
+          "resourceId": "improve-fate",
+          "text": "When you or another creature within 60 feet of you succeeds on or fails a D20 Test, you can roll 2d4 and apply the total rolled as a bonus or penalty to the d20 roll."
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520603",
+      "revisionId": "52e00000-0000-4000-8000-000000520603",
+      "schemaVersion": 3,
+      "kind": "feat",
+      "name": "Boon of Irresistible Offense",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 88
+        }
+      },
+      "status": "published",
+      "summary": "Epic Boon Feat (Prerequisite: Level 19+)\n\nYou gain the following benefits.\n\nAbility Score Increase. Increase your Strength or Dexterity score by 1, to a maximum of 30.\n\nOvercome Defenses. The Bludgeoning, Piercing, and Slashing damage you deal always ignores Resistance.\n\nOverwhelming Strike. When you roll a 20 on the d20 for an attack roll, you can deal extra damage to the target equal to the ability score increased by this feat. The extra damage’s type is the same as the attack’s type.\n\nTomeStack: the level prerequisite is not checked, and the Ability Score Increase (to a maximum of 30) is not applied: record it as an override."
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520604",
+      "revisionId": "52e00000-0000-4000-8000-000000520604",
+      "schemaVersion": 3,
+      "kind": "feat",
+      "name": "Boon of Spell Recall",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 88
+        }
+      },
+      "status": "published",
+      "summary": "Epic Boon Feat (Prerequisite: Level 19+, Spellcasting Feature)\n\nYou gain the following benefits.\n\nAbility Score Increase. Increase your Intelligence, Wisdom, or Charisma score by 1, to a maximum of 30.\n\nFree Casting. Whenever you cast a spell with a level 1–4 spell slot, roll 1d4. If the number you roll is the same as the slot’s level, the slot isn’t expended.\n\nTomeStack: the level and Spellcasting Feature prerequisites are not checked, and the Ability Score Increase (to a maximum of 30) is not applied: record it as an override.",
+      "effects": [
+        {
+          "type": "roll",
+          "id": "free-casting",
+          "automation": "assisted",
+          "timing": "onRoll",
+          "rollId": "free-casting",
+          "label": "Free Casting",
+          "dice": "1d4",
+          "text": "Whenever you cast a spell with a level 1–4 spell slot, roll 1d4. If the number you roll is the same as the slot’s level, the slot isn’t expended."
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520605",
+      "revisionId": "52e00000-0000-4000-8000-000000520605",
+      "schemaVersion": 3,
+      "kind": "feat",
+      "name": "Boon of the Night Spirit",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 88
+        }
+      },
+      "status": "published",
+      "summary": "Epic Boon Feat (Prerequisite: Level 19+)\n\nYou gain the following benefits.\n\nAbility Score Increase. Increase one ability score of your choice by 1, to a maximum of 30.\n\nMerge with Shadows. While within Dim Light or Darkness, you can give yourself the Invisible condition as a Bonus Action. The condition ends on you immediately after you take an action, a Bonus Action, or a Reaction.\n\nShadowy Form. While within Dim Light or Darkness, you have Resistance to all damage except Psychic and Radiant.\n\nTomeStack: the level prerequisite is not checked, and the Ability Score Increase (to a maximum of 30) is not applied: record it as an override."
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000520606",
+      "revisionId": "52e00000-0000-4000-8000-000000520606",
+      "schemaVersion": 3,
+      "kind": "feat",
+      "name": "Boon of Truesight",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 88
+        }
+      },
+      "status": "published",
+      "summary": "Epic Boon Feat (Prerequisite: Level 19+)\n\nYou gain the following benefits.\n\nAbility Score Increase. Increase one ability score of your choice by 1, to a maximum of 30.\n\nTruesight. You have Truesight with a range of 60 feet.\n\nTomeStack: the level prerequisite is not checked, and the Ability Score Increase (to a maximum of 30) is not applied: record it as an override."
+    }
+  ]
+}
