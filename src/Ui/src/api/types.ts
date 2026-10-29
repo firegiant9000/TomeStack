@@ -2265,6 +2265,14 @@ export type LibraryRestoreChoice =
   | { chosen: false }
   | { chosen: true; token: string; fileName: string; preview: PackagePreview };
 
+/** D77: the daily copies setting and the copies kept in `backups/daily` of the data folder, newest first (file names only). */
+export interface DailyCopies {
+  on: boolean;
+  copies: string[];
+  /** Their total size: each copy holds every PDF copy. */
+  bytes: number;
+}
+
 export interface LibraryRestoreResult {
   added: number;
   replaced: number;

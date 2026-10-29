@@ -9,6 +9,7 @@ import type {
   CandidateEdit,
   CandidateFilter,
   CandidatePage,
+  DailyCopies,
   DiagnosticsText,
   ImportJob,
   ImportSearchHit,
@@ -376,6 +377,10 @@ export function createClient(transport: Transport) {
       call<LibraryRestoreResult>('library.restoreApply', { token, sourceChoices, confirm: true }, { timeoutMs: null }),
     /** Settings "Copy diagnostics": versions and the newest error-log entries, redacted by the service; reads only. */
     copyDiagnostics: () => call<DiagnosticsText>('diagnostics.copy'),
+    /** D77: the daily copies setting and the copies kept. */
+    dailyCopies: () => call<DailyCopies>('library.dailyCopies'),
+    /** Turning it off keeps the copies already taken. */
+    setDailyCopies: (on: boolean) => call<DailyCopies>('library.setDailyCopies', { on }),
   };
 }
 
