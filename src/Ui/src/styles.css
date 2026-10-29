@@ -499,6 +499,16 @@ button.roll:hover { background: var(--accent); color: var(--bg); }
 
 /* M4 D5: import review. The excerpt keeps the PDF's line breaks. */
 pre.excerpt { white-space: pre-wrap; font: inherit; border-left: 3px solid var(--line); padding: 0.25rem 0.75rem; max-height: 20rem; overflow: auto; }
+/* D64: effects beside the page text at 1100px and wider; stacked below that and at 400% zoom. */
+.span-review { display: block; }
+@media (min-width: 1100px) { .span-review { display: grid; grid-template-columns: minmax(12rem, 1fr) minmax(0, 2fr); gap: var(--space-4); align-items: start; } }
+.span-effects { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-2); }
+@media (min-width: 1100px) { .span-effects { flex-direction: column; flex-wrap: nowrap; } }
+.span-effects button { text-align: left; white-space: normal; }
+.span-effects button[aria-pressed='true'] { font-weight: 600; text-decoration: underline; }
+.span-text { border-left: 3px solid var(--line); padding: 0.25rem 0.75rem; max-height: 20rem; overflow: auto; }
+.span-block { white-space: pre-wrap; margin: 0 0 0.5rem; overflow-wrap: anywhere; }
+.span-text mark { background: Mark; color: MarkText; }
 dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.2rem 0.75rem; }
 dt { font-weight: 600; }
 dd { margin: 0; }

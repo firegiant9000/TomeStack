@@ -178,7 +178,8 @@ On another physical machine or a clean VM: install the T5 release, restore a ful
   - a package preflight (provenance, notices and redistributable flags, with import-derived content blocked);
   - duplicate detection that only lists duplicates and never merges them.
 
-  It adds a deterministic Markdown importer that feeds the existing detector. Recipes, the source graph, batch review and version diff, edition lineage, importers for other third-party formats, and a simulator are deferred. Bring the spec into `docs/` first, so the repository holds it.
+  It adds a deterministic Markdown importer that feeds the existing detector. Recipes, the source graph, batch review and version diff, edition lineage, importers for other third-party formats, and a simulator are deferred. The requirements are in [features/import-lab.md](features/import-lab.md) (in `docs/` as of 2026-10-24).
+- **Status (2026-10-26).** Built on branch `import-lab`, awaiting the whole-branch review and the owner's merge: the six things above and the Markdown importer, except that the library-scale pass has no indexed per-source queries (the database v12 proposal, A4, declined by the owner on 2026-10-25). The D60 gate tests pass and the SRD precision/recall table is recorded in [features/m4-acceptance.md](features/m4-acceptance.md). **Still owed by the owner:** the private third-party PDF run, so M4 stays not met (the owed-checks row below keeps its status); and AUD-02.
 - **Deterministic by default.** It reuses the existing PdfPig/OCR worker and `CandidateDetector`.
 - **Separate statuses.** "Parsed", "human reviewed" and "playable" are three different statuses (spec §8B).
 - **No AI in this milestone.** Any AI import is a later, separate, optional and consented feature (spec §12). RulesCore stays independent of any LLM (spec §9).

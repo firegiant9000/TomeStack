@@ -20,6 +20,7 @@ vi.mock('../api/client', () => ({
     listContent: vi.fn(),
     snapshots: vi.fn(),
     previewExport: vi.fn(),
+    packagePreflight: vi.fn(),
     info: vi.fn(),
     play: vi.fn(),
     undoPlay: vi.fn(),
@@ -1036,11 +1037,12 @@ it('does not report a print preview lookup that fails after the preview was clos
 // G6: the export dialog shows the preview's warning, for a backup on opening and for a share once chosen.
 it('shows the needs-newer-build warning of the export preview, for a backup and for a share', async () => {
   const user = userEvent.setup();
-  const text = 'Opening this needs TomeStack 0.7.0 or later: it holds content or a character that older versions refuse.';
+  const text = "Opening this needs TomeStack 0.7.0 or newer (this is TomeStack 0.7.1): 'Compat Hero' is a character at schema 10. Older versions refuse the file.";
   vi.mocked(client.previewExport).mockResolvedValue({
     purpose: 'share', fileName: 'x.tomestack.zip', characters: [], included: [], omitted: [], gapNotes: 0,
     warnings: [{ code: 'package.needs-newer-build', message: text }],
   } as Awaited<ReturnType<typeof client.previewExport>>);
+  vi.mocked(client.packagePreflight).mockResolvedValue({ included: [], omitted: [], blocking: [], notices: [] });
   renderSheet(view());
   await user.click(screen.getByRole('tab', { name: 'Manage' }));
   expect(await screen.findByText(text)).toBeTruthy();

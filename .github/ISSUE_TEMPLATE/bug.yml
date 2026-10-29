@@ -1,0 +1,57 @@
+name: Bug report
+description: Something in TomeStack does not work as it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. For a security problem, do not open an issue: see [SECURITY.md](https://github.com/firegiant9000/TomeStack/blob/main/SECURITY.md).
+        Leave out anything personal from paths and character names you paste.
+  - type: input
+    id: version
+    attributes:
+      label: TomeStack version
+      description: Settings > About shows it.
+      placeholder: "0.7.1"
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      description: Run `winver` to see it.
+      placeholder: "Windows 11 24H2"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: What you did, one step per line.
+      placeholder: |
+        1. Open a character with a homebrew class.
+        2. Go to the Play tab.
+        3. Choose "Take damage" with an amount of 5.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected
+      description: What you expected to happen.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual
+      description: What happened instead, with any message TomeStack showed.
+    validations:
+      required: true
+  - type: checkboxes
+    id: content
+    attributes:
+      label: Content
+      options:
+        - label: I have not pasted content from a book I do not own the rights to share.
+          required: true

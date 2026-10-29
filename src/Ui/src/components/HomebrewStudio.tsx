@@ -30,6 +30,9 @@ import type { BeforeSave } from './OriginPieces';
 import { DebugFindings } from './DebugFindings';
 import { SandboxPanel } from './SandboxPanel';
 import { ComparePanel } from './ComparePanel';
+import { CoveragePanel } from './CoveragePanel';
+import { DuplicateChip } from './DuplicateChip';
+import { duplicateOf, useDuplicates } from './duplicates';
 import { PublishManyPanel, type PendingDraft } from './PublishManyPanel';
 import { SpellListForm } from './SpellListForm';
 import { TreeView } from './TreeView';
@@ -134,6 +137,8 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
   }, [loadSources]);
 
   const source = sources.find((s) => s.id === sourceId) ?? sources[0];
+  // Import Lab L6: library rows that look like another entry get a chip (advice only; nothing is merged). Asked again when the rows change.
+  const duplicates = useDuplicates({ sourceId: source?.id }, entries);
 
   // Item 9: a content is pending when its newest revision is a draft; "Publish all drafts" previews them.
   const [publishingAll, setPublishingAll] = useState(false);
@@ -257,6 +262,20 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
     }
   }
 
+  /** The class grid's "Edit {feature}" (Import Lab, D62 L2): opens a feature of this source, never over unsaved changes. */
+  function openFeature(contentId: string) {
+    const entry = entries.find((e) => e.contentId === contentId);
+    if (!entry) {
+      onStatus('That feature is not in this source, so it cannot be edited here.');
+      return;
+    }
+    if (editorDirty) {
+      onStatus('Save or close the open entry before opening another one: it has changes that are not saved.');
+      return;
+    }
+    edit(entry);
+  }
+
   /** Opens the finding's entry (unless it is already open, which keeps unsaved edits) and focuses its rule. */
   function show(finding: DebugFinding) {
     const entry = entries.find((e) => e.contentId === finding.content.contentId);
@@ -348,6 +367,7 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
                     {entry.latest.status === 'published' ? 'published' : entry.latestPublished ? 'published, with a newer draft' : 'draft'} ·{' '}
                     {entry.revisions.length} revision{entry.revisions.length === 1 ? '' : 's'}
                   </span>{' '}
+                  <DuplicateChip other={duplicateOf(duplicates, (m) => m.contentId === entry.contentId)} />{' '}
                   <button type="button" onClick={() => edit(entry)}>
                     Edit {entry.name}
                   </button>
@@ -488,6 +508,8 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
         </section>
       )}
 
+      {source && <CoveragePanel sourceId={source.id} refreshKey={entries} />}
+
       {editing && source && (
         <EntryEditor
           key={`${editing.contentId}-${editing.revisionId}`}
@@ -499,6 +521,7 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
           designFeedback={feedbackOn}
           onError={onError}
           onDirty={setEditorDirty}
+          onEditFeature={openFeature}
           onClose={() => setEditing(undefined)}
           onEntriesChanged={() => void loadEntries(source.id)}
           onPublished={async (result, name) => {
@@ -676,6 +699,8 @@ function EntryEditor(props: {
   onDirty: (dirty: boolean) => void;
   /** The class helper published option features: reload the source's content. */
   onEntriesChanged: () => void;
+  /** The class grid asks the studio to open one of the class's features for editing. */
+  onEditFeature: (contentId: string) => void;
   /** `pinned` counts the unpublished drafts the saved entry points at. */
   onDraftSaved: (name: string, pinned: number) => void;
   /** "Publish all drafts" published the entry this editor saved: the editor shows a superseded draft and is closed. */
@@ -1082,6 +1107,7 @@ function EntryEditor(props: {
           onBusy={setClassBusy}
           onOptionsPublished={props.onEntriesChanged}
           onError={onError}
+          onEditFeature={props.onEditFeature}
         />
       )}
 
