@@ -67,6 +67,30 @@ public class SnapshotTests
     }
 
     [Fact]
+    public void A_restore_preview_lists_the_encounter()
+    {
+        var (temp, hero, _) = Setup();
+        using var _ = temp;
+        var app = temp.App;
+        app.Play(new(hero.Id, PlayActionKind.StartEncounter, Confirm: true, ExpectedUpdatedAt: app.GetCharacter(hero.Id).Character.UpdatedAt));
+        for (var round = 0; round < 3; round++)
+            app.Turn(new(hero.Id, TurnMoment.TurnStart, true, app.GetCharacter(hero.Id).Character.UpdatedAt));
+        Assert.Equal(3, app.GetCharacter(hero.Id).Character.Play.Encounter!.Round);
+        var taken = app.Snapshot(new(hero.Id, "Round 3"));
+        app.Play(new(hero.Id, PlayActionKind.EndEncounter, Confirm: true, ExpectedUpdatedAt: app.GetCharacter(hero.Id).Character.UpdatedAt));
+        Assert.Null(app.GetCharacter(hero.Id).Character.Play.Encounter);
+        Assert.Equal(8, app.GetCharacter(hero.Id).Character.SchemaVersion);
+
+        var preview = app.PreviewRestore(new(hero.Id, taken.Id));
+        Assert.True(preview.PlayChanges); // the encounter differs (round 3 against none)
+
+        var restored = app.RestoreSnapshot(new(preview.Token, Confirm: true));
+        Assert.Equal(3, restored.View.Character.Play.Encounter!.Round);
+        Assert.Equal(10, restored.View.Character.SchemaVersion);
+        Assert.Equal(3, app.GetCharacter(hero.Id).Character.Play.Encounter!.Round);
+    }
+
+    [Fact]
     public void Older_snapshots_past_one_page_stay_reachable_by_paging()
     {
         var (temp, hero, cls) = Setup();

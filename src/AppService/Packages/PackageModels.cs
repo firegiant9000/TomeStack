@@ -105,20 +105,25 @@ public sealed record SourceAttestation(Guid SourceId, string Statement, DateTime
 /// <summary>What <c>package.sourcePackPreview</c> would write; nothing is written.</summary>
 /// <param name="Sources">The sources, with the license notice each carries.</param>
 /// <param name="Revisions">Published revisions included (superseded ones too, so pinned characters keep working).</param>
-/// <param name="Warnings">Content the pack refers to but does not carry (another source's), which the receiver must have.</param>
+/// <param name="Warnings">Content the pack refers to but does not carry (another source's), which the receiver must have; and <c>package.needs-newer-build</c>, which fires when the file needs a newer release than the previous minor (D83).</param>
 /// <param name="Drafts">Drafts of these sources that stay on this machine (a pack never carries them).</param>
-public sealed record SourcePackPreview(string FileName, IReadOnlyList<LicenseNotice> Sources, int Revisions, int Drafts, IReadOnlyList<Diagnostic> Warnings);
+/// <param name="OpensIn">The oldest released TomeStack that opens the pack (D83); null when no released version does.</param>
+/// <param name="OpensInCauses">What keeps the previous minor release out; empty when it opens there. Always set on a real preview.</param>
+public sealed record SourcePackPreview(string FileName, IReadOnlyList<LicenseNotice> Sources, int Revisions, int Drafts, IReadOnlyList<Diagnostic> Warnings,
+    string? OpensIn = null, IReadOnlyList<OpensInCause>? OpensInCauses = null);
 
 /// <summary>What <c>package.campaignPackPreview</c> would write (M6 slice 2); nothing is written.</summary>
 /// <param name="Included">Allowed sources the pack carries, with their published revisions (each passed the source-pack guard).</param>
 /// <param name="Referenced">Allowed sources bundled with TomeStack: referenced by id, never copied.</param>
 /// <param name="LeftOut">Allowed sources the pack leaves out and lists in <c>omitted[]</c>, each with why.</param>
 /// <param name="Revisions">Published revisions carried.</param>
-/// <param name="Warnings">Content the pack refers to but does not carry, which the receiver must have.</param>
+/// <param name="Warnings">Content the pack refers to but does not carry, which the receiver must have; and <c>package.needs-newer-build</c>, which fires when the file needs a newer release than the previous minor (D83).</param>
+/// <param name="OpensIn">The oldest released TomeStack that opens the pack (D83); null when no released version does.</param>
+/// <param name="OpensInCauses">What keeps the previous minor release out; empty when it opens there. Always set on a real preview.</param>
 public sealed record CampaignPackPreview(
     string FileName, Guid CampaignId, string Name, string RulesFamily,
     IReadOnlyList<LicenseNotice> Included, IReadOnlyList<LicenseNotice> Referenced, IReadOnlyList<LeftOutSource> LeftOut,
-    int Revisions, IReadOnlyList<Diagnostic> Warnings);
+    int Revisions, IReadOnlyList<Diagnostic> Warnings, string? OpensIn = null, IReadOnlyList<OpensInCause>? OpensInCauses = null);
 
 /// <param name="Reason">Why it is left out, as a diagnostic (<c>pack.source-not-shareable</c>, <c>pack.source-received</c>, …).</param>
 public sealed record LeftOutSource(Guid SourceId, string Title, string Publisher, string License, Diagnostic Reason);
@@ -136,9 +141,12 @@ public sealed record CampaignImpact(Guid CampaignId, Guid CharacterId, string Ch
 /// <param name="LinkedPdfs">PDFs left where they are: their records are included, the files are not.</param>
 /// <param name="Unreadable">Managed PDFs that are missing or damaged on disk and would be left out, by source title.</param>
 /// <param name="Extensions">M6 slice 3: installed extensions kept (their files, not their grants).</param>
+/// <param name="OpensIn">The oldest released TomeStack that opens the backup (D83); null when no released version does.</param>
+/// <param name="OpensInCauses">What keeps the previous minor release out; empty when it opens there. Always set on a real preview.</param>
 public sealed record LibraryBackupPreview(
     string FileName, int Characters, int Campaigns, int GapNotes, int Sources, int PublishedRevisions, int DraftRevisions,
-    int ManagedPdfs, long ManagedPdfBytes, int LinkedPdfs, IReadOnlyList<string> Unreadable, int Extensions = 0);
+    int ManagedPdfs, long ManagedPdfBytes, int LinkedPdfs, IReadOnlyList<string> Unreadable, int Extensions = 0,
+    string? OpensIn = null, IReadOnlyList<OpensInCause>? OpensInCauses = null);
 
 /// <param name="Warnings">Anything left out (a damaged PDF copy); the backup is still complete otherwise.</param>
 public sealed record LibraryBackupResult(string FileName, long Bytes, LibraryBackupPreview Contents, IReadOnlyList<Diagnostic> Warnings);
@@ -159,7 +167,11 @@ public sealed record OmittedRevision(ContentReference Reference, string Name, IR
 
 /// <summary>What an export with a given purpose would contain, before anything is written (<c>package.exportPreview</c>).</summary>
 /// <param name="GapNotes">The number of gap notes included: all of the characters' notes in a backup, always 0 in a share (M3 B3).</param>
-public sealed record ExportPreview(ExportPurpose Purpose, string FileName, IReadOnlyList<Guid> Characters, IReadOnlyList<LicenseNotice> Included, IReadOnlyList<OmittedSource> Omitted, int GapNotes = 0);
+/// <param name="Warnings"><c>package.needs-newer-build</c> when the package needs a newer release than the previous minor (D83); empty otherwise.</param>
+/// <param name="OpensIn">The oldest released TomeStack that opens the package (D83); null when no released version does.</param>
+/// <param name="OpensInCauses">What keeps the previous minor release out; empty when it opens there. Always set on a real preview.</param>
+public sealed record ExportPreview(ExportPurpose Purpose, string FileName, IReadOnlyList<Guid> Characters, IReadOnlyList<LicenseNotice> Included, IReadOnlyList<OmittedSource> Omitted, int GapNotes = 0, IReadOnlyList<Diagnostic>? Warnings = null,
+    string? OpensIn = null, IReadOnlyList<OpensInCause>? OpensInCauses = null);
 
 public enum PackageItemAction { Add, Unchanged, Replace, Conflict }
 

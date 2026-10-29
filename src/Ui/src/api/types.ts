@@ -227,6 +227,24 @@ export interface DerivedValue {
   units: 'score' | 'modifier' | 'bonus' | 'feet' | string;
   /** D24: on saves and skills, from a grant. */
   mark?: 'none' | 'proficient' | 'expertise';
+  /** Content v11 (D43 S6): on saves, skills, ability modifiers and initiative, the advantage or disadvantage the sheet found; absent when none. */
+  mode?: RollModeSummary;
+}
+
+/** One reason a d20 roll has advantage or disadvantage; `against` (condition keys) means the player confirms it, so it is only a note. */
+export interface RollModeReason {
+  mode: 'advantage' | 'disadvantage';
+  source: string;
+  content: ContentReference;
+  against?: string[];
+  /** True when the service applies this reason by itself (an automatic effect with no `against`). */
+  automatic: boolean;
+}
+
+/** The mode the sheet calculates for a field, and every reason listed for it. */
+export interface RollModeSummary {
+  automatic: RollMode;
+  reasons: RollModeReason[];
 }
 
 export type RestPeriod = 'shortRest' | 'longRest';
@@ -255,6 +273,12 @@ export interface ResourceValue {
   text?: string;
   /** Content v10 (Wave 3 item 22): the group the resource is listed under on Play; absent below v10 and when the content names none. */
   activation?: Activation;
+  /** Content v11 (D43): the pool counts up (`spent` is what has built up toward `maximum`, e.g. strain). */
+  countsUp?: boolean;
+  /** Content v11 (D43): what the pool announces when it fills; only with `countsUp`. */
+  fullText?: string;
+  /** Content v11 (D43): the pool is a per-turn allowance (such as reactions); actions that spend it are listed under its name. */
+  allowance?: boolean;
 }
 
 export interface FeatureEffect {
@@ -274,6 +298,45 @@ export interface FeatureEffect {
   variableCost?: boolean;
   /** Content v8: the roll's bonus formula evaluated for this character (for example the Fighter level). */
   bonus?: number;
+  /** Content v11 (D43): false when the action is outside the form it needs (`unavailableReason` says which). The server always sends it. */
+  available: boolean;
+  unavailableReason?: string;
+  /** Content v11 (D43): the save the action asks for, with its DC evaluated for this character (`saveDc` is absent when it could not be). */
+  saveAbility?: Ability;
+  saveDc?: number;
+  saveTrace?: TraceEntry[];
+  area?: RollArea;
+  range?: string;
+  targets?: string;
+  /** Content v11 (D43): extra dice for each unit spent beyond the base cost. */
+  perUnit?: RollPerUnit;
+  /** Content v11 (D43): the other pools a use also changes, each amount evaluated for this character (null when it could not be). */
+  alsoChange?: AlsoChangeValue[];
+  /** Content v11 (D43): the cost and per-unit amount use up the counting-up pool's built-up value. */
+  drawsDown?: boolean;
+  /** The roll's content `rollId` (what `useAction` names); it can differ from `id`. */
+  rollId?: string;
+}
+
+export interface AlsoChangeValue {
+  resourceContent: string;
+  resourceId: string;
+  change: 'spend' | 'regain';
+  amount?: number | null;
+}
+
+export type AreaShape = 'line' | 'cone' | 'sphere' | 'cube' | 'cylinder' | 'emanation';
+
+/** Content v11 (D43): an area in feet; `width` applies to a line only. */
+export interface RollArea {
+  shape: AreaShape;
+  size: number;
+  width?: number;
+}
+
+export interface RollPerUnit {
+  dice: string;
+  maxUnits?: number;
 }
 
 /** Content v6 (M3 B2): something switched on and off at the table. */
@@ -290,17 +353,65 @@ export interface ToggleValue {
   auto?: boolean;
   /** Content v10 (Wave 3 item 22): the group the toggle is listed under on Play; absent below v10 and when the content names none. */
   activation?: Activation;
+  /** Content v11 (D43): the form group the toggle belongs to (`group` id and the content that declares it); absent when ungrouped. */
+  group?: string;
+  groupContent?: string;
+  /** The label of the toggleGroup effect that declares the group (a calculated sheet field); absent when the declarer is not on the character. */
+  groupLabel?: string;
+  /** A primary is the form itself (one on at a time); an overlay stacks on a primary. Always present when `group` is. */
+  layer?: 'primary' | 'overlay';
+  /** What switching it on spends from `costResourceContent`'s pool of `resourceId`; absent with a pool means 1. */
+  cost?: number;
+  costResourceContent?: string;
+  /** False when the group rules currently refuse switching it on (`unavailableReason` says why). The server always sends it. */
+  available: boolean;
+  unavailableReason?: string;
+  /** Content v11 (D43): rounds the toggle lasts once on in an encounter, and what is left of them (absent: not counted, track by hand). */
+  duration?: number;
+  roundsLeft?: number;
+  /** An overlay's own rule as declared: the toggles it is allowed with (a missing `contentId` is its own content), and whether it is allowed with no form on. */
+  allowedWith?: { contentId?: string; toggleId: string }[];
+  allowedInBase?: boolean;
+}
+
+export type TurnMoment = 'turnStart' | 'turnEnd';
+
+/** Content v11 (D43): a pool change at the start or end of the turn, optionally tied to a toggle. Previewed and confirmed by a turn command. */
+export interface UpkeepValue {
+  content: ContentReference;
+  effectId: string;
+  toggleContent?: string;
+  toggleId?: string;
+  at: TurnMoment;
+  resourceContent: string;
+  resourceId: string;
+  change: 'spend' | 'regain';
+  amount?: number;
+  all: boolean;
+  ifShort: 'ask' | 'end';
+  label: string;
 }
 
 export type Activation = 'action' | 'bonusAction' | 'reaction' | 'other';
 
-/** SPEC C-02, C-04: an attack with an equipped weapon. */
+/** Content v11 (D43): an attack rider that applies to an attack now, with its numbers. */
+export interface RiderValue {
+  content: ContentReference;
+  effectId: string;
+  dice?: string;
+  toHit: number;
+  damageBonus: number;
+  damageType?: string;
+}
+
+/** SPEC C-02, C-04: an attack with an equipped weapon, or (D43) an attack a feature gives. */
 export interface AttackEntry {
   item: ContentReference;
   name: string;
   effectId: string;
   attack: 'melee' | 'ranged';
-  category: 'simple' | 'martial';
+  /** Absent for a feature attack. */
+  category?: 'simple' | 'martial' | null;
   ability: Ability;
   toHit: number;
   damage: string;
@@ -314,6 +425,20 @@ export interface AttackEntry {
   trace: TraceEntry[];
   warnings: Diagnostic[];
   origin: TraceOrigin;
+  /** Content v11 (D43): where the row comes from. A feature attack is rolled by `item` + `effectId` (`content` + `effectId`), not as a weapon. */
+  source: 'weapon' | 'feature';
+  tags?: string[] | null;
+  /** The attack can stand in for one attack of the Attack action. */
+  replacesAttack: boolean;
+  riders?: RiderValue[] | null;
+  /** False when unavailable (`unavailableReason` says why); the server always sends it. An unavailable attack has no damage to roll. */
+  available: boolean;
+  unavailableReason?: string | null;
+  activation?: Activation | null;
+  /** What using the attack spends: `cost` of the pool `resourceId` in `costResourceContent`. */
+  costResourceContent?: string | null;
+  resourceId?: string | null;
+  cost?: number | null;
 }
 
 /** SPEC I-05: an active revision with its text and automation status. */
@@ -340,10 +465,22 @@ export interface MechanicEntry {
   effectId?: string;
   /** The effect's type; `"text"` for a feature with no effects. */
   effectType: string;
+  /** What the author wrote. Not what TomeStack delivers: read `effective` for that. */
   automation: AutomationStatus;
+  /** Import Lab (R10): the author's value lowered by what the engine does (capability registry). Absent from an older host. */
+  effective?: EffectiveAutomation;
   manualStep?: string;
   sourceId?: string;
   page?: PageRef;
+}
+
+/** `status` is absent when `unsupported`: the effect's type is not one this build knows. The server omits null fields. */
+export interface EffectiveAutomation {
+  status?: AutomationStatus | null;
+  unsupported: boolean;
+  ceiling?: AutomationStatus | null;
+  reason?: string | null;
+  evidence?: string | null;
 }
 
 /** `Unsupported` is a subset of `mechanics`: effects of a type this build does not know. */
@@ -389,6 +526,8 @@ export interface CharacterSheet {
   pactSlots?: SlotValue;
   attacks?: AttackEntry[];
   toggles?: ToggleValue[];
+  /** Content v11 (D43): the upkeeps the active content declares, for the turn panel and the combat strip; absent when there are none. */
+  upkeeps?: UpkeepValue[];
   /** Content v9 (ADR-010): each class-table column at the character's level in that class. */
   scales?: ScaleValue[];
   /** D38: current hit points are at or below half the maximum (rounded down), with a maximum of at least 1. Absent when not bloodied. */
@@ -401,6 +540,8 @@ export interface CharacterSheet {
   levelUpAvailable?: boolean;
   /** Wave 3 item 27: the total needed for the next level while experience points are tracked and the level is 1 to 19; absent otherwise. */
   xpForNextLevel?: number;
+  /** Content v11 (D43 S7): the damage responses the active content declares; absent when there are none. */
+  responses?: ResponseValue[];
 }
 
 /** When an item's charges come back; absent `regain` means all of them. */
@@ -462,6 +603,92 @@ export interface DamageOutcome {
   warnings: Diagnostic[];
 }
 
+/** Content v11 (D43 S7): when a damage response applies. */
+export type ResponsePhase = 'damageReduction' | 'hitPointOutcome' | 'threshold';
+export type ResponseOutcomeKind = 'spend' | 'regain' | 'toggleOn' | 'offerRoll' | 'regainHitPoints' | 'temporaryHitPoints';
+
+/** What a chosen response does, evaluated. */
+export interface ResponseOutcomeValue {
+  kind: ResponseOutcomeKind;
+  resourceContent?: string;
+  resourceId?: string;
+  amount?: number;
+  toggle?: { contentId?: string; toggleId: string };
+  roll?: ContentReference;
+  rollEffectId?: string;
+  rollId?: string;
+}
+
+/** One damage response of the character, calculated (`CharacterSheet.responses`; also inside each offer). Numbers come from the server. */
+export interface ResponseValue {
+  contentId: string;
+  contentName: string;
+  responseId: string;
+  label: string;
+  phase: ResponsePhase;
+  amount?: number;
+  costResourceContent?: string;
+  resourceId?: string;
+  cost?: number;
+  available: boolean;
+  unavailableReason?: string;
+  text?: string;
+  atOrBelow?: number;
+  survived: boolean;
+  outcomes?: ResponseOutcomeValue[];
+}
+
+/** One outcome of a `response` effect as authored (content v11); which members apply depends on `kind`. */
+export interface ResponseOutcomeDef {
+  kind: ResponseOutcomeKind;
+  resourceId?: string;
+  resourceContent?: string;
+  amount?: string;
+  toggle?: { contentId?: string; toggleId: string };
+  rollId?: string;
+  rollContent?: string;
+}
+
+/** A response chosen for a hit. */
+export interface ResponseChoice {
+  contentId: string;
+  responseId: string;
+}
+
+/** A response eligible for a hit; `offered` is false (with `reason`) when it cannot be chosen now. */
+export interface ResponseOffer {
+  response: ResponseValue;
+  offered: boolean;
+  reason?: string;
+}
+
+/** A roll a chosen response offers; the confirm returns it as a `damage.roll-offered` notice carrying the same content and effect id. */
+export interface OfferedRoll {
+  content: ContentReference;
+  effectId: string;
+  rollId: string;
+  label: string;
+}
+
+/**
+ * `character.damagePreview`: one hit with the responses chosen so far. When `notes` is not empty the choices cannot be applied and
+ * `after` is the current state, not the result. `updatedAt` is the stored stamp it was planned from; the confirm sends it back.
+ */
+export interface DamagePreview {
+  characterId: string;
+  amount: number;
+  type?: string;
+  reduction: number;
+  outcome: DamageOutcome;
+  after: HitPointState;
+  concentrationDc?: number;
+  concentrationEnds: boolean;
+  offers: ResponseOffer[];
+  rolls: OfferedRoll[];
+  notes: Diagnostic[];
+  updatedAt: string;
+}
+
 export interface ScaleValue {
   class: ContentReference;
   className: string;
@@ -493,6 +720,10 @@ export interface PlayState {
   concentration?: { spell: ContentReference; name: string; pendingSaveDc?: number };
   /** Character schema v9 (D42): current and temporary hit points per companion. */
   companions?: CompanionPlay[];
+  /** Character schema v7 (M3 B2): the toggles switched on; v10 (D43) adds the rounds left on a timed one. */
+  toggles?: { contentId: string; toggleId: string; roundsLeft?: number }[];
+  /** Character schema v10 (D43): the encounter in progress. Round 0 means the first turn has not started; show max(1, round). */
+  encounter?: { round: number };
 }
 
 export type PlayActionKind =
@@ -523,7 +754,10 @@ export type PlayActionKind =
   | 'companionDamage'
   | 'companionHeal'
   | 'companionSetHitPoints'
-  | 'companionSetTemporaryHitPoints';
+  | 'companionSetTemporaryHitPoints'
+  | 'startEncounter'
+  | 'endEncounter'
+  | 'useAction';
 
 export interface PlayAction {
   action: PlayActionKind;
@@ -533,8 +767,18 @@ export interface PlayAction {
   condition?: string;
   /** Content v6: the toggle to switch on or off (with `contentId`). */
   toggleId?: string;
+  /** With `toggleOn` (content v11): switch the form already on in the same group off first. Without it the server refuses with `toggle.group-occupied`. */
+  replace?: boolean;
+  /** D44: the character's `updatedAt` the change was decided from. Required by a compound change (`play.basis-required` without it); any stamp that is not the stored one is `character.stale`. */
+  expectedUpdatedAt?: string;
   /** With `damage`: one of the thirteen damage types (any case). Absent: untyped, so no defence applies. */
   damageType?: string;
+  /** With `damage` (D43 S7): the damage responses chosen for this hit. A non-empty list makes the change compound (it needs `expectedUpdatedAt`). */
+  responses?: { contentId: string; responseId: string }[];
+  /** With `useAction` (D43 S8, with `contentId`): the roll to use, by its `rollId`. Compound (needs `expectedUpdatedAt`); `amount` is the units of a per-unit roll. */
+  rollId?: string;
+  /** With `endEncounter` (D43 S8): counting-up pools to reset to 0 in the same change, as `{contentId}/{resourceId}` (at most 64). Any other action, or a pool that does not count up, is `play.clear-invalid`. */
+  clear?: string[];
   /** With `spendCharge` or `regainCharge`: the equipment entry, by its id, or by `entryIndex` and `contentId` while it has none. */
   entryId?: string;
   entryIndex?: number;
@@ -546,7 +790,7 @@ export interface PlayAction {
 export interface RestChange {
   id: string;
   /** `hitDie`: one spent hit die of a short rest (`die`, `amount` hit points); `hitDice`: dice regained on a long rest. */
-  kind: 'hitPoints' | 'temporaryHitPoints' | 'resource' | 'exhaustion' | 'hitDie' | 'hitDice' | 'deathSaves' | 'spellSlots' | 'pactSlots' | 'toggle' | 'concentration' | 'charges';
+  kind: 'hitPoints' | 'temporaryHitPoints' | 'resource' | 'exhaustion' | 'hitDie' | 'hitDice' | 'deathSaves' | 'spellSlots' | 'pactSlots' | 'toggle' | 'concentration' | 'charges' | 'encounter';
   slotLevel?: number;
   die?: number;
   amount?: number;
@@ -562,6 +806,55 @@ export interface RestChange {
   /** `charges` (Wave 3 item 25): `resourceId` is the entry key, `dice` what the player still rolls while `spentAfter` is absent. */
   dice?: string;
   spentAfter?: number | null;
+}
+
+export type TurnChangeKind = 'round' | 'duration' | 'toggleEnd' | 'spend' | 'regain';
+
+/** D43 slice 3: one proposed change of a turn. `id` is stable for the same character state, so an unticked id is skipped when confirmed. */
+export interface TurnChange {
+  id: string;
+  kind: TurnChangeKind;
+  label: string;
+  /** For `spend` and `regain`, the pool's spent count before and after. */
+  from: number;
+  to: number;
+  reason: string;
+  origin: TraceOrigin;
+  /** Cannot be unticked (a toggle that ends because it cannot pay, or because of an earlier change or choice). */
+  required?: boolean;
+  contentId?: string;
+  resourceId?: string;
+  toggleId?: string;
+}
+
+/** What the player does about an upkeep the pool cannot cover: end the toggle, or keep it and settle the rest by hand. */
+export type TurnChoiceOption = 'end' | 'keep';
+
+/** A question the plan asks. `id` is `short:{content}:{effect}`; `label` is the whole line to show ("Iron stance needs 2, has 1"). */
+export interface TurnChoicePrompt {
+  id: string;
+  label: string;
+  contentId: string;
+  toggleId: string;
+  needs: number;
+  has: number;
+}
+
+/** A message to show when a counting-up pool becomes full. */
+export interface TurnPrompt {
+  id: string;
+  text: string;
+  origin: TraceOrigin;
+}
+
+/** `character.turnPreview`: the plan for the selection sent, already reflecting it. `updatedAt` is the stored stamp it was planned from; `character.turn` must send it back. */
+export interface TurnPreview {
+  at: TurnMoment;
+  changes: TurnChange[];
+  choices: TurnChoicePrompt[];
+  manual: Diagnostic[];
+  prompts: TurnPrompt[];
+  updatedAt: string;
 }
 
 /** A rest proposal (SPEC C-05, D01). `basis` must be sent back to apply exactly this proposal. */
@@ -613,6 +906,21 @@ export interface RollRecord {
   modifiers: RollModifier[];
   total: number;
   provenance?: RollProvenance;
+  /** D43 S5: the uses this roll implies spending from a pool (informational; the Spend button sends `character.play`). */
+  spend?: RollSpend;
+  /** D43 S6: the mode the sheet applied to a field roll, with the content that gave it (absent when the sheet applied none). */
+  automaticMode?: RollMode;
+  modeSources?: string[];
+  /** D72: the sheet's trace for the number rolled (a field, an attack, a caster's spell attack); absent when the roll has none. */
+  explain?: TraceEntry[];
+}
+
+export interface RollSpend {
+  contentId: string;
+  resourceId: string;
+  amount: number;
+  /** D43 S8: the pool counts up and this roll draws it down; the record's Spend is a `useAction`, never a plain `spend`. */
+  drawsDown?: boolean;
 }
 
 /** A content roll effect (`content` + `effectId`) or a sheet field as a d20 test (`field`). */
@@ -624,6 +932,8 @@ export interface RollTarget {
   critical?: boolean;
   /** One of the character's hit dice (d6–d12), the die alone. */
   hitDie?: number;
+  /** D43 S5: the points a per-unit action spends (its base cost plus the extra units); the server checks the range. */
+  amount?: number;
   /** A death saving throw: a d20 with no modifier. */
   deathSave?: boolean;
   /** One of the character's spells: its attack roll (`spellAttack`) or its dice. */
@@ -683,6 +993,10 @@ export interface CharacterView {
   campaign?: CampaignStatus;
   /** Set only on the view a damage command returns. */
   damage?: DamageOutcome;
+  /** D44: present only while the service holds a one-level undo for the last compound play change ("switch to Tide form"). */
+  undoLabel?: string;
+  /** D43 slice 3: set only on the reply of a turn, an encounter start or end, or a spend into a full pool ("duration: track by hand", `resource.full`). Never on a later read. */
+  notices?: Diagnostic[];
 }
 
 export interface CharacterSummary {
@@ -871,6 +1185,37 @@ export interface PackageManifest {
   attestations?: { sourceId: string; statement: string; confirmedAt: string }[];
 }
 
+// ---- Import Lab L5 (`package.preflight`): the one sharing rule, as a list before any share export is saved ----
+
+export type PreflightKind = 'package' | 'sourcePack' | 'campaignPack' | 'sheet';
+
+/** `selection`: character ids for `package` and `sheet`, source ids for `sourcePack`, the campaign id for `campaignPack`. */
+export interface PreflightRequest {
+  kind: PreflightKind;
+  selection: string[];
+}
+
+/** A revision row names the content; a source-level row (a blocked source, a PDF) has an empty revision id (all zeros). */
+export interface PreflightRow {
+  contentId: string;
+  revisionId: string;
+  name: string;
+  sourceName: string;
+  redistributable: boolean;
+  importDerived?: boolean | null;
+  /** `bundled`, `local`, `received` or `unknown`. */
+  origin: string;
+  /** A `preflight.*` code; absent for an included row. The UI says it in words. */
+  reason?: string | null;
+}
+
+export interface PreflightReport {
+  included: PreflightRow[];
+  omitted: PreflightRow[];
+  blocking: PreflightRow[];
+  notices: string[];
+}
+
 /** M6 slice 1 (`package.sourcePackPreview`): what a source pack would hold. Nothing is written. */
 export interface SourcePackPreview {
   fileName: string;
@@ -1038,6 +1383,8 @@ export interface ExportPreview {
   omitted: OmittedSource[];
   /** Gap notes the package would carry: all of the characters' notes in a backup, 0 in a share (M3 B3). */
   gapNotes: number;
+  /** G6: `package.needs-newer-build` when the package would hold content or a character that TomeStack 0.6.x refuses. */
+  warnings?: Diagnostic[];
 }
 
 /** `import` (gap-note schema v2, D16b): an item a D&D Beyond sheet import could not match or place, named by its label. Only the importer writes it. */
@@ -1074,6 +1421,10 @@ export type ImportJobStatus = 'queued' | 'running' | 'completed' | 'cancelled' |
 export interface ImportJob {
   id: string;
   sourceId: string;
+  /** SHA-256 of the document the job read (the PDF, or the Markdown file's bytes); its pages are stored under it. */
+  sha256: string;
+  /** `markdown` for a Markdown import (import pages only: no PDF, not resumable); absent for a PDF job. */
+  format?: 'markdown';
   firstPage: number;
   lastPage?: number;
   wholeDocument: boolean;
@@ -1103,6 +1454,55 @@ export interface ImportSearchHit {
   snippet: string;
 }
 
+/** One text line of a stored block, in PDF points. */
+export interface StoredTextLine {
+  text: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** One text block of a stored page, in PDF points. */
+export interface StoredTextBlock {
+  text: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  fontSize: number;
+  bold: boolean;
+  lines?: StoredTextLine[];
+}
+
+/** `import.page`: the stored extraction of one page (ADR-009). Page text is data: render it as text nodes only. */
+export interface StoredPage {
+  page: number;
+  text: string;
+  fromOcr: boolean;
+  width: number;
+  height: number;
+  blocks: StoredTextBlock[];
+  warnings: string[];
+  error?: string;
+}
+
+/**
+ * D64: where on the stored page text one proposed effect (or the name) was read. `blockStart`/`blockEnd` index the page's
+ * stored blocks (`blockEnd` is on `pageEnd` when set, else on `page`); `lineStart`/`lineEnd` are source lines (Markdown
+ * only; absent for a PDF). `patternId` is a stable id, never prose.
+ */
+export interface CandidateSpan {
+  page: number;
+  pageEnd?: number;
+  blockStart: number;
+  blockEnd: number;
+  lineStart?: number;
+  lineEnd?: number;
+  patternId: string;
+  confidence: number;
+}
+
 export interface DraftCandidate {
   id: string;
   sourceId: string;
@@ -1119,6 +1519,10 @@ export interface DraftCandidate {
   fields: Record<string, string>;
   lowConfidenceFields: string[];
   summary?: string;
+  /** D64: by proposed effect id. Absent on a candidate stored before spans existed (review then shows the whole excerpt). */
+  effectSpans?: Record<string, CandidateSpan>;
+  /** D64: where the name was read; absent when unknown. */
+  nameSpan?: CandidateSpan;
 }
 
 export type CandidateStatus = 'pending' | 'accepted' | 'acceptedAsReference' | 'ignored';
@@ -1135,6 +1539,8 @@ export interface StoredCandidate {
   grantsCandidates?: { candidateId: string; level: number }[];
   /** R29: the reviewer saved a rules family for this candidate; absent (false) until then. */
   familiesReviewed?: boolean;
+  /** D64: SHA-256 of the job's attachment, so a span resolves to the stored page text after the attachment is replaced; absent before spans existed. */
+  attachmentSha256?: string;
   /** R120: the compare-and-swap token of the stored row; sent back as `CandidateEdit.expected`. */
   etag?: string;
   updatedAt: string;
@@ -1273,11 +1679,51 @@ export type ClassEntry = 'startingClass' | 'multiclass';
 export type SpellcastingAbility = 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha';
 
 export type Effect =
-  | (EffectBase & { type: 'modifier'; operation: 'bonus' | 'set' | 'replace'; target: string; value: string; toggle?: string })
+  | (EffectBase & {
+      type: 'modifier';
+      operation: 'bonus' | 'set' | 'replace';
+      target: string;
+      value: string;
+      toggle?: string;
+      /** Content v11 (D43): the content that declares `toggle`. Absent: this revision. */
+      toggleContent?: string;
+    })
   // Content v6 (M3 B2): switched on and off in play; turning it on can spend one use of a resource of this revision.
   // Content v10 (Wave 3, D42): autoWhen and activation on a toggle, activation on a resource, three damage-defence grant
   // kinds with a damageType, and the item effect. All optional; a revision below v10 never carries them.
-  | (EffectBase & { type: 'toggle'; toggleId: string; label: string; resourceId?: string; autoWhen?: 'bloodied'; activation?: Activation })
+  | (EffectBase & {
+      type: 'toggle';
+      toggleId: string;
+      label: string;
+      resourceId?: string;
+      autoWhen?: 'bloodied';
+      activation?: Activation;
+      // Content v11 (D43): the form group (id, and the content that declares it; absent: this revision), layer, the primaries an
+      // overlay may be on with (absent contentId: this revision), a cost formula, the pool's content and the level it opens at.
+      group?: string;
+      groupContent?: string;
+      layer?: 'primary' | 'overlay';
+      allowedWith?: { contentId?: string; toggleId: string }[];
+      allowedInBase?: boolean;
+      cost?: string;
+      resourceContent?: string;
+      level?: number;
+      /** Content v11 (D43): the rounds it lasts once on, a formula; absent: until switched off. */
+      duration?: string;
+    })
+  | (EffectBase & { type: 'toggleGroup'; groupId: string; label: string })
+  // Content v11 (D43): a pool change at the start or end of the turn, while a toggle is on (absent: always). `amount` is a formula, or `all` for a regain.
+  | (EffectBase & {
+      type: 'upkeep';
+      toggle?: string;
+      toggleContent?: string;
+      at: 'turnStart' | 'turnEnd';
+      resourceId: string;
+      resourceContent?: string;
+      change: 'spend' | 'regain';
+      amount: string;
+      ifShort?: 'ask' | 'end';
+    })
   | (EffectBase & {
       type: 'grant';
       grant: 'proficiency' | 'expertise' | 'content' | 'damageResistance' | 'damageImmunity' | 'damageVulnerability';
@@ -1286,11 +1732,108 @@ export type Effect =
       level?: number;
       onlyAs?: ClassEntry;
       damageType?: string;
+      /** Content v11 (D43, slice 6): a defence that applies only while this toggle is on (absent contentId: this revision). */
+      whileToggle?: { contentId?: string; toggleId: string };
     })
-  | (EffectBase & { type: 'resource'; resourceId: string; label: string; maximum: string; activation?: Activation })
+  // Content v11 (D43, slice 6): automatic advantage or disadvantage on a save, skill check or ability check.
+  | (EffectBase & {
+      type: 'rollMode';
+      target: string;
+      mode: 'advantage' | 'disadvantage';
+      against?: string[];
+      toggle?: string;
+      toggleContent?: string;
+    })
+  // Content v11 (D43 S7): a damage-time response. `amount` belongs to a damageReduction or hitPointOutcome response, `when` to a threshold one.
+  | (EffectBase & {
+      type: 'response';
+      responseId: string;
+      label: string;
+      phase: ResponsePhase;
+      amount?: string;
+      when?: { atOrBelow?: string; survived?: true };
+      resourceId?: string;
+      resourceContent?: string;
+      cost?: string;
+      toggle?: { contentId?: string; toggleId: string };
+      outcomes?: ResponseOutcomeDef[];
+    })
+  | (EffectBase & {
+      type: 'resource';
+      resourceId: string;
+      label: string;
+      maximum: string;
+      activation?: Activation;
+      // Content v11 (D43): counts up from zero ("built up"), what a full pool says (only with counts), and a per-turn allowance.
+      counts?: 'up';
+      resourceFull?: { text: string };
+      allowance?: boolean;
+    })
   | (EffectBase & { type: 'item'; requiresAttunement?: boolean; charges?: { max: number; recovery?: { period: RestPeriod; regain?: string } } })
   | (EffectBase & { type: 'recovery'; resourceId: string; on: RestPeriod; amount: string })
-  | (EffectBase & { type: 'roll'; rollId: string; label: string; dice: string; resourceId?: string })
+  | (EffectBase & {
+      type: 'roll';
+      rollId: string;
+      label: string;
+      /** Content v11: a roll may have no dice (an action that only spends a cost); every earlier version requires them. */
+      dice?: string;
+      resourceId?: string;
+      /** Content v5: where the action is listed; absent: "Other". */
+      activation?: Activation;
+      /** Content v6: the content that defines the pool (absent: this revision), the uses spent (a formula) and whether the player picks how many. */
+      resourceContent?: string;
+      cost?: string;
+      variableCost?: boolean;
+      /** Content v8: a formula added to the dice. */
+      bonus?: string;
+      /** Content v11 (D43): the roll is available only while this toggle is on (absent contentId: this revision). */
+      whileToggle?: { contentId?: string; toggleId: string };
+      /** Content v11 (D43, slice 5): the saving throw the action asks of its targets. */
+      save?: { ability: Ability; dc: string };
+      /** Content v11: the area, in feet; width is for a line only. */
+      area?: { shape: 'line' | 'cone' | 'sphere' | 'cube' | 'cylinder' | 'emanation'; size: number; width?: number };
+      range?: string;
+      targets?: string;
+      /** Content v11: extra dice for each unit spent beyond the base cost. */
+      perUnit?: { dice: string; maxUnits?: number };
+      /** Content v11 (D43 S8): other pool changes made in the same use, at most 4; `amount` is a formula. */
+      alsoChange?: { resourceId: string; resourceContent?: string; change: 'spend' | 'regain'; amount: string }[];
+      /** Content v11 (D43 S8): the roll draws down the built-up charge of its pool (a pool that counts up). */
+      drawsDown?: boolean;
+    })
+  // Content v11 (D43, slice 5): a named formula, read as VALUE.<valueId>.
+  | (EffectBase & { type: 'value'; valueId: string; formula: string })
+  // Content v11 (D43): an attack a feature gives, and a rider that adds to the attacks carrying one of its tags.
+  | (EffectBase & {
+      type: 'attack';
+      attackId: string;
+      label: string;
+      kind: 'melee' | 'ranged';
+      abilities: Ability[];
+      proficient?: boolean;
+      damage: { count: string; die: string };
+      damageBonus?: string;
+      damageType: string;
+      range?: string;
+      tags?: string[];
+      replacesAttack?: boolean;
+      activation?: Activation;
+      resourceId?: string;
+      resourceContent?: string;
+      cost?: string;
+      whileToggle?: { contentId?: string; toggleId: string };
+    })
+  | (EffectBase & {
+      type: 'attackRider';
+      tags: string[];
+      toHit?: string;
+      dice?: string;
+      damageBonus?: string;
+      damageType?: string;
+      toggle?: string;
+      toggleContent?: string;
+      stackGroup?: string;
+    })
   | (EffectBase & { type: 'armor'; category: 'light' | 'medium' | 'heavy' | 'shield'; armorClass: number; dexterityCap?: number })
   | (EffectBase & { type: 'choice'; choiceId: string; count: number; options: ContentReference[]; level?: number; onlyAs?: ClassEntry })
   // M5 slice 1b: the class editor (content v3/v5 effects, and v9 scale and multiclassCasterTable; ADR-010).
@@ -1355,7 +1898,7 @@ export interface SourceRecord {
   editionVersion: string;
   license: string;
   redistributable: boolean;
-  /** M6 slice 1: material from a PDF entered this source; it is never shared, and this never goes away. */
+  /** M6 slice 1: material from a PDF or a Markdown file entered this source; it is never shared, and this never goes away. */
   importDerived?: boolean;
   /** M6 slice 1: `received` sources came in someone else's package and cannot be marked as your own work. */
   origin?: 'local' | 'received';
@@ -1937,4 +2480,123 @@ export interface FormulaPreviewResult {
   error?: { code: string; message: string } | null;
   unavailable?: string | null;
   points: FormulaPreviewPoint[];
+}
+
+/** Import Lab (D62 L1): effects by how far TomeStack really goes with them. `unsupported` means the type is not known. */
+export interface CoverageCounts {
+  automatic: number;
+  assisted: number;
+  reference: number;
+  unsupported: number;
+}
+
+/** One effect's author value, the engine's ceiling and the effective automation. The server omits null fields. */
+export interface EffectCoverage {
+  /** Absent for the text-only line of a feature that has no effects. */
+  effectId?: string | null;
+  type: string;
+  author: AutomationStatus;
+  ceiling?: AutomationStatus | null;
+  effective?: AutomationStatus | null;
+  reason?: string | null;
+  evidence?: string | null;
+  unsupported: boolean;
+}
+
+export interface FeatureCoverage {
+  contentId: string;
+  revisionId: string;
+  name: string;
+  kind: ContentKind;
+  status: 'published' | 'draft';
+  totals: CoverageCounts;
+  /** The feature may need a mechanic: advice, never a gate. */
+  missingMechanic: boolean;
+  effects: EffectCoverage[];
+}
+
+export interface LevelCoverage {
+  level: number;
+  features: FeatureCoverage[];
+}
+
+export interface ClassCoverage {
+  contentId: string;
+  name: string;
+  totals: CoverageCounts;
+  levels: LevelCoverage[];
+}
+
+export interface SourceCoverage {
+  sourceId: string;
+  name: string;
+  totals: CoverageCounts;
+  classes: ClassCoverage[];
+  other: FeatureCoverage[];
+}
+
+/** `content.coverage`: read-only; needs no character. */
+export interface CoverageReport {
+  scope: { sourceId?: string | null; contentId?: string | null; includeDrafts: boolean };
+  totals: CoverageCounts;
+  sources: SourceCoverage[];
+}
+
+export interface CoverageRequest {
+  sourceId?: string;
+  contentId?: string;
+  includeDrafts?: boolean;
+}
+
+// ---- Import Lab L6 (`content.duplicates`): entries that look alike, listed and never merged ----
+
+export type DuplicateClass = 'exact' | 'sameNameDifferentRules' | 'sameRulesDifferentName';
+
+/** `jobId`: that job's pending candidates against the library. `sourceId`: only groups that source is in (with a job: only that source's library content). */
+export interface DuplicatesRequest {
+  sourceId?: string;
+  jobId?: string;
+}
+
+/** A published library entry (`contentId`, `revisionId`) or a pending candidate (`candidateId`). */
+export interface DuplicateMember {
+  candidateId?: string | null;
+  contentId?: string | null;
+  revisionId?: string | null;
+  kind: ContentKind;
+  name: string;
+  sourceId: string;
+  sourceName: string;
+}
+
+/** Entries of one kind inside one rules family; the families are never compared with each other. */
+export interface DuplicateGroup {
+  class: DuplicateClass;
+  family: RulesFamilyId;
+  members: DuplicateMember[];
+}
+
+/** A feature a class grants at a level, or an option it offers there through a choice. */
+export interface ClassTableRef {
+  contentId: string;
+  name: string;
+}
+
+export interface ClassLevelRow {
+  level: number;
+  proficiencyBonus: number;
+  features: ClassTableRef[];
+  choices: ClassTableRef[];
+  /** Scale values as text, by column name; empty where the scale has no value at this level. */
+  scales: Record<string, string>;
+  /** Spell slots by spell level (1, 2, ...); absent without ordinary slots at this level. */
+  slots?: number[] | null;
+  pactSlots?: number | null;
+  pactLevel?: number | null;
+}
+
+/** `content.classTable`: read-only; the 20-level progression of one class revision, published or draft. */
+export interface ClassTableView {
+  columns: string[];
+  rows: ClassLevelRow[];
 }

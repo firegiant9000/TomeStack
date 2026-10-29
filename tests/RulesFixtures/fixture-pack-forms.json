@@ -1,0 +1,164 @@
+{
+  "packId": "tomestack-forms-fixtures",
+  "formatVersion": 1,
+  "notice": "Original TomeStack test fixtures (play mechanics, content v11: form groups, overlays and costs from a shared pool). Invented; no SRD or third-party rules text.",
+  "sources": [
+    {
+      "id": "6f0d5000-0000-4000-8000-000000000001",
+      "title": "TomeStack Fixtures: Forms",
+      "publisher": "TomeStack project",
+      "rulesFamilies": ["srd-5.2.1"],
+      "editionVersion": "fixture-1",
+      "license": "Original test fixture",
+      "redistributable": true,
+      "attribution": "Written for TomeStack tests."
+    },
+    {
+      "id": "6f0d5000-0000-4000-8000-000000000002",
+      "title": "TomeStack Fixtures: Forms, second source",
+      "publisher": "TomeStack project",
+      "rulesFamilies": ["srd-5.2.1"],
+      "editionVersion": "fixture-1",
+      "license": "Original test fixture",
+      "redistributable": true,
+      "attribution": "Written for TomeStack tests."
+    }
+  ],
+  "revisions": [
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000000001",
+      "revisionId": "6f0de000-0000-4000-8000-000000000001",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Fixture Form Discipline",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000000001", "page": { "start": 1 } },
+      "status": "published",
+      "summary": "A test feature that declares the form group and the focus pool its forms spend.",
+      "effects": [
+        { "type": "toggleGroup", "id": "forms-group", "groupId": "forms", "label": "Forms" },
+        { "type": "resource", "id": "focus", "resourceId": "focus", "label": "Focus", "maximum": "10 + PB" },
+        { "type": "recovery", "id": "focus-long", "timing": "onLongRest", "resourceId": "focus", "on": "longRest", "amount": "all" }
+      ]
+    },
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000000002",
+      "revisionId": "6f0de000-0000-4000-8000-000000000002",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Fixture Ember Form",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000000001", "page": { "start": 2 } },
+      "status": "published",
+      "summary": "A test primary form: costs 3 focus, +2 Armor Class.",
+      "effects": [
+        { "type": "toggle", "id": "ember", "toggleId": "ember", "label": "Ember form", "group": "forms", "groupContent": "6f0dc000-0000-4000-8000-000000000001", "cost": "3", "resourceContent": "6f0dc000-0000-4000-8000-000000000001", "resourceId": "focus" },
+        { "type": "modifier", "id": "ember-ac", "timing": "whileActive", "toggle": "ember", "operation": "bonus", "target": "armorClass", "value": "2" }
+      ]
+    },
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000000003",
+      "revisionId": "6f0de000-0000-4000-8000-000000000003",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Fixture Tide Form",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000000001", "page": { "start": 3 } },
+      "status": "published",
+      "summary": "A test primary form: costs 5 focus, +3 initiative.",
+      "effects": [
+        { "type": "toggle", "id": "tide", "toggleId": "tide", "label": "Tide form", "group": "forms", "groupContent": "6f0dc000-0000-4000-8000-000000000001", "cost": "5", "resourceContent": "6f0dc000-0000-4000-8000-000000000001", "resourceId": "focus" },
+        { "type": "modifier", "id": "tide-init", "timing": "whileActive", "toggle": "tide", "operation": "bonus", "target": "initiative", "value": "3" }
+      ]
+    },
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000000004",
+      "revisionId": "6f0de000-0000-4000-8000-000000000004",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Fixture Surge Overlay",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000000001", "page": { "start": 4 } },
+      "status": "published",
+      "summary": "A test overlay: allowed on the base character and on the Tide form; costs 1 focus, +1 Armor Class.",
+      "effects": [
+        { "type": "toggle", "id": "surge", "toggleId": "surge", "label": "Surge overlay", "group": "forms", "groupContent": "6f0dc000-0000-4000-8000-000000000001", "layer": "overlay", "allowedInBase": true, "allowedWith": [{ "contentId": "6f0dc000-0000-4000-8000-000000000003", "toggleId": "tide" }], "cost": "1", "resourceContent": "6f0dc000-0000-4000-8000-000000000001", "resourceId": "focus" },
+        { "type": "modifier", "id": "surge-ac", "timing": "whileActive", "toggle": "surge", "operation": "bonus", "target": "armorClass", "value": "1" }
+      ]
+    },
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000000005",
+      "revisionId": "6f0de000-0000-4000-8000-000000000005",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Fixture Bound Overlay",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000000001", "page": { "start": 5 } },
+      "status": "published",
+      "summary": "A test overlay that needs the Tide form and costs nothing: +1 Armor Class.",
+      "effects": [
+        { "type": "toggle", "id": "bound", "toggleId": "bound", "label": "Bound overlay", "group": "forms", "groupContent": "6f0dc000-0000-4000-8000-000000000001", "layer": "overlay", "allowedWith": [{ "contentId": "6f0dc000-0000-4000-8000-000000000003", "toggleId": "tide" }] },
+        { "type": "modifier", "id": "bound-ac", "timing": "whileActive", "toggle": "bound", "operation": "bonus", "target": "armorClass", "value": "1" }
+      ]
+    },
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000000006",
+      "revisionId": "6f0de000-0000-4000-8000-000000000006",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Fixture Deep Form",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000000001", "page": { "start": 6 } },
+      "status": "published",
+      "summary": "A test primary form gated to level 5; costs 2 focus.",
+      "effects": [
+        { "type": "toggle", "id": "deep", "toggleId": "deep", "label": "Deep form", "group": "forms", "groupContent": "6f0dc000-0000-4000-8000-000000000001", "level": 5, "cost": "2", "resourceContent": "6f0dc000-0000-4000-8000-000000000001", "resourceId": "focus" }
+      ]
+    },
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000000007",
+      "revisionId": "6f0de000-0000-4000-8000-000000000007",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Fixture Calm Overlay",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000000001", "page": { "start": 7 } },
+      "status": "published",
+      "summary": "A test overlay allowed only in the base character (no form on): +1 initiative.",
+      "effects": [
+        { "type": "toggle", "id": "calm", "toggleId": "calm", "label": "Calm overlay", "group": "forms", "groupContent": "6f0dc000-0000-4000-8000-000000000001", "layer": "overlay", "allowedInBase": true, "allowedWith": [] },
+        { "type": "modifier", "id": "calm-init", "timing": "whileActive", "toggle": "calm", "operation": "bonus", "target": "initiative", "value": "1" }
+      ]
+    },
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000000008",
+      "revisionId": "6f0de000-0000-4000-8000-000000000008",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Fixture Calm Tide Overlay",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000000001", "page": { "start": 8 } },
+      "status": "published",
+      "summary": "A test overlay allowed only with the Tide form (never in the base character): +2 initiative.",
+      "effects": [
+        { "type": "toggle", "id": "calm-tide", "toggleId": "calm-tide", "label": "Calm tide overlay", "group": "forms", "groupContent": "6f0dc000-0000-4000-8000-000000000001", "layer": "overlay", "allowedInBase": false, "allowedWith": [{ "contentId": "6f0dc000-0000-4000-8000-000000000003", "toggleId": "tide" }] },
+        { "type": "modifier", "id": "calm-tide-init", "timing": "whileActive", "toggle": "calm-tide", "operation": "bonus", "target": "initiative", "value": "2" }
+      ]
+    },
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000000009",
+      "revisionId": "6f0de000-0000-4000-8000-000000000009",
+      "schemaVersion": 11,
+      "kind": "species",
+      "name": "Fixture Lineage Form",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000000002", "page": { "start": 1 } },
+      "status": "published",
+      "summary": "A test species from a second source whose toggle joins the Form Discipline's group: +5 speed.",
+      "effects": [
+        { "type": "toggle", "id": "lineage", "toggleId": "lineage", "label": "Lineage form", "group": "forms", "groupContent": "6f0dc000-0000-4000-8000-000000000001" },
+        { "type": "modifier", "id": "lineage-speed", "timing": "whileActive", "toggle": "lineage", "operation": "bonus", "target": "speed", "value": "5" }
+      ]
+    }
+  ]
+}

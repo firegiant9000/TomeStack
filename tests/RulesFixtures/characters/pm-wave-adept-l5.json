@@ -1,0 +1,60 @@
+{
+  "id": "6f0dca00-0000-4000-8000-000000000550",
+  "schemaVersion": 10,
+  "name": "Testy Wave (action details fixture, schema v10)",
+  "rulesFamily": "srd-5.2.1",
+  "level": 5,
+  "classes": [
+    { "class": { "contentId": "6f0dc000-0000-4000-8000-000000000050", "revisionId": "6f0de000-0000-4000-8000-000000000050" }, "level": 5 }
+  ],
+  "choices": [
+    {
+      "source": { "contentId": "6f0dc000-0000-4000-8000-000000000050", "revisionId": "6f0de000-0000-4000-8000-000000000050" },
+      "choiceId": "focusAbility",
+      "selected": [
+        { "contentId": "6f0dc000-0000-4000-8000-000000000052", "revisionId": "6f0de000-0000-4000-8000-000000000052" }
+      ]
+    }
+  ],
+  "spells": [],
+  "crossFamilyExceptions": [],
+  "campaignExceptions": [],
+  "baseAbilities": {
+    "str": 14,
+    "dex": 14,
+    "con": 12,
+    "int": 10,
+    "wis": 14,
+    "cha": 8
+  },
+  "pins": [],
+  "overrides": [],
+  "play": {
+    "temporaryHitPoints": 0,
+    "resources": [],
+    "conditions": [],
+    "exhaustion": 0,
+    "hitDiceSpent": [],
+    "deathSaves": {
+      "successes": 0,
+      "failures": 0
+    },
+    "inspiration": false,
+    "spellSlotsSpent": [],
+    "pactSlotsSpent": 0,
+    "toggles": [],
+    "encounter": {
+      "round": 1
+    }
+  },
+  "equipment": [],
+  "currency": {
+    "cp": 0,
+    "sp": 0,
+    "ep": 0,
+    "gp": 0,
+    "pp": 0
+  },
+  "notes": [],
+  "updatedAt": "2026-10-22T00:00:00+00:00"
+}

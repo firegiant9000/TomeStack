@@ -1,0 +1,118 @@
+{
+  "packId": "tomestack-feature-attacks-fixtures",
+  "formatVersion": 1,
+  "notice": "Original TomeStack test fixtures (play mechanics, content v11: attacks and attack riders that features give, and toggles that content names across entries). Invented; no SRD or third-party rules text.",
+  "sources": [
+    {
+      "id": "6f0d5000-0000-4000-8000-000000000040",
+      "title": "TomeStack Fixtures: Feature Attacks",
+      "publisher": "TomeStack project",
+      "rulesFamilies": ["srd-5.2.1"],
+      "editionVersion": "fixture-1",
+      "license": "Original test fixture",
+      "redistributable": true,
+      "attribution": "Written for TomeStack tests."
+    }
+  ],
+  "revisions": [
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000000040",
+      "revisionId": "6f0de000-0000-4000-8000-000000000040",
+      "schemaVersion": 11,
+      "kind": "class",
+      "name": "Fixture Open Hand Adept",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000000040", "page": { "start": 1 } },
+      "status": "published",
+      "summary": "A test class with a die column, a mode group, a focus pool and four granted features.",
+      "effects": [
+        { "type": "hitDie", "id": "adept-hit-die", "die": 10 },
+        { "type": "scale", "id": "adept-hand-die", "scaleId": "handDie", "label": "Hand die", "values": [6, 6, 6, 6, 8, 8, 8, 8, 8, 8, 10, 10, 10, 10, 10, 10, 12, 12, 12, 12] },
+        { "type": "toggleGroup", "id": "adept-modes", "groupId": "modes", "label": "Modes" },
+        { "type": "resource", "id": "focus", "resourceId": "focus", "label": "Focus", "maximum": "LEVEL" },
+        { "type": "grant", "id": "adept-strike", "grant": "content", "level": 1, "content": { "contentId": "6f0dc000-0000-4000-8000-000000000041", "revisionId": "6f0de000-0000-4000-8000-000000000041" } },
+        { "type": "grant", "id": "adept-kindled", "grant": "content", "level": 1, "content": { "contentId": "6f0dc000-0000-4000-8000-000000000042", "revisionId": "6f0de000-0000-4000-8000-000000000042" } },
+        { "type": "grant", "id": "adept-keen", "grant": "content", "level": 1, "content": { "contentId": "6f0dc000-0000-4000-8000-000000000044", "revisionId": "6f0de000-0000-4000-8000-000000000044" } },
+        { "type": "grant", "id": "adept-blazing", "grant": "content", "level": 3, "content": { "contentId": "6f0dc000-0000-4000-8000-000000000043", "revisionId": "6f0de000-0000-4000-8000-000000000043" } }
+      ]
+    },
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000000041",
+      "revisionId": "6f0de000-0000-4000-8000-000000000041",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Fixture Open Hand Strike",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000000040", "page": { "start": 2 } },
+      "status": "published",
+      "summary": "A test feature that gives an unarmed strike and a focus bolt.",
+      "effects": [
+        { "type": "attack", "id": "strike", "attackId": "strike", "label": "Open hand strike", "kind": "melee", "abilities": ["str", "dex"], "damage": { "count": "1", "die": "SCALE.handDie" }, "damageType": "bludgeoning", "tags": ["unarmed"] },
+        { "type": "attack", "id": "bolt", "attackId": "bolt", "label": "Focus bolt", "kind": "ranged", "abilities": ["wis"], "damage": { "count": "2", "die": "6" }, "damageType": "force", "range": "60 ft", "tags": ["bolt", "singleTarget"], "resourceContent": "6f0dc000-0000-4000-8000-000000000040", "resourceId": "focus", "cost": "1" }
+      ]
+    },
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000000042",
+      "revisionId": "6f0de000-0000-4000-8000-000000000042",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Fixture Kindled Mode",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000000040", "page": { "start": 3 } },
+      "status": "published",
+      "summary": "A test mode: extra dice on unarmed and single-target attacks, a flash roll and one more reflex use while it lasts.",
+      "effects": [
+        { "type": "toggle", "id": "kindled", "toggleId": "kindled", "label": "Kindled mode", "group": "modes", "groupContent": "6f0dc000-0000-4000-8000-000000000040" },
+        { "type": "attackRider", "id": "kindled-rider", "tags": ["unarmed", "singleTarget"], "dice": "3d8", "toggle": "kindled", "stackGroup": "modeRider" },
+        { "type": "roll", "id": "flash", "rollId": "flash", "label": "Flash step", "dice": "1d6", "whileToggle": { "toggleId": "kindled" } },
+        { "type": "resource", "id": "reflex", "resourceId": "reflex", "label": "Reflex", "maximum": "1" },
+        { "type": "modifier", "id": "reflex-bonus", "timing": "whileActive", "toggle": "kindled", "operation": "bonus", "target": "resource.reflex", "value": "1" }
+      ]
+    },
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000000043",
+      "revisionId": "6f0de000-0000-4000-8000-000000000043",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Fixture Blazing Mode",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000000040", "page": { "start": 4 } },
+      "status": "published",
+      "summary": "A test mode: more dice on unarmed attacks and a flat bonus on every attack while it lasts.",
+      "effects": [
+        { "type": "toggle", "id": "blazing", "toggleId": "blazing", "label": "Blazing mode", "group": "modes", "groupContent": "6f0dc000-0000-4000-8000-000000000040" },
+        { "type": "attackRider", "id": "blazing-rider", "tags": ["unarmed"], "dice": "4d8", "toggle": "blazing", "stackGroup": "modeRider" },
+        { "type": "attackRider", "id": "blazing-bonus", "tags": ["all"], "damageBonus": "2", "toggle": "blazing" }
+      ]
+    },
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000000044",
+      "revisionId": "6f0de000-0000-4000-8000-000000000044",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Fixture Keen Sense",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000000040", "page": { "start": 5 } },
+      "status": "published",
+      "summary": "A test feature whose bonus follows another feature's toggle.",
+      "effects": [
+        { "type": "modifier", "id": "keen-initiative", "timing": "whileActive", "toggle": "kindled", "toggleContent": "6f0dc000-0000-4000-8000-000000000042", "operation": "bonus", "target": "initiative", "value": "2" }
+      ]
+    },
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000000045",
+      "revisionId": "6f0de000-0000-4000-8000-000000000045",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Fixture Ember Fist",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000000040", "page": { "start": 6 } },
+      "status": "published",
+      "summary": "A test feature, pinned directly, with a toggle outside any group and a rider of the shared stack group.",
+      "effects": [
+        { "type": "toggle", "id": "fist", "toggleId": "fist", "label": "Ember fist" },
+        { "type": "attackRider", "id": "fist-rider", "tags": ["unarmed"], "dice": "1d8", "toggle": "fist", "stackGroup": "modeRider" }
+      ]
+    }
+  ]
+}

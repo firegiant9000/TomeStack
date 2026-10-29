@@ -1,0 +1,31 @@
+name: Feature request
+description: Suggest something TomeStack should do.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What
+      description: What should TomeStack do?
+      placeholder: Let a homebrew class grant a resource that recovers on a short rest.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why
+      description: What are you trying to do at the table, and what gets in the way today?
+    validations:
+      required: true
+  - type: dropdown
+    id: rules-family
+    attributes:
+      label: Rules family
+      description: Which rules does this apply to?
+      options:
+        - 2014 rules (srd-5.1)
+        - 2024 rules (srd-5.2.1)
+        - Both
+        - Not about the rules
+    validations:
+      required: true

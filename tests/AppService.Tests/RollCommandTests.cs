@@ -314,4 +314,452 @@ public class RollCommandTests
         Assert.Equal(("roll.bonus-invalid", feat, "swing"), (problem.Code, problem.Content, problem.EffectId));
         Assert.Contains(temp.App.GetCharacter(id).Sheet.Diagnostics, d => d.Code == "effect.invalid-formula" && d.Content == feat && d.EffectId == "swing");
     }
+
+    // D43 S5 (Task 5.3): per-unit amounts and the spend a roll implies (fixture-pack-action-details.json).
+    private static readonly Guid AdeptClass = Guid.Parse("6f0dc000-0000-4000-8000-000000000050");
+    private static readonly ContentReference TideWave = new(Guid.Parse("6f0dc000-0000-4000-8000-000000000053"), Guid.Parse("6f0de000-0000-4000-8000-000000000053"));
+
+    private static (TempApp Temp, Guid Id) WaveAdept(int spentFocus = 0, Func<ContentRevision, ContentRevision>? adjust = null)
+    {
+        var temp = new TempApp();
+        temp.App.Random = new SeededRandomSource(9);
+        temp.AddPack("fixture-pack-action-details.json", adjust);
+        var id = temp.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/pm-wave-adept-l5.json")).Character.Id;
+        if (spentFocus > 0)
+            temp.App.Play(new(id, PlayActionKind.Spend, Confirm: true, ContentId: AdeptClass, ResourceId: "focus", Amount: spentFocus));
+        return (temp, id);
+    }
+
+    private static string Code(TempApp temp, RollCommand command) => Assert.Throws<AppValidationException>(() => temp.App.Roll(command)).Code;
+
+    [Fact]
+    public void PerUnit_dice_match_the_amount_spent()
+    {
+        var (temp, id) = WaveAdept();
+        using var _ = temp;
+        var before = TempApp.Json(temp.App.Store.FindCharacter(id));
+
+        var record = temp.App.Roll(new RollCommand(id, TideWave, "wave", Amount: 4));
+
+        Assert.Equal("4d10+2d10", record.Formula);
+        Assert.Equal(6, record.Dice.Count);
+        Assert.Equal(new RollSpend(AdeptClass, "focus", 4), record.Spend);
+        Assert.Equal(before, TempApp.Json(temp.App.Store.FindCharacter(id))); // rolling spends nothing
+    }
+
+    [Fact]
+    public void A_per_unit_roll_without_amount_rolls_the_base()
+    {
+        var (temp, id) = WaveAdept();
+        using var _ = temp;
+
+        var record = temp.App.Roll(new RollCommand(id, TideWave, "wave"));
+
+        Assert.Equal("4d10", record.Formula);
+        Assert.Equal(2, record.Spend!.Amount);
+        Assert.Equal("focus", record.Provenance!.LinkedResourceId);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(7)]
+    public void PerUnit_amount_out_of_range_is_refused(int amount)
+    {
+        var (temp, id) = WaveAdept();
+        using var _ = temp;
+
+        Assert.Equal("roll.amount-out-of-range", Code(temp, new RollCommand(id, TideWave, "wave", Amount: amount)));
+    }
+
+    [Fact]
+    public void A_per_unit_roll_the_pool_cannot_pay_is_refused()
+    {
+        var (temp, id) = WaveAdept(spentFocus: 6); // focus 9, 3 left
+        using var _ = temp;
+
+        Assert.Equal("roll.amount-unaffordable", Code(temp, new RollCommand(id, TideWave, "wave", Amount: 4)));
+        Assert.Equal("4d10", temp.App.Roll(new RollCommand(id, TideWave, "wave")).Formula); // no amount: the base rolls, unchecked
+    }
+
+    [Fact]
+    public void Rolling_a_dice_less_action_is_refused()
+    {
+        var (temp, id) = WaveAdept();
+        using var _ = temp;
+
+        Assert.Equal("roll.no-dice", Code(temp, new RollCommand(id, TideWave, "brace")));
+        Assert.Equal("roll.no-dice", Code(temp, new RollCommand(id, TideWave, "brace", Amount: 2)));
+    }
+
+    [Fact]
+    public void An_amount_on_a_roll_without_per_unit_is_not_allowed()
+    {
+        var (temp, id) = WaveAdept(adjust: r => r with { Effects = [.. r.Effects.Select(e => e is RollEffect { Id: "wave" } w ? w with { PerUnit = null } : e)] });
+        using var _ = temp;
+
+        Assert.Equal("roll.amount-not-allowed", Code(temp, new RollCommand(id, TideWave, "wave", Amount: 3)));
+    }
+
+    [Fact]
+    public void A_failing_cost_refuses_an_amount_and_rolls_without_one()
+    {
+        var (temp, id) = WaveAdept(adjust: r => r with { Effects = [.. r.Effects.Select(e => e is RollEffect { Id: "wave" } w ? w with { Cost = "NOPE.X" } : e)] });
+        using var _ = temp;
+
+        Assert.Equal("effect.invalid-formula", Code(temp, new RollCommand(id, TideWave, "wave", Amount: 3)));
+        var record = temp.App.Roll(new RollCommand(id, TideWave, "wave"));
+        Assert.Equal("4d10", record.Formula);
+        Assert.Null(record.Spend);
+    }
+
+    private static Func<ContentRevision, ContentRevision> ChangeWave(Func<RollEffect, RollEffect> change) =>
+        r => r with { Effects = [.. r.Effects.Select(e => e is RollEffect { Id: "wave" } w ? change(w) : e)] };
+
+    [Fact]
+    public void The_acceptance_technique_rolls_and_spends_the_same_amount()
+    {
+        var (temp, id) = WaveAdept();
+        using var _ = temp;
+        var wave = temp.App.GetCharacter(id).Sheet.Features!.Single(f => f.Content == TideWave).Effects.Single(e => e.Id == "wave");
+        Assert.Equal((13, Ability.Dex), (wave.SaveDc, wave.SaveAbility)); // 8 + PB 3 + Wisdom 2, from VALUE.focusMod
+        Assert.Equal(new RollArea(AreaShape.Line, 100, 5), wave.Area);
+        var before = TempApp.Json(temp.App.Store.FindCharacter(id));
+
+        var record = temp.App.Roll(new RollCommand(id, TideWave, "wave", Amount: 4));
+
+        Assert.Equal("4d10+2d10", record.Formula);
+        var spend = record.Spend!;
+        Assert.Equal(new RollSpend(AdeptClass, "focus", 4), spend);
+        Assert.Equal(before, TempApp.Json(temp.App.Store.FindCharacter(id))); // the roll itself changes nothing
+
+        temp.App.Play(new(id, PlayActionKind.Spend, Confirm: true, ContentId: spend.ContentId, ResourceId: spend.ResourceId, Amount: spend.Amount));
+
+        var focus = temp.App.GetCharacter(id).Sheet.Resources!.Single(r => r.ResourceId == "focus");
+        Assert.Equal((9, 5), (focus.Maximum, focus.Current)); // 9 - 4
+    }
+
+    [Fact]
+    public void An_untracked_pool_refuses_an_amount()
+    {
+        var (temp, id) = WaveAdept(adjust: r => r.Kind == ContentKind.Class
+            ? r with { Effects = [.. r.Effects.Select(e => e is ResourceEffect { ResourceId: "focus" } p ? p with { Maximum = "NOPE.X" } : e)] }
+            : r);
+        using var _ = temp;
+
+        Assert.Equal("roll.amount-unaffordable", Code(temp, new RollCommand(id, TideWave, "wave", Amount: 3)));
+    }
+
+    [Fact]
+    public void Without_max_units_the_pool_maximum_caps_the_amount()
+    {
+        var (temp, id) = WaveAdept(adjust: ChangeWave(w => w with { PerUnit = new RollPerUnit("1d10", null) }));
+        using var _ = temp;
+
+        Assert.Equal("roll.amount-out-of-range", Code(temp, new RollCommand(id, TideWave, "wave", Amount: 10))); // focus maximum is 9
+        var record = temp.App.Roll(new RollCommand(id, TideWave, "wave", Amount: 9));
+        Assert.Equal("4d10+7d10", record.Formula);
+        Assert.Equal(9, record.Spend!.Amount);
+    }
+
+    [Fact]
+    public void An_explicit_amount_equal_to_the_base_rolls_the_base_dice()
+    {
+        var (temp, id) = WaveAdept();
+        using var _ = temp;
+
+        var record = temp.App.Roll(new RollCommand(id, TideWave, "wave", Amount: 2));
+
+        Assert.Equal("4d10", record.Formula);
+        Assert.Equal(2, record.Spend!.Amount);
+    }
+
+    [Theory]
+    [InlineData("1d10+1")]
+    [InlineData("1d10+1d6")]
+    [InlineData("-1d10")]
+    [InlineData("nonsense")]
+    public void A_per_unit_die_that_is_not_one_plain_die_term_is_refused_not_ignored(string perUnitDice)
+    {
+        // Unreachable for validated content: the roll must not show the base dice while spending extra units.
+        var (temp, id) = WaveAdept(adjust: ChangeWave(w => w with { PerUnit = new RollPerUnit(perUnitDice, 4) }));
+        using var _ = temp;
+
+        Assert.Equal("roll.amount-out-of-range", Code(temp, new RollCommand(id, TideWave, "wave", Amount: 4)));
+    }
+
+    [Fact]
+    public void A_failing_save_dc_does_not_stop_a_roll_whose_bonus_works()
+    {
+        var (temp, id) = WaveAdept(adjust: ChangeWave(w => w with { Bonus = "PB", Save = new RollSave(Ability.Dex, "8 + VALUE.nonesuch") }));
+        using var _ = temp;
+
+        var record = temp.App.Roll(new RollCommand(id, TideWave, "wave"));
+
+        Assert.Equal("4d10", record.Formula);
+        Assert.Contains(record.Modifiers, m => m.Amount == 3);
+    }
+
+    [Fact]
+    public void A_refused_bonus_carries_the_bonus_own_diagnostic_when_the_dc_fails_too()
+    {
+        var (temp, id) = WaveAdept(adjust: ChangeWave(w => w with { Bonus = "BONUSBAD.X", Save = new RollSave(Ability.Dex, "8 + DCBAD.X") }));
+        using var _ = temp;
+
+        var refused = Assert.Throws<AppValidationException>(() => temp.App.Roll(new RollCommand(id, TideWave, "wave")));
+
+        Assert.Equal("roll.bonus-invalid", refused.Problems[0].Code);
+        Assert.Contains("BONUSBAD", refused.Problems[0].Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("DCBAD", refused.Problems[0].Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_costed_roll_without_per_unit_reports_its_spend()
+    {
+        using var temp = new TempApp();
+        temp.App.Random = new SeededRandomSource(3);
+        temp.AddPack("fixture-pack-m3-effects.json");
+        var stance = new ContentReference(Guid.Parse("5f8dc000-0000-4000-8000-000000000001"), Guid.Parse("5f8de000-0000-4000-8000-000000000001"));
+        var brenna = TempApp.LoadFixture<Character>("characters/m1-acceptance-srd521-brenna.json");
+        var id = temp.App.SaveCharacter(brenna with { Pins = [.. brenna.Pins ?? [], stance] }).Character.Id;
+
+        var surge = temp.App.Roll(new RollCommand(id, stance, "surge"));
+        var flare = temp.App.Roll(new RollCommand(id, stance, "flare"));
+
+        Assert.Equal(new RollSpend(stance.ContentId, "radiance", 2), surge.Spend); // variable cost: the most it may spend (PB)
+        Assert.Equal(new RollSpend(stance.ContentId, "radiance", 1), flare.Spend);
+    }
+
+    // D43 S6 (Task 6.4): field rolls combine the player's choice with the sheet's automatic roll mode (fixture-pack-roll-modes.json).
+    private static ContentReference Mode(int n) => new(Guid.Parse($"6f0dc000-0000-4000-8000-{n:X12}"), Guid.Parse($"6f0de000-0000-4000-8000-{n:X12}"));
+
+    private static readonly ContentReference SwiftInstinct = Mode(0x60);
+    private static readonly ContentReference HeavyStance = Mode(0x61);
+    private static readonly ContentReference LightStep = Mode(0x63);
+    private static readonly ContentReference WeightedGear = Mode(0x64);
+
+    /// <summary>Testy Instinct (level 4) with the roll-modes pack; <paramref name="edit"/> changes the stored character before it is saved.</summary>
+    private static (TempApp Temp, Guid Id) Instinct(Func<Character, Character>? edit = null)
+    {
+        var temp = new TempApp();
+        temp.App.Random = new SeededRandomSource(5);
+        temp.AddPack("fixture-pack-roll-modes.json");
+        var character = TempApp.LoadFixture<Character>("characters/pm-instinct-l4.json");
+        return (temp, temp.App.SaveCharacter(edit is null ? character : edit(character)).Character.Id);
+    }
+
+    private static Character Pinned(Character character, params ContentReference[] pins) => character with { Pins = [.. pins] };
+
+    private static Character WithoutSaveDexMode(Character character) =>
+        Pinned(character, HeavyStance, Mode(0x62));
+
+    private static Character HeavyOn(Character character) =>
+        character with { Play = character.Play with { Toggles = [new ActiveToggle(HeavyStance.ContentId, "heavy")] } };
+
+    private static Character AutomaticState(Character character, RollMode automatic) => automatic switch
+    {
+        RollMode.Normal => WithoutSaveDexMode(character),
+        RollMode.Advantage => character,
+        _ => Pinned(character, HeavyStance, Mode(0x62), WeightedGear),
+    };
+
+    [Theory]
+    [InlineData(RollMode.Normal, RollMode.Normal, RollMode.Normal)]
+    [InlineData(RollMode.Normal, RollMode.Advantage, RollMode.Advantage)]
+    [InlineData(RollMode.Normal, RollMode.Disadvantage, RollMode.Disadvantage)]
+    [InlineData(RollMode.Advantage, RollMode.Normal, RollMode.Advantage)]
+    [InlineData(RollMode.Advantage, RollMode.Advantage, RollMode.Advantage)]
+    [InlineData(RollMode.Advantage, RollMode.Disadvantage, RollMode.Normal)]
+    [InlineData(RollMode.Disadvantage, RollMode.Normal, RollMode.Disadvantage)]
+    [InlineData(RollMode.Disadvantage, RollMode.Advantage, RollMode.Normal)]
+    [InlineData(RollMode.Disadvantage, RollMode.Disadvantage, RollMode.Disadvantage)]
+    public void The_players_choice_combines_with_the_automatic_mode(RollMode request, RollMode automatic, RollMode expected)
+    {
+        var (temp, id) = Instinct(c => AutomaticState(c, automatic));
+        using var _ = temp;
+
+        var record = temp.App.Roll(new RollCommand(id, Field: "save.dex", Mode: request));
+
+        Assert.Equal(expected, record.Mode);
+        Assert.Equal(expected == RollMode.Normal ? 1 : 2, record.Dice.Count);
+        if (automatic == RollMode.Normal)
+        {
+            // No automatic reason on save.dex at all: the record says nothing about an automatic mode.
+            Assert.Null(record.AutomaticMode);
+            Assert.Null(record.ModeSources);
+        }
+        else
+        {
+            Assert.Equal(automatic, record.AutomaticMode);
+            string[] sources = automatic == RollMode.Advantage ? ["Fixture Swift Instinct", "Fixture Light Step"] : ["Fixture Weighted Gear"];
+            Assert.Equal(sources, record.ModeSources);
+        }
+    }
+
+    [Fact]
+    public void Automatic_cancellation_beats_the_players_choice()
+    {
+        var (temp, id) = Instinct(c => Pinned(c, SwiftInstinct, HeavyStance, Mode(0x62), LightStep, WeightedGear));
+        using var _ = temp;
+
+        var record = temp.App.Roll(new RollCommand(id, Field: "save.dex", Mode: RollMode.Advantage));
+
+        Assert.Equal(RollMode.Normal, record.Mode);
+        Assert.Single(record.Dice);
+        Assert.Equal(RollMode.Normal, record.AutomaticMode);
+        Assert.Equal(["Fixture Swift Instinct", "Fixture Light Step", "Fixture Weighted Gear"], record.ModeSources);
+    }
+
+    [Fact]
+    public void A_critical_field_roll_with_an_automatic_advantage_is_refused()
+    {
+        var (temp, id) = Instinct();
+        using var _ = temp;
+
+        var refused = Assert.Throws<AppValidationException>(() => temp.App.Roll(new RollCommand(id, Field: "save.dex", Critical: true)));
+
+        Assert.Equal("dice.critical-with-advantage", Assert.Single(refused.Problems).Code);
+    }
+
+    [Fact]
+    public void An_assisted_mode_never_changes_the_roll()
+    {
+        var (temp, id) = Instinct();
+        using var _ = temp;
+
+        var record = temp.App.Roll(new RollCommand(id, Field: "save.con"));
+
+        Assert.Equal(RollMode.Normal, record.Mode);
+        Assert.Single(record.Dice);
+        Assert.Null(record.AutomaticMode);
+        Assert.Null(record.ModeSources);
+    }
+
+    [Fact]
+    public void A_skill_takes_its_ability_check_mode()
+    {
+        var (temp, id) = Instinct(HeavyOn);
+        using var _ = temp;
+
+        var athletics = temp.App.Roll(new RollCommand(id, Field: "skill.athletics"));
+        var stealth = temp.App.Roll(new RollCommand(id, Field: "skill.stealth"));
+
+        Assert.Equal((RollMode.Advantage, 2), (athletics.Mode, athletics.Dice.Count));
+        Assert.Equal(["Fixture Heavy Stance"], athletics.ModeSources);
+        Assert.Equal((RollMode.Disadvantage, 2), (stealth.Mode, stealth.Dice.Count));
+        Assert.Equal(RollMode.Disadvantage, stealth.AutomaticMode);
+    }
+
+    [Fact]
+    public void Rolling_never_changes_the_character_with_a_roll_mode()
+    {
+        var (temp, id) = Instinct(HeavyOn);
+        using var _ = temp;
+        var before = TempApp.Json(temp.App.Store.FindCharacter(id));
+
+        temp.App.Roll(new RollCommand(id, Field: "save.dex", Mode: RollMode.Disadvantage));
+        temp.App.Roll(new RollCommand(id, Field: "skill.stealth"));
+
+        Assert.Equal(before, TempApp.Json(temp.App.Store.FindCharacter(id)));
+    }
+
+    [Fact]
+    public void A_roll_without_automatic_modes_serialises_as_before()
+    {
+        var (temp, id) = Instinct();
+        using var _ = temp;
+
+        var json = TempApp.Json(temp.App.Roll(new RollCommand(id, Field: "save.str")));
+
+        Assert.DoesNotContain("automaticMode", json);
+        Assert.DoesNotContain("modeSources", json);
+    }
+
+    // D72 (Task 1): a roll carries the sheet's trace for the number rolled.
+    [Fact]
+    public void A_field_roll_explains_its_modifier_with_the_fields_trace()
+    {
+        var (temp, id) = Instinct();
+        using var _ = temp;
+
+        var record = temp.App.Roll(new RollCommand(id, Field: FieldIds.Save(Ability.Dex)));
+
+        var field = temp.App.GetCharacter(id).Sheet.Field(FieldIds.Save(Ability.Dex));
+        Assert.Equal(TempApp.Json(field.Trace), TempApp.Json(record.Explain));
+        Assert.Equal(record.Modifiers.Sum(m => m.Amount), record.Explain![^1].Result);
+    }
+
+    [Fact]
+    public void An_overridden_field_roll_ends_its_explanation_with_the_override()
+    {
+        var (temp, id) = Instinct(c => c with { Overrides = [.. c.Overrides, new FieldOverride(FieldIds.Save(Ability.Dex), 9, "test")] });
+        using var _ = temp;
+
+        var record = temp.App.Roll(new RollCommand(id, Field: FieldIds.Save(Ability.Dex)));
+
+        Assert.Equal("override", record.Explain![^1].Operation);
+        Assert.Equal(9, record.Explain[^1].Result);
+        Assert.Equal(9, record.Modifiers.Sum(m => m.Amount));
+    }
+
+    [Fact]
+    public void Rolls_without_a_sheet_number_have_no_explanation()
+    {
+        var (temp, id) = Instinct();
+        using var _ = temp;
+
+        Assert.Null(temp.App.Roll(new RollCommand(id, DeathSave: true)).Explain);
+
+        // The roll-modes pack declares no hit dice, so the hit die is rolled on the action-details fixture.
+        var (wave, waveId) = WaveAdept();
+        using var __ = wave;
+        var die = wave.App.GetCharacter(waveId).Sheet.HitDice![0].Die;
+        Assert.Null(wave.App.Roll(new RollCommand(waveId, HitDie: die)).Explain);
+    }
+
+    private static bool IsAutomaticD20(DerivedValue f) =>
+        f.Automation == AutomationStatus.Automatic
+        && (f.Field == FieldIds.Initiative
+            || f.Field.StartsWith("save.", StringComparison.Ordinal)
+            || f.Field.StartsWith("skill.", StringComparison.Ordinal)
+            || (f.Field.StartsWith("ability.", StringComparison.Ordinal) && f.Field.EndsWith(".mod", StringComparison.Ordinal)));
+
+    private static void AssertEveryD20RollEndsAtItsModifierTotal(TempApp temp, Guid id)
+    {
+        var sheet = temp.App.GetCharacter(id).Sheet;
+        var records = new List<(string What, RollRecord Record)>();
+        foreach (var f in sheet.Fields.Where(IsAutomaticD20))
+            records.Add((f.Field, temp.App.Roll(new RollCommand(id, Field: f.Field))));
+        foreach (var a in sheet.Attacks ?? [])
+            records.Add(($"attack {a.Name}", a.Source == AttackSource.Weapon
+                ? temp.App.Roll(new RollCommand(id, Weapon: a.Item))
+                : temp.App.Roll(new RollCommand(id, Content: a.Item, EffectId: a.EffectId))));
+        Assert.NotEmpty(records);
+        foreach (var (what, record) in records)
+        {
+            Assert.True(record.Explain is { Count: > 0 }, $"{what} has no explanation");
+            Assert.True(record.Explain![^1].Result == record.Modifiers.Sum(m => m.Amount), $"{what}: explanation ends at {record.Explain[^1].Result}, modifiers total {record.Modifiers.Sum(m => m.Amount)}");
+        }
+    }
+
+    [Fact]
+    public void Every_automatic_d20_roll_in_the_play_fixtures_ends_its_explanation_at_the_modifier_total()
+    {
+        using (var temp = new TempApp())
+        {
+            temp.App.Random = new SeededRandomSource(5);
+            temp.AddPack("fixture-pack-feature-attacks.json");
+            var id = temp.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/pm-adept-l5.json")).Character.Id;
+            var kindled = new ContentReference(Guid.Parse("6f0dc000-0000-4000-8000-000000000042"), Guid.Parse("6f0de000-0000-4000-8000-000000000042"));
+            temp.App.Play(new(id, PlayActionKind.ToggleOn, Confirm: true, ContentId: kindled.ContentId, ToggleId: "kindled"));
+            AssertEveryD20RollEndsAtItsModifierTotal(temp, id);
+        }
+
+        var (wave, waveId) = WaveAdept();
+        using (wave)
+            AssertEveryD20RollEndsAtItsModifierTotal(wave, waveId);
+
+        var (instinct, instinctId) = Instinct();
+        using (instinct)
+            AssertEveryD20RollEndsAtItsModifierTotal(instinct, instinctId);
+    }
 }

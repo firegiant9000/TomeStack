@@ -207,6 +207,10 @@ Two screenshots of the app, shown in the README, reproduce bundled SRD 5.2.1 con
 - **License:** CC-BY-4.0, as for the packs. The README links [ATTRIBUTION.md](../../ATTRIBUTION.md), which carries the approved SRD 5.2.1 statement and the modification notice, and each image's alt text names System Reference Document 5.2.1.
 - **Rule for later screenshots:** a screenshot may show SRD text only from the bundled packs. Add it to this table, with its pages, in the same change.
 
+## Sharing rule (Import Lab L5, wording only)
+
+Preflight is the single rule for what may leave the machine in a share: `package.preflight` and the character-package share, the source pack, the campaign pack and the shared sheet all ask the same code (`Preflight` in `src/AppService/Packages/Preflight.cs`) when they export. It lists what is included and what is left out or blocked, with the reason, and shows each included source's license notice once. It never adds a rule or any text to the packs above: the bundled SRD sources pass it as before (CC-BY-4.0, redistributable, never import-derived), and a PDF or the text read from it is never in a share. Backups keep their own rule (a personal backup holds everything).
+
 ## How it was modified (recorded in each source's `modificationNotice`)
 
 - Passages are excerpted. Descriptive text not needed for play (for example age and alignment) is left out, and some passages are shortened. Nothing is reworded to change a rule.
