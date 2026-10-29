@@ -1080,13 +1080,24 @@ it('a cast-spell roll says which spell it casts, its level and the numbers (R38)
 // MECH-X item 3: a weapon carried as several copies gets one row per copy (the service sends `entryIndex`); the rows are told apart.
 it('labels attack rows of copies apart, and leaves a single weapon unlabelled', () => {
   const item = { contentId: 'c-blade', revisionId: 'r-blade' };
+  const own = (equipped: boolean) => ({ item, equipped, quantity: 1 });
   const row = (entryIndex?: number) => ({ item, effectId: 'e1', name: 'Fixture Blade', toHit: 5, damage: '1d8', damageType: 'slashing', automation: 'automatic', category: 'martial', attack: 'melee', properties: [], trace: [], warnings: [], source: 'weapon', ...(entryIndex === undefined ? {} : { entryIndex }) });
-  const copies = { character: { id: 'fixture' }, sheet: { attacks: [row(0), row(2)], toggles: [], features: [] } } as unknown as CharacterView;
+  const copies = { character: { id: 'fixture', equipment: [own(true), own(true)] }, sheet: { attacks: [row(0), row(1)], toggles: [], features: [] } } as unknown as CharacterView;
   render(<ActionsPanel view={copies} roll={() => {}} act={() => {}} />);
   expect(screen.getByRole('button', { name: 'Roll Fixture Blade (copy 1 of 2) attack' })).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Roll Fixture Blade (copy 2 of 2) damage (1d8)' })).toBeTruthy();
   cleanup();
-  const single = { character: { id: 'fixture' }, sheet: { attacks: [row()], toggles: [], features: [] } } as unknown as CharacterView;
+  const single = { character: { id: 'fixture', equipment: [own(true)] }, sheet: { attacks: [row()], toggles: [], features: [] } } as unknown as CharacterView;
   render(<ActionsPanel view={single} roll={() => {}} act={() => {}} />);
   expect(screen.getByRole('button', { name: 'Roll Fixture Blade attack' })).toBeTruthy();
+});
+
+it('numbers copies as the Inventory does, counting an unequipped copy between two equipped ones', () => {
+  const item = { contentId: 'c-blade', revisionId: 'r-blade' };
+  const own = (equipped: boolean) => ({ item, equipped, quantity: 1 });
+  const row = (entryIndex: number) => ({ item, effectId: 'e1', name: 'Fixture Blade', toHit: 5, damage: '1d8', damageType: 'slashing', automation: 'automatic', category: 'martial', attack: 'melee', properties: [], trace: [], warnings: [], source: 'weapon', entryIndex });
+  const v = { character: { id: 'fixture', equipment: [own(true), own(false), own(true)] }, sheet: { attacks: [row(0), row(2)], toggles: [], features: [] } } as unknown as CharacterView;
+  render(<ActionsPanel view={v} roll={() => {}} act={() => {}} />);
+  expect(screen.getByRole('button', { name: 'Roll Fixture Blade (copy 1 of 3) attack' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Roll Fixture Blade (copy 3 of 3) attack' })).toBeTruthy();
 });

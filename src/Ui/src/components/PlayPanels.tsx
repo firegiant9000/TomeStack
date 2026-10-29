@@ -3,6 +3,7 @@ import type {
   Ability,
   Activation,
   AttackEntry,
+  EquipmentEntry,
   AutomationStatus,
   CharacterView,
   ContentKind,
@@ -771,14 +772,14 @@ export function ActionsPanel({
                 <AttackItem
                   key={`${attack.item.revisionId}-${attack.effectId}-${attack.entryIndex ?? ''}`}
                   attack={attack}
-                  label={attackLabel(attack, attacks)}
+                  label={attackLabel(attack, view.character.equipment ?? [])}
                   critical={critical}
                   rollMode={rollMode}
                   roll={roll}
                   rollDamage={rollDamage}
                   pool={poolFor(resourcePools, attack.resourceId ?? undefined, attack.costResourceContent ?? undefined)}
                   availability={availability}
-                  pinning={pinning(pin, attackLabel(attack, attacks))}
+                  pinning={pinning(pin, attackLabel(attack, view.character.equipment ?? []))}
                 />
               ))}
               {groupCustom.map((attack) => (
@@ -987,11 +988,14 @@ function RollItem({
   );
 }
 
-/** MECH-X item 3: a weapon carried as several copies has one row per copy (`entryIndex`); they are told apart as "(copy N of M)". */
-function attackLabel(attack: AttackEntry, all: AttackEntry[]): string {
+/**
+ * MECH-X item 3: a weapon carried as several copies has one row per copy (`entryIndex`, the equipment index). The copies are numbered
+ * exactly as the Inventory numbers them: every equipment entry of the item, in list order, equipped or not.
+ */
+function attackLabel(attack: AttackEntry, equipment: EquipmentEntry[]): string {
   if (attack.entryIndex === undefined || attack.entryIndex === null) return attack.name;
-  const copies = all.filter((a) => a.source !== 'feature' && a.entryIndex !== undefined && a.entryIndex !== null && a.item.revisionId === attack.item.revisionId);
-  const n = copies.indexOf(attack) + 1;
+  const copies = equipment.map((e, i) => ({ e, i })).filter(({ e }) => e.item.contentId === attack.item.contentId && e.item.revisionId === attack.item.revisionId);
+  const n = copies.findIndex(({ i }) => i === attack.entryIndex) + 1;
   return copies.length > 1 && n > 0 ? `${attack.name} (copy ${n} of ${copies.length})` : attack.name;
 }
 
