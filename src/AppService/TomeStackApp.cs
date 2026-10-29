@@ -76,6 +76,23 @@ public sealed partial class TomeStackApp : IDisposable
         return ids;
     });
 
+    /// <summary>The revision ids of <see cref="BundledPacks"/>: what the release ladder's bundled sets must stay within (they are insert-only).</summary>
+    internal static IReadOnlySet<Guid> BundledRevisionIds => LazyBundledRevisionIds.Value;
+
+    private static readonly Lazy<IReadOnlySet<Guid>> LazyBundledRevisionIds = new(() =>
+    {
+        var ids = new HashSet<Guid>();
+        foreach (var pack in BundledPacks)
+        {
+            using var stream = typeof(TomeStackApp).Assembly.GetManifestResourceStream(pack)
+                ?? throw new InvalidOperationException($"Embedded content pack {pack} is missing.");
+            using var document = JsonDocument.Parse(stream);
+            foreach (var revision in document.RootElement.GetProperty("revisions").EnumerateArray())
+                ids.Add(revision.GetProperty("revisionId").GetGuid());
+        }
+        return ids;
+    });
+
     /// <param name="syncRoots">Cloud sync roots to warn about (ADR-005); discovered from this machine when null.</param>
     /// <param name="devFixtures">
     /// Also seed the original test fixture pack. Development only (DevHost, tests, <c>TOMESTACK_DEV_FIXTURES=1</c>): the

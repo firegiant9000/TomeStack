@@ -118,6 +118,8 @@ Velopack (MIT, Caelan Sayler) builds `Setup.exe` and `Update.exe` in Rust, with 
 ## Release procedure (owner)
 
 1. Merge the release PR. `Directory.Build.props`, the `## <version>` changelog heading and the tag must agree; the workflow checks this. (For 0.6.0 the `<Version>` bump to `0.6.0` is already done on the Wave 2 branch, ruling R130; the owner confirms it in the PR. Tagging and releasing stay the owner's.)
+   - In a **minor** release PR, add the new `ReleaseLadder` row (`src/AppService/Packages/ReleaseLadder.cs`, its maxima from the schema constants) and generate its bundled set from the PR's own tree: `scripts/bundled-ids-at.ps1 -Tag HEAD -Out src/AppService/Packages/BundledAt/X.Y.0.txt` (`-Tag` takes any git revision; the tag does not exist yet).
+   - A **patch** release must not change `src/AppService/Content/`: bundled SRD content ships only in a minor release (owner ruling, 2026-10-27), and there are no patch rows. Check that `git diff vX.Y.0 HEAD -- src/AppService/Content` is empty.
 2. Tag and push from an up-to-date `main`: `git tag -a v0.4.0 -m "TomeStack 0.4.0"`, then `git push origin v0.4.0`.
 3. The **Release** workflow (`.github/workflows/release.yml`) runs:
    1. the full gate;

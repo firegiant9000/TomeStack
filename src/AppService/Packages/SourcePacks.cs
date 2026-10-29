@@ -30,7 +30,8 @@ public sealed partial class PackageService
     public SourcePackPreview PreviewSourcePack(IReadOnlyList<Guid> sourceIds)
     {
         var plan = PlanSourcePack(sourceIds);
-        return new(plan.FileName, [.. plan.Sources.Select(Notice)], plan.Revisions.Count, plan.Drafts, [.. plan.Warnings, .. NewerBuild.For(plan.Revisions, [])]);
+        var opens = NewerBuild.Evaluate(plan.Revisions, [], 0, [], BundledPackTitle(plan.Revisions));
+        return new(plan.FileName, [.. plan.Sources.Select(Notice)], plan.Revisions.Count, plan.Drafts, [.. plan.Warnings, .. opens.Warnings], opens.OpensIn, opens.Causes);
     }
 
     /// <summary><c>package.sourcePackExport</c> / <c>package.sourcePackSaveAs</c>: the pack's bytes.</summary>
