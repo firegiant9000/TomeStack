@@ -586,6 +586,10 @@ A spell can carry `tags`, keys under the rule for attack tags (`validate.tag-inv
 
 Fixture and tests: the payment goldens in `golden/payment-revisions.json`, `PaymentSchemaTests`, `PaymentCalculationTests`, `SlotPaymentsTests` (RulesCore) and `PaymentPlayTests` (the service path).
 
+## Item mods and rolling (MECH-X item 3)
+
+Item mods ([equipment.md](equipment.md) "Mods") change a weapon copy's to-hit and damage per equipment entry, and the sheet shows one attack row per copy. **Known limitation (owner decision pending):** the weapon roll command carries no entry index, so rolling a weapon carried as several copies, and a quickbar pin of it, use the first copy's numbers; the sheet rows show each copy's own.
+
 ## On Play and in the studio
 
 - **Play** lists each group under "Forms" (in the Combat strip since slice 3) as a labelled group of radio choices: "Base" first, then each form with its cost ("5 Focus"), and the overlays as checkboxes. A choice that cannot be made is disabled and says why. See [accessibility-checklist.md](accessibility-checklist.md) row 69 for the keyboard rule: the arrow keys move focus and do not choose, because each choice spends from a pool. The strip also shows the round, the timed effects, the combat pools and the turn buttons ([sheet-play.md](sheet-play.md)). Since slice 7, taking damage on a sheet that has responses opens the damage panel (see "Slice 7"). Since slice 8, an action that also changes pools or draws a charge down is used as one change ("Use <name>", "Undo use <name>"), and End encounter offers to clear built-up pools (see "Slice 8").

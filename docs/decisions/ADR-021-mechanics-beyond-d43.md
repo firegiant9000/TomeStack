@@ -28,7 +28,7 @@ The work is one item at a time. Each item is generic and declarative, with a tra
 | 5 | Target marks | **Adopt, no schema.** A mark is a player-set toggle ("Marked target present"), and its riders apply only while it is on, through the D43 rider `toggle` gate. There is no target model. If a mark needs state per target, the item stops: that is a target model (see "D63 clarification"). |
 | 1 | Payment kinds, spell tags, non-slot casting | **Adopt.** The counts: hit-point payment appears in 4 classes or subclasses (8 features), above the threshold of 2, so it ships with slot payment and spell tags (about 22 spells carry a tag beyond school). Three shapes fit: a flat cost per use (`cost`), a cost per die (`perUnit`, the player picks the units) and one spell slot per use. **By-slot-level hit-point payment stays by hand** (owner, 2026-10-27): the cost is worked out before a slot is chosen and has no slot-level input, so it would need a further field. Casting a spell without a slot (`castsSpell`) ships because the counts found it in 2 of the 3 sampled classes. |
 | 2 | Replaceable choices | **Adopt, advisory.** The counts: in the sampled classes: long rest 3, short rest 0, level-up 0; across the book at least 9 level-up and 4 long-rest windows, no short-rest one. So `shortRest` is dropped, and `levelUp` and `longRest` ship. Nothing is enforced and no character history field is added. The level-up builder, Make choices, the D74 list and a long rest offer or list the swap, and a save that replaces picks outside the window shows a notice once (`choice.replaced-outside-window`; it is not stored). A long rest's timing is not checked, because nothing records a rest (R43). |
-| 3 | Item mods and ammunition | **Pending the counts.** If no mod needs state per item entry, mods apply per item and the character schema is unchanged. |
+| 3 | Item mods and ammunition | **Adopt, per copy, with character v11.** The counts: about 92 mod kinds in the shared catalog (weapon 61, armor 31), and all 92 are applied to one specific copy of an item, so mods need state per item entry; the character schema therefore gains `equipment[].mods` (up to 4 per entry). Ammunition does not: all 16 ammunition kinds are per-stack counts, so ammunition is the item's `quantity` and has no field. Seven stateful consumables (5 until-hit flags per copy, 1 once-per-rest power cell, 1 heat counter) stay by hand. Mods are references, not copies, and never follow their own grants or choices. |
 | 4 | Content companions | **Pending the counts**, under the D63 clarification below. If companions spend no pools of their own, their pools are dropped. |
 
 **D63 clarification (owner, 2026-10-24).** D63 keeps DM and combat tools out (ROADMAP R4). A content companion is not one of them. It is a player-side feature of a class or feat, always owned by one character and shown as a card on that character's sheet (the existing companion card, extended rather than duplicated). It has no initiative, no turn order, no tracking of enemies or other creatures, and no free-form statblock authoring. It is not the D05 statblock creator.
@@ -40,7 +40,8 @@ The work is one item at a time. Each item is generic and declarative, with a tra
 | Content v12 | `weapon.bonus` (item 0) | approved by the owner (2026-10-27) |
 | Content v12 | `payment` (on a roll, a feature attack and a toggle), `castsSpell` (on a roll) and spell `tags` (item 1) | approved by the owner (2026-10-27) |
 | Content v12 | `replaceable` on a choice (item 2) | approved by the owner (2026-10-27) |
-| Character v11 | `equipment[].mods` (item 3) | approved by the owner (2026-10-27); taken (T2 commit) |
+| Character v11 | `equipment[].mods` (item 3) | approved by the owner (2026-10-27); shipped (item 3) |
+| Content v12 | `itemMod` effect on item content (item 3) | approved by the owner (2026-10-27) |
 
 ## Consequences
 
@@ -87,6 +88,14 @@ Filled in as each item lands: the tests, the fixture and the feature page.
 - Fixture: the golden "Fixture Shifting Repertoire" in `tests/RulesFixtures/golden/choice-revisions.json`.
 - Feature pages: [choices.md](../features/choices.md), [builder.md](../features/builder.md), [rests.md](../features/rests.md), [sheet-layout.md](../features/sheet-layout.md), [homebrew-studio.md](../features/homebrew-studio.md) and [schemas/README.md](../schemas/README.md).
 - Limits: the studio has no field for it (content JSON only); the long-rest window is not checked; the notice is not stored.
+
+**Item 3 (item mods, content v12 and character v11):**
+
+- Counts (numbers only): about 92 mod kinds in the shared catalog (weapon: apprentice 29, journeyman 13, master 11, legendary 8; armor: apprentice 10, journeyman 8, master 6, legendary 7); about 2 more mod kinds taught by one subclass (the 8 legendary subclass mods overlap the catalog); 11 temporary per-copy options; 9 vehicle upgrade options plus 1 seat; about 45 craftable magic items; 16 ammunition kinds (7 conventional, 9 firearm), all per-stack counts. Per-instance state is needed by all 92 mods (one specific copy, with per-item slot limits) and by 7 stateful consumables. Slot limits, maker locks and the vehicle options are not modelled (an owner stop if wanted).
+- Tests: `ItemModSchemaTests` (shape, bounds, nested modifiers, older revisions keep their bytes and hash), `ItemModCalculationTests` (weapon and armor bonus, `any`, per-copy rows, attunement, first equipped copy, leaves), `ItemModDownConvertTests` (the character rung, charged copies, a null entry) and the content v12 step cases in `DownConvertCoverageTests`, `ItemModSaveTests` (the save-path checks, the stored-pair exemption, ids for modded copies), the Inventory and studio Vitest cases (`EquipmentPanel.test.tsx`, `ItemModFields.test.tsx`, `HomebrewStudioItemMods.test.tsx`, `ActionsPanel.test.tsx`) and the e2e `item mods: a published mod attached to one copy changes only that copy's attack`.
+- Fixture: `tests/RulesFixtures/fixture-pack-item-mods.json` (original content).
+- Feature pages: [equipment.md](../features/equipment.md), [homebrew-studio.md](../features/homebrew-studio.md), [import-lab.md](../features/import-lab.md), [package-format.md](../features/package-format.md) and [schemas/README.md](../schemas/README.md).
+- Limits: the weapon roll command carries no entry index, so rolling (and pinning) a weapon carried as several copies uses the first copy's numbers while the sheet rows show each copy's own (owner decision pending); no negative or cursed mods (bonus 0 to 10); a mod's own charges and attunement are not read (one attunement per copy); Preview, Compare and Sandbox do not run the catalog check for mods.
 
 **Item 5 (target marks, no schema):**
 

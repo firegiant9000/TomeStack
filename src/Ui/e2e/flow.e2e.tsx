@@ -703,6 +703,79 @@ it('authors a +1 weapon in the studio, equips it and rolls it, and "Why?" names 
   expect(await whyList()).toMatch(/\+1 damage \(weapon\)/);
 });
 
+it('item mods: a published mod attached to one copy changes only that copy\'s attack (MECH-X item 3)', async () => {
+  const user = userEvent.setup();
+  await client.createCharacter({ name: 'E2E Mod Hero', rulesFamily: 'srd-5.2.1', baseAbilities: { str: 14, dex: 12, con: 12, int: 10, wis: 10, cha: 10 }, pins: [] });
+  render(<App />);
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  await waitFor(() => expect(studioButton.disabled).toBe(false));
+  await user.click(studioButton);
+
+  const newSource = await screen.findByRole('form', { name: 'New homebrew source' });
+  await user.type(within(newSource).getByRole('textbox', { name: 'Source title' }), 'E2E Mod Book');
+  await user.click(within(newSource).getByRole('checkbox', { name: 'SRD 5.2.1 (2024 rules)' }));
+  await user.click(within(newSource).getByRole('button', { name: 'Create source' }));
+  await screen.findByRole('heading', { name: 'Content in E2E Mod Book' });
+
+  // The host: a plain blade. The mod: item content with an item mod effect (applies to a weapon, +2).
+  const editor = () => screen.getByRole('region', { name: /^New |^Edit / });
+  await user.click(screen.getByRole('button', { name: 'New item' }));
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Mod Blade');
+  await user.click(within(editor()).getByRole('button', { name: 'Add weapon' }));
+  const weapon = within(within(editor()).getByRole('group', { name: /^Rule 1: Weapon/ }));
+  await user.type(weapon.getByRole('textbox', { name: /^Weapon key/ }), 'modblade');
+  await user.clear(weapon.getByRole('textbox', { name: /^Damage \(/ }));
+  await user.type(weapon.getByRole('textbox', { name: /^Damage \(/ }), '1d6');
+  await user.clear(weapon.getByRole('textbox', { name: /^Damage type/ }));
+  await user.type(weapon.getByRole('textbox', { name: /^Damage type/ }), 'slashing');
+  await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Published E2E Mod Blade.'));
+
+  await user.click(screen.getByRole('button', { name: 'New item' }));
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Keen Rune');
+  await user.click(within(editor()).getByRole('button', { name: 'Add mod' }));
+  const mod = within(within(editor()).getByRole('group', { name: /^Rule 1: Item mod/ }));
+  expect((mod.getByRole('combobox', { name: 'Applies to' }) as HTMLSelectElement).value).toBe('weapon');
+  await user.clear(mod.getByRole('textbox', { name: /^Bonus/ }));
+  await user.type(mod.getByRole('textbox', { name: /^Bonus/ }), '2');
+  await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Published E2E Keen Rune.'));
+
+  // Carry and equip the blade, then attach the mod to a new copy: one plain copy and one modded copy.
+  await user.click(screen.getByRole('button', { name: /^E2E Mod Hero/ }));
+  const hero = await screen.findByRole('article', { name: 'E2E Mod Hero' });
+  await openTab(user, hero, 'Inventory');
+  const equipment = () => screen.getByRole('region', { name: 'Equipment' });
+  await waitFor(() => expect(within(equipment()).getByRole('option', { name: /^E2E Mod Blade/ })).toBeTruthy());
+  await user.selectOptions(within(equipment()).getByRole('combobox', { name: 'Add an item' }), within(equipment()).getByRole('option', { name: /^E2E Mod Blade/ }));
+  await user.click(within(equipment()).getByRole('button', { name: 'Add' }));
+  await user.click(await within(equipment()).findByRole('checkbox', { name: 'Equip E2E Mod Blade' }));
+
+  const attach = await within(equipment()).findByRole('combobox', { name: 'Attach a mod to E2E Mod Blade' });
+  await waitFor(() => expect(within(attach).getAllByRole('option').some((o) => o.textContent?.startsWith('E2E Keen Rune'))).toBe(true));
+  await user.selectOptions(attach, within(attach).getAllByRole('option').find((o) => o.textContent?.startsWith('E2E Keen Rune'))!);
+  await user.click(within(equipment()).getByRole('button', { name: 'Attach to a new copy of E2E Mod Blade' }));
+  await user.click(await within(equipment()).findByRole('checkbox', { name: 'Equip E2E Mod Blade (copy 2 of 2)' }));
+  await within(equipment()).findByText(/^Mods on E2E Mod Blade \(copy 2 of 2\): E2E Keen Rune/);
+
+  // Play: two attack rows; only the modded copy carries the +2, and its trace names the mod.
+  await openTab(user, hero, 'Play');
+  const row = async (copy: number) => {
+    const item = await waitFor(() => {
+      const found = within(screen.getByRole('region', { name: 'Attacks and actions' })).getAllByRole('listitem').find((li) => li.textContent?.includes(`E2E Mod Blade (copy ${copy} of 2): `));
+      expect(found).toBeTruthy();
+      return found!;
+    });
+    return item.textContent ?? '';
+  };
+  const toHit = (text: string) => Number(/([+-]\d+) to hit/.exec(text)![1]);
+  const first = await row(1);
+  const second = await row(2);
+  expect(toHit(second)).toBe(toHit(first) + 2);
+  expect(second).toMatch(/E2E Keen Rune: \+2 to hit \(mod\)/);
+  expect(first).not.toMatch(/E2E Keen Rune/);
+});
+
 it('attaches a PDF to a source, offers the cited page on a feature, and removes it after a warning', async () => {
   const user = userEvent.setup();
   // Setup through the client: a homebrew source, a published feat citing page 7, and a character using it.

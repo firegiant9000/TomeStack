@@ -111,7 +111,7 @@ public static class DownConvert
         // Stripping the entry ids can leave two entries of one item that only the ids kept apart; an older build refuses that.
         if (!ReferenceEquals(lowered, character) && changes.All(c => c.Action != BelowAction.Blocks)
             && lowered.Validate().FirstOrDefault(d => d.Code == "character.equipment-duplicate") is { } duplicate)
-            changes.Add(new("equipment", BelowAction.Blocks, BelowCodes.ValidationError, $"'{name}': {duplicate.Message} Merge the copies, then export."));
+            changes.Add(new("equipment", BelowAction.Blocks, BelowCodes.ValidationError, $"'{name}': {duplicate.Message} Remove one copy, then export."));
 
         return changes.Any(c => c.Action == BelowAction.Blocks)
             ? new CharacterBelow(character, changes)

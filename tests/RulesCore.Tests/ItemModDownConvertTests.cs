@@ -103,6 +103,19 @@ public class ItemModDownConvertTests
     }
 
     [Fact]
+    public void A_null_equipment_entry_is_tolerated_and_reported_by_validate()
+    {
+        var character = With(new EquipmentEntry(Longblade, true, 1, Guid.NewGuid(), Mods: [KeenRune]), null!);
+
+        var to10 = DownConvert.Below(character, 10);
+
+        Assert.False(to10.Blocked);
+        Assert.Equal(2, to10.Character.Equipment.Count);
+        Assert.Null(to10.Character.Equipment[1]);
+        Assert.NotEmpty(to10.Character.Validate());
+    }
+
+    [Fact]
     public void A_character_at_v11_is_returned_as_it_is_when_the_target_is_11()
     {
         var character = With(new EquipmentEntry(Longblade, true, 1, Guid.NewGuid(), Mods: [KeenRune]));
