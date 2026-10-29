@@ -105,10 +105,13 @@ it('needs the tick for a dropped item, and a new preview clears it', async () =>
 
 it('sends the release and the preview hash when a release is chosen, and neither for the first choice', async () => {
   const user = await openShare();
+  // Save waits for the sharing preflight's report too (D62 L5).
+  await waitFor(() => expect(save().disabled).toBe(false));
   await user.click(save());
   expect(vi.mocked(client.saveCampaignPackAs).mock.lastCall).toEqual(['compat-table']);
   await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
   await screen.findByRole('region', { name: 'Changed for TomeStack 0.6.0' });
+  await waitFor(() => expect(save().disabled).toBe(false));
   await user.click(save());
   expect(vi.mocked(client.saveCampaignPackAs).mock.lastCall).toEqual(['compat-table', '0.6.0', 'hash-0.6.0']);
 });
