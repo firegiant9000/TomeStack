@@ -503,7 +503,7 @@ public static class DownConvert
             {
                 switch (TypeOf(effect))
                 {
-                    case "itemMod":
+                    case ItemModEffect.TypeName:
                         changes.Add(new(path, BelowAction.Dropped, BelowCodes.EffectUnsupported, $"'{name}': an item modification, which the older version cannot hold."));
                         continue;
                     case WeaponEffect.TypeName:

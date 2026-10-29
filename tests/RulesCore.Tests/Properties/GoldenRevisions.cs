@@ -48,6 +48,25 @@ internal static class GoldenRevisions
         "751caa6c057f6c008b0b4d930c41852b59e546db9ce008ef3e1661c6bc738ae8", // "Fixture Shifting Repertoire"
     ];
 
+    /// <summary>
+    /// The hashes of the six v12 revisions of tests/RulesFixtures/golden/item-mod-revisions.json (MECH-X item 3: "Fixture Keen Rune",
+    /// "Fixture Warding Plating", "Fixture Steady Lining", then the hosts "Fixture Longblade", "Fixture Scale Coat", "Fixture Round
+    /// Guard"). Never update these to make a test pass.
+    /// </summary>
+    public static readonly string[] ItemModHashes =
+    [
+        "f6f2af29da104190a2bf9db13a7098c7b8ecb2face40177636a42c8a3b6e893c", // "Fixture Keen Rune"
+        "cbe7de9ecf77d0c236e5a2e13301975bbb5242f03432680cdfd358059acbedcb", // "Fixture Warding Plating"
+        "05e9744c64558c169f2ef024afe587cdddaa779d067697db4eff7106323533ce", // "Fixture Steady Lining"
+        "36d0cab0bc4190ba1b99a270075e0096e31222ce0244249766a6f98844d2af8b", // "Fixture Longblade"
+        "a41d0c185c8d934f11a7096b1458458157b2289a811472b403dbbe0d741a4493", // "Fixture Scale Coat"
+        "44d633ecd75353e4530245d6ed9d8db7a36bda3696f52ff49bd840885047caf8", // "Fixture Round Guard"
+    ];
+
+    /// <summary>The <paramref name="index"/>th revision of the item mod golden file, as written in the fixture.</summary>
+    public static string ItemModJson(int index) =>
+        JsonNode.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "RulesFixtures", "golden", "item-mod-revisions.json")))!.AsArray()[index]!.ToJsonString();
+
     /// <summary>The <paramref name="index"/>th revision of the choice golden file, as written in the fixture.</summary>
     public static string ChoiceJson(int index) =>
         JsonNode.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "RulesFixtures", "golden", "choice-revisions.json")))!.AsArray()[index]!.ToJsonString();

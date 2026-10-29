@@ -1157,6 +1157,67 @@ public sealed record ItemEffect : Effect
     internal static Effect FromUnknown(UnknownEffect unknown) => VersionedEffects.Typed<ItemEffect>(unknown);
 }
 
+/// <summary>Content schema v12 (MECH-X item 3): what an <see cref="ItemModEffect"/> can attach to. Wire names <c>weapon</c>, <c>armor</c>, <c>any</c>.</summary>
+public enum ModTarget { Weapon, Armor, Any }
+
+/// <summary>
+/// Content schema v12 (MECH-X item 3): content that attaches to one carried copy of another item (a rune, a lining). While the
+/// copy is equipped (and attuned, when its item needs it) the mod adds <see cref="Bonus"/> to the host's attack or Armor Class
+/// and applies its <see cref="Modifiers"/>. Typed only in a v12 revision: below v12 it stays an <see cref="UnknownEffect"/>, byte
+/// for byte (the <see cref="ItemEffect"/> precedent). The nested modifiers are restricted by the validator to an operation, target,
+/// value and text that are always on (see <c>validate.item-mod-modifier</c>).
+/// </summary>
+public sealed record ItemModEffect : Effect
+{
+    public const string TypeName = "itemMod";
+
+    public const int SchemaVersion = ContentRevision.ItemModSchemaVersion;
+
+    /// <summary>The largest <see cref="Bonus"/>; the same bound as <c>weapon.bonus</c>.</summary>
+    public const int MaxBonus = ContentValidator.MaxWeaponBonus;
+
+    /// <summary>The most nested <see cref="Modifiers"/>.</summary>
+    public const int MaxModifiers = 8;
+
+    public override string Type => TypeName;
+
+    /// <summary>What the mod attaches to. Required; must name a <see cref="ModTarget"/> member.</summary>
+    [property: JsonRequired]
+    public required ModTarget AppliesTo { get; init; }
+
+    /// <summary>0 to <see cref="MaxBonus"/>: added to the host weapon's to-hit and damage, or to Armor Class on armor.</summary>
+    public int? Bonus { get; init; }
+
+    /// <summary>Always-on modifiers applied while the mod is active; at most <see cref="MaxModifiers"/>.</summary>
+    public IReadOnlyList<ModifierEffect>? Modifiers { get; init; }
+
+    internal static Effect FromUnknown(UnknownEffect unknown) => AppliesToReads(unknown) ? VersionedEffects.Typed<ItemModEffect>(unknown) : unknown;
+
+    /// <summary>
+    /// Whether <c>appliesTo</c> (any spelling) names a <see cref="ModTarget"/> member and every item of <c>modifiers</c>, if present,
+    /// is an object of type <c>modifier</c>. The serializer alone would bind a padded name or a combined list as bits.
+    /// </summary>
+    private static bool AppliesToReads(UnknownEffect unknown)
+    {
+        if (unknown.Raw.ValueKind != JsonValueKind.Object || !VersionedEffects.NamesMember<ModTarget>(unknown.Raw, "appliesTo"))
+            return false;
+        foreach (var p in unknown.Raw.EnumerateObject())
+        {
+            if (!string.Equals(p.Name, "modifiers", StringComparison.OrdinalIgnoreCase) || p.Value.ValueKind == JsonValueKind.Null)
+                continue;
+            if (p.Value.ValueKind != JsonValueKind.Array)
+                return false;
+            foreach (var item in p.Value.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.Object || !item.TryGetProperty("type", out var type)
+                    || type.ValueKind != JsonValueKind.String || type.GetString() != ModifierEffect.TypeName)
+                    return false;
+            }
+        }
+        return true;
+    }
+}
+
 public enum WeaponCategory { Simple, Martial }
 
 public enum WeaponAttack { Melee, Ranged }
@@ -1429,6 +1490,7 @@ internal static class VersionedEffects
             [ValueEffect.TypeName] = (ValueEffect.SchemaVersion, (u, _) => ValueEffect.FromUnknown(u)),
             [RollModeEffect.TypeName] = (RollModeEffect.SchemaVersion, (u, _) => RollModeEffect.FromUnknown(u)),
             [ResponseEffect.TypeName] = (ResponseEffect.SchemaVersion, (u, _) => ResponseEffect.FromUnknown(u)),
+            [ItemModEffect.TypeName] = (ItemModEffect.SchemaVersion, (u, _) => ItemModEffect.FromUnknown(u)),
         };
 
     /// <summary>
@@ -1607,7 +1669,7 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
                 RollEffect.TypeName => element.Deserialize<RollEffect>(options),
                 HitDieEffect.TypeName => element.Deserialize<HitDieEffect>(options),
                 // Typed only in revisions of their schema version (ContentRevision.OnDeserialized); older ones keep them as written.
-                ArmorEffect.TypeName or SpellcastingEffect.TypeName or SpellEffect.TypeName or WeaponEffect.TypeName or ToggleEffect.TypeName or ScaleEffect.TypeName or ItemEffect.TypeName or ToggleGroupEffect.TypeName or UpkeepEffect.TypeName or AttackEffect.TypeName or AttackRiderEffect.TypeName or ValueEffect.TypeName or RollModeEffect.TypeName or ResponseEffect.TypeName => UnknownEffect.From(element),
+                ArmorEffect.TypeName or SpellcastingEffect.TypeName or SpellEffect.TypeName or WeaponEffect.TypeName or ToggleEffect.TypeName or ScaleEffect.TypeName or ItemEffect.TypeName or ToggleGroupEffect.TypeName or UpkeepEffect.TypeName or AttackEffect.TypeName or AttackRiderEffect.TypeName or ValueEffect.TypeName or RollModeEffect.TypeName or ResponseEffect.TypeName or ItemModEffect.TypeName => UnknownEffect.From(element),
                 LegacyAbilityScoreIncrease or LegacyInitiativeBonus => FromSchemaVersion1(element, type, options),
                 _ => UnknownEffect.From(element),
             } ?? UnknownEffect.From(element);

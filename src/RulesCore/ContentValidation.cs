@@ -178,7 +178,7 @@ public static class ContentValidator
         var needsV9 = false;
         var needsV10 = false; // content v10 (Wave 3, D42): speed/passive targets, autoWhen, activation, damage grants, item
         var needsV11 = false; // content v11 (D43): toggleGroup and upkeep effects, the toggle's group, layer, cost, level and duration keys, and the resource's counts, resourceFull and allowance keys
-        var needsV12 = false; // content v12 (MECH-X items 0–2): weapon.bonus, payment, roll.castsSpell, spell.tags, choice.replaceable
+        var needsV12 = false; // content v12 (MECH-X items 0–3): weapon.bonus, payment, roll.castsSpell, spell.tags, choice.replaceable, itemMod
         var v12Phrases = new List<string>(); // what the v12 keys found are called in validate.requires-v12
         void NeedV12(string phrase)
         {
@@ -192,6 +192,55 @@ public static class ContentValidator
         var usedScales = new HashSet<string>(StringComparer.Ordinal); // SCALE.<id> in any formula (content v9)
         var usedValues = new HashSet<string>(StringComparer.Ordinal); // VALUE.<id> in any formula (content v11)
         var spellTargets = false; // raises the written version only; older revisions with them were never refused
+        void CheckModifier(ModifierEffect modifier)
+        {
+            needsV3 |= modifier.Target is FieldIds.ArmorClass or FieldIds.HitPoints;
+            needsV8 |= modifier.Target is FieldIds.Attacks or FieldIds.CriticalRange || modifier.WhileArmored is not null;
+            spellTargets |= IsSpellField(modifier.Target);
+            if (modifier.Target.StartsWith(ResourceTargetPrefix, StringComparison.Ordinal))
+                CheckResourceTarget(modifier);
+            else if (!CharacterCalculator.IsField(modifier.Target))
+                Error("validate.unknown-target", $"Effect '{modifier.Id}' targets '{modifier.Target}', which is not a calculated field.", modifier.Id);
+            else if (IsCharacterOnlyField(modifier.Target, revision))
+                Error("validate.unknown-target", $"Effect '{modifier.Id}' targets '{modifier.Target}', which cannot be targeted by content yet (needs content schema v{ContentRevision.PlayDetailsSchemaVersion}).", modifier.Id);
+            else
+                needsV10 |= CharacterCalculator.IsSpeedOrPassive(modifier.Target); // allowed: this revision is v10
+            // Content v11 (D43): fly speed. Below v11 the revision gets validate.requires-v11 (and the calculator ignores it).
+            needsV11 |= modifier.Target == FieldIds.FlySpeed;
+            // Content v8: a lower critical range is better, but set and replace keep the highest value, so only a
+            // bonus (such as -1 for Improved Critical) can lower it.
+            if (modifier.Target == FieldIds.CriticalRange && modifier.Operation != ModifierOperation.Bonus)
+                Error("validate.critical-range-operation", $"Effect '{modifier.Id}' uses {modifier.Operation.ToString().ToLowerInvariant()} on criticalRange; only a bonus can change it (for example -1 for a critical hit on 19-20).", modifier.Id);
+            // Worn armor turns off every Armor Class replacement (they are unarmored alternatives), so a replacement
+            // that applies only while armored could never apply.
+            if (modifier.WhileArmored == true && modifier.Target == FieldIds.ArmorClass && modifier.Operation == ModifierOperation.Replace)
+                Error("validate.while-armored-replace", $"Effect '{modifier.Id}' replaces Armor Class only while armor is worn, but worn armor sets the base Armor Class itself, so it could never apply. Use a bonus.", modifier.Id);
+            if (modifier.Stacking == StackingRule.HighestInGroup && string.IsNullOrWhiteSpace(modifier.StackGroup))
+                Error("validate.stack-group-missing", $"Effect '{modifier.Id}' uses highest-in-group stacking without a stackGroup.", modifier.Id);
+            CheckFormula(modifier.Value, modifier.Id, "value");
+            if (modifier.Toggle is { } toggle)
+            {
+                needsV6 = true;
+                if (modifier.Timing != EffectTiming.WhileActive)
+                    Error("validate.toggle-timing", $"Modifier '{modifier.Id}' names toggle '{toggle}', so its timing must be whileActive.", modifier.Id);
+                // Content v11 (D43): the toggle may be another content's (toggleContent); the same lookup as a rider's.
+                if (modifier.ToggleContent is null)
+                {
+                    if (!revision.Effects.OfType<ToggleEffect>().Any(t => t.ToggleId == toggle))
+                        Error("validate.toggle-unknown", $"Modifier '{modifier.Id}' names toggle '{toggle}', which this revision does not define.", modifier.Id);
+                }
+                else
+                {
+                    CheckToggleReference(modifier.ToggleContent, toggle, modifier.Id, "validate.toggle-unknown");
+                }
+            }
+            if (modifier.ToggleContent is not null)
+            {
+                needsV11 = true;
+                if (modifier.Toggle is null)
+                    Error("validate.toggle-unknown", $"Modifier '{modifier.Id}' names the content that declares its toggle but names no toggle; add the toggle, or remove toggleContent.", modifier.Id);
+            }
+        }
         foreach (var effect in revision.Effects)
         {
             switch (effect)
@@ -291,6 +340,13 @@ public static class ContentValidator
                     NeedV12("a replaceable choice");
                     Error("validate.effect-malformed", $"Effect '{unreadableChoice.Id}' has type 'choice' but a value or field that does not read (replaceable needs a when of levelUp or longRest and, if present, a whole-number max; a choiceId is needed); fix it before publishing.", unreadableChoice.Id);
                     break;
+                // Content v12 (MECH-X item 3): from v12 an itemMod that stays unknown did not read (an appliesTo that is not weapon, armor
+                // or any, a bonus that is not a whole number, modifiers that are not modifier effects), so the mod would silently do
+                // nothing. Published at a lower version it is an unsupported effect, so it blocks.
+                case UnknownEffect { DeclaredType: ItemModEffect.TypeName } unreadableMod when revision.SchemaVersion >= ItemModEffect.SchemaVersion:
+                    NeedV12("an item mod");
+                    Error("validate.effect-malformed", $"Effect '{unreadableMod.Id}' has type '{unreadableMod.DeclaredType}' but a value or field that does not read (appliesTo must be weapon, armor or any; bonus a whole number from 0 to {ItemModEffect.MaxBonus}; modifiers a list of modifier effects); fix it before publishing.", unreadableMod.Id);
+                    break;
                 case UnknownEffect unknown:
                     // Content v11 (D43): a roll with no dice is typed only from v11, so below it the roll stays reference-only as it
                     // always did, but publishing it needs v11.
@@ -298,52 +354,7 @@ public static class ContentValidator
                     Warn("validate.effect-unsupported", $"Effect '{unknown.Id}' is of a type this version does not automate; it stays reference-only.", unknown.Id);
                     break;
                 case ModifierEffect modifier:
-                    needsV3 |= modifier.Target is FieldIds.ArmorClass or FieldIds.HitPoints;
-                    needsV8 |= modifier.Target is FieldIds.Attacks or FieldIds.CriticalRange || modifier.WhileArmored is not null;
-                    spellTargets |= IsSpellField(modifier.Target);
-                    if (modifier.Target.StartsWith(ResourceTargetPrefix, StringComparison.Ordinal))
-                        CheckResourceTarget(modifier);
-                    else if (!CharacterCalculator.IsField(modifier.Target))
-                        Error("validate.unknown-target", $"Effect '{modifier.Id}' targets '{modifier.Target}', which is not a calculated field.", modifier.Id);
-                    else if (IsCharacterOnlyField(modifier.Target, revision))
-                        Error("validate.unknown-target", $"Effect '{modifier.Id}' targets '{modifier.Target}', which cannot be targeted by content yet (needs content schema v{ContentRevision.PlayDetailsSchemaVersion}).", modifier.Id);
-                    else
-                        needsV10 |= CharacterCalculator.IsSpeedOrPassive(modifier.Target); // allowed: this revision is v10
-                    // Content v11 (D43): fly speed. Below v11 the revision gets validate.requires-v11 (and the calculator ignores it).
-                    needsV11 |= modifier.Target == FieldIds.FlySpeed;
-                    // Content v8: a lower critical range is better, but set and replace keep the highest value, so only a
-                    // bonus (such as -1 for Improved Critical) can lower it.
-                    if (modifier.Target == FieldIds.CriticalRange && modifier.Operation != ModifierOperation.Bonus)
-                        Error("validate.critical-range-operation", $"Effect '{modifier.Id}' uses {modifier.Operation.ToString().ToLowerInvariant()} on criticalRange; only a bonus can change it (for example -1 for a critical hit on 19-20).", modifier.Id);
-                    // Worn armor turns off every Armor Class replacement (they are unarmored alternatives), so a replacement
-                    // that applies only while armored could never apply.
-                    if (modifier.WhileArmored == true && modifier.Target == FieldIds.ArmorClass && modifier.Operation == ModifierOperation.Replace)
-                        Error("validate.while-armored-replace", $"Effect '{modifier.Id}' replaces Armor Class only while armor is worn, but worn armor sets the base Armor Class itself, so it could never apply. Use a bonus.", modifier.Id);
-                    if (modifier.Stacking == StackingRule.HighestInGroup && string.IsNullOrWhiteSpace(modifier.StackGroup))
-                        Error("validate.stack-group-missing", $"Effect '{modifier.Id}' uses highest-in-group stacking without a stackGroup.", modifier.Id);
-                    CheckFormula(modifier.Value, modifier.Id, "value");
-                    if (modifier.Toggle is { } toggle)
-                    {
-                        needsV6 = true;
-                        if (modifier.Timing != EffectTiming.WhileActive)
-                            Error("validate.toggle-timing", $"Modifier '{modifier.Id}' names toggle '{toggle}', so its timing must be whileActive.", modifier.Id);
-                        // Content v11 (D43): the toggle may be another content's (toggleContent); the same lookup as a rider's.
-                        if (modifier.ToggleContent is null)
-                        {
-                            if (!revision.Effects.OfType<ToggleEffect>().Any(t => t.ToggleId == toggle))
-                                Error("validate.toggle-unknown", $"Modifier '{modifier.Id}' names toggle '{toggle}', which this revision does not define.", modifier.Id);
-                        }
-                        else
-                        {
-                            CheckToggleReference(modifier.ToggleContent, toggle, modifier.Id, "validate.toggle-unknown");
-                        }
-                    }
-                    if (modifier.ToggleContent is not null)
-                    {
-                        needsV11 = true;
-                        if (modifier.Toggle is null)
-                            Error("validate.toggle-unknown", $"Modifier '{modifier.Id}' names the content that declares its toggle but names no toggle; add the toggle, or remove toggleContent.", modifier.Id);
-                    }
+                    CheckModifier(modifier);
                     break;
                 case ToggleEffect toggleEffect:
                     needsV6 = true;
@@ -481,6 +492,25 @@ public static class ContentValidator
                         if (charges.Recovery?.Regain is { } regain && !DiceExpression.TryParse(regain, out _, out var regainError))
                             Error("validate.dice-invalid", $"Item '{item.Id}' regain is not a dice expression such as 1d4+1 ({regainError!.Code})", item.Id);
                     }
+                    break;
+                case ItemModEffect mod:
+                    NeedV12("an item mod");
+                    if (revision.Kind != ContentKind.Item)
+                        Error("validate.item-mod-kind", $"An item mod belongs on an item; this revision is {revision.Kind.ToString().ToLowerInvariant()} content.", mod.Id);
+                    if (mod.Bonus is < 0 or > ItemModEffect.MaxBonus)
+                        Error("validate.item-mod-bonus", $"Item mod '{mod.Id}' has bonus {mod.Bonus}; it must be a whole number from 0 to {ItemModEffect.MaxBonus}.", mod.Id);
+                    if (mod.Modifiers is { Count: > ItemModEffect.MaxModifiers })
+                        Error("validate.item-mod-modifiers", $"Item mod '{mod.Id}' has {mod.Modifiers.Count} modifiers; at most {ItemModEffect.MaxModifiers}.", mod.Id);
+                    foreach (var nested in mod.Modifiers?.Where(m => m is not null) ?? [])
+                    {
+                        if (nested.Toggle is not null || nested.ToggleContent is not null || nested.WhileArmored is not null
+                            || nested.Target.StartsWith(ResourceTargetPrefix, StringComparison.Ordinal)
+                            || nested.Timing != EffectTiming.Always || nested.Automation != AutomationStatus.Automatic)
+                            Error("validate.item-mod-modifier", $"Item mod '{mod.Id}': modifier '{nested.Id}' may only set operation, target, value and text (always on, automatic).", mod.Id);
+                        CheckModifier(nested);
+                    }
+                    if (mod.Bonus is null && mod.Modifiers is not { Count: > 0 })
+                        Warn("validate.item-mod-empty", $"Item mod '{mod.Id}' has no bonus and no modifiers, so it does nothing.", mod.Id);
                     break;
                 case ResourceEffect resource:
                     needsV10 |= resource.Activation is not null;
@@ -716,6 +746,10 @@ public static class ContentValidator
             Error("validate.spell-duplicate", "A spell revision declares its spell data once.");
         if (revision.Effects.OfType<ItemEffect>().Count() > 1)
             Error("validate.item-duplicate", "An item declares its attunement and charges once.");
+        if (revision.Effects.OfType<ItemModEffect>().Count() > 1)
+            Error("validate.item-mod-duplicate", "An item is at most one mod.");
+        if (revision.Effects.OfType<ItemModEffect>().Any() && revision.Effects.Any(e => e is WeaponEffect or ArmorEffect))
+            Error("validate.item-mod-host", "A mod attaches to a weapon or armor; it cannot be one itself.");
         if (revision.Kind == ContentKind.Spell && !revision.Effects.OfType<SpellEffect>().Any())
             Warn("validate.spell-data-missing", "This spell has no spell data (level, lists), so no caster can use it from the sheet.");
         if (revision.Effects.Any(e => e is SpellcastingEffect or SpellEffect or WeaponEffect) && revision.SchemaVersion < SpellcastingEffect.SchemaVersion)
@@ -1424,6 +1458,7 @@ public static class ContentValidator
         Check("rulesFamilies", revision.RulesFamilies is null || revision.RulesFamilies.Any(f => f is null));
         Check("choice options", revision.Effects?.OfType<ChoiceEffect>().Any(c => c.Options is null || c.Options.Any(o => o is null)) == true);
         Check("response outcomes", revision.Effects?.OfType<ResponseEffect>().Any(r => r.Outcomes?.Any(o => o is null) == true) == true);
+        Check("item mod modifiers", revision.Effects?.OfType<ItemModEffect>().Any(m => m.Modifiers?.Any(x => x is null) == true) == true);
         Check("roll alsoChange", revision.Effects?.OfType<RollEffect>().Any(r => r.AlsoChange?.Any(a => a is null) == true) == true);
         return problems;
     }

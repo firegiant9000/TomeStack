@@ -1457,6 +1457,69 @@
           }
         },
         {
+          "description": "Content v12 (MECH-X item 3): content that attaches to one carried copy of another item. Item content only, at most one per revision, and never on a weapon or armor. In a revision older than v12 an itemMod is unknown and reference-only, kept byte for byte.",
+          "properties": {
+            "type": {
+              "const": "itemMod"
+            },
+            "appliesTo": {
+              "enum": [
+                "weapon",
+                "armor",
+                "any"
+              ]
+            },
+            "bonus": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10,
+              "description": "To-hit and damage on a weapon host; Armor Class on an armor or shield host."
+            },
+            "modifiers": {
+              "type": "array",
+              "maxItems": 8,
+              "items": {
+                "type": "object",
+                "required": [
+                  "type",
+                  "operation",
+                  "target",
+                  "value"
+                ],
+                "properties": {
+                  "type": {
+                    "const": "modifier"
+                  },
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "operation": {
+                    "enum": [
+                      "bonus",
+                      "set",
+                      "replace"
+                    ]
+                  },
+                  "target": {
+                    "$ref": "#/$defs/fieldId"
+                  },
+                  "value": {
+                    "$ref": "#/$defs/formula"
+                  },
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "description": "Always on and automatic: a toggle, toggleContent, whileArmored, a timing other than always, a resource target or a non-automatic automation is refused (validate.item-mod-modifier)."
+              }
+            }
+          },
+          "required": [
+            "appliesTo"
+          ]
+        },
+        {
           "properties": {
             "type": {
               "const": "scale"
@@ -1727,7 +1790,8 @@
                   "attackRider",
                   "value",
                   "rollMode",
-                  "response"
+                  "response",
+                  "itemMod"
                 ]
               }
             }

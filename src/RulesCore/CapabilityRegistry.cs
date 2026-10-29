@@ -49,6 +49,7 @@ public static class CapabilityRegistry
         new(ToggleGroupEffect.TypeName, null, AutomationStatus.Automatic, "Enforces which toggles may be on together", "ToggleGroupTests"),
         new(ScaleEffect.TypeName, null, AutomationStatus.Automatic, "A class table column that formulas read", "MechanicsInventoryTests"),
         new(ItemEffect.TypeName, null, AutomationStatus.Automatic, "Charges and attunement are tracked per equipment entry", "MechanicsInventoryTests"),
+        new(ItemModEffect.TypeName, null, AutomationStatus.Automatic, "Attached to one carried copy of an item; its bonus and modifiers apply while that copy is equipped", "ItemModSchemaTests"),
         new(WeaponEffect.TypeName, null, AutomationStatus.Automatic, "Attack and damage calculate", "MulticlassAndAttackTests"),
         new(ArmorEffect.TypeName, null, AutomationStatus.Automatic, "Armor class calculates", "ClassLevelTests"),
         new(SpellcastingEffect.TypeName, null, AutomationStatus.Automatic, "Spell attack, save DC and slots calculate", "SpellcastingTests"),

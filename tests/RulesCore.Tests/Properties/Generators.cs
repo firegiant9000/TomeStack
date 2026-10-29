@@ -96,6 +96,7 @@ internal static class Generators
         [ValueEffect.TypeName] = ValueEffect.SchemaVersion,
         [RollModeEffect.TypeName] = RollModeEffect.SchemaVersion,
         [ResponseEffect.TypeName] = ResponseEffect.SchemaVersion,
+        [ItemModEffect.TypeName] = ItemModEffect.SchemaVersion,
     };
 
     /// <summary>
@@ -388,6 +389,17 @@ internal static class Generators
                     .With("charges", max is { } m
                         ? new JsonObject { ["max"] = m }.With("recovery", period is null ? null : new JsonObject { ["period"] = period }.With("regain", regain))
                         : null)),
+            // Typed from v12, unknown (and unchanged) below. Nested modifiers are the restricted shape the validator allows.
+            Common(ItemModEffect.TypeName,
+                from applies in Gen.Elements("weapon", "armor", "any")
+                from bonus in OptionalValue(Gen.Choose(0, ItemModEffect.MaxBonus))
+                from targets in Gen.Elements(FieldIds.Initiative, FieldIds.Score(Ability.Dex), FieldIds.ProficiencyBonus).ArrayOf().Select(t => t.Take(2).ToArray())
+                from value in Formulas
+                select new JsonObject { ["appliesTo"] = applies }.With("bonus", bonus)
+                    .With("modifiers", targets.Length == 0 ? null : new JsonArray([.. targets.Select((t, i) => (JsonNode)new JsonObject
+                    {
+                        ["type"] = ModifierEffect.TypeName, ["id"] = "nested" + i, ["operation"] = "bonus", ["target"] = t, ["value"] = value,
+                    })]))),
             Common(ScaleEffect.TypeName,
                 from id in Keys
                 from label in Names
