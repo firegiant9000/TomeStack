@@ -3357,3 +3357,35 @@ it('adds a companion on Play, damages it, undoes that exactly, and rolls its att
   await user.click(within(dog()).getByRole('button', { name: /^Roll Testy Bite damage/ }));
   await waitFor(() => expect(lastRoll.textContent).toMatch(/Testy Hound: Testy Bite damage: \d+ \(1d6\+2\)/));
 });
+
+it('previews a Fighter 3 at level 5 from the level-up step: Extra Attack shows and nothing is saved (D82)', async () => {
+  const user = userEvent.setup();
+  const created = await client.createCharacter({
+    name: 'E2E Previewer',
+    rulesFamily: 'srd-5.2.1',
+    baseAbilities: { str: 16, dex: 14, con: 14, int: 10, wis: 12, cha: 8 },
+    pins: [srd(1), srd(2)],
+    classes: [{ class: fighter(0), level: 3 }],
+    choices: [{ source: srd(2), choiceId: 'soldier-ability-scores', selected: [srd(4)] }],
+  });
+  const before = (await client.getCharacter(created.character.id)).character;
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: /^E2E Previewer/ }));
+  await user.click(within(await screen.findByRole('article', { name: 'E2E Previewer' })).getByRole('button', { name: 'Level up' }));
+
+  const form = await screen.findByRole('form', { name: 'Preview at level' });
+  const level = within(form).getByRole('spinbutton', { name: 'Level to preview' });
+  await user.clear(level);
+  await user.type(level, '5');
+  await user.click(within(form).getByRole('button', { name: 'Preview' }));
+  const preview = await screen.findByRole('region', { name: 'Preview at level 5' });
+  expect(within(preview).getByText('Extra Attack')).toBeTruthy();
+  await user.click(within(preview).getByRole('button', { name: 'Close preview' }));
+  expect(screen.queryByRole('region', { name: 'Preview at level 5' })).toBeNull();
+
+  await user.click(screen.getByRole('button', { name: 'Cancel' }));
+  await expectStatus(/Draft discarded/);
+  const after = (await client.getCharacter(created.character.id)).character;
+  expect(after.level).toBe(3);
+  expect(after).toEqual(before); // the store received no write
+});
