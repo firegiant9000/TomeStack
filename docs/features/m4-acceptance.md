@@ -102,6 +102,10 @@ The class precision floor went from 70 % to 80 %; the other floors are unchanged
 
 `SrdDetectionMeasurementTests` ran again with `TOMESTACK_SRD_PDF_DIR` set, and passed. The records above stay as they were. Classes: 91.7 % / 100 % in both families (12 candidates, 11 in the packs; the only extra is the Monk). Class features: n/a / 87.2 % (136 of 156) in SRD 5.1, n/a / 100 % (204 of 204) in SRD 5.2.1. The 5.1 misses added by the Rogue pack are the five Thief features (Fast Hands, Second-Story Work, Supreme Sneak, Use Magic Device, Thief's Reflexes, pp. 40–41), subclass features with no level in their first sentence. Spells, weapons and armor are unchanged.
 
+### Re-measured with the Monk bundled (2026-10-27, C2-3)
+
+`SrdDetectionMeasurementTests` ran again with `TOMESTACK_SRD_PDF_DIR` set, and passed. The records above stay as they were. Classes: 12 of 12 candidates are in the packs, precision and recall 100 % in both families (the Monk is no longer an extra). Class features: 86.5 % in SRD 5.1 (above the 85 % floor) and 100 % (229 of 229) in SRD 5.2.1; class-table grants in SRD 5.2.1 are 176 of 176. Spells, weapons and armor are unchanged.
+
 ## Could not be verified here
 
 - **The third-party test PDF's precision** (above: the run of 2026-10-14 has counts only; the owner has not reviewed the candidates). Detection was written against SRD layouts, so a third-party book will score lower, especially on class features and tables. Every candidate is still only a proposal (ADR-004).
