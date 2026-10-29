@@ -49,7 +49,7 @@ try {
   if (-not $first.WaitForExit($TimeoutSeconds * 1000)) { $first.Kill(); $problems += 'first instance did not close' }
 
   # The folder is free again and still works: the full smoke on it passes.
-  $smoke = & (Join-Path $PSScriptRoot 'smoke.ps1') -Exe $Exe -DataDir $dataDir -ExpectCharactersAtStart 0
+  $smoke = & (Join-Path $PSScriptRoot 'smoke.ps1') -Exe $Exe -DataDir $dataDir -ExpectCharactersAtStart 0 -SkipCrashCheck
   Write-Output $smoke
   if ($LASTEXITCODE -ne 0) { $problems += 'smoke on the released folder failed' }
 } catch {

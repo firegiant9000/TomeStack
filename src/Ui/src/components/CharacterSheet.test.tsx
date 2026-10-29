@@ -21,6 +21,7 @@ vi.mock('../api/client', () => ({
     listContent: vi.fn(),
     snapshots: vi.fn(),
     previewExport: vi.fn(),
+    packagePreflight: vi.fn(),
     info: vi.fn(),
     play: vi.fn(),
     undoPlay: vi.fn(),
@@ -113,8 +114,9 @@ it('offers Undo for the last play change and sends the inverse through the play 
   await user.click(undo);
   await waitFor(() => expect(client.play).toHaveBeenLastCalledWith('fixture-2', { action: 'setHitPoints', amount: 8 }));
   await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Undo last change' }).disabled).toBe(true));
-  // WCAG 2.4.3: the button is disabled now, so focus is on the hit points heading, not <body>.
-  expect(document.activeElement?.id).toBe('hp-heading');
+  // WCAG 2.4.3: the button is disabled now, so focus is on the hit points heading, not <body>. It moves once the play reply
+  // is in, which can be after the button disables, so wait for it.
+  await waitFor(() => expect(document.activeElement?.id).toBe('hp-heading'));
 });
 
 it('shows the applied state and keeps focus when a later undo step fails (D23)', async () => {
@@ -1059,11 +1061,12 @@ it('does not report a print preview lookup that fails after the preview was clos
 // G6: the export dialog shows the preview's warning, for a backup on opening and for a share once chosen.
 it('shows the needs-newer-build warning of the export preview, for a backup and for a share', async () => {
   const user = userEvent.setup();
-  const text = 'Opening this needs TomeStack 0.7.0 or later: it holds content or a character that older versions refuse.';
+  const text = "Opening this needs TomeStack 0.7.0 or newer (this is TomeStack 0.7.1): 'Compat Hero' is a character at schema 10. Older versions refuse the file.";
   vi.mocked(client.previewExport).mockResolvedValue({
     purpose: 'share', fileName: 'x.tomestack.zip', characters: [], included: [], omitted: [], gapNotes: 0,
     warnings: [{ code: 'package.needs-newer-build', message: text }],
   } as Awaited<ReturnType<typeof client.previewExport>>);
+  vi.mocked(client.packagePreflight).mockResolvedValue({ included: [], omitted: [], blocking: [], notices: [] });
   renderSheet(view());
   await user.click(screen.getByRole('tab', { name: 'Manage' }));
   expect(await screen.findByText(text)).toBeTruthy();

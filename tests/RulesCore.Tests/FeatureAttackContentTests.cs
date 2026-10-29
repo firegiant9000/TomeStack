@@ -11,6 +11,26 @@ public class FeatureAttackContentTests
 {
     private static readonly Guid Absent = Guid.Parse("6f0dc000-0000-4000-8000-0000000000ee");
 
+    /// <summary>Capability evidence (ADR-020): an attack rider is delivered automatically, adding to the attacks that carry its tags.</summary>
+    [Fact]
+    public void The_capability_registry_ceiling_for_attackRider_is_automatic()
+    {
+        var bolt = new AttackEffect
+        {
+            Id = "bolt", AttackId = "bolt", Label = "Bolt", Kind = WeaponAttack.Melee, Abilities = [Ability.Str],
+            Damage = new("1", "6"), DamageType = "fire", Tags = ["spark"],
+        };
+        var rider = new AttackRiderEffect { Id = "edge", Tags = ["spark"], ToHit = "2" };
+        var alone = MechanicsInventoryTests.Holder("Test Bolt Alone", 11, bolt);
+        var boosted = MechanicsInventoryTests.Holder("Test Bolt Boosted", 11, bolt, rider);
+
+        var (_, aloneSheet) = MechanicsInventoryTests.Pinned(alone);
+        var (report, boostedSheet) = MechanicsInventoryTests.Pinned(boosted);
+
+        CapabilityRegistryTests.AssertAutomaticallyDelivered(report, boosted, AttackRiderEffect.TypeName, "edge");
+        Assert.Equal(aloneSheet.Attacks!.Single(a => a.EffectId == "bolt").ToHit + 2, boostedSheet.Attacks!.Single(a => a.EffectId == "bolt").ToHit);
+    }
+
     private static ValidationReport Validate(ContentRevision revision) => ContentValidator.Validate(revision, Fixtures.PlayMechanicsCatalog());
 
     private static ContentReference[] PackReferences =>

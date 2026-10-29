@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { client } from '../api/client';
 import { TomeStackError } from '../api/transport';
-import type { CandidateCheck, CandidateFilter, CandidateLinkSummary, CandidatePage, CandidateStatus, ContentKind, ImportJob, RulesFamilyId, SourceRecord, StoredCandidate } from '../api/types';
+import type { CandidateCheck, CandidateFilter, CandidateLinkSummary, CandidatePage, CandidateStatus, ContentKind, DraftCandidate, ImportJob, RulesFamilyId, SourceRecord, StoredCandidate, StoredPage } from '../api/types';
+import { DuplicateChip } from './DuplicateChip';
+import { duplicateOf, useDuplicates } from './duplicates';
 import { familyLabel } from './familyLabels';
 import { SpellListForm } from './SpellListForm';
 
@@ -93,6 +95,9 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
   const bulkId = `accepting-${job.id}`;
   const candidates = result?.items;
   const total = result?.total ?? 0;
+  // Import Lab L6: asked again after an edit or an accept (names and rules change); a page turn or filter does not need it.
+  const [duplicatesVersion, setDuplicatesVersion] = useState(0);
+  const duplicates = useDuplicates({ jobId: job.id }, duplicatesVersion);
   const pendingShown = candidates?.filter((c) => c.status === 'pending') ?? [];
   // Item 10: "Add to spell list…" changes the ticked pending spells only; the button says how many.
   const tickedSpells = pendingShown.filter((c) => ticked.includes(c.id) && (c.edited ?? c.candidate).proposedKind === 'spell');
@@ -214,6 +219,7 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
       const stay = outcome.blocked.map((b) => b.candidateId);
       setTicked(stay);
       setAnnouncement(`${stay.length} selected`);
+      setDuplicatesVersion((v) => v + 1);
       await load();
     } catch (error) {
       if (error instanceof TomeStackError && error.code === 'import.candidate-changed') {
@@ -264,6 +270,7 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
       setSkipped(outcome.skipped.map((s) => ({ id: s.candidateId, name: nameOf(s.candidateId), reasons: s.codes.map(reasonOf) })));
       setListOpen(false);
       listOpener.current?.focus(); // WCAG 2.4.3: the form is gone, so focus goes back to the button that opened it
+      setDuplicatesVersion((v) => v + 1);
       await load();
     } catch (error) {
       onError(error);
@@ -545,6 +552,12 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
               <span className="tag">{(c.edited ?? c.candidate).proposedKind}</span> <span className="hint">{pageText((c.edited ?? c.candidate).page)}</span>{' '}
               <span className={(c.edited ?? c.candidate).confidence < 0.8 ? 'warn' : 'hint'}>{percent((c.edited ?? c.candidate).confidence)}</span>{' '}
               <span className="tag">{statusLabels[c.status]}</span>
+              {c.status === 'pending' && (
+                <>
+                  {' '}
+                  <DuplicateChip other={duplicateOf(duplicates, (m) => m.candidateId === c.id)} />
+                </>
+              )}
             </li>
           ))}
         </ul>
@@ -562,6 +575,7 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
           onConfirmedChange={(ticks) => confirmTicks.current.set(current.id, ticks)}
           onChanged={async (text) => {
             onStatus(text);
+            setDuplicatesVersion((v) => v + 1);
             const list = await load();
             // WCAG 2.4.3: a reviewed candidate can leave the filtered list, and its details with it; focus goes back to the list.
             if (!list.some((c) => c.id === current.id)) {
@@ -756,10 +770,20 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
           </button>
         </div>
       )}
-      <figure>
-        <figcaption>Excerpt from {pageText(candidate.page)}</figcaption>
-        <pre className="excerpt">{candidate.excerpt}</pre>
-      </figure>
+      <SpanReview
+        candidate={candidate}
+        effects={confirmable}
+        sha256={stored.attachmentSha256}
+        confirm={
+          pending && isClass && confirmable.length > 0
+            ? {
+                hint: `Tick each proposal you have checked against the page. Unticked, a proposal stays reference only. The class becomes a draft once its hit die${casting ? ' and spell slot table are' : ' is'} ticked.`,
+                ticked: confirmed,
+                onToggle: toggleConfirmed,
+              }
+            : undefined
+        }
+      />
 
       {Object.keys(candidate.fields).length > 0 && (
         <dl aria-label="What was read">
@@ -816,20 +840,6 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
             ))}
           </ul>
         </>
-      )}
-      {pending && isClass && confirmable.length > 0 && (
-        <fieldset className="confirm-effects">
-          <legend>Confirm what was read</legend>
-          <p className="hint">
-            Tick each proposal you have checked against the page. Unticked, a proposal stays reference only. The class becomes a draft once its hit die{casting ? ' and spell slot table are' : ' is'} ticked.
-          </p>
-          {confirmable.map((effect) => (
-            <label key={effect.id} className="choice">
-              <input type="checkbox" checked={confirmed.includes(effect.id)} onChange={(e) => toggleConfirmed(effect.id, e.target.checked)} />
-              Confirm {effectLabel(effect)}
-            </label>
-          ))}
-        </fieldset>
       )}
 
       {pending && (
@@ -963,6 +973,131 @@ const abilityNames: Record<string, string> = {
 };
 
 /** Item 8: what a Confirm tick names, from the effect's own fields (the detector's proposals; anything else by its id). */
+/**
+ * D64: the proposed effects beside the page text, the selected effect's span highlighted. Whenever the span cannot be shown
+ * (no spans, none for this effect, the effect was edited away, the page did not load, the span does not fit the page) the
+ * whole excerpt is shown, as before. Page text is rendered as text nodes only.
+ */
+interface ConfirmProps {
+  hint: string;
+  ticked: string[];
+  onToggle: (id: string, on: boolean) => void;
+}
+
+function SpanReview({
+  candidate,
+  effects,
+  sha256,
+  confirm,
+}: {
+  candidate: DraftCandidate;
+  effects: (Record<string, unknown> & { id: string })[];
+  /** The hash of the PDF the candidate was read from, when stored with it. */
+  sha256?: string;
+  /** R15: the confirm ticks sit in the left column beside their effect buttons. */
+  confirm?: ConfirmProps;
+}) {
+  const [selected, setSelected] = useState<string>();
+  const [fetched, setFetched] = useState<{ key: string; page?: StoredPage }>();
+  const firstMark = useRef<HTMLElement>(null);
+  const spans = candidate.effectSpans ?? {};
+  const listed = effects.some((e) => spans[e.id] !== undefined);
+  const effect = selected === undefined ? undefined : effects.find((e) => e.id === selected);
+  const rawSpan = effect ? spans[effect.id] : undefined;
+  const span = rawSpan && (rawSpan.pageEnd === undefined || rawSpan.pageEnd === rawSpan.page) ? rawSpan : undefined;
+  const key = span ? `${candidate.sourceId}:${span.page}` : undefined;
+
+  useEffect(() => {
+    if (!key || !span) return;
+    let current = true;
+    client
+      .importedPage(candidate.sourceId, span.page, sha256)
+      .then((page) => current && setFetched({ key, page }))
+      .catch(() => current && setFetched({ key })); // the whole excerpt shows instead
+    return () => {
+      current = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` is the source and page of `span`
+  }, [key, candidate.sourceId, sha256]);
+
+  const blocks = key && fetched?.key === key ? fetched.page?.blocks : undefined;
+  const fits = span && Array.isArray(blocks) && span.blockStart >= 0 && span.blockEnd >= span.blockStart && span.blockEnd < blocks.length;
+  const lineCount = (text: string) => text.split('\n').length;
+  let lines = '';
+  if (fits && blocks) {
+    const before = blocks.slice(0, span.blockStart).reduce((n, b) => n + lineCount(b.text), 0);
+    const first = span.lineStart ?? before + 1;
+    const last = span.lineEnd ?? before + blocks.slice(span.blockStart, span.blockEnd + 1).reduce((n, b) => n + lineCount(b.text), 0);
+    lines = `Lines ${first}–${last}`;
+  }
+
+  useEffect(() => {
+    const mark = firstMark.current;
+    if (mark && typeof mark.scrollIntoView === 'function') mark.scrollIntoView({ block: 'nearest' });
+  }, [selected, lines]);
+
+  const buttonId = (id: string) => `span-effect-${candidate.id}-${id}`;
+  const label = (e: Record<string, unknown> & { id: string }) => {
+    const text = effectLabel(e);
+    return text.charAt(0).toUpperCase() + text.slice(1);
+  };
+  return (
+    <div className={listed || confirm ? 'span-review' : undefined}>
+      {(listed || confirm) &&
+        (() => {
+          const list = (
+            <ul className="span-effects" aria-label={listed ? 'Proposed effects: choose one to see where it was read' : undefined}>
+              {effects.map((e) => (
+                <li key={e.id}>
+                  {listed && (
+                    <button type="button" id={buttonId(e.id)} aria-pressed={selected === e.id} onClick={() => setSelected(selected === e.id ? undefined : e.id)}>
+                      {label(e)}
+                    </button>
+                  )}
+                  {confirm && (
+                    <label className="choice">
+                      <input type="checkbox" checked={confirm.ticked.includes(e.id)} onChange={(ev) => confirm.onToggle(e.id, ev.target.checked)} />
+                      Confirm {effectLabel(e)}
+                    </label>
+                  )}
+                </li>
+              ))}
+            </ul>
+          );
+          return confirm ? (
+            <fieldset className="confirm-effects">
+              <legend>Confirm what was read</legend>
+              <p className="hint">{confirm.hint}</p>
+              {list}
+            </fieldset>
+          ) : (
+            list
+          );
+        })()}
+      <figure>
+        {fits && blocks && span && effect ? (
+          <>
+            <figcaption>Page text from {pageText({ start: span.page })}</figcaption>
+            <div role="region" aria-labelledby={buttonId(effect.id)} className="excerpt span-text" tabIndex={0}>
+              <p className="hint">{lines}</p>
+              {blocks.map((b, i) => (
+                <p key={i} className="span-block">
+                  {i >= span.blockStart && i <= span.blockEnd ? <mark ref={i === span.blockStart ? firstMark : undefined}>{b.text}</mark> : b.text}
+                </p>
+              ))}
+            </div>
+          </>
+        ) : (
+          <>
+            <figcaption>Excerpt from {pageText(candidate.page)}</figcaption>
+            <pre className="excerpt">{candidate.excerpt}</pre>
+          </>
+        )}
+      </figure>
+    </div>
+  );
+}
+
 function effectLabel(effect: Record<string, unknown> & { id: string }) {
   if (effect.type === 'hitDie' && typeof effect.die === 'number') return `the hit die, d${effect.die}`;
   if (effect.type === 'spellcasting' && Array.isArray(effect.slots)) return 'the spell slot table';

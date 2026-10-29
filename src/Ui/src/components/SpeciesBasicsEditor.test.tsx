@@ -8,6 +8,7 @@ import { client } from '../api/client';
 import type { AppInfo, ContentReference, ContentRevision, Effect, RulesFamilyId, SourceRecord } from '../api/types';
 import { abilityIncreases, skillGrants, type Known } from '../entryBasics';
 import { SpeciesBasicsEditor } from './SpeciesBasicsEditor';
+import { fill } from '../test/fill';
 
 vi.mock('../api/client', () => ({ client: { saveDraft: vi.fn() } }));
 
@@ -292,8 +293,8 @@ it('makes a new feature draft in the source and grants it', async () => {
   const onMade = vi.fn();
   vi.mocked(client.saveDraft).mockResolvedValue({ contentId: 'new-c', revisionId: 'new-r' });
   render(<Harness initial={revisionOf(['srd-5.1', 'srd-5.2.1'])} onChange={(r) => (latest = r)} onMade={onMade} />);
-  await user.type(screen.getByRole('textbox', { name: 'Trait name' }), 'Fixture Dark Sight');
-  await user.type(screen.getByRole('textbox', { name: 'Trait description' }), 'Sees a little in dim light.');
+  await fill(user, screen.getByRole('textbox', { name: 'Trait name' }), 'Fixture Dark Sight');
+  await fill(user, screen.getByRole('textbox', { name: 'Trait description' }), 'Sees a little in dim light.');
   await user.click(screen.getByRole('button', { name: 'Create trait and add it' }));
 
   expect(client.saveDraft).toHaveBeenCalledExactlyOnceWith(

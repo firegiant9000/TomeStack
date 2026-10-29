@@ -3412,8 +3412,8 @@ public static class CharacterCalculator
                 return value;
             }));
         }
-        // D24: speed. The bundled species carry no speed data, so the base is the SRD's common 30 feet by rules policy. From
-        // content v10 a species (homebrew) sets its own with a `replace` modifier on speed, which replaces this base before
+        // D24: speed. Some bundled species (the SRD 5.1 Half-Orc, most SRD 5.2.1 species) carry no speed data, so the base is the SRD's common 30 feet by rules policy. From
+        // content v10 a species (homebrew, the SRD 5.2.1 Goliath and Wood Elf, or the SRD 5.1 races of srd-5.1-origins.json) sets its own with a `replace` modifier on speed, which replaces this base before
         // bonuses; otherwise a different speed is an override on Stats.
         specs.Add(new(FieldIds.Speed, "Speed", "feet", [], (c, steps) =>
         {

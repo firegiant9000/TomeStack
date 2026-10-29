@@ -120,18 +120,36 @@ public class M6ExitGateTests
             Assert.Equal(1, author.App.WriteLibraryBackup(file).Contents.Extensions);
         using (var zip = System.IO.Compression.ZipFile.OpenRead(backup))
         using (var manifest = JsonDocument.Parse(zip.GetEntry("manifest.json")!.Open()))
+        {
             Assert.Equal(PackageManifest.LibraryExtensionsFormatVersion, manifest.RootElement.GetProperty("formatVersion").GetInt32());
+            Assert.Equal("", SchemaTests.Validate("package-manifest", manifest.RootElement));
+            Assert.NotNull(zip.GetEntry($"extensions/{Assert.Single(author.App.ListExtensions()).Sha256}.zip"));
+        }
 
         // A later clock: a restore must keep the original times, not stamp its own (review fix).
         using var clean = new TempApp(now: TempApp.Now.AddDays(1));
-        Assert.True(clean.App.PreviewLibraryRestore(backup).CanApply);
+        var restorePreview = clean.App.PreviewLibraryRestore(backup);
+        Assert.True(restorePreview.CanApply, string.Join("; ", restorePreview.Errors.Select(e => e.Code)));
+        Assert.Contains(restorePreview.Items, i => i.Kind == "extension" && i.Action == PackageItemAction.Add);
+        Assert.Contains(restorePreview.Warnings, w => w.Code == "restore.extension-review");
         clean.App.ApplyLibraryRestore(backup);
         Assert.Equal(Snapshot(author.App), Snapshot(clean.App));
 
         var restored = Assert.Single(clean.App.ListExtensions());
         Assert.Equal((false, 0), (restored.Enabled, restored.Grants.Count)); // grants never travel
+        Assert.Contains("extension.disabled", Assert.Throws<AppValidationException>(() => clean.App.PreviewExtensionRun(new(restored.Id, "features-md", CharacterId: library.Character))).Problems.Select(p => p.Code));
+        // It can be reviewed and granted from its stored file, without the original.
         var review = clean.App.PreviewInstalledExtension(restored.Id);
-        clean.App.InstallExtension(review.Token!.Value, ["read.sheet", "export.file"], confirm: true);
+        Assert.True(review.CanInstall);
+        Assert.True(clean.App.InstallExtension(review.Token!.Value, ["read.sheet", "export.file"], confirm: true).Enabled);
         Assert.Equal(expected, Csv(clean.App, restored.Id, library.Character));
+
+        // Without an extension, a backup stays at the library format so older builds can restore it.
+        using var plain = new TempApp();
+        using var stream = new MemoryStream();
+        plain.App.WriteLibraryBackup(stream);
+        using var plainZip = new System.IO.Compression.ZipArchive(new MemoryStream(stream.ToArray()));
+        using var plainManifest = JsonDocument.Parse(plainZip.GetEntry("manifest.json")!.Open());
+        Assert.Equal(PackageManifest.LibraryFormatVersion, plainManifest.RootElement.GetProperty("formatVersion").GetInt32());
     }
 }

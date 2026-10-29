@@ -22,8 +22,11 @@ public class SrdPackTests
     private static readonly ContentPack Armor521 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.2.1-armor.json");
     private static readonly ContentPack Fighter51 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.1-fighter.json");
     private static readonly ContentPack Fighter521 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.2.1-fighter.json");
-    private static readonly ContentPack Srd51 = Merge(Base51, Spells51, Equipment51, Classes51, Armor51, Fighter51);
-    private static readonly ContentPack Srd521 = Merge(Base521, Spells521, Equipment521, Classes521, Armor521, Fighter521);
+    private static readonly ContentPack Feats521 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.2.1-feats.json");
+    private static readonly ContentPack Origins521 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.2.1-origins.json");
+    private static readonly ContentPack Origins51 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.1-origins.json");
+    private static readonly ContentPack Srd51 = Merge(Base51, Spells51, Equipment51, Classes51, Armor51, Fighter51, Origins51);
+    private static readonly ContentPack Srd521 = Merge(Base521, Spells521, Equipment521, Classes521, Armor521, Fighter521, Feats521, Origins521);
 
     private static ContentPack Merge(params ContentPack[] packs) => new()
     {
@@ -44,9 +47,9 @@ public class SrdPackTests
     [Fact]
     public void A_familys_packs_carry_the_identical_source_record()
     {
-        foreach (var pack in new[] { Spells51, Equipment51, Classes51, Armor51, Fighter51 })
+        foreach (var pack in new[] { Spells51, Equipment51, Classes51, Armor51, Fighter51, Origins51 })
             Assert.Equal(TempApp.Json(Base51.Sources), TempApp.Json(pack.Sources));
-        foreach (var pack in new[] { Spells521, Equipment521, Classes521, Armor521, Fighter521 })
+        foreach (var pack in new[] { Spells521, Equipment521, Classes521, Armor521, Fighter521, Feats521, Origins521 })
             Assert.Equal(TempApp.Json(Base521.Sources), TempApp.Json(pack.Sources));
     }
 
@@ -236,6 +239,28 @@ public class SrdPackTests
             Assert.Single(pack.Revisions, r => r.Kind == ContentKind.Subclass);
             Assert.Single(pack.Revisions, r => r.Kind == ContentKind.Feat);
         }
+    }
+
+    [Fact]
+    public void SRD_5_2_1_bundles_every_species_background_and_feat_of_its_Character_Origins_and_Feats()
+    {
+        // SRD 5.2.1 pp. 83–88: 9 species, 4 backgrounds, 17 feats (Origin 4, General 2, Fighting Style 4, Epic Boon 7).
+        int Count(ContentKind kind) => Srd521.Revisions.Where(r => r.Kind == kind).Select(r => r.ContentId).Distinct().Count();
+
+        Assert.Equal((9, 4, 17), (Count(ContentKind.Species), Count(ContentKind.Background), Count(ContentKind.Feat)));
+        Assert.Equal(
+            ["Dragonborn", "Dwarf", "Elf", "Gnome", "Goliath", "Halfling", "Human", "Orc", "Tiefling"],
+            Srd521.Revisions.Where(r => r.Kind == ContentKind.Species).Select(r => r.Name).Order(StringComparer.Ordinal));
+        Assert.Equal(["Acolyte", "Criminal", "Sage", "Soldier"], Srd521.Revisions.Where(r => r.Kind == ContentKind.Background).Select(r => r.Name).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void SRD_5_1_has_its_nine_races_once_each()
+    {
+        // SRD 5.1 pp. 3-7: the Half-Orc in the M1 pack, the other eight in srd-5.1-origins.json.
+        Assert.Equal(
+            ["Dragonborn", "Dwarf", "Elf", "Gnome", "Half-Elf", "Half-Orc", "Halfling", "Human", "Tiefling"],
+            Srd51.Revisions.Where(r => r.Kind == ContentKind.Species).Select(r => r.Name).Order(StringComparer.Ordinal));
     }
 
     [Fact]

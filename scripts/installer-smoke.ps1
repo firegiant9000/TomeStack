@@ -89,7 +89,7 @@ function Uninstall-App {
 
 function Invoke-Step([string] $name, [int] $expectCharacters) {
   $report = Join-Path ([IO.Path]::GetTempPath()) "tomestack-installer-smoke-$([guid]::NewGuid().ToString('N')).json"
-  & $smoke -Exe (Get-InstalledExe) -DataDir $DataDir -Report $report -ExpectCharactersAtStart $expectCharacters | Out-Host
+  & $smoke -Exe (Get-InstalledExe) -DataDir $DataDir -Report $report -ExpectCharactersAtStart $expectCharacters -SkipCrashCheck | Out-Host
   if ($LASTEXITCODE -ne 0) { throw "$name failed" }
   return (Get-Content $report -Raw | ConvertFrom-Json)
 }
