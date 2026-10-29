@@ -2,17 +2,26 @@
 
 The four items ADR-008 left open before the first published installer (LIVING_SPECS D08), closed in writing for **0.4.0** on 2026-10-01. Re-check each one for every later release, and record the result here.
 
-| # | Item | Result for 0.4.0 | Result for 0.5.0 (2026-10-12) | Result for 0.6.0 (2026-10-21) |
-|---|---|---|---|---|
-| 1 | Trademark | **Pass.** No D&D mark in the product | **Pass, with a recorded exception.** The name and branding carry no mark; the importer names "D&D Beyond" only to say which sheet it reads, with a non-affiliation line (owner, 2026-10-12; see [0.5.0 re-check](#050-re-check-2026-10-12)) | **Pass, same exception.** No new kind of use (see [0.6.0 re-check](#060-re-check-2026-10-21)) |
-| 2 | Windows SDK binaries (OCR) | **Done.** Allowed to ship; the owner accepted the license's conditions (option (a), 2026-10-02) and the end-user terms were in that release's `ATTRIBUTION.md` | **Unchanged.** Same package and DLLs as 0.4.0 | **Unchanged.** Same package and DLLs as 0.5.0 |
-| 3 | Velopack `Setup.exe` / `Update.exe` notices | **Done.** Generated and installed | **Unchanged.** Same Velopack version (1.2.161); the notices file stands | **Unchanged.** Same Velopack version (1.2.161) |
-| 4 | Code signing | **Decided: unsigned** (owner, 2026-10-01) | **Unsigned**, as decided | **Unsigned**, as decided |
+| # | Item | Result for 0.4.0 | Result for 0.5.0 (2026-10-12) | Result for 0.6.0 (2026-10-21) | Result for 0.7.0 (2026-10-24) |
+|---|---|---|---|---|---|
+| 1 | Trademark | **Pass.** No D&D mark in the product | **Pass, with a recorded exception.** The name and branding carry no mark; the importer names "D&D Beyond" only to say which sheet it reads, with a non-affiliation line (owner, 2026-10-12; see [0.5.0 re-check](#050-re-check-2026-10-12)) | **Pass, same exception.** No new kind of use (see [0.6.0 re-check](#060-re-check-2026-10-21)) | **Pass, same exception.** No new use (see [0.7.0 re-check](#070-re-check-2026-10-24)) |
+| 2 | Windows SDK binaries (OCR) | **Done.** Allowed to ship; the owner accepted the license's conditions (option (a), 2026-10-02) and the end-user terms were in that release's `ATTRIBUTION.md` | **Unchanged.** Same package and DLLs as 0.4.0 | **Unchanged.** Same package and DLLs as 0.5.0 | **Unchanged.** Same package and DLLs as 0.6.0 |
+| 3 | Velopack `Setup.exe` / `Update.exe` notices | **Done.** Generated and installed | **Unchanged.** Same Velopack version (1.2.161); the notices file stands | **Unchanged.** Same Velopack version (1.2.161) | **Unchanged.** Same Velopack version (1.2.161) |
+| 4 | Code signing | **Decided: unsigned** (owner, 2026-10-01) | **Unsigned**, as decided | **Unsigned**, as decided | **Unsigned**, as decided |
 
-## Next release re-check (after 0.6.0)
+## Next release re-check (after 0.7.1)
 
 - **Windows SDK binaries (item 2): none ship (option (b), 2026-10-27).** See [§2](#2-windows-sdk-binaries-ocr). The release page no longer carries the SDK terms line (`scripts/release-notes.ps1`).
 - **Dependencies:** `Microsoft.Windows.CsWinRT` 2.3.1 (MIT) is a new build-time package of the import worker; its runtime sources and the projection it generates are compiled into `TomeStack.ImportWorker.Host.dll`, so both are listed in `ATTRIBUTION.md`, which also carries C#/WinRT's MIT license text. It does not appear in `dotnet list src/DesktopShell package --include-transitive` (it is private to the worker); check it with `dotnet list src/ImportWorker.Host package`. `Microsoft.Windows.SDK.Contracts` 10.0.19041.2 (Windows SDK license) is downloaded at build time for its API metadata and not shipped.
+
+## 0.7.0 re-check (2026-10-24)
+
+- **Dependencies:** no shipped dependency was added or changed since the `v0.6.0` tag. The only `src/Ui/package.json` / `package-lock.json` change is `axe-core` 4.14.0, a development-only dependency (below). No project file's package reference, `.config/dotnet-tools.json`, workflow or packing script changed; `Directory.Build.props` changed only the version.
+- **`npm audit`: five findings, none ships** (`npm audit --omit=dev` reports 0). All are in development-only packages: Vite 8.3.1 (the `launch-editor` and dev-server advisories noted for 0.6.0, plus newer dev-server ones), Vitest 5.0.x through `@vitest/mocker`, and the transitive `undici` and `zod`. Fix: the Vite and Vitest bumps in a separate development-dependency change on `main`.
+- **Trademark:** the same search as 0.6.0, over the lines added since the `v0.6.0` tag in `src/` (excluding the SRD packs). No new "D&D", "Wizards of the Coast", "Dungeons", "fifth edition" or "5e" in anything the product shows (one source-code comment says "5e rule"). Product name, window title, installer title, exe metadata and README tagline unchanged.
+
+## Earlier note for the release after 0.6.0
+
 - **Dependencies:** `axe-core` 4.14.0 was added as a development-only dependency (unit tests only, not shipped; `src/Ui/package.json` devDependencies and `package-lock.json`). Licence MPL-2.0, read from the installed package. Nothing ships it, so there is no notice to add; its source is not modified or redistributed.
 
 ## 0.6.0 re-check (2026-10-21)
@@ -47,14 +56,14 @@ A search on 2026-10-01 for `D&D`, `Dungeons`, `Dragons`, `D&D Beyond`, `Wizards 
 
 ## 2. Windows SDK binaries (OCR)
 
-**Done for the build (2026-10-27): option (b).** From the next release after 0.6.0 no Windows SDK file ships, so the conditions below, which are the terms for redistributing those files, no longer apply to that release as a redistribution. Whether any SDK terms still reach the generated projection is an owner decision pending (below).
+**Done for the build (2026-10-27): option (b).** From the next release after 0.7.1 no Windows SDK file ships, so the conditions below, which are the terms for redistributing those files, no longer apply to that release as a redistribution. Whether any SDK terms still reach the generated projection is an owner decision pending (below).
 - The import worker builds with C#/WinRT 2.3.1 in embedded mode (`CsWinRTEmbedded`): the projection of only the Windows types it calls, with C#/WinRT's runtime, is compiled into `TomeStack.ImportWorker.Host.dll` (the runtime sources are MIT; both are listed in `ATTRIBUTION.md`). The worker and the shell keep the `net10.0-windows10.0.19041.0` target framework for its platform floor, and set `IncludeWindowsSDKRefFrameworkReferences=false` so the target framework no longer brings `Microsoft.Windows.SDK.NET.Ref`.
 - **Build-time SDK terms may still apply (recorded):** the projection is generated from the API metadata in `Microsoft.Windows.SDK.Contracts` 10.0.19041.2, under the Windows SDK license. The build reads it, and no Microsoft file from the package ships. The generated projection compiled into the worker does contain the API names, signatures and interface IDs from that metadata, as any program that calls these Windows APIs has to. Whether that makes the SDK license apply to the generated code is not settled here; **owner decision pending**: whether to record it as the license's permitted use (building a program that calls Windows APIs) recorded here in §2 with its date, and stated in any future code-signing application (§4).
 - Checked by `PublishedOutputTests` (neither deps file lists the projection) and by `scripts/pack-installer.ps1`, which fails if either DLL is in the publish folder. OCR runs in the worker process as before (`OcrTests`, including `The_worker_process_reads_an_image_only_page_with_ocr_too`). These skip on a machine with no OCR language; the CI runner has one (0 skipped in `TomeStack.ImportWorker.Tests` on `main` at 66d5515, run 39911203994, before this change), so a skip there would be a regression. The PR's CI run is the check on the embedded build.
 - Size, self-contained publish at 0.6.0's version: 188,790,433 → 166,100,513 bytes (−22.7 MB; the worker DLL grows from 14 KB to 1.6 MB). `TomeStack.App-win-Setup.exe`: 86,876,089 → 80,750,609 bytes (−6.1 MB, −7 %).
-- The end-user terms are gone from `ATTRIBUTION.md`, the `NOTICE` line is removed, and the release page no longer points to them. Releases up to 0.6.0 shipped the two DLLs under option (a); they stay published with their terms in their own `ATTRIBUTION.md`, and option (a), including the indemnity, keeps applying to them. The history below stands for them.
+- The end-user terms are gone from `ATTRIBUTION.md`, the `NOTICE` line is removed, and the release page no longer points to them. Releases up to 0.7.1 shipped the two DLLs under option (a); they stay published with their terms in their own `ATTRIBUTION.md`, and option (a), including the indemnity, keeps applying to them. The history below stands for them.
 
-**What shipped up to 0.6.0:** the import worker (`TomeStack.ImportWorker.Host.exe`, ADR-009) uses Windows OCR through the C#/WinRT projection. So two Microsoft DLLs from the NuGet package `Microsoft.Windows.SDK.NET.Ref` 10.0.19041.57 ship unmodified next to `TomeStack.exe`: `Microsoft.Windows.SDK.NET.dll` and `WinRT.Runtime.dll`. The OCR engine itself is part of Windows and is not shipped. (The roadmap guessed "likely none"; two DLLs ship.)
+**What shipped up to 0.7.1:** the import worker (`TomeStack.ImportWorker.Host.exe`, ADR-009) uses Windows OCR through the C#/WinRT projection. So two Microsoft DLLs from the NuGet package `Microsoft.Windows.SDK.NET.Ref` 10.0.19041.57 ship unmodified next to `TomeStack.exe`: `Microsoft.Windows.SDK.NET.dll` and `WinRT.Runtime.dll`. The OCR engine itself is part of Windows and is not shipped. (The roadmap guessed "likely none"; two DLLs ship.)
 
 **Allowed?** Yes.
 - Both files are on Microsoft's redistribution list, in the section "Microsoft.Windows.SDK.NET.Ref": https://learn.microsoft.com/legal/windows-sdk/redist. That section says the package's files "may be distributed unmodified … as part of your program in order to enable your application to call WinRT Apis".
@@ -68,13 +77,13 @@ A search on 2026-10-01 for `D&D`, `Dungeons`, `Dragons`, `D&D Beyond`, `Wizards 
 | Ship them unmodified, keep Microsoft's notices, don't use Microsoft's trademarks in the program's name | Met |
 | Windows only | Met |
 | Display your own copyright notice | Met: `LICENSE` and `NOTICE` |
-| **Distributors and end users must agree to terms that protect the code at least as much as the SDK license** | **Met (0.4.0–0.6.0):** "Terms for the Microsoft Windows SDK files" in `ATTRIBUTION.md` as shipped in those releases (`git show v0.6.0:ATTRIBUTION.md`), installed next to `TomeStack.exe`, and pointed to from their release notes |
+| **Distributors and end users must agree to terms that protect the code at least as much as the SDK license** | **Met (0.4.0–0.7.1):** "Terms for the Microsoft Windows SDK files" in `ATTRIBUTION.md` as shipped in those releases (`git show v0.7.1:ATTRIBUTION.md`), installed next to `TomeStack.exe`, and pointed to from their release notes |
 | **The distributor indemnifies Microsoft against claims arising from the distribution or use of the program** | **Accepted by the owner** (2026-10-02) |
 
 **Decided (owner, 2026-10-02): option (a).**
 - Keep the DLLs and accept the conditions, including the indemnity.
 - Why: it is the standard path for every .NET app that calls Windows APIs through the SDK projection, and the alternatives cost an engineering change (b) or a feature (c).
-- Up to 0.6.0, the end-user terms were in `ATTRIBUTION.md`, with a pointer to them on every release page (`scripts/release-notes.ps1`). Both were removed on 2026-10-27 (option (b), above).
+- Up to 0.7.1, the end-user terms were in `ATTRIBUTION.md`, with a pointer to them on every release page (`scripts/release-notes.ps1`). Both were removed on 2026-10-27 (option (b), above).
 
 The options that were considered:
 - **(a) Accept them:** keep the DLLs; add short end-user terms covering them (a line in `ATTRIBUTION.md` and on the release page, or an installer licence page); and accept the indemnity.
@@ -121,6 +130,8 @@ Velopack (MIT, Caelan Sayler) builds `Setup.exe` and `Update.exe` in Rust, with 
 ## Release procedure (owner)
 
 1. Merge the release PR. `Directory.Build.props`, the `## <version>` changelog heading and the tag must agree; the workflow checks this. (For 0.6.0 the `<Version>` bump to `0.6.0` is already done on the Wave 2 branch, ruling R130; the owner confirms it in the PR. Tagging and releasing stay the owner's.)
+   - In a **minor** release PR, add the new `ReleaseLadder` row (`src/AppService/Packages/ReleaseLadder.cs`, its maxima from the schema constants) and generate its bundled set from the PR's own tree: `scripts/bundled-ids-at.ps1 -Tag HEAD -Out src/AppService/Packages/BundledAt/X.Y.0.txt` (`-Tag` takes any git revision; the tag does not exist yet).
+   - A **patch** release must not change `src/AppService/Content/`: bundled SRD content ships only in a minor release (owner ruling, 2026-10-27), and there are no patch rows. Check that `git diff vX.Y.0 HEAD -- src/AppService/Content` is empty.
 2. Tag and push from an up-to-date `main`: `git tag -a v0.4.0 -m "TomeStack 0.4.0"`, then `git push origin v0.4.0`.
 3. The **Release** workflow (`.github/workflows/release.yml`) runs:
    1. the full gate;
@@ -129,3 +140,6 @@ Velopack (MIT, Caelan Sayler) builds `Setup.exe` and `Update.exe` in Rust, with 
    4. it creates a **draft** release with `Setup.exe`, the portable zip, the `.nupkg`, the Velopack feed files and notes from the changelog.
 4. Review the draft on GitHub (assets, notes, the unsigned note), then **Publish**. Nothing is public before that.
 5. After publishing: run the upgrade test and the install checks on the published `Setup.exe` (`docs/features/release-0.4.0-verification.md`).
+
+Before tagging, check the **Weekly** workflow's (`.github/workflows/weekly.yml`) last run date and status: GitHub turns a schedule off after 60 days without repository activity, and the job never blocks a merge, so a red or stale run is only seen here.
+6. A GitHub ruleset protects `main` and `refs/tags/v*` from force-push and deletion (repository settings, the owner's; check with `gh api repos/firegiant9000/TomeStack/rulesets`).

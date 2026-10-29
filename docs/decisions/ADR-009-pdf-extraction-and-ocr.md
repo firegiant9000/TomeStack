@@ -62,7 +62,7 @@ Docs checked through Context7 (`/uglytoad/pdfpig`): `PdfDocument.Open`, `Parsing
 - OCR quality depends on the Windows language packs of the user's machine, and OCR has no confidence. A clean VM without the OCR language is an owner check.
 - The service keeps page navigation independent of extraction. A job that fails leaves the attachment and "Open page" working (ARCHITECTURE).
 - The worker answers a second request kind, `formFields` (the character-sheet importer's read, `features/ddb-pdf-import.md` S1), under the same isolation and its own smaller limits; extraction requests are unchanged ([pdf-import.md](../features/pdf-import.md) D1).
-- The `extract` kind also serves the character importer: a PDF with no form fields has its first 20 pages read with the sheet limits (20 MB, 50 pages, 30 s) and nothing stored, then parsed as text (ADR-013, ADR-017). There is no third request kind; the allowed set is still `extract` and `formFields`.
+- The `extract` kind also serves the character importer: a PDF with no form fields has its first 20 pages read with the sheet limits (20 MB, 50 pages, 30 s) and nothing stored, then parsed as text (ADR-013, ADR-017). The allowed set is `extract`, `formFields` and, since the Import Lab (D67), `extractMarkdown`: the same worker reads a `.md` temp copy with the pure `MarkdownExtractor` (no PDF library, no OCR) and sends pages under the same message cap; the character importer still uses only `extract` and `formFields`.
 
 ## Alternatives considered
 

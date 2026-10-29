@@ -19,9 +19,9 @@ SPEC C-04 · ARCHITECTURE "commands vs calculation" · status: rules-core engine
 
 ## Roll record
 
-`{ formula, mode, critical, dice[{term, sides, value, kept, fromCritical}], diceTotal, expressionConstant, modifiers[{label, amount, origin}], total, provenance }`. Provenance cites the roll effect's revision, effect id, source and page, plus `linkedResourceId`.
+`{ formula, mode, critical, dice[{term, sides, value, kept, fromCritical}], diceTotal, expressionConstant, modifiers[{label, amount, origin}], total, provenance, spend?, automaticMode?, modeSources? }`. `automaticMode` and `modeSources` (D43 slice 6) are set only on a field roll whose field has at least one automatic roll mode: the sheet's combined automatic mode (even when it cancelled to normal) and the names of the content that gave those modes. Provenance cites the roll effect's revision, effect id, source and page, plus `linkedResourceId`.
 
-**Rolling never spends anything.** `DiceRoller` takes no character or resource state, so it cannot change one. `linkedResourceId` only says which resource an *action* would spend. Spending is a separate, confirmed command: `character.play` with `spend` (M2 item 2).
+**Rolling never spends anything.** `DiceRoller` takes no character or resource state, so it cannot change one. `linkedResourceId` only says which resource an *action* would spend. Spending is a separate, confirmed command: `character.play` with `spend` (M2 item 2). A roll from the panel never spends; a quickbar press rolls and, when its button says "and spend", spends once (D73), by sending that same `character.play` after the roll. The dice engine and the `roll` command are unchanged.
 
 **Display (ADR-015).** The UI draws `dice[]` as polygons showing each die's `value` from the first frame, with a 0.6 s CSS tumble; nothing is rolled or computed in the UI, and the record's text is in the DOM at once. Off under `prefers-reduced-motion` or the Settings switch. Hit dice spent in a rest read their roll directly and are not drawn, but they are logged: a collapsed "Previous rolls" list under the Last roll keeps the last ten rolls of the sheet session (newest first, the current roll excluded, with the time), outside the live region and never stored (D28). Every other roll, death saves included, is drawn in the Last roll region. A d20 is drawn in the second accent only when another d20 in the same roll was dropped (advantage or disadvantage); a plain d20 and every other die use the accent, critical dice the second accent (2026-10-06).
 
@@ -32,8 +32,24 @@ SPEC C-04 · ARCHITECTURE "commands vs calculation" · status: rules-core engine
 - **A content roll effect** (`content` + `effectId`): the revision must apply to the character (it is in the sheet's `active` list: pinned, class, granted or chosen). Otherwise the roll is refused (`roll.content-inactive`). The record cites the revision, effect, source and page, and the linked resource if any.
 - **A sheet field as a d20 test** (`field`): an ability modifier, saving throw, skill or initiative. The formula is `1d20`, and the field's displayed value (after any override) is the modifier. The modifier's origin is the step that set that value, and the provenance names the field. An ability modifier's provenance label is "{Ability} check" (the summary's wording); saves, skills and initiative read "{label} (d20 test)". Other fields are refused (`roll.field-not-rollable`). Passive scores and Speed are not d20 tests and are refused.
 - Advantage and disadvantage apply only to a d20 test, and critical doubling only to damage dice. Dice errors come back with their `dice.*` code.
+- **Automatic roll modes on a field (D43 slice 6):** content can give a saving throw, skill, ability check or initiative advantage or disadvantage (see [play-mechanics.md](play-mechanics.md) "Slice 6"). The service combines the `mode` of the command with every automatic reason of the field: any advantage with any disadvantage is normal however many there are, a normal choice contributes nothing, and an `against` or non-automatic reason never counts. Automatic cancellation beats the player's choice (automatic advantage and disadvantage plus a chosen advantage roll normal).
+
+| `mode` sent | Automatic mode | Rolled |
+| --- | --- | --- |
+| normal | normal | normal |
+| normal | advantage | advantage |
+| normal | disadvantage | disadvantage |
+| advantage | normal | advantage |
+| advantage | advantage | advantage |
+| advantage | disadvantage | normal |
+| disadvantage | normal | disadvantage |
+| disadvantage | advantage | normal |
+| disadvantage | disadvantage | disadvantage |
+
+The record's `mode` is the rolled mode, and `automaticMode` and `modeSources` say what the sheet contributed. `critical` is unchanged: a request that ends up critical with advantage, including through an automatic mode, is refused as `dice.critical-with-advantage`.
 - **It never changes the character.** Nothing is saved, and a roll linked to a resource does not spend it. The test compares the stored character before and after.
 - Dice come from the OS CSPRNG. Tests replace the source with `SeededRandomSource`.
+- **Extra dice for extra points (D43 slice 5):** a roll effect with `perUnit` takes `amount`, the points to spend. The formula is the roll's dice plus the per-unit dice once for each point beyond the base cost (`DiceRoller.TryPerUnitFormula`): `4d10` with `1d10` per point at amount 6 and base 4 is `4d10+2d10`, and the base dice at the base amount. The amount must be from the base cost to the base plus `maxUnits` (or the pool's maximum) and within what the pool has left; otherwise `roll.amount-out-of-range` or `roll.amount-unaffordable`, `roll.amount-not-allowed` for an amount on a roll with no `perUnit`, and `roll.no-dice` for a roll with no dice. The record carries `spend { contentId, resourceId, amount }` for a roll effect that has a pool: exactly what the Spend button sends. Rolling still changes nothing; the dice limits above apply to the built formula. See [play-mechanics.md](play-mechanics.md) "Slice 5".
 
 ## Rolling from the summary
 

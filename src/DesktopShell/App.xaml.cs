@@ -55,9 +55,35 @@ public partial class App : Application
             return;
         }
 
-        var window = new MainWindow(_tomeStack, options);
+        var crashReporter = new CrashReporter(
+            _tomeStack.ErrorLog,
+            Path.Combine(_tomeStack.DataDirectory, "logs", FileErrorLog.FileName),
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            // --smoke suppresses the dialog: nobody is there to close it.
+            options.Smoke ? null : text => MessageBox.Show(text, "TomeStack", MessageBoxButton.OK, MessageBoxImage.Error));
+        DispatcherUnhandledException += (_, args) =>
+        {
+            // A nested fault (raised while the first one's dialog is open) only logs: exiting would close that dialog unread.
+            var owner = crashReporter.ReportFatal("dispatcher", args.Exception);
+            args.Handled = true;
+            if (owner)
+                Shutdown(1);
+        };
+        // The runtime ends the process after this handler returns; it cannot be stopped.
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+            crashReporter.ReportFatal("appdomain", args.ExceptionObject as Exception ?? new InvalidOperationException(args.ExceptionObject?.ToString()));
+        TaskScheduler.UnobservedTaskException += (_, args) =>
+        {
+            crashReporter.ReportNonFatal("task", args.Exception);
+            args.SetObserved();
+        };
+
+        var window = new MainWindow(_tomeStack, options, crashReporter);
         MainWindow = window;
         _activation = SingleInstance.ListenForActivation(dataDirectory, () => Dispatcher.BeginInvoke(window.BringToFront));
+        // D77: the day's automatic full backup, before the window can send any command; listening first means a second
+        // launch during a long copy brings this window forward once it shows. It never throws; a failure is logged.
+        _tomeStack.TakeDailyCopy();
         window.Show();
     }
 
@@ -80,6 +106,10 @@ public partial class App : Application
 /// Test-only: take the "WebView2 Runtime not found" path without asking the loader. Honoured only with
 /// <c>--smoke</c>, so a normal launch cannot be switched into it.
 /// </param>
+/// <param name="SimulateUnhandledException">
+/// Test-only: once the window is ready, throw on the UI thread so the crash handler can be checked end to end. Honoured
+/// only with <c>--smoke</c>, so a normal launch cannot be switched into it.
+/// </param>
 /// <param name="DevFixtures">
 /// <c>TOMESTACK_DEV_FIXTURES=1</c>: seed the original test fixtures into the data folder. Honoured only in a Debug build
 /// (LIVING_SPECS D11): seeded revisions cannot be removed, so no Release launch, smoke included, seeds them.
@@ -90,7 +120,7 @@ public partial class App : Application
 /// </param>
 public sealed record ShellOptions(
     bool Smoke, bool DevTools, string? DataDirectory, string? SmokeReport, bool SimulateMissingRuntime = false, bool DevFixtures = false,
-    bool AllowBrowserArguments = false)
+    bool AllowBrowserArguments = false, bool SimulateUnhandledException = false)
 {
 #if DEBUG
     private const bool DebugBuild = true;
@@ -118,6 +148,7 @@ public sealed record ShellOptions(
             DataDirectory: dataDirectory,
             SmokeReport: Value("--smoke-report"),
             SimulateMissingRuntime: smoke && args.Contains("--simulate-missing-webview2"),
+            SimulateUnhandledException: smoke && args.Contains("--simulate-unhandled-exception"),
             // Seeded fixtures cannot be removed (published revisions are insert-only), so only a Debug build seeds them.
             DevFixtures: debugBuild && devFixturesVariable == "1");
     }

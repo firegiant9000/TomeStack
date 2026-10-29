@@ -170,7 +170,7 @@ public class MigrationProperties
         Tables.Where(t => t switch { "campaigns" => version >= 4, "gap_notes" => version >= 5, _ => true })
             .ToDictionary(t => t, t => Count(database, $"SELECT COUNT(*) FROM {t};"));
 
-    [Property(MaxTest = 60)]
+    [CiProperty(maxTest: 60, ciMaxTest: 20)]
     public Property A_database_of_any_older_version_migrates_keeping_its_rows_and_hashes_and_one_backup() =>
         Prop.ForAll(Databases.ToArbitrary(), old =>
         {

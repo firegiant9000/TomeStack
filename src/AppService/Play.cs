@@ -88,9 +88,23 @@ public enum PlayActionKind
 
     /// <summary>A companion's temporary hit points become <c>amount</c> (0 to the maximum allowed); its current hit points stay as stored, so a damage that landed first is kept.</summary>
     CompanionSetTemporaryHitPoints,
+
+    /// <summary>D43 slice 3: starts an encounter at round 0 (turns are taken in an encounter). Refused <c>encounter.already-started</c> while one is running. Compound: needs the stamp, and sets the undo slot.</summary>
+    StartEncounter,
+
+    /// <summary>D43 slice 3: ends the encounter and clears every toggle's rounds left (the reply names the toggles that lost a duration). Refused <c>encounter.not-started</c> outside one. Compound, like <see cref="StartEncounter"/>.</summary>
+    EndEncounter,
+
+    /// <summary>D43 slice 8: uses one roll (<c>contentId</c> and <c>rollId</c>): its own spend (or draw-down, for a <c>drawsDown</c> roll; <c>amount</c> for a per-unit roll) and every <c>alsoChange</c> entry, all applied or none. Refused <c>use.not-found</c>, <c>use.unavailable</c>, <c>use.unaffordable</c> or <c>use.pool-full</c>. Compound; the undo label is "use {roll label}".</summary>
+    UseAction,
 }
 
 /// <param name="Confirm">Must be <c>true</c>: play state changes only by an explicit user action, never as a side effect.</param>
+/// <param name="Replace">With <c>toggleOn</c> of a primary form: switch off the primary of the same group that is on instead of refusing (D43).</param>
+/// <param name="ExpectedUpdatedAt">The <c>Character.UpdatedAt</c> of the copy the page acted on (D43 S2). When sent and not the stored one, the command is refused with <c>character.stale</c> and nothing is written, as <see cref="TomeStackApp.SaveCharacter"/> does. Compound changes require it.</param>
+/// <param name="Responses">D43 S7, with <c>damage</c>: the damage responses chosen for the hit (<c>character.damagePreview</c> lists them). A non-empty list makes the change compound: it needs <paramref name="ExpectedUpdatedAt"/> and is one undo step.</param>
+/// <param name="RollId">D43 S8, with <c>useAction</c> and <paramref name="ContentId"/>: the roll (its <c>rollId</c>) to use.</param>
+/// <param name="Clear">D43 S8, with <c>endEncounter</c> only: counting-up pools whose built-up value goes to 0 in the same change, as <c>"{contentId:D}/{resourceId}"</c> (at most 64). Refused <c>play.clear-invalid</c> with any other action or any entry that is not a counting-up pool of the character.</param>
 /// <param name="ContentId">With <paramref name="ResourceId"/>, the resource to spend or regain (the content that defines it).</param>
 public sealed record PlayCommand(
     Guid CharacterId,
@@ -105,19 +119,18 @@ public sealed record PlayCommand(
     Guid? EntryId = null,
     int? EntryIndex = null,
     Guid? CompanionId = null,
-    int? Temporary = null);
-
-/// <summary>How the character's defences changed typed damage (R169): immunity wins; otherwise resistance halves (rounding down), then vulnerability doubles.</summary>
-public enum DamageEffect { None, Immune, Halved, Doubled, HalvedThenDoubled }
+    int? Temporary = null,
+    bool Replace = false,
+    DateTimeOffset? ExpectedUpdatedAt = null,
+    IReadOnlyList<ResponseChoice>? Responses = null,
+    string? RollId = null,
+    IReadOnlyList<string>? Clear = null);
 
 /// <summary>
-/// What a <see cref="PlayActionKind.Damage"/> command did, for the result line (Wave 3 item 21, D19 amended).
-/// <paramref name="Amount"/> is what was entered and <paramref name="Type"/> its canonical damage type (null: untyped, so no
-/// defence applies). <paramref name="Adjusted"/> is the amount after defences (what the concentration check uses),
-/// <paramref name="Absorbed"/> what temporary hit points took, <paramref name="Lost"/> what hit points lost.
-/// <paramref name="Warnings"/> carries codes and numbers only (<c>play.massive-damage</c>).
+/// <c>character.undoPlay</c> (D43 S2): undoes the last compound play change. <paramref name="UpdatedAt"/> is the stamp of the copy the
+/// page holds; it must be the stored one (<c>character.stale</c> otherwise).
 /// </summary>
-public sealed record DamageOutcome(int Amount, string? Type, DamageEffect Effect, int Adjusted, int Absorbed, int Lost, IReadOnlyList<Diagnostic> Warnings);
+public sealed record UndoPlayRequest(Guid CharacterId, DateTimeOffset UpdatedAt, bool Confirm = false);
 
 public sealed partial class TomeStackApp
 {
@@ -133,8 +146,18 @@ public sealed partial class TomeStackApp
             throw new AppValidationException([new("play.confirmation-required", "Changing hit points, resources or conditions needs an explicit confirmation.")]);
         var character = _store.FindCharacter(command.CharacterId)
             ?? throw new AppValidationException([new("character.not-found", $"Character {command.CharacterId} does not exist.")]);
+        // D43 S2: the page's stamp is the one concurrency token every character write already uses (SaveCharacter compares the same
+        // value). A stale one is refused before any action runs, so every kind of play command is covered and nothing is written.
+        // A compound change (several writes decided from one view) cannot run on a guess: it must name the copy it was decided on.
+        if (CompoundUndo(command, null).Compound && command.ExpectedUpdatedAt is null)
+            throw new AppValidationException([new("play.basis-required", "This change needs the character's current state. Reload it and try again.")], "play.basis-required");
+        if (command.ExpectedUpdatedAt is { } expected && expected != character.UpdatedAt)
+            throw new AppValidationException([new("character.stale", StaleMessage)], "character.stale");
         if (command.Amount is < 0 or > PlayState.MaxHitPoints)
             throw new AppValidationException([new("play.amount-out-of-range", $"The amount must be between 0 and {PlayState.MaxHitPoints}.")]);
+        // D43 S8: a list of pools to clear belongs to the end of an encounter only; anywhere else it is refused, never ignored.
+        if (command.Clear is { Count: > 0 } && command.Action != PlayActionKind.EndEncounter)
+            throw new AppValidationException([new("play.clear-invalid", "Pools can be cleared only when an encounter ends.")], "play.clear-invalid");
 
         if (command.Action is PlayActionKind.CompanionDamage or PlayActionKind.CompanionHeal or PlayActionKind.CompanionSetHitPoints or PlayActionKind.CompanionSetTemporaryHitPoints)
             return SaveWithPlay(character with { Play = ChangeCompanion(character, command) }); // a companion's hit points are not the character's: no sheet needed
@@ -143,17 +166,19 @@ public sealed partial class TomeStackApp
             return SaveWithPlay(ChangeCharges(character, sheet, command)); // charges live on the equipment entry, not in the play state
         var play = character.Play;
         var hp = sheet.HitPoints!;
-        int? AtMaximumIsNull(int value) => value >= hp.Maximum ? null : value;
         DamageOutcome? damage = null;
+        IReadOnlyList<Diagnostic>? notices = null;
+        string? useLabel = null;
 
         play = command.Action switch
         {
             PlayActionKind.Spend or PlayActionKind.Regain => ChangeResource(play, sheet, command),
+            PlayActionKind.Damage when command.Responses is { Count: > 0 } => DamageWithResponses(character, play, sheet, command, out damage, out notices),
             PlayActionKind.Damage => Damage(play, sheet, command, RulesFamilies.Get(character.RulesFamily), out damage),
-            PlayActionKind.Heal => play with { CurrentHitPoints = AtMaximumIsNull(hp.Current + command.Amount) },
+            PlayActionKind.Heal => play.WithCurrentHitPoints(hp.Current + command.Amount, hp.Maximum),
             PlayActionKind.SetTemporaryHitPoints => play with { TemporaryHitPoints = command.Amount },
             PlayActionKind.SetHitPoints => command.Amount <= hp.Maximum
-                ? play with { CurrentHitPoints = AtMaximumIsNull(command.Amount) }
+                ? play.WithCurrentHitPoints(command.Amount, hp.Maximum)
                 : throw new AppValidationException([new("play.hit-points-above-maximum", $"Current hit points cannot be above the maximum ({hp.Maximum}).")]),
             PlayActionKind.AddCondition => play.Conditions.Contains(Condition(command))
                 ? play
@@ -177,7 +202,14 @@ public sealed partial class TomeStackApp
             PlayActionKind.RegainPactSlot => play.PactSlotsSpent > 0
                 ? play with { PactSlotsSpent = play.PactSlotsSpent - 1 }
                 : throw new AppValidationException([new("slots.nothing-spent", "No Pact Magic slots are spent.")]),
-            PlayActionKind.ToggleOn or PlayActionKind.ToggleOff => ChangeToggle(play, sheet, command),
+            PlayActionKind.ToggleOn or PlayActionKind.ToggleOff => ChangeToggle(character, play, sheet, command),
+            PlayActionKind.StartEncounter => play.Encounter is null
+                ? StartEncounter(play, sheet)
+                : throw new AppValidationException([new("encounter.already-started", "An encounter is already running.")]),
+            PlayActionKind.EndEncounter => play.Encounter is null
+                ? throw new AppValidationException([new("encounter.not-started", "No encounter is running.")])
+                : EndEncounter(play, sheet, command.Clear, out notices),
+            PlayActionKind.UseAction => UseAction(play, sheet, command, out notices, out useLabel),
             PlayActionKind.StartConcentration => StartConcentration(play, sheet, command),
             PlayActionKind.EndConcentration => play.Concentration is null
                 ? throw new AppValidationException([new("play.not-concentrating", "The character is not concentrating on a spell.")])
@@ -192,9 +224,231 @@ public sealed partial class TomeStackApp
         // SRD 5.1 p. 98, SRD 5.2.1 p. 17: regaining any hit points resets death saving throws.
         if (hp.Current == 0 && (play.CurrentHitPoints ?? hp.Maximum) > 0 && command.Action is PlayActionKind.Heal or PlayActionKind.SetHitPoints)
             play = play with { DeathSaves = new() };
-        var view = SaveWithPlay(character with { Play = play });
+        // D43 S2: a compound change keeps the play state it started from, for one undo (the toggle exists: ChangeToggle checked it).
+        // A damage with responses is compound (decided in CompoundUndo), but its label needs the outcome, which only exists here.
+        var (compound, compoundLabel) = CompoundUndo(command, sheet);
+        var undoLabel = compoundLabel ?? useLabel ?? (compound && command.Action == PlayActionKind.Damage && damage is not null ? DamageLabel(command, damage) : null);
+        (PlayState, string)? undo = undoLabel is { } label ? (character.Play, label) : null;
+        if (command.Action == PlayActionKind.Spend)
+            notices = ResourceFullNotice(sheet, command);
+        else if (command.Action == PlayActionKind.Damage && !compound)
+            notices = SkippedResponses(character, sheet, command); // R12: plain damage names the responses it passed over
+        var view = SaveWithPlay(character with { Play = play }, undo);
+        if (notices is not null)
+            view = view with { Notices = notices };
         return damage is null ? view : view with { Damage = damage };
     }
+
+    /// <summary>
+    /// D43 S3: a spend that fills a counting-up pool whose content gave a <c>resourceFull</c> text answers with that text (reply-only,
+    /// code <c>resource.full</c>). Content-authored text only. Called after the spend was accepted, on the sheet it was decided on.
+    /// </summary>
+    private static IReadOnlyList<Diagnostic>? ResourceFullNotice(CharacterSheet sheet, PlayCommand command)
+    {
+        var pool = sheet.Resources?.FirstOrDefault(r => r.Content.ContentId == command.ContentId && r.ResourceId == command.ResourceId);
+        return FullNotice(pool, (pool?.Spent ?? 0) + command.Amount) is { } notice ? [notice] : null;
+    }
+
+    /// <summary>
+    /// The <c>resource.full</c> notice (the content's own text) of a counting-up pool that was below its maximum on the sheet
+    /// (<c>pool.Spent</c>) and is at it after the change (<paramref name="spentAfter"/>). Null otherwise. The one place the rule lives.
+    /// </summary>
+    private static Diagnostic? FullNotice(ResourceValue? pool, int spentAfter) =>
+        pool is { CountsUp: true, Maximum: > 0 } && !string.IsNullOrWhiteSpace(pool.FullText) && pool.Spent < pool.Maximum && spentAfter >= pool.Maximum
+            ? new("resource.full", pool.FullText)
+            : null;
+
+    /// <summary>The encounter starts at round 0, and each toggle that is on with a duration gets its rounds left (the sheet knows which are on).</summary>
+    private static PlayState StartEncounter(PlayState play, CharacterSheet sheet) => play with
+    {
+        Encounter = new(0),
+        Toggles = [.. play.Toggles.Select(t =>
+            sheet.Toggles?.FirstOrDefault(v => v.On && v.Content.ContentId == t.ContentId && v.ToggleId == t.ToggleId) is { Duration: { } rounds } ? t with { RoundsLeft = rounds } : t)],
+    };
+
+    /// <summary>The encounter ends and every count of rounds left goes with it. A toggle that had one is named in <paramref name="notices"/> (no content ref: nothing is downgraded).</summary>
+    private static PlayState EndEncounter(PlayState play, CharacterSheet sheet, IReadOnlyList<string>? clear, out IReadOnlyList<Diagnostic>? notices)
+    {
+        var pools = ClearedPools(sheet, clear); // refused whole before anything is applied
+        var lost = play.Toggles.Where(t => t.RoundsLeft is not null).Select(t =>
+        {
+            var label = sheet.Toggles?.FirstOrDefault(v => v.Content.ContentId == t.ContentId && v.ToggleId == t.ToggleId)?.Label ?? t.ToggleId;
+            return new Diagnostic("encounter.duration-by-hand", $"{label} ({t.ToggleId}): duration: track by hand");
+        }).ToList();
+        notices = lost.Count == 0 ? null : lost;
+        play = play with { Encounter = null, Toggles = [.. play.Toggles.Select(t => t with { RoundsLeft = null })] };
+        return pools.Aggregate(play, (state, pool) => state.WithSpent(pool.Content.ContentId, pool.ResourceId, 0));
+    }
+
+    /// <summary>
+    /// D43 S8: the pools an <c>endEncounter</c> clears. Entries are <c>"{contentId:D}/{resourceId}"</c>, at most <see cref="MaxClearEntries"/>
+    /// (duplicates allowed); each must name a counting-up pool on the sheet. Anything else refuses the whole command with
+    /// <c>play.clear-invalid</c> (the message names the entry's position, never its text).
+    /// </summary>
+    private static List<ResourceValue> ClearedPools(CharacterSheet sheet, IReadOnlyList<string>? clear)
+    {
+        var pools = new List<ResourceValue>();
+        if (clear is not { Count: > 0 })
+            return pools;
+        if (clear.Count > MaxClearEntries)
+            throw new AppValidationException([new("play.clear-invalid", $"At most {MaxClearEntries} pools can be cleared; {clear.Count} were named.")], "play.clear-invalid");
+        for (var i = 0; i < clear.Count; i++)
+        {
+            var entry = clear[i] ?? ""; // a null entry in the request is malformed like any other
+            var slash = entry.IndexOf('/', StringComparison.Ordinal);
+            var pool = slash > 0 && Guid.TryParseExact(entry[..slash], "D", out var content) && slash < entry.Length - 1
+                ? sheet.Resources?.FirstOrDefault(r => r.Content.ContentId == content && r.ResourceId == entry[(slash + 1)..])
+                : null;
+            if (pool is not { CountsUp: true })
+                throw new AppValidationException([new("play.clear-invalid", $"Entry {i + 1} of the pools to clear is not a counting-up pool of this character.")], "play.clear-invalid");
+            pools.Add(pool);
+        }
+        return pools;
+    }
+
+    /// <summary>The most pools one <c>endEncounter</c> may clear.</summary>
+    internal const int MaxClearEntries = 64;
+
+    /// <summary>
+    /// D43 S8: <c>useAction</c>. Finds the roll (content id and roll id) on the calculated sheet, builds every pool change it implies (its
+    /// own spend, or draw-down for a <c>drawsDown</c> roll, then each <c>alsoChange</c> entry) and applies them with
+    /// <see cref="PoolChanges.Apply"/>: all together or none. The roll's own amount follows the roll command's rules (a per-unit roll takes
+    /// <c>command.Amount</c> within the same bounds; any other the evaluated cost, or 1 with none declared).
+    /// </summary>
+    private PlayState UseAction(PlayState play, CharacterSheet sheet, PlayCommand command, out IReadOnlyList<Diagnostic>? notices, out string? label)
+    {
+        notices = null;
+        label = null;
+        if (command.ContentId is not { } contentId || string.IsNullOrEmpty(command.RollId))
+            throw new AppValidationException([new("use.not-found", "Name the content and the roll to use.")], "use.not-found");
+        FeatureEntry? feature = null;
+        RollEffect? roll = null;
+        FeatureEffect? calculated = null;
+        foreach (var candidate in sheet.Features ?? [])
+        {
+            if (candidate.Content.ContentId != contentId)
+                continue;
+            // Two rolls in one revision sharing a rollId cannot be told apart: neither is used.
+            var matches = _store.FindRevision(candidate.Content)?.Effects.OfType<RollEffect>().Where(e => e.RollId == command.RollId).Take(2).ToList() ?? [];
+            roll = matches.Count == 1 ? matches[0] : null;
+            calculated = roll is null ? null : candidate.Effects.FirstOrDefault(e => e.Id == roll.Id && e.Type == RollEffect.TypeName);
+            if (calculated is not null)
+            {
+                feature = candidate;
+                break;
+            }
+        }
+        if (feature is null || roll is null || calculated is null)
+            throw new AppValidationException([new("use.not-found", $"Content {contentId:D} has no roll '{command.RollId}' for this character.")], "use.not-found");
+        var reference = feature.Content;
+        if (!calculated.Available)
+            throw new AppValidationException([new("use.unavailable", $"Roll '{roll.Id}' is not available now.", reference, roll.Id)], "use.unavailable");
+
+        var changes = new List<PoolChange>();
+        if (roll.ResourceId is { } ownPool)
+        {
+            // A cost that cannot be calculated refuses the use with the calculation's own diagnostic, as the roll command does for an amount.
+            if (roll.Cost is not null && calculated.Cost is null)
+            {
+                var failure = sheet.Diagnostics.FirstOrDefault(d => d.Code == "effect.invalid-formula" && d.Content == reference && d.EffectId == roll.Id)
+                    ?? new Diagnostic("effect.invalid-formula", $"The cost of roll '{roll.Id}' could not be calculated.", reference, roll.Id);
+                throw new AppValidationException([failure], failure.Code);
+            }
+            var poolContent = calculated.ResourceContent ?? contentId;
+            // Defence in depth: a draw-down gives uses back, which on an ordinary pool would refill it, so it needs a counting-up pool here.
+            if (calculated.DrawsDown && sheet.Resources?.FirstOrDefault(r => r.Content.ContentId == poolContent && r.ResourceId == ownPool) is not { CountsUp: true })
+                throw new AppValidationException([new("use.unavailable", $"Pool '{ownPool}' does not count up for this character, so roll '{roll.Id}' cannot draw it down.", reference, roll.Id)], "use.unavailable");
+            int amount;
+            if (calculated.PerUnit is { } perUnit)
+            {
+                amount = command.Amount;
+                var baseCost = calculated.Cost ?? 0;
+                var pool = sheet.Resources?.FirstOrDefault(r => r.Content.ContentId == poolContent && r.ResourceId == ownPool);
+                if (PerUnitRangeProblem(roll.Id, reference, amount, baseCost, perUnit, pool?.Maximum) is { } outOfRange)
+                    throw new AppValidationException([outOfRange], outOfRange.Code);
+            }
+            else
+            {
+                amount = calculated.Cost ?? 1;
+            }
+            changes.Add(new(poolContent, ownPool, calculated.DrawsDown ? UpkeepChange.Regain : UpkeepChange.Spend, amount));
+        }
+        foreach (var also in calculated.AlsoChange ?? [])
+        {
+            if (also.Amount is not { } alsoAmount)
+                throw new AppValidationException([new("use.unavailable", $"An amount of roll '{roll.Id}' could not be calculated, so it cannot be used.", reference, roll.Id)], "use.unavailable");
+            changes.Add(new(also.ResourceContent, also.ResourceId, also.Change, alsoAmount));
+        }
+        if (changes.Count == 0)
+            throw new AppValidationException([new("use.unavailable", $"Roll '{roll.Id}' changes no pool, so there is nothing to use.", reference, roll.Id)], "use.unavailable");
+
+        var (applied, errors) = PoolChanges.Apply(play, sheet, changes);
+        if (errors.Count > 0)
+            throw new AppValidationException(errors, errors[0].Code);
+
+        // A use that changes nothing (a regain with nothing spent, a per-unit amount of 0) is not a change: no write, no undo slot taken.
+        var pools = changes.Select(c => (c.ResourceContent, c.ResourceId)).Distinct().ToList();
+        if (pools.All(p => applied.SpentOf(p.ResourceContent, p.ResourceId) == play.SpentOf(p.ResourceContent, p.ResourceId)))
+            throw new AppValidationException([new("use.unavailable", $"Using '{roll.Id}' would change no pool.", reference, roll.Id)], "use.unavailable");
+
+        // A counting-up pool this use filled says so (the content's own text): it was below its maximum before and is at it now.
+        var full = new List<Diagnostic>();
+        foreach (var (poolContent, poolId) in pools)
+        {
+            var filled = FullNotice(sheet.Resources?.FirstOrDefault(r => r.Content.ContentId == poolContent && r.ResourceId == poolId), applied.SpentOf(poolContent, poolId));
+            if (filled is not null)
+                full.Add(filled);
+        }
+        notices = full.Count == 0 ? null : full;
+        label = $"use {(string.IsNullOrWhiteSpace(roll.Label) ? roll.RollId : roll.Label)}";
+        return applied;
+    }
+
+    /// <summary>
+    /// <c>character.undoPlay</c> (D43 S2, D44): puts the play state back to what the last compound change started from. One level,
+    /// in memory, and only while nothing else has written the character. Refused, writing nothing, in this order: without
+    /// <c>confirm</c> (<c>undo.confirmation-required</c>); unknown character (<c>character.not-found</c>); a page stamp that is not the
+    /// stored one (<c>character.stale</c>, as save and play); no slot (<c>undo.nothing</c>); a slot written for an earlier stamp
+    /// (<c>undo.stale</c>). The undo is itself one <c>SaveWithPlay</c> and sets no slot, so it cannot be undone again.
+    /// </summary>
+    public CharacterView UndoPlay(UndoPlayRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (!request.Confirm)
+            throw new AppValidationException([new("undo.confirmation-required", "Undoing a change to the play state needs an explicit confirmation.")], "undo.confirmation-required");
+        var character = _store.FindCharacter(request.CharacterId)
+            ?? throw new AppValidationException([new("character.not-found", $"Character {request.CharacterId} does not exist.")]);
+        if (request.UpdatedAt != character.UpdatedAt)
+            throw new AppValidationException([new("character.stale", StaleMessage)], "character.stale");
+        var slot = _undo.Find(character.Id)
+            ?? throw new AppValidationException([new("undo.nothing", "There is nothing to undo for this character.")], "undo.nothing");
+        if (slot.UpdatedAfter != character.UpdatedAt)
+            throw new AppValidationException([new("undo.stale", "This character changed since that change, so it can't be undone.")], "undo.stale");
+        var view = SaveWithPlay(character with { Play = slot.Before });
+        _undo.Remove(character.Id); // only after the write succeeded: a failed save keeps the slot
+        return view;
+    }
+
+    /// <summary>
+    /// D43 S2/S3: the one server switch for compound play changes. A compound change decides several writes from one view, so it needs
+    /// the current stamp (<c>play.basis-required</c> without one) and keeps the play state it started from for one undo. Today:
+    /// <c>toggleOn</c> with <c>replace</c> ("switch to {toggle label}", the label only once the toggle exists on the
+    /// <paramref name="sheet"/>), <c>startEncounter</c> ("start encounter"), <c>endEncounter</c> ("end encounter") and <c>damage</c> with
+    /// responses (D43 S7; compound here, labelled by <see cref="DamageLabel"/> once the outcome is known) and <c>useAction</c> (D43 S8;
+    /// labelled "use {roll label}" by <see cref="UseAction"/>, because the roll is found by its <c>rollId</c> in the stored revision).
+    /// With no <paramref name="sheet"/> (the stamp check runs before it is calculated) only <c>Compound</c> is answered.
+    /// </summary>
+    internal static (bool Compound, string? Label) CompoundUndo(PlayCommand command, CharacterSheet? sheet) => command.Action switch
+    {
+        PlayActionKind.ToggleOn when command.Replace => (true,
+            sheet?.Toggles?.FirstOrDefault(t => t.Content.ContentId == command.ContentId && t.ToggleId == command.ToggleId) is { } switched ? $"switch to {switched.Label}" : null),
+        PlayActionKind.StartEncounter => (true, "start encounter"),
+        PlayActionKind.EndEncounter => (true, "end encounter"),
+        // D43 S7: a damage with responses decides several writes from one preview. Its label ("damage 15 fire (7 taken)") needs the outcome, so Play builds it.
+        PlayActionKind.Damage when command.Responses is { Count: > 0 } => (true, null),
+        PlayActionKind.UseAction => (true, null), // D43 S8: the label ("use Gather") needs the roll, which only UseAction finds
+        _ => (false, null),
+    };
 
     /// <summary>
     /// Wave 3 item 25 (R158, R160): spends or regains charges of one equipment entry, named by its id or (while it has none) by its
@@ -274,7 +528,19 @@ public sealed partial class TomeStackApp
         return character.Play with { Companions = entry is { Current: null, Temporary: 0 } ? others : all };
     }
 
-    private static PlayState ChangeToggle(PlayState play, CharacterSheet sheet, PlayCommand command)
+    /// <summary>
+    /// D43: drops the stored overlays the calculation says are not allowed with the primary the candidate state has on (none: only
+    /// overlays allowed in the base character stay), so a form switch takes its dependent overlays with it. A form turned off uses
+    /// <see cref="ToggleGroups.EndingWith"/>, the same rule as the turn planner.
+    /// </summary>
+    private PlayState WithoutDisallowedOverlays(Character character, PlayState candidate)
+    {
+        var sheet = CharacterCalculator.Calculate(character with { Play = candidate }, _store);
+        var gone = (sheet.Toggles ?? []).Where(t => !t.Available).Select(t => (t.Content.ContentId, t.ToggleId)).ToHashSet();
+        return gone.Count == 0 ? candidate : candidate with { Toggles = [.. candidate.Toggles.Where(t => !gone.Contains((t.ContentId, t.ToggleId)))] };
+    }
+
+    private PlayState ChangeToggle(Character character, PlayState play, CharacterSheet sheet, PlayCommand command)
     {
         var toggle = sheet.Toggles?.FirstOrDefault(t => t.Content.ContentId == command.ContentId && t.ToggleId == command.ToggleId)
             ?? throw new AppValidationException([new("toggle.not-found", $"This character has no toggle '{command.ToggleId}' from content {command.ContentId}.")]);
@@ -284,18 +550,41 @@ public sealed partial class TomeStackApp
         var others = play.Toggles.Where(t => !(t.ContentId == toggle.Content.ContentId && t.ToggleId == toggle.ToggleId)).ToList();
         if (command.Action == PlayActionKind.ToggleOff)
         {
-            return toggle.On
-                ? play with { Toggles = others }
-                : throw new AppValidationException([new("toggle.already-off", $"'{toggle.Label}' is already off.")]);
+            if (!toggle.On)
+                throw new AppValidationException([new("toggle.already-off", $"'{toggle.Label}' is already off.")]);
+            // D43: a primary that goes off takes the overlays that need it (the rule the turn planner shares).
+            var taken = ToggleGroups.EndingWith(toggle, sheet.Toggles!, play.Toggles.Select(s => (s.ContentId, s.ToggleId)).ToHashSet()).Select(t => (t.Content.ContentId, t.ToggleId)).ToHashSet();
+            return taken.Count == 0 ? play with { Toggles = others } : play with { Toggles = [.. others.Where(t => !taken.Contains((t.ContentId, t.ToggleId)))] };
         }
         if (toggle.On)
             throw new AppValidationException([new("toggle.already-on", $"'{toggle.Label}' is already on.")]);
-        if (toggle.ResourceId is { } resourceId)
+        var isPrimary = toggle is { Group: not null, Layer: not ToggleLayer.Overlay };
+        if (toggle is { Group: not null, Layer: ToggleLayer.Overlay, Available: false })
+            throw new AppValidationException([new("toggle.overlay-not-allowed", $"'{toggle.Label}' ({toggle.ToggleId}) is not allowed with the form that is on now. {toggle.UnavailableReason}".TrimEnd(), toggle.Content, toggle.EffectId)]);
+        var next = others;
+        if (isPrimary)
         {
-            // Turning it on spends one use, in the same confirmed change (a use that is not there refuses the whole change).
-            play = ChangeResource(play, sheet, new(command.CharacterId, PlayActionKind.Spend, Confirm: true, Amount: 1, ContentId: toggle.Content.ContentId, ResourceId: resourceId));
+            // Defensive: the sheet reports no group for a group of one (C6), so a primary here always has its group's content; this only guards a sheet built otherwise.
+            var groupPresent = sheet.Features is null || sheet.Features.Any(f => f.Content.ContentId == toggle.GroupContent);
+            var occupants = ToggleGroups.Occupants(toggle, sheet.Toggles ?? [], groupPresent);
+            if (occupants.Count > 0 && !command.Replace)
+                throw new AppValidationException([new("toggle.group-occupied", $"Group '{toggle.Group}' already has '{occupants[0].Label}' ({occupants[0].ContentName}) on; turn it off first, or switch with replace.", toggle.Content, toggle.EffectId)]);
+            next = [.. others.Where(t => !occupants.Any(o => o.Content.ContentId == t.ContentId && o.ToggleId == t.ToggleId))];
         }
-        return play with { Toggles = [.. others, new ActiveToggle(toggle.Content.ContentId, toggle.ToggleId)] };
+        // Everything is computed before anything is written: the new list, then the payment.
+        // D43 S3: in an encounter a timed toggle starts counting its rounds; outside one it has no count (the sheet says "track by hand").
+        var candidate = play with { Toggles = [.. next, new ActiveToggle(toggle.Content.ContentId, toggle.ToggleId, play.Encounter is null ? null : toggle.Duration)] };
+        if (isPrimary)
+            candidate = WithoutDisallowedOverlays(character, candidate);
+        // The cost comes from the pool the toggle names (a shared pool lives in another content); a v6 toggle with a resource and no cost spends one use of its own.
+        // A declared cost that did not evaluate (the calculator left it null and warned) refuses; only a toggle with no cost spends the default 1.
+        var declaresCost = _store.FindRevision(toggle.Content)?.Effects.OfType<ToggleEffect>().FirstOrDefault(t => t.Id == toggle.EffectId)?.Cost is not null;
+        if (declaresCost && toggle.Cost is null)
+            throw new AppValidationException([new("effect.invalid-formula", $"The cost of '{toggle.Label}' ({toggle.ToggleId}) could not be calculated, so it cannot be turned on.", toggle.Content, toggle.EffectId)]);
+        var amount = toggle.Cost ?? 1;
+        if (toggle.ResourceId is { } resourceId && amount > 0)
+            candidate = ChangeResource(candidate, sheet, new(command.CharacterId, PlayActionKind.Spend, Confirm: true, Amount: amount, ContentId: toggle.CostResourceContent ?? toggle.Content.ContentId, ResourceId: resourceId));
+        return candidate;
     }
 
     private static PlayState ChangeSlot(PlayState play, CharacterSheet sheet, PlayCommand command)
@@ -335,54 +624,16 @@ public sealed partial class TomeStackApp
     /// </summary>
     private static PlayState Damage(PlayState play, CharacterSheet sheet, PlayCommand command, RulesFamilyPolicy family, out DamageOutcome outcome)
     {
-        string? type = null;
-        if (command.DamageType is { } written)
-        {
-            if (!DamageTypes.TryNormalize(written, out var canonical))
-                throw new AppValidationException([new("play.damage-type-unknown", $"Damage type must be one of: {string.Join(", ", DamageTypes.All)}.")]);
-            type = canonical;
-        }
+        var type = NormalizedDamageType(command.DamageType);
         var hp = sheet.HitPoints!;
-        var kinds = type is null
-            ? new HashSet<DamageDefenceKind>()
-            : (sheet.DamageDefences ?? []).Where(d => d.Type == type).Select(d => d.Kind).ToHashSet();
-        var halved = kinds.Contains(DamageDefenceKind.Resistance);
-        var doubled = kinds.Contains(DamageDefenceKind.Vulnerability);
-        var effect = kinds.Contains(DamageDefenceKind.Immunity) ? DamageEffect.Immune
-            : halved && doubled ? DamageEffect.HalvedThenDoubled
-            : halved ? DamageEffect.Halved
-            : doubled ? DamageEffect.Doubled
-            : DamageEffect.None;
-        var amount = effect switch
-        {
-            DamageEffect.Immune => 0,
-            DamageEffect.Halved => command.Amount / 2,
-            DamageEffect.Doubled => command.Amount * 2,
-            DamageEffect.HalvedThenDoubled => command.Amount / 2 * 2,
-            _ => command.Amount,
-        };
-        if (amount == 0)
-        {
-            outcome = new(command.Amount, type, effect, 0, 0, 0, []);
-            return play;
-        }
-
-        var absorbed = Math.Min(play.TemporaryHitPoints, amount);
-        var current = Math.Max(hp.Current - (amount - absorbed), 0);
-        // Massive damage is a warning, never an automatic death: the damage left over once hit points reach 0 equals or exceeds the maximum.
-        var leftOver = amount - absorbed - (hp.Current - current);
-        var warnings = hp.Maximum >= 1 && leftOver >= hp.Maximum
-            ? new List<Diagnostic> { new("play.massive-damage", $"{leftOver} damage was left over after reaching 0 hit points, which equals or exceeds the hit point maximum of {hp.Maximum}.") }
-            : [];
-        outcome = new(command.Amount, type, effect, amount, absorbed, hp.Current - current, warnings);
-        // D19 (SRD 5.1 p. 101, SRD 5.2.1 p. 11), amended: damage while concentrating asks for a Constitution save, DC 10 or half the
-        // damage after resistance, immunity and vulnerability (before temporary hit points), whichever is higher; at 0 hit points the
-        // spell simply ends. The family may cap the DC (SRD 5.2.1: 30); every DC stays within what PlayState validation accepts, so a
-        // huge hit is still applied.
-        var concentration = play.Concentration is { } con
-            ? current == 0 ? null : con with { PendingSaveDc = Math.Min(Math.Max(10, amount / 2), Math.Min(family.ConcentrationSaveMaximumDc ?? int.MaxValue, PlayState.MaxConcentrationSaveDc)) }
+        var result = DamagePipeline.Resolve(new(command.Amount, type), hp, sheet.DamageDefences?.Select(d => new DamageDefence(d.Type, d.Kind)).ToList() ?? [], play.Concentration is not null, family);
+        outcome = result.Outcome;
+        if (result.Outcome.Adjusted == 0)
+            return play; // nothing changes and no concentration check is asked for
+        var concentration = result.ConcentrationEnds ? null
+            : result.ConcentrationDc is { } dc && play.Concentration is { } con ? con with { PendingSaveDc = dc }
             : play.Concentration;
-        return play with { TemporaryHitPoints = play.TemporaryHitPoints - absorbed, CurrentHitPoints = current >= hp.Maximum ? null : current, Concentration = concentration };
+        return play.WithHitPoints(result.After.Current, result.After.Temporary, hp.Maximum) with { Concentration = concentration };
     }
 
     private static PlayState StartConcentration(PlayState play, CharacterSheet sheet, PlayCommand command)

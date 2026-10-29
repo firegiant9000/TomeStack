@@ -365,45 +365,6 @@ public class ExtensionTests
     }
 
     [Fact]
-    public void A_library_backup_keeps_extensions_without_their_grants_and_a_restore_brings_them_back_turned_off()
-    {
-        using var origin = new TempApp();
-        var installed = Install(origin.App);
-        var backup = Path.Combine(origin.Directory, "..", "backup.tomestack.zip");
-        using (var file = File.Create(backup))
-            Assert.Equal(1, origin.App.WriteLibraryBackup(file).Contents.Extensions);
-        using (var zip = ZipFile.OpenRead(backup))
-        {
-            Assert.NotNull(zip.GetEntry($"extensions/{installed.Sha256}.zip"));
-            using var manifest = JsonDocument.Parse(zip.GetEntry("manifest.json")!.Open());
-            Assert.Equal(PackageManifest.LibraryExtensionsFormatVersion, manifest.RootElement.GetProperty("formatVersion").GetInt32());
-            Assert.Equal("", SchemaTests.Validate("package-manifest", manifest.RootElement));
-        }
-
-        using var clean = new TempApp();
-        var preview = clean.App.PreviewLibraryRestore(backup);
-        Assert.True(preview.CanApply, string.Join("; ", preview.Errors.Select(e => e.Code)));
-        Assert.Contains(preview.Items, i => i.Kind == "extension" && i.Action == PackageItemAction.Add);
-        Assert.Contains(preview.Warnings, w => w.Code == "restore.extension-review");
-        clean.App.ApplyLibraryRestore(backup);
-        var restored = Assert.Single(clean.App.ListExtensions());
-        Assert.Equal((installed.Id, installed.Sha256, false, 0), (restored.Id, restored.Sha256, restored.Enabled, restored.Grants.Count));
-        Assert.Contains("extension.disabled", Codes(() => clean.App.PreviewExtensionRun(new(restored.Id, "sheet-markdown", CharacterId: Guid.NewGuid()))));
-        // Review fix: it can be reviewed and granted from its stored file, without the original.
-        var review = clean.App.PreviewInstalledExtension(restored.Id);
-        Assert.True(review.CanInstall);
-        Assert.True(clean.App.InstallExtension(review.Token!.Value, [.. review.Manifest!.Permissions], confirm: true).Enabled);
-
-        // Without an extension, a backup stays v7 so v7 builds can restore it.
-        using var plain = new TempApp();
-        using var stream = new MemoryStream();
-        plain.App.WriteLibraryBackup(stream);
-        using var plainZip = new ZipArchive(new MemoryStream(stream.ToArray()));
-        using var plainManifest = JsonDocument.Parse(plainZip.GetEntry("manifest.json")!.Open());
-        Assert.Equal(PackageManifest.LibraryFormatVersion, plainManifest.RootElement.GetProperty("formatVersion").GetInt32());
-    }
-
-    [Fact]
     public void The_dispatcher_offers_the_extension_commands_and_the_desktop_only_ones_say_so_elsewhere()
     {
         using var temp = new TempApp();

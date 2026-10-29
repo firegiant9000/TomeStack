@@ -623,7 +623,7 @@ it('offers to create a homebrew class for an uninstalled class and sends the row
 
   await waitFor(() => expect(client.ddbPreview).toHaveBeenLastCalledWith(expect.objectContaining({ createClassRow: 'class:0' })));
   await waitFor(() => expect(screen.getByRole<HTMLInputElement>('checkbox', { name: /Create a homebrew class/ }).checked).toBe(true));
-  expect(document.activeElement).toBe(screen.getByRole('checkbox', { name: /Create a homebrew class/ }));
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('checkbox', { name: /Create a homebrew class/ })));
 });
 
 it('holds a second class: aria-disabled, still focusable, with its reason linked, and a click changes nothing (R100)', async () => {

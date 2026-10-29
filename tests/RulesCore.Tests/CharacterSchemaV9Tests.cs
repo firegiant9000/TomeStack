@@ -97,8 +97,8 @@ public class CharacterSchemaV9Tests
     {
         var json = Write(V8()).Replace("\"schemaVersion\":8", "\"schemaVersion\":9", StringComparison.Ordinal);
         Assert.Equal(8, Read(json).SchemaVersion);
-        var future = Read(Write(V8()).Replace("\"schemaVersion\":8", "\"schemaVersion\":10", StringComparison.Ordinal));
-        Assert.Equal(10, future.SchemaVersion);
+        var future = Read(Write(V8()).Replace("\"schemaVersion\":8", "\"schemaVersion\":11", StringComparison.Ordinal));
+        Assert.Equal(11, future.SchemaVersion);
         Assert.Contains("character.schema-unsupported", Codes(future));
     }
 

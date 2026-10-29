@@ -90,6 +90,24 @@ public class ContentDebuggerTests
     }
 
     [Fact]
+    public void A_resource_spent_by_another_contents_toggle_is_not_dead_and_a_toggle_spending_elsewhere_does_not_hide_a_dead_local_one()
+    {
+        var pool = Revision(Ref(1), ContentKind.Feature, "Debug Pool",
+            new ResourceEffect { Id = "pool", ResourceId = "pool", Label = "Pool", Maximum = "2" },
+            new RecoveryEffect { Id = "pool-rest", ResourceId = "pool", On = RestPeriod.LongRest, Amount = "all" });
+        var shapes = Revision(Ref(2), ContentKind.Feature, "Debug Shapes",
+            new ResourceEffect { Id = "pool-local", ResourceId = "pool", Label = "Local pool", Maximum = "2" },
+            new ToggleEffect { Id = "shape", ToggleId = "shape", Label = "Shape", Cost = "1", ResourceId = "pool", ResourceContent = pool.ContentId });
+        var recoveredOnly = Revision(Ref(3), ContentKind.Feature, "Debug Quiet",
+            new ResourceEffect { Id = "drip", ResourceId = "drip", Label = "Drip", Maximum = "1" });
+
+        var report = Diagnose([pool, shapes, recoveredOnly]);
+
+        Assert.DoesNotContain(report.Findings, f => f.Code == "debug.resource-dead" && f.Content == pool.Reference);
+        Assert.Contains(report.Findings, f => (f.Code, f.EffectId, f.Content) == ("debug.resource-dead", "pool-local", shapes.Reference));
+    }
+
+    [Fact]
     public void A_grant_from_granted_content_never_applies_and_what_it_grants_is_unreachable()
     {
         var deepPublished = Published(Revision(Ref(3, 1), ContentKind.Feature, "Debug Deep", Reads("deep-init", "CLASS_LEVEL")));
