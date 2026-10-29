@@ -103,19 +103,6 @@ public class CharacterSchemaV10Tests
     }
 
     [Fact]
-    public void A_v11_character_is_refused_and_the_constants_name_the_rungs()
-    {
-        var future = JsonSerializer.Deserialize<Character>(Write(V10()).Replace("\"schemaVersion\":10", "\"schemaVersion\":11", StringComparison.Ordinal), RulesJson.Options)!;
-        Assert.Equal(11, future.SchemaVersion);
-        Assert.Contains("character.schema-unsupported", Codes(future));
-
-        Assert.Equal(10, Character.CurrentSchemaVersion);
-        Assert.Equal(10, Character.EncounterSchemaVersion);
-        Assert.Equal(9, Character.DetailsSchemaVersion);
-        Assert.Equal(8, Character.PreviousSchemaVersion);
-    }
-
-    [Fact]
     public void A_stored_v10_character_with_no_v10_data_reads_as_v9_or_v8()
     {
         var asV10 = (string json, int from) => json.Replace($"\"schemaVersion\":{from}", "\"schemaVersion\":10", StringComparison.Ordinal);

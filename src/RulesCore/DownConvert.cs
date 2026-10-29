@@ -64,6 +64,8 @@ public static class BelowCodes
     public const string V12Key = "below.v12-key";
     public const string Payment = "below.payment";
     public const string CastsSpell = "below.casts-spell";
+    public const string ItemMods = "below.item-mods";
+    public const string ItemModCopies = "below.item-mod-copies";
     public const string ValidationError = "below.validation-error";
 }
 
@@ -100,6 +102,8 @@ public static class DownConvert
         var lowered = character;
         var name = character.Name;
 
+        if (targetCharacterSchema < Character.ItemModsSchemaVersion && character.UsesV11Fields)
+            lowered = BelowV11(lowered, name, changes);
         if (targetCharacterSchema < Character.EncounterSchemaVersion && character.UsesV10Fields)
             lowered = BelowV10(lowered, name, changes);
         if (targetCharacterSchema < Character.DetailsSchemaVersion && character.UsesV9Fields)
@@ -470,7 +474,7 @@ public static class DownConvert
                         continue;
                     }
                     effect.Remove(key);
-                    changes.Add(declaresV11 ? KeyBelowV11(type!, canonical, value, i, name) : KeyBelowV11(type!, canonical, value, i, name) with { Action = BelowAction.Silent });
+                    changes.Add(declaresV11 ? KeyBelowV11(type!, canonical, value, scope.Origin[i], name) : KeyBelowV11(type!, canonical, value, scope.Origin[i], name) with { Action = BelowAction.Silent });
                 }
             }
             kept.Add(effect);
@@ -516,12 +520,12 @@ public static class DownConvert
                         RemoveKey(effect, "replaceable", path, BelowAction.Dropped, BelowCodes.V12Key, $"'{name}': when a choice may be replaced.", changes);
                         break;
                     case RollEffect.TypeName:
-                        RemoveKey(effect, "payment", path, BelowAction.Blocks, BelowCodes.Payment, $"'{name}': how a roll pays its cost; the older version would charge the wrong thing.", changes);
+                        PaymentBelow(effect, path, name, "a roll", changes);
                         RemoveKey(effect, "castsSpell", path, BelowAction.Blocks, BelowCodes.CastsSpell, $"'{name}': the spell a roll casts; the older version would leave the spell out.", changes);
                         break;
                     case AttackEffect.TypeName:
                     case ToggleEffect.TypeName:
-                        RemoveKey(effect, "payment", path, BelowAction.Blocks, BelowCodes.Payment, $"'{name}': how it pays its cost; the older version would charge the wrong thing.", changes);
+                        PaymentBelow(effect, path, name, "it", changes);
                         break;
                 }
             }
@@ -534,6 +538,20 @@ public static class DownConvert
             effects.Add(item);
         scope.Origin.Clear();
         scope.Origin.AddRange(keptOrigin);
+    }
+
+    /// <summary>
+    /// A <c>payment</c> of kind resource (or with no kind) is today's pool payment, so leaving it out loses nothing and is dropped; hit points and
+    /// spell slots would be charged wrongly (or not at all) by an older version, so they block.
+    /// </summary>
+    private static void PaymentBelow(JsonObject effect, string path, string name, string who, List<BelowChange> changes)
+    {
+        var lossless = Property(effect, "payment") is JsonObject payment
+            && (Property(payment, "kind") is not { } kind || string.Equals(StringOf(kind), "resource", StringComparison.OrdinalIgnoreCase));
+        if (lossless)
+            RemoveKey(effect, "payment", path, BelowAction.Dropped, BelowCodes.V12Key, $"'{name}': that it pays from a resource pool, which is how the older version always pays.", changes);
+        else
+            RemoveKey(effect, "payment", path, BelowAction.Blocks, BelowCodes.Payment, $"'{name}': how {who} pays its cost with hit points or a spell slot; the older version would charge the wrong thing.", changes);
     }
 
     /// <summary>Handles an effect that v10 cannot hold at all. Returns whether the effect was removed.</summary>
@@ -628,6 +646,50 @@ public static class DownConvert
         o.FirstOrDefault(p => string.Equals(p.Key, name, StringComparison.OrdinalIgnoreCase)).Value;
 
     private static string? StringOf(JsonNode? node) => node is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;
+
+    /// <summary>
+    /// The 11 to 10 step (R54): every entry's mods are dropped; then plain copies of one item that differed only by their mods are merged into
+    /// the first, since an older build refuses a second plain entry. Groups where a copy has attunement or charges state are left alone (an older
+    /// build accepts them), and so are groups that never had a mod.
+    /// </summary>
+    private static Character BelowV11(Character character, string name, List<BelowChange> changes)
+    {
+        var equipment = character.Equipment;
+        for (var i = 0; i < equipment.Count; i++)
+        {
+            if (equipment[i]?.Mods is { Count: > 0 })
+                changes.Add(new($"equipment[{i}].mods", BelowAction.Dropped, BelowCodes.ItemMods, $"'{name}': the mods on equipment entry {i + 1}."));
+        }
+
+        var merged = new List<EquipmentEntry>(equipment.Count);
+        var slotOf = new Dictionary<ContentReference, int>();
+        var groups = equipment.Select((e, i) => (e, i)).GroupBy(p => p.e.Item).ToDictionary(g => g.Key, g => g.Select(p => p.e).ToList());
+        foreach (var entry in equipment)
+        {
+            var group = groups[entry.Item];
+            var mergeable = group.Count > 1 && group.Any(e => e.Mods is { Count: > 0 }) && group.All(e => e.Attuned is null && e.ChargesSpent is null);
+            var plain = entry with { Mods = null };
+            if (!mergeable)
+            {
+                merged.Add(plain);
+                continue;
+            }
+            if (slotOf.TryGetValue(entry.Item, out var first))
+            {
+                var head = merged[first];
+                merged[first] = head with { Quantity = (int)Math.Min((long)head.Quantity + entry.Quantity, EquipmentEntry.MaxQuantity), Equipped = head.Equipped || entry.Equipped };
+                continue;
+            }
+            slotOf[entry.Item] = merged.Count;
+            merged.Add(plain);
+        }
+
+        foreach (var (item, group) in groups.Where(g => g.Value.Count > 1 && g.Value.Any(e => e.Mods is { Count: > 0 }) && g.Value.All(e => e.Attuned is null && e.ChargesSpent is null)))
+            changes.Add(new($"equipment[{equipment.ToList().FindIndex(e => e.Item == item)}]", BelowAction.Dropped, BelowCodes.ItemModCopies,
+                $"'{name}': {group.Count} copies of one item merged into one; they differed only by their mods."));
+
+        return character with { Equipment = merged };
+    }
 
     private static Character BelowV10(Character character, string name, List<BelowChange> changes)
     {

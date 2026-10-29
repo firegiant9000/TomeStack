@@ -68,7 +68,8 @@
       { "feature": "roll.payment", "rule": "below.payment" },
       { "feature": "attack.payment", "rule": "below.payment" },
       { "feature": "toggle.payment", "rule": "below.payment" },
-      { "feature": "roll.castsSpell", "rule": "below.casts-spell" }
+      { "feature": "roll.castsSpell", "rule": "below.casts-spell" },
+      { "feature": "payment.kind:resource", "rule": "below.v12-key" }
     ]
   },
   "character": {
@@ -88,6 +89,10 @@
     "10": [
       { "feature": "play.encounter", "rule": "below.encounter-running" },
       { "feature": "play.toggles[].roundsLeft", "rule": "below.rounds-left" }
+    ],
+    "11": [
+      { "feature": "equipment[].mods", "rule": "below.item-mods" },
+      { "feature": "equipment[].mods:copies", "rule": "below.item-mod-copies" }
     ]
   }
 }

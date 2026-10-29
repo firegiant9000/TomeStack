@@ -253,8 +253,8 @@ public class ReleaseLadderTests
         Assert.Null(content.OpensIn);
         Assert.Equal("Opening this needs a TomeStack version that reads content schema 12 or later: it holds content that older versions refuse.", Assert.Single(content.Warnings).Message);
 
-        var character = NewerBuild.Evaluate([], [Hero() with { SchemaVersion = 11 }], 0, [], _ => "");
-        Assert.Equal("Opening this needs a TomeStack version that reads character schema 11 or later: it holds a character that older versions refuse.", Assert.Single(character.Warnings).Message);
+        var character = NewerBuild.Evaluate([], [Hero() with { SchemaVersion = 12 }], 0, [], _ => "");
+        Assert.Equal("Opening this needs a TomeStack version that reads character schema 12 or later: it holds a character that older versions refuse.", Assert.Single(character.Warnings).Message);
     }
 
     [Theory]

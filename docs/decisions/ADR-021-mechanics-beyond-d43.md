@@ -40,7 +40,7 @@ The work is one item at a time. Each item is generic and declarative, with a tra
 | Content v12 | `weapon.bonus` (item 0) | approved by the owner (2026-10-27) |
 | Content v12 | `payment` (on a roll, a feature attack and a toggle), `castsSpell` (on a roll) and spell `tags` (item 1) | approved by the owner (2026-10-27) |
 | Content v12 | `replaceable` on a choice (item 2) | approved by the owner (2026-10-27) |
-| Character v11 | none yet (only if items 3–4 need one) | not proposed |
+| Character v11 | `equipment[].mods` (item 3) | approved by the owner (2026-10-27); taken (T2 commit) |
 
 ## Consequences
 

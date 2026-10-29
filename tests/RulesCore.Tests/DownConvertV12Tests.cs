@@ -33,16 +33,50 @@ public class DownConvertV12Tests
     }
 
     [Theory]
-    [InlineData("""{"type":"roll","id":"r","rollId":"r","label":"R","dice":"1d6","payment":{"kind":"resource"}}""", "effects[0].payment", "below.payment")]
+    [InlineData("""{"type":"roll","id":"r","rollId":"r","label":"R","dice":"1d6","payment":{"kind":"hitPoints"}}""", "effects[0].payment", "below.payment")]
     [InlineData("""{"type":"roll","id":"r","rollId":"r","label":"R","dice":"1d6","castsSpell":"6f0dc000-0000-4000-8000-0000000000b1"}""", "effects[0].castsSpell", "below.casts-spell")]
-    [InlineData("""{"type":"attack","id":"a","attackId":"a","label":"Strike","kind":"melee","abilities":["str"],"payment":{"kind":"resource"}}""", "effects[0].payment", "below.payment")]
-    [InlineData("""{"type":"toggle","id":"t","toggleId":"t","label":"T","payment":{"kind":"resource"}}""", "effects[0].payment", "below.payment")]
+    [InlineData("""{"type":"attack","id":"a","attackId":"a","label":"Strike","kind":"melee","abilities":["str"],"damage":{"count":"1","die":"6"},"damageType":"fire","payment":{"kind":"hitPoints"}}""", "effects[0].payment", "below.payment")]
+    [InlineData("""{"type":"toggle","id":"t","toggleId":"t","label":"T","payment":{"kind":"slot"}}""", "effects[0].payment", "below.payment")]
+    [InlineData("""{"type":"toggle","id":"t","toggleId":"t","label":"T","Payment":{"kind":"slot"}}""", "effects[0].payment", "below.payment")]
     public void Payment_and_casts_spell_block(string effect, string path, string code)
     {
         var result = DownConvert.Below(Rev(effect), 11);
 
         Assert.True(result.Blocked);
-        Assert.Contains(result.Changes, c => c.Action == BelowAction.Blocks && c.Code == code && c.Path == path);
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(BelowAction.Blocks, change.Action);
+        Assert.Equal(code, change.Code);
+        Assert.Equal(path, change.Path);
+    }
+
+    [Theory]
+    [InlineData("""{"type":"roll","id":"r","rollId":"r","label":"R","dice":"1d6","payment":{"kind":"resource"}}""")]
+    [InlineData("""{"type":"attack","id":"a","attackId":"a","label":"Strike","kind":"melee","abilities":["str"],"damage":{"count":"1","die":"6"},"damageType":"fire","payment":{"kind":"resource"}}""")]
+    [InlineData("""{"type":"toggle","id":"t","toggleId":"t","label":"T","payment":{"kind":"Resource"}}""")]
+    [InlineData("""{"type":"toggle","id":"t","toggleId":"t","label":"T","payment":{}}""")]
+    public void A_resource_payment_is_today_s_pool_and_drops(string effect)
+    {
+        var result = DownConvert.Below(Rev(effect), 11);
+
+        Assert.False(result.Blocked);
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(BelowAction.Dropped, change.Action);
+        Assert.Equal(BelowCodes.V12Key, change.Code);
+        Assert.Equal("effects[0].payment", change.Path);
+        Assert.DoesNotContain("payment", Written(result), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void One_revision_can_drop_and_block_together()
+    {
+        var resource = """{"type":"roll","id":"r","rollId":"r","label":"R","dice":"1d6","payment":{"kind":"resource"}}""";
+        var hitPoints = """{"type":"toggle","id":"t","toggleId":"t","label":"T","payment":{"kind":"hitPoints"}}""";
+        var result = DownConvert.Below(Rev($"{resource},{hitPoints}"), 11);
+
+        Assert.True(result.Blocked);
+        Assert.Collection(result.Changes.OrderBy(c => c.Path, StringComparer.Ordinal),
+            c => { Assert.Equal("effects[0].payment", c.Path); Assert.Equal(BelowAction.Dropped, c.Action); Assert.Equal(BelowCodes.V12Key, c.Code); },
+            c => { Assert.Equal("effects[1].payment", c.Path); Assert.Equal(BelowAction.Blocks, c.Action); Assert.Equal(BelowCodes.Payment, c.Code); });
     }
 
     [Fact]
@@ -89,10 +123,14 @@ public class DownConvertV12Tests
     [Fact]
     public void Lowering_to_10_runs_both_steps()
     {
+        var mod = """{"type":"itemMod","id":"m","appliesTo":"weapon","bonus":1}""";
         var toggle = """{"type":"toggle","id":"t","toggleId":"t","label":"T","group":"forms"}""";
-        var result = DownConvert.Below(Item($"{WeaponWith(""","bonus":1""")},{toggle}"), 10);
+        var result = DownConvert.Below(Item($"{mod},{WeaponWith(""","bonus":1""")},{toggle}"), 10);
 
-        Assert.Contains(result.Changes, c => c.Code == BelowCodes.WeaponBonus);
-        Assert.Contains(result.Changes, c => c.Code == BelowCodes.ToggleGroup);
+        Assert.Equal(10, result.Revision.SchemaVersion);
+        Assert.Contains(result.Changes, c => c.Code == BelowCodes.EffectUnsupported && c.Path == "effects[0]");
+        Assert.Contains(result.Changes, c => c.Code == BelowCodes.WeaponBonus && c.Path == "effects[1].bonus");
+        // The item mod was removed at index 0 in the v12 step; the v11 step still reports the toggle at its original index.
+        Assert.Contains(result.Changes, c => c.Code == BelowCodes.ToggleGroup && c.Path == "effects[2].group");
     }
 }

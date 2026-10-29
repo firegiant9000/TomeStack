@@ -224,8 +224,9 @@ public class SchemaTests
 
     [Theory]
     [InlineData(10, false)]
-    [InlineData(11, true)]
-    public void A_package_character_entry_at_schema_v10_is_accepted_and_v11_is_refused(int version, bool refused)
+    [InlineData(11, false)]
+    [InlineData(12, true)]
+    public void A_package_character_entry_at_schema_v11_is_accepted_and_v12_is_refused(int version, bool refused)
     {
         using var origin = new TempApp();
         var saved = origin.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json"));
@@ -237,7 +238,7 @@ public class SchemaTests
 
         Assert.Equal(refused, errors.Count > 0);
         if (refused)
-            Assert.All(errors, e => Assert.Contains("character schema v11", e.Message, StringComparison.Ordinal));
+            Assert.All(errors, e => Assert.Contains("character schema v12", e.Message, StringComparison.Ordinal));
     }
 
     [Fact]

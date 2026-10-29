@@ -624,6 +624,9 @@ internal static class Generators
         from round in OptionalValue(Gen.Choose(0, PlayState.MaxRounds))
         from toggleIds in Gen.Choose(0, 2)
         from roundsLeft in OptionalValue(Gen.Choose(0, PlayState.MaxRounds)).ArrayOf(2)
+        // Schema v11 field (MECH-X item 3), mostly absent: 0 to 2 mods on the first equipment entry, never equal to its item. A character is written as v11 only then.
+        from modCount in Gen.Frequency((6, Gen.Constant(0)), (1, Gen.Constant(1)), (1, Gen.Constant(2)))
+        from mods in References.ArrayOf(2)
         // A field this build does not know: it round-trips through Character.Extensions.
         from extra in Optional(Keys)
         from extraNumber in Gen.Choose(-1000, 1000)
@@ -637,7 +640,7 @@ internal static class Generators
             BaseAbilities = new(scores[0], scores[1], scores[2], scores[3], scores[4], scores[5]),
             Pins = pins,
             Overrides = overrides,
-            Equipment = [.. items.Select((item, i) => new EquipmentEntry(item, equipped[i], quantity[i], Attuned: i == 0 ? attuned : null))],
+            Equipment = [.. items.Select((item, i) => new EquipmentEntry(item, equipped[i], quantity[i], Attuned: i == 0 ? attuned : null, Mods: i == 0 && modCount > 0 ? [.. mods.Take(modCount)] : null))],
             Xp = xp,
             Details = alignment is null ? null : new(Alignment: alignment),
             Spells = [.. spells.Select((s, i) => new KnownSpell(caster, s, i % 2 == 0))],
