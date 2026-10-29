@@ -24,6 +24,7 @@ _**2026-10-18 (LIVING_SPECS D60; owner ruling):** T2 no longer gates anything. I
 
 _**2026-10-20 (LIVING_SPECS D41 and D60 amended; owner ruling):** there is no feature freeze. 0.6.0 is released when Wave 3 is done, and the session (about 2026-11-11) is context, not a deadline. The play-mechanics engine (D43, ADR-018) ships in the release after 0.6.0. The queue is wave 2, wave 3, 0.6.0, the play-mechanics engine, then the Homebrew Import Lab (below). The lab's scope is narrowed (D62), and DM and combat tools stay banned but are noted for later (D63, under R4). The "Owed owner checks" table is re-checked against the recorded evidence as of 2026-10-20._
 
+_**2026-10-26 (LIVING_SPECS D60 amended; owner ruling):** content breadth (Track 1) is queued: the SRD species, backgrounds and feats off `main` now, then Monk, Rogue and Barbarian after the play-mechanics engine merges. The content-breadth row below reads "queued". SRD 5.2.1's species, backgrounds and feats are the first of it._
 _**2026-10-24:** the play-mechanics engine (D43, slices 1 to 8) is built and integrated for **0.7.0**. Its owner checks (accessibility rows 69 to 85, the rehearsal with the owner's own content on an installed build) are open. Next in the queue: the Homebrew Import Lab._
 
 ### R1. Decision
@@ -47,7 +48,7 @@ The rule from LIVING_SPECS D13 stands: everything M5 chose provisionally (templa
 | M6 slices 2 to 6 (campaign packs #39, extension API #40, export adapters #41, docs #42, exit gate #43) | ~~DEFERRED until after T2~~ CURRENT (built 2026-09-29 by owner direction, D15; merged to `main` 2026-09-30 via #46; fixture-verified, not Windows-install verified) | Sharing and extension | Kept. Merged through T1 with the rest of the stack after the owner approved their schema, format and database changes (recorded). The gap report may re-rank follow-up work on them (for example, which VTT the group uses); it does not undo them. The M6 exit gate's cross-machine part is T6. | Medium | Round-trip evidence (fixture-verified) |
 | M6 optional B09 palette, B11 tags | DEFERRED | Polish | After use. | Low | None |
 | M7 Expanded tabletop | DEFERRED | Monsters, DM tools, local AI | Nothing in the evidence asks for it. | Unknown | None |
-| Content breadth (Monk, Rogue, Barbarian 4 to 20, species, backgrounds) | DEFERRED ~~until T2~~ (no longer gated by T2, D60; not queued) | MVP goal | Already an owner decision; the session decides what is missing. | High if needed | None |
+| Content breadth (Monk, Rogue, Barbarian 4 to 20, species, backgrounds; SRD 5.2.1 species, backgrounds and feats bundled 2026-10-26) | ~~DEFERRED until T2~~ QUEUED (no longer gated by T2, D60; ~~not queued~~ queued, D60 amended 2026-10-26) | MVP goal | Already an owner decision; the session decides what is missing. | High if needed | None |
 | Cloud sync, accounts, executable plugin sandbox | CANCELLED | (never planned; recorded to close the question) | Contradicts SPEC and ADR-011 option A. | n/a | n/a |
 | Accessibility owner checks (items 6, 15 to 17 and 18 to 27; the 0.2.2 pass was keyboard only, #24) | OPTIONAL | WCAG AA passes | Do the Narrator pass once with an artifact; do not block milestones on it. | Medium | Small |
 | ADR-008 pre-release checklist (trademark, REDIST, Velopack notices, signing) | SUPERSEDED by T5 | Before the first installer | Becomes the acceptance list of T5. | High | Release evidence |
@@ -178,7 +179,8 @@ On another physical machine or a clean VM: install the T5 release, restore a ful
   - a package preflight (provenance, notices and redistributable flags, with import-derived content blocked);
   - duplicate detection that only lists duplicates and never merges them.
 
-  It adds a deterministic Markdown importer that feeds the existing detector. Recipes, the source graph, batch review and version diff, edition lineage, importers for other third-party formats, and a simulator are deferred. Bring the spec into `docs/` first, so the repository holds it.
+  It adds a deterministic Markdown importer that feeds the existing detector. Recipes, the source graph, batch review and version diff, edition lineage, importers for other third-party formats, and a simulator are deferred. The requirements are in [features/import-lab.md](features/import-lab.md) (in `docs/` as of 2026-10-24).
+- **Status (2026-10-26).** Built on branch `import-lab`, awaiting the whole-branch review and the owner's merge: the six things above and the Markdown importer, except that the library-scale pass has no indexed per-source queries (the database v12 proposal, A4, declined by the owner on 2026-10-25). The D60 gate tests pass and the SRD precision/recall table is recorded in [features/m4-acceptance.md](features/m4-acceptance.md). **Still owed by the owner:** the private third-party PDF run, so M4 stays not met (the owed-checks row below keeps its status); and AUD-02.
 - **Deterministic by default.** It reuses the existing PdfPig/OCR worker and `CandidateDetector`.
 - **Separate statuses.** "Parsed", "human reviewed" and "playable" are three different statuses (spec §8B).
 - **No AI in this milestone.** Any AI import is a later, separate, optional and consented feature (spec §12). RulesCore stays independent of any LLM (spec §9).

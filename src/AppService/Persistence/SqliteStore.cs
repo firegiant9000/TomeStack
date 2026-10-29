@@ -507,7 +507,7 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
     public (IReadOnlyList<StoredCandidate> Items, int Total) QueryImportCandidates(Guid jobId, ImportCandidateFilter filter, int offset, int? limit)
     {
         ArgumentNullException.ThrowIfNull(filter);
-        var sql = new StringBuilder("SELECT id, page, name FROM import_candidates WHERE job_id = $job");
+        var sql = new StringBuilder("FROM import_candidates WHERE job_id = $job");
         var parameters = new List<(string, object)> { ("$job", Key(jobId)) };
         if (filter.Status is { } status)
         {
@@ -539,18 +539,36 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
             sql.Append(" AND confidence <= $max");
             parameters.Add(("$max", max));
         }
-        sql.Append(" ORDER BY rowid;");
+        var from = sql.ToString();
+        offset = Math.Max(0, offset);
         lock (_gate)
         {
+            // Import Lab L3: the order is page first, so the page of the item at any position is the page at that position in a
+            // page-only order. Two scalar reads find the pages the window starts and ends on, a count finds the items before them,
+            // and only the rows of those pages (the ids and names to order within a page) are read, so a page turn allocates the
+            // same however many candidates the job holds. Within a page the order is the name ignoring case, ties in storage order.
+            var total = Convert.ToInt32(Scalar($"SELECT COUNT(*) {from};", parameters), System.Globalization.CultureInfo.InvariantCulture);
+            if (offset >= total || limit is <= 0)
+                return ([], total);
+            var firstPage = Convert.ToInt32(Scalar($"SELECT page {from} ORDER BY page LIMIT 1 OFFSET $at;", [.. parameters, ("$at", offset)]), System.Globalization.CultureInfo.InvariantCulture);
+            var window = $"{from} AND page >= $lo";
+            var windowParameters = new List<(string, object)>(parameters) { ("$lo", firstPage) };
+            if (limit is { } take && (long)offset + take < total)
+            {
+                var lastPage = Convert.ToInt32(Scalar($"SELECT page {from} ORDER BY page LIMIT 1 OFFSET $at;", [.. parameters, ("$at", offset + take - 1)]), System.Globalization.CultureInfo.InvariantCulture);
+                window += " AND page <= $hi";
+                windowParameters.Add(("$hi", lastPage));
+            }
+            var before = Convert.ToInt32(Scalar($"SELECT COUNT(*) {from} AND page < $lo;", [.. parameters, ("$lo", firstPage)]), System.Globalization.CultureInfo.InvariantCulture);
             var keys = new List<(string Id, int Page, string Name)>();
-            using (var command = Command(sql.ToString(), [.. parameters]))
+            using (var command = Command($"SELECT id, page, name {window} ORDER BY rowid;", [.. windowParameters]))
             using (var reader = command.ExecuteReader())
             {
                 while (reader.Read())
                     keys.Add((reader.GetString(0), reader.GetInt32(1), reader.GetString(2)));
             }
             var ordered = keys.OrderBy(k => k.Page).ThenBy(k => k.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
-            var wanted = ordered.Skip(Math.Max(0, offset)).Take(limit ?? int.MaxValue).Select(k => k.Id).ToList();
+            var wanted = ordered.Skip(offset - before).Take(limit ?? int.MaxValue).Select(k => k.Id).ToList();
             var json = new Dictionary<string, string>(wanted.Count, StringComparer.Ordinal);
             foreach (var chunk in wanted.Chunk(400))
             {
@@ -560,8 +578,14 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
                 while (reader.Read())
                     json[reader.GetString(0)] = reader.GetString(1);
             }
-            return ([.. wanted.Where(json.ContainsKey).Select(id => ReadCandidate(json[id]))], ordered.Count);
+            return ([.. wanted.Where(json.ContainsKey).Select(id => ReadCandidate(json[id]))], total);
         }
+    }
+
+    private object? Scalar(string sql, IReadOnlyList<(string Name, object Value)> parameters)
+    {
+        using var command = Command(sql, [.. parameters]);
+        return command.ExecuteScalar();
     }
 
     /// <summary>R120: a stored candidate with its compare-and-swap token (the SHA-256 of the stored JSON string, as read).</summary>
@@ -794,8 +818,16 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
             parameters);
     }
 
-    public IReadOnlyList<ContentRevision> ListRevisions() =>
-        Query<ContentRevision>("SELECT json FROM content_revisions ORDER BY content_id, revision_id;");
+    public IReadOnlyList<ContentRevision> ListRevisions()
+    {
+        Interlocked.Increment(ref _libraryReads);
+        return Query<ContentRevision>("SELECT json FROM content_revisions ORDER BY content_id, revision_id;");
+    }
+
+    /// <summary>Test seam: how many whole-library reads <see cref="ListRevisions()"/> has made (Import Lab L3: one per candidate edit).</summary>
+    internal long LibraryReads => Interlocked.Read(ref _libraryReads);
+
+    private long _libraryReads;
 
     /// <summary>Every stored revision (draft or published) of one content entity, in insertion order.</summary>
     public IReadOnlyList<ContentRevision> ListRevisions(Guid contentId) =>
