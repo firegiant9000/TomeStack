@@ -16,7 +16,17 @@ public static partial class ClassProposals
     public const string SpellcastingId = "spellcasting";
     public const string SubclassId = "subclass";
 
-    public sealed record Proposal(IReadOnlyList<Effect> Effects, IReadOnlyList<string> Uncertainties, IReadOnlyList<string> LowConfidenceFields, IReadOnlyDictionary<string, string> Fields);
+    public sealed record Proposal(IReadOnlyList<Effect> Effects, IReadOnlyList<string> Uncertainties, IReadOnlyList<string> LowConfidenceFields, IReadOnlyDictionary<string, string> Fields)
+    {
+        /// <summary>D64: for each proposed effect id, the pattern that read it and the text it matched (to place a span on the page).</summary>
+        public IReadOnlyDictionary<string, EffectSource> Sources { get; init; } = new Dictionary<string, EffectSource>();
+    }
+
+    /// <summary>
+    /// D64: what a proposed effect was read from. <paramref name="Needle"/> is the text matched (null: the level table as a whole);
+    /// <paramref name="Label"/> is the trait label a joined "label value" line starts with, used when the needle spans lines.
+    /// </summary>
+    public sealed record EffectSource(string PatternId, string? Needle, string? Label = null);
 
     /// <param name="className">The class's display name ("Fixture Lamplighter").</param>
     /// <param name="table">The reconstructed level table, or null when it could not be read whole.</param>
@@ -30,13 +40,17 @@ public static partial class ClassProposals
         var fields = new Dictionary<string, string>(StringComparer.Ordinal);
         var key = SpellListKeyOf(className);
         var idStem = key.Length > 0 ? key : "class";
+        var sources = new Dictionary<string, EffectSource>(StringComparer.Ordinal);
 
         foreach (var line in pageText)
         {
             if (effects.Any(e => e is HitDieEffect))
                 break;
             if (HitDie().Match(line) is { Success: true } hit)
+            {
                 effects.Add(new HitDieEffect { Id = HitDieId, Die = int.Parse(hit.Groups["die"].Value, CultureInfo.InvariantCulture), Text = "Hit die read from the class page." });
+                sources[HitDieId] = new(DetectionPatterns.ClassHitDie, line, TraitLabelOf(line));
+            }
         }
         if (!effects.Any(e => e is HitDieEffect))
             uncertainties.Add("The hit die was not found on the class page: add it by hand.");
@@ -51,10 +65,12 @@ public static partial class ClassProposals
                 continue; // prose that starts like the label
             foreach (var ability in abilities)
             {
+                var saveId = $"save-{FieldIds.Key(ability)}";
                 effects.Add(new GrantEffect
                 {
-                    Id = $"save-{FieldIds.Key(ability)}", Grant = GrantKind.Proficiency, Target = FieldIds.Save(ability), OnlyAs = ClassEntry.StartingClass,
+                    Id = saveId, Grant = GrantKind.Proficiency, Target = FieldIds.Save(ability), OnlyAs = ClassEntry.StartingClass,
                 });
+                sources[saveId] = new(DetectionPatterns.ClassSaves, line, TraitLabelOf(line));
             }
             savesFound = true;
             break;
@@ -83,6 +99,8 @@ public static partial class ClassProposals
                 effects.Add(new GrantEffect { Id = "armor-shield", Grant = GrantKind.Proficiency, Target = "armor.shield" });
             if (effects.Count == before && !list.Contains("none", StringComparison.Ordinal))
                 continue; // prose that starts like the label
+            for (var n = before; n < effects.Count; n++)
+                sources[effects[n].Id] = new(DetectionPatterns.ClassArmorTraining, line, TraitLabelOf(line));
             armorFound = true; // "Armor: None" is a reading too, with nothing to propose
             break;
         }
@@ -105,7 +123,10 @@ public static partial class ClassProposals
                 break;
             }
             foreach (var kind in kinds)
+            {
                 effects.Add(new GrantEffect { Id = $"weapon-{kind}", Grant = GrantKind.Proficiency, Target = $"weapon.{kind}" });
+                sources[$"weapon-{kind}"] = new(DetectionPatterns.ClassWeaponTraining, line, TraitLabelOf(line));
+            }
             break;
         }
         if (!weaponsFound)
@@ -125,20 +146,21 @@ public static partial class ClassProposals
         if (SubclassLevel(featuresByLevel) is { } subclassLevel)
         {
             effects.Add(new ChoiceEffect { Id = $"{idStem}-{SubclassId}", ChoiceId = $"{idStem}-{SubclassId}", Count = 1, Level = subclassLevel });
+            sources[$"{idStem}-{SubclassId}"] = new(DetectionPatterns.ClassSubclass, SubclassFeatureName(featuresByLevel, subclassLevel));
             uncertainties.Add("The subclass choice is proposed with no options: subclasses extend it.");
         }
 
         IReadOnlyList<string> castingText = followingText is { Count: > 0 } ? [.. pageText, .. followingText] : pageText;
         if (table is not null && table.HasSlotColumns)
-            ProposeSpellcasting(key, table, castingText, effects, uncertainties, lowConfidence);
+            ProposeSpellcasting(key, table, castingText, effects, uncertainties, lowConfidence, sources);
         else if (table is not null && castingText.Any(l => l.Contains("spellcasting", StringComparison.OrdinalIgnoreCase)))
             // Spellcasting is proposed from slots only; a caster with another table shape (a highest spell level, a pool) is the reviewer's.
             uncertainties.Add("The class mentions spellcasting, but its table has no spell slot columns: add spellcasting by hand if it casts spells.");
 
-        return new(effects, uncertainties, lowConfidence, fields);
+        return new(effects, uncertainties, lowConfidence, fields) { Sources = sources };
     }
 
-    private static void ProposeSpellcasting(string key, ClassTable table, IReadOnlyList<string> pageText, List<Effect> effects, List<string> uncertainties, List<string> lowConfidence)
+    private static void ProposeSpellcasting(string key, ClassTable table, IReadOnlyList<string> pageText, List<Effect> effects, List<string> uncertainties, List<string> lowConfidence, Dictionary<string, EffectSource> sources)
     {
         // Lines wrap, so the sentence can span two, and a word can break across them ("spellcast- ing").
         var ability = CastingAbility().Match(LineBreakHyphen().Replace(string.Join(' ', pageText), "$1$2")) is { Success: true } found ? found : null;
@@ -173,6 +195,7 @@ public static partial class ClassProposals
             SpellsTable = spellsTable,
             Text = "Slots, cantrips and spells read from the class table.",
         });
+        sources[SpellcastingId] = new(DetectionPatterns.ClassSpellcasting, ability.Value);
         lowConfidence.Add("spellList");
         uncertainties.Add($"The spell list is assumed to be this class's own ({key}): check it before accepting.");
         if (table.SpellsLabel is not null && spellsTable is null)
@@ -207,7 +230,7 @@ public static partial class ClassProposals
     }
 
     [GeneratedRegex(@"^Core .{1,60} Traits$", RegexOptions.IgnoreCase, DetectionLimits.RegexTimeoutMs)]
-    private static partial Regex CoreHeading();
+    internal static partial Regex CoreHeading();
 
     private static List<string> JoinedLabels(IReadOnlyList<TextLine> lines)
     {
@@ -266,6 +289,12 @@ public static partial class ClassProposals
         }
         return null;
     }
+
+    /// <summary>The Features-column name at <paramref name="level"/> that <see cref="SubclassLevel"/> chose (for placing its span).</summary>
+    private static string? SubclassFeatureName(IReadOnlyDictionary<int, IReadOnlyList<string>> featuresByLevel, int level) =>
+        featuresByLevel.TryGetValue(level, out var names)
+            ? names.FirstOrDefault(n => n.Contains("subclass", StringComparison.OrdinalIgnoreCase)) ?? names.FirstOrDefault(n => n.EndsWith(" feature", StringComparison.OrdinalIgnoreCase))
+            : null;
 
     private static Ability AbilityOf(string name) => name.ToLowerInvariant() switch
     {

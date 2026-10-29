@@ -42,6 +42,7 @@
     <!-- local\ holds the owner's private files; tests read them from the source tree, so none is copied to bin. -->
     <None Include="..\RulesFixtures\**\*.json" Exclude="..\RulesFixtures\local\**" LinkBase="RulesFixtures" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\RulesFixtures\pdf\*.pdf" LinkBase="RulesFixtures\pdf" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\RulesFixtures\lab\*.md" LinkBase="RulesFixtures\lab" CopyToOutputDirectory="PreserveNewest" />
     <!-- A data folder's database from a build of the v0.5.0 tag (UpgradeTests); named .sqlite because *.db is gitignored. -->
     <None Include="..\RulesFixtures\upgrade\**\*.sqlite" LinkBase="RulesFixtures\upgrade" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\docs\schemas\*.json" LinkBase="schemas" CopyToOutputDirectory="PreserveNewest" />

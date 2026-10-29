@@ -39,6 +39,17 @@ public class MechanicsInventoryTests
         Assert.Empty(MechanicsInventory.Of(CharacterCalculator.Calculate(character, catalog), new HashSet<Guid>()).Mechanics); // other sources only
     }
 
+    /// <summary>A published feat from the test homebrew source that holds <paramref name="effects"/>, for the per-type capability evidence tests (ADR-020).</summary>
+    internal static ContentRevision Holder(string name, int schemaVersion, params Effect[] effects) => new()
+    {
+        ContentId = Guid.NewGuid(), RevisionId = Guid.NewGuid(), SchemaVersion = schemaVersion, Kind = ContentKind.Feat, Name = name,
+        RulesFamilies = [RulesFamilies.Srd521], Provenance = new(Homebrew, new(4)), Status = RevisionStatus.Published, Effects = effects,
+    };
+
+    /// <summary>The character with <paramref name="revision"/> pinned, its sheet, and the mechanics report for the homebrew source.</summary>
+    internal static (MechanicsReport Report, CharacterSheet Sheet) Pinned(ContentRevision revision) =>
+        Report(revision, c => c with { Pins = [.. c.Pins, revision.Reference] });
+
     private static (MechanicsReport Report, CharacterSheet Sheet) Report(ContentRevision revision, Func<Character, Character> shape)
     {
         var source = new SourceRecord
@@ -50,7 +61,47 @@ public class MechanicsInventoryTests
         var catalog = new InMemoryContentCatalog([.. pack.Sources, source], [.. pack.Revisions, revision]);
         var character = shape(Fixtures.Srd521Character());
         var sheet = CharacterCalculator.Calculate(character, catalog);
-        return (MechanicsInventory.Of(sheet, new HashSet<Guid> { Homebrew }), sheet);
+        return (MechanicsInventory.Of(sheet, new HashSet<Guid> { Homebrew }, catalog), sheet);
+    }
+
+    [Fact]
+    public void Each_mechanic_carries_the_effective_automation_and_the_authors_value_is_unchanged()
+    {
+        var holder = Holder("Test Wary Feat", 11, new RollModeEffect { Id = "wary", Target = "save.wis", Mode = RollMode.Advantage, Against = ["frightened"] });
+
+        var (report, _) = Pinned(holder);
+
+        var wary = Assert.Single(report.Mechanics, m => m.EffectId == "wary");
+        Assert.Equal(AutomationStatus.Automatic, wary.Automation); // the author's value stays
+        Assert.Equal(AutomationStatus.Assisted, wary.Effective?.Status); // the engine only lists it with its conditions
+        Assert.False(wary.Effective?.Unsupported);
+    }
+
+    [Fact]
+    public void An_unregistered_type_is_effectively_unsupported_and_a_text_only_feature_is_reference()
+    {
+        var odd = Fixtures.RevisionWithEffect("""{"type":"fixture-unknown","id":"odd","text":"Odd."}""", 11) with { Provenance = new(Homebrew, new(4)) };
+        var (report, _) = Report(odd, c => c with { Pins = [.. c.Pins, odd.Reference] });
+        var effective = Assert.Single(report.Mechanics, m => m.EffectId == "odd").Effective;
+        Assert.True(effective?.Unsupported);
+        Assert.Null(effective?.Status);
+
+        var prose = Holder("Test Prose Feat", 11);
+        var (textReport, _) = Pinned(prose);
+        var line = Assert.Single(textReport.Mechanics, m => m.EffectType == "text");
+        Assert.Equal(AutomationStatus.Reference, line.Effective?.Status);
+    }
+
+    [Fact]
+    public void Without_a_catalog_no_effective_value_is_given()
+    {
+        var feat = Holder("Test Plain Feat", 11, new ModifierEffect { Id = "bonus", Operation = ModifierOperation.Bonus, Target = FieldIds.Initiative, Value = "1" });
+        var source = new SourceRecord { Id = Homebrew, Title = "T", Publisher = "P", RulesFamilies = [RulesFamilies.Srd521], EditionVersion = "homebrew", License = "L", Redistributable = false };
+        var pack = Fixtures.Pack();
+        var catalog = new InMemoryContentCatalog([.. pack.Sources, source], [.. pack.Revisions, feat]);
+        var character = Fixtures.Srd521Character() with { Pins = [.. Fixtures.Srd521Character().Pins, feat.Reference] };
+        var report = MechanicsInventory.Of(CharacterCalculator.Calculate(character, catalog), new HashSet<Guid> { Homebrew });
+        Assert.All(report.Mechanics, m => Assert.Null(m.Effective));
     }
 
     [Fact]
@@ -75,6 +126,21 @@ public class MechanicsInventoryTests
         Assert.Equal(AutomationStatus.Automatic, Assert.Single(report.Mechanics, m => m.EffectId == "ink-roll").Automation);
         Assert.DoesNotContain(sheet.Diagnostics, d => d.Content == feat.Reference);
         Assert.DoesNotContain(sheet.Features!.SelectMany(f => f.Diagnostics), d => d.EffectId == "ink-roll");
+    }
+
+    [Fact]
+    public void Unregistered_types_are_reported_unsupported()
+    {
+        var holder = Fixtures.RevisionWithEffect("""{"type":"fixture-unknown","id":"odd","text":"Do the odd thing by hand."}""", 11) with
+        {
+            Provenance = new(Homebrew, new(4)),
+        };
+
+        var (report, _) = Report(holder, c => c with { Pins = [.. c.Pins, holder.Reference] });
+
+        var odd = Assert.Single(report.Unsupported);
+        Assert.Equal(("odd", "fixture-unknown", AutomationStatus.Reference), (odd.EffectId, odd.EffectType, odd.Automation));
+        Assert.Contains(report.Mechanics, m => m.EffectId == "odd");
     }
 
     [Fact]

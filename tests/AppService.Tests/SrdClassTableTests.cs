@@ -207,13 +207,16 @@ public class SrdClassTableTests(ITestOutputHelper output)
 
     /// <summary>
     /// Wave 0/1 minor (R81): the "add spellcasting by hand" note is for a class whose table has no spell slot columns. On both SRDs
-    /// no class is in that state: every caster's table is read with its slot columns, and a non-caster never mentions spellcasting.
-    /// Counts only, never names.
+    /// no class is in that state: every caster's table is read with its slot columns, and a non-caster never mentions spellcasting
+    /// (its following text ends where the next class begins). The assertion is on that slotless note only: the older notes that
+    /// also end "add spellcasting by hand" (a slot table read without its ability, or not read whole, or a class name that is not a spell list key) are about a caster's own
+    /// table, so they are only held at today's count (one caster per SRD). Counts only, never names.
     /// </summary>
     [SrdPdfFact]
     public async Task No_SRD_class_gets_the_add_spellcasting_by_hand_note()
     {
-        const string Note = "add spellcasting by hand";
+        const string Note = "its table has no spell slot columns";
+        const string AnyByHand = "add spellcasting by hand";
         var failures = new List<string>();
         foreach (var (family, file, _, version) in Pdfs)
         {
@@ -225,9 +228,12 @@ public class SrdClassTableTests(ITestOutputHelper output)
             }
             var classes = CandidateDetector.Detect(pages, new(Guid.NewGuid(), [family], _ => false)).Where(c => c.ProposedKind == ContentKind.Class).ToList();
             var noted = classes.Count(c => c.Uncertainties.Any(u => u.Contains(Note, StringComparison.OrdinalIgnoreCase)));
-            output.WriteLine($"{version}: classes {classes.Count}, with the slotless note {noted}");
+            var otherNotes = classes.Count(c => c.Uncertainties.Any(u => u.Contains(AnyByHand, StringComparison.OrdinalIgnoreCase) && !u.Contains(Note, StringComparison.OrdinalIgnoreCase)));
+            output.WriteLine($"{version}: classes {classes.Count}, with the slotless note {noted}, with another add-spellcasting note {otherNotes}");
             Assert.NotEmpty(classes);
             if (noted != 0) failures.Add($"{version} {noted} of {classes.Count} classes carry the slotless note");
+            // Today's baseline for the older notes is one caster per SRD; lower it when those are read.
+            if (otherNotes > 1) failures.Add($"{version} {otherNotes} of {classes.Count} classes carry another add-spellcasting note");
         }
         Assert.True(failures.Count == 0, string.Join("; ", failures));
     }
