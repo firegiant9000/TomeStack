@@ -555,7 +555,7 @@ public sealed partial class TomeStackApp
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            var id = Guid.NewGuid().ToString("N")[..8];
+            var id = FileErrorLog.NewCorrelationId();
             ErrorLog.Record(id, "import.run", ex); // TomeStack's own code threw: no PDF text in it (the worker's never reach here)
             Finish(job, ImportJobStatus.Failed, "failed", "import.internal", ("import.internal", $"The import failed unexpectedly (reference {id})."));
         }

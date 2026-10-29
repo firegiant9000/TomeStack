@@ -38,6 +38,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "library.backupPreview", "library.backupSaveAs", "library.restoreChoose", "library.restoreApply",
         "ddb.read", "ddb.readData", "ddb.readText", "ddb.preview", "ddb.apply", "ddb.discard",
         "content.previewFormula", "content.coverage", "content.classTable", "content.duplicates",
+        "diagnostics.copy",
     ];
 
     /// <summary>
@@ -216,6 +217,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "library.backupSaveAs" => SaveLibraryBackupAs(),
         "library.restoreChoose" => ChooseLibraryRestore(),
         "library.restoreApply" => ApplyLibraryRestore(Payload<RestorePayload>(payload)),
+        "diagnostics.copy" => new { text = Diagnostics.DiagnosticsCopy.For(app) },
         _ => throw new UnknownCommandException(command),
     };
 
