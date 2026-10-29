@@ -28,6 +28,11 @@
     <EmbeddedResource Include="Content\srd-5.2.1-armor.json" LogicalName="TomeStack.Content.srd-5.2.1-armor.json" />
     <EmbeddedResource Include="Content\srd-5.1-fighter.json" LogicalName="TomeStack.Content.srd-5.1-fighter.json" />
     <EmbeddedResource Include="Content\srd-5.2.1-fighter.json" LogicalName="TomeStack.Content.srd-5.2.1-fighter.json" />
+    <EmbeddedResource Include="Content\srd-5.1-origins.json" LogicalName="TomeStack.Content.srd-5.1-origins.json" />
+    <EmbeddedResource Include="Content\srd-5.2.1-feats.json" LogicalName="TomeStack.Content.srd-5.2.1-feats.json" />
+    <EmbeddedResource Include="Content\srd-5.2.1-origins.json" LogicalName="TomeStack.Content.srd-5.2.1-origins.json" />
+    <!-- The revision ids each released ladder row bundled (Packages/ReleaseLadder.cs; scripts/bundled-ids-at.ps1 -Tag HEAD in a minor release PR; bundled SRD content ships only in a minor, so no patch rows). -->
+    <EmbeddedResource Include="Packages\BundledAt\*.txt" LogicalName="TomeStack.BundledAt.%(Filename)%(Extension)" />
     <EmbeddedResource Include="Content\srd-5.1-barbarian.json" LogicalName="TomeStack.Content.srd-5.1-barbarian.json" />
     <EmbeddedResource Include="Content\srd-5.2.1-barbarian.json" LogicalName="TomeStack.Content.srd-5.2.1-barbarian.json" />
     <!-- Character-sheet import: the layout maps (field names only; features/ddb-pdf-import.md). -->

@@ -21,3 +21,16 @@ export function diceLine(record: RollRecord): string {
   const modifiers = record.modifiers.map((m) => ` · ${m.label} ${m.amount >= 0 ? '+' : ''}${m.amount}`).join('');
   return `Dice: ${dice}${constant}${modifiers}`;
 }
+
+/**
+ * A key per record object, so an identical second roll (a new object with the same faces) mounts a new dice row and the
+ * CSS tumble runs again, and a new roll's "Why?" always mounts collapsed. A WeakMap keeps it pure: no state, no effect,
+ * and old records are collected.
+ */
+const rollKeys = new WeakMap<RollRecord, number>();
+let nextRollKey = 0;
+export function rollKey(record: RollRecord): number {
+  let key = rollKeys.get(record);
+  if (key === undefined) rollKeys.set(record, (key = ++nextRollKey));
+  return key;
+}

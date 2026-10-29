@@ -12,7 +12,7 @@ A local-first Windows desktop app for building 5E-compatible characters and home
 > - The M3 and M4 engineering is done, and neither gate is met ([ROADMAP](docs/ROADMAP.md)).
 >
 > - **Classes you can build:** the Fighter with the Champion (M2.2, in 0.4.0) and the eight SRD spellcasters (Bard, Cleric, Druid, Paladin, Ranger, Sorcerer, Warlock, Wizard), levels 1–20 in both rules families, and the Barbarian at levels 1–20 with the Path of the Berserker (C2-1, implemented, not released yet; Rage is a toggle, and a few features stay by hand). The SRD armor table is bundled with the Fighter. **Not yet:** Monk, Rogue.
-> - **Species and backgrounds:** one each per family (Half-Orc and Acolyte for SRD 5.1; Dwarf and Soldier for SRD 5.2.1). Anything else you add in the homebrew studio.
+> - **Species and backgrounds:** SRD 5.1 has all nine SRD races (with their subraces) and the Acolyte; SRD 5.2.1 has all 9 species, 4 backgrounds and 17 feats it prints. Anything else you add in the homebrew studio.
 > - **Works today:** build under SRD 5.1 (2014) or SRD 5.2.1 (2024) rules as a cancelable draft (classes, level-ups, multiclassing, spells, every choice), and see every calculated field with a source-aware trace. Play: hit points, resources, spell slots, conditions, equipment, rolls, short and long rests, death saves. Author homebrew subclasses and features, review updates, attach your own PDFs to open cited pages, keep campaign profiles, and print a sheet. Back up and restore your whole library, PDFs included, or export one character to back it up or share it.
 > - **Experimental:** reading a PDF's text and proposing candidates (M4). Nothing becomes a rule until you review and publish it, and it has not yet been proven on a real third-party book.
 > - **Evidence:** checks are either fixture-verified (automated tests), Windows-install verified (the CI desktop smoke, or an owner check on an installed build), or accepted in real play. Nothing is accepted in real play yet (that is the M3 gate). See [features/m2-acceptance.md](docs/features/m2-acceptance.md#evidence-levels-m21-2026-09-28).
@@ -118,6 +118,13 @@ scripts/installer-smoke.ps1 -Adapter Velopack -OldBuild artifacts/installer/<old
 ```
 
 It installs to `%LOCALAPPDATA%\TomeStack.App`. Uninstalling removes only that folder, never the data folder. The version comes from `Directory.Build.props` and must go up with every build you hand out.
+
+**Verify a release.** A release that lists a `SHA256SUMS` file also has a build attestation from the Release workflow for each file in it (earlier releases have neither). With the download and `SHA256SUMS` in one folder, the first command prints `True` when the hash matches, and the second (needs a recent [GitHub CLI](https://cli.github.com/)) checks that this repository's `release.yml` built it. Details, and what a release is and isn't, are in [SECURITY.md](SECURITY.md).
+
+```powershell
+(Get-FileHash .\TomeStack.App-win-Setup.exe -Algorithm SHA256).Hash -eq ((Select-String -Path .\SHA256SUMS -Pattern 'TomeStack.App-win-Setup.exe' -SimpleMatch).Line -split '\s+')[0]
+gh attestation verify .\TomeStack.App-win-Setup.exe --repo firegiant9000/TomeStack --signer-workflow firegiant9000/TomeStack/.github/workflows/release.yml
+```
 
 ## Safety defaults
 

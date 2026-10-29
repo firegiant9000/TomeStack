@@ -38,6 +38,13 @@ public sealed record StoredCandidate
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<CandidateGrant>? GrantsCandidates { get; init; }
+    /// <summary>
+    /// D64: SHA-256 of the job's attachment when the candidate was detected, so a <see cref="CandidateSpan"/> resolves to the stored
+    /// page text after the attachment is replaced. Omitted when unknown (every row stored before it existed keeps its bytes); no
+    /// schema version change, and older builds keep it as an unknown field. Accepting never reads it.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? AttachmentSha256 { get; init; }
     public CandidateStatus Status { get; init; } = CandidateStatus.Pending;
     /// <summary>The draft revision an accepted candidate became.</summary>
     public ContentReference? Draft { get; init; }
@@ -260,7 +267,7 @@ public sealed partial class TomeStackApp
         {
             _store.DeletePendingImportCandidates(job.Id);
             foreach (var candidate in fresh)
-                _store.SaveImportCandidate(new StoredCandidate { Id = candidate.Id, JobId = job.Id, Candidate = WithEarlier(candidate, earlier.GetValueOrDefault(candidate.Id)), GrantsCandidates = grants.GetValueOrDefault(candidate.Id), UpdatedAt = now });
+                _store.SaveImportCandidate(new StoredCandidate { Id = candidate.Id, JobId = job.Id, Candidate = WithEarlier(candidate, earlier.GetValueOrDefault(candidate.Id)), GrantsCandidates = grants.GetValueOrDefault(candidate.Id), AttachmentSha256 = job.Sha256, UpdatedAt = now });
         });
         // Item 13: the review list says when it is not the whole book. The flags are set each run (a resumed job re-detects).
         return job with
@@ -300,6 +307,9 @@ public sealed partial class TomeStackApp
         if (summary is { Length: > 20_000 })
             throw new AppValidationException([new("candidate.summary-too-long", "The text has at most 20,000 characters.")]);
         var dismissed = request.DismissReferences ?? [];
+        // Import Lab L3: one read of the library per edit, however many references the candidate holds.
+        var open = current.UnresolvedReferences.Where(r => !dismissed.Contains(r, StringComparer.OrdinalIgnoreCase)).ToList();
+        var installedNames = open.Count == 0 ? null : InstalledNames.Build(_store.ListRevisions(), families);
         var edited = current with
         {
             ProposedName = name,
@@ -308,7 +318,7 @@ public sealed partial class TomeStackApp
             ProposedEffects = request.Effects ?? current.ProposedEffects,
             Summary = summary,
             LowConfidenceFields = [],
-            UnresolvedReferences = [.. current.UnresolvedReferences.Where(r => !dismissed.Contains(r, StringComparer.OrdinalIgnoreCase) && !IsInstalledName(r, families))],
+            UnresolvedReferences = [.. open.Where(r => !installedNames!.Contains(r))],
         };
         // R29: sending a families set (even the current one) is the reviewer's answer; an edit that sends none leaves it as it was.
         var updated = stored with { Edited = edited, FamiliesReviewed = stored.FamiliesReviewed || request.RulesFamilies is not null, UpdatedAt = _time.GetUtcNow() };
@@ -822,9 +832,6 @@ public sealed partial class TomeStackApp
         dependencies.AddRange(candidate.UnresolvedReferences.Select(n => new CandidateDependency("unresolved-name", n)));
         return dependencies;
     }
-
-    private bool IsInstalledName(string name, IReadOnlyList<string> families) =>
-        _store.ListRevisions().Any(r => r.Status == RevisionStatus.Published && r.RulesFamilies.Any(families.Contains) && CandidateDetector.Key(r.Name) == CandidateDetector.Key(name));
 
     private StoredCandidate FindCandidateOrThrow(Guid candidateId) =>
         _store.FindImportCandidate(candidateId) ?? throw new AppValidationException([new("candidate.not-found", $"Candidate {candidateId} does not exist.")]);

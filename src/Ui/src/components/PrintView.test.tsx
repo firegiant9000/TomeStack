@@ -97,6 +97,30 @@ const combatView: CharacterView = {
   sheet: combatSheet,
 };
 
+// D72: explanations never reach print, even when every field carries a trace.
+const traced = {
+  ...combatSheet,
+  fields: combatSheet.fields.map((f) => ({
+    ...f,
+    trace: [{ order: 1, operation: 'base', description: 'Fixture base', result: f.value, origin: { kind: 'base' } }],
+  })),
+} as unknown as CharacterSheet;
+const tracedView: CharacterView = { ...combatView, sheet: traced };
+
+it('never shows a "Why?" disclosure or explanation in the full sheet or the combat card', async () => {
+  const user = userEvent.setup();
+  const { container } = render(<PrintView view={tracedView} onError={() => {}} onClose={() => {}} />);
+  const preview = screen.getByRole('region', { name: 'Print preview' });
+  const check = () => {
+    expect(container.textContent).not.toContain('Why?');
+    expect(container.querySelector('.explain')).toBeNull();
+    expect(container.querySelector('.roll-why')).toBeNull();
+  };
+  check();
+  await user.click(within(preview).getByRole('radio', { name: 'Combat card' }));
+  check();
+});
+
 async function openCombat(user: ReturnType<typeof userEvent.setup>, v: CharacterView = combatView) {
   render(<PrintView view={v} onError={() => {}} onClose={() => {}} />);
   const preview = screen.getByRole('region', { name: 'Print preview' });
