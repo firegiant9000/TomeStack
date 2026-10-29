@@ -42,6 +42,8 @@ import { abilities, nextGroupKey, nextScaleKey, parseSlotRows, parseTwenty } fro
 import { nextAttackKey, type ToggleChoice } from '../attackAuthoring';
 import { AttackFields, RiderFields, ToggleSelect } from './AttackFields';
 import { WeaponFields } from './WeaponFields';
+import { ItemModFields } from './ItemModFields';
+import { ModifierFields } from './ModifierFields';
 import { DefenceFields, RollModeFields, isDamageDefence } from './RollModeFields';
 import { ResponseFields } from './ResponseFields';
 import { PaymentFields } from './PaymentFields';
@@ -898,6 +900,8 @@ function EntryEditor(props: {
   const isClass = revision.kind === 'class';
   const classLike = isClass || revision.kind === 'subclass';
   const hasSpellcasting = revision.effects.some((e) => e.type === 'spellcasting');
+  const hasItemMod = revision.effects.some((e) => e.type === 'itemMod');
+  const hasWeaponOrArmor = revision.effects.some((e) => e.type === 'weapon' || e.type === 'armor');
   // A class's basics (hit die, saves, prerequisites, choices) have their own editor; the rule list shows the rest.
   // Species, background and spell basics have their own editors too (item 12), and each hides exactly the effects it shows.
   const shownByEditor = (effect: Effect) =>
@@ -912,8 +916,13 @@ function EntryEditor(props: {
             : false;
   const listed = revision.effects.map((effect, index) => ({ effect, index })).filter(({ effect }) => !shownByEditor(effect));
 
-  function add(type: 'modifier' | 'resource' | 'recovery' | 'roll' | 'armor' | 'grant' | 'scale' | 'value' | 'spellcasting' | 'toggle' | 'toggleGroup' | 'upkeep' | 'attack' | 'attackRider' | 'rollMode' | 'damageDefence' | 'response' | 'weapon') {
+  function add(type: 'modifier' | 'resource' | 'recovery' | 'roll' | 'armor' | 'grant' | 'scale' | 'value' | 'spellcasting' | 'toggle' | 'toggleGroup' | 'upkeep' | 'attack' | 'attackRider' | 'rollMode' | 'damageDefence' | 'response' | 'weapon' | 'itemMod') {
     const id = nextId(type === 'damageDefence' ? 'grant' : type);
+    if (type === 'itemMod') {
+      // Content v12 (MECH-X item 3): a valid start (a +1 bonus on a weapon).
+      update({ effects: [...revision.effects, { type, id, appliesTo: 'weapon', bonus: 1 }] });
+      return;
+    }
     if (type === 'weapon') {
       // Content v12: a valid start except the key, which is set once by the author (the empty key blocks saving until named).
       update({ effects: [...revision.effects, { type, id, category: 'simple', attack: 'melee', damage: '1d6', damageType: 'bludgeoning', properties: [], weaponKey: '' }] });
@@ -1271,13 +1280,23 @@ function EntryEditor(props: {
           </button>
         )}
         {revision.kind === 'item' && (
-          <button type="button" onClick={() => add('armor')}>
+          <button type="button" onClick={() => add('armor')} disabled={hasItemMod} title={hasItemMod ? 'An item mod is not a weapon or armor; remove the mod first' : undefined}>
             Add armor
           </button>
         )}
         {revision.kind === 'item' && (
-          <button type="button" onClick={() => add('weapon')}>
+          <button type="button" onClick={() => add('weapon')} disabled={hasItemMod} title={hasItemMod ? 'An item mod is not a weapon or armor; remove the mod first' : undefined}>
             Add weapon
+          </button>
+        )}
+        {revision.kind === 'item' && (
+          <button
+            type="button"
+            onClick={() => add('itemMod')}
+            disabled={hasItemMod || hasWeaponOrArmor}
+            title={hasItemMod || hasWeaponOrArmor ? 'An item is a mod, a weapon or an armor, not more than one; remove the other rule first' : undefined}
+          >
+            Add mod
           </button>
         )}
       </div>
@@ -1715,62 +1734,15 @@ function EffectEditor(props: {
     <fieldset className="effect-editor" id={ruleElementId(effect.id)} tabIndex={-1}>
       <legend>{legend}</legend>
       {effect.type === 'modifier' && (
-        <>
-          <label className="field">
-            Changes
-            <select value={effect.target} onChange={(e) => onChange({ ...effect, target: e.target.value })}>
-              {props.fields.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.label}
-                </option>
-              ))}
-              {/* Content v11 (D43): a bonus can raise the maximum of a pool of this revision. Another operation cannot, so the
-                  targets are offered for a bonus (and kept while the modifier already names one, for the check to explain). */}
-              {(effect.operation === 'bonus' || effect.target.startsWith('resource.')) &&
-                props.resources.map((r) => (
-                  <option key={r.id} value={`resource.${r.resourceId}`}>
-                    Maximum of {r.label || r.resourceId}
-                  </option>
-                ))}
-              {effect.target.startsWith('resource.') && !props.resources.some((r) => `resource.${r.resourceId}` === effect.target) && (
-                <option value={effect.target}>{effect.target} (other content)</option>
-              )}
-            </select>
-          </label>
-          <label className="field">
-            How
-            <select value={effect.operation} onChange={(e) => onChange({ ...effect, operation: e.target.value as typeof effect.operation })}>
-              <option value="bonus">Add (bonus)</option>
-              <option value="replace">Replace the base</option>
-              <option value="set">Set to</option>
-            </select>
-          </label>
-          <label className="field">
-            Value (a number or a formula such as PB + CON.MOD)
-            <input value={effect.value} aria-describedby={`rule-${effect.id}-value-preview`} onChange={(e) => onChange({ ...effect, value: e.target.value })} />
-          </label>
-          <FormulaPreview id={`rule-${effect.id}-value-preview`} formula={effect.value} revision={props.previewRevision} />
-          {/* Only for a modifier that is always on or switched by a toggle: another timing (such as onRoll, from imported
-              content) is left as it is, never turned into "always" (review fix). */}
-          {(effect.toggle || ((effect.timing ?? 'always') === 'always' && (toggles.length > 0 || props.otherToggles.length > 0))) && (
-            <ToggleSelect
-              label="Applies"
-              alwaysLabel="Always"
-              choices={toggleChoices}
-              current={{ contentId: effect.toggleContent, toggleId: effect.toggle }}
-              // Content v6: a toggled modifier applies only while its toggle is on, so its timing is whileActive; without
-              // the toggle it is always on again (its timing was whileActive only because of the toggle). Content v11: the
-              // toggle may be another entry's (toggleContent).
-              onPick={(toggle) =>
-                onChange(
-                  toggle
-                    ? { ...effect, toggle: toggle.toggleId, toggleContent: toggle.contentId, timing: 'whileActive' }
-                    : { ...effect, toggle: undefined, toggleContent: undefined, timing: undefined },
-                )
-              }
-            />
-          )}
-        </>
+        <ModifierFields
+          effect={effect}
+          fields={props.fields}
+          resources={props.resources}
+          toggles={toggles}
+          otherToggles={props.otherToggles}
+          previewRevision={props.previewRevision}
+          onChange={onChange}
+        />
       )}
       {effect.type === 'toggle' && (
         <>
@@ -2127,6 +2099,7 @@ function EffectEditor(props: {
         </>
       )}
       {effect.type === 'weapon' && <WeaponFields effect={effect} onChange={onChange} onProblem={onProblem} />}
+      {effect.type === 'itemMod' && <ItemModFields effect={effect} fields={props.fields} previewRevision={props.previewRevision} onChange={onChange} onProblem={onProblem} />}
       {effect.type === 'scale' && <ScaleFields effect={effect} onChange={onChange} onProblem={onProblem} />}
       {effect.type === 'value' && <ValueFields effect={effect} previewRevision={props.previewRevision} onChange={onChange} onProblem={onProblem} />}
       {effect.type === 'spellcasting' && <SpellcastingFields effect={effect} previewRevision={props.previewRevision} onChange={onChange} onProblem={onProblem} />}
