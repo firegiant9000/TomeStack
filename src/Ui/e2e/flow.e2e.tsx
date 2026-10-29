@@ -266,6 +266,20 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
 
   sheet = await screen.findByRole('article', { name: 'E2E Brenna' });
   expect(within(sheet).getByText('Level 3')).toBeTruthy();
+
+  // D74: Save level-up opens the sheet on Features with "What changed at level 3" focused (the level-2 list was overwritten).
+  const changed = within(sheet).getByRole('region', { name: 'What changed at level 3' });
+  await waitFor(() => expect(document.activeElement).toBe(within(changed).getByRole('heading', { name: 'What changed at level 3' })));
+  expect(within(changed).getByText(/^Hit point maximum:/)).toBeTruthy();
+  expect(within(changed).getByText(/^New choice: Primal Knowledge/)).toBeTruthy();
+  await user.click(within(changed).getByRole('button', { name: 'Dismiss' }));
+  expect(within(sheet).queryByRole('region', { name: /^What changed at level/ })).toBeNull();
+  // Gone for good: leaving the sheet and opening the character again shows no panel.
+  await user.click(screen.getByRole('button', { name: 'Characters' }));
+  await user.click(within(await screen.findByRole('navigation', { name: 'Characters' })).getByRole('button', { name: /E2E Brenna/ }));
+  sheet = await screen.findByRole('article', { name: 'E2E Brenna' });
+  expect(within(sheet).queryByRole('region', { name: /^What changed at level/ })).toBeNull();
+
   const open = within(sheet).getByRole('heading', { name: 'Choices to make' }).parentElement!;
   expect(open.textContent).toMatch(/Primal Knowledge: choose 1 \(0 chosen\)/);
 
@@ -329,6 +343,13 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   await waitFor(() => expect(lastRoll.textContent).toMatch(/Strength saving throw \(d20 test\): \d+ \(1d20, advantage\)/));
   expect(lastRoll.textContent).toMatch(/\(dropped\)/);
   expect(lastRoll.textContent).toMatch(/Strength saving throw \+5/);
+  // D72: "Why?" sits beside the Last roll (not inside it) and explains the +5 in words, naming the proficiency bonus.
+  const why = within(screen.getByRole('region', { name: 'Summary' })).getByText('Why?').closest('details')!;
+  expect(why.open).toBe(false);
+  expect(lastRoll.contains(why)).toBe(false);
+  await user.click(within(why).getByText('Why?'));
+  expect(why.open).toBe(true);
+  expect(within(why).getByRole('list', { name: 'Why this roll came out this way' }).textContent).toMatch(/proficiency bonus/i);
   // D28: the roll before it is in Previous rolls, outside the live region.
   await user.click(within(sheet).getByText('Previous rolls (1)'));
   expect(within(sheet).getByText('Previous rolls (1)').closest('details')!.textContent).toMatch(/Frenzy extra damage.*: \d+ \(2d6, critical\)/);

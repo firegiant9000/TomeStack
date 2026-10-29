@@ -911,6 +911,8 @@ export interface RollRecord {
   /** D43 S6: the mode the sheet applied to a field roll, with the content that gave it (absent when the sheet applied none). */
   automaticMode?: RollMode;
   modeSources?: string[];
+  /** D72: the sheet's trace for the number rolled (a field, an attack, a caster's spell attack); absent when the roll has none. */
+  explain?: TraceEntry[];
 }
 
 export interface RollSpend {
