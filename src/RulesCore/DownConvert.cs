@@ -108,6 +108,10 @@ public static class DownConvert
             lowered = BelowV10(lowered, name, changes);
         if (targetCharacterSchema < Character.DetailsSchemaVersion && character.UsesV9Fields)
             lowered = BelowV9(lowered, name, changes);
+        // Stripping the entry ids can leave two entries of one item that only the ids kept apart; an older build refuses that.
+        if (!ReferenceEquals(lowered, character) && changes.All(c => c.Action != BelowAction.Blocks)
+            && lowered.Validate().FirstOrDefault(d => d.Code == "character.equipment-duplicate") is { } duplicate)
+            changes.Add(new("equipment", BelowAction.Blocks, BelowCodes.ValidationError, $"'{name}': {duplicate.Message} Merge the copies, then export."));
 
         return changes.Any(c => c.Action == BelowAction.Blocks)
             ? new CharacterBelow(character, changes)
@@ -651,6 +655,8 @@ public static class DownConvert
     /// The 11 to 10 step (R54): every entry's mods are dropped; then plain copies of one item that differed only by their mods are merged into
     /// the first, since an older build refuses a second plain entry. Groups where a copy has attunement or charges state are left alone (an older
     /// build accepts them), and so are groups that never had a mod.
+    /// A group left alone because of attunement or charges state may still block at target 8: the v9 step strips the entry ids, and the validation
+    /// step then reports the repeated item as <see cref="BelowCodes.ValidationError"/>.
     /// </summary>
     private static Character BelowV11(Character character, string name, List<BelowChange> changes)
     {
@@ -663,9 +669,14 @@ public static class DownConvert
 
         var merged = new List<EquipmentEntry>(equipment.Count);
         var slotOf = new Dictionary<ContentReference, int>();
-        var groups = equipment.Select((e, i) => (e, i)).GroupBy(p => p.e.Item).ToDictionary(g => g.Key, g => g.Select(p => p.e).ToList());
+        var groups = equipment.Select((e, i) => (e, i)).Where(p => p.e is not null).GroupBy(p => p.e.Item).ToDictionary(g => g.Key, g => g.Select(p => p.e).ToList());
         foreach (var entry in equipment)
         {
+            if (entry is null)
+            {
+                merged.Add(entry!);
+                continue;
+            }
             var group = groups[entry.Item];
             var mergeable = group.Count > 1 && group.Any(e => e.Mods is { Count: > 0 }) && group.All(e => e.Attuned is null && e.ChargesSpent is null);
             var plain = entry with { Mods = null };
@@ -685,7 +696,7 @@ public static class DownConvert
         }
 
         foreach (var (item, group) in groups.Where(g => g.Value.Count > 1 && g.Value.Any(e => e.Mods is { Count: > 0 }) && g.Value.All(e => e.Attuned is null && e.ChargesSpent is null)))
-            changes.Add(new($"equipment[{equipment.ToList().FindIndex(e => e.Item == item)}]", BelowAction.Dropped, BelowCodes.ItemModCopies,
+            changes.Add(new($"equipment[{equipment.ToList().FindIndex(e => e?.Item == item)}]", BelowAction.Dropped, BelowCodes.ItemModCopies,
                 $"'{name}': {group.Count} copies of one item merged into one; they differed only by their mods."));
 
         return character with { Equipment = merged };

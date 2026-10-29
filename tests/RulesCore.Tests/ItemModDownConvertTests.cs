@@ -65,6 +65,13 @@ public class ItemModDownConvertTests
         Assert.Equal(2, to10.Character.Equipment.Count);
         Assert.Equal(2, to10.Character.Equipment[0].ChargesSpent);
         Assert.Empty(to10.Character.Validate());
+
+        // At 8 the ids go, so the two copies of one item would repeat without them: blocked through validation, mods dropped first.
+        var to8 = DownConvert.Below(character, 8);
+        Assert.True(to8.Blocked);
+        Assert.Contains(to8.Changes, c => c.Code == BelowCodes.ItemMods && c.Action == BelowAction.Dropped);
+        Assert.Contains(to8.Changes, c => c.Code == BelowCodes.ValidationError && c.Action == BelowAction.Blocks);
+        Assert.Same(character, to8.Character);
     }
 
     [Fact]
