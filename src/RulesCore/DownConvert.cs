@@ -60,6 +60,10 @@ public static class BelowCodes
     public const string ItemAttunement = "below.item-attunement";
     public const string ItemCharges = "below.item-charges";
     public const string Activation = "below.activation";
+    public const string WeaponBonus = "below.weapon-bonus";
+    public const string V12Key = "below.v12-key";
+    public const string Payment = "below.payment";
+    public const string CastsSpell = "below.casts-spell";
     public const string ValidationError = "below.validation-error";
 }
 
@@ -138,6 +142,9 @@ public static class DownConvert
         {
             switch (step)
             {
+                case ContentRevision.WeaponBonusSchemaVersion:
+                    ContentBelowV12(scope, node, changes);
+                    break;
                 case ContentRevision.PlayMechanicsSchemaVersion:
                     ContentBelowV11(scope, node, changes);
                     break;
@@ -467,6 +474,58 @@ public static class DownConvert
                 }
             }
             kept.Add(effect);
+            keptOrigin.Add(scope.Origin[i]);
+        }
+
+        effects.Clear();
+        foreach (var item in kept)
+            effects.Add(item);
+        scope.Origin.Clear();
+        scope.Origin.AddRange(keptOrigin);
+    }
+
+    /// <summary>
+    /// The 12 to 11 step: the item mod effect, and the keys v12 added (weapon bonus, spell tags, replaceable choices, payment, castsSpell).
+    /// A revision that declares an older version carries them as inert extension data, so it is left as it is.
+    /// </summary>
+    private static void ContentBelowV12(Scope scope, JsonObject node, List<BelowChange> changes)
+    {
+        if (node["effects"] is not JsonArray effects || scope.Revision.SchemaVersion < ContentRevision.WeaponBonusSchemaVersion)
+            return;
+        var name = scope.Revision.Name;
+        var kept = new List<JsonNode?>(effects.Count);
+        var keptOrigin = new List<int>(effects.Count);
+
+        for (var i = 0; i < effects.Count; i++)
+        {
+            var path = $"effects[{scope.Origin[i]}]";
+            if (effects[i] is JsonObject effect)
+            {
+                switch (TypeOf(effect))
+                {
+                    case "itemMod":
+                        changes.Add(new(path, BelowAction.Dropped, BelowCodes.EffectUnsupported, $"'{name}': an item modification, which the older version cannot hold."));
+                        continue;
+                    case WeaponEffect.TypeName:
+                        RemoveKey(effect, "bonus", path, BelowAction.Dropped, BelowCodes.WeaponBonus, $"'{name}': the weapon's bonus to hit and damage.", changes);
+                        break;
+                    case SpellEffect.TypeName:
+                        RemoveKey(effect, "tags", path, BelowAction.Dropped, BelowCodes.V12Key, $"'{name}': the spell's tags, which only filter the Spells tab.", changes);
+                        break;
+                    case ChoiceEffect.TypeName:
+                        RemoveKey(effect, "replaceable", path, BelowAction.Dropped, BelowCodes.V12Key, $"'{name}': when a choice may be replaced.", changes);
+                        break;
+                    case RollEffect.TypeName:
+                        RemoveKey(effect, "payment", path, BelowAction.Blocks, BelowCodes.Payment, $"'{name}': how a roll pays its cost; the older version would charge the wrong thing.", changes);
+                        RemoveKey(effect, "castsSpell", path, BelowAction.Blocks, BelowCodes.CastsSpell, $"'{name}': the spell a roll casts; the older version would leave the spell out.", changes);
+                        break;
+                    case AttackEffect.TypeName:
+                    case ToggleEffect.TypeName:
+                        RemoveKey(effect, "payment", path, BelowAction.Blocks, BelowCodes.Payment, $"'{name}': how it pays its cost; the older version would charge the wrong thing.", changes);
+                        break;
+                }
+            }
+            kept.Add(effects[i]?.DeepClone());
             keptOrigin.Add(scope.Origin[i]);
         }
 
