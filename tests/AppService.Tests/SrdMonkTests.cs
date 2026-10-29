@@ -203,10 +203,11 @@ public class SrdMonkTests
             var shield = Armor(family, "Shield");
             var sheet = temp.App.SaveCharacter(Monk(family, 1, [new(shield, Equipped: true)])).Sheet;
 
-            // The Monk has no shield training, and the families differ on an untrained shield (UntrainedShieldGivesArmorClass):
-            // 5.2.1 still adds it (15 + 2), 5.1 adds nothing (15). Either way the replace is not withdrawn.
+            // The Monk has no shield training, and the families differ on an untrained shield (UntrainedShieldGivesArmorClass is
+            // true for 5.1, false for 5.2.1): 5.1 still adds it (15 + 2 = 17), 5.2.1 adds nothing (15). Either way the replace is
+            // not withdrawn, and the untrained-shield warning is raised (its wording differs).
             var ac = sheet.Field(FieldIds.ArmorClass);
-            Assert.Equal(RulesFamilies.Get(family).UntrainedShieldGivesArmorClass ? 15 + 2 : 15, ac.Value);
+            Assert.Equal(family == RulesFamilies.Srd51 ? 17 : 15, ac.Value);
             Assert.Contains(ac.Warnings, w => w.Code == "equipment.shield-untrained");
             Assert.DoesNotContain(ac.Warnings, w => w.Code == "equipment.armor-untrained");
             var feature = sheet.Features!.Single(f => f.Name == "Unarmored Defense");
@@ -439,7 +440,7 @@ public class SrdMonkTests
     public void Reference_features_are_listed_as_reference()
     {
         using var temp = new TempApp();
-        string[] both = ["Slow Fall", "Evasion", "Open Hand Technique"];
+        string[] both = ["Ability Score Improvement", "Slow Fall", "Evasion", "Open Hand Technique"];
         var names = new Dictionary<string, string[]>
         {
             [RulesFamilies.Srd521] = [.. both, "Empowered Strikes", "Perfect Focus", "Acrobatic Movement", "Heightened Focus", "Self-Restoration", "Deflect Energy", "Epic Boon", "Body and Mind", "Fleet Step"],
@@ -456,6 +457,9 @@ public class SrdMonkTests
                 var feature = Assert.Single(features, f => f.Name == name);
                 Assert.True(feature.Automation == AutomationStatus.Reference, $"{family}: {name} is {feature.Automation}");
             }
+            // The exact set: nothing else in the Monk pack is Reference, so an Automatic feature cannot silently become one.
+            var actual = features.Where(f => f.Automation == AutomationStatus.Reference).Select(f => f.Name).Distinct().Order(StringComparer.Ordinal);
+            Assert.Equal(names[family].Order(StringComparer.Ordinal), actual);
         }
     }
 
