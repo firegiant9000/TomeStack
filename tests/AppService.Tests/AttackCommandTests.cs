@@ -94,6 +94,68 @@ public class AttackCommandTests
         Assert.Null(boltDamage.LinkedResourceId);
     }
 
+    private static readonly Guid KindledContent = Guid.Parse("6f0dc000-0000-4000-8000-000000000042");
+
+    [Fact]
+    public void An_attack_roll_and_its_damage_roll_both_carry_the_attack_trace()
+    {
+        var (temp, id) = Adept();
+        using var _ = temp;
+        temp.App.Play(new(id, PlayActionKind.ToggleOn, Confirm: true, ContentId: KindledContent, ToggleId: "kindled"));
+        var entry = temp.App.GetCharacter(id).Sheet.Attacks!.Single(a => a.Source == AttackSource.Feature && a.Item == Strike && a.EffectId == "strike");
+
+        var toHit = temp.App.Roll(new(id, Content: Strike, EffectId: "strike"));
+        var damage = temp.App.Roll(new(id, Content: Strike, EffectId: "strike", Damage: true));
+
+        Assert.Equal(TempApp.Json(entry.Trace), TempApp.Json(toHit.Explain));
+        Assert.Equal(entry.ToHit, toHit.Explain![^1].Result);
+        Assert.Equal(toHit.Modifiers.Sum(m => m.Amount), toHit.Explain[^1].Result);
+        Assert.Equal(TempApp.Json(entry.Trace), TempApp.Json(damage.Explain));
+        // R6: the rider's dice step has no amount and its text ends "damage (attack rider)"; the damage step is a "set" with no amount.
+        Assert.Contains(damage.Explain!, s => s.Amount is null && s.Description.EndsWith("damage (attack rider)", StringComparison.Ordinal));
+        Assert.Contains(damage.Explain!, s => s.Operation == "set" && s.Amount is null && s.Description.StartsWith("Damage ", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_losing_stack_group_rider_keeps_the_running_to_hit()
+    {
+        var (temp, id) = Adept();
+        using var _ = temp;
+        temp.App.Play(new(id, PlayActionKind.ToggleOn, Confirm: true, ContentId: KindledContent, ToggleId: "kindled"));
+        // Kindled and Blazing are one toggle group, so the second rider that shares stack group "modeRider" comes from the ungrouped Ember Fist.
+        temp.App.Play(new(id, PlayActionKind.ToggleOn, Confirm: true, ContentId: Guid.Parse("6f0dc000-0000-4000-8000-000000000045"), ToggleId: "fist"));
+
+        var record = temp.App.Roll(new(id, Content: Strike, EffectId: "strike"));
+
+        Assert.Contains(record.Explain!, s => s.Operation == "rider.not-applied");
+        Assert.Equal(record.Modifiers.Sum(m => m.Amount), record.Explain![^1].Result);
+    }
+
+    [Fact]
+    public void A_weapon_attack_and_damage_carry_the_attack_trace()
+    {
+        using var temp = new TempApp();
+        var character = new Character
+        {
+            Id = Guid.NewGuid(),
+            Name = "Test Duelist",
+            RulesFamily = RulesFamilies.Srd51,
+            Level = 1,
+            Classes = [new(Duelist, 1)],
+            BaseAbilities = new(14, 16, 12, 10, 10, 10),
+            Equipment = [new(Longblade, Equipped: true)],
+        };
+        var id = temp.App.SaveCharacter(character).Character.Id;
+        var entry = temp.App.GetCharacter(id).Sheet.Attacks!.Single(a => a.Source == AttackSource.Weapon && a.Item == Longblade);
+
+        var toHit = temp.App.Roll(new(id, Weapon: Longblade));
+        var damage = temp.App.Roll(new(id, Weapon: Longblade, Damage: true));
+
+        Assert.Equal(TempApp.Json(entry.Trace), TempApp.Json(toHit.Explain));
+        Assert.Equal(toHit.Modifiers.Sum(m => m.Amount), toHit.Explain![^1].Result);
+        Assert.Equal(TempApp.Json(entry.Trace), TempApp.Json(damage.Explain));
+    }
+
     [Fact]
     public void Rider_dice_double_on_a_critical_hit_and_flat_bonuses_do_not()
     {

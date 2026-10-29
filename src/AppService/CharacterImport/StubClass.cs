@@ -58,7 +58,7 @@ internal static partial class StubClasses
     private const string Summary = "Created from an imported character sheet: a hit die and saving throws only. A draft until it is published.";
 
     /// <summary>One group of dice: a count and a size ("3d10"), with the text between groups checked separately.</summary>
-    [GeneratedRegex(@"(?<count>[0-9]{1,2})\s*[dD]\s*(?<die>[0-9]{1,2})(?![0-9])", RegexOptions.None, 100)]
+    [GeneratedRegex(@"(?<count>[0-9]{1,2})\s*[dD]\s*(?<die>[0-9]{1,2})(?![0-9])", RegexOptions.None, ImportRegex.TimeoutMs)]
     private static partial Regex DiceGroup();
 
     /// <summary>

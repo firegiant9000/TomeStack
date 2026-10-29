@@ -136,9 +136,37 @@ it('Spend_by_hand_rows_appear_once', async () => {
   expect(within(screen.getByRole('region', { name: 'Spend by hand' })).getByText(/Fixture Surge/)).toBeTruthy();
 });
 
+/** A feature with no effects: the report's one text line, which has no effect id. */
+const prose = (name: string): MechanicEntry => ({ ...mech(name, 'text', 'reference'), effectId: undefined, effective: { status: 'reference', unsupported: false } });
+
+it('groups_by_the_effective_value_not_the_authors', async () => {
+  // The author says Automatic on a text effect; the engine delivers text only, so it is listed as Reference.
+  const text: MechanicEntry = { ...mech('Fixture Claim', 'text', 'automatic'), effective: { status: 'reference', unsupported: false } };
+  // The author says Automatic; the engine only lists it with its conditions.
+  const against: MechanicEntry = { ...mech('Fixture Cond', 'rollMode', 'automatic'), effective: { status: 'assisted', ceiling: 'assisted', unsupported: false } };
+  // The author says Reference but the engine fully calculates it: not listed at all.
+  const done: MechanicEntry = { ...mech('Fixture Done', 'modifier', 'reference'), effective: { status: 'automatic', unsupported: false } };
+  vi.mocked(client.characterMechanics).mockResolvedValue(report([text, against, done]));
+  render(<ByHandPanel characterId="char-1" sheet={sheetOf('char-1', [plain])} active />);
+  await screen.findByRole('heading', { name: 'Reference only' });
+  expect(within(screen.getByRole('region', { name: 'Reference only' })).getByText(/Fixture Claim/)).toBeTruthy();
+  expect(within(screen.getByRole('region', { name: 'Partly automatic' })).getByText(/Fixture Cond/)).toBeTruthy();
+  expect(screen.queryByText(/Fixture Done/)).toBeNull();
+  expect(screen.getAllByText(/Fixture Claim/)).toHaveLength(1);
+});
+
+it('an effect whose effective value says unsupported is listed as not understood once', async () => {
+  const odd: MechanicEntry = { ...mech('Fixture Odd', 'weirdo', 'automatic'), effective: { unsupported: true } };
+  vi.mocked(client.characterMechanics).mockResolvedValue(report([odd]));
+  render(<ByHandPanel characterId="char-1" sheet={sheetOf('char-1', [plain])} active />);
+  await screen.findByRole('heading', { name: 'Not understood' });
+  expect(screen.getAllByText(/Fixture Odd/)).toHaveLength(1);
+  expect(screen.queryByRole('heading', { name: 'Reference only' })).toBeNull();
+});
+
 it('Pure_text_features_are_not_listed', async () => {
   vi.mocked(client.characterMechanics).mockResolvedValue(
-    report([mech('Fixture Prose', 'text', 'reference'), mech('Fixture Glow', 'modifier', 'reference')]),
+    report([prose('Fixture Prose'), mech('Fixture Glow', 'modifier', 'reference')]),
   );
   render(<ByHandPanel characterId="char-1" sheet={sheetOf('char-1', [plain])} active />);
   await screen.findByText(/Fixture Glow/);
@@ -146,7 +174,7 @@ it('Pure_text_features_are_not_listed', async () => {
 });
 
 it('lists nothing but the sentence when the report holds only pure text', async () => {
-  vi.mocked(client.characterMechanics).mockResolvedValue(report([mech('Fixture Prose', 'text', 'reference')]));
+  vi.mocked(client.characterMechanics).mockResolvedValue(report([prose('Fixture Prose')]));
   render(<ByHandPanel characterId="char-1" sheet={sheetOf('char-1', [plain])} active />);
   expect(await screen.findByText('Everything on this sheet is calculated.')).toBeTruthy();
 });

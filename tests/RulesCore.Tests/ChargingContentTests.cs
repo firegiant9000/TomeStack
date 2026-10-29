@@ -302,6 +302,21 @@ public class ChargingContentTests
     }
 
     [Fact]
+    public void An_attackRider_toHit_and_damageBonus_count_as_formula_reads()
+    {
+        var riderJson = """{"type":"attackRider","id":"rider","tags":["melee"],"toHit":"SCALE.hit","damageBonus":"SCALE.bonus","automation":"automatic","timing":"always"}""";
+        var revision = Fixtures.RevisionWithEffect(riderJson, 11);
+
+        var formulas = ContentGraph.Formulas(revision).Where(f => f.EffectId == "rider").Select(f => f.Source).ToList();
+        var read = ContentGraph.Identifiers(revision).Where(i => i.EffectId == "rider").Select(i => i.Identifier).ToList();
+
+        Assert.Contains("SCALE.hit", formulas);
+        Assert.Contains("SCALE.bonus", formulas);
+        Assert.Contains("SCALE.hit", read);
+        Assert.Contains("SCALE.bonus", read);
+    }
+
+    [Fact]
     public void A_pool_changed_only_by_another_contents_alsoChange_is_not_dead()
     {
         var source = Fixtures.ChargingPack().Sources[0].Id;
