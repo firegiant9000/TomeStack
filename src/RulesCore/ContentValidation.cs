@@ -505,6 +505,7 @@ public static class ContentValidator
                     {
                         if (nested.Toggle is not null || nested.ToggleContent is not null || nested.WhileArmored is not null
                             || nested.Target.StartsWith(ResourceTargetPrefix, StringComparison.Ordinal)
+                            || nested.Stacking != StackingRule.Stack || nested.StackGroup is not null
                             || nested.Timing != EffectTiming.Always || nested.Automation != AutomationStatus.Automatic)
                             Error("validate.item-mod-modifier", $"Item mod '{mod.Id}': modifier '{nested.Id}' may only set operation, target, value and text (always on, automatic).", mod.Id);
                         CheckModifier(nested);

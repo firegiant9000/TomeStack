@@ -147,6 +147,9 @@ public class ItemModSchemaTests
     [InlineData("timing")]
     [InlineData("resource")]
     [InlineData("assisted")]
+    [InlineData("stacking")]
+    [InlineData("stackGroup")]
+    [InlineData("highestInGroup")]
     public void Nested_modifier_restrictions(string restriction)
     {
         var nested = restriction switch
@@ -156,6 +159,9 @@ public class ItemModSchemaTests
             "whileArmored" => Nested("n") with { WhileArmored = true },
             "timing" => Nested("n") with { Timing = EffectTiming.WhileActive },
             "resource" => Nested("n", "resource.pool"),
+            "stacking" => Nested("n") with { Stacking = StackingRule.HighestInGroup },
+            "stackGroup" => Nested("n") with { StackGroup = "g" },
+            "highestInGroup" => Nested("n") with { Stacking = StackingRule.HighestInGroup, StackGroup = "g" },
             _ => Nested("n") with { Automation = AutomationStatus.Assisted },
         };
 
@@ -184,6 +190,7 @@ public class ItemModSchemaTests
 
         Assert.Equal(first, second);
         Assert.Equal(RevisionHashProperties.Hash(first), RevisionHashProperties.Hash(second));
+        Assert.Contains("\"modifiers\":[{\"type\":\"modifier\",\"id\":\"x\",\"operation\":\"bonus\"", first, StringComparison.Ordinal); // type, id, rest, as a top-level effect
         Assert.Contains("\"timing\":\"always\",\"zzz\":1}],\"automation\"", first, StringComparison.Ordinal);
         var mod = Assert.IsType<ItemModEffect>(revision.Effects[1]);
         Assert.True(mod.Modifiers![0].Extensions!.ContainsKey("zzz"));
@@ -212,6 +219,7 @@ public class ItemModSchemaTests
     [InlineData("{\"type\":\"itemMod\",\"id\":\"m1\",\"appliesTo\":\"weapon\",\"bonus\":1.5}")]
     [InlineData("{\"type\":\"itemMod\",\"id\":\"m1\",\"appliesTo\":\"weapon\",\"modifiers\":[{\"type\":\"grant\",\"id\":\"g\",\"grant\":\"content\"}]}")]
     [InlineData("{\"type\":\"itemMod\",\"id\":\"m1\",\"appliesTo\":\"weapon\",\"modifiers\":{}}")]
+    [InlineData("{\"type\":\"itemMod\",\"id\":\"m1\",\"appliesTo\":\"weapon\",\"modifiers\":[{\"type\":\"modifier\",\"id\":\"x\",\"operation\":\"nope\",\"target\":\"initiative\",\"value\":\"1\"}]}")]
     public void Unreadable_item_mod_blocks_from_v12(string mod)
     {
         var report = Validate(Read(Item(12, mod)));

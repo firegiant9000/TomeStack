@@ -1157,6 +1157,32 @@ public sealed record ItemEffect : Effect
     internal static Effect FromUnknown(UnknownEffect unknown) => VersionedEffects.Typed<ItemEffect>(unknown);
 }
 
+/// <summary>
+/// Reads a list of modifiers as plain objects (unknown keys stay in each one's extension data) and writes each exactly as a
+/// top-level effect is written (<c>type</c>, <c>id</c>, then the rest; see <see cref="EffectJsonConverter"/>), so the layout
+/// of a nested modifier is the same as everywhere else in a revision and its hash.
+/// </summary>
+internal sealed class NestedModifierListConverter : JsonConverter<IReadOnlyList<ModifierEffect>>
+{
+    private static readonly EffectJsonConverter Canonical = new();
+
+    public override IReadOnlyList<ModifierEffect>? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+        JsonSerializer.Deserialize<List<ModifierEffect>>(ref reader, options);
+
+    public override void Write(Utf8JsonWriter writer, IReadOnlyList<ModifierEffect> value, JsonSerializerOptions options)
+    {
+        writer.WriteStartArray();
+        foreach (var modifier in value)
+        {
+            if (modifier is null)
+                writer.WriteNullValue();
+            else
+                Canonical.Write(writer, modifier, options);
+        }
+        writer.WriteEndArray();
+    }
+}
+
 /// <summary>Content schema v12 (MECH-X item 3): what an <see cref="ItemModEffect"/> can attach to. Wire names <c>weapon</c>, <c>armor</c>, <c>any</c>.</summary>
 public enum ModTarget { Weapon, Armor, Any }
 
@@ -1189,6 +1215,7 @@ public sealed record ItemModEffect : Effect
     public int? Bonus { get; init; }
 
     /// <summary>Always-on modifiers applied while the mod is active; at most <see cref="MaxModifiers"/>.</summary>
+    [JsonConverter(typeof(NestedModifierListConverter))]
     public IReadOnlyList<ModifierEffect>? Modifiers { get; init; }
 
     internal static Effect FromUnknown(UnknownEffect unknown) => AppliesToReads(unknown) ? VersionedEffects.Typed<ItemModEffect>(unknown) : unknown;

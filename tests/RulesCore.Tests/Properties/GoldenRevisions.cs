@@ -56,8 +56,8 @@ internal static class GoldenRevisions
     public static readonly string[] ItemModHashes =
     [
         "f6f2af29da104190a2bf9db13a7098c7b8ecb2face40177636a42c8a3b6e893c", // "Fixture Keen Rune"
-        "cbe7de9ecf77d0c236e5a2e13301975bbb5242f03432680cdfd358059acbedcb", // "Fixture Warding Plating"
-        "05e9744c64558c169f2ef024afe587cdddaa779d067697db4eff7106323533ce", // "Fixture Steady Lining"
+        "e69d9e4afdcc0ab4285f4c92d1b442f08b70843ec17ed0ce1f05b50e4883efb9", // "Fixture Warding Plating"
+        "428684ed9432c4dcd25e8ad55dbdbfdaa8999dfa1f751e2bdf2c77920b4e349d", // "Fixture Steady Lining"
         "36d0cab0bc4190ba1b99a270075e0096e31222ce0244249766a6f98844d2af8b", // "Fixture Longblade"
         "a41d0c185c8d934f11a7096b1458458157b2289a811472b403dbbe0d741a4493", // "Fixture Scale Coat"
         "44d633ecd75353e4530245d6ed9d8db7a36bda3696f52ff49bd840885047caf8", // "Fixture Round Guard"
