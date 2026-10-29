@@ -106,7 +106,8 @@ public static class SheetExportBuilder
     public static bool LetsOut(SourceRecord source, SheetPurpose purpose, IReadOnlySet<Guid> bundled)
     {
         ArgumentNullException.ThrowIfNull(source);
-        if (source.MayBeShared || bundled.Contains(source.Id))
+        // The share rule is Preflight's (Import Lab L5): the one place that says what may leave the machine.
+        if (Packages.Preflight.MayShareContent(source, bundled))
             return true;
         if (purpose != SheetPurpose.Personal || source.ImportDerived == true)
             return false;

@@ -40,7 +40,13 @@ public static partial class CandidateDetector
 
     private static readonly string[] Schools = ["abjuration", "conjuration", "divination", "enchantment", "evocation", "illusion", "necromancy", "transmutation"];
 
-    internal sealed record Unit(int Page, int Index, TextBlock Block, string[] Lines, bool FromOcr);
+    /// <param name="Block">The unit's first block. <see cref="BlockIndex"/> and <see cref="LastBlockIndex"/> are its place (and, for a header the PDF split, its last block's) among the page's stored blocks, for spans (D64).</param>
+    internal sealed record Unit(int Page, int Index, TextBlock Block, string[] Lines, bool FromOcr)
+    {
+        public int BlockIndex { get; init; }
+
+        public int LastBlockIndex { get; init; }
+    }
 
     private sealed record Row(int Page, double Y, List<TextLine> Cells);
 
@@ -183,8 +189,9 @@ public static partial class CandidateDetector
         var units = new List<Unit>();
         foreach (var page in pages.OrderBy(p => p.Page))
         {
-            foreach (var block in page.Blocks)
+            for (var blockIndex = 0; blockIndex < page.Blocks.Count; blockIndex++)
             {
+                var block = page.Blocks[blockIndex];
                 if (boilerplate.Contains(Shape(block.Text)) || string.IsNullOrWhiteSpace(block.Text))
                     continue;
                 string[] lines = [.. block.Text.Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0)];
@@ -192,10 +199,10 @@ public static partial class CandidateDetector
                 // Evocation (…)", "Origin Feat", "Level 3 … Feature") is one header, however the PDF split it.
                 if (units.Count > 0 && units[^1] is { Lines.Length: 1 } previous && previous.Page == page.Page && LooksLikeName(previous.Lines[0]) && IsSecondHeaderLine(lines[0]))
                 {
-                    units[^1] = previous with { Lines = [.. previous.Lines, .. lines] };
+                    units[^1] = previous with { Lines = [.. previous.Lines, .. lines], LastBlockIndex = blockIndex };
                     continue;
                 }
-                units.Add(new(page.Page, units.Count, block, lines, page.FromOcr));
+                units.Add(new(page.Page, units.Count, block, lines, page.FromOcr) { BlockIndex = blockIndex, LastBlockIndex = blockIndex });
             }
         }
         return units;
@@ -327,10 +334,12 @@ public static partial class CandidateDetector
             : ([], ["Say which rules family this is written for before accepting."], true);
 
     /// <summary>The description after a header: the following blocks until the next header or heading, at most 80 lines.</summary>
-    private static List<string> Description(List<Unit> units, int start, double body, Func<Unit, bool> isHeader, out int endPage)
+    /// <param name="lastUnit">The index of the last unit taken (D64 spans); <c>start - 1</c> when none was.</param>
+    private static List<string> Description(List<Unit> units, int start, double body, Func<Unit, bool> isHeader, out int endPage, out int lastUnit)
     {
         var lines = new List<string>();
         endPage = start < units.Count ? units[start].Page : 0;
+        lastUnit = start - 1;
         for (var i = start; i < units.Count && lines.Count < MaxDescriptionLines; i++)
         {
             var unit = units[i];
@@ -340,8 +349,76 @@ public static partial class CandidateDetector
                 lines.Add("");
             lines.AddRange(unit.Lines);
             endPage = unit.Page;
+            lastUnit = i;
         }
         return lines;
+    }
+
+    // ---- spans (D64) ----
+
+    /// <summary>
+    /// A span over units <paramref name="first"/> to <paramref name="last"/>, kept to the first unit's page (a span that would run
+    /// onto the next page ends at its last block on the first). The pass's own confidence, no second scan.
+    /// </summary>
+    private static CandidateSpan SpanOf(List<Unit> units, int first, int last, string patternId, double confidence)
+    {
+        var page = units[first].Page;
+        var end = first;
+        for (var i = first + 1; i <= last && units[i].Page == page; i++)
+            end = i;
+        return new(page, null, units[first].BlockIndex, units[end].LastBlockIndex, null, null, patternId, confidence);
+    }
+
+    /// <summary>The span of the first unit in <paramref name="first"/>..<paramref name="last"/> whose text holds <paramref name="needle"/>; the whole range when none does.</summary>
+    private static CandidateSpan Evidence(List<Unit> units, int first, int last, string needle, string patternId, double confidence)
+    {
+        var wanted = Squash(needle);
+        for (var i = first; i <= last && i < units.Count && units[i].Page == units[first].Page; i++)
+        {
+            if (Squash(string.Join(' ', units[i].Lines)).Contains(wanted, StringComparison.Ordinal))
+                return SpanOf(units, i, i, patternId, confidence);
+        }
+        return SpanOf(units, first, last, patternId, confidence);
+    }
+
+    private static string Squash(string text) => string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+    /// <summary>The spans that exist, by effect id; null when there are none (the field is then absent from the stored JSON).</summary>
+    private static IReadOnlyDictionary<string, CandidateSpan>? SpansById(IEnumerable<(string Id, CandidateSpan? Span)> spans)
+    {
+        var found = new Dictionary<string, CandidateSpan>(StringComparer.Ordinal);
+        foreach (var (id, span) in spans)
+        {
+            if (span is not null)
+                found[id] = span;
+        }
+        return found.Count == 0 ? null : found;
+    }
+
+    /// <summary>The index in the page's stored blocks of the block holding <paramref name="line"/> (matched by position and trimmed text), or -1.</summary>
+    private static int BlockIndexOf(DetectionPage page, TextLine line)
+    {
+        for (var b = 0; b < page.Blocks.Count; b++)
+        {
+            var block = page.Blocks[b];
+            if (block.Lines is { Count: > 0 } lines)
+            {
+                if (lines.Any(l => SameLine(l, line)))
+                    return b;
+            }
+            else if (SameLine(new TextLine(block.Text, block.X, block.Y, block.Width, block.Height), line))
+                return b;
+        }
+        return -1;
+    }
+
+    private static bool SameLine(TextLine stored, TextLine line) => stored.X == line.X && stored.Y == line.Y && stored.Text.Trim() == line.Text;
+
+    /// <summary>A span over the blocks that hold <paramref name="lines"/> on one page; null when none of them is found.</summary>
+    private static CandidateSpan? SpanOfLines(DetectionPage page, IEnumerable<TextLine> lines, string patternId, double confidence)
+    {
+        var blocks = lines.Select(l => BlockIndexOf(page, l)).Where(b => b >= 0).ToList();
+        return blocks.Count == 0 ? null : new(page.Page, null, blocks.Min(), blocks.Max(), null, null, patternId, confidence);
     }
 
     private static string Paragraphs(List<string> lines) =>
@@ -424,7 +501,7 @@ public static partial class CandidateDetector
                 else
                     description.Add(line);
             }
-            var more = Description(units, next, body, u => ReadSpellHeader(u) is not null, out var endPage);
+            var more = Description(units, next, body, u => ReadSpellHeader(u) is not null, out var endPage, out var lastUnit);
             if (more.Count > 0 && description.Count > 0)
                 description.Add("");
             description.AddRange(more);
@@ -490,13 +567,17 @@ public static partial class CandidateDetector
             if (header.Lists.Count > 0)
                 fields["lists"] = string.Join(", ", header.Lists);
 
+            var spellConfidence = Clamp(confidence);
             yield return new DraftCandidate(
                 Guid.NewGuid(), context.SourceId, new PageRef(unit.Page, endPage > unit.Page ? endPage : null), Excerpt(unit.Lines.Concat(stream).Concat(description)),
-                ContentKind.Spell, header.Name, families, [effect], Clamp(confidence), uncertainties)
+                ContentKind.Spell, header.Name, families, [effect], spellConfidence, uncertainties)
             {
                 Fields = fields,
                 LowConfidenceFields = low,
                 Summary = text.Length == 0 ? null : text,
+                // D64: the effect is read from the header, its detail lines and the description (dice, attack and save come from it); the name from the header alone.
+                EffectSpans = SpansById([(effect.Id, SpanOf(units, i, Math.Max(next - 1, lastUnit),DetectionPatterns.SpellComponents, spellConfidence))]),
+                NameSpan = SpanOf(units, i, i, DetectionPatterns.SpellHeader, spellConfidence),
             };
         }
     }
@@ -626,7 +707,7 @@ public static partial class CandidateDetector
             else
                 continue;
 
-            var description = Description(units, descriptionStart, body, u => IsFeatHeader(u) || ReadSpellHeader(u) is not null || FeatureHeader(u) is not null, out var endPage);
+            var description = Description(units, descriptionStart, body, u => IsFeatHeader(u) || ReadSpellHeader(u) is not null || FeatureHeader(u) is not null, out var endPage, out var lastUnit);
             var excerptLines = unit.Lines.Concat(description).ToList();
             var own = ownRest.ToList();
             if (own.Count > 0 && description.Count > 0)
@@ -646,15 +727,22 @@ public static partial class CandidateDetector
             else
                 (families, uncertainties) = Family(layout, context);
             var effects = new List<Effect>();
+            var featConfidence = Clamp(text.Length == 0 ? 0.6 : 0.85);
+            var effectSpans = new List<(string Id, CandidateSpan? Span)>();
             foreach (Match bonus in Bonus().Matches(text))
             {
                 var target = bonus.Groups["target"].Value.ToLowerInvariant() is "initiative" ? FieldIds.Initiative : FieldIds.ArmorClass;
-                effects.Add(new ModifierEffect { Id = $"bonus-{effects.Count + 1}", Operation = ModifierOperation.Bonus, Target = target, Value = bonus.Groups["amount"].Value });
+                var bonusId = $"bonus-{effects.Count + 1}";
+                effects.Add(new ModifierEffect { Id = bonusId, Operation = ModifierOperation.Bonus, Target = target, Value = bonus.Groups["amount"].Value });
+                effectSpans.Add((bonusId, Evidence(units, i, lastUnit, bonus.Value, DetectionPatterns.FeatBonus, featConfidence)));
             }
             foreach (Match skill in SkillProficiency().Matches(text))
             {
                 if (CharacterCalculator.Skills.FirstOrDefault(s => s.Label.Equals(skill.Groups["skill"].Value, StringComparison.OrdinalIgnoreCase)) is { Key: { } key })
+                {
                     effects.Add(new GrantEffect { Id = $"skill-{key}", Grant = GrantKind.Proficiency, Target = FieldIds.Skill(key) });
+                    effectSpans.Add(($"skill-{key}", Evidence(units, i, lastUnit, skill.Value, DetectionPatterns.FeatSkillProficiency, featConfidence)));
+                }
             }
             if (text.Contains("choice", StringComparison.OrdinalIgnoreCase) || text.Contains("choose", StringComparison.OrdinalIgnoreCase))
             {
@@ -671,12 +759,14 @@ public static partial class CandidateDetector
                 fields["prerequisite"] = prerequisite;
             yield return new DraftCandidate(
                 Guid.NewGuid(), context.SourceId, new PageRef(unit.Page, endPage > unit.Page ? endPage : null), Excerpt(excerptLines),
-                ContentKind.Feat, name, families, effects, Clamp(text.Length == 0 ? 0.6 : 0.85), uncertainties)
+                ContentKind.Feat, name, families, effects, featConfidence, uncertainties)
             {
                 Fields = fields,
                 LowConfidenceFields = low,
                 UnresolvedReferences = [.. ReferencedSpells(text)],
                 Summary = text.Length == 0 ? null : text,
+                EffectSpans = SpansById(effectSpans),
+                NameSpan = SpanOf(units, i, descriptionStart - 1, DetectionPatterns.FeatHeader, featConfidence),
             };
         }
     }
@@ -754,7 +844,7 @@ public static partial class CandidateDetector
                 continue;
 
             var description = start.Rest.ToList();
-            var more = Description(units, descriptionStart, body, u => FeatureHeader(u) is not null || IsFeatHeader(u) || ReadSpellHeader(u) is not null, out var endPage);
+            var more = Description(units, descriptionStart, body, u => FeatureHeader(u) is not null || IsFeatHeader(u) || ReadSpellHeader(u) is not null, out var endPage, out _);
             if (more.Count > 0 && description.Count > 0)
                 description.Add("");
             description.AddRange(more);
@@ -768,14 +858,16 @@ public static partial class CandidateDetector
                 fields["level"] = start.Level.ToString(CultureInfo.InvariantCulture);
             if (start.Owner is not null)
                 fields["class"] = start.Owner;
+            var featureConfidence = Clamp(text.Length == 0 ? 0.5 : start.Layout == RulesFamilies.Srd521 ? 0.85 : levelUnknown ? 0.55 : 0.7);
             yield return new DraftCandidate(
                 Guid.NewGuid(), context.SourceId, new PageRef(unit.Page, endPage > unit.Page ? endPage : null), Excerpt(unit.Lines.Concat(description)),
-                ContentKind.Feature, start.Name, families, [], Clamp(text.Length == 0 ? 0.5 : start.Layout == RulesFamilies.Srd521 ? 0.85 : levelUnknown ? 0.55 : 0.7), uncertainties)
+                ContentKind.Feature, start.Name, families, [], featureConfidence, uncertainties)
             {
                 Fields = fields,
                 LowConfidenceFields = levelUnknown ? ["level"] : [],
                 UnresolvedReferences = [.. ReferencedSpells(text)],
                 Summary = text.Length == 0 ? null : text,
+                NameSpan = SpanOf(units, i, i, DetectionPatterns.FeatureHeader, featureConfidence), // proposes text only: no effect to span
             };
         }
     }
@@ -841,12 +933,16 @@ public static partial class CandidateDetector
             var fields = new Dictionary<string, string>(StringComparer.Ordinal) { ["damage"] = $"{damage} {type.ToLowerInvariant()}", ["properties"] = string.Join(", ", properties) };
             if (category is not null)
                 fields["category"] = category;
+            var weaponConfidence = Clamp(category is null ? 0.6 : 0.85);
+            var rowSpan = SpanOfLines(page, row, DetectionPatterns.WeaponRow, weaponConfidence); // the row holds both the name and the effect
             yield return new DraftCandidate(
                 Guid.NewGuid(), context.SourceId, new PageRef(page.Page), Excerpt([string.Join("  ", row.Select(c => c.Text))]),
-                ContentKind.Item, name, families, [effect], Clamp(category is null ? 0.6 : 0.85), uncertainties)
+                ContentKind.Item, name, families, [effect], weaponConfidence, uncertainties)
             {
                 Fields = fields,
                 LowConfidenceFields = low,
+                EffectSpans = SpansById([(effect.Id, rowSpan)]),
+                NameSpan = rowSpan,
             };
         }
     }
@@ -904,14 +1000,19 @@ public static partial class CandidateDetector
             uncertainties.AddRange(familyNotes);
             if (familyUnsure)
                 low.Add("rulesFamilies");
+            var armorConfidence = Clamp(section is null && !shield ? 0.6 : 0.85);
+            var armorRow = SameRow(lines, line);
+            var armorSpan = SpanOfLines(page, armorRow, DetectionPatterns.ArmorRow, armorConfidence);
             yield return new DraftCandidate(
-                Guid.NewGuid(), context.SourceId, new PageRef(page.Page), Excerpt([string.Join("  ", SameRow(lines, line).Select(c => c.Text))]),
+                Guid.NewGuid(), context.SourceId, new PageRef(page.Page), Excerpt([string.Join("  ", armorRow.Select(c => c.Text))]),
                 ContentKind.Item, name, families,
                 [new ArmorEffect { Id = "armor", Category = category, ArmorClass = number, DexterityCap = category == ArmorCategory.Medium ? 2 : null }],
-                Clamp(section is null && !shield ? 0.6 : 0.85), uncertainties)
+                armorConfidence, uncertainties)
             {
                 Fields = new Dictionary<string, string>(StringComparer.Ordinal) { ["armorClass"] = ac, ["category"] = category.ToString().ToLowerInvariant() },
                 LowConfidenceFields = low,
+                EffectSpans = SpansById([("armor", armorSpan)]),
+                NameSpan = armorSpan,
             };
         }
     }
@@ -1114,16 +1215,54 @@ public static partial class CandidateDetector
         lowConfidence.AddRange(proposal.LowConfidenceFields);
         if (familyUnsure)
             lowConfidence.Add("rulesFamilies");
+        var classConfidence = Clamp(features.Count >= 3 ? 0.7 : 0.5);
         var candidate = new DraftCandidate(
             Guid.NewGuid(), context.SourceId, new PageRef(page.Page), Excerpt(ordered.Select(f => $"{f.Key}: {string.Join(", ", f.Value)}")),
-            ContentKind.Class, className, families, proposal.Effects, Clamp(features.Count >= 3 ? 0.7 : 0.5), uncertainties)
+            ContentKind.Class, className, families, proposal.Effects, classConfidence, uncertainties)
         {
             Fields = fields,
             UnresolvedReferences = references,
             LowConfidenceFields = lowConfidence,
+            EffectSpans = SpansById(proposal.Sources.Select(s => (s.Key, ClassSpan(page, pageTextLines, s.Value, classConfidence)))),
+            NameSpan = ClassTitleLine(pageTextLines, className) is { } title ? SpanOfLines(page, [title], DetectionPatterns.ClassTitle, classConfidence) : null,
         };
         classFeatures[candidate.Id] = features;
         return candidate;
+    }
+
+    /// <summary>The line that titles <paramref name="className"/>'s table on the page ("The Bard", "Bard Features"), or null.</summary>
+    private static TextLine? ClassTitleLine(List<TextLine> pageTextLines, string className)
+    {
+        foreach (var line in pageTextLines)
+        {
+            if (ClassTableTitle().Match(line.Text) is not { Success: true } match)
+                continue;
+            var name = TitleCase(match.Groups["name"].Value.Trim());
+            if (name.EndsWith(" Class", StringComparison.Ordinal))
+                name = name[..^" Class".Length];
+            if (Key(name) == Key(className))
+                return line;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// D64: where a class effect was read, among the lines of the class's own window: the line it matched (else its trait label's
+    /// line, else a line holding the text); a table-derived effect (spellcasting, subclass) falls back to the table's "Features" header.
+    /// Null when the text is not on this page (for example a Core Traits block on the page before): a span never points off the page.
+    /// </summary>
+    private static CandidateSpan? ClassSpan(DetectionPage page, List<TextLine> pageTextLines, ClassProposals.EffectSource source, double confidence)
+    {
+        TextLine? line = null;
+        if (source.Needle is { Length: > 0 } needle)
+        {
+            line = pageTextLines.FirstOrDefault(l => l.Text == needle)
+                ?? (source.Label is { } label ? pageTextLines.FirstOrDefault(l => l.Text.StartsWith(label, StringComparison.OrdinalIgnoreCase)) : null)
+                ?? pageTextLines.FirstOrDefault(l => l.Text.Contains(needle, StringComparison.Ordinal));
+        }
+        if (line is null && source.PatternId is DetectionPatterns.ClassSpellcasting or DetectionPatterns.ClassSubclass)
+            line = pageTextLines.FirstOrDefault(l => IsFeaturesCell(l.Text));
+        return line is null ? null : SpanOfLines(page, [line], source.PatternId, confidence);
     }
 
     // ---- patterns (anchored, with a match timeout) ----

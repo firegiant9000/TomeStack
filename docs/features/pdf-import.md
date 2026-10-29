@@ -107,6 +107,49 @@ Code: `src/ImportWorker/Detection/CandidateDetector.cs`; the service runs it whe
 
 **What these numbers do not show:** they measure the SRD layouts the detectors were written against. A third-party book with its own layout will score lower, especially on class features and tables. That is why every candidate needs review (ADR-004), and why the M4 exit gate runs a third-party test PDF (D6).
 
+### Per-effect source spans (Import Lab L4, D64)
+
+Each candidate says where on the page each proposed effect was read, so review can show that part of the page instead of the whole excerpt.
+
+- `DraftCandidate.EffectSpans` is keyed by proposed effect id, and `NameSpan` places the name. Both are optional: a candidate stored before spans existed, or an effect the detector could not place, has none, and review then shows the whole excerpt as before.
+- A `CandidateSpan` is `Page`, `PageEnd`, `BlockStart`, `BlockEnd`, `LineStart`, `LineEnd`, `PatternId` and `Confidence`. The blocks index the page's stored blocks (the page text the job keeps), so the text is read from there, not from the PDF. The detector keeps a span on one page (`PageEnd` is null) and sets no lines, for a PDF or for Markdown: **Markdown spans carry block indices only**, so `LineStart` and `LineEnd` are always null. The owner chose not to add a source-line field to `TextBlock`; the "Lines a–b" in review is worked out from the blocks' own lines on the stored page, not from the `.md` file's line numbers.
+- `PatternId` is a stable id from `DetectionPatterns` (for example `spell.components`, `weapon.row`, `class.hit-die`): an id, never prose. `Confidence` is the candidate's own confidence for that pass; no pass scans a second time and no detection result changes.
+- Spells place the effect on the header and its detail lines; feats place each bonus or skill proficiency on the paragraph that states it; weapon and armor rows on the table row; a class's hit die, saving throws and weapon and armor training on the line they were read from, and its spellcasting and subclass effects on that line, or on the table's "Features" header when the sentence is not on the class's page. A class feature proposes text only, so it has a name span and no effect span. A class's saves, hit die or training read from a Core Traits block on the page before the table have no span (a span never points off the candidate's pages).
+- Stored candidates keep `CurrentSchemaVersion = 1`. `effectSpans`, `nameSpan` (inside `candidate` and `edited`) and `attachmentSha256` (on the row: the job's attachment hash when it was detected, so a span still resolves to the stored page text after the attachment is replaced) are additive keys, left out of the JSON while null, so a row stored without them reads and writes byte for byte as before. Accepting a candidate never reads them: the draft, its provenance page and its effects are exactly what they were. Editing keeps them.
+- A 0.7.0-or-earlier build keeps `attachmentSha256` as an unknown field of the row (the stored candidate has a catch-all), but drops `effectSpans` and `nameSpan` when it saves the candidate (its draft candidate had no catch-all for unknown keys); review then shows the whole excerpt for that row. From this build on, a draft candidate keeps unknown keys too (`Extensions`, left out of the JSON while empty), so later additive fields survive a build that does not know them.
+- A spell's effect span runs from its header through its detail lines and description, because its dice, attack and save are read from the description.
+- Review shows the proposed effects as buttons beside the stored page text (`import.page` with the candidate's `attachmentSha256` when it has one, so the highlight stays on the PDF it was read from after the source's PDF is replaced; text nodes only, never HTML); choosing one highlights its span in a `<mark>` and says "Lines a–b". Review shows the whole excerpt, as before, whenever the candidate has no spans, the effect has none, the effect was edited away, the page fails to load, or the span does not fit the page's blocks.
+
+### Possible duplicates in review (Import Lab L6)
+
+A pending candidate that looks like content already in the library shows "Possible duplicate of {name} ({source})" beside its row in the candidate list. It comes from the read-only `content.duplicates { jobId }` command: the job's pending candidates (their current, edited version) against the latest published revision of each library content, inside one kind and one rules family. A candidate with no rules family is not compared. The chip is advice: accepting, editing and ignoring work as before, nothing is merged, and a failed lookup shows no chip and no error. The list asks again after an edit, an accept or a spell-list change. The classes and the rules are in [import-lab.md](import-lab.md) (IL-05).
+
+### Markdown import (Import Lab L7, D67)
+
+A homebrew source can import a `.md` file with "Import a Markdown file…" (no PDF needed). It feeds the same detector and review as a PDF; the differences:
+
+- **Pages only.** The file is read once (up to 4 MB), its SHA-256 is kept on the job, and the worker kind `extractMarkdown` reads a temp copy outside the attachments folder that is deleted when the run ends. The file is not copied into the library, so it is not in library backups, and the job is not resumable: Resume is not offered and `import.resume` answers `import.markdown-read-again` ("Import the Markdown file again."). The job record carries `format: "markdown"` (absent for PDF jobs).
+- **Errors:** `markdown.missing`, `markdown.unreadable`, `markdown.encoding` (not UTF-8), `markdown.too-large` (over 4 MB, 200,000 lines, 10,000 characters in a line, 2,000 pages or 40 table columns). Nothing partial is kept.
+- **Search and stored pages.** A source with no PDF searches and shows stored pages from its newest Markdown job that stored pages (a newer failed or cancelled import does not hide an earlier good one); a PDF attachment's text wins when there is one. The in-app page view shows plain text with the page warnings in words (`markdown.page-order`, `markdown.front-matter-ignored`, `page.text-truncated`, `page.no-text`).
+- **Import-derived.** Starting a Markdown import marks the source import-derived, like a PDF import, so it is never shared.
+- **Re-imports.** Every edit-and-reimport of a `.md` stores a new page set (a new sha), and old page sets are not reclaimed.
+- **Sparse pages.** A `<!-- page: N -->` marker starts page N (numbers must go up; a lower one is ignored with a warning). A page with no text is not emitted; a file with only warnings is one empty page.
+
+| Markdown | Becomes |
+|---|---|
+| `#` to `####` heading | a heading block (large, bold text) |
+| Paragraph | one text block, one line per source line |
+| `Name. text` run-in head | a bold run-in head then body, as a PDF feature head |
+| `-`, `*`, `+` or `1.` item | a list-item block |
+| GFM pipe table | one block per row; cells at X = 72 + column × 90, header bold; a ragged table is plain text rows |
+| `<!-- page: N -->` | starts page N; with no markers a page ends after 60 source lines |
+| Front matter (`---` … `---`) | skipped, with a warning |
+| Code fence | one plain-text block |
+| Emphasis, code marks, links, images | text kept, marks and images removed |
+| HTML | tags removed; `script`, `style` and comment content dropped; nothing is fetched or run |
+
+Positions follow PDF conventions: Y decreases down the page, synthetic at 756 − 12 × row, so the detector's reading order and spacing rules work unchanged.
+
 ## D2: import jobs (ARCHITECTURE "Import lifecycle")
 
 Service: `src/AppService/ImportJobs.cs`, database migration v6 in `SqliteStore`. Acceptance: `tests/AppService.Tests/ImportJobTests.cs`.
@@ -119,8 +162,8 @@ Service: `src/AppService/ImportJobs.cs`, database migration v6 in `SqliteStore`.
 | `import.cancel` | `{ jobId }` | Stops the running job (the worker is killed). Pages already extracted stay |
 | `import.resume` | `{ jobId }` | Continues a cancelled, failed or interrupted job at `nextPage`, on the same PDF (`import.pdf-changed` otherwise) |
 | `import.audit` | `{ jobId }` | The local audit log: `created`, `started`, `resumed`, `page-skipped` (page and code), `detection-limited`, `cancelled`, `interrupted`, `failed` (with the code) and `completed` (with counts). **Codes, page numbers and counts only, never text from the PDF** |
-| `import.search` | `{ sourceId, query }` | SPEC I-03: pages of the source's PDF whose extracted text contains the query (2 to 100 characters, case-insensitive), with a snippet, at most 50. Only within one source; search across sources is M7 (BACKLOG B10) |
-| `import.page` | `{ sourceId, page }` | One extracted page: text, blocks, warnings and error |
+| `import.search` | `{ sourceId, query }` | SPEC I-03: pages whose extracted text contains the query (2 to 100 characters, case-insensitive), with a snippet, at most 50. The text is the source's PDF attachment's when it has one, otherwise the newest Markdown job that stored pages. Only within one source; search across sources is M7 (BACKLOG B10) |
+| `import.page` | `{ sourceId, page, sha256? }` | One extracted page: text, blocks, warnings and error. With `sha256`, the stored page for that hash, only if one of the source's own import jobs read it (else `import.page-not-extracted`); without, the source's PDF attachment when it has one, otherwise the newest Markdown job that stored pages |
 
 - **Progress and resume:** each page is stored as it arrives, in the same transaction as the job's counts. A cancelled or failed job resumes where it stopped. A job that was running when the app closed (or crashed) is `interrupted` at the next start, and resumes the same way. This is page-granular.
 - **A page that kills the worker fails alone:** when the worker crashes, times out on a page, runs out of memory or sends more than a page can hold (`worker.crashed`, `worker.page-timeout`, `worker.memory`, `worker.message-too-large`), that page is stored as unreadable with the code as its error, and a fresh worker continues with the next page. After 5 such pages in one run (`TomeStackApp.MaxSkippedPagesPerRun`), the job fails with the last code, and `import.resume` continues after them. A failure before the document opens (for example `pdf.encrypted`) still fails the job. Acceptance: `ImportJobTests.A_page_that_kills_the_worker_fails_alone_and_the_rest_of_the_book_is_read` and `…After_too_many_pages_that_kill_the_worker…`.

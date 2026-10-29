@@ -1,0 +1,842 @@
+[
+  {
+    "id": "00000000-0000-0000-0000-000000000000",
+    "sourceId": "5fad5000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 2
+    },
+    "excerpt": "Fixture Ember Lance\nLevel 2 Evocation (Fixture Mage)\nCasting Time: Action\nRange: 60 feet\nComponents: V, S\nDuration: Instantaneous\nCasting Time: Action\nRange: 60 feet\nComponents: V, S\nDuration: Instantaneous\nA lance of fixture flame streaks toward a\ncreature within range. Make a ranged spell\nattack. On a hit, the target takes 3d6 Fire\ndamage.",
+    "proposedKind": "spell",
+    "proposedName": "Fixture Ember Lance",
+    "rulesFamilies": [
+      "srd-5.2.1"
+    ],
+    "proposedEffects": [
+      {
+        "type": "spell",
+        "id": "spell",
+        "level": 2,
+        "school": "evocation",
+        "castingTime": "Action",
+        "range": "60 feet",
+        "components": "V, S",
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "lists": [
+          "fixture-mage"
+        ],
+        "attack": "ranged",
+        "dice": "3d6",
+        "automation": "automatic",
+        "timing": "always",
+        "text": "A lance of fixture flame streaks toward a creature within range. Make a ranged spell attack. On a hit, the target takes 3d6 Fire damage."
+      }
+    ],
+    "confidence": 0.95,
+    "uncertainties": [],
+    "unresolvedReferences": [],
+    "fields": {
+      "level": "2",
+      "school": "evocation",
+      "castingtime": "Action",
+      "range": "60 feet",
+      "components": "V, S",
+      "duration": "Instantaneous",
+      "lists": "fixture-mage"
+    },
+    "lowConfidenceFields": [],
+    "summary": "A lance of fixture flame streaks toward a creature within range. Make a ranged spell attack. On a hit, the target takes 3d6 Fire damage."
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000000",
+    "sourceId": "5fad5000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 2
+    },
+    "excerpt": "Fixture Frost Veil\n1st-level abjuration\nCasting Time: 1 reaction\nRange: Self\nComponents: V, S, M (a fixture snowflake)\nDuration: 1 round\nCasting Time: 1 reaction\nRange: Self\nComponents: V, S, M (a fixture snowflake)\nDuration: 1 round\nA veil of fixture frost surrounds you. Until\nthe start of your next turn, you have a \u002B2\nbonus to AC. Each creature that hits you\nmust make a Constitution saving throw.",
+    "proposedKind": "spell",
+    "proposedName": "Fixture Frost Veil",
+    "rulesFamilies": [
+      "srd-5.1"
+    ],
+    "proposedEffects": [
+      {
+        "type": "spell",
+        "id": "spell",
+        "level": 1,
+        "school": "abjuration",
+        "castingTime": "1 reaction",
+        "range": "Self",
+        "components": "V, S, M (a fixture snowflake)",
+        "duration": "1 round",
+        "concentration": false,
+        "ritual": false,
+        "lists": [],
+        "attack": "none",
+        "save": "con",
+        "automation": "automatic",
+        "timing": "always",
+        "text": "A veil of fixture frost surrounds you. Until the start of your next turn, you have a \u002B2 bonus to AC. Each creature that hits you must make a Constitution saving throw."
+      }
+    ],
+    "confidence": 0.95,
+    "uncertainties": [
+      "The spell block names no class lists (SRD 5.1 prints them separately); add them to use the spell with a caster."
+    ],
+    "unresolvedReferences": [],
+    "fields": {
+      "level": "1",
+      "school": "abjuration",
+      "castingtime": "1 reaction",
+      "range": "Self",
+      "components": "V, S, M (a fixture snowflake)",
+      "duration": "1 round"
+    },
+    "lowConfidenceFields": [],
+    "summary": "A veil of fixture frost surrounds you. Until the start of your next turn, you have a \u002B2 bonus to AC. Each creature that hits you must make a Constitution saving throw."
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000000",
+    "sourceId": "5fad5000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 3
+    },
+    "excerpt": "Fixture Stormcall\nLevel 3 Fixture Warden Feature\nYou can cast Fixture Thunder Word once without expending a spell slot.\nYou regain the ability to do so when you finish a Long Rest.",
+    "proposedKind": "feature",
+    "proposedName": "Fixture Stormcall",
+    "rulesFamilies": [
+      "srd-5.2.1"
+    ],
+    "proposedEffects": [],
+    "confidence": 0.85,
+    "uncertainties": [
+      "Class features are proposed as text; grants, resources and uses are added by hand."
+    ],
+    "unresolvedReferences": [
+      "Fixture Thunder Word"
+    ],
+    "fields": {
+      "level": "3",
+      "class": "Fixture Warden"
+    },
+    "lowConfidenceFields": [],
+    "summary": "You can cast Fixture Thunder Word once without expending a spell slot. You regain the ability to do so when you finish a Long Rest."
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000000",
+    "sourceId": "5fad5000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 3
+    },
+    "excerpt": "Fixture Keen Watcher\nOrigin Feat\nYou gain the following benefits.\nAlert Eyes. You gain a \u002B2 bonus to initiative.\nWatchful Mind. You have proficiency in the Perception skill.",
+    "proposedKind": "feat",
+    "proposedName": "Fixture Keen Watcher",
+    "rulesFamilies": [
+      "srd-5.2.1"
+    ],
+    "proposedEffects": [
+      {
+        "type": "modifier",
+        "id": "bonus-1",
+        "operation": "bonus",
+        "target": "initiative",
+        "value": "2",
+        "stacking": "stack",
+        "automation": "automatic",
+        "timing": "always"
+      },
+      {
+        "type": "grant",
+        "id": "skill-perception",
+        "grant": "proficiency",
+        "target": "skill.perception",
+        "automation": "automatic",
+        "timing": "always"
+      }
+    ],
+    "confidence": 0.85,
+    "uncertainties": [
+      "The effects were read from the text; check them against the page."
+    ],
+    "unresolvedReferences": [],
+    "fields": {
+      "category": "Origin"
+    },
+    "lowConfidenceFields": [],
+    "summary": "You gain the following benefits. Alert Eyes. You gain a \u002B2 bonus to initiative. Watchful Mind. You have proficiency in the Perception skill."
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000000",
+    "sourceId": "5fad5000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 4
+    },
+    "excerpt": "Fixture Hookblade 1d8 slashing Finesse, Light 2 lb. 12 GP",
+    "proposedKind": "item",
+    "proposedName": "Fixture Hookblade",
+    "rulesFamilies": [
+      "srd-5.1"
+    ],
+    "proposedEffects": [
+      {
+        "type": "weapon",
+        "id": "weapon",
+        "category": "martial",
+        "attack": "melee",
+        "damage": "1d8",
+        "damageType": "slashing",
+        "properties": [
+          "finesse",
+          "light"
+        ],
+        "weaponKey": "fixture-hookblade",
+        "automation": "automatic",
+        "timing": "always"
+      }
+    ],
+    "confidence": 0.85,
+    "uncertainties": [
+      "Read from a table row; check the columns against the page."
+    ],
+    "unresolvedReferences": [],
+    "fields": {
+      "damage": "1d8 slashing",
+      "properties": "finesse, light",
+      "category": "Martial Melee Weapons"
+    },
+    "lowConfidenceFields": []
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000000",
+    "sourceId": "5fad5000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 4
+    },
+    "excerpt": "Fixture Longstaff 1d10 bludgeoning Heavy, Reach, Two-Handed 6 lb. 8 GP",
+    "proposedKind": "item",
+    "proposedName": "Fixture Longstaff",
+    "rulesFamilies": [
+      "srd-5.1"
+    ],
+    "proposedEffects": [
+      {
+        "type": "weapon",
+        "id": "weapon",
+        "category": "martial",
+        "attack": "melee",
+        "damage": "1d10",
+        "damageType": "bludgeoning",
+        "properties": [
+          "heavy",
+          "reach",
+          "two-handed"
+        ],
+        "weaponKey": "fixture-longstaff",
+        "automation": "automatic",
+        "timing": "always"
+      }
+    ],
+    "confidence": 0.85,
+    "uncertainties": [
+      "Read from a table row; check the columns against the page."
+    ],
+    "unresolvedReferences": [],
+    "fields": {
+      "damage": "1d10 bludgeoning",
+      "properties": "heavy, reach, two-handed",
+      "category": "Martial Melee Weapons"
+    },
+    "lowConfidenceFields": []
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000000",
+    "sourceId": "5fad5000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 4
+    },
+    "excerpt": "Fixture Plate Shell 17 Str 15 Disadvantage 60 lb. 900 GP",
+    "proposedKind": "item",
+    "proposedName": "Fixture Plate Shell",
+    "rulesFamilies": [],
+    "proposedEffects": [
+      {
+        "type": "armor",
+        "id": "armor",
+        "category": "heavy",
+        "armorClass": 17,
+        "automation": "automatic",
+        "timing": "always"
+      }
+    ],
+    "confidence": 0.85,
+    "uncertainties": [
+      "Read from a table row; check the columns against the page.",
+      "Say which rules family this is written for before accepting."
+    ],
+    "unresolvedReferences": [],
+    "fields": {
+      "armorClass": "17",
+      "category": "heavy"
+    },
+    "lowConfidenceFields": [
+      "rulesFamilies"
+    ]
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000000",
+    "sourceId": "5fad5000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 4
+    },
+    "excerpt": "Fixture Quilted Coat 11 \u002B Dex modifier - - 8 lb. 6 GP",
+    "proposedKind": "item",
+    "proposedName": "Fixture Quilted Coat",
+    "rulesFamilies": [],
+    "proposedEffects": [
+      {
+        "type": "armor",
+        "id": "armor",
+        "category": "light",
+        "armorClass": 11,
+        "automation": "automatic",
+        "timing": "always"
+      }
+    ],
+    "confidence": 0.85,
+    "uncertainties": [
+      "Read from a table row; check the columns against the page.",
+      "Say which rules family this is written for before accepting."
+    ],
+    "unresolvedReferences": [],
+    "fields": {
+      "armorClass": "11 \u002B Dex modifier",
+      "category": "light"
+    },
+    "lowConfidenceFields": [
+      "rulesFamilies"
+    ]
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000000",
+    "sourceId": "5fad5000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 5
+    },
+    "excerpt": "1: Fixture Focus\n2: Fixture Resolve\n3: Fixture Stormcall",
+    "proposedKind": "class",
+    "proposedName": "Fixture Warden",
+    "rulesFamilies": [],
+    "proposedEffects": [],
+    "confidence": 0.7,
+    "uncertainties": [
+      "Say which rules family this is written for before accepting.",
+      "The hit die was not found on the class page: add it by hand.",
+      "The saving throw proficiencies were not found on the class page: add them by hand.",
+      "The armor proficiencies were not found on the class page: add them by hand if the class has any.",
+      "The weapon proficiencies were not found on the class page: add them by hand if the class has any.",
+      "The level table could not be read whole: only its features are proposed. Add what is missing by hand, or accept it as reference."
+    ],
+    "unresolvedReferences": [],
+    "fields": {
+      "level 1": "Fixture Focus",
+      "level 2": "Fixture Resolve",
+      "level 3": "Fixture Stormcall"
+    },
+    "lowConfidenceFields": [
+      "effects",
+      "rulesFamilies"
+    ]
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000000",
+    "sourceId": "5fad5000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 5
+    },
+    "excerpt": "Fixture Warden, level 1: Fixture Focus",
+    "proposedKind": "feature",
+    "proposedName": "Fixture Focus",
+    "rulesFamilies": [],
+    "proposedEffects": [],
+    "confidence": 0.3,
+    "uncertainties": [
+      "Say which rules family this is written for before accepting.",
+      "Only the name was found, in the class table: add its text by hand, or accept it as reference."
+    ],
+    "unresolvedReferences": [],
+    "fields": {
+      "class": "Fixture Warden",
+      "level": "1"
+    },
+    "lowConfidenceFields": []
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000000",
+    "sourceId": "5fad5000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 5
+    },
+    "excerpt": "Fixture Warden, level 2: Fixture Resolve",
+    "proposedKind": "feature",
+    "proposedName": "Fixture Resolve",
+    "rulesFamilies": [],
+    "proposedEffects": [],
+    "confidence": 0.3,
+    "uncertainties": [
+      "Say which rules family this is written for before accepting.",
+      "Only the name was found, in the class table: add its text by hand, or accept it as reference."
+    ],
+    "unresolvedReferences": [],
+    "fields": {
+      "class": "Fixture Warden",
+      "level": "2"
+    },
+    "lowConfidenceFields": []
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000000",
+    "sourceId": "5fad5000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 7
+    },
+    "excerpt": "1: Spellcasting, Fixture Lantern Rite\n2: Fixture Glow\n3: Fixture Order feature\n4: Ability Score Improvement\n5: Fixture Beacon\n6: Fixture Order feature\n7: Fixture Glow\n8: Ability Score Improvement\n9: Fixture Sconce\n10: Fixture Order feature\n11: Fixture Beacon\n12: Ability Score Improvement\n14: Fixture Order feature\n15: Fixture Dusk Step\n16: Ability Score Improvement\n18: Fixture Order feature\n19: Ability Score Improvement\n20: Fixture Final Light",
+    "proposedKind": "class",
+    "proposedName": "Fixture Lamplighter",
+    "rulesFamilies": [],
+    "proposedEffects": [
+      {
+        "type": "hitDie",
+        "id": "hit-die",
+        "die": 6,
+        "automation": "automatic",
+        "timing": "always",
+        "text": "Hit die read from the class page."
+      },
+      {
+        "type": "grant",
+        "id": "save-wis",
+        "grant": "proficiency",
+        "target": "save.wis",
+        "onlyAs": "startingClass",
+        "automation": "automatic",
+        "timing": "always"
+      },
+      {
+        "type": "grant",
+        "id": "save-cha",
+        "grant": "proficiency",
+        "target": "save.cha",
+        "onlyAs": "startingClass",
+        "automation": "automatic",
+        "timing": "always"
+      },
+      {
+        "type": "grant",
+        "id": "armor-light",
+        "grant": "proficiency",
+        "target": "armor.light",
+        "automation": "automatic",
+        "timing": "always"
+      },
+      {
+        "type": "grant",
+        "id": "weapon-simple",
+        "grant": "proficiency",
+        "target": "weapon.simple",
+        "automation": "automatic",
+        "timing": "always"
+      },
+      {
+        "type": "choice",
+        "id": "fixture-lamplighter-subclass",
+        "choiceId": "fixture-lamplighter-subclass",
+        "count": 1,
+        "options": [],
+        "level": 3,
+        "automation": "automatic",
+        "timing": "always"
+      },
+      {
+        "type": "spellcasting",
+        "id": "spellcasting",
+        "ability": "wis",
+        "preparation": "prepared",
+        "spellList": "fixture-lamplighter",
+        "slotKind": "spellSlots",
+        "slots": [
+          [
+            1
+          ],
+          [
+            1
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            1,
+            1,
+            1
+          ],
+          [
+            2,
+            1,
+            1
+          ],
+          [
+            2,
+            1,
+            1,
+            1
+          ],
+          [
+            2,
+            2,
+            1,
+            1
+          ],
+          [
+            2,
+            2,
+            1,
+            1,
+            1
+          ],
+          [
+            2,
+            2,
+            2,
+            1,
+            1
+          ],
+          [
+            3,
+            2,
+            2,
+            1,
+            1,
+            1
+          ],
+          [
+            3,
+            2,
+            2,
+            2,
+            1,
+            1
+          ],
+          [
+            3,
+            3,
+            2,
+            2,
+            1,
+            1,
+            1
+          ],
+          [
+            3,
+            3,
+            2,
+            2,
+            2,
+            1,
+            1
+          ],
+          [
+            3,
+            3,
+            3,
+            2,
+            2,
+            1,
+            1,
+            1
+          ],
+          [
+            4,
+            3,
+            3,
+            2,
+            2,
+            2,
+            1,
+            1
+          ],
+          [
+            4,
+            3,
+            3,
+            3,
+            2,
+            2,
+            1,
+            1,
+            1
+          ],
+          [
+            4,
+            4,
+            3,
+            3,
+            2,
+            2,
+            2,
+            1,
+            1
+          ],
+          [
+            4,
+            4,
+            3,
+            3,
+            3,
+            2,
+            2,
+            1,
+            1
+          ],
+          [
+            4,
+            4,
+            4,
+            3,
+            3,
+            2,
+            2,
+            2,
+            1
+          ]
+        ],
+        "cantrips": [
+          2,
+          2,
+          2,
+          2,
+          2,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          4,
+          4,
+          4,
+          4,
+          4,
+          4,
+          5,
+          5,
+          5
+        ],
+        "automation": "automatic",
+        "timing": "always",
+        "text": "Slots, cantrips and spells read from the class table."
+      }
+    ],
+    "confidence": 0.7,
+    "uncertainties": [
+      "Say which rules family this is written for before accepting.",
+      "The skill choice is shown but not proposed: add it by hand.",
+      "The subclass choice is proposed with no options: subclasses extend it.",
+      "The spell list is assumed to be this class\u0027s own (fixture-lamplighter): check it before accepting.",
+      "No spells column: how many spells are prepared is not proposed."
+    ],
+    "unresolvedReferences": [],
+    "fields": {
+      "level 1": "Spellcasting, Fixture Lantern Rite",
+      "level 2": "Fixture Glow",
+      "level 3": "Fixture Order feature",
+      "level 4": "Ability Score Improvement",
+      "level 5": "Fixture Beacon",
+      "level 6": "Fixture Order feature",
+      "level 7": "Fixture Glow",
+      "level 8": "Ability Score Improvement",
+      "level 9": "Fixture Sconce",
+      "level 10": "Fixture Order feature",
+      "level 11": "Fixture Beacon",
+      "level 12": "Ability Score Improvement",
+      "level 14": "Fixture Order feature",
+      "level 15": "Fixture Dusk Step",
+      "level 16": "Ability Score Improvement",
+      "level 18": "Fixture Order feature",
+      "level 19": "Ability Score Improvement",
+      "level 20": "Fixture Final Light",
+      "skills": "Choose two from Insight, Investigation, Perception, and Persuasion"
+    },
+    "lowConfidenceFields": [
+      "spellList",
+      "rulesFamilies"
+    ]
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000000",
+    "sourceId": "5fad5000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 7
+    },
+    "excerpt": "Fixture Lamplighter, level 5: Fixture Beacon",
+    "proposedKind": "feature",
+    "proposedName": "Fixture Beacon",
+    "rulesFamilies": [],
+    "proposedEffects": [],
+    "confidence": 0.3,
+    "uncertainties": [
+      "Say which rules family this is written for before accepting.",
+      "Only the name was found, in the class table: add its text by hand, or accept it as reference."
+    ],
+    "unresolvedReferences": [],
+    "fields": {
+      "class": "Fixture Lamplighter",
+      "level": "5"
+    },
+    "lowConfidenceFields": []
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000000",
+    "sourceId": "5fad5000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 7
+    },
+    "excerpt": "Fixture Lamplighter, level 15: Fixture Dusk Step",
+    "proposedKind": "feature",
+    "proposedName": "Fixture Dusk Step",
+    "rulesFamilies": [],
+    "proposedEffects": [],
+    "confidence": 0.3,
+    "uncertainties": [
+      "Say which rules family this is written for before accepting.",
+      "Only the name was found, in the class table: add its text by hand, or accept it as reference."
+    ],
+    "unresolvedReferences": [],
+    "fields": {
+      "class": "Fixture Lamplighter",
+      "level": "15"
+    },
+    "lowConfidenceFields": []
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000000",
+    "sourceId": "5fad5000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 7
+    },
+    "excerpt": "Fixture Lamplighter, level 20: Fixture Final Light",
+    "proposedKind": "feature",
+    "proposedName": "Fixture Final Light",
+    "rulesFamilies": [],
+    "proposedEffects": [],
+    "confidence": 0.3,
+    "uncertainties": [
+      "Say which rules family this is written for before accepting.",
+      "Only the name was found, in the class table: add its text by hand, or accept it as reference."
+    ],
+    "unresolvedReferences": [],
+    "fields": {
+      "class": "Fixture Lamplighter",
+      "level": "20"
+    },
+    "lowConfidenceFields": []
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000000",
+    "sourceId": "5fad5000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 7
+    },
+    "excerpt": "Fixture Glow\nLevel 2 Fixture Lamplighter Feature\nYou can shed dim light in a 10-foot radius as a bonus action.",
+    "proposedKind": "feature",
+    "proposedName": "Fixture Glow",
+    "rulesFamilies": [
+      "srd-5.2.1"
+    ],
+    "proposedEffects": [],
+    "confidence": 0.85,
+    "uncertainties": [
+      "Class features are proposed as text; grants, resources and uses are added by hand."
+    ],
+    "unresolvedReferences": [],
+    "fields": {
+      "level": "2",
+      "class": "Fixture Lamplighter"
+    },
+    "lowConfidenceFields": [],
+    "summary": "You can shed dim light in a 10-foot radius as a bonus action."
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000000",
+    "sourceId": "5fad5000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 7
+    },
+    "excerpt": "Fixture Lamplighter, level 1: Fixture Lantern Rite",
+    "proposedKind": "feature",
+    "proposedName": "Fixture Lantern Rite",
+    "rulesFamilies": [],
+    "proposedEffects": [],
+    "confidence": 0.3,
+    "uncertainties": [
+      "Say which rules family this is written for before accepting.",
+      "Only the name was found, in the class table: add its text by hand, or accept it as reference."
+    ],
+    "unresolvedReferences": [],
+    "fields": {
+      "class": "Fixture Lamplighter",
+      "level": "1"
+    },
+    "lowConfidenceFields": []
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000000",
+    "sourceId": "5fad5000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 7
+    },
+    "excerpt": "Fixture Lamplighter, level 9: Fixture Sconce",
+    "proposedKind": "feature",
+    "proposedName": "Fixture Sconce",
+    "rulesFamilies": [],
+    "proposedEffects": [],
+    "confidence": 0.3,
+    "uncertainties": [
+      "Say which rules family this is written for before accepting.",
+      "Only the name was found, in the class table: add its text by hand, or accept it as reference."
+    ],
+    "unresolvedReferences": [],
+    "fields": {
+      "class": "Fixture Lamplighter",
+      "level": "9"
+    },
+    "lowConfidenceFields": []
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000000",
+    "sourceId": "5fad5000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 7
+    },
+    "excerpt": "Fixture Lamplighter, level 1: Spellcasting",
+    "proposedKind": "feature",
+    "proposedName": "Spellcasting",
+    "rulesFamilies": [],
+    "proposedEffects": [],
+    "confidence": 0.3,
+    "uncertainties": [
+      "Say which rules family this is written for before accepting.",
+      "Only the name was found, in the class table: add its text by hand, or accept it as reference."
+    ],
+    "unresolvedReferences": [],
+    "fields": {
+      "class": "Fixture Lamplighter",
+      "level": "1"
+    },
+    "lowConfidenceFields": []
+  }
+]

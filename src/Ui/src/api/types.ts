@@ -465,10 +465,22 @@ export interface MechanicEntry {
   effectId?: string;
   /** The effect's type; `"text"` for a feature with no effects. */
   effectType: string;
+  /** What the author wrote. Not what TomeStack delivers: read `effective` for that. */
   automation: AutomationStatus;
+  /** Import Lab (R10): the author's value lowered by what the engine does (capability registry). Absent from an older host. */
+  effective?: EffectiveAutomation;
   manualStep?: string;
   sourceId?: string;
   page?: PageRef;
+}
+
+/** `status` is absent when `unsupported`: the effect's type is not one this build knows. The server omits null fields. */
+export interface EffectiveAutomation {
+  status?: AutomationStatus | null;
+  unsupported: boolean;
+  ceiling?: AutomationStatus | null;
+  reason?: string | null;
+  evidence?: string | null;
 }
 
 /** `Unsupported` is a subset of `mechanics`: effects of a type this build does not know. */
@@ -1171,6 +1183,37 @@ export interface PackageManifest {
   attestations?: { sourceId: string; statement: string; confirmedAt: string }[];
 }
 
+// ---- Import Lab L5 (`package.preflight`): the one sharing rule, as a list before any share export is saved ----
+
+export type PreflightKind = 'package' | 'sourcePack' | 'campaignPack' | 'sheet';
+
+/** `selection`: character ids for `package` and `sheet`, source ids for `sourcePack`, the campaign id for `campaignPack`. */
+export interface PreflightRequest {
+  kind: PreflightKind;
+  selection: string[];
+}
+
+/** A revision row names the content; a source-level row (a blocked source, a PDF) has an empty revision id (all zeros). */
+export interface PreflightRow {
+  contentId: string;
+  revisionId: string;
+  name: string;
+  sourceName: string;
+  redistributable: boolean;
+  importDerived?: boolean | null;
+  /** `bundled`, `local`, `received` or `unknown`. */
+  origin: string;
+  /** A `preflight.*` code; absent for an included row. The UI says it in words. */
+  reason?: string | null;
+}
+
+export interface PreflightReport {
+  included: PreflightRow[];
+  omitted: PreflightRow[];
+  blocking: PreflightRow[];
+  notices: string[];
+}
+
 /** M6 slice 1 (`package.sourcePackPreview`): what a source pack would hold. Nothing is written. */
 export interface SourcePackPreview {
   fileName: string;
@@ -1376,6 +1419,10 @@ export type ImportJobStatus = 'queued' | 'running' | 'completed' | 'cancelled' |
 export interface ImportJob {
   id: string;
   sourceId: string;
+  /** SHA-256 of the document the job read (the PDF, or the Markdown file's bytes); its pages are stored under it. */
+  sha256: string;
+  /** `markdown` for a Markdown import (import pages only: no PDF, not resumable); absent for a PDF job. */
+  format?: 'markdown';
   firstPage: number;
   lastPage?: number;
   wholeDocument: boolean;
@@ -1405,6 +1452,55 @@ export interface ImportSearchHit {
   snippet: string;
 }
 
+/** One text line of a stored block, in PDF points. */
+export interface StoredTextLine {
+  text: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** One text block of a stored page, in PDF points. */
+export interface StoredTextBlock {
+  text: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  fontSize: number;
+  bold: boolean;
+  lines?: StoredTextLine[];
+}
+
+/** `import.page`: the stored extraction of one page (ADR-009). Page text is data: render it as text nodes only. */
+export interface StoredPage {
+  page: number;
+  text: string;
+  fromOcr: boolean;
+  width: number;
+  height: number;
+  blocks: StoredTextBlock[];
+  warnings: string[];
+  error?: string;
+}
+
+/**
+ * D64: where on the stored page text one proposed effect (or the name) was read. `blockStart`/`blockEnd` index the page's
+ * stored blocks (`blockEnd` is on `pageEnd` when set, else on `page`); `lineStart`/`lineEnd` are source lines (Markdown
+ * only; absent for a PDF). `patternId` is a stable id, never prose.
+ */
+export interface CandidateSpan {
+  page: number;
+  pageEnd?: number;
+  blockStart: number;
+  blockEnd: number;
+  lineStart?: number;
+  lineEnd?: number;
+  patternId: string;
+  confidence: number;
+}
+
 export interface DraftCandidate {
   id: string;
   sourceId: string;
@@ -1421,6 +1517,10 @@ export interface DraftCandidate {
   fields: Record<string, string>;
   lowConfidenceFields: string[];
   summary?: string;
+  /** D64: by proposed effect id. Absent on a candidate stored before spans existed (review then shows the whole excerpt). */
+  effectSpans?: Record<string, CandidateSpan>;
+  /** D64: where the name was read; absent when unknown. */
+  nameSpan?: CandidateSpan;
 }
 
 export type CandidateStatus = 'pending' | 'accepted' | 'acceptedAsReference' | 'ignored';
@@ -1437,6 +1537,8 @@ export interface StoredCandidate {
   grantsCandidates?: { candidateId: string; level: number }[];
   /** R29: the reviewer saved a rules family for this candidate; absent (false) until then. */
   familiesReviewed?: boolean;
+  /** D64: SHA-256 of the job's attachment, so a span resolves to the stored page text after the attachment is replaced; absent before spans existed. */
+  attachmentSha256?: string;
   /** R120: the compare-and-swap token of the stored row; sent back as `CandidateEdit.expected`. */
   etag?: string;
   updatedAt: string;
@@ -1794,7 +1896,7 @@ export interface SourceRecord {
   editionVersion: string;
   license: string;
   redistributable: boolean;
-  /** M6 slice 1: material from a PDF entered this source; it is never shared, and this never goes away. */
+  /** M6 slice 1: material from a PDF or a Markdown file entered this source; it is never shared, and this never goes away. */
   importDerived?: boolean;
   /** M6 slice 1: `received` sources came in someone else's package and cannot be marked as your own work. */
   origin?: 'local' | 'received';
@@ -2376,4 +2478,123 @@ export interface FormulaPreviewResult {
   error?: { code: string; message: string } | null;
   unavailable?: string | null;
   points: FormulaPreviewPoint[];
+}
+
+/** Import Lab (D62 L1): effects by how far TomeStack really goes with them. `unsupported` means the type is not known. */
+export interface CoverageCounts {
+  automatic: number;
+  assisted: number;
+  reference: number;
+  unsupported: number;
+}
+
+/** One effect's author value, the engine's ceiling and the effective automation. The server omits null fields. */
+export interface EffectCoverage {
+  /** Absent for the text-only line of a feature that has no effects. */
+  effectId?: string | null;
+  type: string;
+  author: AutomationStatus;
+  ceiling?: AutomationStatus | null;
+  effective?: AutomationStatus | null;
+  reason?: string | null;
+  evidence?: string | null;
+  unsupported: boolean;
+}
+
+export interface FeatureCoverage {
+  contentId: string;
+  revisionId: string;
+  name: string;
+  kind: ContentKind;
+  status: 'published' | 'draft';
+  totals: CoverageCounts;
+  /** The feature may need a mechanic: advice, never a gate. */
+  missingMechanic: boolean;
+  effects: EffectCoverage[];
+}
+
+export interface LevelCoverage {
+  level: number;
+  features: FeatureCoverage[];
+}
+
+export interface ClassCoverage {
+  contentId: string;
+  name: string;
+  totals: CoverageCounts;
+  levels: LevelCoverage[];
+}
+
+export interface SourceCoverage {
+  sourceId: string;
+  name: string;
+  totals: CoverageCounts;
+  classes: ClassCoverage[];
+  other: FeatureCoverage[];
+}
+
+/** `content.coverage`: read-only; needs no character. */
+export interface CoverageReport {
+  scope: { sourceId?: string | null; contentId?: string | null; includeDrafts: boolean };
+  totals: CoverageCounts;
+  sources: SourceCoverage[];
+}
+
+export interface CoverageRequest {
+  sourceId?: string;
+  contentId?: string;
+  includeDrafts?: boolean;
+}
+
+// ---- Import Lab L6 (`content.duplicates`): entries that look alike, listed and never merged ----
+
+export type DuplicateClass = 'exact' | 'sameNameDifferentRules' | 'sameRulesDifferentName';
+
+/** `jobId`: that job's pending candidates against the library. `sourceId`: only groups that source is in (with a job: only that source's library content). */
+export interface DuplicatesRequest {
+  sourceId?: string;
+  jobId?: string;
+}
+
+/** A published library entry (`contentId`, `revisionId`) or a pending candidate (`candidateId`). */
+export interface DuplicateMember {
+  candidateId?: string | null;
+  contentId?: string | null;
+  revisionId?: string | null;
+  kind: ContentKind;
+  name: string;
+  sourceId: string;
+  sourceName: string;
+}
+
+/** Entries of one kind inside one rules family; the families are never compared with each other. */
+export interface DuplicateGroup {
+  class: DuplicateClass;
+  family: RulesFamilyId;
+  members: DuplicateMember[];
+}
+
+/** A feature a class grants at a level, or an option it offers there through a choice. */
+export interface ClassTableRef {
+  contentId: string;
+  name: string;
+}
+
+export interface ClassLevelRow {
+  level: number;
+  proficiencyBonus: number;
+  features: ClassTableRef[];
+  choices: ClassTableRef[];
+  /** Scale values as text, by column name; empty where the scale has no value at this level. */
+  scales: Record<string, string>;
+  /** Spell slots by spell level (1, 2, ...); absent without ordinary slots at this level. */
+  slots?: number[] | null;
+  pactSlots?: number | null;
+  pactLevel?: number | null;
+}
+
+/** `content.classTable`: read-only; the 20-level progression of one class revision, published or draft. */
+export interface ClassTableView {
+  columns: string[];
+  rows: ClassLevelRow[];
 }
