@@ -28,6 +28,8 @@ A choice that does not apply to this entry is not offered, so it is never "unres
 
 An item carries `weapon { category: simple | martial, attack: melee | ranged, damage, damageType, properties[], versatile?, range?, weaponKey, mastery? }`. Proficiency is a `grant proficiency` in `weapon.simple`, `weapon.martial` or `weapon.<weaponKey>`, and it may be `onlyAs` like any grant.
 
+An attack row shows the weapon's `mastery` only when the character's active content includes a feature named exactly "Weapon Mastery" (an interim name rule); otherwise the row's mastery is empty.
+
 Each **equipped** weapon gives an entry in `sheet.attacks`:
 
 | Value | Rule (both SRDs) |
@@ -70,6 +72,6 @@ A feature can give an attack with an `attack` effect (an unarmed strike, a bolt)
 
 ## Not yet
 
-- The multiclass data of the non-caster classes that are not bundled (Monk, Rogue). The Fighter is bundled since M2.2. Bundled: the eight casters, the weapon tables (`srd-<family>-equipment.json`) and a content v5 revision of the SRD Barbarian (`srd-<family>-classes.json`). Characters that pin the M1 Barbarian revision keep it. Pickers offer the newest revision (`ContentOption.Superseded`), and moving a saved character to it is the reviewed update (SPEC I-06).
+- The multiclass data of the non-caster classes that are not bundled (Monk; the Rogue is bundled since C2-2, with its multiclass data). The Fighter is bundled since M2.2. Bundled: the eight casters, the weapon tables (`srd-<family>-equipment.json`) and a content v5 revision of the SRD Barbarian (`srd-<family>-classes.json`). Characters that pin the M1 Barbarian revision keep it. Pickers offer the newest revision (`ContentOption.Superseded`), and moving a saved character to it is the reviewed update (SPEC I-06).
 - The net and the blowgun: text only, because their damage is not a dice roll.
 - Ammunition tracking, Weapon Mastery effects (text only), fighting styles other than Defense (text only), two-weapon fighting and bonus damage from features. Armor training and its warnings are in `equipment.md` (M2.2).

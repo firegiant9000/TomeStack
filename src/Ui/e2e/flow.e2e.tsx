@@ -360,7 +360,8 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   // Features list their automation status.
   await openTab(user, sheet, 'Features');
   const features = screen.getByRole('region', { name: 'Features' });
-  expect(within(features).getByText('Danger Sense').closest('li')!.textContent).toMatch(/reference only|assisted/);
+  // C2-1: the new Barbarian's Danger Sense is an automatic Dexterity-save advantage (it was reference text before).
+  expect(within(features).getByText('Danger Sense').closest('li')!.textContent).toMatch(/automatic/);
 
   // M2 item 3, long rest (D01): preview first, cancel changes nothing, then confirm.
   await openTab(user, sheet, 'Play');
