@@ -90,7 +90,7 @@ public class ItemModCalculationTests
         Assert.Equal(plain.Field(FieldIds.ArmorClass).Value + 1, ac.Value);
         var step = Assert.Single(ac.Trace, t => t.Origin.Content == Plating);
         Assert.Equal(("add", 1, "Fixture Warding Plating"), (step.Operation, step.Amount, step.Origin.ContentName));
-        Assert.Contains("Fixture Warding Plating", step.Description, StringComparison.Ordinal);
+        Assert.Equal("Fixture Warding Plating on Fixture Scale Coat", step.Description);
         Assert.Equal(plain.Field(FieldIds.Save(Ability.Dex)).Value + 1, sheet.Field(FieldIds.Save(Ability.Dex)).Value);
         Assert.DoesNotContain(sheet.Diagnostics, d => d.Code.StartsWith("item-mod.", StringComparison.Ordinal));
     }
@@ -103,7 +103,7 @@ public class ItemModCalculationTests
         var sheet = Sheet(Tinker(Worn(Coat), Worn(Guard, false, Plating)));
 
         Assert.Equal(plain.Field(FieldIds.ArmorClass).Value + 1, sheet.Field(FieldIds.ArmorClass).Value);
-        Assert.Single(sheet.Field(FieldIds.ArmorClass).Trace, t => t.Origin.Content == Plating);
+        Assert.Equal("Fixture Warding Plating on Fixture Round Guard", Assert.Single(sheet.Field(FieldIds.ArmorClass).Trace, t => t.Origin.Content == Plating).Description);
     }
 
     [Fact]

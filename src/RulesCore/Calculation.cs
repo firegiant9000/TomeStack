@@ -1056,7 +1056,7 @@ public static class CharacterCalculator
             var item = revision.Effects.OfType<ItemEffect>().FirstOrDefault();
             if ((item is null || (item.RequiresAttunement != true && item.Charges is null)) && hosts.Count == 0 && entry.Mods is null)
                 continue;
-            var mods = (entry.Mods ?? []).Select(m =>
+            var mods = (entry.Mods ?? []).Where(m => m is not null).Select(m =>
                 catalog.FindRevision(m) is { } mod
                     ? mod.Effects.OfType<ItemModEffect>().FirstOrDefault() is { } effect ? new ItemModInfo(m, mod.Name, effect.AppliesTo, effect.Bonus) : new ItemModInfo(m, mod.Name, ModTarget.Any, null)
                     : new ItemModInfo(m, "(not available)", ModTarget.Any, null)).ToList();
@@ -2516,6 +2516,8 @@ public static class CharacterCalculator
             var built = new List<(ActiveContent Mod, ItemModEffect Effect)>();
             foreach (var reference in references)
             {
+                if (reference is null)
+                    continue;
                 if (!admittedMods.TryGetValue(reference, out var mod))
                 {
                     mod = Admit(reference, null); // once per reference, so the same mod on two entries explains itself once
@@ -2714,7 +2716,7 @@ public static class CharacterCalculator
 
     /// <param name="SkipReason">Set when the rules say this modifier does not apply now (for example, Unarmored Defense while armor is worn); it is traced as not used.</param>
     /// <param name="FollowedToggle">Set when the modifier follows another entry's toggle (content v11 <c>toggleContent</c>): that toggle's label, named in the trace.</param>
-    private sealed record Modifier(ActiveContent Content, ModifierEffect Effect, Formula Formula, IReadOnlyList<string> ReadsFields, string? SkipReason = null, string? FollowedToggle = null);
+    private sealed record Modifier(ActiveContent Content, ModifierEffect Effect, Formula Formula, IReadOnlyList<string> ReadsFields, string? SkipReason = null, string? FollowedToggle = null, bool ModBonus = false);
 
     private const string ResourceTargetPrefix = ContentValidator.ResourceTargetPrefix;
 
@@ -2764,7 +2766,7 @@ public static class CharacterCalculator
                     var value = x.Effect.Bonus!.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
                     var effect = new ModifierEffect { Id = x.Effect.Id, Operation = ModifierOperation.Bonus, Target = FieldIds.ArmorClass, Value = value, Text = $"{x.Mod.Revision.Name} on {host.Revision.Name}" };
                     var formula = Formula.TryParse(value, out var parsed, out _) ? parsed! : throw new InvalidOperationException($"Armor mod bonus '{value}' does not parse."); // an integer, as in Synthetic
-                    return new Modifier(x.Mod, effect, formula, [], skipReason);
+                    return new Modifier(x.Mod, effect, formula, [], skipReason, ModBonus: true);
                 }),
         ];
         var armor = active
@@ -3416,7 +3418,7 @@ public static class CharacterCalculator
                 continue;
             }
             value = (int)next;
-            steps.Add(new(field, "add", $"Bonus from {Name(bonus.Modifier)}", bonus.Amount, value, Origin(bonus.Modifier), Inputs(bonus.Inputs)));
+            steps.Add(new(field, "add", bonus.Modifier.ModBonus && !string.IsNullOrEmpty(bonus.Modifier.Effect.Text) ? bonus.Modifier.Effect.Text : $"Bonus from {Name(bonus.Modifier)}", bonus.Amount, value, Origin(bonus.Modifier), Inputs(bonus.Inputs)));
         }
 
         var sets = evaluated.Where(e => e.Modifier.Effect.Operation == ModifierOperation.Set).ToList();

@@ -40,7 +40,7 @@ public sealed partial class TomeStackApp
     /// keeps it when the mods are later removed (R158: ids are never taken away).
     /// </summary>
     private bool NeedsEntryId(EquipmentEntry entry, IReadOnlyList<EquipmentEntry> all) =>
-        NeedsEntryId(entry.Item) || all.Any(e => e.Item == entry.Item && e.Mods is { Count: > 0 });
+        NeedsEntryId(entry.Item) || all.Any(e => e?.Item == entry.Item && e.Mods is { Count: > 0 });
 
     private Character WithEntryIds(Character character)
     {

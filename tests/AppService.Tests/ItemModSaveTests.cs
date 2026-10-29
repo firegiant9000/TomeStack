@@ -96,6 +96,17 @@ public class ItemModSaveTests
     }
 
     [Fact]
+    public void A_null_entry_beside_a_duplicated_item_is_refused_as_an_empty_entry()
+    {
+        var s = Start();
+        using var _ = s.Temp;
+
+        var problems = Assert.Throws<AppValidationException>(() => Save(s, new EquipmentEntry(Longblade), null!, new EquipmentEntry(Longblade))).Problems;
+
+        Assert.Contains(problems, p => p.Code == "character.empty-entry");
+    }
+
+    [Fact]
     public void A_plain_second_copy_alone_is_still_refused()
     {
         var s = Start();
