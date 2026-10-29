@@ -2331,6 +2331,19 @@ describe('after your long rest', () => {
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Long rest' })).toBeNull());
     expect(screen.queryByRole('region', { name: 'After your long rest' })).toBeNull();
   });
+
+  // Owner 2026-10-28: a permanent way to change picks, even when every choice is resolved.
+  it('offers Change picks in the header while every choice is resolved, and none without choices', async () => {
+    const user = userEvent.setup();
+    const onMakeChoices = vi.fn();
+    render(<CharacterSheet view={view({ choices: [picked('levelUp', 2)] })} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={onMakeChoices} onArchiveChanged={noop} />);
+    expect(screen.queryByRole('button', { name: 'Make choices' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Change picks' }));
+    expect(onMakeChoices).toHaveBeenCalledTimes(1);
+    cleanup();
+    render(<CharacterSheet view={view({ choices: [] })} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+    expect(screen.queryByRole('button', { name: 'Change picks' })).toBeNull();
+  });
 });
 
 it('does not echo the save notice through the status line when a play reply carries it (MECH-X item 2)', async () => {

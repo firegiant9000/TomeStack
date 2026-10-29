@@ -52,7 +52,7 @@ Traces, overrides and "Report a gap" stay on the field cards.
 | Notes | Session notes (dated, newest first; D22), then Gap notes, then Details (item 17, D36): a form named "Details" of four fieldsets (Personality, Appearance, Background story, Languages and tools), no new tab |
 | Manage | Updates available, Export, Export for a virtual tabletop, Archive, Snapshots, separated by rules |
 
-After a long rest that finishes with a `longRest` replaceable choice that has picks, the sheet shows an "After your long rest" panel above the tabs, with "Make choices" and "Dismiss" ([rests.md](rests.md), MECH-X item 2). It is page state: not stored, and gone on reload. Make choices is otherwise shown only while a choice is open, so this panel is how a swap is made when every choice is answered.
+After a long rest that finishes with a `longRest` replaceable choice that has picks, the sheet shows an "After your long rest" panel above the tabs, with "Make choices" and "Dismiss" ([rests.md](rests.md), MECH-X item 2). It is page state: not stored, and gone on reload. At any other time, the header's "Change picks" button (shown whenever the character has a choice) opens Make choices, even when every choice is answered.
 
 "Report a gap" on a feature or a field opens Notes, pre-fills "About" and moves focus to the note text (WCAG 2.4.3). Open choices and content problems stay above the tabs on every page (SPEC C-03).
 

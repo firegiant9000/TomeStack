@@ -865,6 +865,12 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
             Already at level 20, the highest level.
           </span>
         )}
+        {/* MECH-X item 2 (owner, 2026-10-28): picks can always be changed; a swap outside its window gets the save notice. */}
+        {(sheet.choices?.length ?? 0) > 0 && (
+          <button type="button" onClick={onMakeChoices}>
+            Change picks
+          </button>
+        )}
         <button type="button" ref={printButton} onClick={() => setPrinting((open) => !open)} aria-expanded={printing} aria-controls={printing ? 'print-preview' : undefined}>
           Print…
         </button>
