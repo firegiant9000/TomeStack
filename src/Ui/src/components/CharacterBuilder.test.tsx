@@ -6,8 +6,9 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { client } from '../api/client';
 import { TomeStackError } from '../api/transport';
-import type { Character, CharacterView, ContentOption, RulesFamilyPolicy, SpellcastingEntry } from '../api/types';
+import type { Character, CharacterView, ContentOption, FeatureEntry, RulesFamilyPolicy, SpellcastingEntry } from '../api/types';
 import { CharacterBuilder, campaignLabel } from './CharacterBuilder';
+import { fill } from '../test/fill';
 
 vi.mock('../api/client', () => ({ client: { listCampaigns: vi.fn(), listContent: vi.fn(), draftCounts: vi.fn(), preview: vi.fn(), previewChoice: vi.fn(), createCharacter: vi.fn(), saveCharacter: vi.fn(), rollDice: vi.fn() } }));
 
@@ -113,7 +114,7 @@ it('lists no option of the other family, and keeps a campaign-outside option lis
     content(6, 'feat', 'Fixture Other Feat', 'srd-5.2.1'),
   ]);
   render(<CharacterBuilder mode={{ kind: 'create' }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
-  await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
+  await fill(user, screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
   await user.selectOptions(await screen.findByRole('combobox', { name: 'Campaign' }), 'fixture-camp');
   await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
   await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
@@ -133,7 +134,7 @@ it('lists no option of the other family, and keeps a campaign-outside option lis
   expect(screen.queryByText(/Options for the other family cannot be selected/)).toBeNull();
   // An own-family option outside the campaign becomes selectable once an exception reason is given (P-01).
   await user.click(screen.getByRole('checkbox', { name: 'Use content from outside the campaign' }));
-  await user.type(screen.getByRole('textbox', { name: /Reason/ }), 'DM approved');
+  await fill(user, screen.getByRole('textbox', { name: /Reason/ }), 'DM approved');
   await waitFor(() => expect(screen.getByRole('radio', { name: /^Fixture Outsider/ }).getAttribute('aria-disabled')).toBeNull());
   expect(screen.queryByRole('radio', { name: /^Fixture Outlander/ })).toBeNull();
   await user.clear(screen.getByRole('textbox', { name: /Reason/ }));
@@ -187,7 +188,7 @@ describe('arrow keys onto an inert (aria-disabled) radio', () => {
       content(4, 'class', 'Fixture Outsider', 'srd-5.1', { allowedInCampaign: false }),
     ]);
     renderCreate();
-    await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
+    await fill(user, screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
     await user.selectOptions(await screen.findByRole('combobox', { name: 'Campaign' }), 'fixture-camp');
     await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
     await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
@@ -244,6 +245,67 @@ it('keeps a checked option of the other family in a choice, and omits an uncheck
   const kept = within(picker).getByRole('checkbox', { name: /Fixture Imported/ }) as HTMLInputElement;
   expect(kept.checked).toBe(true);
   expect(within(picker).queryByRole('checkbox', { name: /Fixture Absent/ })).toBeNull();
+});
+
+// SPEC I-06: a class lists the old and the new revision of an option; a new pick sees one, a holder of the old one still sees it.
+describe('a superseded option in a choice (I-06)', () => {
+  const source = { contentId: 'fixture-feature', revisionId: 'fixture-feature-r1' };
+  const newest = content(7, 'feature', 'Fixture Path', 'srd-5.1');
+  const older = { ...content(7, 'feature', 'Fixture Path', 'srd-5.1'), reference: { contentId: newest.reference.contentId, revisionId: 'older' }, superseded: true };
+  const choiceOf = (selected: ContentOption[]): CharacterView => {
+    const view = viewWith([]);
+    view.sheet.choices = [
+      { source, sourceName: 'Fixture feature', choiceId: 'pick', count: 1, options: [newest.reference, older.reference], selected: selected.map((o) => o.reference), resolved: selected.length === 1 },
+    ];
+    return view;
+  };
+  const open = (view: CharacterView) => {
+    vi.mocked(client.listContent).mockResolvedValue([newest, older]);
+    render(<CharacterBuilder mode={{ kind: 'choices', view }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+    return screen.findByRole('group', { name: /Fixture feature: choose 1/ });
+  };
+
+  it('shows one checkbox when nobody has picked the older revision', async () => {
+    const picker = await open(choiceOf([]));
+    await within(picker).findByRole('checkbox', { name: /Fixture Path/ });
+    expect(within(picker).getAllByRole('checkbox')).toHaveLength(1);
+  });
+
+  it('shows both when the older revision is the one picked, and the older one is ticked', async () => {
+    const picker = await open(choiceOf([older]));
+    await waitFor(() => expect(within(picker).getAllByRole('checkbox')).toHaveLength(2));
+    const boxes = within(picker).getAllByRole('checkbox') as HTMLInputElement[];
+    expect(boxes.map((b) => b.checked)).toEqual([false, true]);
+  });
+
+  it('keeps a lone superseded option pickable when the choice offers no newer revision of it', async () => {
+    const view = choiceOf([]);
+    view.sheet.choices![0]!.options = [older.reference];
+    vi.mocked(client.listContent).mockResolvedValue([newest, older]);
+    render(<CharacterBuilder mode={{ kind: 'choices', view }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+    const picker = await screen.findByRole('group', { name: /Fixture feature: choose 1/ });
+    const box = (await within(picker).findByRole('checkbox', { name: /Fixture Path/ })) as HTMLInputElement;
+    expect(box.getAttribute('aria-disabled')).toBeNull();
+  });
+
+  it('keeps the older option pickable when its newer sibling is hidden (incompatible)', async () => {
+    const view = choiceOf([]);
+    vi.mocked(client.listContent).mockResolvedValue([{ ...newest, compatible: false }, older]);
+    render(<CharacterBuilder mode={{ kind: 'choices', view }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+    const picker = await screen.findByRole('group', { name: /Fixture feature: choose 1/ });
+    const box = (await within(picker).findByRole('checkbox', { name: /Fixture Path/ })) as HTMLInputElement;
+    expect(box.getAttribute('aria-disabled')).toBeNull();
+  });
+
+  it('keeps the older option hidden when its newer sibling is outside the campaign (shown as not allowed)', async () => {
+    const view = choiceOf([]);
+    vi.mocked(client.listContent).mockResolvedValue([{ ...newest, allowedInCampaign: false }, older]);
+    render(<CharacterBuilder mode={{ kind: 'choices', view }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+    const picker = await screen.findByRole('group', { name: /Fixture feature: choose 1/ });
+    const box = (await within(picker).findByRole('checkbox', { name: /Fixture Path/ })) as HTMLInputElement;
+    expect(box.getAttribute('aria-disabled')).toBe('true');
+    expect(within(picker).getAllByRole('checkbox')).toHaveLength(1);
+  });
 });
 
 // R42 (follow-up F2): another option of the same choice can be ticked while an imported other-family option stays chosen.
@@ -350,7 +412,7 @@ describe('spells and the campaign (R34)', () => {
     expect(hex.checked).toBe(false);
 
     await user.click(screen.getByRole('checkbox', { name: 'Use content from outside the campaign' }));
-    await user.type(screen.getByRole('textbox', { name: /Reason/ }), 'DM approved');
+    await fill(user, screen.getByRole('textbox', { name: /Reason/ }), 'DM approved');
     await waitFor(() => expect(hex.getAttribute('aria-disabled')).toBeNull());
     expect(within(picker).queryByRole('checkbox', { name: /Fixture Wisp/ })).toBeNull();
     await user.click(hex);
@@ -371,7 +433,7 @@ describe('spells and the campaign (R34)', () => {
     await user.click(bolt);
     await waitFor(() => expect(bolt.checked).toBe(true));
     await user.click(screen.getByRole('checkbox', { name: 'Use content from outside the campaign' }));
-    await user.type(screen.getByRole('textbox', { name: /Reason/ }), 'DM approved');
+    await fill(user, screen.getByRole('textbox', { name: /Reason/ }), 'DM approved');
     await user.click(screen.getByRole('button', { name: 'Save choices' }));
     await waitFor(() => expect(vi.mocked(client.saveCharacter)).toHaveBeenCalled());
     expect(vi.mocked(client.saveCharacter).mock.calls[0]![0].campaignExceptions).toEqual([]);
@@ -394,7 +456,7 @@ it('walks six steps with the heading focused on each, and reaches the choices (D
   renderCreate();
   expect(screen.getByText('Step 1 of 6. Nothing is saved until you press Create and save.')).toBeTruthy();
   expect(document.activeElement).not.toBe(screen.getByRole('heading', { name: 'New character' })); // never on first mount
-  await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
+  await fill(user, screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
   await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
   expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'New character' }));
   expect(screen.getByRole('form', { name: 'Ability scores' })).toBeTruthy();
@@ -418,7 +480,7 @@ it('moves focus to the heading when Back returns to the Rules step (R5, 2.4.3)',
   const user = userEvent.setup();
   vi.mocked(client.listContent).mockResolvedValue(stepContent());
   renderCreate();
-  await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
+  await fill(user, screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
   await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
   await user.click(screen.getByRole('button', { name: 'Back' }));
   expect(screen.getByRole('form', { name: 'Rules' })).toBeTruthy();
@@ -430,7 +492,7 @@ it('keeps the species and class picks across Back and forth', async () => {
   const user = userEvent.setup();
   vi.mocked(client.listContent).mockResolvedValue(stepContent());
   renderCreate();
-  await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
+  await fill(user, screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
   await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
   await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
   await user.click(screen.getByRole('button', { name: 'Next: species' }));
@@ -446,7 +508,7 @@ it('keeps the species and class picks across Back and forth', async () => {
 // D32: standard array, point buy and rolled scores.
 async function toScores(user: ReturnType<typeof userEvent.setup>, onError: (error: unknown) => void = () => {}) {
   render(<CharacterBuilder mode={{ kind: 'create' }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={onError} />);
-  await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
+  await fill(user, screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
   await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
 }
 const nextSpecies = () => screen.getByRole('button', { name: 'Next: species' }) as HTMLButtonElement;
@@ -546,7 +608,7 @@ it('names the rules family, the campaign and a hand-entered method in the review
   vi.mocked(client.listContent).mockResolvedValue([content(1, 'species', 'Fixture Hillfolk', 'srd-5.2.1', { compatible: true })]);
   vi.mocked(client.preview).mockResolvedValue(draftView());
   renderCreate();
-  await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
+  await fill(user, screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
   await user.selectOptions(await screen.findByRole('combobox', { name: 'Campaign' }), 'fixture-camp');
   await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
   await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
@@ -955,7 +1017,7 @@ it('asks for a name before Next, with the reason linked to the button (carry 7)'
   expect(screen.getByText('Enter a name to continue.')).toBeTruthy();
   await user.type(screen.getByRole('textbox', { name: 'Name' }), '   ');
   expect(next.getAttribute('aria-disabled')).toBe('true');
-  await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
+  await fill(user, screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
   expect(next.getAttribute('aria-disabled')).toBeNull();
   expect(screen.queryByText('Enter a name to continue.')).toBeNull();
 });
@@ -963,7 +1025,7 @@ it('asks for a name before Next, with the reason linked to the button (carry 7)'
 const twoClasses = () => [content(1, 'species', 'Fixture Hillfolk', 'srd-5.1'), content(3, 'class', 'Fixture Warden', 'srd-5.1'), content(4, 'class', 'Fixture Ranger', 'srd-5.1')];
 async function toBackground(user: ReturnType<typeof userEvent.setup>, cls: RegExp, extra: { onCommitted?: () => void | Promise<void>; onCancel?: () => void; onError?: (e: unknown) => void } = {}) {
   render(<CharacterBuilder mode={{ kind: 'create' }} rulesFamilies={families} onCommitted={extra.onCommitted ?? (() => {})} onCancel={extra.onCancel ?? (() => {})} onError={extra.onError ?? (() => {})} />);
-  await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
+  await fill(user, screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
   await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
   await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
   await user.click(screen.getByRole('button', { name: 'Next: species' }));
@@ -1065,7 +1127,7 @@ it('keeps focus on a campaign-outside choice option whose reason is cleared, and
   await within(picker).findByRole('checkbox', { name: /Fixture Outsider/ });
   // (a) give a reason, tick the outside option, clear the reason, untick it: the box stays enabled and focused.
   await user.click(screen.getByRole('checkbox', { name: 'Use content from outside the campaign' }));
-  await user.type(screen.getByRole('textbox', { name: /Reason/ }), 'DM approved');
+  await fill(user, screen.getByRole('textbox', { name: /Reason/ }), 'DM approved');
   await user.click(box(/Fixture Outsider/));
   await waitFor(() => expect(box(/Fixture Outsider/).checked).toBe(true));
   await user.clear(screen.getByRole('textbox', { name: /Reason/ }));
@@ -1165,7 +1227,7 @@ it('says why Next: choices waits when the picked new class needs a campaign reas
   vi.mocked(client.preview).mockClear();
   render(<CharacterBuilder mode={{ kind: 'levelUp', view: levelView('fixture-camp') }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
   await user.click(await screen.findByRole('checkbox', { name: 'Use content from outside the campaign' }));
-  await user.type(screen.getByRole('textbox', { name: /Reason/ }), 'DM approved');
+  await fill(user, screen.getByRole('textbox', { name: /Reason/ }), 'DM approved');
   await user.click(await screen.findByRole('radio', { name: /^Fixture Outsider/ }));
   const next = screen.getByRole('button', { name: 'Next: choices' });
   expect(next.getAttribute('aria-disabled')).toBeNull();
@@ -1183,11 +1245,11 @@ const fixtureCampaign = { id: 'fixture-camp', name: 'Fixture Campaign', rulesFam
 const reasonField = () => screen.getByRole('textbox', { name: /Reason/ });
 async function allowOutside(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole('checkbox', { name: 'Use content from outside the campaign' }));
-  await user.type(reasonField(), 'DM approved');
+  await fill(user, reasonField(), 'DM approved');
 }
 async function toSpeciesInCampaign(user: ReturnType<typeof userEvent.setup>) {
   render(<CharacterBuilder mode={{ kind: 'create' }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
-  await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
+  await fill(user, screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
   await user.selectOptions(await screen.findByRole('combobox', { name: 'Campaign' }), 'fixture-camp');
   await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
   await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
@@ -1219,7 +1281,7 @@ describe('a pick that needs a campaign exception reason after the reason is clea
     await user.click(next);
     expect(screen.getByRole('form', { name: 'Species' })).toBeTruthy();
     expect(document.activeElement).toBe(next);
-    await user.type(reasonField(), 'DM approved');
+    await fill(user, reasonField(), 'DM approved');
     expect(next.getAttribute('aria-disabled')).toBeNull();
     expect(screen.queryByText(/needs a campaign exception reason/)).toBeNull();
     await user.click(next);
@@ -1262,7 +1324,7 @@ describe('a pick that needs a campaign exception reason after the reason is clea
     await user.click(next);
     expect(vi.mocked(client.preview)).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(next);
-    await user.type(reasonField(), 'DM approved');
+    await fill(user, reasonField(), 'DM approved');
     await user.click(next);
     await waitFor(() => expect(vi.mocked(client.preview)).toHaveBeenCalledTimes(1));
     expect(vi.mocked(client.preview).mock.calls[0]![0].pins.map((p) => p.contentId)).toContain('fixture-c5');
@@ -1299,7 +1361,7 @@ describe('a pick that needs a campaign exception reason after the reason is clea
     expect(vi.mocked(client.saveCharacter)).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(save);
     expect(box.checked).toBe(true); // never dropped
-    await user.type(reasonField(), 'DM approved again');
+    await fill(user, reasonField(), 'DM approved again');
     expect(save.getAttribute('aria-disabled')).toBeNull();
     await user.click(save);
     await waitFor(() => expect(vi.mocked(client.saveCharacter)).toHaveBeenCalledTimes(1));
@@ -1355,7 +1417,7 @@ describe('a pick that needs a campaign exception reason after the reason is clea
     expect(vi.mocked(client.saveCharacter)).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(save);
     expect(hex.checked).toBe(true);
-    await user.type(reasonField(), 'DM approved');
+    await fill(user, reasonField(), 'DM approved');
     await user.click(save);
     await waitFor(() => expect(vi.mocked(client.saveCharacter)).toHaveBeenCalledTimes(1));
     expect(vi.mocked(client.saveCharacter).mock.calls[0]![0].campaignExceptions).toEqual([expect.objectContaining({ content: outsideSpell.reference, reason: 'DM approved' })]);
@@ -1380,7 +1442,7 @@ describe('a pick that needs a campaign exception reason after the reason is clea
     expect(save.getAttribute('aria-disabled')).toBeNull(); // what is held asks nothing
     const hexB = (await within(second).findByRole('checkbox', { name: /Fixture Hex/ })) as HTMLInputElement;
     await user.click(await screen.findByRole('checkbox', { name: 'Use content from outside the campaign' }));
-    await user.type(reasonField(), 'DM approved');
+    await fill(user, reasonField(), 'DM approved');
     await user.click(hexB);
     await waitFor(() => expect(hexB.checked).toBe(true));
     await user.clear(reasonField()); // the same spell for caster B is a new pick
@@ -1463,5 +1525,199 @@ describe('level-up Next states its reason (R43)', () => {
     expect(next.getAttribute('aria-disabled')).toBeNull();
     expect(next.hasAttribute('aria-describedby')).toBe(false);
     expect(screen.queryByText('Choose a class to continue.')).toBeNull();
+  });
+});
+
+// D82 (F9a): "Preview at level" shows the sheet of an unsaved copy at a later level, read only, through character.preview (D14).
+describe('preview at level (D82)', () => {
+  const fighterRef = { contentId: 'fixture-c1', revisionId: 'fixture-r1' };
+  const feature = (name: string): FeatureEntry => ({
+    content: { contentId: `fixture-${name}`, revisionId: `fixture-${name}-r1` },
+    name,
+    kind: 'feature',
+    origin: {} as FeatureEntry['origin'],
+    automation: 'automatic',
+    effects: [],
+    diagnostics: [],
+  });
+  const fighter3 = (): CharacterView => {
+    const view = viewWith([]);
+    view.character = { ...view.character, level: 3, classes: [{ class: fighterRef, level: 3 }] };
+    view.sheet = { ...view.sheet, spellcasting: [] };
+    return view;
+  };
+  const renderLevelUp = (view: CharacterView, onError = vi.fn(), onCancel = vi.fn()) =>
+    render(<CharacterBuilder mode={{ kind: 'levelUp', view }} rulesFamilies={families} onCommitted={() => {}} onCancel={onCancel} onError={onError} />);
+  async function previewAt(user: ReturnType<typeof userEvent.setup>, level: string) {
+    const form = screen.getByRole('form', { name: 'Preview at level' });
+    const input = within(form).getByRole('spinbutton', { name: 'Level to preview' });
+    await user.clear(input);
+    await user.type(input, level);
+    await user.click(within(form).getByRole('button', { name: 'Preview' }));
+  }
+
+  beforeEach(() => {
+    vi.mocked(client.listCampaigns).mockResolvedValue([]);
+    vi.mocked(client.listContent).mockResolvedValue([content(1, 'class', 'Fixture Fighter', 'srd-5.1'), content(3, 'class', 'Fixture Warden', 'srd-5.1')]);
+    vi.mocked(client.preview).mockReset();
+    vi.mocked(client.preview).mockImplementation(async (draft) => ({
+      character: draft,
+      sheet: {
+        characterId: draft.id,
+        rulesFamily: 'srd-5.1',
+        diagnostics: [],
+        fields: [],
+        features: (draft.classes[0]?.level ?? 0) >= 5 ? [feature('Second Wind'), feature('Extra Attack')] : [feature('Second Wind')],
+      },
+    }));
+    vi.mocked(client.previewChoice).mockReset();
+    vi.mocked(client.saveCharacter).mockReset();
+    vi.mocked(client.createCharacter).mockReset();
+  });
+
+  it('Fighter_3_previewed_at_5_shows_Extra_Attack', async () => {
+    const user = userEvent.setup();
+    renderLevelUp(fighter3());
+    await previewAt(user, '5');
+    const sheet = await screen.findByRole('region', { name: 'Preview at level 5' });
+    expect(within(sheet).getByText('Extra Attack')).toBeTruthy();
+    expect(screen.getByText('Preview at level 5 shown below.').getAttribute('aria-live')).toBe('polite');
+    expect(within(sheet).queryByRole('heading', { name: 'Problems' })).toBeNull();
+    expect(within(sheet).getByText(/Nothing is saved/)).toBeTruthy();
+    expect(within(sheet).queryByRole('button', { name: /Save|Create/ })).toBeNull(); // read only
+    expect(vi.mocked(client.preview)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(client.preview).mock.calls[0]![0].classes).toEqual([{ class: fighterRef, level: 5 }]);
+    expect(client.saveCharacter).not.toHaveBeenCalled();
+    expect(client.createCharacter).not.toHaveBeenCalled();
+    expect(client.previewChoice).not.toHaveBeenCalled();
+  });
+
+  it('Cancel_leaves_character_unchanged', async () => {
+    const user = userEvent.setup();
+    const view = fighter3();
+    const before = structuredClone(view);
+    const onCancel = vi.fn();
+    renderLevelUp(view, vi.fn(), onCancel);
+    await previewAt(user, '5');
+    await screen.findByRole('region', { name: 'Preview at level 5' });
+    await user.click(screen.getByRole('button', { name: 'Close preview' }));
+    expect(screen.queryByRole('region', { name: 'Preview at level 5' })).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Preview' }));
+    expect(view).toEqual(before);
+    expect(client.saveCharacter).not.toHaveBeenCalled();
+    expect(client.createCharacter).not.toHaveBeenCalled();
+    expect(client.previewChoice).not.toHaveBeenCalled();
+    // The level-up itself is unchanged: Next still asks for one level more than the saved character.
+    expect(screen.getByText('Level 3 → 4')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+    await waitFor(() => expect(vi.mocked(client.preview)).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(client.preview).mock.calls[1]![0].classes).toEqual([{ class: fighterRef, level: 4 }]);
+    await user.click(await screen.findByRole('button', { name: 'Cancel' }));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(view).toEqual(before);
+    expect(client.saveCharacter).not.toHaveBeenCalled();
+    expect(client.createCharacter).not.toHaveBeenCalled();
+  });
+
+  it('lists the copy\'s problems', async () => {
+    const user = userEvent.setup();
+    vi.mocked(client.preview).mockImplementation(async (draft) => ({
+      character: draft,
+      sheet: { characterId: draft.id, rulesFamily: 'srd-5.1', diagnostics: [{ code: 'fixture.warning', message: 'Fixture warning text' }], fields: [] },
+    }));
+    renderLevelUp(fighter3());
+    await previewAt(user, '5');
+    const sheet = await screen.findByRole('region', { name: 'Preview at level 5' });
+    expect(within(sheet).getByRole('heading', { name: 'Problems' })).toBeTruthy();
+    expect(within(sheet).getByText('Fixture warning text')).toBeTruthy();
+  });
+
+  it('a failure that arrives after another class was picked is not reported', async () => {
+    const user = userEvent.setup();
+    const onError = vi.fn();
+    let fail: (error: Error) => void = () => {};
+    vi.mocked(client.preview).mockImplementation(() => new Promise((_, reject) => (fail = reject)));
+    renderLevelUp(fighter3(), onError);
+    await previewAt(user, '5');
+    await user.click(await screen.findByRole('radio', { name: /^Fixture Warden/ }));
+    fail(new Error('fixture failure'));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('is not offered when the class levels do not add up to the level (an import with no class)', async () => {
+    const user = userEvent.setup();
+    const view = fighter3();
+    view.character = { ...view.character, level: 5, classes: [] };
+    renderLevelUp(view);
+    await user.click(await screen.findByRole('radio', { name: /^Fixture Fighter/ }));
+    expect(screen.getByRole('button', { name: 'Next: choices' }).getAttribute('aria-disabled')).toBeNull(); // a class is picked
+    expect(screen.queryByRole('form', { name: 'Preview at level' })).toBeNull();
+  });
+
+  it('refuses a level outside the next level to 20 with its reason, and asks nothing', async () => {
+    const user = userEvent.setup();
+    renderLevelUp(fighter3());
+    // noValidate: the press reaches the form's own guard, not the browser's range check.
+    expect(screen.getByRole<HTMLFormElement>('form', { name: 'Preview at level' }).noValidate).toBe(true);
+    for (const level of ['3', '21']) {
+      await previewAt(user, level);
+      const button = screen.getByRole('button', { name: 'Preview' });
+      expect(button.getAttribute('aria-disabled')).toBe('true');
+      expect(button.hasAttribute('disabled')).toBe(false);
+      expect(document.getElementById(button.getAttribute('aria-describedby')!)!.textContent).toBe('Enter a level from 4 to 20.');
+    }
+    expect(client.preview).not.toHaveBeenCalled();
+  });
+
+  it('a new class previews at the levels gained, and picking another class withdraws the preview', async () => {
+    const user = userEvent.setup();
+    renderLevelUp(fighter3());
+    await user.click(await screen.findByRole('radio', { name: /^Fixture Warden/ }));
+    await previewAt(user, '6');
+    await screen.findByRole('region', { name: 'Preview at level 6' });
+    expect(vi.mocked(client.preview).mock.calls[0]![0].classes).toEqual([
+      { class: fighterRef, level: 3 },
+      { class: { contentId: 'fixture-c3', revisionId: 'fixture-r3' }, level: 3 },
+    ]);
+    await user.click(screen.getByRole('radio', { name: /^Fixture Fighter/ }));
+    expect(screen.queryByRole('region', { name: /^Preview at level/ })).toBeNull();
+  });
+
+  it('refuses a second press while one is pending, and drops a reply that arrives after another class was picked', async () => {
+    const user = userEvent.setup();
+    const pending: (() => void)[] = [];
+    vi.mocked(client.preview).mockImplementation((draft) => new Promise((resolve) => pending.push(() => resolve({ ...fighter3(), character: draft }))));
+    renderLevelUp(fighter3());
+    await previewAt(user, '5');
+    expect(screen.getByRole('button', { name: 'Preview' }).getAttribute('aria-disabled')).toBe('true');
+    await previewAt(user, '4');
+    expect(client.preview).toHaveBeenCalledTimes(1);
+    await user.click(await screen.findByRole('radio', { name: /^Fixture Warden/ }));
+    pending[0]!();
+    await Promise.resolve();
+    expect(screen.queryByRole('region', { name: /^Preview at level/ })).toBeNull();
+    // The new class's form is free to ask again.
+    await previewAt(user, '5');
+    pending[1]!();
+    await screen.findByRole('region', { name: 'Preview at level 5' });
+  });
+
+  it('is not offered at level 20', () => {
+    const view = fighter3();
+    view.character = { ...view.character, level: 20, classes: [{ class: fighterRef, level: 20 }] };
+    renderLevelUp(view);
+    expect(screen.queryByRole('form', { name: 'Preview at level' })).toBeNull();
+  });
+
+  it('reports a failed preview and shows no sheet', async () => {
+    const user = userEvent.setup();
+    const onError = vi.fn();
+    vi.mocked(client.preview).mockRejectedValue(new Error('fixture failure'));
+    renderLevelUp(fighter3(), onError);
+    await previewAt(user, '5');
+    await waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('region', { name: /^Preview at level/ })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Preview' }).getAttribute('aria-disabled')).toBeNull();
   });
 });

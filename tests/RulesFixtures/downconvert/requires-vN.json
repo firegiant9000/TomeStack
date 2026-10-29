@@ -1,0 +1,86 @@
+{
+  "content": {
+    "9": [
+      { "feature": "scale", "rule": null, "note": "floor: no target below content v9" },
+      { "feature": "formula:SCALE", "rule": null, "note": "floor: no target below content v9" },
+      { "feature": "spellcasting.multiclassCasterTable", "rule": null, "note": "floor: no target below content v9" },
+      { "feature": "choice.options:none", "rule": null, "note": "floor: no target below content v9" }
+    ],
+    "10": [
+      { "feature": "modifier.target:speed", "rule": "below.unknown-target" },
+      { "feature": "modifier.target:passive.*", "rule": "below.unknown-target" },
+      { "feature": "restriction.field:speed", "rule": "below.restriction-lifted" },
+      { "feature": "restriction.field:passive.*", "rule": "below.restriction-lifted" },
+      { "feature": "toggle.autoWhen", "rule": "below.toggle-auto-when" },
+      { "feature": "toggle.activation", "rule": "below.activation" },
+      { "feature": "resource.activation", "rule": "below.activation" },
+      { "feature": "grant.damageResistance", "rule": "below.grant-defence" },
+      { "feature": "grant.damageImmunity", "rule": "below.grant-defence" },
+      { "feature": "grant.damageType", "rule": "below.grant-defence" },
+      { "feature": "grant.damageVulnerability", "rule": "below.vulnerability" },
+      { "feature": "item", "rule": "below.effect-unsupported" },
+      { "feature": "item.requiresAttunement", "rule": "below.item-attunement" },
+      { "feature": "item.charges", "rule": "below.item-charges" }
+    ],
+    "11": [
+      { "feature": "toggleGroup", "rule": "below.toggle-group" },
+      { "feature": "upkeep", "rule": "below.upkeep" },
+      { "feature": "attack", "rule": "below.effect-unsupported" },
+      { "feature": "attackRider", "rule": "below.effect-unsupported" },
+      { "feature": "value", "rule": "below.effect-unsupported" },
+      { "feature": "response", "rule": "below.effect-unsupported" },
+      { "feature": "rollMode", "rule": "below.effect-unsupported" },
+      { "feature": "rollMode.mode:disadvantage", "rule": "below.roll-mode-disadvantage" },
+      { "feature": "toggle.group", "rule": "below.toggle-group" },
+      { "feature": "toggle.groupContent", "rule": "below.toggle-group" },
+      { "feature": "toggle.layer", "rule": "below.toggle-group" },
+      { "feature": "toggle.allowedWith", "rule": "below.toggle-group" },
+      { "feature": "toggle.allowedInBase", "rule": "below.toggle-group" },
+      { "feature": "toggle.cost", "rule": "below.toggle-cost" },
+      { "feature": "toggle.resourceContent", "rule": "below.toggle-cost" },
+      { "feature": "toggle.level", "rule": "below.toggle-level" },
+      { "feature": "toggle.duration", "rule": "below.toggle-duration" },
+      { "feature": "resource.counts", "rule": "below.resource-counts-up" },
+      { "feature": "resource.resourceFull", "rule": "below.resource-detail" },
+      { "feature": "resource.allowance", "rule": "below.resource-detail" },
+      { "feature": "roll.whileToggle", "rule": "below.roll-detail" },
+      { "feature": "roll.save", "rule": "below.roll-detail" },
+      { "feature": "roll.area", "rule": "below.roll-detail" },
+      { "feature": "roll.range", "rule": "below.roll-detail" },
+      { "feature": "roll.targets", "rule": "below.roll-detail" },
+      { "feature": "roll.perUnit", "rule": "below.roll-detail" },
+      { "feature": "roll.drawsDown", "rule": "below.roll-detail" },
+      { "feature": "roll.alsoChange", "rule": "below.roll-also-change" },
+      { "feature": "roll.dice:none", "rule": "below.diceless-roll" },
+      { "feature": "modifier.toggleContent", "rule": "below.modifier-toggle-content" },
+      { "feature": "modifier.target:resource.*", "rule": "below.unknown-target" },
+      { "feature": "modifier.target:speed.fly", "rule": "below.unknown-target" },
+      { "feature": "restriction.field:resource.*", "rule": "below.restriction-lifted" },
+      { "feature": "restriction.field:speed.fly", "rule": "below.restriction-lifted" },
+      { "feature": "grant.whileToggle", "rule": "below.defence-while-toggle" },
+      { "feature": "formula:VALUE", "rule": "below.value-formula" }
+    ],
+    "12": [
+      { "feature": "weapon.bonus", "rule": null, "note": "MECH-X: rule added when it merges" }
+    ]
+  },
+  "character": {
+    "9": [
+      { "feature": "details", "rule": "below.details" },
+      { "feature": "customItems", "rule": "below.custom-items" },
+      { "feature": "customAttacks", "rule": "below.custom-attacks" },
+      { "feature": "damageDefences", "rule": "below.damage-defences" },
+      { "feature": "damageDefences[].kind:vulnerability", "rule": "below.vulnerability" },
+      { "feature": "companions", "rule": "below.companions" },
+      { "feature": "play.companions", "rule": "below.companions" },
+      { "feature": "xp", "rule": "below.xp" },
+      { "feature": "equipment[].id", "rule": "below.equipment-state" },
+      { "feature": "equipment[].attuned", "rule": "below.equipment-state" },
+      { "feature": "equipment[].chargesSpent", "rule": "below.equipment-state" }
+    ],
+    "10": [
+      { "feature": "play.encounter", "rule": "below.encounter-running" },
+      { "feature": "play.toggles[].roundsLeft", "rule": "below.rounds-left" }
+    ]
+  }
+}

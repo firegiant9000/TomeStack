@@ -1,8 +1,11 @@
+import type { ReactNode } from 'react';
 import type { CharacterView, DerivedValue, PlayAction, RollMode, RollRecord } from '../api/types';
 import { hitDiceText } from '../format';
 import { DiceBox } from './DiceBox';
-import { inspirationLabel, RollModePicker, RollResult } from './PlayPanels';
+import { rollButtonSuffix } from '../rollModes';
+import { inspirationLabel, RollModePicker, RollResult, type RecordSpent } from './PlayPanels';
 import { RollLog, type LoggedRoll } from './RollLog';
+import { RollWhy } from './RollWhy';
 
 const abilities = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const;
 const abilityNames: Record<(typeof abilities)[number], string> = {
@@ -23,13 +26,21 @@ interface Props {
   lastRoll?: RollRecord;
   /** D28: the previous rolls of this sheet session, newest first. */
   rollLog: LoggedRoll[];
-  act: (action: PlayAction) => void;
+  act: (action: PlayAction) => void | Promise<boolean>;
+  /** D43 S7: opens the damage panel for the amount and type ('' is untyped); used by "Lose 1 hit point" when the sheet has damage responses. */
+  onDamage?: (amount: number, type: string) => void;
   /** Rolls a d20 test for a field id (for example `ability.str.mod`) in the current mode. */
   onRoll: (field: string) => void;
   /** Rolls typed dice (item 8); rejects with the engine's refusal, which the box shows. */
   onRollDice: (formula: string) => Promise<void>;
   /** True when the sheet offers a Spells tab; the hint names it only then. */
   spellsTab?: boolean;
+  /** D73: the quickbar, in its own row after the summary line (never inside the roll strip). */
+  quickbar?: ReactNode;
+  /** D73: whether the bar has any pin; the hint then says only a button named "and spend" spends. */
+  hasQuickbar?: boolean;
+  /** D73: the sheet's record-spent state, shared with the quickbar; absent, Last roll keeps its own. */
+  spent?: RecordSpent;
 }
 
 /**
@@ -38,7 +49,7 @@ interface Props {
  * `getByRole` and confuse screen readers). Traces and overrides stay on the field cards (Stats, Spells). An overridden
  * value says so in text (WCAG 1.4.1). The d20 roll mode and the last roll live here so they are reachable from every tab.
  */
-export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, act, onRoll, onRollDice, spellsTab = false }: Props) {
+export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, act, onDamage, onRoll, onRollDice, spellsTab = false, quickbar, hasQuickbar = false, spent }: Props) {
   const { character, sheet } = view;
   const field = (id: string): DerivedValue | undefined => sheet.fields.find((f) => f.field === id);
   const show = (id: string): string => {
@@ -75,7 +86,7 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, ac
                 </span>{' '}
                 {/* D28 (owner, 2026-10-07): a compact control. The visible word starts the accessible name (WCAG 2.5.3). */}
                 <button type="button" className="roll" onClick={() => onRoll(mod.field)}>
-                  Roll{' '}
+                  Roll{rollButtonSuffix(mod)}{' '}
                   <span className="visually-hidden"> {abilityNames[a]} check ({signed(mod.value)})</span>
                 </button>
                 {mod.override && <span className="override-label"> (modifier overridden)</span>}
@@ -99,7 +110,11 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, ac
         </div>
         <div>
           <dt>Speed</dt>
-          <dd>{show('speed')}</dd>
+          <dd>
+            {show('speed')}
+            {/* Shown above 0, and at 0 when the player set that override (so the override is visible, as on its Stats card). */}
+            {((field('speed.fly')?.value ?? 0) > 0 || field('speed.fly')?.override !== undefined) && `, Fly ${field('speed.fly')!.value} ft.`}
+          </dd>
         </div>
         {hp && (
           <div>
@@ -120,7 +135,9 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, ac
                 aria-disabled={loseAtLimit || undefined}
                 onClick={() => {
                   if (loseAtLimit) return;
-                  act({ action: 'damage', amount: 1 });
+                  // D43 S7: with damage responses on the sheet, even one point is previewed first (untyped).
+                  if (onDamage && (sheet.responses ?? []).length > 0) onDamage(1, '');
+                  else act({ action: 'damage', amount: 1 });
                 }}
               >
                 −
@@ -168,17 +185,21 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, ac
           </div>
         )}
       </dl>
+      {quickbar}
       <div className="roll-controls">
         <RollModePicker mode={rollMode} onChange={onRollMode} />
         <DiceBox onRoll={onRollDice} />
       </div>
       <p className="hint">
+        {/* D73 R13: a quickbar button whose name says "and spend" rolls and then makes that spend once; other pins only roll (Use and toggle pins make their own play change). */}
+        {hasQuickbar ? 'Rolling from here never spends anything; a quickbar button that says "and spend" rolls and then spends.' : 'Rolling never spends anything.'}
         {spellsTab
-          ? 'Rolling never spends anything. Roll a check here; a save, skill or initiative from its field on Stats; an attack or feature on Play; or a spell on Spells.'
-          : 'Rolling never spends anything. Roll a check here; a save, skill or initiative from its field on Stats; or an attack or feature on Play.'}
+          ? ' Roll a check here; a save, skill or initiative from its field on Stats; an attack or feature on Play; or a spell on Spells.'
+          : ' Roll a check here; a save, skill or initiative from its field on Stats; or an attack or feature on Play.'}
       </p>
       <div className="roll-strip">
-        <RollResult record={lastRoll} resources={sheet.resources ?? []} features={sheet.features ?? []} act={act} />
+        <RollResult record={lastRoll} resources={sheet.resources ?? []} features={sheet.features ?? []} attacks={sheet.attacks ?? []} act={act} spent={spent} />
+        <RollWhy record={lastRoll} />
         <RollLog rolls={rollLog} />
       </div>
     </section>

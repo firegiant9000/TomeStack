@@ -181,6 +181,21 @@ public class FormulaProperties
                     .Label($"{p.Text} → {(ok ? value.ToString(CultureInfo.InvariantCulture) : error!.Code)}");
             });
 
+    [Property(MaxTest = 500)]
+    public Property Values_never_parse_without_the_feature() =>
+        Prop.ForAll(
+            Gen.Elements("a", "focusMod", "x1", "handDie", "kiPoints").ToArbitrary(),
+            Gen.Elements(FormulaFeatures.None, FormulaFeatures.Scales).ToArbitrary(),
+            (id, without) =>
+            {
+                var text = $"PB + VALUE.{id}";
+                var refused = !Formula.TryParse(text, without, out _, out var error) && error!.Code == "formula.unknown-identifier";
+                var allowed = Formula.TryParse(text, without | FormulaFeatures.Values, out var formula, out _)
+                    && formula!.Identifiers.Contains($"VALUE.{id}") && FormulaIdentifiers.IsValue($"VALUE.{id}") && FormulaIdentifiers.ValueId($"VALUE.{id}") == id;
+                var invalid = !Formula.TryParse($"VALUE.{id}-", FormulaFeatures.Values, out _, out _) && !Formula.TryParse("VALUE.", FormulaFeatures.Values, out _, out _);
+                return (refused && allowed && invalid).Label(text);
+            });
+
     /// <summary>Untrusted text (SPEC Q-02): any string, mostly from the formula alphabet, parses or fails with a code.</summary>
     [Property(MaxTest = 2000)]
     public Property Parsing_any_text_returns_a_result_or_an_error_code_and_never_throws() =>

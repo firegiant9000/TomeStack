@@ -133,7 +133,7 @@ The Test Chronicler is an original fixture under `tests/RulesFixtures/` (never `
 - A nonstandard class needs no code edit. The engine change is one effect type, one identifier and one field, each with a validator rule and a side-by-side test.
 - The Multiclass Spellcaster table stays a policy field. Only the *contribution* becomes data.
 - The studio's class editor is the largest piece of slice 1 by effort, and it is plain UI over existing commands.
-- A class published as v9 cannot be shared with 0.3.x or M2.2 builds, and the share preview must say so. `package.exportPreview` names the minimum TomeStack version when any entry is above v7 (slice 1b).
+- A class published as v9 cannot be shared with 0.3.x or M2.2 builds, and the share preview must say so. `package.exportPreview` names the minimum TomeStack version when any entry is above v7 (slice 1b). (Found at 0.7.0: this line was never built. Every published build, 0.4.0 onward, reads v9, so it no longer matters; the preview warning `package.needs-newer-build`, added for 0.7.0, covers content v11 and character v10 only, D43 gap G6.)
 
 ## Alternatives considered
 
