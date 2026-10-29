@@ -136,7 +136,16 @@ public sealed record ItemUseValue(
     int? ChargesMax,
     int ChargesSpent,
     int? ChargesLeft,
-    ItemChargeRecoveryInfo? Recovery);
+    ItemChargeRecoveryInfo? Recovery,
+    IReadOnlyList<ItemModInfo> Mods,
+    IReadOnlyList<string> Hosts);
+
+/// <summary>
+/// MECH-X item 3 (R57): one mod attached to an equipment entry, for the Inventory. <paramref name="Name"/> is the mod's own name, or
+/// "(not available)" when the catalog cannot find it (the entry keeps the reference so it can be removed); <paramref name="AppliesTo"/> and
+/// <paramref name="Bonus"/> are those of its <c>itemMod</c> effect (any and none when it has none).
+/// </summary>
+public sealed record ItemModInfo(ContentReference Reference, string Name, ModTarget AppliesTo, int? Bonus);
 
 /// <summary>
 /// Content v9 (ADR-010): one column of a class table at the character's level in that class, for example "Ink 4" for a
@@ -372,7 +381,8 @@ public sealed record AttackEntry(
     Guid? CostResourceContent = null,
     string? ResourceId = null,
     int? Cost = null,
-    PaymentValue? Payment = null);
+    PaymentValue? Payment = null,
+    int? EntryIndex = null);
 
 /// <summary>Content v11 (D43): where an attack on the sheet comes from. Custom attacks are not on the sheet's list.</summary>
 public enum AttackSource { Weapon, Feature }
@@ -665,7 +675,7 @@ public static class CharacterCalculator
         var declaredToggles = DeclaredToggles(active, character, resolved.ClassLevels);
         var effective = ToggleGroups.Resolve(character.Play, declaredToggles, diagnostics, active.Select(a => a.Revision.ContentId).ToHashSet());
         var resourceBonuses = new List<ResourceBonus>();
-        var modifiers = CollectModifiers(active, character, policy, diagnostics, warnings, manual, effective, autoOn, resourceBonuses, resolved.ClassLevels);
+        var modifiers = CollectModifiers(active, character, policy, diagnostics, warnings, manual, effective, autoOn, resourceBonuses, resolved.ClassLevels, resolved.ModdedEntries);
         var rollModes = CollectRollModes(active, effective, autoOn, diagnostics);
         var weaponProficiencies = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         var armorTraining = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
@@ -677,7 +687,7 @@ public static class CharacterCalculator
         var classes = character.Classes.Where(e => e.Level > 0).ToList();
         var checkTraining = unseenArmor.Count == 0 && classes.Count > 0 && classes.All(e =>
             resolved.Classes.FirstOrDefault(c => c.Content.Revision.Reference == e.Class) is { } info && RecordsArmorTraining(info.Content.Revision));
-        var worn = AddArmor(active, modifiers, diagnostics, armorTraining, checkTraining, policy, warnings);
+        var worn = AddArmor(active, modifiers, diagnostics, armorTraining, checkTraining, policy, warnings, resolved.ModdedEntries);
         RemoveCycles(modifiers, diagnostics, warnings, manual);
         var order = TopologicalOrder(modifiers);
         var casters = CollectCasters(active, character, resolved.ClassLevels, diagnostics);
@@ -733,7 +743,7 @@ public static class CharacterCalculator
         }).ToList();
 
         // Before the feature list: an attack whose die is invalid reports on its feature (attack.die-invalid).
-        var attacks = CollectAttacks(active, values, family, weaponProficiencies, character, resolved.ClassLevels, effective, autoOn, diagnostics);
+        var attacks = CollectAttacks(active, values, family, weaponProficiencies, character, resolved.ClassLevels, effective, autoOn, diagnostics, resolved.ModdedEntries);
         var resources = CollectResources(active, character, resolved.ClassLevels, values, family, resourceBonuses);
         var rollBonuses = RollBonuses(active, character, resolved.ClassLevels, values, diagnostics);
         var rollDetails = RollDetailsOf(active, family, character, resolved.ClassLevels, values, diagnostics);
@@ -1035,16 +1045,27 @@ public static class CharacterCalculator
         for (var index = 0; index < character.Equipment.Count; index++)
         {
             var entry = character.Equipment[index];
-            if (catalog.FindRevision(entry.Item) is not { Kind: ContentKind.Item, Status: RevisionStatus.Published } revision
-                || revision.Effects.OfType<ItemEffect>().FirstOrDefault() is not { } item
-                || (item.RequiresAttunement != true && item.Charges is null))
+            if (catalog.FindRevision(entry.Item) is not { Kind: ContentKind.Item, Status: RevisionStatus.Published } revision)
                 continue;
+            // MECH-X item 3 (R57): an item that can host mods (it has a weapon or armor effect) or an entry that has mods gets a row too.
+            var hosts = new List<string>();
+            if (revision.Effects.OfType<WeaponEffect>().Any())
+                hosts.Add("weapon");
+            if (revision.Effects.OfType<ArmorEffect>().Any())
+                hosts.Add("armor");
+            var item = revision.Effects.OfType<ItemEffect>().FirstOrDefault();
+            if ((item is null || (item.RequiresAttunement != true && item.Charges is null)) && hosts.Count == 0 && entry.Mods is null)
+                continue;
+            var mods = (entry.Mods ?? []).Select(m =>
+                catalog.FindRevision(m) is { } mod
+                    ? mod.Effects.OfType<ItemModEffect>().FirstOrDefault() is { } effect ? new ItemModInfo(m, mod.Name, effect.AppliesTo, effect.Bonus) : new ItemModInfo(m, mod.Name, ModTarget.Any, null)
+                    : new ItemModInfo(m, "(not available)", ModTarget.Any, null)).ToList();
             var spent = entry.ChargesSpent ?? 0;
-            var recovery = item.Charges?.Recovery is { } r ? new ItemChargeRecoveryInfo(r.Period, r.Regain) : null;
+            var recovery = item?.Charges?.Recovery is { } r ? new ItemChargeRecoveryInfo(r.Period, r.Regain) : null;
             uses.Add(new(
                 entry.Item, revision.Name, entry.Id is { } id ? id.ToString("D") : $"#{index}", entry.Id, index, entry.Equipped,
-                item.RequiresAttunement == true, entry.Attuned == true, item.Charges?.Max, spent,
-                item.Charges is { } charges ? Math.Max(charges.Max - spent, 0) : null, recovery));
+                item?.RequiresAttunement == true, entry.Attuned == true, item?.Charges?.Max, spent,
+                item?.Charges is { } charges ? Math.Max(charges.Max - spent, 0) : null, recovery, mods, hosts));
         }
         return uses;
     }
@@ -1195,7 +1216,7 @@ public static class CharacterCalculator
     /// </summary>
     private static List<AttackEntry> CollectAttacks(
         List<ActiveContent> active, Dictionary<string, int> values, string family, Dictionary<string, Proficiency> weapons,
-        Character character, ClassLevelMap classLevels, EffectiveToggles effective, bool autoOn, List<Diagnostic> diagnostics)
+        Character character, ClassLevelMap classLevels, EffectiveToggles effective, bool autoOn, List<Diagnostic> diagnostics, IReadOnlyList<ModdedEntry> modded)
     {
         var attacks = new List<AttackEntry>();
         var rules = new TraceOrigin(TraceOriginKind.RulesPolicy, family);
@@ -1208,59 +1229,90 @@ public static class CharacterCalculator
                     attack.WhileToggle is { } form ? OutOfForm(active, item, form, effective, autoOn) : null));
             if (item.Revision.Kind != ContentKind.Item)
                 continue;
+            // R159 keeps one row for an item equipped twice. When one of its equipped entries carries mods, each equipped entry that passes the
+            // host's attunement gate gets its own row instead (the modded ones add their bonuses), told apart by EntryIndex.
+            var copies = modded.Where(m => m.Host.Revision.Reference == item.Revision.Reference).ToList();
+            var variants = new List<(int? EntryIndex, ModdedEntry? Modded)>();
+            if (copies.Count == 0)
+                variants.Add((null, null));
+            else
+            {
+                for (var i = 0; i < character.Equipment.Count; i++)
+                {
+                    var entry = character.Equipment[i];
+                    if (entry.Equipped && entry.Item == item.Revision.Reference && (!RequiresAttunement(item.Revision) || entry.Attuned == true))
+                        variants.Add((i, copies.FirstOrDefault(m => m.EntryIndex == i)));
+                }
+            }
             foreach (var weapon in item.Revision.Effects.OfType<WeaponEffect>().Where(w => w.Automation != AutomationStatus.Reference))
             {
-                var str = values[FieldIds.Modifier(Ability.Str)];
-                var dex = values[FieldIds.Modifier(Ability.Dex)];
-                var ability = weapon.Attack == WeaponAttack.Ranged ? Ability.Dex
-                    : weapon.Has("finesse") && dex > str ? Ability.Dex
-                    : Ability.Str;
-                var mod = ability == Ability.Dex ? dex : str;
-                var pb = values[FieldIds.ProficiencyBonus];
-                var category = weapon.Category == WeaponCategory.Simple ? "simple" : "martial";
-                var proficiency = weapons.GetValueOrDefault(category) ?? weapons.GetValueOrDefault(weapon.WeaponKey);
-                var warnings = new List<Diagnostic>();
-                var automation = weapon.Automation;
-                var trace = new List<TraceEntry>();
-                var why = weapon.Has("finesse") && weapon.Attack == WeaponAttack.Melee ? " (finesse: the better of Strength and Dexterity)" : "";
-                trace.Add(new(1, "base", $"{AbilityNames[ability]} modifier{why}", mod, mod, rules, FieldIds.Modifier(ability), [new(FieldIds.Modifier(ability), mod)]));
-                var toHit = mod;
-                if (proficiency is not null)
+                foreach (var variant in variants)
                 {
-                    toHit += pb;
-                    trace.Add(new(2, "add", $"Proficiency bonus: proficient with {category} weapons or {weapon.WeaponKey}, from {Describe(proficiency.Content)}", pb, toHit, ContentOrigin(family, proficiency.Content, proficiency.Effect), null, [new(FieldIds.ProficiencyBonus, pb)]));
+                    var str = values[FieldIds.Modifier(Ability.Str)];
+                    var dex = values[FieldIds.Modifier(Ability.Dex)];
+                    var ability = weapon.Attack == WeaponAttack.Ranged ? Ability.Dex
+                        : weapon.Has("finesse") && dex > str ? Ability.Dex
+                        : Ability.Str;
+                    var mod = ability == Ability.Dex ? dex : str;
+                    var pb = values[FieldIds.ProficiencyBonus];
+                    var category = weapon.Category == WeaponCategory.Simple ? "simple" : "martial";
+                    var proficiency = weapons.GetValueOrDefault(category) ?? weapons.GetValueOrDefault(weapon.WeaponKey);
+                    var warnings = new List<Diagnostic>();
+                    var automation = weapon.Automation;
+                    var trace = new List<TraceEntry>();
+                    var why = weapon.Has("finesse") && weapon.Attack == WeaponAttack.Melee ? " (finesse: the better of Strength and Dexterity)" : "";
+                    trace.Add(new(1, "base", $"{AbilityNames[ability]} modifier{why}", mod, mod, rules, FieldIds.Modifier(ability), [new(FieldIds.Modifier(ability), mod)]));
+                    var toHit = mod;
+                    if (proficiency is not null)
+                    {
+                        toHit += pb;
+                        trace.Add(new(2, "add", $"Proficiency bonus: proficient with {category} weapons or {weapon.WeaponKey}, from {Describe(proficiency.Content)}", pb, toHit, ContentOrigin(family, proficiency.Content, proficiency.Effect), null, [new(FieldIds.ProficiencyBonus, pb)]));
+                    }
+                    else if (weapons.Count == 0)
+                    {
+                        // No content says which weapons the character knows (for example classes published before weapons existed).
+                        automation = AutomationStatus.Assisted;
+                        warnings.Add(new("attack.proficiency-unknown", $"No content records weapon proficiencies for this character, so the proficiency bonus (+{pb}) is not added to '{item.Revision.Name}'. Add it if the character is proficient.", item.Revision.Reference, weapon.Id));
+                    }
+                    else
+                    {
+                        warnings.Add(new("attack.not-proficient", $"Not proficient with '{item.Revision.Name}' ({category}): no proficiency bonus.", item.Revision.Reference, weapon.Id));
+                    }
+                    // The weapon's own bonus (content v12): to hit and damage, after the proficiency bonus and before the riders. A revision
+                    // below v12 gets nothing, even one built in code with the property set. Two steps, like a rider's, so a damage roll's
+                    // explanation keeps the damage one (R21); the last step's result stays the to-hit.
+                    var weaponBonus = 0;
+                    if (weapon.Bonus is int b and not 0 && item.Revision.SchemaVersion >= ContentRevision.WeaponBonusSchemaVersion)
+                    {
+                        weaponBonus = b;
+                        var weaponOrigin = ContentOrigin(family, item, weapon);
+                        toHit += b;
+                        trace.Add(new(trace.Count + 1, "add", $"{item.Revision.Name}: +{b} to hit (weapon)", b, toHit, weaponOrigin));
+                        trace.Add(new(trace.Count + 1, "add", $"{item.Revision.Name}: +{b} damage (weapon)", b, toHit, weaponOrigin));
+                    }
+                    // MECH-X item 3 (R49): this copy's weapon mods add after the weapon's own bonus and before the riders, two steps each.
+                    var modBonus = 0;
+                    foreach (var (modContent, modEffect) in variant.Modded?.Mods ?? [])
+                    {
+                        if (modEffect.AppliesTo is not (ModTarget.Weapon or ModTarget.Any) || modEffect.Bonus is not (int mb and not 0))
+                            continue;
+                        modBonus += mb;
+                        var modOrigin = ContentOrigin(family, modContent, modEffect);
+                        toHit += mb;
+                        trace.Add(new(trace.Count + 1, "add", $"{modContent.Revision.Name}: +{mb} to hit (mod)", mb, toHit, modOrigin));
+                        trace.Add(new(trace.Count + 1, "add", $"{modContent.Revision.Name}: +{mb} damage (mod)", mb, toHit, modOrigin));
+                    }
+                    // Riders that match (the tags weapon and melee or ranged) add to the numbers; none matching leaves them as they were.
+                    var applied = ApplyRiders(family, riders, ["weapon", weapon.Attack == WeaponAttack.Ranged ? "ranged" : "melee"], trace, ref toHit, out var riderBonus);
+                    var damageBonus = mod + weaponBonus + modBonus + riderBonus;
+                    attacks.Add(new(
+                        item.Revision.Reference, item.Revision.Name, weapon.Id, weapon.Attack, weapon.Category, ability, toHit,
+                        DamageWith(weapon.Damage, applied, damageBonus), weapon.Versatile is { } versatile ? DamageWith(versatile, applied, damageBonus) : null,
+                        weapon.DamageType, weapon.Properties, weapon.Range, weapon.Mastery, proficiency is not null, automation, trace, warnings,
+                        ContentOrigin(family, item, weapon),
+                        Riders: applied.Count == 0 ? null : [.. applied.Select(r => r.Value)],
+                        EntryIndex: variant.EntryIndex));
                 }
-                else if (weapons.Count == 0)
-                {
-                    // No content says which weapons the character knows (for example classes published before weapons existed).
-                    automation = AutomationStatus.Assisted;
-                    warnings.Add(new("attack.proficiency-unknown", $"No content records weapon proficiencies for this character, so the proficiency bonus (+{pb}) is not added to '{item.Revision.Name}'. Add it if the character is proficient.", item.Revision.Reference, weapon.Id));
-                }
-                else
-                {
-                    warnings.Add(new("attack.not-proficient", $"Not proficient with '{item.Revision.Name}' ({category}): no proficiency bonus.", item.Revision.Reference, weapon.Id));
-                }
-                // The weapon's own bonus (content v12): to hit and damage, after the proficiency bonus and before the riders. A revision
-                // below v12 gets nothing, even one built in code with the property set. Two steps, like a rider's, so a damage roll's
-                // explanation keeps the damage one (R21); the last step's result stays the to-hit.
-                var weaponBonus = 0;
-                if (weapon.Bonus is int b and not 0 && item.Revision.SchemaVersion >= ContentRevision.WeaponBonusSchemaVersion)
-                {
-                    weaponBonus = b;
-                    var weaponOrigin = ContentOrigin(family, item, weapon);
-                    toHit += b;
-                    trace.Add(new(trace.Count + 1, "add", $"{item.Revision.Name}: +{b} to hit (weapon)", b, toHit, weaponOrigin));
-                    trace.Add(new(trace.Count + 1, "add", $"{item.Revision.Name}: +{b} damage (weapon)", b, toHit, weaponOrigin));
-                }
-                // Riders that match (the tags weapon and melee or ranged) add to the numbers; none matching leaves them as they were.
-                var applied = ApplyRiders(family, riders, ["weapon", weapon.Attack == WeaponAttack.Ranged ? "ranged" : "melee"], trace, ref toHit, out var riderBonus);
-                var damageBonus = mod + weaponBonus + riderBonus;
-                attacks.Add(new(
-                    item.Revision.Reference, item.Revision.Name, weapon.Id, weapon.Attack, weapon.Category, ability, toHit,
-                    DamageWith(weapon.Damage, applied, damageBonus), weapon.Versatile is { } versatile ? DamageWith(versatile, applied, damageBonus) : null,
-                    weapon.DamageType, weapon.Properties, weapon.Range, weapon.Mastery, proficiency is not null, automation, trace, warnings,
-                    ContentOrigin(family, item, weapon),
-                    Riders: applied.Count == 0 ? null : [.. applied.Select(r => r.Value)]));
             }
         }
         return attacks;
@@ -2309,7 +2361,18 @@ public static class CharacterCalculator
     }
 
     private sealed record ResolvedContent(
-        List<ActiveContent> Active, List<ClassInfo> Classes, ClassLevelMap ClassLevels, List<ChoiceStatus> Choices);
+        List<ActiveContent> Active, List<ClassInfo> Classes, ClassLevelMap ClassLevels, List<ChoiceStatus> Choices, IReadOnlyList<ModdedEntry> ModdedEntries);
+
+    /// <summary>
+    /// MECH-X item 3 (R49, R50): one equipped entry of a host item that carries mods and passes the per-entry attunement gate, with the
+    /// admitted mods in order. Mods are leaves: they are never put in <c>active</c>, only this side list, which <c>CollectAttacks</c>,
+    /// <c>AddArmor</c> and <c>CollectModifiers</c> read. <paramref name="EntryIndex"/> is the entry's position in the character's equipment.
+    /// </summary>
+    private sealed record ModdedEntry(int EntryIndex, ActiveContent Host, IReadOnlyList<(ActiveContent Mod, ItemModEffect Effect)> Mods);
+
+    /// <summary>Whether an item revision's v10 <c>item</c> effect needs attunement (a revision below v10 has no typed item effect, so no gate).</summary>
+    private static bool RequiresAttunement(ContentRevision revision) =>
+        revision.Kind == ContentKind.Item && revision.Effects.OfType<ItemEffect>().Any(e => e.RequiresAttunement == true);
 
     /// <summary>
     /// Pins and classes first. Then, in a worklist: content granted by a root (one level deep only: granted content's own
@@ -2393,7 +2456,7 @@ public static class CharacterCalculator
         }
 
         // The attunement gate (Wave 3 item 25): an item that needs attunement applies only while an entry of it is recorded as attuned.
-        bool NeedsAttunement(ActiveContent item) => item.Revision.Kind == ContentKind.Item && item.Revision.Effects.OfType<ItemEffect>().Any(e => e.RequiresAttunement == true);
+        bool NeedsAttunement(ActiveContent item) => RequiresAttunement(item.Revision);
         // R189: content a grant or a choice brings in passes the same gate, through an attuned equipped copy.
         bool AttunedCopyEquipped(ContentReference reference) => character.Equipment.Any(e => e.Equipped && e.Item == reference && e.Attuned == true);
         void NotAttuned(ContentReference reference) =>
@@ -2430,6 +2493,53 @@ public static class CharacterCalculator
                 continue;
             }
             active.Add(item);
+        }
+
+        // MECH-X item 3 (R49 to R52): the mods on equipped entries. Mods are leaves (never in `active`, so a mod's choice, grant or other
+        // effects are never offered or followed); they live in a side list read by three collectors. The host must have been admitted
+        // above, and a host that needs attunement needs this entry attuned (the item-wide gate above stays for the host itself).
+        var modded = new List<ModdedEntry>();
+        var admittedMods = new Dictionary<ContentReference, ActiveContent?>();
+        var ignoredNoted = new HashSet<ContentReference>();
+        for (var index = 0; index < character.Equipment.Count; index++)
+        {
+            var entry = character.Equipment[index];
+            if (!entry.Equipped || entry.Mods is not { Count: > 0 } references)
+                continue;
+            if (active.FirstOrDefault(a => a.Revision.Kind == ContentKind.Item && a.Revision.Reference == entry.Item) is not { } host)
+                continue; // not applied: Admit, the kind check or the item-wide attunement gate above already said why
+            if (NeedsAttunement(host) && entry.Attuned != true)
+            {
+                diagnostics.Add(new("item-mod.host-not-attuned", $"The mods on an equipped copy of '{host.Revision.Name}' add nothing: that copy needs attunement, which is not recorded for it. Mark it attuned in the Inventory.", entry.Item));
+                continue;
+            }
+            var built = new List<(ActiveContent Mod, ItemModEffect Effect)>();
+            foreach (var reference in references)
+            {
+                if (!admittedMods.TryGetValue(reference, out var mod))
+                {
+                    mod = Admit(reference, null); // once per reference, so the same mod on two entries explains itself once
+                    admittedMods[reference] = mod;
+                }
+                if (mod is null)
+                    continue;
+                var effects = mod.Revision.Effects.OfType<ItemModEffect>().ToList();
+                if (mod.Revision.Kind != ContentKind.Item || effects.Count != 1 || mod.Revision.SchemaVersion < ContentRevision.ItemModSchemaVersion)
+                {
+                    AddOnce(diagnostics, new("item-mod.not-a-mod", $"'{mod.Revision.Name}' is attached to '{host.Revision.Name}' as a mod but is not one; it adds nothing.", reference));
+                    continue;
+                }
+                var effect = effects[0];
+                if (ignoredNoted.Add(reference) && mod.Revision.Effects.Where(e => e is not (ItemModEffect or ModifierEffect or ItemEffect)).Select(e => e.Type).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList() is { Count: > 0 } ignored)
+                    diagnostics.Add(new("item-mod.effect-ignored", $"The mod '{mod.Revision.Name}' also carries {string.Join(", ", ignored)} effects, which a mod does not use; they are ignored.", reference));
+                var hasWeapon = host.Revision.Effects.OfType<WeaponEffect>().Any(w => w.Automation != AutomationStatus.Reference);
+                var hasArmor = host.Revision.Effects.OfType<ArmorEffect>().Any(a => a.Automation == AutomationStatus.Automatic && a.Timing == EffectTiming.Always);
+                if (effect.Bonus is > 0 && !(effect.AppliesTo is ModTarget.Weapon or ModTarget.Any && hasWeapon) && !(effect.AppliesTo is ModTarget.Armor or ModTarget.Any && hasArmor))
+                    diagnostics.Add(new("item-mod.no-host-effect", $"The mod '{mod.Revision.Name}' has a bonus, but '{host.Revision.Name}' has no {(effect.AppliesTo == ModTarget.Any ? "weapon or armor" : effect.AppliesTo.ToString().ToLowerInvariant())} effect for it to add to; the bonus adds nothing.", reference, effect.Id));
+                built.Add((mod, effect));
+            }
+            if (built.Count > 0)
+                modded.Add(new(index, host, built));
         }
 
         var classes = new List<ClassInfo>();
@@ -2581,7 +2691,7 @@ public static class CharacterCalculator
             diagnostics.Add(new("choice.orphaned", $"A selection is recorded for choice '{orphan.ChoiceId}' of revision {orphan.Source.RevisionId}, which is not active or does not offer that choice (yet); it is not applied.", orphan.Source));
         CollectScales(active, classLevels, diagnostics);
         CollectValues(active, classLevels, diagnostics);
-        return new(active, classes, classLevels, choices);
+        return new(active, classes, classLevels, choices, modded);
     }
 
     /// <summary>
@@ -2640,8 +2750,23 @@ public static class CharacterCalculator
     /// </remarks>
     private static WornArmor AddArmor(
         List<ActiveContent> active, List<Modifier> modifiers, List<Diagnostic> diagnostics, Dictionary<string, Proficiency> training, bool checkTraining,
-        RulesFamilyPolicy policy, Dictionary<string, List<Diagnostic>> warnings)
+        RulesFamilyPolicy policy, Dictionary<string, List<Diagnostic>> warnings, IReadOnlyList<ModdedEntry> modded)
     {
+        // MECH-X item 3 (R49): the armor mods of the first modded entry (list order) of the worn item add their bonus to Armor Class,
+        // built like Synthetic (origin the mod's revision). Nothing for a mod that applies to weapons only or has no bonus.
+        List<Modifier> ModBonuses(ActiveContent host, string? skipReason) =>
+        [
+            .. modded.Where(m => m.Host.Revision.Reference == host.Revision.Reference).Take(1)
+                .SelectMany(m => m.Mods)
+                .Where(x => x.Effect.AppliesTo is ModTarget.Armor or ModTarget.Any && x.Effect.Bonus is > 0)
+                .Select(x =>
+                {
+                    var value = x.Effect.Bonus!.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    var effect = new ModifierEffect { Id = x.Effect.Id, Operation = ModifierOperation.Bonus, Target = FieldIds.ArmorClass, Value = value, Text = $"{x.Mod.Revision.Name} on {host.Revision.Name}" };
+                    var formula = Formula.TryParse(value, out var parsed, out _) ? parsed! : throw new InvalidOperationException($"Armor mod bonus '{value}' does not parse."); // an integer, as in Synthetic
+                    return new Modifier(x.Mod, effect, formula, [], skipReason);
+                }),
+        ];
         var armor = active
             .SelectMany(a => a.Revision.Effects.OfType<ArmorEffect>()
                 .Where(e => e.Automation == AutomationStatus.Automatic && e.Timing == EffectTiming.Always)
@@ -2670,6 +2795,7 @@ public static class CharacterCalculator
                 _ => $"{effect.ArmorClass}",
             };
             modifiers.Add(Synthetic(content, effect, ModifierOperation.Replace, value));
+            modifiers.AddRange(ModBonuses(content, null));
             var key = effect.Category.ToString().ToLowerInvariant();
             if (checkTraining && !training.ContainsKey(key))
             {
@@ -2705,6 +2831,7 @@ public static class CharacterCalculator
                     shield = shield with { SkipReason = "the character has no training with shields" };
             }
             modifiers.Add(shield);
+            modifiers.AddRange(ModBonuses(content, shield.SkipReason));
         }
         return new(body.Count > 0 ? body[0] : null, shields.Count > 0 ? shields[0] : null);
     }
@@ -2841,16 +2968,23 @@ public static class CharacterCalculator
 
     private static List<Modifier> CollectModifiers(
         List<ActiveContent> active, Character character, RulesFamilyPolicy policy, List<Diagnostic> diagnostics, Dictionary<string, List<Diagnostic>> warnings,
-        HashSet<string> manual, EffectiveToggles effective, bool autoOn, List<ResourceBonus> resourceBonuses, ClassLevelMap classLevels)
+        HashSet<string> manual, EffectiveToggles effective, bool autoOn, List<ResourceBonus> resourceBonuses, ClassLevelMap classLevels,
+        IReadOnlyList<ModdedEntry> modded)
     {
         var modifiers = new List<Modifier>();
-        foreach (var item in active)
+        // MECH-X item 3 (R49, R50): the modifiers of the active content, then those of each modded entry's mods (a mod's own top-level
+        // modifiers and its nested ones), once per entry: the same mod on two entries applies twice. A mod is a leaf: it names no toggle
+        // of the character's, so its modifiers are always on or, when not, left for the player like any assisted modifier.
+        var sources = active
+            .SelectMany(a => a.Revision.Effects.OfType<ModifierEffect>().Select(e => (Item: a, Effect: e, Leaf: false)))
+            .Concat(modded.SelectMany(m => m.Mods.SelectMany(x =>
+                x.Mod.Revision.Effects.OfType<ModifierEffect>().Concat(x.Effect.Modifiers ?? []).Select(e => (Item: x.Mod, Effect: e, Leaf: true)))));
         {
-            var revision = item.Revision;
-            foreach (var effect in revision.Effects.OfType<ModifierEffect>())
+            foreach (var (item, effect, leaf) in sources)
             {
+                var revision = item.Revision;
                 string? followedToggle = null;
-                var gate = effect.Automation == AutomationStatus.Automatic && effect.Timing == EffectTiming.WhileActive && effect.Toggle is { } followed
+                var gate = !leaf && effect.Automation == AutomationStatus.Automatic && effect.Timing == EffectTiming.WhileActive && effect.Toggle is { } followed
                     ? GateOnToggle(active, revision, effect.Id, followed, effect.ToggleContent, effective, autoOn, diagnostics, out followedToggle)
                     : ToggleGate.Unresolved;
                 if (gate == ToggleGate.Skips)

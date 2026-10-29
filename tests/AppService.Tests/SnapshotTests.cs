@@ -40,19 +40,21 @@ public class SnapshotTests
         var (temp, hero, _) = Setup();
         using var _ = temp;
         var app = temp.App;
+        // The host and mods are invented references the catalog does not hold, so write the stored character directly: a save checks mods (MECH-X item 3, R51).
+        void Put(Character character) => app.Store.InTransaction(() => app.Store.SaveCharacter(character));
         var host = new ContentReference(Guid.NewGuid(), Guid.NewGuid());
         var modA = new ContentReference(Guid.NewGuid(), Guid.NewGuid());
         var modB = new ContentReference(Guid.NewGuid(), Guid.NewGuid());
         var entryId = Guid.NewGuid();
-        app.SaveCharacter(app.GetCharacter(hero.Id).Character with { Equipment = [new(host, true, 1, entryId, Mods: [modA])] });
+        Put(app.GetCharacter(hero.Id).Character with { Equipment = [new(host, true, 1, entryId, Mods: [modA])] });
         var taken = app.Snapshot(new(hero.Id));
 
         Assert.False(app.PreviewRestore(new(hero.Id, taken.Id)).OtherSheetValuesChange);
 
-        app.SaveCharacter(app.GetCharacter(hero.Id).Character with { Equipment = [new(host, true, 1, entryId, Mods: [modB])] });
+        Put(app.GetCharacter(hero.Id).Character with { Equipment = [new(host, true, 1, entryId, Mods: [modB])] });
         Assert.True(app.PreviewRestore(new(hero.Id, taken.Id)).OtherSheetValuesChange);
 
-        app.SaveCharacter(app.GetCharacter(hero.Id).Character with { Equipment = [new(host, true, 1, entryId)] });
+        Put(app.GetCharacter(hero.Id).Character with { Equipment = [new(host, true, 1, entryId)] });
         Assert.True(app.PreviewRestore(new(hero.Id, taken.Id)).OtherSheetValuesChange);
     }
 

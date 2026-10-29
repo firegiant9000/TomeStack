@@ -230,7 +230,8 @@ public sealed partial class TomeStackApp : IDisposable
                             ? new SpellSummary(spell.Level, spell.Lists, spell.School, spell.Concentration, spell.Ritual, SpellTagsOf(r, spell))
                             : null,
                         Superseded: newest[r.ContentId] != r.RevisionId,
-                        Standalone: !reachable.Contains(r.ContentId));
+                        Standalone: !reachable.Contains(r.ContentId),
+                        ModOf: r.Kind == ContentKind.Item && r.SchemaVersion >= ContentRevision.ItemModSchemaVersion ? r.Effects.OfType<ItemModEffect>().FirstOrDefault()?.AppliesTo : null);
                 })
                 .OrderBy(o => o.Kind).ThenBy(o => o.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(o => o.SourceTitle, StringComparer.CurrentCultureIgnoreCase),
         ];
@@ -328,10 +329,10 @@ public sealed partial class TomeStackApp : IDisposable
     {
         ArgumentNullException.ThrowIfNull(character);
         if (_store.FindCharacter(character.Id) is not { } stored)
-            return SaveWithPlay(character with { ArchivedAt = null }); // a save never creates an archived character
+            return SaveWithPlay(character with { ArchivedAt = null }, checkMods: true); // a save never creates an archived character
         if (character.UpdatedAt != stored.UpdatedAt)
             throw new AppValidationException([new("character.stale", StaleMessage)], "character.stale");
-        var view = SaveWithPlay(character with { Play = WithoutOrphanedCompanionPlay(stored.Play, character), ArchivedAt = stored.ArchivedAt, Equipment = WithStoredCharges(stored.Equipment, character.Equipment) });
+        var view = SaveWithPlay(character with { Play = WithoutOrphanedCompanionPlay(stored.Play, character), ArchivedAt = stored.ArchivedAt, Equipment = WithStoredCharges(stored.Equipment, character.Equipment) }, checkMods: true);
         // MECH-X item 2 (R42, R43, R47): advisory only, never stored and never blocking; it rides on this reply alone.
         var notices = ChoiceReplacements.OutsideWindow(stored, view.Character, view.Sheet.Choices);
         return notices.Count > 0 ? view with { Notices = notices } : view;
@@ -372,9 +373,9 @@ public sealed partial class TomeStackApp : IDisposable
     /// where it is: the stamp moved, so it can no longer match (the view offers nothing and the undo says <c>undo.stale</c>), and the
     /// next compound change replaces it, or the undo removes it after its own write succeeds.
     /// </summary>
-    private CharacterView SaveWithPlay(Character character, (PlayState Before, string Label)? undo = null)
+    private CharacterView SaveWithPlay(Character character, (PlayState Before, string Label)? undo = null, bool checkMods = false)
     {
-        var saved = Checked(character) with { UpdatedAt = _time.GetUtcNow() };
+        var saved = Checked(character, checkMods) with { UpdatedAt = _time.GetUtcNow() };
         // Calculate before writing: if the sheet cannot be calculated, nothing is stored (the store never holds a
         // character that cannot be opened).
         var view = View(saved);
@@ -590,7 +591,8 @@ public sealed record ContentOption(
     bool? AllowedInCampaign = null,
     SpellSummary? Spell = null,
     bool Superseded = false,
-    bool Standalone = true);
+    bool Standalone = true,
+    ModTarget? ModOf = null);
 
 /// <summary>What the builder's spell picker needs to filter and sort a spell option (content schema v5).</summary>
 public sealed record SpellSummary(int Level, IReadOnlyList<string> Lists, string? School, bool Concentration, bool Ritual, IReadOnlyList<string>? Tags = null);

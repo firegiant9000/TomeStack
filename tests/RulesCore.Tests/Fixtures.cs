@@ -190,6 +190,9 @@ internal static class Fixtures
     private static ContentReference TargetMarksRef(int n) =>
         new(Guid.Parse($"6f0dc000-0000-4000-8000-{n:X12}"), Guid.Parse($"6f0de000-0000-4000-8000-{n:X12}"));
 
+    // MECH-X item 3 fixtures (fixture-pack-item-mods.json, content v12): item mods and their hosts. Not in PlayMechanicsCatalog.
+    public static ContentPack ItemModsPack() => Load<ContentPack>("fixture-pack-item-mods.json");
+
     /// <summary>
     /// The packs of <see cref="AllCatalog"/> plus every play-mechanics pack (D43). Each slice appends its pack here;
     /// <see cref="AllCatalog"/> is left alone so existing tests keep their counts.
