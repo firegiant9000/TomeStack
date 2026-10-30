@@ -167,7 +167,7 @@ public class DownConversionGoldenTests
             // armor class bonus in a revision that is lowered (0.6.0: the cascade copy "Compat Tide Mark"; 0.5.0: the v11 revision
             // going straight to v9), and a class level (0.6.0: the library's "Compat Path of Tides", a cascade copy; 0.5.0: a class of its own).
             var bonusRevision = Guid.Parse(target == "0.6.0" ? "c1060000-0000-4000-8000-0000000000e8" : "c1050000-0000-4000-8000-0000000000e4");
-            var ward = new ModifierEffect { Id = "mark-ward", Operation = ModifierOperation.Bonus, Target = FieldIds.ArmorClass, Value = "1" };
+            var ward = new ModifierEffect { Id = "mark-ac", Operation = ModifierOperation.Bonus, Target = FieldIds.ArmorClass, Value = "1" };
             ContentReference classReference;
             List<ContentRevision> revisions = [.. pack.Revisions.Where(r => !BlockingInPacks.Contains(r.RevisionId))
                 .Select(r => r.RevisionId == bonusRevision ? r with { Effects = [.. r.Effects, ward] } : r)];
@@ -377,6 +377,44 @@ public class DownConversionGoldenTests
         foreach (var (name, bytes) in zips)
             Assert.Equal(Entries(File.ReadAllBytes(Path.Combine(directory, name))), Entries(bytes));
         Assert.Equal(File.ReadAllText(Path.Combine(directory, "expected.json")).ReplaceLineEndings("\n"), expectedJson);
+    }
+
+    [Fact]
+    public void Cascade_rewritten_grant_points_at_the_subclass_copy_and_the_sheet_resolves_it()
+    {
+        var (zips, _) = ProduceInputs("for-0.6.0", "0.6.0");
+        var share = zips["Compat-Hero-for-0.6.0.tomestack.zip"];
+        var classCopy = Guid.Parse("c1060000-0000-4000-8000-0000000000e6");
+        var subclassOriginal = Guid.Parse("c1060000-0000-4000-8000-0000000000e7");
+        JsonObject? path = null;
+        JsonObject? walker = null;
+        using (var zip = new ZipArchive(new MemoryStream(share)))
+            foreach (var entry in zip.Entries.Where(e => e.FullName.StartsWith("content/", StringComparison.Ordinal)))
+            {
+                using var stream = entry.Open();
+                var node = JsonNode.Parse(stream)!.AsObject();
+                if (node["name"]!.GetValue<string>() == "Compat Path of Tides")
+                    path = node;
+                else if (node["name"]!.GetValue<string>() == "Compat Tide Walker")
+                    walker = node;
+            }
+
+        Assert.NotNull(path);
+        Assert.NotNull(walker);
+        var walkerId = Guid.Parse(walker["revisionId"]!.GetValue<string>());
+        Assert.NotEqual(subclassOriginal, walkerId);
+        Assert.Equal(subclassOriginal.ToString("D"), walker["downConvertedFrom"]!["revisionId"]!.GetValue<string>());
+        Assert.NotEqual(classCopy.ToString("D"), path["revisionId"]!.GetValue<string>());
+        var grant = path["effects"]!.AsArray().Single(e => e!["id"]!.GetValue<string>() == "grant-walker")!;
+        Assert.Equal(walkerId.ToString("D"), grant["content"]!["revisionId"]!.GetValue<string>());
+
+        // The lowered character's sheet resolves the subclass copy (Tide Mark is pinned too, so the subclass itself is what is looked for).
+        using var fresh = new TempApp(fresh: true);
+        var dispatcher = new CommandDispatcher(fresh.App);
+        Dispatch(dispatcher, "package.apply", $$"""{"base64":"{{Convert.ToBase64String(share)}}"}""");
+        var id = fresh.App.Store.ListCharacters().Single().Id;
+        var view = Dispatch(dispatcher, "character.get", $$"""{"id":"{{id}}"}""");
+        Assert.Contains("Compat Tide Walker", view.GetProperty("sheet").GetRawText(), StringComparison.Ordinal);
     }
 
     private static JsonElement Dispatch(CommandDispatcher dispatcher, string command, string payload)

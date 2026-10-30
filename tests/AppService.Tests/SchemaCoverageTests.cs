@@ -56,6 +56,16 @@ public sealed class SchemaCoverageTests
         Assert.True(missing.Count == 0, $"{kind} v{version}: requires-vN.json lists features the schema does not declare: {string.Join(", ", missing)}");
     }
 
+    /// <summary>The missing-schema tolerance above applies only to versions above every pair: each pair's schema files must exist.</summary>
+    [Theory]
+    [MemberData(nameof(Pairs))]
+    public void Every_pair_has_both_schema_files(string kind, int previous, int next)
+    {
+        Assert.True(File.Exists(SchemaPath(kind, previous)), $"{kind} v{previous} has no schema file.");
+        Assert.True(File.Exists(SchemaPath(kind, next)), $"{kind} v{next} has no schema file.");
+        Assert.True(next <= LatestSchemaVersion(kind), $"{kind} v{next} is above the latest schema file.");
+    }
+
     [Theory]
     [MemberData(nameof(Pairs))]
     public void Every_schema_property_added_at_vN_is_listed(string kind, int previous, int next)
