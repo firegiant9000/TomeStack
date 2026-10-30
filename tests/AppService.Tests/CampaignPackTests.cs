@@ -56,6 +56,42 @@ public class CampaignPackTests
     }
 
     [Fact]
+    public void Campaign_pack_for_0_6_0_carries_lowered_allowed_content()
+    {
+        using var temp = new TempApp();
+        var shared = Homebrew(temp, "Compat Homebrew A", withContent: false);
+        var original = new ContentRevision
+        {
+            ContentId = Guid.Parse("c3000000-0000-4000-8000-0000000000c1"),
+            RevisionId = Guid.Parse("c300e000-0000-4000-8000-0000000000c1"),
+            Kind = ContentKind.Feat,
+            Name = "Compat Steady Hands",
+            RulesFamilies = [RulesFamilies.Srd521],
+            Provenance = new(shared.Id),
+            Status = RevisionStatus.Published,
+            Effects = [new ModifierEffect { Id = "fly", Operation = ModifierOperation.Bonus, Target = FieldIds.FlySpeed, Value = "10" }],
+        };
+        temp.App.Store.AddRevision(original);
+        var campaign = Campaign(temp, "Compat Table", shared.Id);
+        var row = ReleaseLadder.Target("0.6.0")!;
+
+        var plain = temp.App.PreviewCampaignPack(campaign.Id);
+        var preview = temp.App.PreviewCampaignPack(campaign.Id, row);
+        var pack = temp.App.ExportCampaignPack(campaign.Id, row, preview.ChangesHash);
+
+        Assert.Equal("0.6.0", preview.Target);
+        Assert.Equal("Compat-Table-campaign-pack-for-0.6.0.tomestack.zip", pack.FileName);
+        Assert.Equal("Compat-Table-campaign-pack.tomestack.zip", plain.FileName);
+        Assert.Equal("0.6.0", pack.Manifest.MadeFor);
+        var written = Assert.Single(pack.Manifest.RevisionOrder!);
+        Assert.NotEqual(original.RevisionId, written);
+        var entry = Entry(pack.Content, $"content/{written:D}.json").RootElement;
+        Assert.True(entry.GetProperty("schemaVersion").GetInt32() <= 10);
+        Assert.Equal(original.RevisionId.ToString("D"), entry.GetProperty("downConvertedFrom").GetProperty("revisionId").GetString());
+        Assert.DoesNotContain(pack.Manifest.Entries, e => e.Path == $"content/{original.RevisionId:D}.json");
+    }
+
+    [Fact]
     public void A_campaign_pack_round_trips_into_a_clean_data_folder_and_compares_equal()
     {
         using var origin = new TempApp();

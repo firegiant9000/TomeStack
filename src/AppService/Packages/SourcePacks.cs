@@ -27,17 +27,45 @@ public sealed partial class PackageService
         List<SourceRecord> Sources, List<ContentRevision> Revisions, int Drafts, List<Diagnostic> Warnings, string FileName);
 
     /// <summary><c>package.sourcePackPreview</c>: what a source pack of <paramref name="sourceIds"/> would hold. Writes nothing.</summary>
-    public SourcePackPreview PreviewSourcePack(IReadOnlyList<Guid> sourceIds)
+    public SourcePackPreview PreviewSourcePack(IReadOnlyList<Guid> sourceIds, LadderRow? target = null)
     {
         var plan = PlanSourcePack(sourceIds);
-        var opens = NewerBuild.Evaluate(plan.Revisions, [], 0, [], BundledPackTitle(plan.Revisions));
-        return new(plan.FileName, [.. plan.Sources.Select(Notice)], plan.Revisions.Count, plan.Drafts, [.. plan.Warnings, .. opens.Warnings], opens.OpensIn, opens.Causes);
+        var lowered = LowerPack(plan.Revisions, plan.FileName, target);
+        var (revisions, fileName) = lowered is null ? (plan.Revisions, plan.FileName) : (lowered.Plan.Revisions, lowered.Plan.FileName);
+        var opens = NewerBuild.Evaluate(revisions, [], 0, [], BundledPackTitle(revisions));
+        var preview = new SourcePackPreview(fileName, [.. plan.Sources.Select(Notice)], revisions.Count, plan.Drafts, [.. plan.Warnings, .. opens.Warnings], opens.OpensIn, opens.Causes);
+        return lowered is null
+            ? preview
+            : preview with { Target = lowered.Target.Release.ToString(3), Changes = lowered.Changes, ChangesHash = lowered.ChangesHash };
+    }
+
+    /// <summary>
+    /// D85: a pack's revisions lowered for <paramref name="target"/>, or null without one. A pack carries no characters, so a
+    /// superseded revision whose blocker nothing written needs is left out (<see cref="DownConversion.Superseded"/>); the newest never is.
+    /// </summary>
+    private LoweredPlan? LowerPack(List<ContentRevision> revisions, string fileName, LadderRow? target) =>
+        target is null
+            ? null
+            : DownConversion.Lower(new ExportPlan([], revisions, [], [], fileName), target, _bundledSources.Contains, id => store.FindSource(id)?.Title ?? "", store, DownConversion.Superseded(revisions));
+
+    /// <summary>A blocked plan, or a save whose <paramref name="changesHash"/> is not the list that was previewed, writes nothing (spec section 7).</summary>
+    internal static void RequireConfirmed(LoweredPlan lowered, string? changesHash)
+    {
+        if (lowered.Blocked)
+            throw new AppValidationException([.. lowered.Changes.Where(c => c.Action == "blocks").Select(c => new Diagnostic(DownConversion.BlockedCode, c.Message))], DownConversion.BlockedCode);
+        if (changesHash is null || !string.Equals(changesHash, lowered.ChangesHash, StringComparison.Ordinal))
+            throw new AppValidationException([new(DownConversion.ChangedCode, "The preview changed since you confirmed it. Review the list and try again.")], DownConversion.ChangedCode);
     }
 
     /// <summary><c>package.sourcePackExport</c> / <c>package.sourcePackSaveAs</c>: the pack's bytes.</summary>
-    public ExportResult ExportSourcePack(IReadOnlyList<Guid> sourceIds)
+    public ExportResult ExportSourcePack(IReadOnlyList<Guid> sourceIds, LadderRow? target = null, string? changesHash = null)
     {
         var plan = PlanSourcePack(sourceIds);
+        if (LowerPack(plan.Revisions, plan.FileName, target) is { } lowered)
+        {
+            RequireConfirmed(lowered, changesHash);
+            plan = plan with { Revisions = lowered.Plan.Revisions, FileName = lowered.Plan.FileName };
+        }
         var files = new SortedDictionary<string, (string Kind, byte[] Bytes)>(StringComparer.Ordinal);
         foreach (var source in plan.Sources)
             files[$"sources/{source.Id:D}.json"] = ("source", Json(ForSourcePack(source)));
@@ -53,6 +81,7 @@ public sealed partial class PackageService
             Purpose = ExportPurpose.Share,
             CreatedAt = createdAt,
             AppVersion = typeof(PackageService).Assembly.GetName().Version?.ToString(3) ?? "0.0.0",
+            MadeFor = target?.Release.ToString(3),
             Entries = [.. files.Select(f => new PackageEntry(f.Key, f.Value.Kind, Hash(f.Value.Bytes), f.Value.Bytes.LongLength))],
             Notices = [.. plan.Sources.Select(Notice)],
             RevisionOrder = [.. plan.Revisions.Select(r => r.RevisionId)],

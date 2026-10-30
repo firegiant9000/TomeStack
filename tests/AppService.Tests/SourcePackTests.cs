@@ -64,6 +64,160 @@ public class SourcePackTests
         return (source, first.Reference, second.Reference);
     }
 
+    // ---- D85 part 2 (C2-3): a source pack saved for an older TomeStack, and the left-out rule ----
+
+    private static readonly Guid CompatContent = Guid.Parse("c3000000-0000-4000-8000-000000000001");
+    private static readonly Guid CompatOtherContent = Guid.Parse("c3000000-0000-4000-8000-000000000002");
+    private static Guid CompatRevision(int n) => Guid.Parse($"c300e000-0000-4000-8000-00000000000{n}");
+    private static LadderRow For060 => ReleaseLadder.Target("0.6.0")!;
+
+    /// <summary>A published "Compat Steady Hands" revision: old (schema 3, nothing to lower) or, with a blocker, a v11 toggle that has a cost.</summary>
+    private static ContentRevision Compat(Guid sourceId, int n, bool blocker = false, Guid? contentId = null) =>
+        Feat(sourceId, "Compat Steady Hands", contentId ?? CompatContent, CompatRevision(n)) with
+        {
+            Status = RevisionStatus.Published,
+            SchemaVersion = blocker ? ContentRevision.CurrentSchemaVersion : 3,
+            Effects = blocker
+                ? [new ToggleEffect { Id = "form", ToggleId = "form", Label = "Form", Cost = "1", ResourceId = "focus" }]
+                : [new ModifierEffect { Id = "init", Operation = ModifierOperation.Bonus, Target = FieldIds.Initiative, Value = "1" }],
+        };
+
+    private static SourceRecord StoreCompat(TempApp temp, Func<Guid, ContentRevision[]> make)
+    {
+        var source = Shared(temp, "Compat Homebrew A");
+        foreach (var revision in make(source.Id))
+            temp.App.Store.AddRevision(revision);
+        return source;
+    }
+
+    private const string LeftOutSecondOfThree = "'Compat Steady Hands', revision 2 of 3 (Compat Homebrew A): left out; what a toggle costs; it would turn on for free.";
+
+    [Fact]
+    public void Source_pack_leaves_out_a_superseded_blocked_revision()
+    {
+        using var temp = new TempApp();
+        var source = StoreCompat(temp, id => [Compat(id, 1), Compat(id, 2, blocker: true), Compat(id, 3)]);
+
+        var preview = temp.App.PreviewSourcePack([source.Id], For060);
+
+        var change = Assert.Single(preview.Changes);
+        Assert.Equal(("leftOut", DownConversion.LeftOutCode, "content", $"content/{CompatRevision(2):D}.json"), (change.Action, change.Code, change.Kind, change.Entry));
+        Assert.Equal(LeftOutSecondOfThree, change.Message);
+        Assert.Equal(2, preview.Revisions);
+
+        var export = temp.App.ExportSourcePack([source.Id], For060, preview.ChangesHash);
+        var paths = export.Manifest.Entries.Select(e => e.Path).ToList();
+        Assert.Contains($"content/{CompatRevision(1):D}.json", paths);
+        Assert.Contains($"content/{CompatRevision(3):D}.json", paths);
+        Assert.DoesNotContain($"content/{CompatRevision(2):D}.json", paths);
+        Assert.Equal([CompatRevision(1), CompatRevision(3)], export.Manifest.RevisionOrder);
+    }
+
+    [Fact]
+    public void Source_pack_blocks_when_the_newest_revision_blocks()
+    {
+        using var temp = new TempApp();
+        var source = StoreCompat(temp, id => [Compat(id, 1), Compat(id, 2, blocker: true)]);
+
+        var preview = temp.App.PreviewSourcePack([source.Id], For060);
+
+        Assert.DoesNotContain(preview.Changes, c => c.Action == "leftOut");
+        Assert.All(preview.Changes, c => Assert.Equal(("blocks", DownConversion.BlockedCode, CompatRevision(2)), (c.Action, c.Code, c.Id)));
+        var thrown = Assert.Throws<AppValidationException>(() => temp.App.ExportSourcePack([source.Id], For060, preview.ChangesHash));
+        Assert.All(thrown.Problems, p => Assert.Equal(DownConversion.BlockedCode, p.Code));
+        Assert.Equal(preview.Changes.Select(c => c.Message), thrown.Problems.Select(p => p.Message));
+    }
+
+    [Fact]
+    public void Source_pack_keeps_a_blocked_revision_that_a_written_revision_grants()
+    {
+        using var temp = new TempApp();
+        var source = StoreCompat(temp, id =>
+        [
+            Compat(id, 1, blocker: true),
+            Compat(id, 2),
+            Compat(id, 4, contentId: CompatOtherContent) with
+            {
+                Effects = [new GrantEffect { Id = "gives", Grant = GrantKind.Content, Content = new ContentReference(CompatContent, CompatRevision(1)), Level = 1 }],
+            },
+        ]);
+
+        var preview = temp.App.PreviewSourcePack([source.Id], For060);
+
+        Assert.DoesNotContain(preview.Changes, c => c.Action == "leftOut");
+        Assert.All(preview.Changes.Where(c => c.Action == "blocks"), c => Assert.Equal(CompatRevision(1), c.Id));
+        Assert.Contains(preview.Changes, c => c.Action == "blocks");
+        Assert.Throws<AppValidationException>(() => temp.App.ExportSourcePack([source.Id], For060, preview.ChangesHash));
+    }
+
+    [Fact]
+    public void Source_pack_revision_order_lists_copies_in_place()
+    {
+        using var temp = new TempApp();
+        // A fly-speed modifier is v11 content the older version cannot keep, so each revision becomes a copy.
+        ContentRevision Flying(Guid id, int n) => Compat(id, n) with
+        {
+            SchemaVersion = ContentRevision.CurrentSchemaVersion,
+            Effects = [new ModifierEffect { Id = "fly", Operation = ModifierOperation.Bonus, Target = FieldIds.FlySpeed, Value = "10" }],
+        };
+        var source = StoreCompat(temp, id => [Flying(id, 1), Flying(id, 2)]);
+
+        var preview = temp.App.PreviewSourcePack([source.Id], For060);
+        var export = temp.App.ExportSourcePack([source.Id], For060, preview.ChangesHash);
+
+        var order = export.Manifest.RevisionOrder!;
+        Assert.Equal(2, order.Count);
+        Assert.DoesNotContain(order, id => id == CompatRevision(1) || id == CompatRevision(2));
+        var written = export.Manifest.Entries.Where(e => e.Kind == "contentRevision").Select(e => e.Path).ToList();
+        Assert.Equal(2, written.Count);
+        Assert.All(order, id => Assert.Contains($"content/{id:D}.json", written));
+        using var zip = new ZipArchive(new MemoryStream(export.Content), ZipArchiveMode.Read);
+        var first = JsonDocument.Parse(new StreamReader(zip.GetEntry($"content/{order[0]:D}.json")!.Open()).ReadToEnd()).RootElement;
+        Assert.Equal(CompatRevision(1).ToString("D"), first.GetProperty("downConvertedFrom").GetProperty("revisionId").GetString());
+    }
+
+    [Fact]
+    public void Source_pack_for_0_6_0_file_name_and_madeFor()
+    {
+        using var temp = new TempApp();
+        var source = StoreCompat(temp, id => [Compat(id, 1), Compat(id, 2)]);
+
+        var plain = temp.App.PreviewSourcePack([source.Id]);
+        var preview = temp.App.PreviewSourcePack([source.Id], For060);
+        var export = temp.App.ExportSourcePack([source.Id], For060, preview.ChangesHash);
+
+        Assert.Equal("0.6.0", preview.Target);
+        Assert.EndsWith("-source-pack-for-0.6.0.tomestack.zip", preview.FileName, StringComparison.Ordinal);
+        Assert.Equal(plain.FileName.Replace(".tomestack.zip", "-for-0.6.0.tomestack.zip", StringComparison.Ordinal), export.FileName);
+        Assert.Equal("0.6.0", export.Manifest.MadeFor);
+        Assert.Null(temp.App.ExportSourcePack([source.Id]).Manifest.MadeFor);
+    }
+
+    [Fact]
+    public void Source_pack_save_requires_matching_changesHash()
+    {
+        using var temp = new TempApp();
+        var source = StoreCompat(temp, id => [Compat(id, 1), Compat(id, 2, blocker: true), Compat(id, 3)]);
+        var preview = temp.App.PreviewSourcePack([source.Id], For060);
+
+        Assert.Equal(DownConversion.ChangedCode, Assert.Throws<AppValidationException>(() => temp.App.ExportSourcePack([source.Id], For060)).Problems[0].Code);
+        Assert.Equal(DownConversion.ChangedCode, Assert.Throws<AppValidationException>(() => temp.App.ExportSourcePack([source.Id], For060, "0000")).Problems[0].Code);
+        Assert.NotEmpty(temp.App.ExportSourcePack([source.Id], For060, preview.ChangesHash).Content);
+    }
+
+    [Fact]
+    public void A_source_pack_without_a_target_is_unchanged_by_the_left_out_rule()
+    {
+        using var temp = new TempApp();
+        var source = StoreCompat(temp, id => [Compat(id, 1), Compat(id, 2, blocker: true), Compat(id, 3)]);
+
+        var preview = temp.App.PreviewSourcePack([source.Id]);
+
+        Assert.Equal(3, preview.Revisions);
+        Assert.Empty(preview.Changes);
+        Assert.Equal(3, temp.App.ExportSourcePack([source.Id]).Manifest.RevisionOrder!.Count);
+    }
+
     [Fact]
     public void A_source_pack_round_trips_into_a_clean_data_folder_with_its_published_revisions_in_stored_order()
     {

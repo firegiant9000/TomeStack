@@ -354,29 +354,14 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
             "package.target-unknown");
     }
 
-    /// <summary>A valid target on a command that cannot lower yet is refused, so no file is written under a false label.</summary>
-    private static void RefuseTarget(string? target, string what)
-    {
-        if (ResolveTarget(target) is null)
-            return;
-        throw new AppValidationException(
-            [new("package.target-blocked", $"Saving {what} for an older TomeStack is not available yet.")], "package.target-blocked");
-    }
-
     private ExportPreview PreviewExport(ExportPayload payload) =>
         app.PreviewExport(payload.CharacterIds, payload.Purpose, ResolveTarget(payload.Target));
 
-    private SourcePackPreview PreviewSourcePack(SourcePackPayload payload)
-    {
-        RefuseTarget(payload.Target, "a source pack");
-        return app.PreviewSourcePack(payload.SourceIds ?? []);
-    }
+    private SourcePackPreview PreviewSourcePack(SourcePackPayload payload) =>
+        app.PreviewSourcePack(payload.SourceIds ?? [], ResolveTarget(payload.Target));
 
-    private CampaignPackPreview PreviewCampaignPack(CampaignIdPayload payload)
-    {
-        RefuseTarget(payload.Target, "a campaign pack");
-        return app.PreviewCampaignPack(payload.CampaignId);
-    }
+    private CampaignPackPreview PreviewCampaignPack(CampaignIdPayload payload) =>
+        app.PreviewCampaignPack(payload.CampaignId, ResolveTarget(payload.Target));
 
     private object ExportPackage(ExportPayload payload)
     {
@@ -400,35 +385,33 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     /// <summary>M6 slice 1: a source pack as base64 (browser development and tests; the desktop uses the Save dialog).</summary>
     private object ExportSourcePack(SourcePackPayload payload)
     {
-        RefuseTarget(payload.Target, "a source pack");
-        var export = app.ExportSourcePack(payload.SourceIds ?? []);
+        var export = app.ExportSourcePack(payload.SourceIds ?? [], ResolveTarget(payload.Target), payload.ChangesHash);
         return new { export.FileName, Base64 = Convert.ToBase64String(export.Content), export.Manifest };
     }
 
     /// <summary>M6 slice 1: writes a source pack where the user chooses; the page never supplies a path.</summary>
     private SaveOutcome SaveSourcePackAs(SourcePackPayload payload)
     {
-        RefuseTarget(payload.Target, "a source pack");
+        var row = ResolveTarget(payload.Target);
         if (host is null)
             throw new AppValidationException([new("host.unsupported", "This host has no native Save dialog.")], "unsupported");
-        return SaveAs(app.ExportSourcePack(payload.SourceIds ?? []));
+        return SaveAs(app.ExportSourcePack(payload.SourceIds ?? [], row, payload.ChangesHash));
     }
 
     /// <summary>M6 slice 2: a campaign pack as base64 (browser development and tests; the desktop uses the Save dialog).</summary>
     private object ExportCampaignPack(CampaignIdPayload payload)
     {
-        RefuseTarget(payload.Target, "a campaign pack");
-        var export = app.ExportCampaignPack(payload.CampaignId);
+        var export = app.ExportCampaignPack(payload.CampaignId, ResolveTarget(payload.Target), payload.ChangesHash);
         return new { export.FileName, Base64 = Convert.ToBase64String(export.Content), export.Manifest };
     }
 
     /// <summary>M6 slice 2: writes a campaign pack where the user chooses; the page never supplies a path.</summary>
     private SaveOutcome SaveCampaignPackAs(CampaignIdPayload payload)
     {
-        RefuseTarget(payload.Target, "a campaign pack");
+        var row = ResolveTarget(payload.Target);
         if (host is null)
             throw new AppValidationException([new("host.unsupported", "This host has no native Save dialog.")], "unsupported");
-        return SaveAs(app.ExportCampaignPack(payload.CampaignId));
+        return SaveAs(app.ExportCampaignPack(payload.CampaignId, row, payload.ChangesHash));
     }
 
     // ---- extensions (M6 slice 3, ADR-011): files come from native dialogs, or as bytes in browser development ----

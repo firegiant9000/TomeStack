@@ -91,13 +91,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         var plan = Plan(characterIds, purpose);
         if (LowerFor(plan, target) is { } lowered)
         {
-            if (lowered.Blocked)
-            {
-                // Spec section 7: one error per blocking change, its message as it is.
-                throw new AppValidationException([.. lowered.Changes.Where(c => c.Action == "blocks").Select(c => new Diagnostic(DownConversion.BlockedCode, c.Message))], DownConversion.BlockedCode);
-            }
-            if (changesHash is null || !string.Equals(changesHash, lowered.ChangesHash, StringComparison.Ordinal))
-                throw new AppValidationException([new(DownConversion.ChangedCode, "The preview changed since you confirmed it. Review the list and try again.")], DownConversion.ChangedCode);
+            RequireConfirmed(lowered, changesHash); // spec section 7: one error per blocking change, its message as it is
             plan = lowered.Plan;
         }
         var files = new SortedDictionary<string, (string Kind, byte[] Bytes)>(StringComparer.Ordinal);

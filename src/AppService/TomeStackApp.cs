@@ -445,16 +445,16 @@ public sealed partial class TomeStackApp : IDisposable
     public PreflightReport PackagePreflight(PreflightRequest request) => _packages.RunPreflight(request);
 
     /// <summary>M6 slice 1: what a source pack of these sources would hold (<c>package.sourcePackPreview</c>). Writes nothing.</summary>
-    public SourcePackPreview PreviewSourcePack(IReadOnlyList<Guid> sourceIds) => _packages.PreviewSourcePack(sourceIds);
+    public SourcePackPreview PreviewSourcePack(IReadOnlyList<Guid> sourceIds, LadderRow? target = null) => _packages.PreviewSourcePack(sourceIds, target);
 
     /// <summary>M6 slice 1: a source pack of sources their author marked as shareable (<c>package.sourcePackExport</c>).</summary>
-    public ExportResult ExportSourcePack(IReadOnlyList<Guid> sourceIds) => _packages.ExportSourcePack(sourceIds);
+    public ExportResult ExportSourcePack(IReadOnlyList<Guid> sourceIds, LadderRow? target = null, string? changesHash = null) => _packages.ExportSourcePack(sourceIds, target, changesHash);
 
     /// <summary>M6 slice 2: what a campaign pack of this campaign would hold (<c>package.campaignPackPreview</c>). Writes nothing.</summary>
-    public CampaignPackPreview PreviewCampaignPack(Guid campaignId) => _packages.PreviewCampaignPack(campaignId);
+    public CampaignPackPreview PreviewCampaignPack(Guid campaignId, LadderRow? target = null) => _packages.PreviewCampaignPack(campaignId, target);
 
     /// <summary>M6 slice 2: a campaign pack: the profile and the shareable content of its allowed sources (<c>package.campaignPackExport</c>).</summary>
-    public ExportResult ExportCampaignPack(Guid campaignId) => _packages.ExportCampaignPack(campaignId);
+    public ExportResult ExportCampaignPack(Guid campaignId, LadderRow? target = null, string? changesHash = null) => _packages.ExportCampaignPack(campaignId, target, changesHash);
 
     public PackagePreview PreviewImport(byte[] package) => _packages.Preview(package);
 

@@ -32,6 +32,7 @@ public static class DownConversion
     public const string BlockedCode = "package.target-blocked";
     public const string ChangedCode = "package.target-changed";
     public const string CopiedCode = "package.target-copied";
+    public const string LeftOutCode = "package.target-left-out";
 
     /// <summary>The extensions key of the <see cref="DownConvertedFrom"/> marker. Fixed: changing it breaks re-pinning.</summary>
     public const string MarkerKey = "downConvertedFrom";
@@ -122,8 +123,12 @@ public static class DownConversion
     /// Lowers every character in <paramref name="plan"/> for <paramref name="target"/> (<see cref="DownConvert.Below"/>) and every
     /// content revision too (D85 part 2): bundled revisions are kept or block, the others become copies with new ids, the copies'
     /// references cascade, and the characters follow them. Lists what that loses. Writes nothing.
+    /// <paramref name="mayLeaveOut"/> is the left-out rule (spec section 4): a revision it accepts that has a blocking change, that no
+    /// character pins and that no revision still written grants or offers is left out of the file with one <c>leftOut</c> line instead
+    /// of blocking it. Null (a character package) leaves nothing out: every blocker blocks.
     /// </summary>
-    internal static LoweredPlan Lower(PackageService.ExportPlan plan, LadderRow target, Func<Guid, bool> isBundledSource, Func<Guid, string> sourceTitle, IContentCatalog catalog)
+    internal static LoweredPlan Lower(PackageService.ExportPlan plan, LadderRow target, Func<Guid, bool> isBundledSource, Func<Guid, string> sourceTitle, IContentCatalog catalog,
+        Func<ContentRevision, bool>? mayLeaveOut = null)
     {
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(target);
@@ -152,7 +157,7 @@ public static class DownConversion
             }
         }
 
-        var content = LowerContent(plan, target, isBundledSource, sourceTitle, catalog, changes);
+        var content = LowerContent(plan, target, isBundledSource, sourceTitle, catalog, mayLeaveOut, changes);
         for (var i = 0; i < characters.Count; i++)
         {
             foreach (var (from, to) in content.Moves)
@@ -161,6 +166,16 @@ public static class DownConversion
 
         var lowered = plan with { Characters = characters, Revisions = content.Revisions, FileName = WithTarget(plan.FileName, target) };
         return new LoweredPlan(lowered, changes, HashChanges(changes), changes.Any(c => c.Action == "blocks"), target);
+    }
+
+    /// <summary>
+    /// The pack rule for <c>mayLeaveOut</c>: a published revision that is not the newest published one of its content in
+    /// <paramref name="revisions"/> (newest is the last stored). The one place "newest" is decided, so a Q14-aware helper can replace it.
+    /// </summary>
+    internal static Func<ContentRevision, bool> Superseded(IEnumerable<ContentRevision> revisions)
+    {
+        var newest = revisions.Where(r => r.Status == RevisionStatus.Published).GroupBy(r => r.ContentId).ToDictionary(g => g.Key, g => g.Last().RevisionId);
+        return r => r.Status == RevisionStatus.Published && newest.TryGetValue(r.ContentId, out var id) && id != r.RevisionId;
     }
 
     /// <summary>R-C4: a rounds-left line names the toggle by its label (the id when no revision in the plan has one).</summary>
@@ -209,7 +224,7 @@ public static class DownConversion
         });
 
     private static ContentOutcome LowerContent(PackageService.ExportPlan plan, LadderRow target, Func<Guid, bool> isBundledSource,
-        Func<Guid, string> sourceTitle, IContentCatalog catalog, List<ExportChange> changes)
+        Func<Guid, string> sourceTitle, IContentCatalog catalog, Func<ContentRevision, bool>? mayLeaveOut, List<ExportChange> changes)
     {
         var release = target.Release.ToString(3);
         var revisions = new List<ContentRevision>();
@@ -222,14 +237,28 @@ public static class DownConversion
         var lowered = new Dictionary<Guid, ContentRevision>();
         var own = new HashSet<Guid>();
 
+        // Each revision's own lines are kept apart until the left-out rule has decided, so a left-out revision can swap them for one.
+        var linesOf = new Dictionary<Guid, List<ExportChange>>();
+        var reasons = new Dictionary<Guid, string>();
         ExportChange Line(ContentRevision r, string action, string code, string message) =>
             new($"content/{r.RevisionId:D}.json", "content", r.RevisionId, r.Name, sourceTitle(r.Provenance.SourceId), action, code, message);
+        string Rest(ContentRevision r, string message)
+        {
+            var lead = $"'{r.Name}': ";
+            return message.StartsWith(lead, StringComparison.Ordinal) ? message[lead.Length..] : message;
+        }
         string Prefixed(ContentRevision r, string message)
         {
             var title = sourceTitle(r.Provenance.SourceId);
-            var lead = $"'{r.Name}': ";
-            var rest = message.StartsWith(lead, StringComparison.Ordinal) ? message[lead.Length..] : message;
-            return title.Length == 0 ? $"'{r.Name}': {rest}" : $"'{r.Name}' ({title}): {rest}";
+            return title.Length == 0 ? $"'{r.Name}': {Rest(r, message)}" : $"'{r.Name}' ({title}): {Rest(r, message)}";
+        }
+        void Note(ContentRevision r, ExportChange line, string? blockingReason = null)
+        {
+            if (!linesOf.TryGetValue(r.RevisionId, out var list))
+                linesOf[r.RevisionId] = list = [];
+            list.Add(line);
+            if (blockingReason is not null)
+                reasons.TryAdd(r.RevisionId, blockingReason);
         }
 
         foreach (var r in revisions)
@@ -247,7 +276,7 @@ public static class DownConversion
                 var message = user is null
                     ? $"'{r.Name}' from the bundled {title} pack is not in TomeStack {release}. {tail}"
                     : $"'{user.Name}' uses '{r.Name}' from the bundled {title} pack, which TomeStack {release} does not have. {tail}";
-                changes.Add(Line(r, "blocks", BlockedCode, message));
+                Note(r, Line(r, "blocks", BlockedCode, message), message);
                 continue;
             }
 
@@ -260,13 +289,49 @@ public static class DownConversion
                 switch (change.Action)
                 {
                     case BelowAction.Dropped:
-                        changes.Add(Line(r, "dropped", DropsCode, Prefixed(r, change.Message)));
+                        Note(r, Line(r, "dropped", DropsCode, Prefixed(r, change.Message)));
                         break;
                     case BelowAction.Blocks:
-                        changes.Add(Line(r, "blocks", BlockedCode, Prefixed(r, change.Message)));
+                        Note(r, Line(r, "blocks", BlockedCode, Prefixed(r, change.Message)), Rest(r, change.Message));
                         break;
                 }
             }
+        }
+
+        // The left-out rule: a caller-chosen revision whose blocker no character pins and no written revision grants or offers is
+        // dropped from the file with one line. Leaving one out can free another, so this runs to a fixed point.
+        var leftOut = new HashSet<Guid>();
+        if (mayLeaveOut is not null)
+        {
+            var pinned = plan.Characters.SelectMany(c => c.AllReferences()).Select(x => x.RevisionId).ToHashSet();
+            foreach (var r in revisions.Where(r => reasons.ContainsKey(r.RevisionId) && !pinned.Contains(r.RevisionId) && mayLeaveOut(r)))
+                leftOut.Add(r.RevisionId);
+            for (var shrunk = true; shrunk;)
+            {
+                shrunk = false;
+                foreach (var needed in revisions.Where(r => !leftOut.Contains(r.RevisionId)).SelectMany(RefsOf).Distinct().Where(leftOut.Contains).ToList())
+                    shrunk |= leftOut.Remove(needed);
+            }
+        }
+        foreach (var r in revisions)
+        {
+            if (leftOut.Contains(r.RevisionId))
+            {
+                var siblings = revisions.Where(x => x.ContentId == r.ContentId).ToList();
+                var title = sourceTitle(r.Provenance.SourceId);
+                var where = title.Length == 0 ? "" : $" ({title})";
+                changes.Add(Line(r, "leftOut", LeftOutCode, $"'{r.Name}', revision {siblings.IndexOf(r) + 1} of {siblings.Count}{where}: left out; {reasons[r.RevisionId]}"));
+            }
+            else if (linesOf.TryGetValue(r.RevisionId, out var mine))
+            {
+                changes.AddRange(mine);
+            }
+        }
+        revisions.RemoveAll(r => leftOut.Contains(r.RevisionId));
+        foreach (var id in leftOut)
+        {
+            lowered.Remove(id);
+            own.Remove(id);
         }
 
         // A revision is changed when lowering changed it, or when something it grants or offers is changed.

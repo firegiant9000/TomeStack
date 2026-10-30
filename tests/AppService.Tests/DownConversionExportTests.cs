@@ -348,7 +348,7 @@ public class DownConversionExportTests
     }
 
     [Fact]
-    public void Source_pack_preview_refuses_a_target_and_is_unchanged_without_one()
+    public void Source_pack_commands_take_a_target_and_are_unchanged_without_one()
     {
         using var app = new TempApp();
         var source = app.App.CreateHomebrewSource(new("Compat Homebrew A", [RulesFamilies.Srd51], Redistributable: true, ConfirmOwnWork: true));
@@ -370,10 +370,11 @@ public class DownConversionExportTests
         Assert.Equal("package.target-unknown", unknown.Code);
         Assert.Equal(string.Format(System.Globalization.CultureInfo.InvariantCulture, UnknownSentence, "0.4.0"), unknown.Message);
 
-        var valid = ErrorOf(Send(dispatcher, "package.sourcePackPreview", $$"""{"sourceIds":["{{source.Id}}"],"target":"0.6.0"}"""));
-        Assert.Equal(("package.target-blocked", "Saving a source pack for an older TomeStack is not available yet."), valid);
+        var valid = Result(Send(dispatcher, "package.sourcePackPreview", $$"""{"sourceIds":["{{source.Id}}"],"target":"0.6.0"}"""));
+        Assert.Equal("0.6.0", valid.GetProperty("target").GetString());
+        Assert.False(string.IsNullOrEmpty(valid.GetProperty("changesHash").GetString()));
 
-        Assert.Equal("package.target-blocked", ErrorOf(Send(dispatcher, "package.sourcePackExport", $$"""{"sourceIds":["{{source.Id}}"],"target":"0.6.0"}""")).Code);
+        Assert.Equal("package.target-changed", ErrorOf(Send(dispatcher, "package.sourcePackExport", $$"""{"sourceIds":["{{source.Id}}"],"target":"0.6.0"}""")).Code);
 
         var plain = Result(Send(dispatcher, "package.sourcePackPreview", $$"""{"sourceIds":["{{source.Id}}"]}"""));
         Assert.Empty(plain.GetProperty("changes").EnumerateArray());
@@ -381,7 +382,7 @@ public class DownConversionExportTests
     }
 
     [Fact]
-    public void Campaign_pack_preview_refuses_a_target_and_is_unchanged_without_one()
+    public void Campaign_pack_commands_take_a_target_and_are_unchanged_without_one()
     {
         using var app = new TempApp();
         var campaign = app.App.SaveCampaign(new() { Id = Guid.Empty, Name = "Compat Campaign", RulesFamily = RulesFamilies.Srd521, AllowedSources = [] });
@@ -390,10 +391,11 @@ public class DownConversionExportTests
         var unknown = ErrorOf(Send(dispatcher, "package.campaignPackPreview", $$"""{"campaignId":"{{campaign.Id}}","target":"0.7.1"}"""));
         Assert.Equal("package.target-unknown", unknown.Code);
 
-        var valid = ErrorOf(Send(dispatcher, "package.campaignPackPreview", $$"""{"campaignId":"{{campaign.Id}}","target":"0.6.0"}"""));
-        Assert.Equal(("package.target-blocked", "Saving a campaign pack for an older TomeStack is not available yet."), valid);
+        var valid = Send(dispatcher, "package.campaignPackPreview", $$"""{"campaignId":"{{campaign.Id}}","target":"0.6.0"}""");
+        Assert.True(valid.GetProperty("ok").GetBoolean(), valid.ToString());
+        Assert.Equal("0.6.0", valid.GetProperty("result").GetProperty("target").GetString());
 
-        Assert.Equal("package.target-blocked", ErrorOf(Send(dispatcher, "package.campaignPackSaveAs", $$"""{"campaignId":"{{campaign.Id}}","target":"0.5.0"}""")).Code);
+        Assert.Equal("package.target-changed", ErrorOf(Send(dispatcher, "package.campaignPackExport", $$"""{"campaignId":"{{campaign.Id}}","target":"0.5.0"}""")).Code);
 
         var plain = Send(dispatcher, "package.campaignPackPreview", $$"""{"campaignId":"{{campaign.Id}}"}""");
         Assert.True(plain.GetProperty("ok").GetBoolean(), plain.ToString());
