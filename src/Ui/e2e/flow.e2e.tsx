@@ -289,12 +289,13 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   await user.click(await screen.findByRole('button', { name: 'Save choices' }));
 
   // The M1 acceptance values for Brenna (m1-acceptance.md): AC 13, HP 35, Animal Handling +3.
+  // The sheet is already mounted, so wait for the saved choice to re-render it before reading the numbers.
   sheet = await screen.findByRole('article', { name: 'E2E Brenna' });
   await openTab(user, sheet, 'Stats');
-  expect(within(sheet).getByRole('heading', { name: /^Armor Class: 13/ })).toBeTruthy();
-  expect(within(sheet).getByRole('heading', { name: /^Hit point maximum: 35/ })).toBeTruthy();
-  expect(within(sheet).getByRole('heading', { name: /^Animal Handling: \+3/ })).toBeTruthy();
-  expect(within(sheet).queryByRole('heading', { name: 'Choices to make' })).toBeNull();
+  expect(await within(sheet).findByRole('heading', { name: /^Armor Class: 13/ }, { timeout: 5000 })).toBeTruthy();
+  expect(await within(sheet).findByRole('heading', { name: /^Hit point maximum: 35/ }, { timeout: 5000 })).toBeTruthy();
+  expect(await within(sheet).findByRole('heading', { name: /^Animal Handling: \+3/ }, { timeout: 5000 })).toBeTruthy();
+  await waitFor(() => expect(within(sheet).queryByRole('heading', { name: 'Choices to make' })).toBeNull());
 
   // M2 item 2, play: resources with calculated maximums, explicit spending, hit points, conditions and rolls.
   await openTab(user, sheet, 'Play');
