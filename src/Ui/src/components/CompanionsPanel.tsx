@@ -1,7 +1,10 @@
 import { useEffect, useState, type ReactNode, type SubmitEvent } from 'react';
 import { client } from '../api/client';
-import type { CharacterView, Companion, PlayAction, RollMode, RollTarget } from '../api/types';
+import type { AttackEntry, CharacterSheet, CharacterView, Companion, CompanionValue, PlayAction, ResourceValue, RollMode, RollTarget } from '../api/types';
+import { attackAvailability, poolFor } from '../actionRows';
 import { refusalText } from './DiceBox';
+import { ExplainList } from './ExplainList';
+import { AttackItem, ResourceCard } from './PlayPanels';
 import { AddButton, EntryForm, TextBox, useEntryEditor } from './CustomEntries';
 import {
   attackLines,
@@ -10,6 +13,7 @@ import {
   companionDraft,
   companionHitPoints,
   companionProblems,
+  contentCompanionModel,
   damageTypeLabel,
   damageTypes,
   maxCompanionArmorClass,
@@ -22,6 +26,7 @@ import {
   maxToHit,
   minToHit,
   type AttackLine,
+  type CardModel,
   type CompanionDraft,
 } from './customModel';
 import { directSave, type SheetSave } from './sheetSave';
@@ -202,7 +207,41 @@ export function CompanionsPanel({ view, act, roll, rollMode = 'normal', onChange
     </EntryForm>
   );
 
-  const anyDamage = entries.some((c) => c.attacks?.some((a) => a.damage));
+  // MECH-X item 4: companions that content gives come first, calculated; their attacks and pools are drawn here, not in Actions or Resources.
+  const sheet = view.sheet as CharacterSheet | undefined;
+  const given = sheet?.companions ?? [];
+  const givenModel = (value: CompanionValue): CardModel => ({
+    ...contentCompanionModel(value),
+    extra: (
+      <>
+        {contentAttacks(sheet, value).length > 0 && (
+          <ul className="features">
+            {contentAttacks(sheet, value).map((attack) => (
+              <AttackItem
+                key={`${attack.item.revisionId}-${attack.effectId}`}
+                attack={attack}
+                label={attack.name}
+                critical={critical}
+                rollMode={rollMode}
+                roll={roll}
+                rollDamage={(target) => roll(target)}
+                pool={poolFor(sheet?.resources ?? [], attack.resourceId ?? undefined, attack.costResourceContent ?? undefined)}
+                availability={attackAvailability(attack, poolFor(sheet?.resources ?? [], attack.resourceId ?? undefined, attack.costResourceContent ?? undefined))}
+              />
+            ))}
+          </ul>
+        )}
+        {contentPools(sheet, value).length > 0 && (
+          <ul className="resources">
+            {contentPools(sheet, value).map((resource) => (
+              <ResourceCard key={`${resource.content.revisionId}-${resource.resourceId}`} resource={resource} act={act} level={5} />
+            ))}
+          </ul>
+        )}
+      </>
+    ),
+  });
+  const anyDamage = entries.some((c) => c.attacks?.some((a) => a.damage)) || given.some((v) => contentAttacks(sheet, v).some((a) => a.damage));
 
   return (
     <section aria-labelledby="companions-heading" className="play-panel">
@@ -211,26 +250,31 @@ export function CompanionsPanel({ view, act, roll, rollMode = 'normal', onChange
       </h3>
       <p className="hint">
         Familiars, mounts and the like, kept as free text. TomeStack applies no rules to them: you type their numbers and press the buttons.
-        Their hit points change only here, and a rest does not change them.
+        Their hit points change only here, and a rest does not change them. A companion marked &quot;From&quot; a feature or item is calculated
+        from it: you cannot edit or remove it here.
       </p>
-      {entries.length === 0 && !editing && <p className="hint">No companions yet.</p>}
+      {entries.length === 0 && given.length === 0 && !editing && <p className="hint">No companions yet.</p>}
       {anyDamage && (
         <label className="choice">
           <input type="checkbox" checked={critical} onChange={(e) => setCritical(e.target.checked)} />
           Companion critical hit (double the damage dice)
         </label>
       )}
-      {(entries.length > 0 || editing?.isNew) && (
+      {(entries.length > 0 || given.length > 0 || editing?.isNew) && (
         <ul className="resources">
+          {given.map((value) => {
+            const model = givenModel(value);
+            return (
+              <li key={model.key} className="resource companion-card">
+                <CompanionCard model={model} act={act} busy={editor.busy} editing={false} />
+              </li>
+            );
+          })}
           {entries.map((companion) => (
             <li key={companion.id} className="resource companion-card">
               <CompanionCard
-                view={view}
-                companion={companion}
+                model={handCardModel(view, companion, roll, rollMode, critical)}
                 act={act}
-                roll={roll}
-                rollMode={rollMode}
-                critical={critical}
                 busy={editor.busy}
                 editing={editing?.id === companion.id && !editing.isNew}
                 form={form(`Edit ${companion.name}`)}
@@ -255,14 +299,74 @@ export function CompanionsPanel({ view, act, roll, rollMode = 'normal', onChange
   );
 }
 
-/** One companion: a named region. Its hit point controls follow the character's (same labels), held with aria-disabled and a linked reason. */
+/** A hand (W3) companion as a card: its kind is the subtitle; its attack lines and note follow the hit point controls. */
+function handCardModel(
+  view: CharacterView,
+  companion: Companion,
+  roll: (target: RollTarget) => void,
+  rollMode: RollMode,
+  critical: boolean,
+): CardModel {
+  const hp = companionHitPoints(view, companion);
+  return {
+    key: `companion-${companion.id}`,
+    name: companion.name,
+    subtitle: companion.kind,
+    armorClass: companion.armorClass,
+    speed: companion.speed,
+    hitPointMaximum: companion.hitPointMaximum,
+    current: hp.current,
+    temporary: hp.temporary,
+    target: { companionId: companion.id },
+    extra: (
+      <>
+        {(companion.attacks ?? []).length > 0 && (
+          <ul className="features">
+            {(companion.attacks ?? []).map((attack) => {
+              const attackTarget = { companionId: companion.id, attackId: attack.id };
+              return (
+                <li key={attack.id} className="feature">
+                  <span className="option-name">{attackSummary(attack)}</span>
+                  {attack.note ? <span className="hint"> · {attack.note}</span> : null}{' '}
+                  <button type="button" aria-label={`Roll ${attack.name} attack for ${companion.name}`} onClick={() => roll({ companionAttack: attackTarget, mode: rollMode })}>
+                    Roll {attack.name} attack
+                  </button>
+                  {attack.damage && (
+                    <button type="button" aria-label={`Roll ${attack.name} damage for ${companion.name}`} onClick={() => roll({ companionAttack: attackTarget, damage: true, critical })}>
+                      Roll {attack.name} damage
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {companion.note && <p className="hint">{companion.note}</p>}
+      </>
+    ),
+  };
+}
+
+/** The attacks of a content companion, as the Actions list shows an attack (rolled by its content and effect). */
+function contentAttacks(sheet: CharacterSheet | undefined, value: CompanionValue): AttackEntry[] {
+  return (sheet?.attacks ?? []).filter(
+    (a) => a.item.contentId === value.content.contentId && (a.companionId ?? value.companionId) === value.companionId && value.attackEffectIds.includes(a.effectId),
+  );
+}
+
+function contentPools(sheet: CharacterSheet | undefined, value: CompanionValue): ResourceValue[] {
+  return (sheet?.resources ?? []).filter(
+    (r) => r.content.contentId === value.content.contentId && (r.companionId ?? value.companionId) === value.companionId && value.resourceIds.includes(r.resourceId),
+  );
+}
+
+/**
+ * One companion: a named region. Its hit point controls follow the character's (same labels), held with aria-disabled and a linked reason.
+ * A card with `onEdit` is a hand companion; a content companion is calculated and has no Edit or Remove.
+ */
 function CompanionCard({
-  view,
-  companion,
+  model,
   act,
-  roll,
-  rollMode,
-  critical,
   busy,
   editing,
   form,
@@ -270,28 +374,30 @@ function CompanionCard({
   onRemove,
   editId,
 }: {
-  view: CharacterView;
-  companion: Companion;
+  model: CardModel;
   act: (action: PlayAction) => void;
-  roll: (target: RollTarget) => void;
-  rollMode: RollMode;
-  critical: boolean;
   busy: boolean;
   editing: boolean;
-  form: ReactNode;
-  onEdit: () => void;
-  onRemove: () => void;
-  editId: string;
+  form?: ReactNode;
+  onEdit?: () => void;
+  onRemove?: () => void;
+  editId?: string;
 }) {
   const [amount, setAmount] = useState('');
-  const hp = companionHitPoints(view, companion);
-  const key = `companion-${companion.id}`;
+  const { key, target } = model;
+  const maximum = model.hitPointMaximum;
   const n = Number(amount);
   const entered = amount !== '' && Number.isInteger(n) && n >= 0 && n <= maxHitPoints;
-  const amountReason = amount === '' ? 'Enter an amount first.' : !entered ? `Enter a whole number from 0 to ${maxHitPoints}.` : '';
-  const aboveMaximum = entered && n > companion.hitPointMaximum;
-  const setReason = aboveMaximum ? `Current hit points cannot be above the maximum (${companion.hitPointMaximum}).` : '';
-  const target = { companionId: companion.id };
+  const unknown = maximum === null;
+  const amountReason = unknown
+    ? "This companion's hit point maximum could not be calculated."
+    : amount === ''
+      ? 'Enter an amount first.'
+      : !entered
+        ? `Enter a whole number from 0 to ${maxHitPoints}.`
+        : '';
+  const aboveMaximum = entered && maximum !== null && n > maximum;
+  const setReason = aboveMaximum ? `Current hit points cannot be above the maximum (${maximum}).` : '';
 
   function apply(action: PlayAction) {
     act(action);
@@ -299,7 +405,7 @@ function CompanionCard({
   }
 
   const heldButton = (label: string, held: boolean, reasonId: string | undefined, press: () => void) => (
-    <button type="button" aria-label={`${label}: ${companion.name}`} aria-disabled={held || undefined} aria-describedby={held ? reasonId : undefined} onClick={() => !held && press()}>
+    <button type="button" aria-label={`${label}: ${model.name}`} aria-disabled={held || undefined} aria-describedby={held ? reasonId : undefined} onClick={() => !held && press()}>
       {label}
     </button>
   );
@@ -307,20 +413,22 @@ function CompanionCard({
   return (
     <section aria-labelledby={`${key}-heading`}>
       <h4 id={`${key}-heading`} tabIndex={-1}>
-        {companion.name}
+        {model.name}
       </h4>
       {editing ? (
         form
       ) : (
         <>
-          {companion.kind && <p className="hint">{companion.kind}</p>}
-          {(companion.armorClass !== undefined || companion.speed) && (
+          {model.subtitle && <p className="hint">{model.subtitle}</p>}
+          {(model.armorClass != null || model.speed) && (
             <p className="companion-stats">
-              {companion.armorClass !== undefined && <span>{`Armor Class ${companion.armorClass}`}</span>}
-              {companion.speed && <span>{`Speed ${companion.speed}`}</span>}
+              {model.armorClass != null && <span>{`Armor Class ${model.armorClass}`}</span>}
+              {model.speed && <span>{`Speed ${model.speed}`}</span>}
             </p>
           )}
-          <p>{`Hit points: ${hp.current} of ${companion.hitPointMaximum}${hp.temporary > 0 ? `, ${hp.temporary} temporary` : ''}`}</p>
+          {model.explain && model.armorClass != null && <ExplainList label={`${model.name} Armor Class`} steps={model.explain.armorClass} />}
+          <p>{maximum === null ? 'Hit points: maximum unknown' : `Hit points: ${model.current} of ${maximum}${model.temporary > 0 ? `, ${model.temporary} temporary` : ''}`}</p>
+          {model.explain && <ExplainList label={`${model.name} hit point maximum`} steps={model.explain.hitPoints} />}
           <form className="inline-form" onSubmit={(e: SubmitEvent<HTMLFormElement>) => e.preventDefault()}>
             <div className="field">
               <label htmlFor={`${key}-amount`}>Amount</label>
@@ -335,12 +443,12 @@ function CompanionCard({
                 onChange={(e) => setAmount(e.target.value)}
               />
             </div>
-            {heldButton('Take damage', !entered, `${key}-reason`, () => apply({ action: 'companionDamage', ...target, amount: n }))}
-            {heldButton('Heal', !entered, `${key}-reason`, () => apply({ action: 'companionHeal', ...target, amount: n }))}
-            {heldButton('Set hit points', !entered || aboveMaximum, aboveMaximum ? `${key}-set-reason` : `${key}-reason`, () =>
+            {heldButton('Take damage', !entered || unknown, `${key}-reason`, () => apply({ action: 'companionDamage', ...target, amount: n }))}
+            {heldButton('Heal', !entered || unknown, `${key}-reason`, () => apply({ action: 'companionHeal', ...target, amount: n }))}
+            {heldButton('Set hit points', !entered || unknown || aboveMaximum, aboveMaximum ? `${key}-set-reason` : `${key}-reason`, () =>
               apply({ action: 'companionSetHitPoints', ...target, amount: n }),
             )}
-            {heldButton('Set temporary hit points', !entered, `${key}-reason`, () =>
+            {heldButton('Set temporary hit points', !entered || unknown, `${key}-reason`, () =>
               apply({ action: 'companionSetTemporaryHitPoints', ...target, amount: n }), // temporary only: the server keeps the stored current
             )}
           </form>
@@ -354,36 +462,17 @@ function CompanionCard({
               {setReason}
             </p>
           )}
-          {(companion.attacks ?? []).length > 0 && (
-            <ul className="features">
-              {(companion.attacks ?? []).map((attack) => {
-                const attackTarget = { companionId: companion.id, attackId: attack.id };
-                return (
-                  <li key={attack.id} className="feature">
-                    <span className="option-name">{attackSummary(attack)}</span>
-                    {attack.note ? <span className="hint"> · {attack.note}</span> : null}{' '}
-                    <button type="button" aria-label={`Roll ${attack.name} attack for ${companion.name}`} onClick={() => roll({ companionAttack: attackTarget, mode: rollMode })}>
-                      Roll {attack.name} attack
-                    </button>
-                    {attack.damage && (
-                      <button type="button" aria-label={`Roll ${attack.name} damage for ${companion.name}`} onClick={() => roll({ companionAttack: attackTarget, damage: true, critical })}>
-                        Roll {attack.name} damage
-                      </button>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
+          {model.extra}
+          {onEdit && onRemove && (
+            <div className="actions">
+              <button id={editId} type="button" onClick={onEdit}>
+                Edit {model.name}
+              </button>
+              <button type="button" aria-disabled={busy || undefined} aria-describedby={busy ? 'companion-busy' : undefined} onClick={() => !busy && onRemove()}>
+                Remove {model.name}
+              </button>
+            </div>
           )}
-          {companion.note && <p className="hint">{companion.note}</p>}
-          <div className="actions">
-            <button id={editId} type="button" onClick={onEdit}>
-              Edit {companion.name}
-            </button>
-            <button type="button" aria-disabled={busy || undefined} aria-describedby={busy ? 'companion-busy' : undefined} onClick={() => !busy && onRemove()}>
-              Remove {companion.name}
-            </button>
-          </div>
         </>
       )}
     </section>

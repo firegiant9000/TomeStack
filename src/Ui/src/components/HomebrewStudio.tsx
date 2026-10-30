@@ -1721,6 +1721,7 @@ function EffectEditor(props: {
     upkeep: 'Upkeep',
     item: 'Item rules',
     itemMod: 'Item mod',
+    companion: 'Companion',
     attack: 'Attack',
     attackRider: 'Attack rider',
   };

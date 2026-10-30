@@ -47,7 +47,7 @@ export function CombatStrip({
   // D43 S8: ending an encounter asks which built-up counting-up pools to clear, when there are any.
   const encounter = view.character.play?.encounter;
   const resources = view.sheet.resources ?? [];
-  const builtUp = resources.filter((r) => r.countsUp && r.spent > 0);
+  const builtUp = resources.filter((r) => r.countsUp && r.spent > 0 && !r.companionId); // a companion's pools are on its card
   const [confirming, setConfirming] = useState(false);
   const [ticked, setTicked] = useState<string[]>([]);
   // The confirmation is open only while there is an encounter with something built up; an encounter that ends (from anywhere), or
@@ -76,7 +76,7 @@ export function CombatStrip({
     setTicked([]);
   };
   const timed = toggles.filter((t) => t.on && t.duration != null);
-  const pools = resources.filter((r) => r.countsUp || r.allowance);
+  const pools = resources.filter((r) => (r.countsUp || r.allowance) && !r.companionId);
   return (
     <section aria-labelledby="combat-heading" className="play-panel combat-strip">
       <h3 id="combat-heading" tabIndex={-1}>

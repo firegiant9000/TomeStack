@@ -132,7 +132,7 @@ export function resolvePin(view: CharacterView, pin: Pin): QuickAction | undefin
     }
     case 'attack': {
       const attack = (view.sheet.attacks ?? []).find((a) => a.item.contentId === pin.contentId && a.effectId === pin.effectId);
-      if (!attack) return undefined;
+      if (!attack || attack.companionId) return undefined; // a companion's attacks are rolled from its card
       const pool = poolFor(resources, attack.resourceId ?? undefined, attack.costResourceContent ?? undefined);
       const availability = attackAvailability(attack, pool);
       const target: RollTarget = attack.source === 'feature' ? { content: attack.item, effectId: attack.effectId } : { weapon: attack.item };

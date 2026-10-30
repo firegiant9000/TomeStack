@@ -286,3 +286,18 @@ it('names the id an entry was given by the change it undoes, and offers nothing 
   expect(inverseOf(action, withUses([wandUse()]), withUses([wandUse('given')]))!.inverse).toEqual([{ action: 'regainCharge', amount: 1, entryId: 'given' }]);
   expect(inverseOf(action, withUses([wandUse()]), withUses([]))).toBeUndefined();
 });
+
+// MECH-X item 4: a content companion's hit points are on the sheet, and the inverse names its content.
+const withContentCompanion = (current: number, temporary: number): CharacterView =>
+  ({
+    character: { play: { temporaryHitPoints: 0, resources: [], conditions: [], exhaustion: 0 } },
+    sheet: { companions: [{ content: { contentId: 'c-charm', revisionId: 'r-charm' }, companionId: 'g1', label: 'Testy Wolf', hitPointMaximum: 12, current, temporary }] },
+  }) as unknown as CharacterView;
+
+it('undo of content companion damage sends heal with contentId', () => {
+  const damaged = inverseOf({ action: 'companionDamage', contentId: 'c-charm', companionId: 'g1', amount: 5 }, withContentCompanion(12, 0), withContentCompanion(7, 0))!;
+  expect(damaged.inverse).toEqual([{ action: 'companionSetHitPoints', contentId: 'c-charm', companionId: 'g1', amount: 12, temporary: 0 }]);
+  const healed = inverseOf({ action: 'companionHeal', contentId: 'c-charm', companionId: 'g1', amount: 3 }, withContentCompanion(7, 2), withContentCompanion(10, 2))!;
+  expect(healed.inverse).toEqual([{ action: 'companionSetHitPoints', contentId: 'c-charm', companionId: 'g1', amount: 7, temporary: 2 }]);
+  expect(inverseOf({ action: 'companionHeal', contentId: 'c-charm', companionId: 'g1', amount: 3 }, withContentCompanion(12, 0), withContentCompanion(12, 0))).toBeUndefined();
+});

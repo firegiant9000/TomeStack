@@ -312,3 +312,10 @@ it('a paying toggle cannot be pinned (S4), but a pool toggle still can', () => {
   expect(resolvePin(view({ toggles: [paying] }), { kind: 'toggle', contentId: 'c1', effectId: 'e-form' })).toBeUndefined();
   expect(resolvePin(view({ toggles: [toggle({ resourceId: 'focus', cost: 2 })] }), { kind: 'toggle', contentId: 'c1', effectId: 'e-form' })).toBeDefined();
 });
+
+it('quickbar hides an attack pin whose row has companionId', () => {
+  const own = featureAttack({ companionId: 'g1' });
+  expect(resolvePin(view({ attacks: [own] }), attackPin(own))).toBeUndefined();
+  const plain = featureAttack();
+  expect(resolvePin(view({ attacks: [plain] }), attackPin(plain))).toBeDefined();
+});

@@ -126,6 +126,11 @@ export function inverseOf(action: PlayAction, before: CharacterView, after: Char
       // Wave 3 item 23: a companion's hit points are put back exactly, current and temporary both. No recorded entry means at the
       // maximum with none temporary. A change that left both as they were, or a companion the view no longer has, has no entry.
       const state = (v: CharacterView) => {
+        // MECH-X item 4: a content companion (the action names its content) is read from the sheet, which carries its current and temporary.
+        if (action.contentId) {
+          const value = v.sheet.companions?.find((c) => c.content.contentId === action.contentId && c.companionId === action.companionId);
+          return value && value.hitPointMaximum != null ? { current: value.current, temporary: value.temporary } : undefined;
+        }
         const companion = v.character.companions?.find((c) => c.id === action.companionId);
         if (!companion) return undefined;
         const recorded = v.character.play?.companions?.find((c) => c.id === action.companionId);
@@ -134,7 +139,7 @@ export function inverseOf(action: PlayAction, before: CharacterView, after: Char
       const was = state(before);
       const now = state(after);
       if (!was || !now || (was.current === now.current && was.temporary === now.temporary)) return undefined;
-      return entry([{ action: 'companionSetHitPoints', companionId: action.companionId, amount: was.current, temporary: was.temporary }]);
+      return entry([{ action: 'companionSetHitPoints', ...(action.contentId ? { contentId: action.contentId } : {}), companionId: action.companionId, amount: was.current, temporary: was.temporary }]);
     }
     case 'spendCharge':
     case 'regainCharge': {

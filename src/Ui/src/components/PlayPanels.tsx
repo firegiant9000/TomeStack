@@ -385,7 +385,7 @@ export function ConditionsPanel({ view, act }: { view: CharacterView; act: Act }
   );
 }
 
-function ResourceCard({ resource, act, level = 4 }: { resource: ResourceValue; act: Act; level?: 4 | 5 }) {
+export function ResourceCard({ resource, act, level = 4 }: { resource: ResourceValue; act: Act; level?: 4 | 5 }) {
   const key = { contentId: resource.content.contentId, resourceId: resource.resourceId };
   const tracked = resource.current !== undefined && resource.maximum !== undefined;
   const headingId = `resource-${resource.content.revisionId}-${resource.resourceId}`;
@@ -502,7 +502,8 @@ export function ClassColumnsPanel({ view }: { view: CharacterView }) {
 }
 
 export function ResourcesPanel({ view, act }: { view: CharacterView; act: Act }) {
-  const resources = view.sheet.resources ?? [];
+  // MECH-X item 4: a content companion's pools are on its card.
+  const resources = (view.sheet.resources ?? []).filter((r) => !r.companionId);
   if (resources.length === 0) return null;
   // Wave 3 item 22 (R157): a resource with an activation sits under the same group headings as the actions; the rest are listed as before.
   const ungrouped = resources.filter((r) => !r.activation);
@@ -662,7 +663,8 @@ export function ActionsPanel({
     onDamageType?.(normalizeDamageType(type));
     roll(target);
   };
-  const attacks = view.sheet.attacks ?? [];
+  // MECH-X item 4: a content companion's attacks and pools are shown on its card, so this display list skips them. Lookups keep every pool.
+  const attacks = (view.sheet.attacks ?? []).filter((a) => !a.companionId);
   const customAttacks = view.character.customAttacks ?? [];
   const toggles = view.sheet.toggles ?? [];
   const rolls = (view.sheet.features ?? []).flatMap((feature) =>
@@ -672,7 +674,7 @@ export function ActionsPanel({
   const plainToggles = toggles.filter((t) => !t.group);
   // D43 slice 3: an action or switch that spends an allowance pool (reactions, say) is listed under that pool's name, not its activation group.
   const resourcePools = view.sheet.resources ?? [];
-  const allowances = resourcePools.filter((r) => r.allowance);
+  const allowances = resourcePools.filter((r) => r.allowance && !r.companionId);
   const allowanceOf = (resourceId: string | undefined, contentId: string) => poolFor(allowances, resourceId, contentId);
   const togglePool = (t: ToggleValue) => allowanceOf(t.resourceId, t.costResourceContent ?? t.content.contentId);
   if (attacks.length === 0 && customAttacks.length === 0 && rolls.length === 0 && plainToggles.length === 0) return null;
@@ -999,7 +1001,7 @@ function attackLabel(attack: AttackEntry, equipment: EquipmentEntry[]): string {
   return copies.length > 1 && n > 0 ? `${attack.name} (copy ${n} of ${copies.length})` : attack.name;
 }
 
-function AttackItem({
+export function AttackItem({
   attack,
   label,
   critical,

@@ -662,7 +662,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
       const concentrationOnly = steps.every((s) => s.action === 'endConcentration' || s.action === 'startConcentration');
       const target =
         steps[0]?.action === 'companionSetHitPoints'
-          ? document.getElementById(`companion-${steps[0].companionId}-heading`) // Wave 3 item 23: the companion's card
+          ? document.getElementById(`companion-${steps[0].contentId ? `${steps[0].contentId}-` : ''}${steps[0].companionId}-heading`) // Wave 3 item 23: the companion's card (MECH-X item 4: a content companion's key has its content id)
           : steps[0]?.action === 'setHitPoints' || steps[0]?.action === 'setTemporaryHitPoints'
             ? document.getElementById('hp-heading')
             : concentrationOnly && current?.character.play?.concentration

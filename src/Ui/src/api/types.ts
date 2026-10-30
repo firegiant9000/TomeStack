@@ -155,6 +155,29 @@ export interface CompanionPlay {
   id: string;
   current?: number | null;
   temporary: number;
+  /** MECH-X item 4: set for a content companion (the content that gives it); `id` is then its `companionId`. */
+  contentId?: string;
+}
+
+/** MECH-X item 4: a companion that content gives, calculated by the server. Its attacks and pools stay in `attacks` / `resources`, tagged with its `companionId`. */
+export interface CompanionValue {
+  content: ContentReference;
+  contentName: string;
+  effectId: string;
+  companionId: string;
+  label: string;
+  armorClass?: number | null;
+  armorClassTrace: TraceEntry[];
+  hitPointMaximum?: number | null;
+  hitPointTrace: TraceEntry[];
+  current: number;
+  temporary: number;
+  speed?: string;
+  attackEffectIds: string[];
+  resourceIds: string[];
+  automation: AutomationStatus;
+  warnings: Diagnostic[];
+  origin: TraceOrigin;
 }
 
 export interface ClassLevel {
@@ -283,6 +306,8 @@ export interface ResourceValue {
   fullText?: string;
   /** Content v11 (D43): the pool is a per-turn allowance (such as reactions); actions that spend it are listed under its name. */
   allowance?: boolean;
+  /** MECH-X item 4: the content companion this pool belongs to; the companion card shows it, not the Resources panel. */
+  companionId?: string;
 }
 
 /** Content v12 (MECH-X item 1): how a payment is made. A pool payment is `resource` (the sheet leaves `payment` out for it). */
@@ -487,6 +512,8 @@ export interface AttackEntry {
   cost?: number | null;
   /** Content v12 (MECH-X item 1): a hit-point or slot payment (a feature attack); absent for a pool payment. */
   payment?: PaymentValue | null;
+  /** MECH-X item 4: the content companion this attack belongs to; the companion card shows it, not the Actions list. */
+  companionId?: string;
 }
 
 /** SPEC I-05: an active revision with its text and automation status. */
@@ -566,6 +593,8 @@ export interface CharacterSheet {
   choices?: ChoiceStatus[];
   active?: ContentReference[];
   resources?: ResourceValue[];
+  /** MECH-X item 4: companions that content gives (absent when none). */
+  companions?: CompanionValue[];
   features?: FeatureEntry[];
   hitPoints?: HitPointState;
   hitDice?: HitDiceValue[];
@@ -822,6 +851,7 @@ export type PlayActionKind =
 export interface PlayAction {
   action: PlayActionKind;
   amount?: number;
+  /** With a `companion*` action: the content that gives the companion (a content companion); absent for a hand companion. */
   contentId?: string;
   resourceId?: string;
   condition?: string;
@@ -1856,6 +1886,7 @@ export type Effect =
     })
   | (EffectBase & { type: 'item'; requiresAttunement?: boolean; charges?: { max: number; recovery?: { period: RestPeriod; regain?: string } } })
   | (EffectBase & { type: 'itemMod'; appliesTo: 'weapon' | 'armor' | 'any'; bonus?: number; modifiers?: Extract<Effect, { type: 'modifier' }>[] })
+  | (EffectBase & { type: 'companion'; companionId: string; label: string; armorClass: string; hitPointMaximum: string; speed?: string; attacks?: string[]; resourceIds?: string[] })
   | (EffectBase & { type: 'recovery'; resourceId: string; on: RestPeriod; amount: string })
   | (EffectBase & {
       type: 'roll';

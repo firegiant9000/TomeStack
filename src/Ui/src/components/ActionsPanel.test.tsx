@@ -6,7 +6,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { CharacterView, CustomAttack, RollTarget } from '../api/types';
 import { attackPin, customPin, rollPin, togglePin, type Pin } from '../quickbar';
-import { ActionsPanel, RollResult } from './PlayPanels';
+import { ActionsPanel, ResourcesPanel, RollResult } from './PlayPanels';
 
 afterEach(cleanup);
 
@@ -1100,4 +1100,34 @@ it('numbers copies as the Inventory does, counting an unequipped copy between tw
   render(<ActionsPanel view={v} roll={() => {}} act={() => {}} />);
   expect(screen.getByRole('button', { name: 'Roll Fixture Blade (copy 1 of 3) attack' })).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Roll Fixture Blade (copy 3 of 3) attack' })).toBeTruthy();
+});
+
+// MECH-X item 4: a content companion's rows are on its card; the lists that show cards skip them, every lookup keeps them.
+it('Actions and Resources panels hide companion rows but a roll that spends a companion pool still finds it', () => {
+  const content = { contentId: 'c-charm', revisionId: 'r-charm' };
+  const attack = (name: string, extra: object = {}) => ({ item: content, name, effectId: name, source: 'feature', attack: 'melee', toHit: 4, damage: '1d6', damageType: 'piercing', properties: [], trace: [], warnings: [], automation: 'automatic', available: true, replacesAttack: false, ...extra });
+  const pool = (id: string, extra: object = {}) => ({ content, contentName: 'Testy Charm', effectId: `e-${id}`, resourceId: id, label: `Testy ${id}`, maximum: 2, spent: 0, current: 2, trace: [], warnings: [], automation: 'automatic', recoveries: [], ...extra });
+  const v = {
+    character: { id: 'fixture' },
+    sheet: {
+      // The plain attack spends a pool that belongs to a companion: it must still name it.
+      attacks: [attack('Pack Claw', { companionId: 'g1' }), attack('Plain Lash', { resourceId: 'howl', costResourceContent: 'c-charm', cost: 1 })],
+      resources: [pool('howl', { companionId: 'g1' }), pool('guard')],
+      toggles: [],
+      features: [],
+    },
+  } as unknown as CharacterView;
+  render(
+    <>
+      <ActionsPanel view={v} roll={() => {}} act={() => {}} />
+      <ResourcesPanel view={v} act={() => {}} />
+    </>,
+  );
+  const actions = screen.getByRole('region', { name: 'Attacks and actions' });
+  expect(within(actions).queryByRole('button', { name: 'Roll Pack Claw attack' })).toBeNull();
+  expect(within(actions).getByRole('button', { name: 'Roll Plain Lash attack' })).toBeTruthy();
+  expect(actions.textContent).toMatch(/uses 1 Testy howl \(spend it from the roll\)/);
+  const resources = screen.getByRole('region', { name: 'Resources' });
+  expect(within(resources).queryByRole('heading', { name: /Testy howl/ })).toBeNull();
+  expect(within(resources).getByRole('heading', { name: /Testy guard/ })).toBeTruthy();
 });
