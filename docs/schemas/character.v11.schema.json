@@ -397,10 +397,10 @@
           }
         },
         "companions": {
-          "description": "Character schema v9 (D42): current and temporary hit points per companion.",
+          "description": "Character schema v9 (D42): current and temporary hit points per companion. Schema v11 (MECH-X item 4): a row with contentId belongs to the companion a feature declares; without it, to a companion kept by hand. Rows are keyed by (contentId, id).",
           "type": "array",
           "minItems": 1,
-          "maxItems": 10,
+          "maxItems": 64,
           "items": {
             "type": "object",
             "required": ["id", "temporary"],
@@ -408,7 +408,8 @@
             "properties": {
               "id": { "$ref": "#/$defs/uuid" },
               "current": { "type": ["integer", "null"], "minimum": 0, "maximum": 10000 },
-              "temporary": { "type": "integer", "minimum": 0, "maximum": 10000 }
+              "temporary": { "type": "integer", "minimum": 0, "maximum": 10000 },
+              "contentId": { "$ref": "#/$defs/uuid" }
             }
           }
         },

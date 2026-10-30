@@ -14,7 +14,7 @@ public class DownConvertCoverageTests
         "below.resource-counts-up", "below.roll-detail", "below.roll-also-change", "below.diceless-roll",
         "below.modifier-toggle-content", "below.unknown-target", "below.restriction-lifted", "below.defence-while-toggle",
         "below.grant-defence", "below.item-attunement", "below.item-charges", "below.activation", "below.validation-error",
-        "below.weapon-bonus", "below.v12-key", "below.payment", "below.casts-spell", "below.item-mods", "below.item-mod-copies",
+        "below.weapon-bonus", "below.v12-key", "below.payment", "below.casts-spell", "below.item-mods", "below.item-mod-copies", "below.companion-content",
     ];
 
     private sealed record Entry(string Group, string Version, string Feature, string? Rule);
@@ -38,7 +38,7 @@ public class DownConvertCoverageTests
         var entries = Load();
         var known = DownConvert.KnownCodes;
 
-        Assert.Equal(39, Contract.Length);
+        Assert.Equal(40, Contract.Length);
         Assert.True(known.SetEquals(Contract), "KnownCodes must equal the contract set.");
 
         foreach (var entry in entries.Where(e => e.Rule is not null))

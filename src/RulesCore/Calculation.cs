@@ -108,7 +108,8 @@ public sealed record CharacterSheet(
     bool? LevelUpAvailable = null,
     int? XpForNextLevel = null,
     IReadOnlyList<UpkeepValue>? Upkeeps = null,
-    IReadOnlyList<ResponseValue>? Responses = null)
+    IReadOnlyList<ResponseValue>? Responses = null,
+    IReadOnlyList<CompanionValue>? Companions = null)
 {
     public DerivedValue Field(string field) => Fields.Single(f => f.Field == field);
 }
@@ -152,6 +153,9 @@ public sealed record ItemModInfo(ContentReference Reference, string Name, ModTar
 /// level-5 Test Chronicler. <paramref name="Content"/> is the revision that defines it (the class or its subclass).
 /// </summary>
 public sealed record ScaleValue(ContentReference Class, string ClassName, ContentReference Content, string ScaleId, string Label, int ClassLevel, int Value);
+
+/// <summary>MECH-X item 4: a companion card a <c>companion</c> effect declares. Its play state is keyed by the content id and <paramref name="CompanionId"/>.</summary>
+public sealed record CompanionValue(ContentReference Content, Guid CompanionId);
 
 /// <summary>
 /// A limited-use resource (ADR-003 <c>resource</c>). <paramref name="Maximum"/> is its formula evaluated in the content's

@@ -66,6 +66,7 @@ public static class BelowCodes
     public const string CastsSpell = "below.casts-spell";
     public const string ItemMods = "below.item-mods";
     public const string ItemModCopies = "below.item-mod-copies";
+    public const string CompanionContent = "below.companion-content";
     public const string ValidationError = "below.validation-error";
 }
 
@@ -702,7 +703,14 @@ public static class DownConvert
             changes.Add(new($"equipment[{equipment.ToList().FindIndex(e => e?.Item == item)}]", BelowAction.Dropped, BelowCodes.ItemModCopies,
                 $"'{name}': {group.Count} copies of one item merged into one; they differed only by their mods."));
 
-        return character with { Equipment = merged };
+        var play = character.Play;
+        if (play?.Companions?.Where(p => p?.ContentId is not null).ToList() is { Count: > 0 } content)
+        {
+            changes.Add(new("play.companions", BelowAction.Dropped, BelowCodes.CompanionContent, $"'{name}': the current hit points of {content.Count} content companions."));
+            play = play with { Companions = Character.NullIfEmpty(play.Companions.Where(p => p?.ContentId is null).ToList()) };
+        }
+
+        return character with { Equipment = merged, Play = play! };
     }
 
     private static Character BelowV10(Character character, string name, List<BelowChange> changes)

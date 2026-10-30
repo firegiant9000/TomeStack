@@ -93,7 +93,8 @@
     ],
     "11": [
       { "feature": "equipment[].mods", "rule": "below.item-mods" },
-      { "feature": "equipment[].mods:copies", "rule": "below.item-mod-copies" }
+      { "feature": "equipment[].mods:copies", "rule": "below.item-mod-copies" },
+      { "feature": "play.companions[].contentId", "rule": "below.companion-content" }
     ]
   }
 }

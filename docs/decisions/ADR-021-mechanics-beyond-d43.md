@@ -41,6 +41,8 @@ The work is one item at a time. Each item is generic and declarative, with a tra
 | Content v12 | `payment` (on a roll, a feature attack and a toggle), `castsSpell` (on a roll) and spell `tags` (item 1) | approved by the owner (2026-10-27) |
 | Content v12 | `replaceable` on a choice (item 2) | approved by the owner (2026-10-27) |
 | Character v11 | `equipment[].mods` (item 3) | approved by the owner (2026-10-27); shipped (item 3) |
+| Content v12 | `companion` effect (item 4) | approved by the owner (2026-10-27); taken 72fd9325 |
+| Character v11 | `play.companions[].contentId` (item 4) | approved by the owner (2026-10-27); taken 2026-10-29 (item 4 T2) |
 | Content v12 | `itemMod` effect on item content (item 3) | approved by the owner (2026-10-27) |
 
 ## Consequences

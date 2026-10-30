@@ -1,0 +1,58 @@
+{
+  "id": "6a7e0cb0-0000-4000-8000-000000000001",
+  "schemaVersion": 11,
+  "name": "Testy Handler (content companion fixture, schema v11)",
+  "rulesFamily": "srd-5.2.1",
+  "level": 3,
+  "classes": [
+    { "class": { "contentId": "5f6dc000-0000-4000-8000-000000000011", "revisionId": "5f6de000-0000-4000-8000-000000000011" }, "level": 3 }
+  ],
+  "choices": [],
+  "spells": [],
+  "crossFamilyExceptions": [],
+  "campaignExceptions": [],
+  "baseAbilities": {
+    "str": 14,
+    "dex": 14,
+    "con": 12,
+    "int": 10,
+    "wis": 10,
+    "cha": 8
+  },
+  "pins": [
+    { "contentId": "6a7e00f4-0000-4000-8000-000000000001", "revisionId": "6a7e00f4-0000-4000-8000-000000000101" }
+  ],
+  "overrides": [],
+  "companions": [
+    { "id": "6a7e0cb0-0000-4000-8000-0000000000c1", "name": "Fixture Mule", "hitPointMaximum": 11 }
+  ],
+  "play": {
+    "temporaryHitPoints": 0,
+    "resources": [],
+    "conditions": [],
+    "exhaustion": 0,
+    "hitDiceSpent": [],
+    "deathSaves": {
+      "successes": 0,
+      "failures": 0
+    },
+    "inspiration": false,
+    "spellSlotsSpent": [],
+    "pactSlotsSpent": 0,
+    "toggles": [],
+    "companions": [
+      { "id": "6a7e0cb0-0000-4000-8000-0000000000c1", "current": 3, "temporary": 1 },
+      { "id": "6a7e0c00-0000-4000-8000-000000000001", "current": 4, "temporary": 0, "contentId": "6a7e00f4-0000-4000-8000-000000000001" }
+    ]
+  },
+  "equipment": [],
+  "currency": {
+    "cp": 0,
+    "sp": 0,
+    "ep": 0,
+    "gp": 0,
+    "pp": 0
+  },
+  "notes": [],
+  "updatedAt": "2026-10-29T00:00:00+00:00"
+}

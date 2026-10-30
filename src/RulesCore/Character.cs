@@ -10,7 +10,7 @@ namespace TomeStack.RulesCore;
 public sealed record Character
 {
     /// <summary>
-    /// v11 adds the mods on an equipment entry (MECH-X item 3, D75), written only while an entry has one.
+    /// v11 adds the mods on an equipment entry (MECH-X item 3, D75) and the content id of a play companion row (item 4), written only while one is used.
     /// v10 adds the encounter round and the rounds left of an active toggle to <see cref="Play"/>, written only while they are used (D43 slice 3).
     /// v9 adds <see cref="Details"/>, <see cref="CustomItems"/>, <see cref="CustomAttacks"/>, <see cref="DamageDefences"/>, <see cref="Companions"/>,
     /// <see cref="Xp"/>, the id, attunement and charges of an <see cref="EquipmentEntry"/>, and <see cref="PlayState.Companions"/> (Wave 2;
@@ -102,9 +102,12 @@ public sealed record Character
         init => _schemaVersion = value;
     }
 
-    /// <summary>True when an equipment entry has a mod, the only field that only schema v11 has. An empty list is normalised to null, so null is the only "unset".</summary>
+    /// <summary>
+    /// True when an equipment entry has a mod or a play companion row names content (<see cref="CompanionPlay.ContentId"/>), the only fields that only schema v11 has.
+    /// An empty list is normalised to null, so null is the only "unset".
+    /// </summary>
     [JsonIgnore]
-    public bool UsesV11Fields => Equipment?.Any(e => e?.Mods is { Count: > 0 }) ?? false; // a null list or entry from untrusted JSON is Validate's to report, not this getter's to throw
+    public bool UsesV11Fields => (Equipment?.Any(e => e?.Mods is { Count: > 0 }) ?? false) || (Play?.Companions?.Any(p => p?.ContentId is not null) ?? false); // a null list or entry from untrusted JSON is Validate's to report, not this getter's to throw
 
     /// <summary>True when any field that only schema v10 has is set: an encounter, or the rounds left on a toggle.</summary>
     [JsonIgnore]
@@ -420,7 +423,7 @@ public sealed record Character
             }
         }
 
-        if (Play.Companions is { } companionPlay && companionPlay.Any(p => Companions is null || Companions.All(c => c.Id != p.Id)))
+        if (Play.Companions is { } companionPlay && companionPlay.Any(p => p?.ContentId is null && (Companions is null || Companions.All(c => c.Id != p?.Id))))
             problems.Add(new("character.companion-play-unknown", "Hit points are recorded for a companion the character does not have."));
     }
 
@@ -677,8 +680,12 @@ public sealed record Companion(Guid Id, string Name, string? Kind, int? ArmorCla
     internal Companion Normalized() => this with { Attacks = Character.NullIfEmpty(Attacks) };
 }
 
-/// <summary>Character schema v9 (D42): a companion's current hit points (null: at the maximum) and temporary hit points.</summary>
-public sealed record CompanionPlay(Guid Id, int? Current, int Temporary);
+/// <summary>
+/// Character schema v9 (D42): a companion's current hit points (null: at the maximum) and temporary hit points.
+/// Character schema v11 (MECH-X item 4): <paramref name="ContentId"/> names the revision's content whose <c>companion</c> effect this row belongs to;
+/// null for a companion the character keeps by hand (v9). Null by default, so a character without one is written below v11.
+/// </summary>
+public sealed record CompanionPlay(Guid Id, int? Current, int Temporary, Guid? ContentId = null);
 
 /// <summary>SPEC C-06. A labeled user override applied as the final display layer.</summary>
 public sealed record FieldOverride(string Field, int Value, string? Reason = null);

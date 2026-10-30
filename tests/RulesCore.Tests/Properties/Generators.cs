@@ -635,6 +635,11 @@ internal static class Generators
         // Schema v11 field (MECH-X item 3), mostly absent: 0 to 2 mods on the first equipment entry, never equal to its item. A character is written as v11 only then.
         from modCount in Gen.Frequency((6, Gen.Constant(0)), (1, Gen.Constant(1)), (1, Gen.Constant(2)))
         from mods in References.ArrayOf(2)
+        // Schema v11 field (MECH-X item 4), mostly absent: one play row for a content companion. A character is written as v11 then.
+        from hasContentCompanion in Gen.Frequency((6, Gen.Constant(false)), (1, Gen.Constant(true)))
+        from companionId in Guids
+        from companionContent in Guids
+        from companionCurrent in Gen.Choose(0, PlayState.MaxHitPoints)
         // A field this build does not know: it round-trips through Character.Extensions.
         from extra in Optional(Keys)
         from extraNumber in Gen.Choose(-1000, 1000)
@@ -659,6 +664,7 @@ internal static class Generators
                 TemporaryHitPoints = temporary,
                 Encounter = round is { } r ? new EncounterState(r) : null,
                 Toggles = [.. Enumerable.Range(0, toggleIds).Select(i => new ActiveToggle(caster, "toggle-" + i, roundsLeft[i]))],
+                Companions = hasContentCompanion ? [new CompanionPlay(companionId, companionCurrent, 0, companionContent)] : null,
             },
             UpdatedAt = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero).AddMinutes(updated),
             ArchivedAt = archived is { } a ? new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero).AddMinutes(a) : null,

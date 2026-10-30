@@ -559,7 +559,7 @@ public sealed partial class TomeStackApp
         var companion = command.CompanionId is { } id ? character.Companions?.FirstOrDefault(c => c.Id == id) : null;
         if (companion is null)
             throw new AppValidationException([new("play.companion-unknown", "This character has no such companion.")]);
-        var recorded = character.Play.Companions?.FirstOrDefault(p => p.Id == companion.Id);
+        var recorded = character.Play.Companions?.FirstOrDefault(p => p.ContentId is null && p.Id == companion.Id);
         var maximum = companion.HitPointMaximum;
         var current = Math.Min(recorded?.Current ?? maximum, maximum); // a maximum lowered since is respected
         var temporary = recorded?.Temporary ?? 0;
@@ -586,8 +586,8 @@ public sealed partial class TomeStackApp
                 break;
         }
         var entry = new CompanionPlay(companion.Id, current >= maximum ? null : current, temporary);
-        var others = character.Play.Companions?.Where(p => p.Id != companion.Id).ToList() ?? [];
-        List<CompanionPlay> all = recorded is null ? [.. others, entry] : character.Play.Companions!.Select(p => p.Id == companion.Id ? entry : p).ToList();
+        var others = character.Play.Companions?.Where(p => p.ContentId is not null || p.Id != companion.Id).ToList() ?? [];
+        List<CompanionPlay> all = recorded is null ? [.. others, entry] : character.Play.Companions!.Select(p => p.ContentId is null && p.Id == companion.Id ? entry : p).ToList();
         return character.Play with { Companions = entry is { Current: null, Temporary: 0 } ? others : all };
     }
 
