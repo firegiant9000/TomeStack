@@ -1,5 +1,6 @@
 using System.Text.Json;
 using TomeStack.AppService.Packages;
+using TomeStack.AppService.Persistence;
 using TomeStack.RulesCore;
 
 namespace TomeStack.AppService;
@@ -29,7 +30,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "gap.list", "gap.listAll", "gap.add", "gap.setStatus", "gap.delete",
         "import.start", "import.startMarkdown", "import.startMarkdownData", "import.status", "import.list", "import.cancel", "import.resume", "import.audit", "import.search", "import.page", "import.candidates",
         "import.candidate.check", "import.candidate.edit", "import.candidate.accept", "import.candidate.acceptMany", "import.candidate.addToSpellList", "import.candidate.ignore",
-        "package.exportPreview", "package.export", "package.saveAs", "package.preview", "package.apply",
+        "package.targets", "package.exportPreview", "package.export", "package.saveAs", "package.preview", "package.apply",
         "package.sourcePackPreview", "package.sourcePackExport", "package.sourcePackSaveAs",
         "package.campaignPackPreview", "package.campaignPackExport", "package.campaignPackSaveAs", "package.preflight",
         "extension.list", "extension.installPreview", "extension.installChoose", "extension.install", "extension.review", "extension.setEnabled", "extension.remove",
@@ -186,15 +187,16 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "gap.add" => app.AddGapNote(Payload<AddGapNoteRequest>(payload)),
         "gap.setStatus" => app.SetGapNoteStatus(Payload<GapNoteStatusRequest>(payload)),
         "gap.delete" => DeleteGapNote(Payload<DeleteGapNoteRequest>(payload)),
+        "package.targets" => PackageTargets(),
         "package.exportPreview" => PreviewExport(Payload<ExportPayload>(payload)),
         "package.export" => ExportPackage(Payload<ExportPayload>(payload)),
         "package.saveAs" => SavePackageAs(Payload<ExportPayload>(payload)),
         "package.preview" => app.PreviewImport(Convert.FromBase64String(Payload<PackagePayload>(payload).Base64)),
         "package.apply" => ApplyImport(Payload<PackagePayload>(payload)),
-        "package.sourcePackPreview" => app.PreviewSourcePack(Payload<SourcePackPayload>(payload).SourceIds ?? []),
+        "package.sourcePackPreview" => PreviewSourcePack(Payload<SourcePackPayload>(payload)),
         "package.sourcePackExport" => ExportSourcePack(Payload<SourcePackPayload>(payload)),
         "package.sourcePackSaveAs" => SaveSourcePackAs(Payload<SourcePackPayload>(payload)),
-        "package.campaignPackPreview" => app.PreviewCampaignPack(Payload<CampaignIdPayload>(payload).CampaignId),
+        "package.campaignPackPreview" => PreviewCampaignPack(Payload<CampaignIdPayload>(payload)),
         "package.preflight" => app.PackagePreflight(Payload<Packages.PreflightRequest>(payload)),
         "package.campaignPackExport" => ExportCampaignPack(Payload<CampaignIdPayload>(payload)),
         "package.campaignPackSaveAs" => SaveCampaignPackAs(Payload<CampaignIdPayload>(payload)),
@@ -321,11 +323,64 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
 
     private CharacterView ApplyUpdate(UpdatePayload payload) => app.ApplyUpdate(payload.CharacterId, payload.From, payload.To, payload.Confirm);
 
-    private ExportPreview PreviewExport(ExportPayload payload) => app.PreviewExport(payload.CharacterIds, payload.Purpose);
+    /// <summary>D85: the offered older releases, newest first, and the running build's own row.</summary>
+    private static object PackageTargets()
+    {
+        var current = ReleaseLadder.CurrentRowOrLast(AppVersionStamp.CurrentVersion);
+        return new
+        {
+            Current = AppVersionStamp.CurrentVersion,
+            CurrentRow = current.Release.ToString(3),
+            PreviousMinor = ReleaseLadder.PreviousMinorFor(AppVersionStamp.CurrentVersion)?.Release.ToString(3),
+            Targets = OfferedTargets().Select(r => new { Release = r.Release.ToString(3), r.CharacterSchema, r.ContentSchema }).ToList(),
+        };
+    }
+
+    private static IEnumerable<LadderRow> OfferedTargets() => ReleaseLadder.Rows.Where(r => r.OfferedAsTarget).Reverse();
+
+    /// <summary>The offered row for <paramref name="target"/>; null when there is no target; an error for any other string.</summary>
+    private static LadderRow? ResolveTarget(string? target)
+    {
+        if (target is null)
+            return null;
+        if (ReleaseLadder.Target(target) is { } row)
+            return row;
+        var choices = string.Join(", ", OfferedTargets().Select(r => r.Release.ToString(3)));
+        // A caller's string is echoed only as letters, digits, dots and hyphens (no control characters or split pairs), cut at 16 with "…" when it was cut.
+        var safe = new string([.. target.Where(c => c is (>= '0' and <= '9') or (>= 'A' and <= 'Z') or (>= 'a' and <= 'z') or '.' or '-')]);
+        var shown = safe.Length > 16 ? safe[..16] + "…" : safe.Length == 0 ? "(none)" : safe;
+        throw new AppValidationException(
+            [new("package.target-unknown", $"TomeStack {shown} is not a version this export can be made for. Choose one of: {choices}.")],
+            "package.target-unknown");
+    }
+
+    /// <summary>A valid target on a command that cannot lower yet is refused, so no file is written under a false label.</summary>
+    private static void RefuseTarget(string? target, string what)
+    {
+        if (ResolveTarget(target) is null)
+            return;
+        throw new AppValidationException(
+            [new("package.target-blocked", $"Saving {what} for an older TomeStack is not available yet.")], "package.target-blocked");
+    }
+
+    private ExportPreview PreviewExport(ExportPayload payload) =>
+        app.PreviewExport(payload.CharacterIds, payload.Purpose, ResolveTarget(payload.Target));
+
+    private SourcePackPreview PreviewSourcePack(SourcePackPayload payload)
+    {
+        RefuseTarget(payload.Target, "a source pack");
+        return app.PreviewSourcePack(payload.SourceIds ?? []);
+    }
+
+    private CampaignPackPreview PreviewCampaignPack(CampaignIdPayload payload)
+    {
+        RefuseTarget(payload.Target, "a campaign pack");
+        return app.PreviewCampaignPack(payload.CampaignId);
+    }
 
     private object ExportPackage(ExportPayload payload)
     {
-        var export = app.ExportCharacters(payload.CharacterIds, payload.Purpose);
+        var export = app.ExportCharacters(payload.CharacterIds, payload.Purpose, ResolveTarget(payload.Target), payload.ChangesHash);
         return new { export.FileName, Base64 = Convert.ToBase64String(export.Content), export.Manifest };
     }
 
@@ -335,14 +390,17 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     /// </summary>
     private SaveOutcome SavePackageAs(ExportPayload payload)
     {
+        var row = ResolveTarget(payload.Target);
         if (host is null)
             throw new AppValidationException([new("host.unsupported", "This host has no native Save dialog.")], "unsupported");
-        return SaveAs(app.ExportCharacters(payload.CharacterIds, payload.Purpose));
+        // The package is built (and a blocked or changed plan refused) before the Save dialog opens.
+        return SaveAs(app.ExportCharacters(payload.CharacterIds, payload.Purpose, row, payload.ChangesHash));
     }
 
     /// <summary>M6 slice 1: a source pack as base64 (browser development and tests; the desktop uses the Save dialog).</summary>
     private object ExportSourcePack(SourcePackPayload payload)
     {
+        RefuseTarget(payload.Target, "a source pack");
         var export = app.ExportSourcePack(payload.SourceIds ?? []);
         return new { export.FileName, Base64 = Convert.ToBase64String(export.Content), export.Manifest };
     }
@@ -350,6 +408,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     /// <summary>M6 slice 1: writes a source pack where the user chooses; the page never supplies a path.</summary>
     private SaveOutcome SaveSourcePackAs(SourcePackPayload payload)
     {
+        RefuseTarget(payload.Target, "a source pack");
         if (host is null)
             throw new AppValidationException([new("host.unsupported", "This host has no native Save dialog.")], "unsupported");
         return SaveAs(app.ExportSourcePack(payload.SourceIds ?? []));
@@ -358,6 +417,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     /// <summary>M6 slice 2: a campaign pack as base64 (browser development and tests; the desktop uses the Save dialog).</summary>
     private object ExportCampaignPack(CampaignIdPayload payload)
     {
+        RefuseTarget(payload.Target, "a campaign pack");
         var export = app.ExportCampaignPack(payload.CampaignId);
         return new { export.FileName, Base64 = Convert.ToBase64String(export.Content), export.Manifest };
     }
@@ -365,6 +425,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     /// <summary>M6 slice 2: writes a campaign pack where the user chooses; the page never supplies a path.</summary>
     private SaveOutcome SaveCampaignPackAs(CampaignIdPayload payload)
     {
+        RefuseTarget(payload.Target, "a campaign pack");
         if (host is null)
             throw new AppValidationException([new("host.unsupported", "This host has no native Save dialog.")], "unsupported");
         return SaveAs(app.ExportCampaignPack(payload.CampaignId));
@@ -669,14 +730,16 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     private sealed record ContentPayload(ContentReference? Reference = null, ContentRevision? Revision = null);
 
     /// <param name="Purpose">ADR-007: <c>backup</c> (default, everything) or <c>share</c> (leaves out non-redistributable sources).</param>
-    private sealed record ExportPayload(IReadOnlyList<Guid> CharacterIds, ExportPurpose Purpose = ExportPurpose.Backup);
+    /// <param name="Target">D85: the older release to save for (<c>"0.6.0"</c>); null for an ordinary export.</param>
+    /// <param name="ChangesHash">The hash the preview returned for that target; a save must present it.</param>
+    private sealed record ExportPayload(IReadOnlyList<Guid> CharacterIds, ExportPurpose Purpose = ExportPurpose.Backup, string? Target = null, string? ChangesHash = null);
 
     /// <param name="CampaignChoices">M6 slice 2: for a campaign pack whose campaign differs from the local one.</param>
     private sealed record PackagePayload(string Base64, Dictionary<Guid, SourceChoice>? SourceChoices = null, Dictionary<Guid, SourceChoice>? CampaignChoices = null);
 
-    private sealed record SourcePackPayload(IReadOnlyList<Guid>? SourceIds);
+    private sealed record SourcePackPayload(IReadOnlyList<Guid>? SourceIds, string? Target = null, string? ChangesHash = null);
 
-    private sealed record CampaignIdPayload(Guid CampaignId);
+    private sealed record CampaignIdPayload(Guid CampaignId, string? Target = null, string? ChangesHash = null);
 
     /// <param name="Grants">The permissions the user ticked; a subset of what the extension asks for.</param>
     private sealed record ExtensionInstallPayload(Guid Token, IReadOnlyList<string>? Grants, bool Confirm = false);

@@ -1,0 +1,22 @@
+{
+  "format": "tomestack.package",
+  "formatVersion": 5,
+  "createdAt": "2026-09-24T12:00:00+00:00",
+  "appVersion": "{appVersion}",
+  "purpose": "share",
+  "characters": [
+    "c1050000-0000-4000-8000-0000000000a1"
+  ],
+  "entries": [
+    {
+      "path": "characters/c1050000-0000-4000-8000-0000000000a1.json",
+      "kind": "character",
+      "sha256": "93d9a5cc84c490c8f759e84ce06eb62c5704df16788855170121175a1396c3eb",
+      "size": 904
+    }
+  ],
+  "notices": [],
+  "omitted": [],
+  "madeFor": "0.5.0",
+  "attachmentPolicy": "PDF attachments are never included in packages; linked pages must be re-attached on the receiving machine."
+}

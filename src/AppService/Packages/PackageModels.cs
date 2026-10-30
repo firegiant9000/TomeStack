@@ -79,6 +79,20 @@ public sealed record PackageManifest
     /// </summary>
     public IReadOnlyList<SourceAttestation>? Attestations { get; init; }
 
+    /// <summary>
+    /// D85, "Save for an older TomeStack": the release this package was lowered for (<c>"0.6.0"</c>). Absent in an ordinary
+    /// export, so those bytes do not change; <see cref="AppVersion"/> stays the true maker. No format bump. A malformed value
+    /// is read as null (with a <c>package.marker-ignored</c> warning in the import preview).
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? MadeFor { get; init; }
+
+    /// <summary>Whether <paramref name="value"/> is a release string this build accepts as <see cref="MadeFor"/>: <c>x.y.z</c>, each part 1 to 4 digits.</summary>
+    public static bool IsValidMadeFor(string? value) =>
+        value is not null && value == value.Trim()
+        && System.Text.RegularExpressions.Regex.IsMatch(value, @"^[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}\z", System.Text.RegularExpressions.RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1))
+        && Version.TryParse(value, out _);
+
     public string AttachmentPolicy { get; init; } = CharacterAttachmentPolicy;
 
     public const string CharacterAttachmentPolicy = "PDF attachments are never included in packages; linked pages must be re-attached on the receiving machine.";
@@ -109,8 +123,14 @@ public sealed record SourceAttestation(Guid SourceId, string Statement, DateTime
 /// <param name="Drafts">Drafts of these sources that stay on this machine (a pack never carries them).</param>
 /// <param name="OpensIn">The oldest released TomeStack that opens the pack (D83); null when no released version does.</param>
 /// <param name="OpensInCauses">What keeps the previous minor release out; empty when it opens there. Always set on a real preview.</param>
+/// <param name="Target">D85: the older release asked for (echoed), null for an ordinary pack. <paramref name="Changes"/> and <paramref name="ChangesHash"/> describe what lowering it would change.</param>
 public sealed record SourcePackPreview(string FileName, IReadOnlyList<LicenseNotice> Sources, int Revisions, int Drafts, IReadOnlyList<Diagnostic> Warnings,
-    string? OpensIn = null, IReadOnlyList<OpensInCause>? OpensInCauses = null);
+    string? OpensIn = null, IReadOnlyList<OpensInCause>? OpensInCauses = null)
+{
+    public string? Target { get; init; }
+    public IReadOnlyList<ExportChange> Changes { get; init; } = [];
+    public string? ChangesHash { get; init; }
+}
 
 /// <summary>What <c>package.campaignPackPreview</c> would write (M6 slice 2); nothing is written.</summary>
 /// <param name="Included">Allowed sources the pack carries, with their published revisions (each passed the source-pack guard).</param>
@@ -123,7 +143,13 @@ public sealed record SourcePackPreview(string FileName, IReadOnlyList<LicenseNot
 public sealed record CampaignPackPreview(
     string FileName, Guid CampaignId, string Name, string RulesFamily,
     IReadOnlyList<LicenseNotice> Included, IReadOnlyList<LicenseNotice> Referenced, IReadOnlyList<LeftOutSource> LeftOut,
-    int Revisions, IReadOnlyList<Diagnostic> Warnings, string? OpensIn = null, IReadOnlyList<OpensInCause>? OpensInCauses = null);
+    int Revisions, IReadOnlyList<Diagnostic> Warnings, string? OpensIn = null, IReadOnlyList<OpensInCause>? OpensInCauses = null)
+{
+    /// <summary>D85: the older release asked for (echoed), null for an ordinary pack.</summary>
+    public string? Target { get; init; }
+    public IReadOnlyList<ExportChange> Changes { get; init; } = [];
+    public string? ChangesHash { get; init; }
+}
 
 /// <param name="Reason">Why it is left out, as a diagnostic (<c>pack.source-not-shareable</c>, <c>pack.source-received</c>, …).</param>
 public sealed record LeftOutSource(Guid SourceId, string Title, string Publisher, string License, Diagnostic Reason);
@@ -171,7 +197,17 @@ public sealed record OmittedRevision(ContentReference Reference, string Name, IR
 /// <param name="OpensIn">The oldest released TomeStack that opens the package (D83); null when no released version does.</param>
 /// <param name="OpensInCauses">What keeps the previous minor release out; empty when it opens there. Always set on a real preview.</param>
 public sealed record ExportPreview(ExportPurpose Purpose, string FileName, IReadOnlyList<Guid> Characters, IReadOnlyList<LicenseNotice> Included, IReadOnlyList<OmittedSource> Omitted, int GapNotes = 0, IReadOnlyList<Diagnostic>? Warnings = null,
-    string? OpensIn = null, IReadOnlyList<OpensInCause>? OpensInCauses = null);
+    string? OpensIn = null, IReadOnlyList<OpensInCause>? OpensInCauses = null)
+{
+    /// <summary>D85: the older release asked for (echoed), null for an ordinary export.</summary>
+    public string? Target { get; init; }
+
+    /// <summary>What lowering to <see cref="Target"/> changes; empty without a target.</summary>
+    public IReadOnlyList<ExportChange> Changes { get; init; } = [];
+
+    /// <summary>Hash of <see cref="Changes"/>; a save with a target must present it. Null without a target.</summary>
+    public string? ChangesHash { get; init; }
+}
 
 public enum PackageItemAction { Add, Unchanged, Replace, Conflict }
 

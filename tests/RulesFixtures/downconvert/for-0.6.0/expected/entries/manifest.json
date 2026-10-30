@@ -1,0 +1,43 @@
+{
+  "format": "tomestack.package",
+  "formatVersion": 5,
+  "createdAt": "2026-09-24T12:00:00+00:00",
+  "appVersion": "{appVersion}",
+  "purpose": "share",
+  "characters": [
+    "c1060000-0000-4000-8000-0000000000a1"
+  ],
+  "entries": [
+    {
+      "path": "characters/c1060000-0000-4000-8000-0000000000a1.json",
+      "kind": "character",
+      "sha256": "69e772fdae08fa670fcd95c1ab1ecbd6d6bd8f296cae7b85eaca1b0ccc7bc55c",
+      "size": 1217
+    },
+    {
+      "path": "content/c1060000-0000-4000-8000-0000000000e1.json",
+      "kind": "contentRevision",
+      "sha256": "e98242df33bce22fbe71eac9f5dba081f92004a165982382e97a46ccac0843ef",
+      "size": 653
+    },
+    {
+      "path": "sources/c1060000-0000-4000-8000-000000000001.json",
+      "kind": "source",
+      "sha256": "f18bab9b41de7e916f557175ada3f4c926cdd1f57e7d2c99ed8625cfd8d8872f",
+      "size": 317
+    }
+  ],
+  "notices": [
+    {
+      "sourceId": "c1060000-0000-4000-8000-000000000001",
+      "title": "Compat Homebrew A",
+      "publisher": "TomeStack project",
+      "license": "Original test fixture",
+      "redistributable": true,
+      "attribution": "Written for TomeStack tests."
+    }
+  ],
+  "omitted": [],
+  "madeFor": "0.6.0",
+  "attachmentPolicy": "PDF attachments are never included in packages; linked pages must be re-attached on the receiving machine."
+}

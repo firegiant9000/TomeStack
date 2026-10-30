@@ -436,10 +436,10 @@ public sealed partial class TomeStackApp : IDisposable
             : without with { Choices = [.. without.Choices, new ChoiceSelection(request.Source, request.ChoiceId, selected)] };
     }
 
-    public ExportResult ExportCharacters(IReadOnlyList<Guid> characterIds, ExportPurpose purpose = ExportPurpose.Backup) =>
-        _packages.Export(characterIds, purpose);
+    public ExportResult ExportCharacters(IReadOnlyList<Guid> characterIds, ExportPurpose purpose = ExportPurpose.Backup, LadderRow? target = null, string? changesHash = null) =>
+        _packages.Export(characterIds, purpose, target, changesHash);
 
-    public ExportPreview PreviewExport(IReadOnlyList<Guid> characterIds, ExportPurpose purpose) => _packages.PreviewExport(characterIds, purpose);
+    public ExportPreview PreviewExport(IReadOnlyList<Guid> characterIds, ExportPurpose purpose, LadderRow? target = null) => _packages.PreviewExport(characterIds, purpose, target);
 
     /// <summary>Import Lab L5, <c>package.preflight</c>: what a share export (package, source pack, campaign pack, sheet) would carry, omit or refuse. Writes nothing.</summary>
     public PreflightReport PackagePreflight(PreflightRequest request) => _packages.RunPreflight(request);

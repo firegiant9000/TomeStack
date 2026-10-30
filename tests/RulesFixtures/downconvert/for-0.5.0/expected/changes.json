@@ -1,0 +1,29 @@
+[
+  {
+    "entry": "characters/c1050000-0000-4000-8000-0000000000a1.json",
+    "kind": "character",
+    "id": "c1050000-0000-4000-8000-0000000000a1",
+    "name": "Compat Hero",
+    "action": "dropped",
+    "code": "package.target-drops",
+    "message": "'Compat Hero': backstory and details."
+  },
+  {
+    "entry": "characters/c1050000-0000-4000-8000-0000000000a1.json",
+    "kind": "character",
+    "id": "c1050000-0000-4000-8000-0000000000a1",
+    "name": "Compat Hero",
+    "action": "dropped",
+    "code": "package.target-drops",
+    "message": "'Compat Hero': the custom items."
+  },
+  {
+    "entry": "characters/c1050000-0000-4000-8000-0000000000a1.json",
+    "kind": "character",
+    "id": "c1050000-0000-4000-8000-0000000000a1",
+    "name": "Compat Hero",
+    "action": "dropped",
+    "code": "package.target-drops",
+    "message": "'Compat Hero': the damage resistances and immunities."
+  }
+]

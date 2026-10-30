@@ -1,0 +1,11 @@
+[
+  {
+    "entry": "characters/c1060000-0000-4000-8000-0000000000a1.json",
+    "kind": "character",
+    "id": "c1060000-0000-4000-8000-0000000000a1",
+    "name": "Compat Hero",
+    "action": "dropped",
+    "code": "package.target-drops",
+    "message": "'Compat Hero': the rounds left on 'surge'."
+  }
+]

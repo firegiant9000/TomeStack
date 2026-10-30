@@ -438,6 +438,42 @@ public class SchemaTests
         Assert.Equal("content.schema-unsupported", Assert.Single(sheet.Diagnostics).Code);
         Assert.Contains((character with { SchemaVersion = 99 }).Validate(), d => d.Code == "character.schema-unsupported");
     }
+
+    [Theory]
+    [InlineData(5)]
+    [InlineData(7)]
+    [InlineData(8)]
+    [InlineData(9)]
+    public void Package_manifest_schemas_accept_madeFor_and_still_reject_an_unknown_key(int formatVersion)
+    {
+        string ErrorsWith(Action<JsonObject> change)
+        {
+            var manifest = new JsonObject
+            {
+                ["format"] = "tomestack.package",
+                ["formatVersion"] = formatVersion,
+                ["createdAt"] = "2026-10-30T00:00:00+00:00",
+                ["appVersion"] = "0.7.0",
+                ["purpose"] = "backup",
+                ["characters"] = new JsonArray(),
+                ["entries"] = new JsonArray(),
+                ["notices"] = new JsonArray(),
+                ["omitted"] = new JsonArray(),
+                ["attachmentPolicy"] = MadeForPolicy,
+            };
+            change(manifest);
+            using var document = JsonDocument.Parse(manifest.ToJsonString());
+            return Validate("package-manifest", document.RootElement);
+        }
+
+        Assert.Equal("", ErrorsWith(_ => { }));
+        Assert.Equal("", ErrorsWith(m => m["madeFor"] = "0.6.0"));
+        Assert.NotEqual("", ErrorsWith(m => m["madeFor"] = "abc"));
+        Assert.NotEqual("", ErrorsWith(m => m["madeFor"] = "12345.0.0"));
+        Assert.NotEqual("", ErrorsWith(m => m["madeForever"] = "0.6.0"));
+    }
+
+    private const string MadeForPolicy = PackageManifest.CharacterAttachmentPolicy;
 }
 
 /// <summary>Rewrites package entries and re-signs the manifest so that only the edited content differs.</summary>
