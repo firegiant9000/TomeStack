@@ -270,6 +270,9 @@ public class RevisionHashProperties
             // Content v12 (MECH-X item 3): the itemMod is typed only from v12, so only there a null bonus or modifiers hashes like an absent key.
             if (version >= ItemModEffect.SchemaVersion && type == ItemModEffect.TypeName)
                 members = ["bonus", "modifiers"];
+            // Content v12 (MECH-X item 4): the companion is typed only from v12, so only there a null speed, attacks or resourceIds hashes like an absent key.
+            if (version >= CompanionEffect.SchemaVersion && type == CompanionEffect.TypeName)
+                members = ["speed", "attacks", "resourceIds"];
             if (members is null)
                 continue;
             foreach (var name in members.Append("text"))

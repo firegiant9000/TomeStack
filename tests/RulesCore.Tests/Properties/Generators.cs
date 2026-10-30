@@ -97,6 +97,7 @@ internal static class Generators
         [RollModeEffect.TypeName] = RollModeEffect.SchemaVersion,
         [ResponseEffect.TypeName] = ResponseEffect.SchemaVersion,
         [ItemModEffect.TypeName] = ItemModEffect.SchemaVersion,
+        [CompanionEffect.TypeName] = CompanionEffect.SchemaVersion,
     };
 
     /// <summary>
@@ -400,6 +401,13 @@ internal static class Generators
                     {
                         ["type"] = ModifierEffect.TypeName, ["id"] = "nested" + i, ["operation"] = "bonus", ["target"] = t, ["value"] = value,
                     })]))),
+            // Typed from v12, unknown (and unchanged) below. Never lists attacks or pools: those are checked by the validator, not the reader.
+            Common(CompanionEffect.TypeName,
+                from companionId in Guids
+                from label in Gen.Elements("Fixture Hound", "Fixture Hawk", "Fixture Ox", "Fixture Wisp")
+                from speed in Optional(Gen.Elements("30 ft.", "40 ft.", "fly 60 ft."))
+                select new JsonObject { ["companionId"] = companionId.ToString("D"), ["label"] = label, ["armorClass"] = "13", ["hitPointMaximum"] = "5 * LEVEL" }
+                    .With("speed", speed)),
             Common(ScaleEffect.TypeName,
                 from id in Keys
                 from label in Names

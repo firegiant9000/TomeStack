@@ -493,7 +493,7 @@ public static class DownConvert
     }
 
     /// <summary>
-    /// The 12 to 11 step: the item mod effect, and the keys v12 added (weapon bonus, spell tags, replaceable choices, payment, castsSpell).
+    /// The 12 to 11 step: the item mod and companion effects, and the keys v12 added (weapon bonus, spell tags, replaceable choices, payment, castsSpell).
     /// A revision that declares an older version carries them as inert extension data, so it is left as it is.
     /// </summary>
     private static void ContentBelowV12(Scope scope, JsonObject node, List<BelowChange> changes)
@@ -513,6 +513,9 @@ public static class DownConvert
                 {
                     case ItemModEffect.TypeName:
                         changes.Add(new(path, BelowAction.Dropped, BelowCodes.EffectUnsupported, $"'{name}': an item modification, which the older version cannot hold."));
+                        continue;
+                    case CompanionEffect.TypeName:
+                        changes.Add(new(path, BelowAction.Dropped, BelowCodes.EffectUnsupported, $"'{name}': a companion card; its attacks and pools remain as the character's own."));
                         continue;
                     case WeaponEffect.TypeName:
                         RemoveKey(effect, "bonus", path, BelowAction.Dropped, BelowCodes.WeaponBonus, $"'{name}': the weapon's bonus to hit and damage.", changes);

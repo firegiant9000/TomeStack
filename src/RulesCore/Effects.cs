@@ -1245,6 +1245,83 @@ public sealed record ItemModEffect : Effect
     }
 }
 
+/// <summary>
+/// Content schema v12 (MECH-X item 4): a companion card a feature or feat declares. Its armor class and hit point maximum are
+/// formulas on the owner's sheet; <see cref="Attacks"/> lists the ids of this revision's attack effects and
+/// <see cref="ResourceIds"/> the resource ids of its resource effects. Typed only in a v12 revision: below v12 it stays an
+/// <see cref="UnknownEffect"/>, byte for byte.
+/// </summary>
+public sealed record CompanionEffect : Effect
+{
+    public const string TypeName = "companion";
+
+    public const int SchemaVersion = ContentRevision.CompanionSchemaVersion;
+
+    /// <summary>The most attacks (and the most pools) one companion lists.</summary>
+    public const int MaxAttacks = Character.MaxCompanionAttacks;
+
+    public const int MaxResources = 5;
+
+    public override string Type => TypeName;
+
+    /// <summary>Identifies the companion within the revision; canonical lowercase form, never empty.</summary>
+    [property: JsonRequired]
+    public required Guid CompanionId { get; init; }
+
+    public required string Label { get; init; }
+
+    /// <summary>A formula for the companion's armor class.</summary>
+    public required string ArmorClass { get; init; }
+
+    /// <summary>A formula for the companion's hit point maximum.</summary>
+    public required string HitPointMaximum { get; init; }
+
+    public string? Speed { get; init; }
+
+    /// <summary>Ids (<see cref="Effect.Id"/>) of attack effects in the same revision.</summary>
+    public IReadOnlyList<string>? Attacks { get; init; }
+
+    /// <summary><see cref="ResourceEffect.ResourceId"/> keys of resource effects in the same revision.</summary>
+    public IReadOnlyList<string>? ResourceIds { get; init; }
+
+    internal static Effect FromUnknown(UnknownEffect unknown) => CompanionReads(unknown) ? VersionedEffects.Typed<CompanionEffect>(unknown) : unknown;
+
+    /// <summary>
+    /// Whether <c>companionId</c> is a canonical non-empty Guid string, <c>label</c>, <c>armorClass</c> and <c>hitPointMaximum</c> are
+    /// strings, and <c>attacks</c> and <c>resourceIds</c>, if present, are arrays of strings (any spelling of each name).
+    /// </summary>
+    private static bool CompanionReads(UnknownEffect unknown)
+    {
+        if (unknown.Raw.ValueKind != JsonValueKind.Object)
+            return false;
+        var required = 0;
+        foreach (var p in unknown.Raw.EnumerateObject())
+        {
+            if (Is(p.Name, "companionId"))
+            {
+                var s = p.Value.ValueKind == JsonValueKind.String ? p.Value.GetString() : null;
+                if (s is null || !Guid.TryParseExact(s, "D", out var g) || g == Guid.Empty || g.ToString("D") != s)
+                    return false;
+                required++;
+            }
+            else if (Is(p.Name, "label") || Is(p.Name, "armorClass") || Is(p.Name, "hitPointMaximum"))
+            {
+                if (p.Value.ValueKind != JsonValueKind.String)
+                    return false;
+                required++;
+            }
+            else if ((Is(p.Name, "attacks") || Is(p.Name, "resourceIds")) && p.Value.ValueKind != JsonValueKind.Null)
+            {
+                if (p.Value.ValueKind != JsonValueKind.Array || p.Value.EnumerateArray().Any(i => i.ValueKind != JsonValueKind.String))
+                    return false;
+            }
+        }
+        return required == 4;
+
+        static bool Is(string name, string property) => string.Equals(name, property, StringComparison.OrdinalIgnoreCase);
+    }
+}
+
 public enum WeaponCategory { Simple, Martial }
 
 public enum WeaponAttack { Melee, Ranged }
@@ -1518,6 +1595,7 @@ internal static class VersionedEffects
             [RollModeEffect.TypeName] = (RollModeEffect.SchemaVersion, (u, _) => RollModeEffect.FromUnknown(u)),
             [ResponseEffect.TypeName] = (ResponseEffect.SchemaVersion, (u, _) => ResponseEffect.FromUnknown(u)),
             [ItemModEffect.TypeName] = (ItemModEffect.SchemaVersion, (u, _) => ItemModEffect.FromUnknown(u)),
+            [CompanionEffect.TypeName] = (CompanionEffect.SchemaVersion, (u, _) => CompanionEffect.FromUnknown(u)),
         };
 
     /// <summary>
@@ -1696,7 +1774,7 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
                 RollEffect.TypeName => element.Deserialize<RollEffect>(options),
                 HitDieEffect.TypeName => element.Deserialize<HitDieEffect>(options),
                 // Typed only in revisions of their schema version (ContentRevision.OnDeserialized); older ones keep them as written.
-                ArmorEffect.TypeName or SpellcastingEffect.TypeName or SpellEffect.TypeName or WeaponEffect.TypeName or ToggleEffect.TypeName or ScaleEffect.TypeName or ItemEffect.TypeName or ToggleGroupEffect.TypeName or UpkeepEffect.TypeName or AttackEffect.TypeName or AttackRiderEffect.TypeName or ValueEffect.TypeName or RollModeEffect.TypeName or ResponseEffect.TypeName or ItemModEffect.TypeName => UnknownEffect.From(element),
+                ArmorEffect.TypeName or SpellcastingEffect.TypeName or SpellEffect.TypeName or WeaponEffect.TypeName or ToggleEffect.TypeName or ScaleEffect.TypeName or ItemEffect.TypeName or ToggleGroupEffect.TypeName or UpkeepEffect.TypeName or AttackEffect.TypeName or AttackRiderEffect.TypeName or ValueEffect.TypeName or RollModeEffect.TypeName or ResponseEffect.TypeName or ItemModEffect.TypeName or CompanionEffect.TypeName => UnknownEffect.From(element),
                 LegacyAbilityScoreIncrease or LegacyInitiativeBonus => FromSchemaVersion1(element, type, options),
                 _ => UnknownEffect.From(element),
             } ?? UnknownEffect.From(element);

@@ -110,6 +110,24 @@ public class DownConvertV12Tests
     }
 
     [Fact]
+    public void A_companion_effect_drops_as_unsupported()
+    {
+        var bite = """{"type":"attack","id":"bite","attackId":"bite","label":"Bite","kind":"melee","abilities":["str"],"damage":{"count":"1","die":"6"},"damageType":"piercing"}""";
+        var companion = """{"type":"companion","id":"c","companionId":"6a7e0c00-0000-4000-8000-000000000001","label":"Fixture Hound","armorClass":"13","hitPointMaximum":"5 * LEVEL","attacks":["bite"]}""";
+        var result = DownConvert.Below(Rev($"{bite},{companion}"), 11);
+
+        Assert.False(result.Blocked);
+        Assert.IsType<AttackEffect>(Assert.Single(result.Revision.Effects));
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(BelowCodes.EffectUnsupported, change.Code);
+        Assert.Equal(BelowAction.Dropped, change.Action);
+        Assert.Equal("effects[1]", change.Path);
+        Assert.Contains("a companion card; its attacks and pools remain as the character's own.", change.Message, StringComparison.Ordinal);
+        Assert.Equal(11, result.Revision.SchemaVersion);
+        Assert.All(ContentValidator.Validate(result.Revision, Fixtures.M1Catalog()).Errors, e => Assert.Equal("validate.source-missing", e.Code));
+    }
+
+    [Fact]
     public void A_v12_revision_with_no_v12_feature_lowers_silently()
     {
         var result = DownConvert.Below(Item(WeaponWith("")), 11);

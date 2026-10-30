@@ -63,6 +63,7 @@
     "12": [
       { "feature": "weapon.bonus", "rule": "below.weapon-bonus" },
       { "feature": "itemMod", "rule": "below.effect-unsupported" },
+      { "feature": "companion", "rule": "below.effect-unsupported" },
       { "feature": "spell.tags", "rule": "below.v12-key" },
       { "feature": "choice.replaceable", "rule": "below.v12-key" },
       { "feature": "roll.payment", "rule": "below.payment" },

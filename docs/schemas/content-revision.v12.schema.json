@@ -1520,6 +1520,60 @@
           ]
         },
         {
+          "description": "Content v12 (MECH-X item 4): a companion card on a feature, feat or other character content (never an item or a spell); at most 10 per revision. Armor class and hit point maximum are formulas on the owner's sheet. attacks holds ids of attack effects in this revision and resourceIds holds resourceId keys of resource effects in this revision; each may be listed by one companion only. In a revision older than v12 a companion is unknown and reference-only, kept byte for byte.",
+          "properties": {
+            "type": {
+              "const": "companion"
+            },
+            "companionId": {
+              "type": "string",
+              "pattern": "^(?!0{8}-0{4}-0{4}-0{4}-0{12}$)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "A lowercase GUID that is not empty; unique within the revision."
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "armorClass": {
+              "$ref": "#/$defs/formula"
+            },
+            "hitPointMaximum": {
+              "$ref": "#/$defs/formula"
+            },
+            "speed": {
+              "type": "string",
+              "maxLength": 80
+            },
+            "attacks": {
+              "type": "array",
+              "maxItems": 5,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": "Effect ids of attack effects in this revision."
+            },
+            "resourceIds": {
+              "type": "array",
+              "maxItems": 5,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": "resourceId keys of resource effects in this revision."
+            }
+          },
+          "required": [
+            "companionId",
+            "label",
+            "armorClass",
+            "hitPointMaximum"
+          ]
+        },
+        {
           "properties": {
             "type": {
               "const": "scale"
@@ -1791,7 +1845,8 @@
                   "value",
                   "rollMode",
                   "response",
-                  "itemMod"
+                  "itemMod",
+                  "companion"
                 ]
               }
             }

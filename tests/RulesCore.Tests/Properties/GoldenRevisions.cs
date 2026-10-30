@@ -67,6 +67,21 @@ internal static class GoldenRevisions
     public static string ItemModJson(int index) =>
         JsonNode.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "RulesFixtures", "golden", "item-mod-revisions.json")))!.AsArray()[index]!.ToJsonString();
 
+    /// <summary>
+    /// The hashes of the three v12 revisions of tests/RulesFixtures/golden/companion-revisions.json (MECH-X item 4: "Fixture Warden Bond",
+    /// "Fixture Hound Keeper", "Fixture Sentinel Bond"). Never update these to make a test pass.
+    /// </summary>
+    public static readonly string[] CompanionHashes =
+    [
+        "61d852a5e8119cd7e2240938b64cae30aa57c9cbfe57b5f606dd1262136ff476", // "Fixture Warden Bond"
+        "1d3e1c1ba2ae8f0368b03cb3c36e4ac3f45300fa4f37e01f25098af95f25c1b5", // "Fixture Hound Keeper"
+        "95cba4f3e9bd36841b03eae7a46a86fed6bb483ce1d9902ec737aebbff3396d6", // "Fixture Sentinel Bond"
+    ];
+
+    /// <summary>The <paramref name="index"/>th revision of the companion golden file, as written in the fixture.</summary>
+    public static string CompanionJson(int index) =>
+        JsonNode.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "RulesFixtures", "golden", "companion-revisions.json")))!.AsArray()[index]!.ToJsonString();
+
     /// <summary>The <paramref name="index"/>th revision of the choice golden file, as written in the fixture.</summary>
     public static string ChoiceJson(int index) =>
         JsonNode.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "RulesFixtures", "golden", "choice-revisions.json")))!.AsArray()[index]!.ToJsonString();

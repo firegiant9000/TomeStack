@@ -56,6 +56,12 @@ public static class ContentValidator
     /// <summary>The most other pools one roll also changes (content v11, <c>alsoChange</c>).</summary>
     public const int MaxAlsoChanges = 4;
 
+    /// <summary>The most companions one revision declares (content v12).</summary>
+    private const int MaxCompanionsPerRevision = 10;
+
+    /// <summary>The longest companion label or speed (content v12).</summary>
+    private const int MaxCompanionText = 80;
+
     /// <summary>The largest weapon bonus (content v12, <c>weapon.bonus</c>); the smallest is 0.</summary>
     internal const int MaxWeaponBonus = 10;
 
@@ -347,6 +353,13 @@ public static class ContentValidator
                     NeedV12("an item mod");
                     Error("validate.effect-malformed", $"Effect '{unreadableMod.Id}' has type '{unreadableMod.DeclaredType}' but a value or field that does not read (appliesTo must be weapon, armor or any; bonus a whole number from 0 to {ItemModEffect.MaxBonus}; modifiers a list of modifier effects); fix it before publishing.", unreadableMod.Id);
                     break;
+                // Content v12 (MECH-X item 4): from v12 a companion that stays unknown did not read (a companionId that is not a
+                // canonical non-empty Guid, a missing or non-string label, armorClass or hitPointMaximum, attacks or resourceIds
+                // that are not lists of strings). Published at a lower version it is an unsupported effect, so it blocks.
+                case UnknownEffect { DeclaredType: CompanionEffect.TypeName } unreadableCompanion when revision.SchemaVersion >= CompanionEffect.SchemaVersion:
+                    NeedV12("a companion");
+                    Error("validate.effect-malformed", $"Effect '{unreadableCompanion.Id}' has type '{unreadableCompanion.DeclaredType}' but a value or field that does not read (companionId must be a lowercase GUID that is not empty; label, armorClass and hitPointMaximum are text; attacks and resourceIds lists of ids); fix it before publishing.", unreadableCompanion.Id);
+                    break;
                 case UnknownEffect unknown:
                     // Content v11 (D43): a roll with no dice is typed only from v11, so below it the roll stays reference-only as it
                     // always did, but publishing it needs v11.
@@ -512,6 +525,29 @@ public static class ContentValidator
                     }
                     if (mod.Bonus is null && mod.Modifiers is not { Count: > 0 })
                         Warn("validate.item-mod-empty", $"Item mod '{mod.Id}' has no bonus and no modifiers, so it does nothing.", mod.Id);
+                    break;
+                case CompanionEffect companion:
+                    NeedV12("a companion");
+                    if (revision.Kind is ContentKind.Item or ContentKind.Spell)
+                        Error("validate.companion-kind", $"A companion belongs on a feature, feat or other character content; this revision is {revision.Kind.ToString().ToLowerInvariant()} content.", companion.Id);
+                    if (string.IsNullOrWhiteSpace(companion.Label) || companion.Label.Length > MaxCompanionText || companion.Speed?.Length > MaxCompanionText)
+                        Error("validate.companion-incomplete", $"Companion '{companion.Id}' needs a label, and its label and speed are at most {MaxCompanionText} characters.", companion.Id);
+                    CheckFormula(companion.ArmorClass, companion.Id, "armor class");
+                    CheckFormula(companion.HitPointMaximum, companion.Id, "hit point maximum");
+                    if (companion.Attacks is { Count: > CompanionEffect.MaxAttacks } || companion.ResourceIds is { Count: > CompanionEffect.MaxResources })
+                        Error("validate.companion-too-many", $"Companion '{companion.Id}' lists more than {CompanionEffect.MaxAttacks} attacks or {CompanionEffect.MaxResources} pools.", companion.Id);
+                    foreach (var attackId in companion.Attacks?.Distinct() ?? [])
+                    {
+                        if (!revision.Effects.OfType<AttackEffect>().Any(a => a.Id == attackId))
+                            Error("validate.companion-attack", $"Companion '{companion.Id}' lists attack '{attackId}', which this revision does not have.", companion.Id);
+                    }
+                    if (companion.Attacks is not null && companion.Attacks.Distinct().Count() != companion.Attacks.Count)
+                        Error("validate.companion-attack", $"Companion '{companion.Id}' lists an attack more than once.", companion.Id);
+                    foreach (var poolId in companion.ResourceIds?.Distinct() ?? [])
+                    {
+                        if (!revision.Effects.OfType<ResourceEffect>().Any(r => r.ResourceId == poolId))
+                            Error("validate.companion-resource", $"Companion '{companion.Id}' lists pool '{poolId}', which this revision does not have.", companion.Id);
+                    }
                     break;
                 case ResourceEffect resource:
                     needsV10 |= resource.Activation is not null;
@@ -751,6 +787,15 @@ public static class ContentValidator
             Error("validate.item-mod-duplicate", "An item is at most one mod.");
         if (revision.Effects.OfType<ItemModEffect>().Any() && revision.Effects.Any(e => e is WeaponEffect or ArmorEffect))
             Error("validate.item-mod-host", "A mod attaches to a weapon or armor; it cannot be one itself.");
+        var companions = revision.Effects.OfType<CompanionEffect>().ToList();
+        foreach (var group in companions.GroupBy(c => c.CompanionId).Where(g => g.Count() > 1))
+            Error("validate.companion-id-duplicate", $"Companion id '{group.Key}' is declared {group.Count()} times in this revision; declare each companion once.", group.Skip(1).First().Id);
+        foreach (var group in companions.SelectMany(c => (c.Attacks ?? []).Distinct().Select(a => (Companion: c, Attack: a))).GroupBy(x => x.Attack).Where(g => g.Count() > 1))
+            Error("validate.companion-attack", $"Attack '{group.Key}' is listed by {group.Count()} companions; each attack belongs to one companion.", group.Skip(1).First().Companion.Id);
+        foreach (var group in companions.SelectMany(c => (c.ResourceIds ?? []).Distinct().Select(r => (Companion: c, Pool: r))).GroupBy(x => x.Pool).Where(g => g.Count() > 1))
+            Error("validate.companion-resource", $"Pool '{group.Key}' is listed by {group.Count()} companions; each pool belongs to one companion.", group.Skip(1).First().Companion.Id);
+        if (companions.Count > MaxCompanionsPerRevision)
+            Error("validate.companion-too-many", $"This revision declares {companions.Count} companions; the most is {MaxCompanionsPerRevision}.");
         if (revision.Kind == ContentKind.Spell && !revision.Effects.OfType<SpellEffect>().Any())
             Warn("validate.spell-data-missing", "This spell has no spell data (level, lists), so no caster can use it from the sheet.");
         if (revision.Effects.Any(e => e is SpellcastingEffect or SpellEffect or WeaponEffect) && revision.SchemaVersion < SpellcastingEffect.SchemaVersion)
