@@ -81,10 +81,11 @@ public sealed partial class PackageService
             // lowered with the rest and dropped again, so a pin outside the target's set blocks (Q9). Drafts and superseded revisions may be left out.
             var pinned = characters.SelectMany(c => c.AllReferences()).DistinctBy(r => r.RevisionId)
                 .Where(r => _bundledRevisions.Contains(r.RevisionId)).Select(store.FindRevision).OfType<ContentRevision>();
-            List<ContentRevision> all = [.. revisions, .. pinned];
+            // Bundled revisions a written revision grants or offers go the same way (Q9); one only a left-out revision reaches may be left out too.
+            List<ContentRevision> all = [.. revisions, .. pinned, .. BundledReferencedBy(revisions).Where(b => pinned.All(p => p.RevisionId != b.RevisionId))];
             var superseded = DownConversion.Superseded(all);
             lowered = DownConversion.Lower(new ExportPlan(characters, all, [], [], LibraryFileName()), target, _bundledSources.Contains,
-                id => store.FindSource(id)?.Title ?? "", store, r => r.Status == RevisionStatus.Draft || superseded(r));
+                id => store.FindSource(id)?.Title ?? "", store, r => _bundledRevisions.Contains(r.RevisionId) || r.Status == RevisionStatus.Draft || superseded(r));
             characters = lowered.Plan.Characters;
             revisions = [.. lowered.Plan.Revisions.Where(r => !_bundledRevisions.Contains(r.RevisionId))];
         }
@@ -100,6 +101,14 @@ public sealed partial class PackageService
             [.. store.ListExtensions()],
             lowered);
     }
+
+    /// <summary>
+    /// D85, spec Q9: the bundled revisions that <paramref name="revisions"/> (none of them bundled) grant or offer. They are never written;
+    /// a lowered plan needs them so the bundled check can see a grant that names one the target does not have.
+    /// </summary>
+    private List<ContentRevision> BundledReferencedBy(IEnumerable<ContentRevision> revisions) =>
+        [.. revisions.SelectMany(DownConversion.ReferencesOf).DistinctBy(r => r.RevisionId)
+            .Where(r => _bundledRevisions.Contains(r.RevisionId)).Select(store.FindRevision).OfType<ContentRevision>()];
 
     private string LibraryFileName() =>
         $"TomeStack-full-backup-{time.GetUtcNow().ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)}.tomestack.zip";

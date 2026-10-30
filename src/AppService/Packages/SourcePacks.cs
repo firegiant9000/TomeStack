@@ -45,10 +45,17 @@ public sealed partial class PackageService
     /// D85: a pack's revisions lowered for <paramref name="target"/>, or null without one. A pack carries no characters, so a
     /// superseded revision whose blocker nothing written needs is left out (<see cref="DownConversion.Superseded"/>); the newest never is.
     /// </summary>
-    private LoweredPlan? LowerPack(List<ContentRevision> revisions, string fileName, LadderRow? target) =>
-        target is null
-            ? null
-            : DownConversion.Lower(new ExportPlan([], revisions, [], [], fileName), target, _bundledSources.Contains, id => store.FindSource(id)?.Title ?? "", store, DownConversion.Superseded(revisions));
+    private LoweredPlan? LowerPack(List<ContentRevision> revisions, string fileName, LadderRow? target)
+    {
+        if (target is null)
+            return null;
+        // Spec Q9: a bundled revision that a written revision grants or offers must be in the target's set; it is checked, never written.
+        var bundled = BundledReferencedBy(revisions);
+        var superseded = DownConversion.Superseded(revisions);
+        var lowered = DownConversion.Lower(new ExportPlan([], [.. revisions, .. bundled], [], [], fileName), target, _bundledSources.Contains,
+            id => store.FindSource(id)?.Title ?? "", store, r => _bundledRevisions.Contains(r.RevisionId) || superseded(r));
+        return lowered with { Plan = lowered.Plan with { Revisions = [.. lowered.Plan.Revisions.Where(r => !_bundledRevisions.Contains(r.RevisionId))] } };
+    }
 
     /// <summary>A blocked plan, or a save whose <paramref name="changesHash"/> is not the list that was previewed, writes nothing (spec section 7).</summary>
     internal static void RequireConfirmed(LoweredPlan lowered, string? changesHash)

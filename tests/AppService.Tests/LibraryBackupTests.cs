@@ -977,6 +977,49 @@ public class LibraryBackupTests
     }
 
     [Fact]
+    public void Backup_blocks_on_a_grant_of_a_bundled_revision_outside_the_target_set()
+    {
+        using var temp = new TempApp();
+        var srd = temp.App.ListSources().First(s => s.Title.StartsWith("System Reference Document 5.1", StringComparison.Ordinal));
+        var bundled = temp.App.Store.ListRevisions().First(r => r.Provenance.SourceId == srd.Id && r.Status == RevisionStatus.Published);
+        StoreCompat(temp.App, id => [Compat(id, 1) with
+        {
+            Effects = [new GrantEffect { Id = "gives", Grant = GrantKind.Content, Content = new ContentReference(bundled.ContentId, bundled.RevisionId), Level = 1 }],
+        }]);
+        var outside = With060Bundled() with { BundledRevisionIds = new HashSet<Guid>() };
+        var inside = With060Bundled() with { BundledRevisionIds = new HashSet<Guid> { bundled.RevisionId } };
+
+        var preview = temp.App.PreviewLibraryBackup(outside);
+
+        var blocks = preview.Changes.Where(c => c.Action == "blocks" && c.Message.StartsWith("'Compat Steady Hands'", StringComparison.Ordinal)).ToList();
+        Assert.Equal($"'Compat Steady Hands' (Compat Homebrew A) uses '{bundled.Name}' from the bundled SRD 5.1 pack, which TomeStack 0.6.0 does not have. Update the receiver's TomeStack; this content cannot be copied into the file.", Assert.Single(blocks).Message);
+        Assert.Throws<AppValidationException>(() => temp.App.WriteLibraryBackup(new MemoryStream(), outside, preview.ChangesHash));
+
+        var fine = temp.App.PreviewLibraryBackup(inside);
+        Assert.DoesNotContain(fine.Changes, c => c.Action == "blocks" && c.Message.StartsWith("'Compat Steady Hands'", StringComparison.Ordinal));
+        var path = TempFile();
+        try
+        {
+            BackupFor(temp.App, path, inside, fine.ChangesHash);
+            Assert.False(ZipHas(path, $"content/{bundled.RevisionId:D}.json"));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Backup_command_refuses_a_payload_that_is_not_an_object()
+    {
+        using var temp = new TempApp();
+        var dispatcher = new CommandDispatcher(temp.App);
+
+        Assert.Equal("bad-request", ErrorCode(dispatcher, "library.backupPreview", "0.6.0"));
+        Assert.Equal("bad-request", ErrorCode(dispatcher, "library.backupPreview", 6));
+    }
+
+    [Fact]
     public void Backup_save_requires_matching_changesHash()
     {
         using var temp = new TempApp();

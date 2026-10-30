@@ -660,9 +660,9 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     private object ApplyImport(PackagePayload payload) =>
         app.ApplyImport(Convert.FromBase64String(payload.Base64), payload.SourceChoices, payload.CampaignChoices);
 
-    /// <summary>The payload when the caller sent an object, else <c>new T()</c> (a command whose every field is optional).</summary>
+    /// <summary>The payload object, or <c>new T()</c> when the caller sent none (a command whose every field is optional); anything else that is not an object is refused like any malformed payload.</summary>
     private static T OptionalPayload<T>(JsonElement? payload) where T : new() =>
-        payload is { ValueKind: JsonValueKind.Object } ? Payload<T>(payload) : new T();
+        payload is null or { ValueKind: JsonValueKind.Null or JsonValueKind.Undefined } ? new T() : Payload<T>(payload);
 
     private static T Payload<T>(JsonElement? payload) =>
         payload is { ValueKind: JsonValueKind.Object } element

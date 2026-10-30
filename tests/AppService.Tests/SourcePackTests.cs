@@ -114,31 +114,86 @@ public class SourcePackTests
     }
 
     [Fact]
-    public void Source_pack_leaves_out_a_chain_of_superseded_blocked_revisions_one_step_at_a_time()
+    public void Source_pack_keeps_a_chain_of_blocked_revisions_that_a_written_revision_reaches()
     {
         using var temp = new TempApp();
-        // A (superseded, blocked) is granted only by B (superseded, blocked, nothing grants B); C is the newest of B's content and fine.
-        // A stays only while B is written, so B goes first and then A: the fixed point takes two rounds.
+        // C (newest, written) grants B, and B grants A; A and B are superseded and blocked. C is written, so B stays (round 1),
+        // and B is then written, so A stays (round 2): the fixed point takes two rounds and neither is left out.
         var source = StoreCompat(temp, id =>
         [
             Compat(id, 1, blocker: true),
             Compat(id, 2),
-            Compat(id, 5, blocker: true, contentId: CompatOtherContent) with
-            {
-                Effects = [new GrantEffect { Id = "gives", Grant = GrantKind.Content, Content = new ContentReference(CompatContent, CompatRevision(1)), Level = 1 },
-                    new ToggleEffect { Id = "form", ToggleId = "form", Label = "Form", Cost = "1", ResourceId = "focus" }],
-            },
+            Granting(Compat(id, 5, blocker: true, contentId: CompatOtherContent), CompatContent, 1),
             Compat(id, 6, contentId: CompatOtherContent),
+            Granting(Compat(id, 8, contentId: CompatThirdContent), CompatOtherContent, 5),
         ]);
 
         var preview = temp.App.PreviewSourcePack([source.Id], For060);
 
-        var left = preview.Changes.Where(c => c.Action == "leftOut").Select(c => c.Id).ToList();
-        Assert.Contains(CompatRevision(1), left);
-        Assert.Contains(CompatRevision(5), left);
+        Assert.DoesNotContain(preview.Changes, c => c.Action == "leftOut");
+        var blocked = preview.Changes.Where(c => c.Action == "blocks").Select(c => c.Id).ToHashSet();
+        Assert.Contains(CompatRevision(1), blocked);
+        Assert.Contains(CompatRevision(5), blocked);
+        Assert.Throws<AppValidationException>(() => temp.App.ExportSourcePack([source.Id], For060, preview.ChangesHash));
+    }
+
+    [Fact]
+    public void Source_pack_leaves_out_a_chain_of_superseded_blocked_revisions_nothing_written_reaches()
+    {
+        using var temp = new TempApp();
+        // A is granted only by B, and B only by C; all three are superseded and blocked, and nothing written refers to C.
+        var source = StoreCompat(temp, id =>
+        [
+            Compat(id, 1, blocker: true),
+            Compat(id, 2),
+            Granting(Compat(id, 5, blocker: true, contentId: CompatOtherContent), CompatContent, 1),
+            Compat(id, 6, contentId: CompatOtherContent),
+            Granting(Compat(id, 7, blocker: true, contentId: CompatThirdContent), CompatOtherContent, 5),
+            Compat(id, 8, contentId: CompatThirdContent),
+        ]);
+
+        var preview = temp.App.PreviewSourcePack([source.Id], For060);
+
+        Assert.Equal([CompatRevision(1), CompatRevision(5), CompatRevision(7)], preview.Changes.Where(c => c.Action == "leftOut").Select(c => c.Id).Order());
         Assert.DoesNotContain(preview.Changes, c => c.Action == "blocks");
         var export = temp.App.ExportSourcePack([source.Id], For060, preview.ChangesHash);
-        Assert.DoesNotContain(export.Manifest.Entries, e => e.Path == $"content/{CompatRevision(1):D}.json" || e.Path == $"content/{CompatRevision(5):D}.json");
+        Assert.Equal([CompatRevision(2), CompatRevision(6), CompatRevision(8)], export.Manifest.RevisionOrder!.Order());
+    }
+
+    private static readonly Guid CompatThirdContent = Guid.Parse("c3000000-0000-4000-8000-000000000003");
+
+    private static ContentRevision Granting(ContentRevision revision, Guid contentId, int revisionNumber) =>
+        revision with { Effects = [.. revision.Effects, new GrantEffect { Id = "gives", Grant = GrantKind.Content, Content = new ContentReference(contentId, CompatRevision(revisionNumber)), Level = 1 }] };
+
+    private static ContentRevision BundledSrd(TempApp temp)
+    {
+        var srd = temp.App.ListSources().First(s => s.Title.StartsWith("System Reference Document 5.1", StringComparison.Ordinal));
+        return temp.App.Store.ListRevisions().First(r => r.Provenance.SourceId == srd.Id && r.Status == RevisionStatus.Published);
+    }
+
+    [Fact]
+    public void Source_pack_blocks_on_a_grant_of_a_bundled_revision_outside_the_target_set()
+    {
+        using var temp = new TempApp();
+        var bundled = BundledSrd(temp);
+        var source = StoreCompat(temp, id => [Compat(id, 1) with
+        {
+            Effects = [new GrantEffect { Id = "gives", Grant = GrantKind.Content, Content = new ContentReference(bundled.ContentId, bundled.RevisionId), Level = 1 }],
+        }]);
+        var outside = For060 with { BundledRevisionIds = new HashSet<Guid>() };
+        var inside = For060 with { BundledRevisionIds = new HashSet<Guid> { bundled.RevisionId } };
+
+        var preview = temp.App.PreviewSourcePack([source.Id], outside);
+
+        var line = Assert.Single(preview.Changes, c => c.Action == "blocks");
+        Assert.Equal($"'Compat Steady Hands' (Compat Homebrew A) uses '{bundled.Name}' from the bundled SRD 5.1 pack, which TomeStack 0.6.0 does not have. Update the receiver's TomeStack; this content cannot be copied into the file.", line.Message);
+        Assert.Throws<AppValidationException>(() => temp.App.ExportSourcePack([source.Id], outside, preview.ChangesHash));
+
+        var fine = temp.App.PreviewSourcePack([source.Id], inside);
+        Assert.DoesNotContain(fine.Changes, c => c.Action == "blocks");
+        var export = temp.App.ExportSourcePack([source.Id], inside, fine.ChangesHash);
+        Assert.DoesNotContain(export.Manifest.RevisionOrder!, id => id == bundled.RevisionId);
+        Assert.DoesNotContain(export.Manifest.Entries, e => e.Path == $"content/{bundled.RevisionId:D}.json");
     }
 
     [Fact]

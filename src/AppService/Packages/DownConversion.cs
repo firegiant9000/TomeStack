@@ -215,12 +215,15 @@ public static class DownConversion
     }
 
     /// <summary>The revision ids a revision refers to through <c>grant.content</c> and <c>choice.options</c>, the only two fields that hold them.</summary>
-    private static IEnumerable<Guid> RefsOf(ContentRevision revision) =>
+    private static IEnumerable<Guid> RefsOf(ContentRevision revision) => ReferencesOf(revision).Select(r => r.RevisionId);
+
+    /// <summary>The revisions a revision grants or offers (<c>grant.content</c>, <c>choice.options</c>), as references.</summary>
+    internal static IEnumerable<ContentReference> ReferencesOf(ContentRevision revision) =>
         revision.Effects.SelectMany(e => e switch
         {
-            GrantEffect { Content: { } c } => [c.RevisionId],
-            ChoiceEffect ch => ch.Options.Select(o => o.RevisionId),
-            _ => [],
+            GrantEffect { Content: { } c } => [c],
+            ChoiceEffect ch => ch.Options,
+            _ => (IEnumerable<ContentReference>)[],
         });
 
     private static ContentOutcome LowerContent(PackageService.ExportPlan plan, LadderRow target, Func<Guid, bool> isBundledSource,
@@ -273,9 +276,16 @@ public static class DownConversion
                 var reference = new ContentReference(r.ContentId, r.RevisionId);
                 var user = plan.Characters.FirstOrDefault(c => c.AllReferences().Contains(reference));
                 const string tail = "Update the receiver's TomeStack; this content cannot be copied into the file.";
-                var message = user is null
-                    ? $"'{r.Name}' from the bundled {title} pack is not in TomeStack {release}. {tail}"
-                    : $"'{user.Name}' uses '{r.Name}' from the bundled {title} pack, which TomeStack {release} does not have. {tail}";
+                // A written revision that grants or offers it blocks the same way (spec Q9): the sentence names that revision.
+                var referrer = user is null
+                    ? revisions.FirstOrDefault(x => !isBundledSource(x.Provenance.SourceId) && RefsOf(x).Contains(r.RevisionId))
+                    : null;
+                var from = referrer is null ? "" : sourceTitle(referrer.Provenance.SourceId) is { Length: > 0 } rs ? $"'{referrer.Name}' ({rs})" : $"'{referrer.Name}'";
+                var message = user is not null
+                    ? $"'{user.Name}' uses '{r.Name}' from the bundled {title} pack, which TomeStack {release} does not have. {tail}"
+                    : referrer is not null
+                        ? $"{from} uses '{r.Name}' from the bundled {title} pack, which TomeStack {release} does not have. {tail}"
+                        : $"'{r.Name}' from the bundled {title} pack is not in TomeStack {release}. {tail}";
                 Note(r, Line(r, "blocks", BlockedCode, message), message);
                 continue;
             }
