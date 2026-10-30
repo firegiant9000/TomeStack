@@ -500,13 +500,15 @@ public static class DownConversion
         var kept = revisions.Where(r => !moved.ContainsKey(r.RevisionId))
             .Select(r => ReferencesOf(r).Any(x => moved.ContainsKey(x.RevisionId)) ? r with { Effects = [.. r.Effects.Select(Rewrite)] } : r).ToList();
 
-        var swaps = copies.Where(c => moved.ContainsKey(c.RevisionId)).Select(c => (From: c.Reference, To: new ContentReference(c.ContentId, moved[c.RevisionId]))).ToList();
+        // One map for every closure, one pass per character: only the copies a character actually holds are swapped.
+        var swaps = copies.Where(c => moved.ContainsKey(c.RevisionId)).ToDictionary(c => c.Reference, c => new ContentReference(c.ContentId, moved[c.RevisionId]));
         var rewritten = characters.Select(character =>
         {
-            if (!MentionsAny(character, moved.Keys))
+            var held = HeldReferences(character).Where(swaps.ContainsKey).ToList();
+            if (held.Count == 0)
                 return character;
-            foreach (var (from, to) in swaps)
-                character = character.ReplaceReference(from, to);
+            foreach (var from in held)
+                character = character.ReplaceReference(from, swaps[from]);
             return Deduplicated(character);
         }).ToList();
         return new(kept, rewritten, repinned, warnings);
@@ -519,8 +521,10 @@ public static class DownConversion
         var found = new Dictionary<Guid, ContentRevision>();
         foreach (var member in members)
         {
-            var original = catalog.FindRevision(new ContentReference(member.ContentId, markers[member.RevisionId].RevisionId));
+            var marker = markers[member.RevisionId];
+            var original = catalog.FindRevision(new ContentReference(member.ContentId, marker.RevisionId));
             if (original is null || original.Status != RevisionStatus.Published || isBundledSource(original.Provenance.SourceId)
+                || original.SchemaVersion != marker.SchemaVersion
                 || original.ContentId != member.ContentId || original.Provenance.SourceId != member.Provenance.SourceId)
                 return null;
             found[member.RevisionId] = original;
@@ -537,14 +541,14 @@ public static class DownConversion
         return members.All(m => again[found[m.RevisionId].RevisionId] == m.RevisionId) ? found : null;
     }
 
-    private static bool MentionsAny(Character character, IEnumerable<Guid> revisionIds)
-    {
-        var ids = revisionIds.ToHashSet();
-        return character.AllReferences().Any(r => ids.Contains(r.RevisionId))
-            || character.CrossFamilyExceptions.Any(e => ids.Contains(e.Content.RevisionId))
-            || character.CampaignExceptions.Any(e => ids.Contains(e.Content.RevisionId))
-            || (character.Play.Concentration is { } c && ids.Contains(c.Spell.RevisionId));
-    }
+    /// <summary>Every revision a character refers to, wherever <see cref="Character.ReplaceReference"/> looks (AllReferences omits choice sources and exceptions).</summary>
+    private static IEnumerable<ContentReference> HeldReferences(Character character) =>
+        character.AllReferences()
+            .Concat(character.Choices.Select(c => c.Source))
+            .Concat(character.CrossFamilyExceptions.Select(e => e.Content))
+            .Concat(character.CampaignExceptions.Select(e => e.Content))
+            .Concat(character.Play.Concentration is { } c ? [c.Spell] : [])
+            .Distinct();
 
     /// <summary>After a re-pin a character that held both a copy and its original holds the original once (pins, classes, choices, exceptions).</summary>
     private static Character Deduplicated(Character character) => character with
