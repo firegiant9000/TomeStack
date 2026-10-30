@@ -289,6 +289,29 @@ it('Use on an action with alsoChange sends useAction stamped with the view (D43 
   expect(vi.mocked(client.play).mock.calls[0]?.[1]).toEqual({ action: 'useAction', contentId: 'c-gather', rollId: 'gather-roll', expectedUpdatedAt: '2026-10-03T00:00:00Z' });
 });
 
+it('a second press of a paying Use while the first is being saved is dropped; a later press goes through', async () => {
+  const user = userEvent.setup();
+  const ref = { contentId: 'c-gather', revisionId: 'r-gather' };
+  const pools = [{ content: ref, contentName: 'Fixture Gatherer', effectId: 'e-focus', resourceId: 'focus', label: 'Fixture focus', maximum: 5, spent: 0, current: 5, trace: [], warnings: [], automation: 'automatic', recoveries: [] }];
+  const gatherEffect = { id: 'gather', rollId: 'gather-roll', type: 'roll', automation: 'automatic', label: 'Gather', activation: 'action', resourceId: 'focus', cost: 1, available: true };
+  const shown = view({ resources: pools, features: [{ content: ref, name: 'Fixture Gatherer', kind: 'feature', origin: {}, automation: 'automatic', diagnostics: [], effects: [gatherEffect] }] } as never);
+  let release: (v: typeof shown) => void = () => undefined;
+  vi.mocked(client.play).mockReset();
+  vi.mocked(client.play).mockReturnValueOnce(new Promise((resolve) => { release = resolve as typeof release; }) as never);
+  vi.mocked(client.play).mockResolvedValue(shown);
+  const changed = vi.fn();
+  render(<CharacterSheet view={shown} onChanged={changed} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+  const use = screen.getByRole('button', { name: /^Use Gather/ });
+  await user.click(use);
+  await user.click(use);
+  expect(client.play).toHaveBeenCalledTimes(1);
+  release(shown);
+  await waitFor(() => expect(changed).toHaveBeenCalled());
+  const before = vi.mocked(client.play).mock.calls.length;
+  await user.click(screen.getByRole('button', { name: /^Use Gather/ }));
+  await waitFor(() => expect(client.play).toHaveBeenCalledTimes(before + 1));
+});
+
 it('Pay on the Last roll sends useAction stamped with the view, once (MECH-X item 1, S6)', async () => {
   const user = userEvent.setup();
   const ref = { contentId: 'c-fury', revisionId: 'r-fury' };

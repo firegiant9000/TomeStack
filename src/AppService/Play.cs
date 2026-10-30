@@ -435,11 +435,7 @@ public sealed partial class TomeStackApp
         if (payment.Kind == PaymentKind.Slot)
             return 1;
         if (roll.Cost is not null && calculated.Cost is null)
-        {
-            var failure = sheet.Diagnostics.FirstOrDefault(d => d.Code == "effect.invalid-formula" && d.Content == reference && d.EffectId == roll.Id)
-                ?? new Diagnostic("effect.invalid-formula", $"The cost of roll '{roll.Id}' could not be calculated.", reference, roll.Id);
-            throw new AppValidationException([failure], failure.Code);
-        }
+            throw CostNotCalculated(sheet, reference, roll.Id, "roll");
         var amount = calculated.Cost ?? 0;
         if (calculated.PerUnit is { } perUnit)
         {
@@ -452,6 +448,14 @@ public sealed partial class TomeStackApp
         return amount;
     }
 
+    /// <summary>The refusal for a cost formula that did not calculate: the sheet's own <c>effect.invalid-formula</c> diagnostic for that content and effect.</summary>
+    private static AppValidationException CostNotCalculated(CharacterSheet sheet, ContentReference reference, string effectId, string noun)
+    {
+        var failure = sheet.Diagnostics.FirstOrDefault(d => d.Code == "effect.invalid-formula" && d.Content == reference && d.EffectId == effectId)
+            ?? new Diagnostic("effect.invalid-formula", $"The cost of {noun} '{effectId}' could not be calculated.", reference, effectId);
+        return new AppValidationException([failure], failure.Code);
+    }
+
     /// <summary>
     /// MECH-X item 1 (R36): <c>useAction</c> of a feature attack by its effect id. Only a paying attack that is available can be used
     /// here (an attack with a pool cost spends through its roll's Spend button, unchanged); the payment is made through <see cref="Pay"/>.
@@ -461,6 +465,8 @@ public sealed partial class TomeStackApp
         label = $"use {attack.Name}";
         if (attack.Payment is not { } payment || !attack.Available)
             throw new AppValidationException([new("use.unavailable", $"Attack '{attack.EffectId}' cannot be used now.", attack.Item, attack.EffectId)], "use.unavailable");
+        if (payment.Kind == PaymentKind.HitPoints && attack.Cost is null)
+            throw CostNotCalculated(sheet, attack.Item, attack.EffectId, "attack");
         var amount = payment.Kind == PaymentKind.Slot ? 1 : attack.Cost ?? 0;
         if (amount <= 0)
             throw new AppValidationException([new("use.unavailable", $"Using '{attack.EffectId}' would pay nothing.", attack.Item, attack.EffectId)], "use.unavailable");

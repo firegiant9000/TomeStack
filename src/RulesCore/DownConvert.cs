@@ -464,7 +464,7 @@ public static class DownConvert
                 _ => [],
             };
             // Below v11 only a typed effect holds its v11 keys as inert extension data; an untyped one is written back as it is.
-            var typed = i < revision.Effects.Count && revision.Effects[i] is not UnknownEffect;
+            var typed = scope.Origin[i] < revision.Effects.Count && revision.Effects[scope.Origin[i]] is not UnknownEffect;
             if (keys.Length > 0 && (declaresV11 || typed))
             {
                 var done = new HashSet<string>(StringComparer.Ordinal);

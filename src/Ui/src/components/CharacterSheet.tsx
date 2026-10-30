@@ -581,6 +581,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   }, []);
   const started = useRef(0);
   const running = useRef(0);
+  const payingRef = useRef(new Set<string>()); // useActions in flight, by content and roll: a second press of one would carry the stamp the first wrote and pay again
   const [inFlight, setInFlight] = useState(false); // `running > 0`, for the render: the service's Undo waits for in-flight changes
   const shownView = useRef(view);
   useEffect(() => {
@@ -637,6 +638,13 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   }
   /** Resolves true when the play change was applied or timed out (outcome unknown), and false when it was refused or failed (the error has gone to `onError`). */
   async function act(action: PlayAction): Promise<boolean> {
+    // A second press of the same Use while the first is still being saved is dropped (reported as applied: the first one's reply
+    // decides). Another action's Use still goes through.
+    const paying = action.action === 'useAction' ? `${action.contentId}/${action.rollId}` : undefined;
+    if (paying !== undefined) {
+      if (payingRef.current.has(paying)) return true;
+      payingRef.current.add(paying);
+    }
     setUndo(undefined); // an offered Undo is withdrawn at once, so it cannot run in between this change and its reply
     const mine = ++started.current;
     const startedWhileRunning = running.current > 0;
@@ -665,6 +673,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
       // Spend stays used and a second press cannot spend twice. A service refusal is certain, so it gives the button back.
       return error instanceof TomeStackError && error.code === 'timeout';
     } finally {
+      if (paying !== undefined) payingRef.current.delete(paying);
       running.current -= 1;
       setInFlight(running.current > 0);
     }

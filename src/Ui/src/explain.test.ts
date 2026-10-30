@@ -122,6 +122,17 @@ describe('attackSteps', () => {
     expect(explainSteps(trace.slice(2, 3), 'attack')).toEqual(['Blade: +2 to hit (weapon)']);
   });
 
+  it('splits a weapon mod: the to-hit step stays with to-hit, the damage (mod) step goes with damage', () => {
+    const trace = [
+      step('base', 'Dexterity modifier', 3, rules, 3),
+      step('add', 'Proficiency bonus', 5, rules, 2),
+      step('add', 'Whetstone: +1 to hit (mod)', 6, content('Whetstone'), 1),
+      step('add', 'Whetstone: +1 damage (mod)', 6, content('Whetstone'), 1),
+    ];
+    expect(attackSteps(trace, 'toHit')).toEqual([trace[0], trace[1], trace[2]]);
+    expect(attackSteps(trace, 'damage')).toEqual([trace[0], trace[3]]);
+  });
+
   it('treats a feature-attack damage step (set, no amount, starts "Damage ") as damage', () => {
     const trace = [step('base', 'Ability modifier', 3, rules, 3), step('add', 'Proficiency bonus', 5, rules, 2), step('set', 'Damage 1d8 slashing', 5, rules)];
     expect(attackSteps(trace, 'damage')).toEqual([trace[0], trace[2]]);

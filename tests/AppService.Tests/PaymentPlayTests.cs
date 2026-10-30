@@ -69,10 +69,13 @@ public class PaymentPlayTests
         "{\"type\":\"spell\",\"id\":\"s\",\"level\":2,\"lists\":[\"fixture-arcane\"],\"attack\":\"none\",\"save\":\"dex\"" + (dice.Length == 0 ? "" : ",\"dice\":\"" + dice + "\"") + "}";
 
     /// <summary>The Rite, a clashing content and the sparks, installed; a level 5 Arcanist (plus Oathbinder levels) with the given play state. Stamps move on every write.</summary>
-    private static (TempApp Temp, Guid Id) Caster(PlayState? play = null, int oathbinderLevels = 0, bool clash = true)
+    private static (TempApp Temp, Guid Id) Caster(PlayState? play = null, int oathbinderLevels = 0, bool clash = true, bool badCostAttack = false)
     {
         var temp = new TempApp(time: new TickingTime(TempApp.Now));
-        temp.App.Store.AddRevision(Revision(RiteId, RiteRevision, "feature", "Fixture Payment Rite", RiteEffects));
+        var riteEffects = badCostAttack
+            ? RiteEffects + ",{\"type\":\"attack\",\"id\":\"badbolt\",\"attackId\":\"badbolt\",\"label\":\"Bad Bolt\",\"kind\":\"ranged\",\"abilities\":[\"int\"],\"damage\":{\"count\":\"1\",\"die\":\"6\"},\"damageType\":\"fire\",\"cost\":\"1 + SCALE.nonesuch\",\"payment\":{\"kind\":\"hitPoints\"}}"
+            : RiteEffects;
+        temp.App.Store.AddRevision(Revision(RiteId, RiteRevision, "feature", "Fixture Payment Rite", riteEffects));
         temp.App.Store.AddRevision(Revision(ClashId, ClashRevision, "feature", "Fixture Rite Clash", ClashEffects));
         temp.App.Store.AddRevision(Revision(SparkId, SparkRevision, "spell", "Fixture Rite Spark", SparkEffect("2d6")));
         temp.App.Store.AddRevision(Revision(QuietId, QuietRevision, "spell", "Fixture Quiet Spark", SparkEffect("")));
@@ -224,6 +227,20 @@ public class PaymentPlayTests
         Assert.Equal(10, view.Sheet.HitPoints!.Current);
         Assert.Equal("use Bolt", view.UndoLabel);
         Assert.Equal(12, Undo(temp, id).Sheet.HitPoints!.Current);
+    }
+
+    [Fact]
+    public void A_hit_point_paying_feature_attack_with_an_uncomputable_cost_is_refused_with_the_formula_diagnostic()
+    {
+        var (temp, id) = Caster(new PlayState { CurrentHitPoints = 12 }, badCostAttack: true);
+        using var _ = temp;
+        var before = Stored(temp, id);
+
+        var refused = Refused(() => Use(temp, id, "badbolt"));
+
+        Assert.Equal("effect.invalid-formula", refused.Code);
+        Assert.Equal("effect.invalid-formula", refused.Problems[0].Code);
+        Assert.Equal(before, Stored(temp, id));
     }
 
     [Fact]
