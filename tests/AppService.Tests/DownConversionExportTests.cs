@@ -634,6 +634,52 @@ public class DownConversionExportTests
     }
 
     [Fact]
+    public void Forged_marker_is_not_trusted_at_export()
+    {
+        var other = Guid.Parse("c100e000-0000-4000-8000-0000000000ee");
+        var forged = V11Feature() with
+        {
+            Extensions = new() { [DownConversion.MarkerKey] = JsonDocument.Parse($$"""{"revisionId":"{{other}}","schemaVersion":11}""").RootElement.Clone() },
+        };
+
+        var copy = Assert.Single(LowerFor(Row("0.6.0"), Hero(c => c), forged).Plan.Revisions);
+
+        Assert.Equal(new DownConvertedFrom(FeatureRevision, 11), DownConversion.ReadMarker(copy));
+        Assert.Equal(DownConversion.CopyId(FeatureRevision, 10, DownConversion.CanonicalBytes(copy)), copy.RevisionId);
+        Assert.Equal((FeatureRevision, 11), DownConversion.VerifiedRoot(forged));
+        Assert.Equal((FeatureRevision, 11), DownConversion.VerifiedRoot(copy));
+    }
+
+    [Fact]
+    public void Lower_is_independent_of_plan_order()
+    {
+        var feature = V11Feature();
+        var path = V9Path(PathContent, PathRevision, GrantsFeature());
+
+        var forward = LowerFor(Row("0.6.0"), Hero(c => c), feature, path).Plan.Revisions;
+        var reversed = LowerFor(Row("0.6.0"), Hero(c => c), path, feature).Plan.Revisions;
+
+        Assert.Equal(forward.Select(r => r.RevisionId).Order(), reversed.Select(r => r.RevisionId).Order());
+        Assert.Equal(PackageService.Json(forward[0]), PackageService.Json(reversed[1]));
+        Assert.Equal(PackageService.Json(forward[1]), PackageService.Json(reversed[0]));
+    }
+
+    [Fact]
+    public void Copy_of_a_copy_collapses_to_the_root_with_a_cascade_parent()
+    {
+        var feature = V11Feature();
+        var path = V9Path(PathContent, PathRevision, GrantsFeature());
+        var first = LowerFor(Row("0.6.0"), Hero(c => c), feature, path).Plan.Revisions;
+
+        var viaCopy = LowerFor(Row("0.5.0"), Hero(c => c), [.. first]).Plan.Revisions;
+        var direct = LowerFor(Row("0.5.0"), Hero(c => c), feature, path).Plan.Revisions;
+
+        Assert.Equal(new DownConvertedFrom(PathRevision, 9), DownConversion.ReadMarker(viaCopy[1]));
+        Assert.Equal(direct.Select(r => r.RevisionId), viaCopy.Select(r => r.RevisionId));
+        Assert.Equal(PackageService.Json(direct[1]), PackageService.Json(viaCopy[1]));
+    }
+
+    [Fact]
     public void ReadMarker_returns_null_for_any_malformed_shape()
     {
         static ContentRevision With(string json) => V11Feature() with { Extensions = new() { [DownConversion.MarkerKey] = JsonDocument.Parse(json).RootElement.Clone() } };

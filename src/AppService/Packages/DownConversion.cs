@@ -174,7 +174,9 @@ public static class DownConversion
             if (change.Path != $"play.toggles[{i}].roundsLeft")
                 continue;
             var id = toggles[i].ToggleId;
-            var label = revisions.SelectMany(r => r.Effects).OfType<ToggleEffect>().FirstOrDefault(t => t.ToggleId == id)?.Label;
+            var contentId = toggles[i].ContentId;
+            var label = (revisions.Where(r => r.ContentId == contentId).SelectMany(r => r.Effects).OfType<ToggleEffect>().FirstOrDefault(t => t.ToggleId == id)
+                ?? revisions.SelectMany(r => r.Effects).OfType<ToggleEffect>().FirstOrDefault(t => t.ToggleId == id))?.Label;
             return label is null ? change.Message : change.Message.Replace($"'{id}'", $"'{label}'", StringComparison.Ordinal);
         }
         return change.Message;
@@ -219,7 +221,6 @@ public static class DownConversion
         var overlay = new OverlayCatalog(catalog, revisions);
         var lowered = new Dictionary<Guid, ContentRevision>();
         var own = new HashSet<Guid>();
-        var kept = new HashSet<Guid>();
 
         ExportChange Line(ContentRevision r, string action, string code, string message) =>
             new($"content/{r.RevisionId:D}.json", "content", r.RevisionId, r.Name, sourceTitle(r.Provenance.SourceId), action, code, message);
@@ -247,7 +248,6 @@ public static class DownConversion
                     ? $"'{r.Name}' from the bundled {title} pack is not in TomeStack {release}. {tail}"
                     : $"'{user.Name}' uses '{r.Name}' from the bundled {title} pack, which TomeStack {release} does not have. {tail}";
                 changes.Add(Line(r, "blocks", BlockedCode, message));
-                kept.Add(r.RevisionId);
                 continue;
             }
 
@@ -306,7 +306,7 @@ public static class DownConversion
 
         var moves = movable.Where(r => copies.ContainsKey(r.RevisionId))
             .Select(r => (new ContentReference(r.ContentId, r.RevisionId), new ContentReference(r.ContentId, copies[r.RevisionId].RevisionId))).ToList();
-        var written = plan.Revisions.Select(r => copies.TryGetValue(r.RevisionId, out var c) ? c : r).ToList();
+        var written = revisions.Select(r => copies.TryGetValue(r.RevisionId, out var c) ? c : r).ToList();
         return new ContentOutcome(written, moves);
     }
 
@@ -327,12 +327,24 @@ public static class DownConversion
         return false;
     }
 
+    /// <summary>
+    /// The root a revision lowers from: the marker's original and schema when the revision verifies as that copy
+    /// (<c>RevisionId == CopyId(marker, own schema, CanonicalBytes)</c>, and the marker names another revision), else the revision itself.
+    /// A marker that does not verify is never trusted.
+    /// </summary>
+    internal static (Guid RevisionId, int SchemaVersion) VerifiedRoot(ContentRevision revision)
+    {
+        ArgumentNullException.ThrowIfNull(revision);
+        return ReadMarker(revision) is { } marker && marker.RevisionId != revision.RevisionId
+            && revision.RevisionId == CopyId(marker.RevisionId, revision.SchemaVersion, CanonicalBytes(revision))
+            ? (marker.RevisionId, marker.SchemaVersion)
+            : (revision.RevisionId, revision.SchemaVersion);
+    }
+
     /// <summary>The copy of <paramref name="original"/>: its lowered body, references moved to the copies made so far, the marker, and the new id.</summary>
     private static ContentRevision MakeCopy(ContentRevision original, ContentRevision body, Dictionary<Guid, ContentRevision> copies)
     {
-        var marker = ReadMarker(original);
-        var root = marker?.RevisionId ?? original.RevisionId;
-        var rootSchema = marker?.SchemaVersion ?? original.SchemaVersion;
+        var (root, rootSchema) = VerifiedRoot(original);
         ContentReference Move(ContentReference r) => copies.TryGetValue(r.RevisionId, out var c) ? new ContentReference(r.ContentId, c.RevisionId) : r;
         Effect Rewrite(Effect e) => e switch
         {
