@@ -1178,11 +1178,13 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
   // gone). The smaller safe option: say so in plain words and stop offering a save that cannot succeed; Cancel and reopen starts from
   // the current copy.
   const [stale, setStale] = useState(false);
-  const commitHint = stale
-    ? 'This character changed after you opened this screen, so it cannot be saved from here. Cancel, then open it again to start from the current copy.'
-    : view
-      ? reasonHint(needReason(picksOf(view.character)))
-      : undefined;
+  const hintFor = (v: CharacterView | undefined) =>
+    stale
+      ? 'This character changed after you opened this screen, so it cannot be saved from here. Cancel, then open it again to start from the current copy.'
+      : v
+        ? reasonHint(needReason(picksOf(v.character)))
+        : undefined;
+  const commitHint = hintFor(view);
 
   /**
    * Previews the draft and moves to the choices. The reply applies only if it is the latest request and the player is still
@@ -1251,6 +1253,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
       await choosing.current; // a tick still previewing lands first, so the save carries it
       if (!mounted.current) return;
       const current = latest.current ?? view;
+      if (hintFor(current)) return; // R41: a tick that landed meanwhile may need its reason first; the hint shows on the re-render
       const draft = withExceptions(current.character);
       const saved =
         mode.kind === 'create'

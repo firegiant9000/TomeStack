@@ -1450,6 +1450,35 @@ describe('a pick that needs a campaign exception reason after the reason is clea
     await waitFor(() => expect(vi.mocked(client.saveCharacter)).toHaveBeenCalledTimes(1));
     expect(vi.mocked(client.saveCharacter).mock.calls[0]![0].choices).toEqual([{ source, choiceId: 'pick', selected: [mine.reference] }]);
   });
+
+  it("Save pressed before a restricted tick's preview lands does not save it without its reason (R41)", async () => {
+    const user = userEvent.setup();
+    const source = { contentId: 'fixture-feature', revisionId: 'fixture-feature-r1' };
+    const outsider = content(8, 'feature', 'Fixture Outsider', 'srd-5.1', { allowedInCampaign: false });
+    vi.mocked(client.listContent).mockResolvedValue([outsider]);
+    const answer = (selected: ContentOption[]) => {
+      const v = choiceView(selected, [outsider], 'fixture-camp');
+      v.character = { ...v.character, choices: [{ source, choiceId: 'pick', selected: selected.map((o) => o.reference) }] };
+      return v;
+    };
+    let land: (v: CharacterView) => void = () => {};
+    vi.mocked(client.previewChoice).mockReset();
+    vi.mocked(client.previewChoice).mockImplementation(() => new Promise<CharacterView>((resolve) => (land = resolve)));
+    vi.mocked(client.saveCharacter).mockReset();
+    vi.mocked(client.saveCharacter).mockImplementation(async (c) => ({ ...viewWith(c.spells), character: c }));
+    render(<CharacterBuilder mode={{ kind: 'choices', view: answer([]) }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+    const picker = await screen.findByRole('group', { name: /Fixture feature: choose 2/ });
+    await within(picker).findByRole('checkbox', { name: /Fixture Outsider/ });
+    await allowOutside(user);
+    await user.click(within(picker).getByRole('checkbox', { name: /Fixture Outsider/ }));
+    await user.clear(reasonField()); // no reason, and the pick is not in the rendered draft yet, so the hint is not shown
+    await user.click(screen.getByRole('button', { name: 'Save choices' })); // before the preview lands
+    expect(vi.mocked(client.saveCharacter)).not.toHaveBeenCalled();
+    land(answer([outsider]));
+    await screen.findByText('Fixture Outsider needs a campaign exception reason.');
+    expect(vi.mocked(client.saveCharacter)).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Save choices' }).getAttribute('aria-disabled')).toBe('true');
+  });
 });
 
 // R43 (follow-up F3): level-up Next says why it waits (3.3.2, 4.1.2) and is never natively disabled.

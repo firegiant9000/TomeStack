@@ -33,7 +33,7 @@
 
 ### Fixed
 - **Down-conversion: a content change reported at the wrong index:** the v11 content lowering step reported a change at the post-removal index of an effect (`effects[i]`) when an earlier effect had already been removed; it now keeps the original index.
-- Builder: Save waits for a tick whose preview is still loading, so a choice ticked just before Save is never lost.
+- **Builder: Save waits for a pending tick:** a choice ticked just before Save is no longer lost; Save now waits for the tick's preview and saves that draft.
 - **Character import on a busy computer:** every pattern the sheet, text and class-stub readers use now has a 1 s match timeout instead of 100 ms (one constant, `ImportRegex.TimeoutMs`), as PDF detection already does (R151). A paused thread could make a valid hit-dice line read as unreadable, so no class was offered. The text importer's 2 s budget for a whole text is unchanged.
 - **Class import: a class no longer reads the next class's spellcasting:** the text read after a class's table now ends at the next class's table when its column is headed "Class Features" (SRD 5.2.1), and at the next class's "Core ... Traits" heading, which comes a page before its table. Before, a class with no spell slot columns (Barbarian, Monk and Rogue in SRD 5.2.1, Rogue in 5.1) got "add spellcasting by hand if it casts spells" from the next class's text. The SRD-gated test checks that note, and holds the older add-spellcasting notes at today's count of one per SRD. No schema, package or database change.
 
