@@ -402,6 +402,41 @@ public class DownConversionExportTests
         Assert.Empty(plain.GetProperty("result").GetProperty("changes").EnumerateArray());
     }
 
+    [Fact]
+    public void Pack_save_as_commands_resolve_the_target_and_need_the_confirmed_hash()
+    {
+        using var app = new TempApp();
+        var source = app.App.CreateHomebrewSource(new("Compat Homebrew A", [RulesFamilies.Srd51], Redistributable: true, ConfirmOwnWork: true));
+        var feat = new ContentRevision
+        {
+            ContentId = Guid.Parse("c1000000-0000-4000-8000-0000000000e1"),
+            RevisionId = Guid.Parse("c100e000-0000-4000-8000-0000000000e1"),
+            Kind = ContentKind.Feat,
+            Name = "Compat Steady Hands",
+            RulesFamilies = [RulesFamilies.Srd51],
+            Provenance = new(source.Id),
+            Status = RevisionStatus.Draft,
+            Effects = [new ModifierEffect { Id = "steady", Operation = ModifierOperation.Bonus, Target = FieldIds.Initiative, Value = "1" }],
+        };
+        app.App.SaveDraft(feat);
+        app.App.Publish(feat.Reference);
+        var campaign = app.App.SaveCampaign(new() { Id = Guid.Empty, Name = "Compat Campaign", RulesFamily = RulesFamilies.Srd51, AllowedSources = [source.Id] });
+        var host = new SaveHost(null);
+        var dispatcher = new CommandDispatcher(app.App, host: host);
+        var packs = new (string Command, string Body)[]
+        {
+            ("package.sourcePackSaveAs", $$"""{"sourceIds":["{{source.Id}}"],"target":"TARGET"}"""),
+            ("package.campaignPackSaveAs", $$"""{"campaignId":"{{campaign.Id}}","target":"TARGET"}"""),
+        };
+
+        foreach (var (command, body) in packs)
+        {
+            Assert.Equal("package.target-unknown", ErrorOf(Send(dispatcher, command, body.Replace("TARGET", "0.4.0", StringComparison.Ordinal))).Code);
+            Assert.Equal("package.target-changed", ErrorOf(Send(dispatcher, command, body.Replace("TARGET", "0.6.0", StringComparison.Ordinal))).Code);
+        }
+        Assert.Equal(0, host.Opened);
+    }
+
     private static ContentRevision CompatFeat(Guid revisionId, Dictionary<string, JsonElement>? extensions) => new()
     {
         ContentId = Guid.Parse("c1000000-0000-4000-8000-000000000009"),

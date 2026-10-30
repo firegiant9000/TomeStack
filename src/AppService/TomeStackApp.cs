@@ -472,10 +472,13 @@ public sealed partial class TomeStackApp : IDisposable
     }
 
     /// <summary>M2.1 "Back up everything": what it would contain (<c>library.backupPreview</c>).</summary>
-    public LibraryBackupPreview PreviewLibraryBackup() => _packages.PreviewLibraryBackup();
+    public LibraryBackupPreview PreviewLibraryBackup(LadderRow? target = null) => _packages.PreviewLibraryBackup(target);
 
-    /// <summary>M2.1: writes the whole library, managed PDFs included, to <paramref name="output"/>.</summary>
-    public LibraryBackupResult WriteLibraryBackup(Stream output) => _packages.WriteLibraryBackup(output);
+    /// <summary>M2.1: writes the whole library, managed PDFs included, to <paramref name="output"/>. D85: with a <paramref name="target"/>, lowered for that release and refused (nothing written) unless <paramref name="changesHash"/> confirms the previewed list.</summary>
+    public LibraryBackupResult WriteLibraryBackup(Stream output, LadderRow? target = null, string? changesHash = null) => _packages.WriteLibraryBackup(output, target, changesHash);
+
+    /// <summary>D85: refuses a library backup for <paramref name="target"/> that is blocked or not confirmed, so the Save dialog is not opened for it.</summary>
+    public void RequireLibraryBackupConfirmed(LadderRow target, string? changesHash) => _packages.RequireLibraryBackupConfirmed(target, changesHash);
 
     /// <summary>M2.1 "Restore full backup": checks the file completely; writes nothing.</summary>
     public PackagePreview PreviewLibraryRestore(string backupPath) => _packages.PreviewLibraryRestore(backupPath);

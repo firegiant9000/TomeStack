@@ -317,10 +317,10 @@ public static class DownConversion
         {
             if (leftOut.Contains(r.RevisionId))
             {
-                var siblings = revisions.Where(x => x.ContentId == r.ContentId).ToList();
+                var siblings = revisions.Where(x => x.ContentId == r.ContentId).Select(x => x.RevisionId).ToList();
                 var title = sourceTitle(r.Provenance.SourceId);
                 var where = title.Length == 0 ? "" : $" ({title})";
-                changes.Add(Line(r, "leftOut", LeftOutCode, $"'{r.Name}', revision {siblings.IndexOf(r) + 1} of {siblings.Count}{where}: left out; {reasons[r.RevisionId]}"));
+                changes.Add(Line(r, "leftOut", LeftOutCode, $"'{r.Name}', revision {siblings.IndexOf(r.RevisionId) + 1} of {siblings.Count}{where}: left out; {reasons[r.RevisionId]}"));
             }
             else if (linesOf.TryGetValue(r.RevisionId, out var mine))
             {

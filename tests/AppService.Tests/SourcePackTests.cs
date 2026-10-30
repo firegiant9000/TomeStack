@@ -114,6 +114,34 @@ public class SourcePackTests
     }
 
     [Fact]
+    public void Source_pack_leaves_out_a_chain_of_superseded_blocked_revisions_one_step_at_a_time()
+    {
+        using var temp = new TempApp();
+        // A (superseded, blocked) is granted only by B (superseded, blocked, nothing grants B); C is the newest of B's content and fine.
+        // A stays only while B is written, so B goes first and then A: the fixed point takes two rounds.
+        var source = StoreCompat(temp, id =>
+        [
+            Compat(id, 1, blocker: true),
+            Compat(id, 2),
+            Compat(id, 5, blocker: true, contentId: CompatOtherContent) with
+            {
+                Effects = [new GrantEffect { Id = "gives", Grant = GrantKind.Content, Content = new ContentReference(CompatContent, CompatRevision(1)), Level = 1 },
+                    new ToggleEffect { Id = "form", ToggleId = "form", Label = "Form", Cost = "1", ResourceId = "focus" }],
+            },
+            Compat(id, 6, contentId: CompatOtherContent),
+        ]);
+
+        var preview = temp.App.PreviewSourcePack([source.Id], For060);
+
+        var left = preview.Changes.Where(c => c.Action == "leftOut").Select(c => c.Id).ToList();
+        Assert.Contains(CompatRevision(1), left);
+        Assert.Contains(CompatRevision(5), left);
+        Assert.DoesNotContain(preview.Changes, c => c.Action == "blocks");
+        var export = temp.App.ExportSourcePack([source.Id], For060, preview.ChangesHash);
+        Assert.DoesNotContain(export.Manifest.Entries, e => e.Path == $"content/{CompatRevision(1):D}.json" || e.Path == $"content/{CompatRevision(5):D}.json");
+    }
+
+    [Fact]
     public void Source_pack_blocks_when_the_newest_revision_blocks()
     {
         using var temp = new TempApp();

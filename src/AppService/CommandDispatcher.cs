@@ -215,8 +215,8 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "export.preview" => PreviewVttExport(Payload<VttExportPayload>(payload)),
         "export.saveAs" => SaveVttExportAs(Payload<ExtensionTokenPayload>(payload)),
         "export.download" => DownloadVttExport(Payload<ExtensionTokenPayload>(payload)),
-        "library.backupPreview" => app.PreviewLibraryBackup(),
-        "library.backupSaveAs" => SaveLibraryBackupAs(),
+        "library.backupPreview" => app.PreviewLibraryBackup(ResolveTarget(OptionalPayload<LibraryBackupPayload>(payload).Target)),
+        "library.backupSaveAs" => SaveLibraryBackupAs(OptionalPayload<LibraryBackupPayload>(payload)),
         "library.restoreChoose" => ChooseLibraryRestore(),
         "library.restoreApply" => ApplyLibraryRestore(Payload<RestorePayload>(payload)),
         "diagnostics.copy" => new { text = Diagnostics.DiagnosticsCopy.For(app) },
@@ -563,11 +563,15 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     /// M2.1 "Back up everything": the native Save dialog picks the file, and the backup streams to <c>&lt;file&gt;.partial</c>
     /// first, so a cancelled or failed write never leaves a half backup under the chosen name.
     /// </summary>
-    private object SaveLibraryBackupAs()
+    private object SaveLibraryBackupAs(LibraryBackupPayload payload)
     {
+        var row = ResolveTarget(payload.Target);
         if (host is null)
             throw new AppValidationException([new("host.unsupported", "Backing up everything needs the desktop app's Save dialog.")], "unsupported");
-        var preview = app.PreviewLibraryBackup();
+        // A blocked or changed plan is refused before the Save dialog opens (as for a package).
+        if (row is not null)
+            app.RequireLibraryBackupConfirmed(row, payload.ChangesHash);
+        var preview = app.PreviewLibraryBackup(row);
         var path = host.ChooseSaveLocation(preview.FileName, "TomeStack full backup", ".tomestack.zip");
         if (path is null)
             return new { saved = false };
@@ -579,7 +583,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         {
             using (var file = new FileStream(temporary, FileMode.Create, FileAccess.ReadWrite))
             {
-                result = app.WriteLibraryBackup(file);
+                result = app.WriteLibraryBackup(file, row, payload.ChangesHash);
                 file.Flush(flushToDisk: true);
             }
             File.Move(temporary, path, overwrite: true);
@@ -656,6 +660,10 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     private object ApplyImport(PackagePayload payload) =>
         app.ApplyImport(Convert.FromBase64String(payload.Base64), payload.SourceChoices, payload.CampaignChoices);
 
+    /// <summary>The payload when the caller sent an object, else <c>new T()</c> (a command whose every field is optional).</summary>
+    private static T OptionalPayload<T>(JsonElement? payload) where T : new() =>
+        payload is { ValueKind: JsonValueKind.Object } ? Payload<T>(payload) : new T();
+
     private static T Payload<T>(JsonElement? payload) =>
         payload is { ValueKind: JsonValueKind.Object } element
             ? element.Deserialize<T>(RulesJson.Compact) ?? throw new JsonException("Payload is null.")
@@ -721,6 +729,15 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     private sealed record PackagePayload(string Base64, Dictionary<Guid, SourceChoice>? SourceChoices = null, Dictionary<Guid, SourceChoice>? CampaignChoices = null);
 
     private sealed record SourcePackPayload(IReadOnlyList<Guid>? SourceIds, string? Target = null, string? ChangesHash = null);
+
+    /// <summary>D85: <c>library.backupPreview</c> / <c>library.backupSaveAs</c>; both keys optional.</summary>
+    private sealed record LibraryBackupPayload(string? Target = null, string? ChangesHash = null)
+    {
+        public LibraryBackupPayload()
+            : this(null, null)
+        {
+        }
+    }
 
     private sealed record CampaignIdPayload(Guid CampaignId, string? Target = null, string? ChangesHash = null);
 

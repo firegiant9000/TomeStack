@@ -172,7 +172,17 @@ public sealed record CampaignImpact(Guid CampaignId, Guid CharacterId, string Ch
 public sealed record LibraryBackupPreview(
     string FileName, int Characters, int Campaigns, int GapNotes, int Sources, int PublishedRevisions, int DraftRevisions,
     int ManagedPdfs, long ManagedPdfBytes, int LinkedPdfs, IReadOnlyList<string> Unreadable, int Extensions = 0,
-    string? OpensIn = null, IReadOnlyList<OpensInCause>? OpensInCauses = null);
+    string? OpensIn = null, IReadOnlyList<OpensInCause>? OpensInCauses = null)
+{
+    /// <summary>D85: the older release asked for (echoed), null for an ordinary backup.</summary>
+    public string? Target { get; init; }
+
+    /// <summary>What lowering to <see cref="Target"/> changes or leaves out; empty without a target.</summary>
+    public IReadOnlyList<ExportChange> Changes { get; init; } = [];
+
+    /// <summary>Hash of <see cref="Changes"/>; a save with a target must present it. Null without a target.</summary>
+    public string? ChangesHash { get; init; }
+}
 
 /// <param name="Warnings">Anything left out (a damaged PDF copy); the backup is still complete otherwise.</param>
 public sealed record LibraryBackupResult(string FileName, long Bytes, LibraryBackupPreview Contents, IReadOnlyList<Diagnostic> Warnings);

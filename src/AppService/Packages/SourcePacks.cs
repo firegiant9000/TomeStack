@@ -24,7 +24,8 @@ public sealed partial class PackageService
     internal void SetBundledSources(IReadOnlySet<Guid> sourceIds) => _bundledSources = sourceIds;
 
     private sealed record SourcePackPlan(
-        List<SourceRecord> Sources, List<ContentRevision> Revisions, int Drafts, List<Diagnostic> Warnings, string FileName);
+        List<SourceRecord> Sources, List<ContentRevision> Revisions, int Drafts, List<Diagnostic> Warnings, string FileName,
+        Func<IEnumerable<ContentRevision>, List<Diagnostic>> WarningsFor);
 
     /// <summary><c>package.sourcePackPreview</c>: what a source pack of <paramref name="sourceIds"/> would hold. Writes nothing.</summary>
     public SourcePackPreview PreviewSourcePack(IReadOnlyList<Guid> sourceIds, LadderRow? target = null)
@@ -33,7 +34,8 @@ public sealed partial class PackageService
         var lowered = LowerPack(plan.Revisions, plan.FileName, target);
         var (revisions, fileName) = lowered is null ? (plan.Revisions, plan.FileName) : (lowered.Plan.Revisions, lowered.Plan.FileName);
         var opens = NewerBuild.Evaluate(revisions, [], 0, [], BundledPackTitle(revisions));
-        var preview = new SourcePackPreview(fileName, [.. plan.Sources.Select(Notice)], revisions.Count, plan.Drafts, [.. plan.Warnings, .. opens.Warnings], opens.OpensIn, opens.Causes);
+        var warnings = lowered is null ? plan.Warnings : plan.WarningsFor(revisions); // D85: over what the lowered pack writes
+        var preview = new SourcePackPreview(fileName, [.. plan.Sources.Select(Notice)], revisions.Count, plan.Drafts, [.. warnings, .. opens.Warnings], opens.OpensIn, opens.Causes);
         return lowered is null
             ? preview
             : preview with { Target = lowered.Target.Release.ToString(3), Changes = lowered.Changes, ChangesHash = lowered.ChangesHash };
@@ -125,14 +127,14 @@ public sealed partial class PackageService
         if (errors.Count > 0)
             throw new PackageException(errors);
 
-        var (revisions, drafts, warnings) = PackContent(sources, errors);
+        var (revisions, drafts, warningsFor) = PackContent(sources, errors);
         foreach (var empty in sources.Where(s => !revisions.Any(r => r.Provenance.SourceId == s.Id)))
             errors.Add(new("pack.source-empty", $"'{empty.Title}' has no published content to share yet."));
         if (errors.Count > 0)
             throw new PackageException(errors);
 
         var name = sources.Count == 1 ? SafeFileName(sources[0].Title) : "homebrew-sources";
-        return new SourcePackPlan(sources, revisions, drafts, warnings, $"{name}-source-pack.tomestack.zip");
+        return new SourcePackPlan(sources, revisions, drafts, warningsFor(revisions), $"{name}-source-pack.tomestack.zip", warningsFor);
     }
 
     /// <summary>
@@ -140,7 +142,7 @@ public sealed partial class PackageService
     /// stored order. A content that another source also holds is added to <paramref name="errors"/>; content they refer to
     /// in a source the pack does not carry (and that is not bundled) is a warning.
     /// </summary>
-    private (List<ContentRevision> Revisions, int Drafts, List<Diagnostic> Warnings) PackContent(IReadOnlyCollection<SourceRecord> sources, List<Diagnostic> errors)
+    private (List<ContentRevision> Revisions, int Drafts, Func<IEnumerable<ContentRevision>, List<Diagnostic>> WarningsFor) PackContent(IReadOnlyCollection<SourceRecord> sources, List<Diagnostic> errors)
     {
         var inPack = sources.Select(s => s.Id).ToHashSet();
         var content = Preflight.PackContentOf(store, sources);
@@ -148,19 +150,24 @@ public sealed partial class PackageService
         foreach (var spanning in content.Spanning)
             errors.Add(new("pack.content-spans-sources", $"'{spanning.Name}' has revisions in another source too, so it cannot be shared from this one.", spanning.Reference));
 
-        var warnings = new List<Diagnostic>();
         var bySource = all.GroupBy(r => r.ContentId).ToDictionary(g => g.Key, g => g.Last().Provenance.SourceId);
-        var outside = revisions.SelectMany(References)
-            .Select(contentId => bySource.TryGetValue(contentId, out var sourceId) ? sourceId : (Guid?)null)
-            .OfType<Guid>()
-            .Where(sourceId => !inPack.Contains(sourceId) && !_bundledSources.Contains(sourceId))
-            .Distinct();
-        foreach (var sourceId in outside)
+        // D85: asked again over the revisions a lowered pack writes, so a reference only a left-out revision held is not warned about.
+        List<Diagnostic> WarningsFor(IEnumerable<ContentRevision> written)
         {
-            var title = store.FindSource(sourceId)?.Title ?? sourceId.ToString();
-            warnings.Add(new("pack.reference-outside", $"Content in this pack refers to content from '{title}', which the pack does not carry. Whoever imports it needs that source too."));
+            var warnings = new List<Diagnostic>();
+            var outside = written.SelectMany(References)
+                .Select(contentId => bySource.TryGetValue(contentId, out var sourceId) ? sourceId : (Guid?)null)
+                .OfType<Guid>()
+                .Where(sourceId => !inPack.Contains(sourceId) && !_bundledSources.Contains(sourceId))
+                .Distinct();
+            foreach (var sourceId in outside)
+            {
+                var title = store.FindSource(sourceId)?.Title ?? sourceId.ToString();
+                warnings.Add(new("pack.reference-outside", $"Content in this pack refers to content from '{title}', which the pack does not carry. Whoever imports it needs that source too."));
+            }
+            return warnings;
         }
-        return (revisions, drafts, warnings);
+        return (revisions, drafts, WarningsFor);
     }
 
     // The guard (D14 item 6) lives in Preflight.ShareProblem, the one sharing rule (Import Lab L5).

@@ -21,7 +21,7 @@ public sealed partial class PackageService
 
     private sealed record CampaignPackPlan(
         Campaign Campaign, List<SourceRecord> Included, List<SourceRecord> Referenced, List<LeftOutSource> LeftOut,
-        List<ContentRevision> Revisions, List<Diagnostic> Warnings, string FileName);
+        List<ContentRevision> Revisions, List<Diagnostic> Warnings, string FileName, Func<IEnumerable<ContentRevision>, List<Diagnostic>> WarningsFor);
 
     /// <summary><c>package.campaignPackPreview</c>: what a campaign pack of <paramref name="campaignId"/> would hold. Writes nothing.</summary>
     public CampaignPackPreview PreviewCampaignPack(Guid campaignId, LadderRow? target = null)
@@ -31,7 +31,8 @@ public sealed partial class PackageService
         var (revisions, fileName) = lowered is null ? (plan.Revisions, plan.FileName) : (lowered.Plan.Revisions, lowered.Plan.FileName);
         var opens = NewerBuild.Evaluate(revisions, [], 0, [], BundledPackTitle(revisions));
         var preview = new CampaignPackPreview(fileName, plan.Campaign.Id, plan.Campaign.Name, plan.Campaign.RulesFamily,
-            [.. plan.Included.Select(Notice)], [.. plan.Referenced.Select(Notice)], plan.LeftOut, revisions.Count, [.. plan.Warnings, .. opens.Warnings], opens.OpensIn, opens.Causes);
+            [.. plan.Included.Select(Notice)], [.. plan.Referenced.Select(Notice)], plan.LeftOut, revisions.Count,
+            [.. lowered is null ? plan.Warnings : plan.WarningsFor(revisions), .. opens.Warnings], opens.OpensIn, opens.Causes); // D85: warnings over what the lowered pack writes
         return lowered is null
             ? preview
             : preview with { Target = lowered.Target.Release.ToString(3), Changes = lowered.Changes, ChangesHash = lowered.ChangesHash };
@@ -85,10 +86,10 @@ public sealed partial class PackageService
         var (included, referenced, leftOut) = Preflight.SortCampaignSources(store, campaign, _bundledSources);
 
         var errors = new List<Diagnostic>();
-        var (revisions, _, warnings) = PackContent(included, errors);
+        var (revisions, _, warningsFor) = PackContent(included, errors);
         if (errors.Count > 0)
             throw new PackageException(errors);
-        return new CampaignPackPlan(campaign, included, referenced, leftOut, revisions, warnings, $"{SafeFileName(campaign.Name)}-campaign-pack.tomestack.zip");
+        return new CampaignPackPlan(campaign, included, referenced, leftOut, revisions, warningsFor(revisions), $"{SafeFileName(campaign.Name)}-campaign-pack.tomestack.zip", warningsFor);
     }
 
     /// <summary>

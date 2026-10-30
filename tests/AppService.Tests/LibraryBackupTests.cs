@@ -717,6 +717,314 @@ public class LibraryBackupTests
     private static void Change(TomeStackApp app, Guid character, string text) =>
         app.AddGapNote(new(character, new(GapTargetKind.Field, FieldId: FieldIds.ArmorClass), text));
 
+    // ---- D85 part 2 (C2-4): the full backup saved for an older TomeStack ----
+
+    private static LadderRow For060 => ReleaseLadder.Target("0.6.0")!;
+
+    /// <summary>The 0.6.0 row with every bundled revision of this build in its set, so a character's SRD pins never block these tests.</summary>
+    private static LadderRow With060Bundled() =>
+        For060 with { BundledRevisionIds = TomeStackApp.BundledPacks.SelectMany(p => TomeStackApp.LoadBundledPack(p).Revisions).Select(r => r.RevisionId).ToHashSet() };
+
+    private static readonly Guid CompatContent = Guid.Parse("c4000000-0000-4000-8000-000000000001");
+    private static Guid CompatRevision(int n) => Guid.Parse($"c400e000-0000-4000-8000-00000000000{n}");
+
+    /// <summary>A stored "Compat Steady Hands" revision at the current schema: a toggle with a cost (a blocker for 0.6.0), or a fly-speed modifier (lowered into a copy).</summary>
+    private static ContentRevision Compat(Guid sourceId, int n, bool blocker = false, bool draft = false, Guid? contentId = null) => new()
+    {
+        ContentId = contentId ?? CompatContent,
+        RevisionId = CompatRevision(n),
+        Kind = ContentKind.Feat,
+        Name = "Compat Steady Hands",
+        RulesFamilies = [RulesFamilies.Srd51],
+        Provenance = new(sourceId),
+        Status = draft ? RevisionStatus.Draft : RevisionStatus.Published,
+        SchemaVersion = ContentRevision.CurrentSchemaVersion,
+        Effects = blocker
+            ? [new ToggleEffect { Id = "form", ToggleId = "form", Label = "Form", Cost = "1", ResourceId = "focus" }]
+            : [new ModifierEffect { Id = "fly", Operation = ModifierOperation.Bonus, Target = FieldIds.FlySpeed, Value = "10" }],
+    };
+
+    private static SourceRecord StoreCompat(TomeStackApp app, Func<Guid, ContentRevision[]> make)
+    {
+        var source = app.CreateHomebrewSource(new("Compat Homebrew A", [RulesFamilies.Srd51]));
+        foreach (var revision in make(source.Id))
+            app.Store.AddRevision(revision);
+        return source;
+    }
+
+    private static Guid SaveHero(TomeStackApp app, string name, bool running) =>
+        app.SaveCharacter(TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json") with
+        {
+            Id = Guid.NewGuid(),
+            Name = name,
+            Play = running ? new PlayState { Encounter = new EncounterState(1) } : new PlayState(),
+        }).Character.Id;
+
+    private static LibraryBackupResult BackupFor(TomeStackApp app, string path, LadderRow? target, string? hash)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        using var file = File.Create(path);
+        return app.WriteLibraryBackup(file, target, hash);
+    }
+
+    private static JsonElement ZipJson(string path, string entry)
+    {
+        using var zip = ZipFile.OpenRead(path);
+        using var reader = new StreamReader(zip.GetEntry(entry)!.Open());
+        return JsonDocument.Parse(reader.ReadToEnd()).RootElement.Clone();
+    }
+
+    private static List<Guid> RevisionOrder(string path) =>
+        [.. ZipJson(path, "manifest.json").GetProperty("revisionOrder").EnumerateArray().Select(e => e.GetGuid())];
+
+    [Fact]
+    public void Backup_for_0_6_0_lowers_drafts_and_keeps_status_draft()
+    {
+        using var temp = new TempApp();
+        StoreCompat(temp.App, id => [Compat(id, 1, draft: true)]);
+        var preview = temp.App.PreviewLibraryBackup(For060);
+        var path = TempFile();
+        try
+        {
+            BackupFor(temp.App, path, For060, preview.ChangesHash);
+
+            var order = RevisionOrder(path);
+            var copyId = Assert.Single(order, id => OriginalOf(path, id) == CompatRevision(1));
+            Assert.NotEqual(CompatRevision(1), copyId);
+            var copy = ZipJson(path, $"content/{copyId:D}.json");
+            Assert.Equal("draft", copy.GetProperty("status").GetString(), ignoreCase: true);
+            Assert.Equal(CompatRevision(1).ToString("D"), copy.GetProperty("downConvertedFrom").GetProperty("revisionId").GetString());
+            Assert.False(ZipHas(path, $"content/{CompatRevision(1):D}.json"));
+            Assert.Equal("0.6.0", ZipJson(path, "manifest.json").GetProperty("madeFor").GetString());
+            Assert.Equal(temp.App.PreviewLibraryBackup().DraftRevisions, preview.DraftRevisions);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    /// <summary>The revision a written content entry stands for: the marker's original when it is a down-converted copy, else itself.</summary>
+    private static Guid OriginalOf(string path, Guid id) =>
+        ZipJson(path, $"content/{id:D}.json").TryGetProperty("downConvertedFrom", out var marker) ? marker.GetProperty("revisionId").GetGuid() : id;
+
+    private static bool ZipHas(string path, string entry)
+    {
+        using var zip = ZipFile.OpenRead(path);
+        return zip.GetEntry(entry) is not null;
+    }
+
+    [Fact]
+    public void Backup_leaves_out_a_draft_with_a_blocker()
+    {
+        using var temp = new TempApp();
+        StoreCompat(temp.App, id => [Compat(id, 1, blocker: true, draft: true), Compat(id, 2, contentId: Guid.NewGuid())]);
+        var preview = temp.App.PreviewLibraryBackup(For060);
+        var path = TempFile();
+        try
+        {
+            var line = Assert.Single(preview.Changes, c => c.Id == CompatRevision(1));
+            Assert.Equal(("leftOut", DownConversion.LeftOutCode), (line.Action, line.Code));
+            Assert.DoesNotContain(preview.Changes, c => c.Action == "blocks");
+            Assert.Equal(temp.App.PreviewLibraryBackup().DraftRevisions - 1, preview.DraftRevisions);
+
+            BackupFor(temp.App, path, For060, preview.ChangesHash);
+
+            Assert.False(ZipHas(path, $"content/{CompatRevision(1):D}.json"));
+            Assert.DoesNotContain(RevisionOrder(path), id => OriginalOf(path, id) == CompatRevision(1));
+            Assert.Contains(RevisionOrder(path), id => OriginalOf(path, id) == CompatRevision(2));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Backup_leaves_out_a_superseded_blocked_revision_but_blocks_on_the_newest()
+    {
+        using var temp = new TempApp();
+        StoreCompat(temp.App, id => [Compat(id, 1, blocker: true), Compat(id, 2)]);
+        Assert.Equal("leftOut", Assert.Single(temp.App.PreviewLibraryBackup(For060).Changes, c => c.Id == CompatRevision(1)).Action);
+
+        using var other = new TempApp();
+        StoreCompat(other.App, id => [Compat(id, 1), Compat(id, 2, blocker: true)]);
+        Assert.Contains(other.App.PreviewLibraryBackup(For060).Changes, c => c.Action == "blocks" && c.Id == CompatRevision(2));
+    }
+
+    [Fact]
+    public void Backup_revisionOrder_has_every_entry_once_with_copies_in_place()
+    {
+        using var temp = new TempApp();
+        StoreCompat(temp.App, id => [Compat(id, 1), Compat(id, 2), Compat(id, 3, draft: true, contentId: Guid.NewGuid())]);
+        var originals = temp.App.Store.ListRevisionsInOrder().Where(r => r.RevisionId == CompatRevision(1) || r.RevisionId == CompatRevision(2) || r.RevisionId == CompatRevision(3)).Select(r => r.RevisionId).ToList();
+        var preview = temp.App.PreviewLibraryBackup(For060);
+        var path = TempFile();
+        try
+        {
+            BackupFor(temp.App, path, For060, preview.ChangesHash);
+
+            var order = RevisionOrder(path);
+            Assert.Equal(order.Count, order.Distinct().Count());
+            Assert.Empty(order.Intersect(originals));
+            // Each copy sits where its original sat in the stored order.
+            var stored051 = temp.App.Store.ListRevisionsInOrder().Select(r => r.RevisionId).ToList();
+            var represented = order.Select(id => OriginalOf(path, id)).ToList();
+            Assert.Equal(stored051.Where(represented.Contains), represented);
+            Assert.Equal(originals, represented.Where(originals.Contains));
+
+            using var clean = new TempApp();
+            var restore = clean.App.PreviewLibraryRestore(path);
+            Assert.True(restore.CanApply, string.Join("; ", restore.Errors.Select(e => e.Message)));
+            clean.App.ApplyLibraryRestore(path);
+            var stored = clean.App.Store.ListRevisions().Select(r => r.RevisionId).ToHashSet();
+            Assert.All(order, id => Assert.Contains(id, stored));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Backup_file_name_carries_target()
+    {
+        using var temp = new TempApp();
+        var plain = temp.App.PreviewLibraryBackup();
+        var preview = temp.App.PreviewLibraryBackup(For060);
+        var path = TempFile();
+        try
+        {
+            var written = BackupFor(temp.App, path, For060, preview.ChangesHash);
+
+            Assert.Matches(@"^TomeStack-full-backup-\d{4}-\d{2}-\d{2}-for-0\.6\.0\.tomestack\.zip$", preview.FileName);
+            Assert.Equal(plain.FileName.Replace(".tomestack.zip", "-for-0.6.0.tomestack.zip", StringComparison.Ordinal), written.FileName);
+            Assert.Equal("0.6.0", preview.Target);
+            Assert.Null(plain.Target);
+            Assert.Empty(plain.Changes);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Backup_blocks_on_any_character_blocker_listing_each()
+    {
+        using var temp = new TempApp();
+        SaveHero(temp.App, "Compat Hero", running: true);
+        SaveHero(temp.App, "Compat Second", running: true);
+        var row = With060Bundled();
+
+        var preview = temp.App.PreviewLibraryBackup(row);
+
+        var blocks = preview.Changes.Where(c => c.Action == "blocks").ToList();
+        Assert.Equal(2, blocks.Count);
+        Assert.All(blocks, c => Assert.Equal("character", c.Kind));
+        var output = new MemoryStream();
+        var thrown = Assert.Throws<AppValidationException>(() => temp.App.WriteLibraryBackup(output, row, preview.ChangesHash));
+        Assert.Equal(2, thrown.Problems.Count);
+        Assert.All(thrown.Problems, p => Assert.Equal(DownConversion.BlockedCode, p.Code));
+        Assert.Equal(0, output.Length);
+    }
+
+    [Fact]
+    public void Backup_excludes_bundled_revisions_as_today()
+    {
+        using var temp = new TempApp();
+        SaveHero(temp.App, "Compat Hero", running: false);
+        StoreCompat(temp.App, id => [Compat(id, 1)]);
+        var row = With060Bundled();
+        var preview = temp.App.PreviewLibraryBackup(row);
+        var path = TempFile();
+        try
+        {
+            Assert.DoesNotContain(preview.Changes, c => c.Action == "blocks");
+            BackupFor(temp.App, path, row, preview.ChangesHash);
+
+            var plain = temp.App.PreviewLibraryBackup();
+            Assert.Equal((plain.PublishedRevisions, plain.DraftRevisions), (preview.PublishedRevisions, preview.DraftRevisions));
+            Assert.All(RevisionOrder(path), id => Assert.DoesNotContain(id, row.BundledRevisionIds));
+            Assert.Contains(RevisionOrder(path), id => OriginalOf(path, id) == CompatRevision(1));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Backup_blocks_on_a_bundled_pin_outside_the_target_set()
+    {
+        using var temp = new TempApp();
+        var srd = temp.App.ListSources().First(s => s.Title.StartsWith("System Reference Document 5.1", StringComparison.Ordinal));
+        var bundled = temp.App.Store.ListRevisions().First(r => r.Provenance.SourceId == srd.Id && r.Status == RevisionStatus.Published);
+        temp.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json") with
+        {
+            Id = Guid.NewGuid(),
+            Name = "Compat Hero",
+            Pins = [new ContentReference(bundled.ContentId, bundled.RevisionId)],
+        });
+        var row = For060 with { BundledRevisionIds = new HashSet<Guid>() };
+
+        var preview = temp.App.PreviewLibraryBackup(row);
+
+        var uses = preview.Changes.Where(c => c.Action == "blocks" && c.Message.StartsWith("'Compat Hero' uses ", StringComparison.Ordinal)).ToList();
+        Assert.NotEmpty(uses);
+        Assert.All(uses, c => Assert.EndsWith("which TomeStack 0.6.0 does not have. Update the receiver's TomeStack; this content cannot be copied into the file.", c.Message, StringComparison.Ordinal));
+        Assert.Throws<AppValidationException>(() => temp.App.WriteLibraryBackup(new MemoryStream(), row, preview.ChangesHash));
+    }
+
+    [Fact]
+    public void Backup_save_requires_matching_changesHash()
+    {
+        using var temp = new TempApp();
+        StoreCompat(temp.App, id => [Compat(id, 1, blocker: true, draft: true)]);
+        var preview = temp.App.PreviewLibraryBackup(For060);
+        var output = new MemoryStream();
+
+        Assert.Equal(DownConversion.ChangedCode, Assert.Throws<AppValidationException>(() => temp.App.WriteLibraryBackup(output, For060, null)).Problems[0].Code);
+        Assert.Equal(DownConversion.ChangedCode, Assert.Throws<AppValidationException>(() => temp.App.WriteLibraryBackup(output, For060, "0000")).Problems[0].Code);
+        Assert.Equal(0, output.Length);
+        temp.App.WriteLibraryBackup(output, For060, preview.ChangesHash);
+        Assert.True(output.Length > 0);
+    }
+
+    [Fact]
+    public void Backup_commands_take_a_target_and_are_unchanged_without_one()
+    {
+        using var temp = new TempApp();
+        StoreCompat(temp.App, id => [Compat(id, 1)]);
+        var dispatcher = new CommandDispatcher(temp.App);
+
+        var valid = Ok(dispatcher, "library.backupPreview", new { target = "0.6.0" });
+        Assert.Equal("0.6.0", valid.GetProperty("target").GetString());
+        Assert.False(string.IsNullOrEmpty(valid.GetProperty("changesHash").GetString()));
+        Assert.Equal("package.target-unknown", ErrorCode(dispatcher, "library.backupPreview", new { target = "0.4.0" }));
+
+        var plain = Ok(dispatcher, "library.backupPreview");
+        Assert.Empty(plain.GetProperty("changes").EnumerateArray());
+        Assert.False(plain.TryGetProperty("target", out var target) && target.ValueKind != JsonValueKind.Null);
+        Assert.DoesNotContain("-for-", plain.GetProperty("fileName").GetString(), StringComparison.Ordinal);
+
+        var path = TempFile();
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        try
+        {
+            var host = new CommandDispatcher(temp.App, host: new DialogHost(path, null));
+            Assert.Equal("package.target-unknown", ErrorCode(host, "library.backupSaveAs", new { target = "0.4.0" }));
+            Assert.Equal("package.target-changed", ErrorCode(host, "library.backupSaveAs", new { target = "0.6.0" }));
+            Assert.False(File.Exists(path));
+            Assert.True(Ok(host, "library.backupSaveAs", new { target = "0.6.0", changesHash = valid.GetProperty("changesHash").GetString() }).GetProperty("saved").GetBoolean());
+            Assert.True(File.Exists(path));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     [Fact]
     public void Daily_copy_written_once_per_day()
     {
