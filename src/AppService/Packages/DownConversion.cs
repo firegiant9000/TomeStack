@@ -158,10 +158,17 @@ public static class DownConversion
         }
 
         var content = LowerContent(plan, target, isBundledSource, sourceTitle, catalog, mayLeaveOut, changes);
-        for (var i = 0; i < characters.Count; i++)
+        // One map, one pass per character (moves never chain: a copy id is new).
+        var moves = new Dictionary<ContentReference, ContentReference>();
+        foreach (var (from, to) in content.Moves)
+            moves[from] = to;
+        if (moves.Count > 0)
         {
-            foreach (var (from, to) in content.Moves)
-                characters[i] = characters[i].ReplaceReference(from, to);
+            for (var i = 0; i < characters.Count; i++)
+            {
+                foreach (var from in HeldReferences(characters[i]).Where(moves.ContainsKey).ToList())
+                    characters[i] = characters[i].ReplaceReference(from, moves[from]);
+            }
         }
 
         var lowered = plan with { Characters = characters, Revisions = content.Revisions, FileName = WithTarget(plan.FileName, target) };
@@ -546,10 +553,12 @@ public static class DownConversion
         var madeFor = manifest.MadeFor;
         var repinned = new List<Repinned>();
         var moved = new Dictionary<Guid, Guid>();
+        // Revisions the file keeps (not copies) are never rewritten, so a closure one of them grants or offers stays as it is.
+        var heldByKept = revisions.Where(r => !markers.ContainsKey(r.RevisionId)).SelectMany(ReferencesOf).Select(x => x.RevisionId).ToHashSet();
         foreach (var closure in copies.GroupBy(c => Find(c.RevisionId)))
         {
             var members = closure.ToList();
-            var originals = VerifiedOriginals(members, markers, manifest, catalog, isBundledSource);
+            var originals = members.Any(m => heldByKept.Contains(m.RevisionId)) ? null : VerifiedOriginals(members, markers, manifest, catalog, isBundledSource);
             foreach (var member in members)
             {
                 if (originals is null)
@@ -568,15 +577,8 @@ public static class DownConversion
         if (moved.Count == 0)
             return new(revisions, characters, [], warnings);
 
-        ContentReference Move(ContentReference r) => moved.TryGetValue(r.RevisionId, out var to) ? new ContentReference(r.ContentId, to) : r;
-        Effect Rewrite(Effect e) => e switch
-        {
-            GrantEffect { Content: { } c } g => g with { Content = Move(c) },
-            ChoiceEffect ch => ch with { Options = [.. ch.Options.Select(Move).Distinct()] },
-            _ => e,
-        };
-        var kept = revisions.Where(r => !moved.ContainsKey(r.RevisionId))
-            .Select(r => ReferencesOf(r).Any(x => moved.ContainsKey(x.RevisionId)) ? r with { Effects = [.. r.Effects.Select(Rewrite)] } : r).ToList();
+        // A kept revision is never edited (same id, same bytes everywhere), so only dropped copies disappear.
+        var kept = revisions.Where(r => !moved.ContainsKey(r.RevisionId)).ToList();
 
         // One map for every closure, one pass per character: only the copies a character actually holds are swapped.
         var swaps = copies.Where(c => moved.ContainsKey(c.RevisionId)).ToDictionary(c => c.Reference, c => new ContentReference(c.ContentId, moved[c.RevisionId]));

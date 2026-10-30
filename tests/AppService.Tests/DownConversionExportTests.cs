@@ -1079,6 +1079,78 @@ public class DownConversionExportTests
         AssertNoPublishedRevisionCarriesMarker(app);
     }
 
+    /// <summary>A file with copy C (of the fly feature) and an ordinary revision H that grants C: the path copy with its marker removed and its source made foreign.</summary>
+    private static (byte[] Bytes, Guid CopyId, Guid HId) FileWithKeptReferrer(TempApp origin, out Guid characterId)
+    {
+        var (source, _, fly) = PublishFlyOriginal(origin);
+        var path = PublishPathGranting(origin, source, fly);
+        characterId = Save(origin, c => c with { Pins = [.. c.Pins, path] });
+        var bytes = ExportFor(origin.App, characterId);
+        var flyCopy = Guid.Empty;
+        var hId = Guid.Empty;
+        using (var zip = new System.IO.Compression.ZipArchive(new MemoryStream(bytes)))
+        {
+            foreach (var entry in zip.Entries.Where(e => e.FullName.StartsWith("content/", StringComparison.Ordinal)))
+            {
+                var json = Entry(bytes, entry.FullName);
+                var id = Guid.Parse(entry.FullName["content/".Length..^".json".Length]);
+                var name = json.GetProperty("name").GetString();
+                if (name == "Compat Steady Hands")
+                    flyCopy = id;
+                else if (name == "Compat Path of Tides")
+                    hId = id;
+            }
+        }
+        var other = ForgeCopyByKeep(bytes, hId);
+        return (other, flyCopy, hId);
+    }
+
+    /// <summary>Strips the marker from the revision stored under <paramref name="id"/>: an ordinary revision.</summary>
+    private static byte[] ForgeCopyByKeep(byte[] bytes, Guid id) =>
+        PackageEditor.Edit(bytes, p => p == $"content/{id:D}.json", node => node.AsObject().Remove("downConvertedFrom"));
+
+    [Fact]
+    public void Repin_never_rewrites_a_kept_revision()
+    {
+        using var origin = new TempApp();
+        var (bytes, copyId, hId) = FileWithKeptReferrer(origin, out var characterId);
+        using var app = new TempApp();
+        app.App.ApplyImport(origin.App.ExportCharacters([characterId], ExportPurpose.Share).Content); // the original is stored here
+        var fileJson = Entry(bytes, $"content/{hId:D}.json").ToString();
+
+        var preview = app.App.PreviewImport(bytes);
+
+        Assert.True(preview.CanApply, string.Join("; ", preview.Errors.Select(e => e.Message)));
+        Assert.Empty(preview.Repinned ?? []);
+        Assert.Contains(preview.Warnings, w => w.Code == "package.down-converted");
+        Assert.DoesNotContain(preview.Warnings, w => w.Code == "package.down-converted-repinned");
+        Assert.Contains(preview.Items, i => i.Kind == "contentRevision" && i.Id == copyId);
+        Assert.Contains(preview.Items, i => i.Kind == "contentRevision" && i.Id == hId);
+
+        app.App.ApplyImport(bytes);
+
+        var stored = app.App.Store.ListRevisions().Single(r => r.RevisionId == hId);
+        Assert.Equal(fileJson, System.Text.Json.Nodes.JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(stored, RulesJson.Options))!.ToString());
+        Assert.NotNull(app.App.Store.ListRevisions().SingleOrDefault(r => r.RevisionId == copyId));
+    }
+
+    [Fact]
+    public void Reimport_with_a_stored_referrer_still_applies()
+    {
+        using var origin = new TempApp();
+        var (bytes, _, _) = FileWithKeptReferrer(origin, out var characterId);
+        using var fresh = new TempApp();
+        fresh.App.ApplyImport(bytes); // C and H arrive first, without the original
+
+        var plain = origin.App.ExportCharacters([characterId], ExportPurpose.Share).Content; // then the original arrives
+        fresh.App.ApplyImport(plain);
+
+        var again = fresh.App.PreviewImport(bytes);
+        Assert.DoesNotContain(again.Errors, e => e.Code == "package.revision-conflict");
+        Assert.True(again.CanApply, string.Join("; ", again.Errors.Select(e => e.Message)));
+        fresh.App.ApplyImport(bytes);
+    }
+
     [Fact]
     public void Import_adds_a_copy_whose_original_is_absent_with_warning()
     {
