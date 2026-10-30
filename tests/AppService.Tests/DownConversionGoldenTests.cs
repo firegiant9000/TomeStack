@@ -75,6 +75,7 @@ public class DownConversionGoldenTests
             }
 
             File.WriteAllText(Path.Combine(expected, "changes.json"), changes + "\n", new UTF8Encoding(false));
+            Assert.Fail($"Regenerated the expected files under {folder}; review them by eye against spec section 2, unset TOMESTACK_REGENERATE_GOLDENS and run again.");
         }
 
         var expectedEntries = Path.Combine(expected, "entries");

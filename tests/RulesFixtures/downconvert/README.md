@@ -31,5 +31,5 @@ dotnet test tests/AppService.Tests -c Release --filter FullyQualifiedName~DownCo
 Remove-Item Env:TOMESTACK_REGENERATE_GOLDENS
 ```
 
-That rewrites both `expected/` folders from the implementation. Then review the diff by eye against SPEC section 2 (what a
+That rewrites both `expected/` folders from the implementation. The regenerate run fails on purpose, so it never reads as green; that failure is expected, not a bug. Then review the diff by eye against SPEC section 2 (what a
 copy for each release keeps, drops and blocks) before committing: the golden proves the output is stable, not that it is right.
