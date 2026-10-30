@@ -1,0 +1,63 @@
+{
+  "packId": "tomestack-companions-fixtures",
+  "formatVersion": 1,
+  "notice": "Original TomeStack test fixtures (MECH-X item 4, content v12: companion cards a feature or feat declares). Invented; no SRD or third-party rules text.",
+  "sources": [
+    {
+      "id": "6a7e0000-0000-4000-8000-000000000001",
+      "title": "TomeStack Fixtures: Companions",
+      "publisher": "TomeStack project",
+      "rulesFamilies": ["srd-5.2.1"],
+      "editionVersion": "fixture-1",
+      "license": "Original test fixture",
+      "redistributable": true,
+      "attribution": "Written for TomeStack tests."
+    }
+  ],
+  "revisions": [
+    {
+      "contentId": "6a7e00f4-0000-4000-8000-000000000001", "revisionId": "6a7e00f4-0000-4000-8000-000000000101", "schemaVersion": 12, "kind": "feature",
+      "name": "Fixture Warden Bond", "rulesFamilies": ["srd-5.2.1"], "provenance": { "sourceId": "6a7e0000-0000-4000-8000-000000000001" }, "status": "published",
+      "effects": [
+        { "type": "resource", "id": "warden-fury-pool", "resourceId": "warden-fury", "label": "Warden fury", "maximum": "2" },
+        { "type": "recovery", "id": "warden-fury-long", "resourceId": "warden-fury", "on": "longRest", "amount": "all" },
+        { "type": "attack", "id": "warden-bite", "attackId": "wardenBite", "label": "Warden bite", "kind": "melee", "abilities": ["str"], "proficient": true, "damage": { "count": "1", "die": "8" }, "damageType": "piercing" },
+        {
+          "type": "companion", "id": "warden", "companionId": "6a7e0c00-0000-4000-8000-000000000001", "label": "Fixture Warden",
+          "armorClass": "13 + PB", "hitPointMaximum": "5 * LEVEL", "speed": "40 ft.", "attacks": ["warden-bite"], "resourceIds": ["warden-fury"]
+        }
+      ]
+    },
+    {
+      "contentId": "6a7e00f4-0000-4000-8000-000000000002", "revisionId": "6a7e00f4-0000-4000-8000-000000000102", "schemaVersion": 12, "kind": "feat",
+      "name": "Fixture Hound Keeper", "rulesFamilies": ["srd-5.2.1"], "provenance": { "sourceId": "6a7e0000-0000-4000-8000-000000000001" }, "status": "published",
+      "effects": [
+        { "type": "companion", "id": "hound", "companionId": "6a7e0c00-0000-4000-8000-000000000002", "label": "Fixture Hound", "armorClass": "12", "hitPointMaximum": "3 * LEVEL" }
+      ]
+    },
+    {
+      "contentId": "6a7e00f4-0000-4000-8000-000000000003", "revisionId": "6a7e00f4-0000-4000-8000-000000000103", "schemaVersion": 12, "kind": "feature",
+      "name": "Fixture Sentinel Bond", "rulesFamilies": ["srd-5.2.1"], "provenance": { "sourceId": "6a7e0000-0000-4000-8000-000000000001" }, "status": "published",
+      "effects": [
+        { "type": "companion", "id": "sentinel", "companionId": "6a7e0c00-0000-4000-8000-000000000003", "label": "Fixture Sentinel", "armorClass": "14", "hitPointMaximum": "2 * CLASS_LEVEL" }
+      ]
+    },
+    {
+      "contentId": "6a7e00f4-0000-4000-8000-000000000010", "revisionId": "6a7e00f4-0000-4000-8000-000000000110", "schemaVersion": 12, "kind": "class",
+      "name": "Fixture Keeper Path", "rulesFamilies": ["srd-5.2.1"], "provenance": { "sourceId": "6a7e0000-0000-4000-8000-000000000001" }, "status": "published",
+      "summary": "A test class whose level 1 feature is Fixture Warden Bond and whose level 3 feature grows the warden's bite.",
+      "effects": [
+        { "type": "hitDie", "id": "keeper-hit-die", "die": 8 },
+        { "type": "grant", "id": "keeper-bond", "grant": "content", "level": 1, "content": { "contentId": "6a7e00f4-0000-4000-8000-000000000001", "revisionId": "6a7e00f4-0000-4000-8000-000000000101" } },
+        { "type": "grant", "id": "keeper-growth", "grant": "content", "level": 3, "content": { "contentId": "6a7e00f4-0000-4000-8000-000000000011", "revisionId": "6a7e00f4-0000-4000-8000-000000000111" } }
+      ]
+    },
+    {
+      "contentId": "6a7e00f4-0000-4000-8000-000000000011", "revisionId": "6a7e00f4-0000-4000-8000-000000000111", "schemaVersion": 12, "kind": "feature",
+      "name": "Fixture Warden Growth", "rulesFamilies": ["srd-5.2.1"], "provenance": { "sourceId": "6a7e0000-0000-4000-8000-000000000001" }, "status": "published",
+      "effects": [
+        { "type": "attackRider", "id": "warden-growth-rider", "tags": ["melee"], "dice": "1d4" }
+      ]
+    }
+  ]
+}

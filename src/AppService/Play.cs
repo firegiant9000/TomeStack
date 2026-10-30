@@ -160,7 +160,11 @@ public sealed partial class TomeStackApp
             throw new AppValidationException([new("play.clear-invalid", "Pools can be cleared only when an encounter ends.")], "play.clear-invalid");
 
         if (command.Action is PlayActionKind.CompanionDamage or PlayActionKind.CompanionHeal or PlayActionKind.CompanionSetHitPoints or PlayActionKind.CompanionSetTemporaryHitPoints)
-            return SaveWithPlay(character with { Play = ChangeCompanion(character, command) }); // a companion's hit points are not the character's: no sheet needed
+        {
+            // A hand companion's hit points are not the character's: no sheet needed. A content companion's maximum is on the sheet.
+            var companionSheet = command.ContentId is null ? null : CharacterCalculator.Calculate(character, _store);
+            return SaveWithPlay(character with { Play = ChangeCompanion(character, command, companionSheet) });
+        }
         var sheet = CharacterCalculator.Calculate(character, _store);
         // MECH-X item 1: a toggle that pays is compound only once the sheet shows its payment; the stale check above already ran and nothing is written yet.
         if (command.ExpectedUpdatedAt is null && CompoundUndo(command, sheet).Compound)
@@ -554,13 +558,31 @@ public sealed partial class TomeStackApp
     /// unchanged when not sent). Set temporary takes only the temporary hit points and keeps the stored current. Current at the maximum is stored as null, and an entry that says nothing (null, 0) is dropped.
     /// Errors are codes only; the companion's name never appears in them.
     /// </summary>
-    private static PlayState ChangeCompanion(Character character, PlayCommand command)
+    private static PlayState ChangeCompanion(Character character, PlayCommand command, CharacterSheet? sheet)
     {
-        var companion = command.CompanionId is { } id ? character.Companions?.FirstOrDefault(c => c.Id == id) : null;
-        if (companion is null)
-            throw new AppValidationException([new("play.companion-unknown", "This character has no such companion.")]);
-        var recorded = character.Play.Companions?.FirstOrDefault(p => p.ContentId is null && p.Id == companion.Id);
-        var maximum = companion.HitPointMaximum;
+        // MECH-X item 4: with a content id the companion is a card on the sheet (keyed by content id and companion id); without, a hand companion.
+        int maximum;
+        Guid companionId;
+        Guid? contentId = command.ContentId;
+        if (contentId is null)
+        {
+            var companion = command.CompanionId is { } id ? character.Companions?.FirstOrDefault(c => c.Id == id) : null;
+            if (companion is null)
+                throw new AppValidationException([new("play.companion-unknown", "This character has no such companion.")]);
+            maximum = companion.HitPointMaximum;
+            companionId = companion.Id;
+        }
+        else
+        {
+            var card = command.CompanionId is { } cardId
+                ? sheet?.Companions?.FirstOrDefault(c => c.Content.ContentId == contentId && c.CompanionId == cardId)
+                : null;
+            if (card?.HitPointMaximum is not { } cardMaximum)
+                throw new AppValidationException([new("play.companion-unknown", "This character has no such companion.")]);
+            maximum = cardMaximum;
+            companionId = card.CompanionId;
+        }
+        var recorded = character.Play.Companions?.FirstOrDefault(p => p.Id == companionId && p.ContentId == contentId);
         var current = Math.Min(recorded?.Current ?? maximum, maximum); // a maximum lowered since is respected
         var temporary = recorded?.Temporary ?? 0;
         switch (command.Action)
@@ -585,9 +607,9 @@ public sealed partial class TomeStackApp
                 temporary = command.Temporary ?? temporary;
                 break;
         }
-        var entry = new CompanionPlay(companion.Id, current >= maximum ? null : current, temporary);
-        var others = character.Play.Companions?.Where(p => p.ContentId is not null || p.Id != companion.Id).ToList() ?? [];
-        List<CompanionPlay> all = recorded is null ? [.. others, entry] : character.Play.Companions!.Select(p => p.ContentId is null && p.Id == companion.Id ? entry : p).ToList();
+        var entry = new CompanionPlay(companionId, current >= maximum ? null : current, temporary, contentId);
+        var others = character.Play.Companions?.Where(p => p.ContentId != contentId || p.Id != companionId).ToList() ?? [];
+        List<CompanionPlay> all = recorded is null ? [.. others, entry] : character.Play.Companions!.Select(p => p.ContentId == contentId && p.Id == companionId ? entry : p).ToList();
         return character.Play with { Companions = entry is { Current: null, Temporary: 0 } ? others : all };
     }
 

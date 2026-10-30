@@ -381,11 +381,14 @@ public sealed partial class TomeStackApp : IDisposable
         var view = View(saved);
         // MECH-X item 4 (S1): an ordinary save forgets the hit points of a content companion whose content is no longer active. Only this
         // path prunes; play actions, rests, charge changes and snapshot restores keep every row, so a stored character stays playable.
-        if (checkMods && saved.Play?.Companions is { } rows
-            && rows.Any(p => p.ContentId is not null && view.Sheet.Companions?.Any(c => c.Content.ContentId == p.ContentId && c.CompanionId == p.Id) != true))
+        if (checkMods && saved.Play?.Companions is { } rows)
         {
-            saved = saved with { Play = saved.Play with { Companions = [.. rows.Where(p => p.ContentId is null || view.Sheet.Companions?.Any(c => c.Content.ContentId == p.ContentId && c.CompanionId == p.Id) == true)] } };
-            view = view with { Character = saved };
+            var kept = rows.Where(p => p.ContentId is null || view.Sheet.Companions?.Any(c => c.Content.ContentId == p.ContentId && c.CompanionId == p.Id) == true).ToList();
+            if (kept.Count != rows.Count)
+            {
+                saved = saved with { Play = saved.Play with { Companions = kept } };
+                view = view with { Character = saved };
+            }
         }
         _store.InTransaction(() => _store.SaveCharacter(saved));
         if (undo is not { } slot)

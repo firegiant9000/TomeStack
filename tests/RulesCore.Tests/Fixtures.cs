@@ -193,6 +193,9 @@ internal static class Fixtures
     // MECH-X item 3 fixtures (fixture-pack-item-mods.json, content v12): item mods and their hosts. Not in PlayMechanicsCatalog.
     public static ContentPack ItemModsPack() => Load<ContentPack>("fixture-pack-item-mods.json");
 
+    // MECH-X item 4 fixtures (fixture-pack-companions.json, content v12): companion cards, a class that grants one, a rider that grows its attack.
+    public static ContentPack CompanionsPack() => Load<ContentPack>("fixture-pack-companions.json");
+
     /// <summary>
     /// The packs of <see cref="AllCatalog"/> plus every play-mechanics pack (D43). Each slice appends its pack here;
     /// <see cref="AllCatalog"/> is left alone so existing tests keep their counts.

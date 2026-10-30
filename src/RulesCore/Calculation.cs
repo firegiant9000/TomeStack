@@ -154,8 +154,30 @@ public sealed record ItemModInfo(ContentReference Reference, string Name, ModTar
 /// </summary>
 public sealed record ScaleValue(ContentReference Class, string ClassName, ContentReference Content, string ScaleId, string Label, int ClassLevel, int Value);
 
-/// <summary>MECH-X item 4: a companion card a <c>companion</c> effect declares. Its play state is keyed by the content id and <paramref name="CompanionId"/>.</summary>
-public sealed record CompanionValue(ContentReference Content, Guid CompanionId);
+/// <summary>
+/// MECH-X item 4 (R60, R65): a companion card a <c>companion</c> effect declares. Its play state is keyed by the content id
+/// (<paramref name="Content"/>) and <paramref name="CompanionId"/>. <paramref name="ArmorClass"/> and <paramref name="HitPointMaximum"/>
+/// are null when their formula fails (with <c>effect.invalid-formula</c>); <paramref name="Current"/> is then 0. The attacks and pools
+/// named by <paramref name="AttackEffectIds"/> and <paramref name="ResourceIds"/> are rows of the sheet's own lists, tagged with the companion id.
+/// </summary>
+public sealed record CompanionValue(
+    ContentReference Content,
+    string ContentName,
+    string EffectId,
+    Guid CompanionId,
+    string Label,
+    int? ArmorClass,
+    IReadOnlyList<TraceEntry> ArmorClassTrace,
+    int? HitPointMaximum,
+    IReadOnlyList<TraceEntry> HitPointTrace,
+    int Current,
+    int Temporary,
+    string? Speed,
+    IReadOnlyList<string> AttackEffectIds,
+    IReadOnlyList<string> ResourceIds,
+    AutomationStatus Automation,
+    IReadOnlyList<Diagnostic> Warnings,
+    TraceOrigin Origin);
 
 /// <summary>
 /// A limited-use resource (ADR-003 <c>resource</c>). <paramref name="Maximum"/> is its formula evaluated in the content's
@@ -180,7 +202,8 @@ public sealed record ResourceValue(
     Activation? Activation = null,
     bool CountsUp = false,
     string? FullText = null,
-    bool Allowance = false);
+    bool Allowance = false,
+    Guid? CompanionId = null);
 
 /// <summary>
 /// Content v11 (D43): an upkeep the character's active content declares, for the turn planner. <paramref name="Content"/> and
@@ -386,7 +409,8 @@ public sealed record AttackEntry(
     string? ResourceId = null,
     int? Cost = null,
     PaymentValue? Payment = null,
-    int? EntryIndex = null);
+    int? EntryIndex = null,
+    Guid? CompanionId = null);
 
 /// <summary>Content v11 (D43): where an attack on the sheet comes from. Custom attacks are not on the sheet's list.</summary>
 public enum AttackSource { Weapon, Feature }
@@ -749,6 +773,8 @@ public static class CharacterCalculator
         // Before the feature list: an attack whose die is invalid reports on its feature (attack.die-invalid).
         var attacks = CollectAttacks(active, values, family, weaponProficiencies, character, resolved.ClassLevels, effective, autoOn, diagnostics, resolved.ModdedEntries);
         var resources = CollectResources(active, character, resolved.ClassLevels, values, family, resourceBonuses);
+        // MECH-X item 4: tag the attacks and pools a companion lists (same rows, never moved) before responses and the feature list read them.
+        var companions = CollectCompanions(active, values, character, resolved.ClassLevels, family, attacks, resources, diagnostics);
         var rollBonuses = RollBonuses(active, character, resolved.ClassLevels, values, diagnostics);
         var rollDetails = RollDetailsOf(active, family, character, resolved.ClassLevels, values, diagnostics);
         // Before the feature list: a spell that cannot be cast reports on its feature (spells.unusable), like a recorded spell that cannot be listed.
@@ -861,7 +887,7 @@ public static class CharacterCalculator
             spellcasting, spellSlots, pactSlots, attacks, toggles, scales.Count > 0 ? scales : null, bloodied ? true : null,
             damageDefences.Count > 0 ? damageDefences : null, null, // the item uses are added once by Calculate (WithItemUses)
             xpForNextLevel is { } next && character.Xp >= next ? true : null, xpForNextLevel, upkeeps.Count > 0 ? upkeeps : null,
-            responses.Count > 0 ? responses : null), active);
+            responses.Count > 0 ? responses : null, companions.Count > 0 ? companions : null), active);
     }
 
     /// <summary>
@@ -1901,6 +1927,106 @@ public static class CharacterCalculator
             }
         }
         return resources;
+    }
+
+    /// <summary>
+    /// MECH-X item 4 (R60): the companion cards of the active content, in active-content order and then effect order. Reference-only
+    /// companions are not calculated. Both formulas are evaluated in the declaring content's context; one that fails leaves that
+    /// number null with <c>effect.invalid-formula</c>. Armor class is clamped to 0 to <see cref="Character.MaxCompanionArmorClass"/> and
+    /// the hit point maximum to 0 to <see cref="PlayState.MaxHitPoints"/> (<c>companion.out-of-range</c>). A card is made once per
+    /// (content, companion id), at most <see cref="Character.MaxCompanions"/> per sheet (<c>companion.too-many</c>). The attacks and
+    /// pools a card lists stay in <paramref name="attacks"/> and <paramref name="resources"/>, tagged with the companion id; one that
+    /// is not on the sheet is <c>companion.missing-part</c>.
+    /// </summary>
+    private static List<CompanionValue> CollectCompanions(
+        List<ActiveContent> active, Dictionary<string, int> values, Character character, ClassLevelMap classLevels, string family,
+        List<AttackEntry> attacks, List<ResourceValue> resources, List<Diagnostic> diagnostics)
+    {
+        var cards = new List<CompanionValue>();
+        var seen = new HashSet<(Guid Content, Guid Companion)>();
+        var tooMany = false;
+        foreach (var item in active)
+        {
+            var revision = item.Revision;
+            foreach (var effect in revision.Effects.OfType<CompanionEffect>().Where(c => c.Automation != AutomationStatus.Reference))
+            {
+                if (!seen.Add((revision.ContentId, effect.CompanionId)))
+                    continue;
+                if (cards.Count >= Character.MaxCompanions)
+                {
+                    if (!tooMany)
+                        diagnostics.Add(new("companion.too-many", $"A sheet shows at most {Character.MaxCompanions} companions; the rest are left out."));
+                    tooMany = true;
+                    continue;
+                }
+                var origin = ContentOrigin(family, item, effect);
+                var warnings = new List<Diagnostic>();
+                void Warn(Diagnostic d)
+                {
+                    if (!warnings.Contains(d))
+                        warnings.Add(d);
+                    AddOnce(diagnostics, d);
+                }
+
+                int? Number(string source, string what, int low, int high, out List<TraceEntry> trace)
+                {
+                    trace = [];
+                    var inputs = new List<TraceInput>();
+                    if (!TryEvaluate(source, item, character, classLevels, values, inputs, out var value, out var failure))
+                    {
+                        Warn(InvalidFormula(revision, effect, failure!));
+                        return null;
+                    }
+                    var clamped = Math.Clamp(value, low, high);
+                    if (clamped != value)
+                        Warn(new("companion.out-of-range", $"'{revision.Name}' companion '{effect.Id}': the {what.ToLowerInvariant()} {value} is outside {low} to {high} and was set to {clamped}.", revision.Reference, effect.Id));
+                    trace.Add(new(1, "derive", $"{what} from {source}", value, clamped, origin, null, inputs.Count > 0 ? inputs : null));
+                    return clamped;
+                }
+
+                var armorClass = Number(effect.ArmorClass, "Armor Class", 0, Character.MaxCompanionArmorClass, out var armorClassTrace);
+                var hitPointMaximum = Number(effect.HitPointMaximum, "Hit point maximum", 0, PlayState.MaxHitPoints, out var hitPointTrace);
+
+                var attackIds = effect.Attacks ?? [];
+                var resourceIds = effect.ResourceIds ?? [];
+                foreach (var id in attackIds)
+                {
+                    var found = false;
+                    for (var i = 0; i < attacks.Count; i++)
+                    {
+                        if (attacks[i].Item.ContentId == revision.ContentId && attacks[i].EffectId == id)
+                        {
+                            attacks[i] = attacks[i] with { CompanionId = effect.CompanionId };
+                            found = true;
+                        }
+                    }
+                    if (!found)
+                        Warn(new("companion.missing-part", $"'{revision.Name}' companion '{effect.Id}' lists attack '{id}', which is not on the sheet.", revision.Reference, effect.Id));
+                }
+                foreach (var id in resourceIds)
+                {
+                    var found = false;
+                    for (var i = 0; i < resources.Count; i++)
+                    {
+                        if (resources[i].Content.ContentId == revision.ContentId && resources[i].ResourceId == id)
+                        {
+                            resources[i] = resources[i] with { CompanionId = effect.CompanionId };
+                            found = true;
+                        }
+                    }
+                    if (!found)
+                        Warn(new("companion.missing-part", $"'{revision.Name}' companion '{effect.Id}' lists pool '{id}', which is not on the sheet.", revision.Reference, effect.Id));
+                }
+
+                var recorded = character.Play.Companions?.FirstOrDefault(p => p.ContentId == revision.ContentId && p.Id == effect.CompanionId);
+                var current = hitPointMaximum is { } max ? Math.Min(recorded?.Current ?? max, max) : 0;
+                var automation = (armorClass is null || hitPointMaximum is null) && effect.Automation == AutomationStatus.Automatic ? AutomationStatus.Assisted : effect.Automation;
+                cards.Add(new(
+                    revision.Reference, revision.Name, effect.Id, effect.CompanionId, effect.Label, armorClass, armorClassTrace, hitPointMaximum, hitPointTrace,
+                    current, recorded?.Temporary ?? 0, effect.Speed, [.. attackIds], [.. resourceIds], automation, warnings, origin));
+            }
+        }
+        return cards;
     }
 
     /// <summary>A recovery amount: <c>all</c>, or its formula evaluated in the content's context (a failure is a warning).</summary>
