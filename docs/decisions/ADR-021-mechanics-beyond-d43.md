@@ -1,6 +1,6 @@
 # ADR-021: Mechanics beyond the play-mechanics engine (MECH-X)
 
-Status: accepted (owner decision D75, 2026-10-24). Items 0–5 are adopted and shipped; the schema rows were approved 2026-10-27.
+Status: accepted (owner decision D75, 2026-10-24). Items 0–5 are adopted and built; the schema rows were approved 2026-10-27.
 Date: 2026-10-27
 
 ## Context

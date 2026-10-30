@@ -907,6 +907,10 @@ function RollItem({
   const diceless = !rolled;
   // D73: the Use (its reason, its cost text and the action it sends) lives in actionRows.ts, shared with the quickbar.
   const { cost: useCost, costFailed, poolName, alsoText, reason: useReason, action: useAction, payText } = dicelessUse(feature, effect, pool, pools);
+  // A compound useAction names the stamp the save queue holds when it runs, so a second press queued behind the first would carry the
+  // stamp the first wrote and spend again: the Use ignores presses while its change is under way. (A roll record's Spend is held by
+  // `spendOnce` instead.)
+  const using = useRef(false);
   // D73: a roll with dice that the pool can't pay stays enabled (the cost is spent from its record) but says so; a locked one reuses the lock's reason.
   const needsId = `roll-needs-${baseId}`;
   const needs = !diceless && !locked ? availability.reasons.join(' ') : '';
@@ -921,7 +925,13 @@ function RollItem({
             disabled={useReason !== undefined}
             aria-describedby={useReason !== undefined ? reasonId : undefined}
             onClick={() => {
-              if (useAction) act(useAction);
+              if (!useAction || using.current) return;
+              using.current = true;
+              void Promise.resolve(act(useAction))
+                .catch(() => undefined)
+                .finally(() => {
+                  using.current = false;
+                });
             }}
           >
             Use {label}
