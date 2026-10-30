@@ -29,6 +29,232 @@ public class DownConversionExportTests
         return response.GetProperty("result");
     }
 
+    private sealed class SaveHost(string? chosen) : IHostServices
+    {
+        public int Opened { get; private set; }
+
+        public string? Suggested { get; private set; }
+
+        public string? ChooseSaveLocation(string suggestedFileName, string filterDescription, string extension)
+        {
+            Opened++;
+            Suggested = suggestedFileName;
+            return chosen;
+        }
+    }
+
+    private static Character Hero(Func<Character, Character> shape) =>
+        shape(TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json") with { Name = "Compat Hero" });
+
+    private static Guid Save(TempApp app, Func<Character, Character> shape) => app.App.SaveCharacter(Hero(shape)).Character.Id;
+
+    private static Character RunningEncounter(Character c) => c with { Play = (c.Play ?? new PlayState()) with { Encounter = new EncounterState(1) } };
+
+    private static Character WithDetails(Character c) => c with { Details = new CharacterDetails(Backstory: "Compat backstory.") };
+
+    private static Character WithRoundsLeft(Character c) =>
+        c with { Play = (c.Play ?? new PlayState()) with { Toggles = [new ActiveToggle(Guid.Parse("c1000000-0000-4000-8000-0000000000aa"), "surge", 3)] } };
+
+    private static string Payload(Guid id, string target, string? hash = null, string purpose = "share") =>
+        $$"""{"characterIds":["{{id}}"],"purpose":"{{purpose}}","target":"{{target}}"{{(hash is null ? "" : $",\"changesHash\":\"{hash}\"")}}}""";
+
+    private static JsonElement Entry(byte[] zipBytes, string path)
+    {
+        using var zip = new System.IO.Compression.ZipArchive(new MemoryStream(zipBytes));
+        using var reader = new StreamReader(zip.GetEntry(path)!.Open());
+        return JsonDocument.Parse(reader.ReadToEnd()).RootElement.Clone();
+    }
+
+    private static byte[] ExportBytes(JsonElement response) => Convert.FromBase64String(Result(response).GetProperty("base64").GetString()!);
+
+    private static string Snapshot(TempApp app) =>
+        string.Join("\n", Directory.EnumerateFiles(app.App.DataDirectory, "*", SearchOption.AllDirectories).Where(f => !f.EndsWith(".lock", StringComparison.Ordinal)).Order(StringComparer.Ordinal)
+            .Select(f =>
+            {
+                using var stream = new FileStream(f, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete); // the open database is shared
+                return $"{Path.GetRelativePath(app.App.DataDirectory, f)}:{Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream))}";
+            }));
+
+    [Fact]
+    public void Preview_for_0_6_0_blocks_a_running_encounter()
+    {
+        using var app = new TempApp();
+        var id = Save(app, RunningEncounter);
+
+        var result = Result(Send(new CommandDispatcher(app.App), "package.exportPreview", Payload(id, "0.6.0")));
+
+        var change = Assert.Single(result.GetProperty("changes").EnumerateArray());
+        Assert.Equal($"characters/{id:D}.json", change.GetProperty("entry").GetString());
+        Assert.Equal("character", change.GetProperty("kind").GetString());
+        Assert.Equal("blocks", change.GetProperty("action").GetString());
+        Assert.Equal("package.target-blocked", change.GetProperty("code").GetString());
+        Assert.Equal("'Compat Hero': an encounter is running. End it, then export.", change.GetProperty("message").GetString());
+        Assert.Equal("0.6.0", result.GetProperty("target").GetString());
+
+        var plan = new PackageService.ExportPlan([Hero(RunningEncounter) with { Id = id }], [], [], [], "x.tomestack.zip");
+        var lowered = DownConversion.Lower(plan, ReleaseLadder.Target("0.6.0")!, _ => false, _ => "");
+        Assert.True(lowered.Blocked);
+    }
+
+    [Fact]
+    public void Export_refuses_when_blocked()
+    {
+        using var app = new TempApp();
+        var id = Save(app, RunningEncounter);
+        var saved = Path.Combine(app.App.DataDirectory, "out", "x.tomestack.zip");
+        Directory.CreateDirectory(Path.GetDirectoryName(saved)!);
+        var host = new SaveHost(saved);
+        var dispatcher = new CommandDispatcher(app.App, host: host);
+        var hash = Result(Send(dispatcher, "package.exportPreview", Payload(id, "0.6.0"))).GetProperty("changesHash").GetString()!;
+        var before = Snapshot(app);
+
+        Assert.Equal("package.target-blocked", ErrorOf(Send(dispatcher, "package.export", Payload(id, "0.6.0", hash))).Code);
+        Assert.Equal("package.target-blocked", ErrorOf(Send(dispatcher, "package.saveAs", Payload(id, "0.6.0", hash))).Code);
+
+        Assert.Equal(0, host.Opened);
+        Assert.False(File.Exists(saved));
+        Assert.False(File.Exists(saved + ".partial"));
+        Assert.Equal(before, Snapshot(app));
+    }
+
+    [Fact]
+    public void Preview_for_0_6_0_drops_rounds_left_and_writes_v9()
+    {
+        using var app = new TempApp();
+        var id = Save(app, c => WithDetails(WithRoundsLeft(c))); // details keep it a v9 character once the v10 field is gone
+        var dispatcher = new CommandDispatcher(app.App);
+
+        var preview = Result(Send(dispatcher, "package.exportPreview", Payload(id, "0.6.0")));
+        var change = Assert.Single(preview.GetProperty("changes").EnumerateArray());
+        Assert.Equal(("dropped", "package.target-drops"), (change.GetProperty("action").GetString(), change.GetProperty("code").GetString()));
+
+        var bytes = ExportBytes(Send(dispatcher, "package.export", Payload(id, "0.6.0", preview.GetProperty("changesHash").GetString())));
+        var character = Entry(bytes, $"characters/{id:D}.json");
+        Assert.Equal(9, character.GetProperty("schemaVersion").GetInt32());
+        Assert.DoesNotContain("roundsLeft", character.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Preview_for_0_5_0_drops_details()
+    {
+        using var app = new TempApp();
+        var id = Save(app, WithDetails);
+        var dispatcher = new CommandDispatcher(app.App);
+
+        var preview = Result(Send(dispatcher, "package.exportPreview", Payload(id, "0.5.0")));
+        var change = Assert.Single(preview.GetProperty("changes").EnumerateArray());
+        Assert.Equal(("dropped", "package.target-drops"), (change.GetProperty("action").GetString(), change.GetProperty("code").GetString()));
+
+        var bytes = ExportBytes(Send(dispatcher, "package.export", Payload(id, "0.5.0", preview.GetProperty("changesHash").GetString())));
+        var character = Entry(bytes, $"characters/{id:D}.json");
+        Assert.Equal(8, character.GetProperty("schemaVersion").GetInt32());
+        Assert.False(character.TryGetProperty("details", out _));
+    }
+
+    [Fact]
+    public void Manifest_carries_madeFor_and_true_appVersion()
+    {
+        using var app = new TempApp();
+        var id = Save(app, c => c);
+        var dispatcher = new CommandDispatcher(app.App);
+        var hash = Result(Send(dispatcher, "package.exportPreview", Payload(id, "0.6.0"))).GetProperty("changesHash").GetString();
+
+        var manifest = Entry(ExportBytes(Send(dispatcher, "package.export", Payload(id, "0.6.0", hash))), "manifest.json");
+
+        Assert.Equal("0.6.0", manifest.GetProperty("madeFor").GetString());
+        Assert.Equal(AppVersionStamp.CurrentVersion, manifest.GetProperty("appVersion").GetString());
+    }
+
+    [Theory]
+    [InlineData("share", "Compat-Hero-for-0.6.0.tomestack.zip")]
+    [InlineData("backup", "Compat-Hero-for-0.6.0-personal-backup.tomestack.zip")]
+    public void File_name_carries_the_target(string purpose, string expected)
+    {
+        using var app = new TempApp();
+        var id = Save(app, c => c);
+        var dispatcher = new CommandDispatcher(app.App);
+
+        var preview = Result(Send(dispatcher, "package.exportPreview", Payload(id, "0.6.0", purpose: purpose)));
+        Assert.Equal(expected, preview.GetProperty("fileName").GetString());
+        var export = Result(Send(dispatcher, "package.export", Payload(id, "0.6.0", preview.GetProperty("changesHash").GetString(), purpose)));
+        Assert.Equal(expected, export.GetProperty("fileName").GetString());
+    }
+
+    [Fact]
+    public void Save_requires_matching_changesHash()
+    {
+        using var app = new TempApp();
+        var id = Save(app, WithDetails);
+        var saved = Path.Combine(app.App.DataDirectory, "out", "x.tomestack.zip");
+        Directory.CreateDirectory(Path.GetDirectoryName(saved)!);
+        var dispatcher = new CommandDispatcher(app.App, host: new SaveHost(saved));
+        const string sentence = "The preview changed since you confirmed it. Review the list and try again.";
+        var hash = Result(Send(dispatcher, "package.exportPreview", Payload(id, "0.5.0"))).GetProperty("changesHash").GetString()!;
+
+        Assert.Equal(("package.target-changed", sentence), ErrorOf(Send(dispatcher, "package.export", Payload(id, "0.5.0"))));
+        Assert.Equal(("package.target-changed", sentence), ErrorOf(Send(dispatcher, "package.saveAs", Payload(id, "0.5.0"))));
+        Assert.Equal(("package.target-changed", sentence), ErrorOf(Send(dispatcher, "package.export", Payload(id, "0.5.0", new string('0', 64)))));
+        Assert.Equal(("package.target-changed", sentence), ErrorOf(Send(dispatcher, "package.saveAs", Payload(id, "0.5.0", new string('0', 64)))));
+        Assert.False(File.Exists(saved));
+
+        Result(Send(dispatcher, "package.export", Payload(id, "0.5.0", hash)));
+        Assert.True(Result(Send(dispatcher, "package.saveAs", Payload(id, "0.5.0", hash))).GetProperty("saved").GetBoolean());
+        Assert.True(File.Exists(saved));
+    }
+
+    [Fact]
+    public void Without_a_target_the_changesHash_is_ignored()
+    {
+        using var app = new TempApp();
+        var id = Save(app, c => c);
+        var dispatcher = new CommandDispatcher(app.App);
+
+        Result(Send(dispatcher, "package.export", $$"""{"characterIds":["{{id}}"],"changesHash":"nonsense"}"""));
+    }
+
+    [Fact]
+    public void Same_input_gives_identical_bytes()
+    {
+        using var app = new TempApp();
+        var id = Save(app, WithDetails);
+        var dispatcher = new CommandDispatcher(app.App);
+        var hash = Result(Send(dispatcher, "package.exportPreview", Payload(id, "0.5.0"))).GetProperty("changesHash").GetString();
+
+        var first = ExportBytes(Send(dispatcher, "package.export", Payload(id, "0.5.0", hash)));
+        var second = ExportBytes(Send(dispatcher, "package.export", Payload(id, "0.5.0", hash)));
+
+        Assert.Equal(first, second);
+    }
+
+    [Fact]
+    public void An_export_with_nothing_to_lose_has_no_changes_and_a_hash_of_the_empty_list()
+    {
+        using var app = new TempApp();
+        var id = Save(app, c => c);
+        var dispatcher = new CommandDispatcher(app.App);
+
+        var preview = Result(Send(dispatcher, "package.exportPreview", Payload(id, "0.6.0")));
+
+        Assert.Empty(preview.GetProperty("changes").EnumerateArray());
+        var hash = preview.GetProperty("changesHash").GetString();
+        Assert.Equal(DownConversion.HashChanges([]), hash);
+        Assert.Equal(64, hash!.Length);
+        Result(Send(dispatcher, "package.export", Payload(id, "0.6.0", hash)));
+    }
+
+    [Fact]
+    public void Unknown_target_message_stays_short_for_a_huge_value()
+    {
+        using var app = new TempApp();
+        var id = SaveCharacter(app);
+
+        var (code, message) = ErrorOf(Send(new CommandDispatcher(app.App), "package.exportPreview", Payload(id, new string('x', 10_000))));
+
+        Assert.Equal("package.target-unknown", code);
+        Assert.True(message.Length < 200, message.Length.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        Assert.StartsWith("TomeStack xxxxxxxxxxxxxxxx… is not", message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Targets_lists_offered_rows_newest_first()
     {

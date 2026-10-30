@@ -469,6 +469,7 @@ public class SchemaTests
         Assert.Equal("", ErrorsWith(_ => { }));
         Assert.Equal("", ErrorsWith(m => m["madeFor"] = "0.6.0"));
         Assert.NotEqual("", ErrorsWith(m => m["madeFor"] = "abc"));
+        Assert.NotEqual("", ErrorsWith(m => m["madeFor"] = "12345.0.0"));
         Assert.NotEqual("", ErrorsWith(m => m["madeForever"] = "0.6.0"));
     }
 

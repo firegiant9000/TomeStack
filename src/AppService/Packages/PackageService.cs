@@ -49,20 +49,29 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
 
     private static readonly Diagnostic ExtensionNotAllowed = new("package.extension-not-allowed", "A package never carries an extension, and importing one never installs one (ADR-011). Install extensions from the Extensions screen.");
 
-    private sealed record ExportPlan(
+    internal sealed record ExportPlan(
         List<Character> Characters, List<ContentRevision> Revisions, List<SourceRecord> Sources, List<OmittedSource> Omitted, string FileName);
 
     /// <summary>Import Lab L5, <c>package.preflight</c>: what a share export would carry, leave out or refuse. Writes nothing.</summary>
     public PreflightReport RunPreflight(PreflightRequest request) => Preflight.Plan(store, request, _bundledSources);
 
-    /// <summary>What <see cref="Export"/> would write for <paramref name="purpose"/>, without writing it (ADR-007).</summary>
-    public ExportPreview PreviewExport(IReadOnlyList<Guid> characterIds, ExportPurpose purpose)
+    /// <summary>The plan for <paramref name="target"/> (D85): lowered for that release, or null when there is no target (the ordinary path).</summary>
+    private LoweredPlan? LowerFor(ExportPlan plan, LadderRow? target) =>
+        target is null ? null : DownConversion.Lower(plan, target, _bundledSources.Contains, id => store.FindSource(id)?.Title ?? "");
+
+    /// <summary>What <see cref="Export"/> would write for <paramref name="purpose"/>, without writing it (ADR-007). With a <paramref name="target"/>, the character is lowered and what that loses is listed (D85).</summary>
+    public ExportPreview PreviewExport(IReadOnlyList<Guid> characterIds, ExportPurpose purpose, LadderRow? target = null)
     {
         var plan = Plan(characterIds, purpose);
+        var lowered = LowerFor(plan, target);
+        plan = lowered?.Plan ?? plan;
         var gapNotes = purpose == ExportPurpose.Backup ? plan.Characters.Sum(c => store.ListGapNotes(c.Id).Count) : 0;
         var bundledIds = plan.Revisions.Where(r => _bundledSources.Contains(r.Provenance.SourceId)).Select(r => r.RevisionId).ToList();
         var opens = NewerBuild.Evaluate(plan.Revisions, plan.Characters, gapNotes > 0 ? GapNote.CurrentSchemaVersion : 0, bundledIds, BundledPackTitle(plan.Revisions));
-        return new ExportPreview(purpose, plan.FileName, [.. plan.Characters.Select(c => c.Id)], [.. plan.Sources.Select(Notice)], plan.Omitted, gapNotes, opens.Warnings, opens.OpensIn, opens.Causes);
+        var preview = new ExportPreview(purpose, plan.FileName, [.. plan.Characters.Select(c => c.Id)], [.. plan.Sources.Select(Notice)], plan.Omitted, gapNotes, opens.Warnings, opens.OpensIn, opens.Causes);
+        return lowered is null
+            ? preview
+            : preview with { Target = lowered.Target.Release.ToString(3), Changes = lowered.Changes, ChangesHash = lowered.ChangesHash };
     }
 
     /// <summary>The bundled pack a revision comes from, as a short label for a cause ("SRD 5.2.1"): its source title with "System Reference Document" shortened.</summary>
@@ -76,9 +85,21 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         };
     }
 
-    public ExportResult Export(IReadOnlyList<Guid> characterIds, ExportPurpose purpose = ExportPurpose.Backup)
+    /// <param name="target">D85: lower the character for this release. The save presents <paramref name="changesHash"/>, the list it confirmed; a blocked plan or a different list writes nothing.</param>
+    public ExportResult Export(IReadOnlyList<Guid> characterIds, ExportPurpose purpose = ExportPurpose.Backup, LadderRow? target = null, string? changesHash = null)
     {
         var plan = Plan(characterIds, purpose);
+        if (LowerFor(plan, target) is { } lowered)
+        {
+            if (lowered.Blocked)
+            {
+                var reasons = string.Join(" ", lowered.Changes.Where(c => c.Action == "blocks").Select(c => c.Message));
+                throw new AppValidationException([new(DownConversion.BlockedCode, reasons)], DownConversion.BlockedCode);
+            }
+            if (changesHash is null || !string.Equals(changesHash, lowered.ChangesHash, StringComparison.Ordinal))
+                throw new AppValidationException([new(DownConversion.ChangedCode, "The preview changed since you confirmed it. Review the list and try again.")], DownConversion.ChangedCode);
+            plan = lowered.Plan;
+        }
         var files = new SortedDictionary<string, (string Kind, byte[] Bytes)>(StringComparer.Ordinal);
         foreach (var source in plan.Sources)
             files[$"sources/{source.Id:D}.json"] = ("source", Json(ForCharacterPackage(source))); // machine-local; a path may name the user (ADR-005)
@@ -107,6 +128,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
             FormatVersion = PackageManifest.CharacterFormatVersion,
             CreatedAt = createdAt,
             AppVersion = typeof(PackageService).Assembly.GetName().Version?.ToString(3) ?? "0.0.0",
+            MadeFor = target?.Release.ToString(3),
             Purpose = purpose,
             Characters = [.. plan.Characters.Select(c => c.Id)],
             Entries = [.. files.Select(f => new PackageEntry(f.Key, f.Value.Kind, Hash(f.Value.Bytes), f.Value.Bytes.LongLength))],

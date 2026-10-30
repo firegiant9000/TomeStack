@@ -89,7 +89,8 @@ public sealed record PackageManifest
 
     /// <summary>Whether <paramref name="value"/> is a release string this build accepts as <see cref="MadeFor"/>: <c>x.y.z</c>, each part 1 to 4 digits.</summary>
     public static bool IsValidMadeFor(string? value) =>
-        value is not null && System.Text.RegularExpressions.Regex.IsMatch(value, @"^\d{1,4}\.\d{1,4}\.\d{1,4}$", System.Text.RegularExpressions.RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1))
+        value is not null && value == value.Trim()
+        && System.Text.RegularExpressions.Regex.IsMatch(value, @"^[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}\z", System.Text.RegularExpressions.RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1))
         && Version.TryParse(value, out _);
 
     public string AttachmentPolicy { get; init; } = CharacterAttachmentPolicy;

@@ -64,6 +64,8 @@ public class MadeForMarkerTests
     [InlineData("abc")]
     [InlineData("12345.0.0")]
     [InlineData("")]
+    [InlineData("0.6.0\n")]
+    [InlineData(" 0.6.0")]
     public void Manifest_ignores_malformed_madeFor(string value) => AssertIgnored(value);
 
     [Fact]

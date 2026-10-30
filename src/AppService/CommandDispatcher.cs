@@ -346,8 +346,11 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         if (ReleaseLadder.Target(target) is { } row)
             return row;
         var choices = string.Join(", ", OfferedTargets().Select(r => r.Release.ToString(3)));
+        // A caller's string is echoed only when it looks like a version number; anything else is cut short.
+        var versionLike = target.Length is >= 1 and <= 16 && target.All(c => c is >= '0' and <= '9' or '.'); // ^[0-9.]{1,16}\z
+        var shown = versionLike ? target : (target.Length > 16 ? target[..16] : target) + "…";
         throw new AppValidationException(
-            [new("package.target-unknown", $"TomeStack {target} is not a version this export can be made for. Choose one of: {choices}.")],
+            [new("package.target-unknown", $"TomeStack {shown} is not a version this export can be made for. Choose one of: {choices}.")],
             "package.target-unknown");
     }
 
@@ -360,12 +363,8 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
             [new("package.target-blocked", $"Saving {what} for an older TomeStack is not available yet.")], "package.target-blocked");
     }
 
-    private ExportPreview PreviewExport(ExportPayload payload)
-    {
-        var row = ResolveTarget(payload.Target);
-        var preview = app.PreviewExport(payload.CharacterIds, payload.Purpose);
-        return row is null ? preview : preview with { Target = row.Release.ToString(3) };
-    }
+    private ExportPreview PreviewExport(ExportPayload payload) =>
+        app.PreviewExport(payload.CharacterIds, payload.Purpose, ResolveTarget(payload.Target));
 
     private SourcePackPreview PreviewSourcePack(SourcePackPayload payload)
     {
@@ -381,8 +380,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
 
     private object ExportPackage(ExportPayload payload)
     {
-        RefuseTarget(payload.Target, "a character export");
-        var export = app.ExportCharacters(payload.CharacterIds, payload.Purpose);
+        var export = app.ExportCharacters(payload.CharacterIds, payload.Purpose, ResolveTarget(payload.Target), payload.ChangesHash);
         return new { export.FileName, Base64 = Convert.ToBase64String(export.Content), export.Manifest };
     }
 
@@ -392,10 +390,11 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     /// </summary>
     private SaveOutcome SavePackageAs(ExportPayload payload)
     {
-        RefuseTarget(payload.Target, "a character export");
+        var row = ResolveTarget(payload.Target);
         if (host is null)
             throw new AppValidationException([new("host.unsupported", "This host has no native Save dialog.")], "unsupported");
-        return SaveAs(app.ExportCharacters(payload.CharacterIds, payload.Purpose));
+        // The package is built (and a blocked or changed plan refused) before the Save dialog opens.
+        return SaveAs(app.ExportCharacters(payload.CharacterIds, payload.Purpose, row, payload.ChangesHash));
     }
 
     /// <summary>M6 slice 1: a source pack as base64 (browser development and tests; the desktop uses the Save dialog).</summary>
