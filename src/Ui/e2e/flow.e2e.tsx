@@ -776,6 +776,72 @@ it('item mods: a published mod attached to one copy changes only that copy\'s at
   expect(first).not.toMatch(/E2E Keen Rune/);
 });
 
+it('content companions: a published feature\'s companion is a card with its own pool (MECH-X item 4)', async () => {
+  const user = userEvent.setup();
+  const source = await client.createHomebrewSource('E2E Bonded Book', ['srd-5.2.1']);
+  await openStudioOn(user, 'E2E Bonded Book');
+
+  // One feature: a pool, an attack, and a companion that lists both (the checkboxes name them by label).
+  const editor = () => screen.getByRole('region', { name: /^New |^Edit / });
+  await user.click(screen.getByRole('button', { name: 'New feature' }));
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'Fixture Warden Bond');
+  await user.click(within(editor()).getByRole('button', { name: 'Add resource' }));
+  const pool = within(within(editor()).getByRole('group', { name: /^Rule 1: Resource/ }));
+  await user.type(pool.getByRole('textbox', { name: 'Resource name' }), 'Fixture Charges');
+  await user.clear(pool.getByRole('textbox', { name: /^Uses/ }));
+  await user.type(pool.getByRole('textbox', { name: /^Uses/ }), '3');
+  await user.click(within(editor()).getByRole('button', { name: 'Add attack' }));
+  await user.type(within(within(editor()).getByRole('group', { name: /^Rule 2: Attack/ })).getByRole('textbox', { name: 'Attack name' }), 'Fixture Bite');
+  await user.click(within(editor()).getByRole('button', { name: 'Add companion' }));
+  const companion = within(within(editor()).getByRole('group', { name: /^Rule 3: Companion/ }));
+  await user.type(companion.getByRole('textbox', { name: 'Label' }), 'Fixture Warden');
+  await user.clear(companion.getByRole('textbox', { name: 'Armor Class formula' }));
+  await user.type(companion.getByRole('textbox', { name: 'Armor Class formula' }), '15');
+  await user.clear(companion.getByRole('textbox', { name: 'Hit point maximum formula' }));
+  await user.type(companion.getByRole('textbox', { name: 'Hit point maximum formula' }), '20');
+  await user.click(companion.getByRole('checkbox', { name: 'Fixture Bite' }));
+  await user.click(companion.getByRole('checkbox', { name: 'Fixture Charges' }));
+  await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Published Fixture Warden Bond.'));
+
+  // The server stored a v12 revision with the companion and both lists.
+  const published = (await newestOf(source.id, 'Fixture Warden Bond'))!;
+  expect(published.schemaVersion).toBe(12);
+  expect(published.effects.find((e) => e.type === 'companion')).toMatchObject({ label: 'Fixture Warden', armorClass: '15', hitPointMaximum: '20' });
+
+  await client.createCharacter({ name: 'E2E Bonded Hero', rulesFamily: 'srd-5.2.1', baseAbilities: { str: 14, dex: 12, con: 12, int: 10, wis: 10, cha: 10 }, pins: [published] });
+  cleanup();
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: /^E2E Bonded Hero/ }));
+  const hero = await screen.findByRole('article', { name: 'E2E Bonded Hero' });
+  await openTab(user, hero, 'Play');
+
+  // The card shows Armor Class and hit points, calculated (no Edit or Remove), with its attack and pool inside it.
+  const card = () => screen.getByRole('region', { name: 'Fixture Warden' });
+  await waitFor(() => expect(within(card()).getByText('Armor Class 15')).toBeTruthy());
+  expect(within(card()).getByText('Hit points: 20 of 20')).toBeTruthy();
+  expect(within(card()).queryByRole('button', { name: /^Edit / })).toBeNull();
+  expect(within(card()).queryByRole('button', { name: /^Remove / })).toBeNull();
+  expect(card().textContent).toMatch(/From Fixture Warden Bond/);
+  expect(within(card()).getByRole('button', { name: 'Roll Fixture Bite attack' })).toBeTruthy();
+
+  // "Take damage" goes through the play command and lowers the hit points.
+  await user.type(within(card()).getByRole('spinbutton', { name: 'Amount' }), '3');
+  await user.click(within(card()).getByRole('button', { name: /^Take damage/ }));
+  await waitFor(() => expect(within(card()).getByText('Hit points: 17 of 20')).toBeTruthy());
+
+  // "Spend" on its own pool lowers the pool.
+  expect(within(card()).getByRole('heading', { name: /^Fixture Charges: 3 of 3/ })).toBeTruthy();
+  await user.click(within(card()).getByRole('button', { name: 'Spend 1 Fixture Charges' }));
+  await waitFor(() => expect(within(card()).getByRole('heading', { name: /^Fixture Charges: 2 of 3/ })).toBeTruthy());
+
+  // The attack and the pool are drawn on the card only: not in the Actions or Resources panels.
+  const actions = screen.queryByRole('region', { name: 'Attacks and actions' });
+  if (actions) expect(within(actions).queryByRole('button', { name: /Fixture Bite/ })).toBeNull();
+  const resources = screen.queryByRole('region', { name: 'Resources' });
+  if (resources) expect(within(resources).queryByText(/Fixture Charges/)).toBeNull();
+});
+
 it('attaches a PDF to a source, offers the cited page on a feature, and removes it after a warning', async () => {
   const user = userEvent.setup();
   // Setup through the client: a homebrew source, a published feat citing page 7, and a character using it.

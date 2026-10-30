@@ -144,6 +144,17 @@ Play's second column ends with a "Companions" section: one card per companion (a
 - **Undo (D23):** each companion action is undone by an exact `companionSetHitPoints` that restores both current and temporary hit points (a companion with no recorded hit points reads as at its maximum with none temporary). A change that changed nothing has no Undo. After Undo, focus moves to the companion's heading.
 - **Attack lines roll** through `roll` with `companionAttack: { companionId, attackId }`: the attack roll is a d20 plus the typed to-hit (with the d20 mode choice), `damage: true` rolls the damage dice (`critical` doubles them), exactly as for "Your own attacks". The record reads "<companion>: <attack> attack" / "damage (<type>)" with `rollId` `companion.attack` / `companion.damage`. Refusals: `roll.companion-unknown`, `roll.companion-attack-unknown`, `roll.companion-attack-no-damage`, and `roll.ambiguous` with another target. Rolling changes nothing.
 
+### Companions that content gives (MECH-X item 4, content v12)
+
+Content can give a companion ([play-mechanics.md](play-mechanics.md) "Content companions"). These are **calculated**, unlike the hand companions above, and come first in the section.
+
+- **The hint** says a companion marked "From" a feature or item is calculated from it, and that you cannot edit or remove it here.
+- **The card** is a region named by the companion's label. It shows "From {content name}", Armor Class and speed when given, and hit points ("Hit points: 17 of 20", with temporary hit points when there are some). "Why?" lists open under Armor Class and the hit point maximum. There is no Edit or Remove. When the maximum cannot be calculated, the card says "Hit points: maximum unknown" and holds the hit point buttons with a reason.
+- **Its attacks and pools are drawn inside the card**: each attack as in the Actions list (roll, damage, "How the attack is calculated", cost line), each pool as a resource card with Spend, Regain and its recovery. They are left out of the Actions list, the allowances, the Resources panel and the Combat strip, so each shows once.
+- **The four actions** (Take damage, Heal, Set hit points, Set temporary hit points) send `companionDamage`, `companionHeal`, `companionSetHitPoints` and `companionSetTemporaryHitPoints` with `contentId` and `companionId`. Undo works the same way (an exact `companionSetHitPoints` with the content id). A rest changes nothing about the hit points.
+- **Not pinnable.** The quickbar skips an attack pin whose row is a companion's; a pin that already existed and becomes a companion's attack disappears from the bar.
+- **Stable ids.** The card's heading and fields use the DOM ids `companion-{contentId}-{companionId}`.
+
 ## Spells tab: filters (P09, D70)
 
 - Beside the name search (D30), each caster has a **Filters** button (`aria-expanded`) that opens a "Filter {caster} spells" group: level (0 is "Cantrip", up to 9), school (the schools that caster's spells have, compared without regard to case), casting time (Action, Bonus action, Reaction, "Longer or not stated"), Concentration and Ritual (Any, Yes, No), and "Clear filters". An empty group means any; the groups combine with AND, and the name search still applies.
