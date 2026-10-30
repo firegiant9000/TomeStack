@@ -1043,6 +1043,8 @@ export interface RollTarget {
   spellAttack?: boolean;
   /** An equipped weapon: its attack roll, or its damage (`damage`), two-handed (`versatile`). */
   weapon?: ContentReference;
+  /** MECH-X R68: with `weapon`, the copy's equipment index (`AttackEntry.entryIndex`), so a weapon carried as several copies rolls that copy's row. */
+  entryIndex?: number;
   damage?: boolean;
   versatile?: boolean;
   /** One of the character's own hand-typed attacks (`character.customAttacks`): its attack roll, or its damage (`damage`). */

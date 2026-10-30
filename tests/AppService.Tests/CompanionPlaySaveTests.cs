@@ -59,4 +59,22 @@ public class CompanionPlaySaveTests
         Assert.Null(row.ContentId);
         Assert.Equal(9, s.Temp.App.Store.FindCharacter(s.Id)!.SchemaVersion);
     }
+
+    [Fact]
+    public void A_save_that_prunes_says_so_once_with_a_count_and_no_name()
+    {
+        var s = Start();
+        using var _ = s.Temp;
+        var stored = s.Temp.App.GetCharacter(s.Id).Character;
+
+        var saved = s.Temp.App.SaveCharacter(stored with { Name = "Testy Handler Renamed" });
+        var again = s.Temp.App.SaveCharacter(saved.Character with { Name = "Testy Handler Again" });
+
+        var notice = Assert.Single(saved.Notices!, n => n.Code == TomeStackApp.CompanionPlayPrunedCode);
+        Assert.Equal("A companion's hit points were reset, because the content that gives it is no longer active.", notice.Message);
+        Assert.Null(notice.Content);
+        Assert.DoesNotContain("Testy", notice.Message, StringComparison.Ordinal);
+        Assert.True(again.Notices is null || again.Notices.All(n => n.Code != TomeStackApp.CompanionPlayPrunedCode)); // nothing left to prune
+        Assert.Null(s.Temp.App.GetCharacter(s.Id).Notices); // never stored
+    }
 }

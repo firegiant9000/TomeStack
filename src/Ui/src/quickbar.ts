@@ -4,16 +4,19 @@ import { paying } from './payment';
 import type { AttackEntry, CharacterView, CustomAttack, FeatureEffect, FeatureEntry, PlayAction, RollTarget, ToggleValue } from './api/types';
 
 export type PinKind = 'roll' | 'attack' | 'custom' | 'toggle';
-export type Pin = { kind: PinKind; contentId?: string; effectId?: string; attackId?: string };
+/** `entryIndex` (attack pins only, MECH-X R68): the copy a weapon carried as several copies was pinned from. */
+export type Pin = { kind: PinKind; contentId?: string; effectId?: string; attackId?: string; entryIndex?: number };
 
 /** The most pins the bar shows. */
 export const maxPins = 8;
 /** R14: visible pins first, then the ones that no longer resolve (kept in case the form or item comes back). */
 export const maxStoredPins = 16;
 
-export const pinKey = (pin: Pin): string => `${pin.kind}:${pin.contentId ?? ''}:${pin.effectId ?? ''}:${pin.attackId ?? ''}`;
+export const pinKey = (pin: Pin): string =>
+  `${pin.kind}:${pin.contentId ?? ''}:${pin.effectId ?? ''}:${pin.attackId ?? ''}${pin.entryIndex === undefined ? '' : `:${pin.entryIndex}`}`;
 
 const filled = (value: unknown): value is string => typeof value === 'string' && value !== '';
+const anIndex = (value: unknown): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 0;
 
 export function isPin(value: unknown): value is Pin {
   if (typeof value !== 'object' || value === null) return false;
@@ -30,7 +33,7 @@ export function isPin(value: unknown): value is Pin {
   }
 }
 
-/** Keeps the four known fields of each valid pin, drops duplicates, and stops at `max`. */
+/** Keeps the known fields of each valid pin (an attack pin's copy index too), drops duplicates, and stops at `max`. */
 function normalise(values: unknown[], max: number): Pin[] {
   const seen = new Set<string>();
   const pins: Pin[] = [];
@@ -43,6 +46,8 @@ function normalise(values: unknown[], max: number): Pin[] {
     } else {
       pin.contentId = value.contentId;
       pin.effectId = value.effectId;
+      // A stored index that is not a whole number at or above 0 is dropped, so the pin falls back to the weapon's first row.
+      if (value.kind === 'attack' && anIndex(value.entryIndex)) pin.entryIndex = value.entryIndex;
     }
     const k = pinKey(pin);
     if (seen.has(k)) continue;
@@ -78,7 +83,16 @@ export function writePins(characterId: string, pins: Pin[]): void {
 }
 
 export const rollPin = (feature: FeatureEntry, effect: FeatureEffect): Pin => ({ kind: 'roll', contentId: feature.content.contentId, effectId: effect.id });
-export const attackPin = (attack: AttackEntry): Pin => ({ kind: 'attack', contentId: attack.item.contentId, effectId: attack.effectId });
+export const attackPin = (attack: AttackEntry): Pin => ({
+  kind: 'attack',
+  contentId: attack.item.contentId,
+  effectId: attack.effectId,
+  ...(attack.entryIndex === undefined || attack.entryIndex === null ? {} : { entryIndex: attack.entryIndex }),
+});
+
+/** MECH-X R68: a weapon row's roll target; a per-copy row names its copy so the service rolls that copy's numbers. */
+export const weaponTarget = (attack: AttackEntry): RollTarget =>
+  attack.entryIndex === undefined || attack.entryIndex === null ? { weapon: attack.item } : { weapon: attack.item, entryIndex: attack.entryIndex };
 export const customPin = (attack: CustomAttack): Pin => ({ kind: 'custom', attackId: attack.id });
 export const togglePin = (toggle: ToggleValue): Pin => ({ kind: 'toggle', contentId: toggle.content.contentId, effectId: toggle.effectId });
 
@@ -131,11 +145,16 @@ export function resolvePin(view: CharacterView, pin: Pin): QuickAction | undefin
       return { ...base, name: spends ? `Roll ${label} and spend ${use.cost} ${pool.label}` : `Roll ${label}`, label, availability, target, spends };
     }
     case 'attack': {
-      const attack = (view.sheet.attacks ?? []).find((a) => a.item.contentId === pin.contentId && a.effectId === pin.effectId);
+      const rows = (view.sheet.attacks ?? []).filter((a) => a.item.contentId === pin.contentId && a.effectId === pin.effectId);
+      // R68, as the service rolls it: a pinned copy finds its own row, or the one plain row once the copies no longer differ;
+      // a copy that is gone resolves to nothing (kept, R14). A pin with no copy takes the first row.
+      const [first] = rows;
+      const plainOnly = rows.length === 1 && first !== undefined && (first.entryIndex ?? undefined) === undefined;
+      const attack = pin.entryIndex === undefined ? first : (rows.find((a) => a.entryIndex === pin.entryIndex) ?? (plainOnly ? first : undefined));
       if (!attack || attack.companionId) return undefined; // a companion's attacks are rolled from its card
       const pool = poolFor(resources, attack.resourceId ?? undefined, attack.costResourceContent ?? undefined);
       const availability = attackAvailability(attack, pool);
-      const target: RollTarget = attack.source === 'feature' ? { content: attack.item, effectId: attack.effectId } : { weapon: attack.item };
+      const target: RollTarget = attack.source === 'feature' ? { content: attack.item, effectId: attack.effectId } : weaponTarget(attack);
       // The service links a feature attack's pool on its to-hit record, so the record offers the fixed Spend: the name must say so (R13).
       const cost = attack.cost ?? 1;
       const spends =

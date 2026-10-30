@@ -15,6 +15,7 @@ import type {
   RollTarget,
   TurnMoment,
 } from '../api/types';
+import { companionPrunedText } from '../companionNotice';
 import { downloadBase64 } from '../files';
 import { ArchivePanel } from './ArchivePanel';
 import { ChangeRegion } from './export/ChangeRegion';
@@ -586,6 +587,15 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   useEffect(() => {
     shownView.current = view;
   }, [view]);
+  // MECH-X R69: a save that reset content companions' hit points says so once on the status line. It runs after the panel's own
+  // status (the reply is shown first), and once per view: the view the sheet opened with is the opener's to report (the builder).
+  const noticedView = useRef(view);
+  useEffect(() => {
+    if (noticedView.current === view) return;
+    noticedView.current = view;
+    const pruned = companionPrunedText(view);
+    if (pruned && mounted.current) onStatus(pruned);
+  }, [view, onStatus]);
   /** D43 S3: what the reply noticed (an encounter's durations to track by hand, a pool that filled) goes to the sheet's one status line. */
   function say(reply: CharacterView) {
     // D43 S7: the damage panel and the Hit points panel show their own notices (rolls to make, responses not chosen) by label, not by id.

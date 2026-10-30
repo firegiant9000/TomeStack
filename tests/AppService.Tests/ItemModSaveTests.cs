@@ -227,6 +227,63 @@ public class ItemModSaveTests
     }
 
     [Fact]
+    public void A_weapon_roll_with_an_entry_index_rolls_that_copys_numbers()
+    {
+        var s = Start();
+        using var _ = s.Temp;
+        var view = Save(s, new EquipmentEntry(Longblade, Equipped: true), new EquipmentEntry(Longblade, Equipped: true, Mods: [Keen]));
+        var plain = view.Sheet.Attacks!.Single(a => a.Item == Longblade && a.EntryIndex == 0);
+        var keen = view.Sheet.Attacks!.Single(a => a.Item == Longblade && a.EntryIndex == 1);
+        Assert.NotEqual(plain.ToHit, keen.ToHit); // the fixture's mod must change the numbers, or this test proves nothing
+
+        var first = s.Temp.App.Roll(new(s.Id, Weapon: Longblade, EntryIndex: 0));
+        var second = s.Temp.App.Roll(new(s.Id, Weapon: Longblade, EntryIndex: 1));
+        var secondDamage = s.Temp.App.Roll(new(s.Id, Weapon: Longblade, EntryIndex: 1, Damage: true));
+        var unnamed = s.Temp.App.Roll(new(s.Id, Weapon: Longblade));
+
+        Assert.Equal(plain.ToHit, first.Modifiers.Sum(m => m.Amount));
+        Assert.Equal(keen.ToHit, second.Modifiers.Sum(m => m.Amount));
+        Assert.Equal(TempApp.Json(keen.Trace), TempApp.Json(second.Explain));
+        Assert.Equal(keen.Damage, secondDamage.Formula);
+        Assert.Equal(plain.ToHit, unnamed.Modifiers.Sum(m => m.Amount)); // no index: the first row, as before R68
+    }
+
+    [Fact]
+    public void A_weapon_roll_with_an_entry_index_refuses_a_copy_that_is_not_equipped()
+    {
+        var s = Start();
+        using var _ = s.Temp;
+        Save(s, new EquipmentEntry(Longblade, Equipped: true), new EquipmentEntry(Longblade, Equipped: false, Mods: [Keen]), new EquipmentEntry(Longblade, Equipped: true, Mods: [Keen]));
+
+        Assert.Equal("roll.weapon-unknown", CodeOf(() => s.Temp.App.Roll(new(s.Id, Weapon: Longblade, EntryIndex: 1))));
+        Assert.Equal("roll.weapon-unknown", CodeOf(() => s.Temp.App.Roll(new(s.Id, Weapon: Longblade, EntryIndex: 7))));
+        s.Temp.App.Roll(new(s.Id, Weapon: Longblade, EntryIndex: 2));
+    }
+
+    [Fact]
+    public void A_weapon_roll_with_an_entry_index_uses_the_single_row_once_the_copies_no_longer_differ()
+    {
+        var s = Start();
+        using var _ = s.Temp;
+        var view = Save(s, new EquipmentEntry(Longblade, Equipped: true));
+        var row = Assert.Single(view.Sheet.Attacks!, a => a.Item == Longblade);
+        Assert.Null(row.EntryIndex);
+
+        var rolled = s.Temp.App.Roll(new(s.Id, Weapon: Longblade, EntryIndex: 0));
+
+        Assert.Equal(row.ToHit, rolled.Modifiers.Sum(m => m.Amount));
+    }
+
+    [Fact]
+    public void An_entry_index_on_a_roll_that_is_not_a_weapon_roll_is_refused()
+    {
+        var s = Start();
+        using var _ = s.Temp;
+
+        Assert.Equal("roll.entry-index-not-allowed", CodeOf(() => s.Temp.App.Roll(new(s.Id, Field: FieldIds.Initiative, EntryIndex: 0))));
+    }
+
+    [Fact]
     public void Charge_roll_cap_counts_charged_rows_only()
     {
         var s = Start();

@@ -319,3 +319,38 @@ it('quickbar hides an attack pin whose row has companionId', () => {
   const plain = featureAttack();
   expect(resolvePin(view({ attacks: [plain] }), attackPin(plain))).toBeDefined();
 });
+
+// MECH-X R68: a pin made from a copy's row keeps the copy, rolls it, and resolves the way the service rolls it.
+it('an attack pin from a copy of a weapon keeps its entry index and rolls that copy', () => {
+  const first = weapon({ entryIndex: 0, toHit: 5 });
+  const second = weapon({ entryIndex: 2, toHit: 7 });
+  const pin = attackPin(second);
+  expect(pin).toEqual({ kind: 'attack', contentId: 'w1', effectId: 'attack', entryIndex: 2 });
+  expect(pinKey(pin)).not.toBe(pinKey(attackPin(first)));
+  expect(attackPin(weapon())).toEqual({ kind: 'attack', contentId: 'w1', effectId: 'attack' });
+
+  const both = view({ attacks: [first, second] });
+  expect(resolvePin(both, pin)!.target).toEqual({ weapon: second.item, entryIndex: 2 });
+  expect(resolvePin(both, { kind: 'attack', contentId: 'w1', effectId: 'attack' })!.target).toEqual({ weapon: first.item, entryIndex: 0 }); // an older pin: the first row
+  // The copies no longer differ: the one plain row. The copy is gone while others differ: nothing (the pin is kept, R14).
+  expect(resolvePin(view({ attacks: [weapon()] }), pin)!.target).toEqual({ weapon: first.item });
+  expect(resolvePin(view({ attacks: [first, weapon({ entryIndex: 3 })] }), pin)).toBeUndefined();
+});
+
+it('stores an attack pin entry index and drops a bad one or one on another kind', () => {
+  writePins('c1', [{ kind: 'attack', contentId: 'w1', effectId: 'attack', entryIndex: 2 }]);
+  expect(readPins('c1')).toEqual([{ kind: 'attack', contentId: 'w1', effectId: 'attack', entryIndex: 2 }]);
+  localStorage.setItem(
+    'tomestack.quickbar.c1',
+    JSON.stringify([
+      { kind: 'attack', contentId: 'w1', effectId: 'attack', entryIndex: -1 },
+      { kind: 'attack', contentId: 'w2', effectId: 'attack', entryIndex: 1.5 },
+      { kind: 'roll', contentId: 'c1', effectId: 'wave', entryIndex: 1 },
+    ]),
+  );
+  expect(readPins('c1')).toEqual([
+    { kind: 'attack', contentId: 'w1', effectId: 'attack' },
+    { kind: 'attack', contentId: 'w2', effectId: 'attack' },
+    { kind: 'roll', contentId: 'c1', effectId: 'wave' },
+  ]);
+});

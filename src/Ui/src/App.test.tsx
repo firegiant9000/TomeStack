@@ -378,6 +378,17 @@ it('a level-up save with the notice shows its words as the status (MECH-X item 2
   expect(await screen.findByText(moreThanMax)).toBeTruthy();
 });
 
+it('a level-up save that reset a companion adds that notice to the status (MECH-X R69)', async () => {
+  const user = userEvent.setup();
+  const { before, saved } = replacedViews(2);
+  const pruned = "A companion's hit points were reset, because the content that gives it is no longer active.";
+  saved.notices = [...(saved.notices ?? []), { code: 'companion.play-pruned', message: pruned }];
+  vi.mocked(client.saveCharacter).mockResolvedValue(saved);
+  const { save } = await toSaveLevelUp(user, before);
+  await user.click(save);
+  expect(await screen.findByText(`${moreThanMax} ${pruned}`)).toBeTruthy();
+});
+
 it('a choices-mode save with the notice shows its words as the status (MECH-X item 2)', async () => {
   const user = userEvent.setup();
   const { before, saved } = replacedViews(1);

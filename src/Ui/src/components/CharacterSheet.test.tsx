@@ -2558,3 +2558,19 @@ it('does not echo the save notice through the status line when a play reply carr
   await waitFor(() => expect(onStatus).toHaveBeenCalled());
   expect(onStatus).toHaveBeenCalledWith('Fixture pool is full.'); // other notices still say
 });
+
+it('says once when a saved view reset a companion, and leaves the view it opened with to the opener (MECH-X R69)', () => {
+  const pruned = "A companion's hit points were reset, because the content that gives it is no longer active.";
+  const withNotice = (): CharacterView => ({ ...view(), notices: [{ code: 'companion.play-pruned', message: pruned }] });
+  const onStatus = vi.fn<(text: string) => void>();
+  const props = { onChanged: noop, onError: noop, onStatus, onLevelUp: noop, onMakeChoices: noop, onArchiveChanged: noop };
+  const opened = withNotice();
+  const { rerender } = render(<CharacterSheet view={opened} {...props} />);
+  expect(onStatus).not.toHaveBeenCalledWith(pruned); // the builder's save reports its own reply
+  const saved = withNotice();
+  rerender(<CharacterSheet view={saved} {...props} />);
+  expect(onStatus).toHaveBeenCalledWith(pruned);
+  rerender(<CharacterSheet view={saved} {...props} onStatus={onStatus} />);
+  rerender(<CharacterSheet view={view()} {...props} />);
+  expect(onStatus.mock.calls.filter(([text]) => text === pruned)).toHaveLength(1);
+});

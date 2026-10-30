@@ -1102,6 +1102,28 @@ it('numbers copies as the Inventory does, counting an unequipped copy between tw
   expect(screen.getByRole('button', { name: 'Roll Fixture Blade (copy 3 of 3) attack' })).toBeTruthy();
 });
 
+// MECH-X R68: a copy's buttons name the copy, so the service rolls that copy's numbers; a single weapon sends no index.
+it('rolls a copy of a weapon with its entry index, and a single weapon without one', async () => {
+  const user = userEvent.setup();
+  const item = { contentId: 'c-blade', revisionId: 'r-blade' };
+  const own = { item, equipped: true, quantity: 1 };
+  const row = (entryIndex?: number) => ({ item, effectId: 'e1', name: 'Fixture Blade', toHit: 5, damage: '1d8', versatileDamage: '1d10', damageType: 'slashing', automation: 'automatic', category: 'martial', attack: 'melee', properties: [], trace: [], warnings: [], source: 'weapon', ...(entryIndex === undefined ? {} : { entryIndex }) });
+  const roll = vi.fn();
+  const copies = { character: { id: 'fixture', equipment: [own, own] }, sheet: { attacks: [row(0), row(1)], toggles: [], features: [] } } as unknown as CharacterView;
+  render(<ActionsPanel view={copies} roll={roll} act={() => {}} />);
+  await user.click(screen.getByRole('button', { name: 'Roll Fixture Blade (copy 2 of 2) attack' }));
+  expect(roll).toHaveBeenLastCalledWith(expect.objectContaining({ weapon: item, entryIndex: 1 }));
+  await user.click(screen.getByRole('button', { name: 'Roll Fixture Blade (copy 2 of 2) damage (1d8)' }));
+  expect(roll).toHaveBeenLastCalledWith(expect.objectContaining({ weapon: item, entryIndex: 1, damage: true }));
+  await user.click(screen.getByRole('button', { name: 'Roll Fixture Blade (copy 1 of 2) two-handed damage (1d10)' }));
+  expect(roll).toHaveBeenLastCalledWith(expect.objectContaining({ weapon: item, entryIndex: 0, versatile: true }));
+  cleanup();
+  const single = { character: { id: 'fixture', equipment: [own] }, sheet: { attacks: [row()], toggles: [], features: [] } } as unknown as CharacterView;
+  render(<ActionsPanel view={single} roll={roll} act={() => {}} />);
+  await user.click(screen.getByRole('button', { name: 'Roll Fixture Blade attack' }));
+  expect(roll.mock.lastCall?.[0]).not.toHaveProperty('entryIndex');
+});
+
 // MECH-X item 4: a content companion's rows are on its card; the lists that show cards skip them, every lookup keeps them.
 it('Actions and Resources panels hide companion rows but a roll that spends a companion pool still finds it', () => {
   const content = { contentId: 'c-charm', revisionId: 'r-charm' };

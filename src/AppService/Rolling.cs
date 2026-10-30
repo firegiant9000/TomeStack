@@ -9,7 +9,8 @@ namespace TomeStack.AppService;
 /// throw (<paramref name="DeathSave"/>: a d20 with no modifier), or one of the character's spells (<paramref name="Spell"/>:
 /// its attack roll with the caster's spell attack bonus when <paramref name="SpellAttack"/>, else its dice), or an
 /// equipped weapon (<paramref name="Weapon"/>: its attack roll, or its damage when <paramref name="Damage"/>, two-handed
-/// when <paramref name="Versatile"/>), or one of the character's own hand-typed attacks (<paramref name="CustomAttack"/>:
+/// when <paramref name="Versatile"/>; MECH-X R68: <paramref name="EntryIndex"/> picks the copy's row when the weapon is carried
+/// as several copies with their own mods, and without it the first row is rolled), or one of the character's own hand-typed attacks (<paramref name="CustomAttack"/>:
 /// d20 plus its typed to-hit, or its damage dice when <paramref name="Damage"/>), or an attack line of one of the character's
 /// companions (<paramref name="CompanionAttack"/>: rolled the same way).
 /// </summary>
@@ -30,7 +31,8 @@ public sealed record RollCommand(
     Guid? CustomAttack = null,
     string? ChargeEntry = null,
     CompanionAttackTarget? CompanionAttack = null,
-    int? Amount = null);
+    int? Amount = null,
+    int? EntryIndex = null);
 
 /// <summary>Wave 3 item 23: one attack line of one of the character's companions (<see cref="Companion.Attacks"/>).</summary>
 public sealed record CompanionAttackTarget(Guid CompanionId, Guid AttackId);
@@ -66,6 +68,9 @@ public sealed partial class TomeStackApp
             + (command.CustomAttack is not null ? 1 : 0) + (command.ChargeEntry is not null ? 1 : 0) + (command.CompanionAttack is not null ? 1 : 0);
         if (targets > 1)
             throw new AppValidationException([new("roll.ambiguous", "Roll one thing: a content effect, a field, a hit die, a death saving throw, a spell, a weapon, your own attack or a companion's attack.")]);
+        // MECH-X R68: an entry index means something only on a weapon roll; elsewhere it is refused, not ignored.
+        if (command.EntryIndex is not null && command.Weapon is null)
+            throw new AppValidationException([new("roll.entry-index-not-allowed", "An entry index applies only to a weapon roll.")], "roll.entry-index-not-allowed");
         if (command.CustomAttack is { } customId)
         {
             // Hand-typed attacks (D42): the name goes only into the provenance label; no message below quotes it.
@@ -84,8 +89,14 @@ public sealed partial class TomeStackApp
         }
         else if (command.Weapon is { } weaponReference)
         {
-            var attack = sheet.Attacks?.FirstOrDefault(a => a.Source == AttackSource.Weapon && a.Item == weaponReference)
-                ?? throw new AppValidationException([new("roll.weapon-unknown", "This character has no such weapon equipped.", weaponReference)]);
+            var rows = sheet.Attacks?.Where(a => a.Source == AttackSource.Weapon && a.Item == weaponReference).ToList() ?? [];
+            // R68: an entry index picks that copy's row. When the copies no longer differ (one row, no index) that row is the copy's;
+            // when they differ and none is this entry (unequipped, removed), the roll is refused rather than rolling another copy.
+            var attack = command.EntryIndex is { } entryIndex
+                ? rows.FirstOrDefault(a => a.EntryIndex == entryIndex) ?? (rows is [{ EntryIndex: null } single] ? single : null)
+                : rows.FirstOrDefault();
+            if (attack is null)
+                throw new AppValidationException([new("roll.weapon-unknown", command.EntryIndex is null ? "This character has no such weapon equipped." : "This character has no such copy of the weapon equipped.", weaponReference)]);
             explain = attack.Trace;
             var provenance = new RollProvenance(
                 $"weapon.{(command.Damage ? "damage" : "attack")}", command.Damage ? $"{attack.Name} damage ({attack.DamageType})" : $"{attack.Name} attack",

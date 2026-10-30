@@ -24,7 +24,7 @@ import { attackAvailability, dicelessUse, hasDice, poolFor, recordPayment, recor
 import { castsText, paying, paymentText } from '../payment';
 import { explainSteps } from '../explain';
 import { hitDiceText, rollBonus } from '../format';
-import { attackPin, customPin, maxPins, pinKey, rollPin, togglePin, type Pin } from '../quickbar';
+import { attackPin, customPin, maxPins, pinKey, rollPin, togglePin, weaponTarget, type Pin } from '../quickbar';
 import { rollButtonSuffix } from '../rollModes';
 import { diceLine, rollKey, rollModeText } from '../rollText';
 import { announceRollsOn, diceAnimationOn } from '../settings';
@@ -1039,7 +1039,7 @@ export function AttackItem({
   const needsId = useId();
   // D43 slice 4: a feature attack is rolled by the content that gives it and its effect id; a weapon by its item.
   const feature = attack.source === 'feature';
-  const target: RollTarget = feature ? { content: attack.item, effectId: attack.effectId } : { weapon: attack.item };
+  const target: RollTarget = feature ? { content: attack.item, effectId: attack.effectId } : weaponTarget(attack);
   // An unavailable attack is a disabled button whose reason is text beside it, not a tooltip.
   const locked = attack.available === false;
   const needs = locked ? '' : availability.reasons.join(' ');
@@ -1093,7 +1093,7 @@ export function AttackItem({
         </span>
       )}
       {attack.versatileDamage && (
-        <button type="button" onClick={() => rollDamage({ weapon: attack.item, damage: true, versatile: true, critical }, attack.damageType)}>
+        <button type="button" onClick={() => rollDamage({ ...weaponTarget(attack), damage: true, versatile: true, critical }, attack.damageType)}>
           Roll {label} two-handed damage ({attack.versatileDamage})
         </button>
       )}

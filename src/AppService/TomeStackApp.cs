@@ -326,7 +326,8 @@ public sealed partial class TomeStackApp : IDisposable
     /// <para>
     /// MECH-X item 2 (R43): the reply of a save of an existing character may carry the advisory
     /// <c>choice.replaced-outside-window</c> notice in <see cref="CharacterView.Notices"/> when it swapped picks of a replaceable
-    /// choice outside its window. It is never stored and never blocks the save.
+    /// choice outside its window. It is never stored and never blocks the save. R69: it may also carry
+    /// <c>companion.play-pruned</c> when the save reset the stored hit points of content companions whose content is no longer active.
     /// </para>
     /// </summary>
     public CharacterView SaveCharacter(Character character)
@@ -339,8 +340,11 @@ public sealed partial class TomeStackApp : IDisposable
         var view = SaveWithPlay(character with { Play = WithoutOrphanedCompanionPlay(stored.Play, character), ArchivedAt = stored.ArchivedAt, Equipment = WithStoredCharges(stored.Equipment, character.Equipment) }, checkMods: true);
         // MECH-X item 2 (R42, R43, R47): advisory only, never stored and never blocking; it rides on this reply alone.
         var notices = ChoiceReplacements.OutsideWindow(stored, view.Character, view.Sheet.Choices);
-        return notices.Count > 0 ? view with { Notices = notices } : view;
+        return notices.Count > 0 ? view with { Notices = [.. view.Notices ?? [], .. notices] } : view;
     }
+
+    /// <summary>MECH-X R69: the advisory notice of a save that reset content companions' hit points (R61's prune). Never stored.</summary>
+    public const string CompanionPlayPrunedCode = "companion.play-pruned";
 
     /// <summary>The words of the <c>character.stale</c> refusal (codes and plain words only; the page re-reads the current copy).</summary>
     public const string StaleMessage = "This character changed since you opened it. Your change wasn't saved; the current copy is shown.";
@@ -391,7 +395,12 @@ public sealed partial class TomeStackApp : IDisposable
             if (kept.Count != rows.Count)
             {
                 saved = saved with { Play = saved.Play with { Companions = kept } };
-                view = view with { Character = saved };
+                // R69 (owner, 2026-10-30): the prune stays (R61), and the reply says so once. A count only: no name, no content id.
+                var pruned = rows.Count - kept.Count;
+                var message = pruned == 1
+                    ? "A companion's hit points were reset, because the content that gives it is no longer active."
+                    : $"{pruned} companions' hit points were reset, because the content that gives them is no longer active.";
+                view = view with { Character = saved, Notices = [new(CompanionPlayPrunedCode, message)] };
             }
         }
         _store.InTransaction(() => _store.SaveCharacter(saved));
