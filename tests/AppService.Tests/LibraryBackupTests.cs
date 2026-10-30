@@ -497,6 +497,80 @@ public class LibraryBackupTests
         }
     }
 
+    /// <summary>A stored copy of <paramref name="original"/> as an export would write it: marker plus the id its bytes give.</summary>
+    private static ContentRevision CopyOf(ContentRevision original)
+    {
+        var marker = JsonDocument.Parse($$"""{"revisionId":"{{original.RevisionId:D}}","schemaVersion":{{original.SchemaVersion}}}""").RootElement.Clone();
+        var bare = original with { RevisionId = Guid.Empty, Extensions = new Dictionary<string, JsonElement> { [DownConversion.MarkerKey] = marker } };
+        var copy = bare with { RevisionId = DownConversion.CopyId(original.RevisionId, bare.SchemaVersion, DownConversion.CanonicalBytes(bare)) };
+        Assert.True(DownConversion.IsCopy(copy));
+        return copy;
+    }
+
+    /// <summary>A library with one source and a published revision of one content, plus the restoring store that has the source and a different, local-only unmarked revision of that content.</summary>
+    private static (TempApp Origin, TempApp Local, ContentRevision Original, ContentRevision LocalOnly) CopyLibraries()
+    {
+        var origin = new TempApp();
+        var source = origin.App.CreateHomebrewSource(new("Test Library Homebrew", [RulesFamilies.Srd51, RulesFamilies.Srd521]));
+        var original = origin.App.Store.FindRevision(Publish(origin.App, Feat(source, Guid.NewGuid(), "Test Quick Hands", 1)))!;
+        var local = new TempApp();
+        local.App.Store.UpsertSource(origin.App.Store.FindSource(source.Id)!);
+        var localOnly = original with { RevisionId = Guid.NewGuid(), Name = "Test Quick Hands (only here)" };
+        local.App.Store.AddRevision(localOnly);
+        return (origin, local, original, localOnly);
+    }
+
+    [Fact]
+    public void A_backup_group_of_only_copies_does_not_warn_when_this_library_has_an_unmarked_revision()
+    {
+        var (origin, local, original, _) = CopyLibraries();
+        using (origin)
+        using (local)
+        {
+            var path = TempFile();
+            try
+            {
+                // The backup's only revision of the content is a copy (the original is not in the file).
+                origin.App.Store.InTransaction(() => origin.App.Store.AddRevision(CopyOf(original) with { Name = original.Name }));
+                var onlyCopy = origin.App.Store.ListRevisions(original.ContentId).Single(DownConversion.IsCopy);
+                using var backup = new TempApp();
+                backup.App.Store.UpsertSource(origin.App.Store.FindSource(original.Provenance.SourceId)!);
+                backup.App.Store.AddRevision(onlyCopy);
+                Backup(backup.App, path);
+
+                Assert.DoesNotContain(local.App.PreviewLibraryRestore(path).Warnings, w => w.Code == "restore.newest-changes");
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+    }
+
+    [Fact]
+    public void A_mixed_backup_group_still_warns_and_names_the_unmarked_revision()
+    {
+        var (origin, local, original, _) = CopyLibraries();
+        using (origin)
+        using (local)
+        {
+            var path = TempFile();
+            try
+            {
+                origin.App.Store.AddRevision(CopyOf(original));
+                Backup(origin.App, path);
+
+                var warning = Assert.Single(local.App.PreviewLibraryRestore(path).Warnings, w => w.Code == "restore.newest-changes");
+                Assert.Equal(original.Reference, warning.Content);
+                Assert.StartsWith($"'{original.Name}' has a newer", warning.Message, StringComparison.Ordinal);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+    }
+
     [Fact]
     public void The_restore_preview_names_the_database_copy_and_a_revision_that_would_become_newest()
     {

@@ -602,6 +602,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         var newerBackup = parsed.Manifest.Scope == PackageScope.Library ? NewerBuild.NewerThanThisBuild(parsed.Manifest.AppVersion) : null;
         var unseeded = new HashSet<ContentReference>();
         var unseededCharacters = new List<string>();
+        var storedRevisions = new Lazy<IReadOnlyList<ContentRevision>>(() => store.ListRevisionsInOrder()); // read at most once, only to label a loss warning
         foreach (var character in parsed.Characters)
         {
             var problems = character.Validate();
@@ -627,7 +628,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                 unseededCharacters.Add(character.Name);
             var localCharacter = store.FindCharacter(character.Id);
             var exists = localCharacter is not null;
-            if (exists && !malformed && DownConversion.CharacterLoss(localCharacter!, character, parsed.Manifest.MadeFor, store.ListRevisionsInOrder) is { } loss)
+            if (exists && !malformed && DownConversion.CharacterLoss(localCharacter!, character, parsed.Manifest.MadeFor, () => storedRevisions.Value) is { } loss)
                 warnings.Add(loss);
             if (exists && parsed.Manifest.Scope == PackageScope.Library)
                 warnings.Add(new("restore.character-replace", $"'{character.Name}' already exists and will be replaced by the backup's copy. Your whole database is copied to the {BackupFolderName} folder first (pre-restore-….db); to go back, close TomeStack and put that file in place of {TomeStackApp.DatabaseFileName}."));
