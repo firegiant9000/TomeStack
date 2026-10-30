@@ -230,17 +230,22 @@ public sealed record PackageItem(string Kind, Guid Id, string Name, PackageItemA
 /// <summary>What to do with a package source whose metadata (e.g. license) differs from the local record.</summary>
 public enum SourceChoice { KeepLocal, UseImported }
 
+/// <summary>A down-converted copy in a file that import skipped because its original is here (D85 part 2): every reference to it moves to the original.</summary>
+public sealed record Repinned(Guid CopyId, Guid OriginalId, string Name);
+
 /// <param name="CampaignImpact">
 /// M6 slice 2, campaign packs: for a campaign that differs from the local one, the local characters whose content "use the
 /// imported one" would make not allowed. Empty otherwise.
 /// </param>
+/// <param name="Repinned">D85 part 2: the copies of this build's own revisions that the file carried and import skipped (R-C12: each also has a <c>package.down-converted-repinned</c> warning).</param>
 public sealed record PackagePreview(
     bool CanApply,
     PackageManifest? Manifest,
     IReadOnlyList<PackageItem> Items,
     IReadOnlyList<Diagnostic> Errors,
     IReadOnlyList<Diagnostic> Warnings,
-    IReadOnlyList<CampaignImpact>? CampaignImpact = null);
+    IReadOnlyList<CampaignImpact>? CampaignImpact = null,
+    IReadOnlyList<Repinned>? Repinned = null);
 
 /// <param name="BackupFile">
 /// Path relative to the data directory of the pre-import backup: a character package when characters were replaced, or a

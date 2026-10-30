@@ -457,6 +457,10 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
             return (new PackagePreview(false, parsed?.Manifest, [], errors, warnings), null);
         if (parsed.MarkerIgnored)
             warnings.Add(new("package.marker-ignored", "The package says which TomeStack it was made for, but the value is not a version number, so it was ignored."));
+        // D85 part 2: re-pin first, so the checks below and the commit see the file without the copies whose originals are here.
+        var repin = DownConversion.Repin(parsed.Revisions, parsed.Characters, parsed.Manifest, store, _bundledSources.Contains);
+        warnings.AddRange(repin.Warnings);
+        parsed = parsed with { Revisions = repin.Revisions, Characters = repin.Characters };
         var items = new List<PackageItem>();
         var packageRevisions = parsed.Revisions.ToDictionary(r => r.Reference);
         var packageSources = parsed.Sources.ToDictionary(s => s.Id);
@@ -679,7 +683,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
             items.Add(new("attachment", attachment.AttachmentId, attachment.OriginalFileName, action, detail));
         }
 
-        return (new PackagePreview(errors.Count == 0, parsed.Manifest, items, errors, warnings, impact), errors.Count == 0 ? parsed : null);
+        return (new PackagePreview(errors.Count == 0, parsed.Manifest, items, errors, warnings, impact, repin.Repinned), errors.Count == 0 ? parsed : null);
     }
 
     /// <summary>Entry count and total unpacked JSON for one kind of archive.</summary>

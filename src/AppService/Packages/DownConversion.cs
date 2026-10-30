@@ -416,6 +416,149 @@ public static class DownConversion
             : (revision.RevisionId, revision.SchemaVersion);
     }
 
+    /// <summary>What <see cref="Repin"/> made of a file's revisions and characters.</summary>
+    internal sealed record RepinOutcome(IReadOnlyList<ContentRevision> Revisions, IReadOnlyList<Character> Characters, IReadOnlyList<Repinned> Repinned, IReadOnlyList<Diagnostic> Warnings);
+
+    /// <summary>
+    /// The way back (D85 part 2): a copy whose original is here and verifies is dropped from the file and every reference to it moves to
+    /// the original. A copy is trusted only when its id is <see cref="CopyId"/> of its marker and bytes, and then only together with its
+    /// whole closure (copies that grant or offer one another): every original must be a published revision of the same content and
+    /// source, outside the bundled sources, and lowering the originals again for the file's release must give exactly the file's copy
+    /// ids (an id embeds the SHA-256 of the bytes). Any failure leaves every member of the closure an ordinary revision with a warning.
+    /// A marker that is unreadable or does not match its copy's content is ignored with a warning. Writes nothing.
+    /// </summary>
+    internal static RepinOutcome Repin(IReadOnlyList<ContentRevision> revisions, IReadOnlyList<Character> characters, PackageManifest manifest,
+        IContentCatalog catalog, Func<Guid, bool> isBundledSource)
+    {
+        ArgumentNullException.ThrowIfNull(revisions);
+        ArgumentNullException.ThrowIfNull(characters);
+        ArgumentNullException.ThrowIfNull(manifest);
+        ArgumentNullException.ThrowIfNull(catalog);
+        ArgumentNullException.ThrowIfNull(isBundledSource);
+        var warnings = new List<Diagnostic>();
+        var markers = new Dictionary<Guid, DownConvertedFrom>();
+        foreach (var revision in revisions.Where(r => r.Extensions?.ContainsKey(MarkerKey) == true))
+        {
+            var marker = ReadMarker(revision);
+            if (marker is null)
+                warnings.Add(new("package.marker-ignored", $"'{revision.Name}': the note saying which revision it was copied from is not readable, so it was ignored.", revision.Reference));
+            else if (marker.RevisionId == revision.RevisionId || VerifiedRoot(revision).RevisionId != marker.RevisionId)
+                warnings.Add(new("package.marker-ignored", $"'{revision.Name}': the note saying which revision it was copied from does not match its content, so it was ignored.", revision.Reference));
+            else
+                markers[revision.RevisionId] = marker;
+        }
+        if (markers.Count == 0)
+            return new(revisions, characters, [], warnings);
+
+        // Closures: copies joined by a grant or an option between them.
+        var copies = revisions.Where(r => markers.ContainsKey(r.RevisionId)).ToList();
+        var parent = copies.ToDictionary(r => r.RevisionId, r => r.RevisionId);
+        Guid Find(Guid id)
+        {
+            while (parent[id] != id)
+                id = parent[id] = parent[parent[id]];
+            return id;
+        }
+        foreach (var copy in copies)
+        {
+            foreach (var reference in ReferencesOf(copy).Where(r => parent.ContainsKey(r.RevisionId)))
+                parent[Find(copy.RevisionId)] = Find(reference.RevisionId);
+        }
+
+        var madeFor = manifest.MadeFor;
+        var repinned = new List<Repinned>();
+        var moved = new Dictionary<Guid, Guid>();
+        foreach (var closure in copies.GroupBy(c => Find(c.RevisionId)))
+        {
+            var members = closure.ToList();
+            var originals = VerifiedOriginals(members, markers, manifest, catalog, isBundledSource);
+            foreach (var member in members)
+            {
+                if (originals is null)
+                {
+                    var by = madeFor is null ? "an older TomeStack" : $"TomeStack {madeFor}";
+                    warnings.Add(new("package.down-converted", $"'{member.Name}': made for {by} by {manifest.AppVersion}; the original has more.", member.Reference));
+                    continue;
+                }
+                var original = originals[member.RevisionId];
+                moved[member.RevisionId] = original.RevisionId;
+                repinned.Add(new(member.RevisionId, original.RevisionId, member.Name));
+                warnings.Add(new("package.down-converted-repinned",
+                    $"'{member.Name}': re-pinned to your original revision (the file held a copy made for {madeFor ?? "an older TomeStack"}).", original.Reference));
+            }
+        }
+        if (moved.Count == 0)
+            return new(revisions, characters, [], warnings);
+
+        ContentReference Move(ContentReference r) => moved.TryGetValue(r.RevisionId, out var to) ? new ContentReference(r.ContentId, to) : r;
+        Effect Rewrite(Effect e) => e switch
+        {
+            GrantEffect { Content: { } c } g => g with { Content = Move(c) },
+            ChoiceEffect ch => ch with { Options = [.. ch.Options.Select(Move).Distinct()] },
+            _ => e,
+        };
+        var kept = revisions.Where(r => !moved.ContainsKey(r.RevisionId))
+            .Select(r => ReferencesOf(r).Any(x => moved.ContainsKey(x.RevisionId)) ? r with { Effects = [.. r.Effects.Select(Rewrite)] } : r).ToList();
+
+        var swaps = copies.Where(c => moved.ContainsKey(c.RevisionId)).Select(c => (From: c.Reference, To: new ContentReference(c.ContentId, moved[c.RevisionId]))).ToList();
+        var rewritten = characters.Select(character =>
+        {
+            if (!MentionsAny(character, moved.Keys))
+                return character;
+            foreach (var (from, to) in swaps)
+                character = character.ReplaceReference(from, to);
+            return Deduplicated(character);
+        }).ToList();
+        return new(kept, rewritten, repinned, warnings);
+    }
+
+    /// <summary>The original of each member of a closure by the member's revision id, or null when any member does not verify.</summary>
+    private static Dictionary<Guid, ContentRevision>? VerifiedOriginals(List<ContentRevision> members, Dictionary<Guid, DownConvertedFrom> markers,
+        PackageManifest manifest, IContentCatalog catalog, Func<Guid, bool> isBundledSource)
+    {
+        var found = new Dictionary<Guid, ContentRevision>();
+        foreach (var member in members)
+        {
+            var original = catalog.FindRevision(new ContentReference(member.ContentId, markers[member.RevisionId].RevisionId));
+            if (original is null || original.Status != RevisionStatus.Published || isBundledSource(original.Provenance.SourceId)
+                || original.ContentId != member.ContentId || original.Provenance.SourceId != member.Provenance.SourceId)
+                return null;
+            found[member.RevisionId] = original;
+        }
+
+        // R-C11: the row the manifest names; else a stand-in at the highest schema among the copies.
+        var target = manifest.MadeFor is { } release ? ReleaseLadder.Rows.FirstOrDefault(r => r.Release.ToString(3) == release) : null;
+        target ??= new LadderRow(new Version(0, 0, 0), 0, members.Max(m => m.SchemaVersion), 0, 0, 0, new HashSet<Guid>(), false);
+        var distinct = found.Values.DistinctBy(o => o.RevisionId).ToList();
+        var lowered = Lower(new PackageService.ExportPlan([], distinct, [], [], "x.tomestack.zip"), target, isBundledSource, _ => "", catalog);
+        if (lowered.Blocked || lowered.Plan.Revisions.Count != distinct.Count)
+            return null;
+        var again = distinct.Select((o, i) => (o.RevisionId, Copy: lowered.Plan.Revisions[i])).ToDictionary(x => x.RevisionId, x => x.Copy.RevisionId);
+        return members.All(m => again[found[m.RevisionId].RevisionId] == m.RevisionId) ? found : null;
+    }
+
+    private static bool MentionsAny(Character character, IEnumerable<Guid> revisionIds)
+    {
+        var ids = revisionIds.ToHashSet();
+        return character.AllReferences().Any(r => ids.Contains(r.RevisionId))
+            || character.CrossFamilyExceptions.Any(e => ids.Contains(e.Content.RevisionId))
+            || character.CampaignExceptions.Any(e => ids.Contains(e.Content.RevisionId))
+            || (character.Play.Concentration is { } c && ids.Contains(c.Spell.RevisionId));
+    }
+
+    /// <summary>After a re-pin a character that held both a copy and its original holds the original once (pins, classes, choices, exceptions).</summary>
+    private static Character Deduplicated(Character character) => character with
+    {
+        Pins = [.. character.Pins.Distinct()],
+        Classes = [.. character.Classes.Distinct()],
+        Choices = [.. character.Choices
+            .Select(c => c with { Selected = [.. c.Selected.Distinct()] })
+            .GroupBy(c => (c.Source, c.ChoiceId))
+            .Select(g => g.Count() == 1 ? g.First() : g.First() with { Selected = [.. g.SelectMany(c => c.Selected).Distinct()] })],
+        CrossFamilyExceptions = [.. character.CrossFamilyExceptions.DistinctBy(e => e.Content)],
+        CampaignExceptions = [.. character.CampaignExceptions.DistinctBy(e => e.Content)],
+    };
+
     /// <summary>The copy of <paramref name="original"/>: its lowered body, references moved to the copies made so far, the marker, and the new id.</summary>
     private static ContentRevision MakeCopy(ContentRevision original, ContentRevision body, Dictionary<Guid, ContentRevision> copies)
     {

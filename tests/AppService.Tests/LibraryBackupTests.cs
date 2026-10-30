@@ -77,6 +77,51 @@ public class LibraryBackupTests
     }
 
     [Fact]
+    public void Restore_repins_like_import()
+    {
+        // D85 part 2: a backup made for 0.6.0 restored into the store it came from gives back the originals, not the copies.
+        using var app = new TempApp();
+        var source = app.App.CreateHomebrewSource(new("Compat Homebrew A", [RulesFamilies.Srd51], Redistributable: true, ConfirmOwnWork: true));
+        var fly = new ContentRevision
+        {
+            ContentId = Guid.NewGuid(), RevisionId = Guid.Empty, Kind = ContentKind.Feature, Name = "Compat Steady Hands", RulesFamilies = [RulesFamilies.Srd51],
+            Provenance = new(source.Id), Status = RevisionStatus.Draft,
+            Effects = [new ModifierEffect { Id = "fly", Operation = ModifierOperation.Bonus, Target = FieldIds.FlySpeed, Value = "10" }],
+        };
+        var published = Publish(app.App, fly);
+        var fixture = TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json");
+        var character = app.App.SaveCharacter(fixture with { Pins = [.. fixture.Pins, published] }).Character.Id;
+        var row = ReleaseLadder.Target("0.6.0")!;
+        var hash = app.App.PreviewLibraryBackup(row).ChangesHash;
+        var path = TempFile();
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            using (var file = File.Create(path))
+                app.App.WriteLibraryBackup(file, row, hash);
+            var stored = app.App.Store.ListRevisions().Count;
+
+            var preview = app.App.PreviewLibraryRestore(path);
+
+            Assert.True(preview.CanApply, string.Join("; ", preview.Errors.Select(e => e.Message)));
+            var repinned = Assert.Single(preview.Repinned!, r => r.OriginalId == published.RevisionId);
+            Assert.Contains(preview.Warnings, w => w.Code == "package.down-converted-repinned" && w.Message.StartsWith("'Compat Steady Hands': re-pinned to your original revision", StringComparison.Ordinal));
+
+            app.App.ApplyLibraryRestore(path);
+
+            var pins = app.App.Store.FindCharacter(character)!.Pins;
+            Assert.Contains(published, pins);
+            Assert.DoesNotContain(pins, p => p.RevisionId == repinned.CopyId);
+            Assert.Null(app.App.Store.FindRevision(new ContentReference(published.ContentId, repinned.CopyId)));
+            Assert.True(app.App.Store.ListRevisions().Count >= stored); // nothing was removed; a draft's copy (its original is not published) is added
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public void A_full_backup_restores_everything_into_a_clean_data_folder()
     {
         using var origin = new TempApp();

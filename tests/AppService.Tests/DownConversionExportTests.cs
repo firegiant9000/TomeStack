@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using TomeStack.AppService.Packages;
 using TomeStack.AppService.Persistence;
 using TomeStack.RulesCore;
@@ -856,5 +857,253 @@ public class DownConversionExportTests
         Assert.Equal(first, second);
         Assert.Contains(copyEntry.FullName[8..^5], Entry(first, $"characters/{id:D}.json").ToString(), StringComparison.Ordinal);
         Assert.Equal(before, Snapshot(app));
+    }
+
+    // ---- C2-5: the way back (guarded re-pin on import) ---------------------------------------------------------------------
+
+    private const string RepinnedSentence = "'Compat Steady Hands': re-pinned to your original revision (the file held a copy made for 0.6.0).";
+
+    private static (SourceRecord Source, ContentReference Draft, ContentReference Published) PublishFlyOriginal(TempApp app)
+    {
+        var source = app.App.CreateHomebrewSource(new("Compat Homebrew A", [RulesFamilies.Srd51], Redistributable: true, ConfirmOwnWork: true));
+        var draft = app.App.SaveDraft(V11Feature(Guid.NewGuid()) with { Provenance = new(source.Id), Status = RevisionStatus.Draft });
+        return (source, draft, app.App.Publish(draft).Published);
+    }
+
+    private static ContentReference PublishPathGranting(TempApp app, SourceRecord source, ContentReference fly)
+    {
+        var grant = new GrantEffect { Id = "grant-hands", Grant = GrantKind.Content, Content = fly };
+        var draft = app.App.SaveDraft(V9Path(PathContent, Guid.NewGuid(), grant) with { Kind = ContentKind.Feat, Provenance = new(source.Id), Status = RevisionStatus.Draft });
+        return app.App.Publish(draft).Published;
+    }
+
+    private static byte[] ExportFor(TomeStackApp app, Guid characterId, string target = "0.6.0")
+    {
+        var row = Row(target);
+        var preview = app.PreviewExport([characterId], ExportPurpose.Share, row);
+        return app.ExportCharacters([characterId], ExportPurpose.Share, row, preview.ChangesHash).Content;
+    }
+
+    private static void ReplaceText(System.Text.Json.Nodes.JsonNode node, Guid from, Guid to)
+    {
+        var target = node.AsObject();
+        var swapped = System.Text.Json.Nodes.JsonNode.Parse(target.ToJsonString().Replace(from.ToString("D"), to.ToString("D"), StringComparison.OrdinalIgnoreCase))!.AsObject();
+        target.Clear();
+        foreach (var (key, value) in swapped.ToList())
+        {
+            swapped.Remove(key);
+            target[key] = value;
+        }
+    }
+
+    /// <summary>Edits the copy named <paramref name="copyName"/>; with <paramref name="newRoot"/> its marker names that revision and its id is recomputed honestly (so the id check passes) and the characters follow.</summary>
+    private static byte[] ForgeCopy(byte[] bytes, string copyName, Action<System.Text.Json.Nodes.JsonNode> edit, Guid? newRoot = null)
+    {
+        string copyPath;
+        using (var zip = new System.IO.Compression.ZipArchive(new MemoryStream(bytes)))
+        {
+            copyPath = zip.Entries.Single(e => e.FullName.StartsWith("content/", StringComparison.Ordinal)
+                && Entry(bytes, e.FullName) is var entry && entry.TryGetProperty("downConvertedFrom", out _) && entry.GetProperty("name").GetString() == copyName).FullName;
+        }
+        var oldId = Guid.Parse(copyPath["content/".Length..^".json".Length]);
+        var newId = oldId;
+        var edited = PackageEditor.Edit(bytes, p => p == copyPath, node =>
+        {
+            edit(node);
+            if (newRoot is not { } root)
+                return;
+            node["downConvertedFrom"]!["revisionId"] = root.ToString("D");
+            var revision = node.Deserialize<ContentRevision>(RulesJson.Options)!;
+            newId = DownConversion.CopyId(root, revision.SchemaVersion, DownConversion.CanonicalBytes(revision));
+            node["revisionId"] = newId.ToString("D");
+        });
+        if (newId == oldId)
+            return edited;
+        var followed = PackageEditor.Edit(edited, p => p.StartsWith("characters/", StringComparison.Ordinal), node => ReplaceText(node, oldId, newId));
+        return Rename(followed, copyPath, $"content/{newId:D}.json");
+    }
+
+    /// <summary>The package with one entry under another path (the parser expects an entry to be named by its id).</summary>
+    private static byte[] Rename(byte[] package, string from, string to)
+    {
+        var files = new SortedDictionary<string, byte[]>(StringComparer.Ordinal);
+        using (var zip = new System.IO.Compression.ZipArchive(new MemoryStream(package), System.IO.Compression.ZipArchiveMode.Read))
+        {
+            foreach (var entry in zip.Entries)
+            {
+                using var buffer = new MemoryStream();
+                using (var stream = entry.Open())
+                    stream.CopyTo(buffer);
+                files[entry.FullName == from ? to : entry.FullName] = buffer.ToArray();
+            }
+        }
+        var manifest = JsonNode.Parse(files["manifest.json"])!;
+        manifest["entries"]!.AsArray().Single(e => (string?)e!["path"] == from)!["path"] = to;
+        files["manifest.json"] = System.Text.Encoding.UTF8.GetBytes(manifest.ToJsonString(RulesJson.Options) + "\n");
+        using var output = new MemoryStream();
+        using (var zip = new System.IO.Compression.ZipArchive(output, System.IO.Compression.ZipArchiveMode.Create, leaveOpen: true))
+        {
+            foreach (var (path, bytes) in files)
+            {
+                using var stream = zip.CreateEntry(path).Open();
+                stream.Write(bytes);
+            }
+        }
+        return output.ToArray();
+    }
+
+    [Fact]
+    public void Import_repins_a_verified_copy_to_the_original()
+    {
+        using var app = new TempApp();
+        var (_, _, fly) = PublishFlyOriginal(app);
+        var id = Save(app, c => c with { Pins = [.. c.Pins, fly] });
+        var bytes = ExportFor(app.App, id);
+        var stored = app.App.Store.ListRevisions().Count;
+
+        var preview = app.App.PreviewImport(bytes);
+
+        Assert.True(preview.CanApply, string.Join("; ", preview.Errors.Select(e => e.Message)));
+        var repinned = Assert.Single(preview.Repinned!);
+        Assert.Equal((fly.RevisionId, "Compat Steady Hands"), (repinned.OriginalId, repinned.Name));
+        Assert.NotEqual(fly.RevisionId, repinned.CopyId);
+        var warning = Assert.Single(preview.Warnings, w => w.Code == "package.down-converted-repinned");
+        Assert.Equal(RepinnedSentence, warning.Message);
+        Assert.DoesNotContain(preview.Items, i => i.Kind == "contentRevision" && i.Name == "Compat Steady Hands");
+
+        app.App.ApplyImport(bytes);
+
+        Assert.Equal(stored, app.App.Store.ListRevisions().Count);
+        var pins = app.App.Store.FindCharacter(id)!.Pins;
+        Assert.Contains(fly, pins);
+        Assert.DoesNotContain(pins, p => p.RevisionId == repinned.CopyId);
+    }
+
+    [Fact]
+    public void Import_runs_repin_before_pin_missing_and_own_source()
+    {
+        using var app = new TempApp();
+        var (_, _, fly) = PublishFlyOriginal(app);
+        var id = Save(app, c => c with { Pins = [.. c.Pins, fly] });
+        var bytes = ExportFor(app.App, id);
+
+        var preview = app.App.PreviewImport(bytes);
+
+        Assert.DoesNotContain(preview.Errors, e => e.Code is "package.own-source" or "package.pin-missing");
+        Assert.Empty(preview.Errors);
+        app.App.ApplyImport(bytes);
+        Assert.Contains(fly, app.App.Store.FindCharacter(id)!.Pins);
+    }
+
+    [Fact]
+    public void Import_repins_a_cascade_closure()
+    {
+        using var app = new TempApp();
+        var (source, _, fly) = PublishFlyOriginal(app);
+        var path = PublishPathGranting(app, source, fly);
+        var id = Save(app, c => c with { Pins = [.. c.Pins, path] });
+        var bytes = ExportFor(app.App, id);
+        var stored = app.App.Store.ListRevisions().Count;
+
+        var preview = app.App.PreviewImport(bytes);
+
+        Assert.True(preview.CanApply, string.Join("; ", preview.Errors.Select(e => e.Message)));
+        Assert.Equal(new HashSet<Guid> { fly.RevisionId, path.RevisionId }, preview.Repinned!.Select(r => r.OriginalId).ToHashSet());
+        app.App.ApplyImport(bytes);
+        Assert.Equal(stored, app.App.Store.ListRevisions().Count);
+        Assert.Contains(path, app.App.Store.FindCharacter(id)!.Pins);
+    }
+
+    [Fact]
+    public void Import_adds_a_copy_whose_original_is_absent_with_warning()
+    {
+        using var origin = new TempApp();
+        var (_, _, fly) = PublishFlyOriginal(origin);
+        var id = Save(origin, c => c with { Pins = [.. c.Pins, fly] });
+        var bytes = ExportFor(origin.App, id);
+        using var fresh = new TempApp();
+
+        var preview = fresh.App.PreviewImport(bytes);
+
+        Assert.True(preview.CanApply, string.Join("; ", preview.Errors.Select(e => e.Message)));
+        Assert.Empty(preview.Repinned ?? []);
+        var warning = Assert.Single(preview.Warnings, w => w.Code == "package.down-converted");
+        Assert.Equal($"'Compat Steady Hands': made for TomeStack 0.6.0 by {preview.Manifest!.AppVersion}; the original has more.", warning.Message);
+        var item = Assert.Single(preview.Items, i => i.Kind == "contentRevision" && i.Name == "Compat Steady Hands");
+        Assert.Equal(PackageItemAction.Add, item.Action);
+        fresh.App.ApplyImport(bytes);
+        Assert.NotNull(fresh.App.Store.FindRevision(new ContentReference(FeatureContent, item.Id)));
+    }
+
+    [Theory]
+    [InlineData("name-changed", "package.marker-ignored")]
+    [InlineData("other-content", "package.down-converted")]
+    [InlineData("bundled", "package.down-converted")]
+    [InlineData("draft", "package.down-converted")]
+    public void Import_ignores_a_forged_marker(string kind, string expected)
+    {
+        using var app = new TempApp();
+        var (source, draft, fly) = PublishFlyOriginal(app);
+        var otherDraft = app.App.SaveDraft(V11Feature(Guid.NewGuid()) with { ContentId = Guid.NewGuid(), Name = "Compat Other", Provenance = new(source.Id), Status = RevisionStatus.Draft });
+        var other = app.App.Publish(otherDraft).Published;
+        var bundled = TomeStackApp.BundledPacks.SelectMany(p => TomeStackApp.LoadBundledPack(p).Revisions).First().RevisionId;
+        var id = Save(app, c => c with { Pins = [.. c.Pins, fly] });
+        var bytes = ExportFor(app.App, id);
+        Guid? root = kind switch { "other-content" => other.RevisionId, "bundled" => bundled, "draft" => draft.RevisionId, _ => null };
+
+        var forged = ForgeCopy(bytes, "Compat Steady Hands", node =>
+        {
+            if (root is null)
+                node["name"] = "Compat Steady Hands X";
+        }, root);
+        var preview = app.App.PreviewImport(forged);
+
+        Assert.Empty(preview.Repinned ?? []);
+        Assert.Contains(preview.Warnings, w => w.Code == expected);
+        Assert.DoesNotContain(preview.Warnings, w => w.Code == (expected == "package.down-converted" ? "package.marker-ignored" : "package.down-converted"));
+        Assert.DoesNotContain(preview.Warnings, w => w.Code == "package.down-converted-repinned");
+        if (expected == "package.marker-ignored")
+            Assert.Equal("'Compat Steady Hands X': the note saying which revision it was copied from does not match its content, so it was ignored.", preview.Warnings.Single(w => w.Code == expected).Message);
+        var item = Assert.Single(preview.Items, i => i.Kind == "contentRevision" && i.Name.StartsWith("Compat Steady Hands", StringComparison.Ordinal));
+        Assert.Equal(PackageItemAction.Add, item.Action); // an ordinary revision: today's rules (here the own-source refusal) apply to it
+        Assert.Contains(preview.Errors, e => e.Code == "package.own-source");
+    }
+
+    [Fact]
+    public void Import_repins_a_closure_all_or_nothing()
+    {
+        using var app = new TempApp();
+        var (source, _, fly) = PublishFlyOriginal(app);
+        var path = PublishPathGranting(app, source, fly);
+        var id = Save(app, c => c with { Pins = [.. c.Pins, path] });
+        var bytes = ExportFor(app.App, id);
+        // Z's original is absent here (its marker names a revision nobody has), its id still verifies; X is untouched.
+        var forged = ForgeCopy(bytes, "Compat Path of Tides", _ => { }, Guid.NewGuid());
+
+        var preview = app.App.PreviewImport(forged);
+
+        Assert.Empty(preview.Repinned ?? []);
+        Assert.Equal(2, preview.Warnings.Count(w => w.Code == "package.down-converted"));
+        Assert.Equal(2, preview.Items.Count(i => i.Kind == "contentRevision" && i.Action == PackageItemAction.Add));
+        Assert.DoesNotContain(preview.Errors, e => e.Code is "validate.reference-missing" or "package.pin-missing");
+    }
+
+    [Fact]
+    public void Import_handles_a_pin_to_both_copy_and_original()
+    {
+        using var app = new TempApp();
+        var (_, _, fly) = PublishFlyOriginal(app);
+        var id = Save(app, c => c with { Pins = [.. c.Pins, fly] });
+        var bytes = ExportFor(app.App, id);
+        var both = PackageEditor.Edit(bytes, p => p.StartsWith("characters/", StringComparison.Ordinal),
+            node => node["pins"]!.AsArray().Add(System.Text.Json.Nodes.JsonNode.Parse($$"""{"contentId":"{{fly.ContentId}}","revisionId":"{{fly.RevisionId}}"}""")));
+
+        var preview = app.App.PreviewImport(both);
+
+        Assert.True(preview.CanApply, string.Join("; ", preview.Errors.Select(e => e.Message)));
+        app.App.ApplyImport(both);
+        var pins = app.App.Store.FindCharacter(id)!.Pins;
+        Assert.Single(pins, p => p == fly);
+        Assert.Equal(pins.Count, pins.Distinct().Count());
     }
 }
