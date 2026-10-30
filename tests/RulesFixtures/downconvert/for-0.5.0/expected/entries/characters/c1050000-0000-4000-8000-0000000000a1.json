@@ -1,0 +1,47 @@
+{
+  "id": "c1050000-0000-4000-8000-0000000000a1",
+  "schemaVersion": 8,
+  "name": "Compat Hero",
+  "rulesFamily": "srd-5.1",
+  "level": 1,
+  "classes": [],
+  "choices": [],
+  "spells": [],
+  "crossFamilyExceptions": [],
+  "campaignExceptions": [],
+  "baseAbilities": {
+    "str": 10,
+    "dex": 14,
+    "con": 12,
+    "int": 10,
+    "wis": 13,
+    "cha": 8
+  },
+  "pins": [],
+  "overrides": [],
+  "play": {
+    "temporaryHitPoints": 0,
+    "resources": [],
+    "conditions": [],
+    "exhaustion": 0,
+    "hitDiceSpent": [],
+    "deathSaves": {
+      "successes": 0,
+      "failures": 0
+    },
+    "inspiration": false,
+    "spellSlotsSpent": [],
+    "pactSlotsSpent": 0,
+    "toggles": []
+  },
+  "equipment": [],
+  "currency": {
+    "cp": 0,
+    "sp": 0,
+    "ep": 0,
+    "gp": 0,
+    "pp": 0
+  },
+  "notes": [],
+  "updatedAt": "2026-09-24T12:00:00+00:00"
+}

@@ -1,0 +1,18 @@
+{
+  "id": "c1060000-0000-4000-8000-0000000000a1",
+  "schemaVersion": 10,
+  "name": "Compat Hero",
+  "rulesFamily": "srd-5.1",
+  "baseAbilities": { "str": 10, "dex": 14, "con": 12, "int": 10, "wis": 13, "cha": 8 },
+  "pins": [
+    { "contentId": "c1060000-0000-4000-8000-0000000000c1", "revisionId": "c1060000-0000-4000-8000-0000000000e1" }
+  ],
+  "overrides": [],
+  "details": { "backstory": "Compat backstory." },
+  "play": {
+    "toggles": [
+      { "contentId": "c1060000-0000-4000-8000-0000000000c1", "toggleId": "surge", "roundsLeft": 3 }
+    ]
+  },
+  "updatedAt": "2026-09-24T00:00:00+00:00"
+}

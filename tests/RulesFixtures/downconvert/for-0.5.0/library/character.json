@@ -1,0 +1,17 @@
+{
+  "id": "c1050000-0000-4000-8000-0000000000a1",
+  "schemaVersion": 9,
+  "name": "Compat Hero",
+  "rulesFamily": "srd-5.1",
+  "baseAbilities": { "str": 10, "dex": 14, "con": 12, "int": 10, "wis": 13, "cha": 8 },
+  "pins": [],
+  "overrides": [],
+  "details": { "alignment": "Compat neutral", "backstory": "Compat backstory." },
+  "customItems": [
+    { "id": "c1050000-0000-4000-8000-0000000000b1", "name": "Compat Lantern", "quantity": 1, "note": "Hand-written entry.", "equipped": false }
+  ],
+  "damageDefences": [
+    { "type": "fire", "kind": "resistance" }
+  ],
+  "updatedAt": "2026-09-24T00:00:00+00:00"
+}
