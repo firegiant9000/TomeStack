@@ -435,7 +435,7 @@ export function App() {
               onStatus={(text) => setMessage({ tone: 'status', text })}
             />
           )}
-          {screen.kind === 'settings' && <SettingsPanel info={info} />}
+          {screen.kind === 'settings' && <SettingsPanel info={info} onError={onError} />}
           {screen.kind === 'ddb-import' && info && (
             <DdbImportPanel
               rulesFamilies={info.rulesFamilies}

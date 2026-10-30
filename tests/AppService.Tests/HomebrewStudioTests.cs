@@ -83,7 +83,8 @@ public class HomebrewStudioTests
         var id = Brenna(temp.App);
 
         var offered = temp.App.GetCharacter(id).Sheet.Choices!.Single(c => c.ChoiceId == "barbarian-subclass");
-        Assert.Equal([Srd(23), authored.Path], offered.Options); // Berserker (declared), then the extension
+        // Berserker (declared), the levels 1-20 Berserker (C2-1: it extends the choice, so the old class revision offers it too), then the homebrew extension
+        Assert.Equal([Srd(23), new(Srd(23).ContentId, Srd(409023).RevisionId), authored.Path], offered.Options);
 
         var sheet = temp.App.Choose(new(id, Barbarian, "barbarian-subclass", [authored.Path])).Sheet;
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type SubmitEvent } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type SubmitEvent } from 'react';
 import { client } from '../api/client';
 import { TomeStackError } from '../api/transport';
 import type {
@@ -17,6 +17,10 @@ import type {
 } from '../api/types';
 import { downloadBase64 } from '../files';
 import { ArchivePanel } from './ArchivePanel';
+import { ChangeRegion } from './export/ChangeRegion';
+import { ExportConfirmation, hasBlocker, needsConfirmation } from './export/ExportConfirmation';
+import { TargetFieldset } from './export/TargetFieldset';
+import { usePackageTargets } from './export/usePackageTargets';
 import { CombatStrip } from './CombatStrip';
 import { DamagePanel } from './DamagePanel';
 import { TurnPanel } from './TurnPanel';
@@ -178,25 +182,43 @@ export function ExportPanel({ characterId, active, updatedAt, onError, onStatus 
   const [preview, setPreview] = useState<ExportPreview>();
   // Import Lab L5: a share goes through the one sharing rule's preflight; a backup keeps its own rule (everything, personal).
   const [report, setReport] = useState<PreflightReport>();
+  const targets = usePackageTargets();
+  const [target, setTarget] = useState<string | null>(null);
+  const [confirmed, setConfirmed] = useState(false);
+  const hintId = useId();
 
   const [backupFailed, setBackupFailed] = useState(false);
+  const [targetFailed, setTargetFailed] = useState(false);
 
   // G6: both purposes are previewed, so the package's warnings (it needs a newer TomeStack) show before the file is saved. A share needs
   // its preview (the export button waits for it); a backup's is advisory, so a failure shows one plain line. The preview loads only while
-  // the Manage tab is shown and again when the character changes (updatedAt), so the warning never goes stale.
+  // the Manage tab is shown and again when the character changes (updatedAt), so the warning never goes stale. A copy for an older
+  // TomeStack always needs its preview: it lists what the copy leaves out, and its failure is one plain line too.
   const chosen = useRef<ExportPurpose>('backup');
+  const chosenTarget = useRef<string | null>(null);
   const requestId = useRef(0);
   const load = useCallback(
-    async (next: ExportPurpose) => {
+    async (next: ExportPurpose, nextTarget: string | null) => {
       const id = ++requestId.current;
+      const stale = () => requestId.current !== id || chosen.current !== next || chosenTarget.current !== nextTarget;
       setBackupFailed(false);
+      setTargetFailed(false);
+      if (nextTarget) {
+        // A copy for an older TomeStack is sent with its preview's hash: an earlier preview must not stand in while this one loads.
+        setPreview(undefined);
+        setConfirmed(false);
+      }
       try {
-        const loaded = await client.previewExport([characterId], next);
-        if (requestId.current === id && chosen.current === next) setPreview(loaded);
+        // No target: the call is exactly as it was before there was a target.
+        const loaded = nextTarget ? await client.previewExport([characterId], next, nextTarget) : await client.previewExport([characterId], next);
+        if (stale()) return;
+        setPreview(loaded);
+        setConfirmed(false);
       } catch (error) {
-        if (requestId.current !== id || chosen.current !== next) return;
+        if (stale()) return;
         setPreview(undefined); // an older preview must not stand in for the one that failed
-        if (next === 'share') onError(error);
+        if (nextTarget) setTargetFailed(true);
+        else if (next === 'share') onError(error);
         else setBackupFailed(true);
       }
     },
@@ -208,19 +230,33 @@ export function ExportPanel({ characterId, active, updatedAt, onError, onStatus 
   }, [load]);
   useEffect(() => {
     if (!active) return;
-    void loadRef.current(chosen.current);
+    void loadRef.current(chosen.current, chosenTarget.current);
   }, [active, characterId, updatedAt]);
 
   async function choose(next: ExportPurpose) {
     chosen.current = next;
     setPurpose(next);
     setPreview(undefined);
-    await load(next);
+    await load(next, chosenTarget.current);
   }
+
+  // The fieldset stays mounted while the preview reloads, so focus stays on the radio that was chosen.
+  async function chooseTarget(next: string | null) {
+    chosenTarget.current = next;
+    setTarget(next);
+    setPreview(undefined);
+    setConfirmed(false);
+    await load(chosen.current, next);
+  }
+
+  const blocked = hasBlocker(preview?.changes);
+  const exportDisabled = ((purpose === 'share' || target !== null) && !preview) || blocked || (needsConfirmation(preview?.changes) && !confirmed);
+  // Only a copy for an older TomeStack carries the target and the preview's hash.
+  const downConversion = target ? ([target, preview?.changesHash] as const) : ([] as const);
 
   async function exportCharacter() {
     try {
-      const outcome = await client.saveExportAs([characterId], purpose);
+      const outcome = await client.saveExportAs([characterId], purpose, ...downConversion);
       if (outcome.saved) onStatus(`Saved ${outcome.fileName}.`);
     } catch (error) {
       if (!(error instanceof TomeStackError && error.code === 'unsupported')) {
@@ -229,7 +265,7 @@ export function ExportPanel({ characterId, active, updatedAt, onError, onStatus 
       }
       // Browser development (DevHost) has no native dialog: fall back to a download.
       try {
-        const exported = await client.exportCharacters([characterId], purpose);
+        const exported = await client.exportCharacters([characterId], purpose, ...downConversion);
         downloadBase64(exported.fileName, exported.base64);
       } catch (fallbackError) {
         onError(fallbackError);
@@ -252,6 +288,10 @@ export function ExportPanel({ characterId, active, updatedAt, onError, onStatus 
           Share with someone: leaves out content you may not share, and never includes gap notes or PDFs
         </label>
       </fieldset>
+      <TargetFieldset targets={targets} value={target} onChange={chooseTarget} />
+      {preview && (
+        <ChangeRegion target={target} opensIn={preview.opensIn} causes={preview.opensInCauses} changes={preview.changes} previousMinor={targets?.previousMinor ?? null} />
+      )}
       {purpose === 'share' && preview && (
         <div role="region" aria-label="Left out of the shared package">
           {preview.omitted.length === 0 ? (
@@ -278,10 +318,17 @@ export function ExportPanel({ characterId, active, updatedAt, onError, onStatus 
         </ul>
       )}
       {backupFailed && purpose === 'backup' && <p>Could not check whether this package needs a newer TomeStack.</p>}
+      {targetFailed && <p>Could not check what the copy for TomeStack {target} leaves out.</p>}
       {purpose === 'share' && active && (
         <PreflightPanel kind="package" selection={[characterId]} label="shared package" refreshKey={updatedAt} onReport={setReport} onError={onError} />
       )}
-      <button type="button" onClick={exportCharacter} disabled={purpose === 'share' && (!preview || !canSaveAfter(report))}>
+      <ExportConfirmation changes={preview?.changes} confirmed={confirmed} onConfirmedChange={setConfirmed} hintId={hintId} />
+      <button
+        type="button"
+        onClick={exportCharacter}
+        disabled={exportDisabled || (purpose === 'share' && !canSaveAfter(report))}
+        aria-describedby={blocked ? hintId : undefined}
+      >
         Export package
       </button>
     </section>

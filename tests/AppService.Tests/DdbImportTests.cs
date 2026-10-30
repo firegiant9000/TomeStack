@@ -294,7 +294,8 @@ public class DdbImportTests
     {
         using var h = new DdbHarness();
         var preview = h.Preview(new SheetBuilder($"{h.Name(Barbarian)} 3"), RulesFamilies.Srd521,
-            resolutions: [new Resolution("class:0:subclass", Berserker, LeaveOut: false)]);
+            // C2-1: the matched class is the newest Barbarian, whose subclass choice offers the newest Berserker first; that is what a user picks.
+            resolutions: [new Resolution("class:0:subclass", new(Berserker.ContentId, Guid.Parse("52e00000-0000-4000-8000-000000409023")), LeaveOut: false)]);
 
         var row = Row(preview, "class:0:subclass");
         Assert.Equal(MatchStatus.Matched, row.Status);
