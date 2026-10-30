@@ -243,6 +243,40 @@ public class DownConversionExportTests
     }
 
     [Fact]
+    public void Two_blocked_characters_give_two_target_blocked_errors()
+    {
+        using var app = new TempApp();
+        var first = Save(app, RunningEncounter);
+        var second = app.App.SaveCharacter(Hero(RunningEncounter) with { Id = Guid.NewGuid(), Name = "Compat Second" }).Character.Id;
+        var payload = $$"""{"characterIds":["{{first}}","{{second}}"],"purpose":"share","target":"0.6.0","changesHash":"x"}""";
+
+        var response = Send(new CommandDispatcher(app.App), "package.export", payload);
+
+        Assert.Equal("package.target-blocked", ErrorOf(response).Code);
+        var problems = response.GetProperty("error").GetProperty("diagnostics").EnumerateArray().ToList();
+        Assert.Equal(2, problems.Count);
+        Assert.All(problems, p => Assert.Equal("package.target-blocked", p.GetProperty("code").GetString()));
+        Assert.Equal("'Compat Hero': an encounter is running. End it, then export.", problems[0].GetProperty("message").GetString());
+        Assert.Equal("'Compat Second': an encounter is running. End it, then export.", problems[1].GetProperty("message").GetString());
+    }
+
+    [Theory]
+    [InlineData("0.4.0", "0.4.0")]
+    [InlineData("v1\\nTomeStack", "v1TomeStack")]
+    [InlineData("a\\u0007b\\ud83d\\ude00c", "abc")]
+    public void Unknown_target_echo_keeps_only_letters_digits_dots_and_hyphens(string sent, string shown)
+    {
+        using var app = new TempApp();
+        var id = SaveCharacter(app);
+
+        var (code, message) = ErrorOf(Send(new CommandDispatcher(app.App), "package.exportPreview", Payload(id, sent)));
+
+        Assert.Equal("package.target-unknown", code);
+        Assert.StartsWith($"TomeStack {shown} is not a version", message, StringComparison.Ordinal);
+        Assert.DoesNotContain("…", message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Unknown_target_message_stays_short_for_a_huge_value()
     {
         using var app = new TempApp();

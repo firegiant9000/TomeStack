@@ -93,8 +93,8 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         {
             if (lowered.Blocked)
             {
-                var reasons = string.Join(" ", lowered.Changes.Where(c => c.Action == "blocks").Select(c => c.Message));
-                throw new AppValidationException([new(DownConversion.BlockedCode, reasons)], DownConversion.BlockedCode);
+                // Spec section 7: one error per blocking change, its message as it is.
+                throw new AppValidationException([.. lowered.Changes.Where(c => c.Action == "blocks").Select(c => new Diagnostic(DownConversion.BlockedCode, c.Message))], DownConversion.BlockedCode);
             }
             if (changesHash is null || !string.Equals(changesHash, lowered.ChangesHash, StringComparison.Ordinal))
                 throw new AppValidationException([new(DownConversion.ChangedCode, "The preview changed since you confirmed it. Review the list and try again.")], DownConversion.ChangedCode);
