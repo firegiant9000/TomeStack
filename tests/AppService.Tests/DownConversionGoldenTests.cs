@@ -126,6 +126,225 @@ public class DownConversionGoldenTests
         Assert.Equal(target, manifest.RootElement.GetProperty("madeFor").GetString());
     }
 
+    // ---- C2-7 section 2: the packages lane E opens with the real older build (spec section 8, "Real older build") ----
+
+    private static readonly HashSet<Guid> BlockingInPacks =
+    [
+        Guid.Parse("c1060000-0000-4000-8000-0000000000e9"), // Compat Reservoir
+        Guid.Parse("c1060000-0000-4000-8000-0000000000ea"), // Compat Draw Down
+    ];
+
+    /// <summary>
+    /// The sheet fields the old build must reproduce: ability scores, hit points, armor class, proficiency, initiative, one save
+    /// and one skill. The lowered characters keep all of them; none comes from a dropped effect.
+    /// </summary>
+    private static readonly string[] HarnessFields =
+    [
+        "ability.str.score", "ability.dex.score", "ability.con.score", "ability.int.score", "ability.wis.score", "ability.cha.score",
+        "ability.dex.mod", "proficiencyBonus", "save.dex", "skill.acrobatics", "skill.perception", "passive.perception",
+        "speed", "initiative", "armorClass", "hitPoints",
+    ];
+
+    /// <summary>
+    /// Produces the harness inputs of <paramref name="folder"/> from its golden library with the clock pinned (<see cref="TempApp.Now"/>)
+    /// and no bundled pin (R-C17: no SRD text under tests/): the character's bundled revision is dropped from a test-time copy only.
+    /// Returns file name to bytes, and the text of <c>expected.json</c>.
+    /// </summary>
+    private static (SortedDictionary<string, byte[]> Zips, string ExpectedJson) ProduceInputs(string folder, string target)
+    {
+        var library = $"downconvert/{folder}/library";
+        var zips = new SortedDictionary<string, byte[]>(StringComparer.Ordinal);
+        Guid id;
+        using (var app = new TempApp())
+        {
+            // The drawsDown golden revisions (a counting-up pool and the roll that draws it down) block a whole-source export by
+            // design (spec section 2), so a test-time copy of the pack leaves them out; the committed library is not edited.
+            var pack = TempApp.LoadFixture<ContentPack>($"{library}/pack.json");
+            pack = pack with { Revisions = [.. pack.Revisions.Where(r => !BlockingInPacks.Contains(r.RevisionId))] };
+            app.App.Store.InTransaction(() =>
+            {
+                foreach (var source in pack.Sources)
+                    app.App.Store.UpsertSource(source);
+                foreach (var revision in pack.Revisions)
+                    app.App.Store.AddRevision(revision);
+            });
+            var sourceId = pack.Sources[0].Id;
+            app.App.SetShareable(new ShareableRequest(sourceId, true, ConfirmOwnWork: true));
+            var character = TempApp.LoadFixture<Character>($"{library}/character.json");
+            character = character with { Pins = [.. character.Pins.Where(p => p.RevisionId != BundledRevision && !BlockingInPacks.Contains(p.RevisionId))] };
+            id = app.App.SaveCharacter(character).Character.Id;
+            var campaignId = Guid.Parse(sourceId.ToString("D")[..8] + "-0000-4000-8000-0000000000d1");
+            var campaign = app.App.SaveCampaign(new() { Id = campaignId,Name = "Compat Campaign", RulesFamily = character.RulesFamily, AllowedSources = [sourceId] });
+            var dispatcher = new CommandDispatcher(app.App);
+
+            void Add(string preview, string export, string body)
+            {
+                var hash = Dispatch(dispatcher, preview, body).GetProperty("changesHash").GetString();
+                var result = Dispatch(dispatcher, export, body.Replace("}", $",\"changesHash\":\"{hash}\"}}", StringComparison.Ordinal));
+                zips[result.GetProperty("fileName").GetString()!] = Convert.FromBase64String(result.GetProperty("base64").GetString()!);
+            }
+
+            Add("package.exportPreview", "package.export", $$"""{"characterIds":["{{id}}"],"purpose":"share","target":"{{target}}"}""");
+            Add("package.exportPreview", "package.export", $$"""{"characterIds":["{{id}}"],"purpose":"backup","target":"{{target}}"}""");
+            Add("package.sourcePackPreview", "package.sourcePackExport", $$"""{"sourceIds":["{{sourceId}}"],"target":"{{target}}"}""");
+            Add("package.campaignPackPreview", "package.campaignPackExport", $$"""{"campaignId":"{{campaign.Id}}","target":"{{target}}"}""");
+
+            var row = ReleaseLadder.Target(target)!;
+            using var backup = new MemoryStream();
+            app.App.WriteLibraryBackup(backup, row, app.App.PreviewLibraryBackup(row).ChangesHash);
+            zips[$"library-backup-for-{target}.tomestack.zip"] = KeepOnlySource(backup.ToArray(), sourceId); // the harness restores files named library-backup*
+        }
+
+        // expected.json: import the written character share into a fresh store and calculate it with the current build.
+        var share = zips.Single(z => !z.Key.StartsWith("library-backup", StringComparison.Ordinal) && z.Key.StartsWith("Compat-Hero", StringComparison.Ordinal) && !z.Key.Contains("backup", StringComparison.Ordinal));
+        using var fresh = new TempApp(fresh: true);
+        var dispatch = new CommandDispatcher(fresh.App);
+        Dispatch(dispatch, "package.apply", $$"""{"base64":"{{Convert.ToBase64String(share.Value)}}"}""");
+        var fields = SheetFields(dispatch, id);
+        // The committed backup restores to the same sheet (it is a valid backup, not only a well-formed zip).
+        Assert.Equal(fields.ToJsonString(Indented), Restores(zips[$"library-backup-for-{target}.tomestack.zip"], id));
+        var expected = new JsonObject { ["characters"] = new JsonObject { [id.ToString("D")] = new JsonObject { ["fields"] = fields } } };
+        return (zips, expected.ToJsonString(Indented).ReplaceLineEndings("\n") + "\n");
+    }
+
+    /// <summary>
+    /// A library backup always carries every source in the store, and the bundled SRD sources hold SRD notice text (R-C17: none under
+    /// tests/). The committed backup is that backup with every source other than the fixture's, and the content of those sources, taken
+    /// out, and the manifest's entries, notices and revisionOrder brought into line. The result is checked by restoring it
+    /// (<see cref="Restores"/>), so it is a valid backup.
+    /// </summary>
+    private static byte[] KeepOnlySource(byte[] backup, Guid sourceId)
+    {
+        var kept = new List<(string Name, DateTimeOffset Time, byte[] Bytes)>();
+        var keptRevisions = new HashSet<string>();
+        JsonObject manifest;
+        using (var zip = new ZipArchive(new MemoryStream(backup)))
+        {
+            manifest = null!;
+            foreach (var entry in zip.Entries)
+            {
+                using var stream = entry.Open();
+                using var buffer = new MemoryStream();
+                stream.CopyTo(buffer);
+                var bytes = buffer.ToArray();
+                if (entry.FullName == "manifest.json")
+                {
+                    manifest = JsonNode.Parse(bytes)!.AsObject();
+                    continue;
+                }
+                if (entry.FullName.StartsWith("sources/", StringComparison.Ordinal) && entry.FullName != $"sources/{sourceId:D}.json")
+                    continue;
+                if (entry.FullName.StartsWith("content/", StringComparison.Ordinal))
+                {
+                    var revision = JsonNode.Parse(bytes)!.AsObject();
+                    if (revision["provenance"]!["sourceId"]!.GetValue<string>() != sourceId.ToString("D"))
+                        continue;
+                    keptRevisions.Add(revision["revisionId"]!.GetValue<string>());
+                }
+                kept.Add((entry.FullName, entry.LastWriteTime, bytes));
+            }
+        }
+
+        var names = kept.Select(k => k.Name).ToHashSet(StringComparer.Ordinal);
+        manifest["entries"] = new JsonArray([.. manifest["entries"]!.AsArray().Where(e => names.Contains(e!["path"]!.GetValue<string>())).Select(e => e!.DeepClone())]);
+        manifest["notices"] = new JsonArray([.. manifest["notices"]!.AsArray().Where(n => n!["sourceId"]!.GetValue<string>() == sourceId.ToString("D")).Select(n => n!.DeepClone())]);
+        manifest["revisionOrder"] = new JsonArray([.. manifest["revisionOrder"]!.AsArray().Where(r => keptRevisions.Contains(r!.GetValue<string>())).Select(r => r!.DeepClone())]);
+
+        using var output = new MemoryStream();
+        using (var zip = new ZipArchive(output, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            foreach (var (name, time, bytes) in kept)
+                Write(zip, name, time, bytes);
+            Write(zip, "manifest.json", kept[0].Time, Encoding.UTF8.GetBytes(manifest.ToJsonString(Indented)));
+        }
+        return output.ToArray();
+
+        static void Write(ZipArchive zip, string name, DateTimeOffset time, byte[] bytes)
+        {
+            var entry = zip.CreateEntry(name, CompressionLevel.Optimal);
+            entry.LastWriteTime = time;
+            using var stream = entry.Open();
+            stream.Write(bytes);
+        }
+    }
+
+    /// <summary>Restores <paramref name="backup"/> into an empty store with the current build and returns the character's sheet fields as JSON.</summary>
+    private static string Restores(byte[] backup, Guid characterId)
+    {
+        var path = Path.Combine(Path.GetTempPath(), "tomestack-tests", Guid.NewGuid().ToString("N") + ".tomestack.zip");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllBytes(path, backup);
+        try
+        {
+            using var restored = new TempApp(fresh: true);
+            restored.App.ApplyLibraryRestore(path);
+            return SheetFields(new CommandDispatcher(restored.App), characterId).ToJsonString(Indented);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    private static JsonObject SheetFields(CommandDispatcher dispatcher, Guid id)
+    {
+        var view = Dispatch(dispatcher, "character.get", $$"""{"id":"{{id}}"}""");
+        var fields = new JsonObject();
+        foreach (var field in view.GetProperty("sheet").GetProperty("fields").EnumerateArray())
+        {
+            var name = field.GetProperty("field").GetString()!;
+            if (HarnessFields.Contains(name))
+                fields[name] = JsonNode.Parse(field.GetProperty("value").GetRawText());
+        }
+        return fields;
+    }
+
+    /// <summary>The zip's entries by name; the manifest's <c>appVersion</c> is neutral, so a version bump does not stale a committed input.</summary>
+    private static SortedDictionary<string, string> Entries(byte[] zipBytes)
+    {
+        var entries = new SortedDictionary<string, string>(StringComparer.Ordinal);
+        using var zip = new ZipArchive(new MemoryStream(zipBytes));
+        foreach (var entry in zip.Entries)
+        {
+            using var stream = entry.Open();
+            using var buffer = new MemoryStream();
+            stream.CopyTo(buffer);
+            var text = Convert.ToBase64String(buffer.ToArray());
+            if (entry.FullName == "manifest.json")
+            {
+                var root = JsonNode.Parse(buffer.ToArray())!.AsObject();
+                root["appVersion"] = "{appVersion}";
+                text = root.ToJsonString();
+            }
+            entries[entry.FullName] = text;
+        }
+        return entries;
+    }
+
+    [Theory]
+    [MemberData(nameof(Folders))]
+    public void Harness_inputs_match_the_committed_files(string folder, string target)
+    {
+        var (zips, expectedJson) = ProduceInputs(folder, target);
+        var directory = SourceFolder(folder);
+        if (Environment.GetEnvironmentVariable("TOMESTACK_REGENERATE_GOLDENS") == "1")
+        {
+            foreach (var old in Directory.EnumerateFiles(directory, "*.tomestack.zip"))
+                File.Delete(old);
+            foreach (var (name, bytes) in zips)
+                File.WriteAllBytes(Path.Combine(directory, name), bytes);
+            File.WriteAllText(Path.Combine(directory, "expected.json"), expectedJson, new UTF8Encoding(false));
+            Assert.Fail($"Regenerated the harness inputs under {folder}; review expected.json, unset TOMESTACK_REGENERATE_GOLDENS and run again.");
+        }
+
+        Assert.Equal(
+            Directory.EnumerateFiles(directory, "*.tomestack.zip").Select(Path.GetFileName).Order(StringComparer.Ordinal),
+            zips.Keys);
+        foreach (var (name, bytes) in zips)
+            Assert.Equal(Entries(File.ReadAllBytes(Path.Combine(directory, name))), Entries(bytes));
+        Assert.Equal(File.ReadAllText(Path.Combine(directory, "expected.json")).ReplaceLineEndings("\n"), expectedJson);
+    }
+
     private static JsonElement Dispatch(CommandDispatcher dispatcher, string command, string payload)
     {
         var response = JsonDocument.Parse(dispatcher.Dispatch($$"""{"id":"1","command":"{{command}}","payload":{{payload}}}""")).RootElement.Clone();

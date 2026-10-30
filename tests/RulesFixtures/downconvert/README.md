@@ -21,7 +21,43 @@ before comparing, and line endings are compared as LF (the repository stores LF;
 manifest's `sha256` and `size` values are taken from the bytes the writer produced on Windows (CRLF), so the golden is a
 Windows test, like the app. Everything else is exact.
 
-## Regenerating `expected/`
+## Harness inputs (lane E, "real older build")
+
+`for-<T>/` holds, beside `library/` and `expected/` (entry goldens), the files lane E opens with the real release T
+(`scripts/old-release-check.ps1`; the owner runs it). All are original test data; every fixture name starts with "Compat".
+
+| File (in `for-0.6.0/`, and the same with `0.5.0` in `for-0.5.0/`) | What it is |
+|---|---|
+| `Compat-Hero-for-<T>.tomestack.zip` | character share |
+| `Compat-Hero-for-<T>-personal-backup.tomestack.zip` | character backup |
+| `Compat-Homebrew-A-source-pack-for-<T>.tomestack.zip` | source pack |
+| `Compat-Campaign-campaign-pack-for-<T>.tomestack.zip` | campaign pack (allows "Compat Homebrew A") |
+| `library-backup-for-<T>.tomestack.zip` | full library backup (the harness restores files named `library-backup*`) |
+| `expected.json` | `{ "characters": { "<id>": { "fields": { ... } } } }`, the sheet the old build must calculate |
+
+How they are made (`DownConversionGoldenTests.Harness_inputs_match_the_committed_files`): the test loads `library/` into a
+fresh store with the clock pinned to `TempApp.Now`, marks the source shareable, saves a campaign with a fixed id, and exports
+each package for target T through the same commands the app uses (preview, then export with the previewed `changesHash`).
+Three test-time choices keep the committed zips free of SRD text (CONTRIBUTING invariant; ruling R-C17), none of which edits
+`library/`:
+
+- The character's bundled SRD pin (`51e00000-...-0001`) is dropped from the copy that is exported, so no bundled revision or
+  source goes into a zip. The bundled-pin case stays covered by `expected/` (which compares it with the store).
+- "Compat Reservoir" and "Compat Draw Down" (0.6.0 only) are left out: a counting-up pool blocks a whole-source export by design.
+- A library backup writes every source in the store, including the bundled SRD sources and their notices. The test takes out
+  every source other than the fixture's with its content, then fixes the manifest's `entries`, `notices` and `revisionOrder`, and
+  checks that the result restores with the current build to the same sheet.
+
+`expected.json` is computed by importing the written character share into a fresh store with the current build and reading
+the character's sheet (`character.get`, the field names the harness emits: `fields[<field>] = value`). It lists the fields
+the lowered copy keeps (ability scores, a modifier, proficiency bonus, a save, a skill, passive Perception, speed, initiative,
+armor class, hit points), none of which comes from a dropped effect. It sits beside `expected/` (entry goldens); they are separate.
+
+The test produces every zip again and compares entry by entry (names and bytes; the manifest's `appVersion` is neutral, so a
+release bump does not stale the files), and compares `expected.json` as text. A stale input fails. Entry bytes are as the writer
+makes them on Windows (CRLF), like the entry goldens. Regenerating also rewrites these files.
+
+## Regenerating `expected/` and the harness inputs
 
 Only when the lowering, the package format or a fixture changes on purpose. From the repository root:
 
@@ -31,5 +67,5 @@ dotnet test tests/AppService.Tests -c Release --filter FullyQualifiedName~DownCo
 Remove-Item Env:TOMESTACK_REGENERATE_GOLDENS
 ```
 
-That rewrites both `expected/` folders from the implementation. The regenerate run fails on purpose, so it never reads as green; that failure is expected, not a bug. Then review the diff by eye against SPEC section 2 (what a
+That rewrites both `expected/` folders and the harness inputs from the implementation. The regenerate run fails on purpose, so it never reads as green; that failure is expected, not a bug. Then review the diff by eye against SPEC section 2 (what a
 copy for each release keeps, drops and blocks) before committing: the golden proves the output is stable, not that it is right.
