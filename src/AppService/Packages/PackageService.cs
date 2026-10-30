@@ -57,7 +57,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
 
     /// <summary>The plan for <paramref name="target"/> (D85): lowered for that release, or null when there is no target (the ordinary path).</summary>
     private LoweredPlan? LowerFor(ExportPlan plan, LadderRow? target) =>
-        target is null ? null : DownConversion.Lower(plan, target, _bundledSources.Contains, id => store.FindSource(id)?.Title ?? "");
+        target is null ? null : DownConversion.Lower(plan, target, _bundledSources.Contains, id => store.FindSource(id)?.Title ?? "", store);
 
     /// <summary>What <see cref="Export"/> would write for <paramref name="purpose"/>, without writing it (ADR-007). With a <paramref name="target"/>, the character is lowered and what that loses is listed (D85).</summary>
     public ExportPreview PreviewExport(IReadOnlyList<Guid> characterIds, ExportPurpose purpose, LadderRow? target = null)

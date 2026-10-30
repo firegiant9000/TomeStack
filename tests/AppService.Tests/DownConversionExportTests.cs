@@ -92,7 +92,7 @@ public class DownConversionExportTests
         Assert.Equal("0.6.0", result.GetProperty("target").GetString());
 
         var plan = new PackageService.ExportPlan([Hero(RunningEncounter) with { Id = id }], [], [], [], "x.tomestack.zip");
-        var lowered = DownConversion.Lower(plan, ReleaseLadder.Target("0.6.0")!, _ => false, _ => "");
+        var lowered = DownConversion.Lower(plan, ReleaseLadder.Target("0.6.0")!, _ => false, _ => "", new EmptyCatalog());
         Assert.True(lowered.Blocked);
     }
 
@@ -465,5 +465,313 @@ public class DownConversionExportTests
         Assert.DoesNotContain((byte)'\r', bytes);
         Assert.Equal(PinnedDigest, Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes)));
         Assert.Equal(PinnedCopyId, DownConversion.CopyId(root, 10, bytes));
+    }
+
+    // ---- C2-2: content copies, the cascade and the bundled check -----------------------------------------------------------
+
+    private static readonly Guid HomebrewId = Guid.Parse("c2000000-0000-4000-8000-0000000000a1");
+    private static readonly Guid FeatureContent = Guid.Parse("c1000000-0000-4000-8000-0000000000f1");
+    private static readonly Guid FeatureRevision = Guid.Parse("c100e000-0000-4000-8000-0000000000f1");
+    private static readonly Guid PathContent = Guid.Parse("c1000000-0000-4000-8000-0000000000b1");
+    private static readonly Guid PathRevision = Guid.Parse("c100e000-0000-4000-8000-0000000000b1");
+    private static readonly ContentReference FeatureRef = new(FeatureContent, FeatureRevision);
+    private static readonly ContentReference PathRef = new(PathContent, PathRevision);
+    private const string PathCopiedSentence = "'Compat Path of Tides' (Compat Homebrew A): copied because it grants a changed feature; nothing of its own is left out.";
+
+    private sealed class HomebrewCatalog : IContentCatalog
+    {
+        public ContentRevision? FindRevision(ContentReference reference) => null;
+
+        public SourceRecord? FindSource(Guid sourceId) => new()
+        {
+            Id = sourceId, Title = "Compat Homebrew A", Publisher = "", RulesFamilies = [RulesFamilies.Srd51], EditionVersion = "", License = "", Redistributable = true,
+        };
+    }
+
+    private sealed class EmptyCatalog : IContentCatalog
+    {
+        public ContentRevision? FindRevision(ContentReference reference) => null;
+
+        public SourceRecord? FindSource(Guid sourceId) => null;
+    }
+
+    /// <summary>A v11 feature whose fly-speed bonus a v10 reader has no field for, so lowering drops it.</summary>
+    private static ContentRevision V11Feature(Guid? revisionId = null) => new()
+    {
+        ContentId = FeatureContent,
+        RevisionId = revisionId ?? FeatureRevision,
+        Kind = ContentKind.Feature,
+        Name = "Compat Steady Hands",
+        RulesFamilies = [RulesFamilies.Srd51],
+        Provenance = new(HomebrewId),
+        Status = RevisionStatus.Published,
+        Effects =
+        [
+            new ModifierEffect { Id = "steady", Operation = ModifierOperation.Bonus, Target = FieldIds.Initiative, Value = "1" },
+            new ModifierEffect { Id = "fly", Operation = ModifierOperation.Bonus, Target = FieldIds.FlySpeed, Value = "10" },
+        ],
+    };
+
+    /// <summary>A v9 subclass: nothing of its own to lower, so only the cascade can change it.</summary>
+    private static ContentRevision V9Path(Guid contentId, Guid revisionId, params Effect[] effects) => new()
+    {
+        ContentId = contentId,
+        RevisionId = revisionId,
+        SchemaVersion = 9,
+        Kind = ContentKind.Subclass,
+        Name = "Compat Path of Tides",
+        RulesFamilies = [RulesFamilies.Srd51],
+        Provenance = new(HomebrewId),
+        Status = RevisionStatus.Published,
+        Effects = effects,
+    };
+
+    private static GrantEffect GrantsFeature() => new() { Id = "grant-hands", Grant = GrantKind.Content, Content = FeatureRef, Level = 3 };
+
+    private static LoweredPlan LowerFor(LadderRow row, Character hero, params ContentRevision[] revisions) =>
+        DownConversion.Lower(new([hero], [.. revisions], [], [], "x.tomestack.zip"), row, id => false, _ => "Compat Homebrew A", new HomebrewCatalog());
+
+    private static LadderRow Row(string release) => ReleaseLadder.Target(release)!;
+
+    [Fact]
+    public void Lower_copies_a_v11_feature_with_marker_and_new_id()
+    {
+        var original = V11Feature();
+
+        var lowered = LowerFor(Row("0.6.0"), Hero(c => c), original);
+
+        var copy = Assert.Single(lowered.Plan.Revisions);
+        Assert.False(lowered.Blocked);
+        Assert.Equal(10, copy.SchemaVersion);
+        Assert.Equal((original.ContentId, original.Provenance.SourceId, original.Status), (copy.ContentId, copy.Provenance.SourceId, copy.Status));
+        Assert.Equal(new DownConvertedFrom(FeatureRevision, 11), DownConversion.ReadMarker(copy));
+        Assert.Equal(DownConversion.CopyId(FeatureRevision, 10, DownConversion.CanonicalBytes(copy)), copy.RevisionId);
+        Assert.NotEqual(FeatureRevision, copy.RevisionId);
+        var change = Assert.Single(lowered.Changes, c => c.Kind == "content");
+        Assert.Equal(("dropped", DownConversion.DropsCode, $"content/{FeatureRevision:D}.json", FeatureRevision, "Compat Steady Hands", "Compat Homebrew A"),
+            (change.Action, change.Code, change.Entry, change.Id, change.Name, change.SourceTitle));
+        Assert.StartsWith("'Compat Steady Hands' (Compat Homebrew A): ", change.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Lower_rewrites_grants_and_choice_options_and_cascades()
+    {
+        var choiceRevision = Guid.Parse("c100e000-0000-4000-8000-0000000000b2");
+        var granting = V9Path(PathContent, PathRevision, GrantsFeature());
+        var offering = V9Path(Guid.Parse("c1000000-0000-4000-8000-0000000000b2"), choiceRevision,
+            new ChoiceEffect { Id = "pick-hands", ChoiceId = "hands", Options = [FeatureRef] }) with { Name = "Compat Path of Waves" };
+
+        var lowered = LowerFor(Row("0.6.0"), Hero(c => c), V11Feature(), granting, offering);
+
+        var featureCopy = lowered.Plan.Revisions[0];
+        var pathCopy = lowered.Plan.Revisions[1];
+        var waveCopy = lowered.Plan.Revisions[2];
+        Assert.Equal(featureCopy.RevisionId, Assert.IsType<GrantEffect>(Assert.Single(pathCopy.Effects)).Content!.RevisionId);
+        Assert.Equal(FeatureContent, ((GrantEffect)pathCopy.Effects[0]).Content!.ContentId);
+        Assert.Equal([featureCopy.RevisionId], Assert.IsType<ChoiceEffect>(Assert.Single(waveCopy.Effects)).Options.Select(o => o.RevisionId));
+        Assert.Equal(DownConversion.CopyId(PathRevision, 9, DownConversion.CanonicalBytes(pathCopy)), pathCopy.RevisionId);
+        Assert.Equal(new DownConvertedFrom(PathRevision, 9), DownConversion.ReadMarker(pathCopy));
+        var copied = Assert.Single(lowered.Changes, c => c.Id == PathRevision);
+        Assert.Equal(("copied", "package.target-copied", PathCopiedSentence), (copied.Action, copied.Code, copied.Message));
+        Assert.Equal("copied", Assert.Single(lowered.Changes, c => c.Id == choiceRevision).Action);
+    }
+
+    [Fact]
+    public void Lower_never_rewrites_content_id_references()
+    {
+        var extending = V9Path(PathContent, PathRevision, GrantsFeature()) with { ExtendsChoice = new ChoiceExtension(FeatureContent, "hands") };
+
+        var lowered = LowerFor(Row("0.6.0"), Hero(c => c), V11Feature(), extending);
+
+        var copy = lowered.Plan.Revisions[1];
+        Assert.NotEqual(PathRevision, copy.RevisionId);
+        Assert.Equal(new ChoiceExtension(FeatureContent, "hands"), copy.ExtendsChoice);
+        Assert.Equal(FeatureContent, ((GrantEffect)copy.Effects[0]).Content!.ContentId);
+    }
+
+    [Fact]
+    public void Character_pins_follow_the_copies_via_ReplaceReference()
+    {
+        var hero = Hero(c => c with
+        {
+            Pins = [FeatureRef],
+            Classes = [new ClassLevel(PathRef, 1)],
+            Choices = [new ChoiceSelection(PathRef, "hands", [FeatureRef])],
+            Equipment = [new EquipmentEntry(FeatureRef)],
+            Spells = [new KnownSpell(PathContent, FeatureRef)],
+            CrossFamilyExceptions = [new CrossFamilyException(FeatureRef, "Compat reason")],
+            CampaignExceptions = [new CampaignException(FeatureRef, "Compat reason")],
+            Play = (c.Play ?? new PlayState()) with { Concentration = new Concentration(FeatureRef, "Compat Steady Hands") },
+        });
+
+        var lowered = LowerFor(Row("0.6.0"), hero, V11Feature(), V9Path(PathContent, PathRevision, GrantsFeature()));
+
+        var featureId = lowered.Plan.Revisions[0].RevisionId;
+        var pathId = lowered.Plan.Revisions[1].RevisionId;
+        var moved = Assert.Single(lowered.Plan.Characters);
+        Assert.Equal([featureId], moved.Pins.Select(r => r.RevisionId));
+        Assert.Equal([pathId], moved.Classes.Select(c => c.Class.RevisionId));
+        Assert.Equal((pathId, featureId), (moved.Choices[0].Source.RevisionId, moved.Choices[0].Selected[0].RevisionId));
+        Assert.Equal(featureId, moved.Equipment[0].Item.RevisionId);
+        Assert.Equal(featureId, moved.Spells[0].Spell.RevisionId);
+        Assert.Equal(featureId, moved.CrossFamilyExceptions[0].Content.RevisionId);
+        Assert.Equal(featureId, moved.CampaignExceptions[0].Content.RevisionId);
+        Assert.Equal(featureId, moved.Play.Concentration!.Spell.RevisionId);
+    }
+
+    [Fact]
+    public void Copy_of_a_copy_collapses_to_the_root()
+    {
+        var original = V11Feature();
+        var first = Assert.Single(LowerFor(Row("0.6.0"), Hero(c => c), original).Plan.Revisions);
+
+        var viaCopy = Assert.Single(LowerFor(Row("0.5.0"), Hero(c => c), first).Plan.Revisions);
+        var direct = Assert.Single(LowerFor(Row("0.5.0"), Hero(c => c), original).Plan.Revisions);
+
+        Assert.Equal(new DownConvertedFrom(FeatureRevision, 11), DownConversion.ReadMarker(viaCopy));
+        Assert.Equal(direct.RevisionId, viaCopy.RevisionId);
+        Assert.Equal(PackageService.Json(direct), PackageService.Json(viaCopy));
+    }
+
+    [Fact]
+    public void ReadMarker_returns_null_for_any_malformed_shape()
+    {
+        static ContentRevision With(string json) => V11Feature() with { Extensions = new() { [DownConversion.MarkerKey] = JsonDocument.Parse(json).RootElement.Clone() } };
+
+        Assert.NotNull(DownConversion.ReadMarker(With("""{"revisionId":"c100e000-0000-4000-8000-0000000000f1","schemaVersion":11}""")));
+        Assert.Null(DownConversion.ReadMarker(V11Feature()));
+        Assert.Null(DownConversion.ReadMarker(With("""{"revisionId":"c100e000-0000-4000-8000-0000000000f1"}""")));
+        Assert.Null(DownConversion.ReadMarker(With("""{"revisionId":"c100e000-0000-4000-8000-0000000000f1","schemaVersion":11,"x":1}""")));
+        Assert.Null(DownConversion.ReadMarker(With("""{"revisionId":"nope","schemaVersion":11}""")));
+        Assert.Null(DownConversion.ReadMarker(With("""{"revisionId":"c100e000-0000-4000-8000-0000000000f1","schemaVersion":12}""")));
+        Assert.Null(DownConversion.ReadMarker(With("""{"revisionId":"c100e000-0000-4000-8000-0000000000f1","schemaVersion":0}""")));
+        Assert.Null(DownConversion.ReadMarker(With("""{"revisionId":"c100e000-0000-4000-8000-0000000000f1","schemaVersion":"11"}""")));
+        Assert.Null(DownConversion.ReadMarker(With("[1]")));
+        Assert.Null(DownConversion.ReadMarker(With("null")));
+    }
+
+    [Fact]
+    public void Bundled_revision_in_set_is_written_as_is()
+    {
+        var bundled = V11Feature();
+        var row = Row("0.6.0") with { BundledRevisionIds = new HashSet<Guid> { FeatureRevision } };
+
+        var lowered = DownConversion.Lower(new([Hero(c => c with { Pins = [FeatureRef] })], [bundled], [], [], "x.tomestack.zip"), row, id => id == HomebrewId, _ => "Compat Homebrew A", new HomebrewCatalog());
+
+        Assert.Same(bundled, Assert.Single(lowered.Plan.Revisions));
+        Assert.False(lowered.Blocked);
+        Assert.Empty(lowered.Changes);
+    }
+
+    [Fact]
+    public void Bundled_revision_outside_set_blocks()
+    {
+        using var app = new TempApp();
+        var srd = app.App.ListSources().First(s => s.Title.StartsWith("System Reference Document 5.1", StringComparison.Ordinal));
+        var bundled = app.App.Store.ListRevisions().First(r => r.Provenance.SourceId == srd.Id && r.Status == RevisionStatus.Published);
+        var id = Save(app, c => c with { Pins = [new ContentReference(bundled.ContentId, bundled.RevisionId)] });
+        var row = Row("0.6.0") with { BundledRevisionIds = new HashSet<Guid>() };
+
+        var preview = app.App.PreviewExport([id], ExportPurpose.Share, row);
+
+        Assert.NotEmpty(preview.Changes);
+        Assert.All(preview.Changes, c => Assert.Equal(("blocks", "package.target-blocked", "content"), (c.Action, c.Code, c.Kind)));
+        const string tail = "Update the receiver's TomeStack; this content cannot be copied into the file.";
+        var uses = preview.Changes.Where(c => c.Message.StartsWith("'Compat Hero' uses ", StringComparison.Ordinal)).ToList();
+        Assert.NotEmpty(uses);
+        Assert.All(uses, c => Assert.Equal($"'Compat Hero' uses '{c.Name}' from the bundled SRD 5.1 pack, which TomeStack 0.6.0 does not have. {tail}", c.Message));
+        Assert.All(preview.Changes.Except(uses), c => Assert.Equal($"'{c.Name}' from the bundled SRD 5.1 pack is not in TomeStack 0.6.0. {tail}", c.Message));
+    }
+
+    [Fact]
+    public void Bundled_revision_is_never_lowered()
+    {
+        var bundled = V11Feature();
+        var row = Row("0.5.0") with { BundledRevisionIds = new HashSet<Guid>() };
+
+        var lowered = DownConversion.Lower(new([Hero(c => c with { Pins = [FeatureRef] })], [bundled], [], [], "x.tomestack.zip"), row, id => id == HomebrewId, _ => "System Reference Document 5.2.1", new HomebrewCatalog());
+
+        Assert.True(lowered.Blocked);
+        Assert.Same(bundled, Assert.Single(lowered.Plan.Revisions));
+        var change = Assert.Single(lowered.Changes);
+        Assert.Equal("'Compat Hero' uses 'Compat Steady Hands' from the bundled SRD 5.2.1 pack, which TomeStack 0.5.0 does not have. Update the receiver's TomeStack; this content cannot be copied into the file.", change.Message);
+    }
+
+    [Fact]
+    public void Reference_cycle_among_changed_revisions_blocks()
+    {
+        var first = V11Feature() with { Effects = [.. V11Feature().Effects, new GrantEffect { Id = "to-path", Grant = GrantKind.Content, Content = PathRef, Level = 1 }] };
+        var second = V9Path(PathContent, PathRevision, GrantsFeature());
+
+        var lowered = LowerFor(Row("0.6.0"), Hero(c => c), first, second);
+
+        Assert.True(lowered.Blocked);
+        var cycle = lowered.Changes.Where(c => c.Message.EndsWith("it refers to itself through other changed content, so a copy cannot be made.", StringComparison.Ordinal)).ToList();
+        Assert.Equal(2, cycle.Count);
+        Assert.All(cycle, c => Assert.Equal(("blocks", "package.target-blocked"), (c.Action, c.Code)));
+        Assert.Contains(cycle, c => c.Message.StartsWith("'Compat Path of Tides' (Compat Homebrew A): it refers", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Rounds_left_names_the_toggle_label()
+    {
+        var toggleContent = Guid.Parse("c1000000-0000-4000-8000-0000000000c1");
+        var toggle = V9Path(toggleContent, Guid.Parse("c100e000-0000-4000-8000-0000000000c1"),
+            new ToggleEffect { Id = "surge-toggle", ToggleId = "surge", Label = "Surge of Tides" });
+        var hero = WithDetails(Hero(c => c with
+        {
+            Play = (c.Play ?? new PlayState()) with { Toggles = [new ActiveToggle(toggleContent, "surge", 3)] },
+        }));
+
+        var lowered = LowerFor(Row("0.6.0"), hero, toggle);
+
+        var change = Assert.Single(lowered.Changes, c => c.Kind == "character");
+        Assert.Equal("'Compat Hero': the rounds left on 'Surge of Tides'.", change.Message);
+    }
+
+    private static Guid PublishFlyFeature(TempApp app)
+    {
+        var source = app.App.CreateHomebrewSource(new("Compat Homebrew A", [RulesFamilies.Srd51], Redistributable: true, ConfirmOwnWork: true));
+        app.App.SaveDraft(V11Feature() with { Provenance = new(source.Id), Status = RevisionStatus.Draft });
+        app.App.Publish(FeatureRef);
+        return source.Id;
+    }
+
+    [Theory]
+    [InlineData("0.6.0")]
+    [InlineData("0.5.0")]
+    public void Lowered_plan_that_is_not_blocked_opens_in_the_target(string target)
+    {
+        using var app = new TempApp();
+        PublishFlyFeature(app);
+        var id = Save(app, c => c with { Pins = [.. c.Pins, FeatureRef] });
+        var dispatcher = new CommandDispatcher(app.App);
+
+        var preview = Result(Send(dispatcher, "package.exportPreview", Payload(id, target)));
+
+        Assert.Contains(preview.GetProperty("changes").EnumerateArray(), c => c.GetProperty("kind").GetString() == "content");
+        Assert.Equal(target, preview.GetProperty("opensIn").GetString());
+    }
+
+    [Fact]
+    public void Content_copies_are_written_and_the_same_input_gives_identical_bytes()
+    {
+        using var app = new TempApp();
+        PublishFlyFeature(app);
+        var id = Save(app, c => c with { Pins = [.. c.Pins, FeatureRef] });
+        var dispatcher = new CommandDispatcher(app.App);
+        var hash = Result(Send(dispatcher, "package.exportPreview", Payload(id, "0.6.0"))).GetProperty("changesHash").GetString();
+        var before = Snapshot(app);
+
+        var first = ExportBytes(Send(dispatcher, "package.export", Payload(id, "0.6.0", hash)));
+        var second = ExportBytes(Send(dispatcher, "package.export", Payload(id, "0.6.0", hash)));
+
+        using var zip = new System.IO.Compression.ZipArchive(new MemoryStream(first));
+        Assert.Null(zip.GetEntry($"content/{FeatureRevision:D}.json"));
+        var copyEntry = Assert.Single(zip.Entries, e => e.FullName.StartsWith("content/", StringComparison.Ordinal) && e.FullName != $"content/{FeatureRevision:D}.json"
+            && Entry(first, e.FullName).TryGetProperty("downConvertedFrom", out _));
+        Assert.Equal(first, second);
+        Assert.Contains(copyEntry.FullName[8..^5], Entry(first, $"characters/{id:D}.json").ToString(), StringComparison.Ordinal);
+        Assert.Equal(before, Snapshot(app));
     }
 }

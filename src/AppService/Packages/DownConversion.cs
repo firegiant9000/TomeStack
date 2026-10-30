@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using TomeStack.RulesCore;
 
 namespace TomeStack.AppService.Packages;
@@ -30,6 +31,7 @@ public static class DownConversion
     public const string DropsCode = "package.target-drops";
     public const string BlockedCode = "package.target-blocked";
     public const string ChangedCode = "package.target-changed";
+    public const string CopiedCode = "package.target-copied";
 
     /// <summary>The extensions key of the <see cref="DownConvertedFrom"/> marker. Fixed: changing it breaks re-pinning.</summary>
     public const string MarkerKey = "downConvertedFrom";
@@ -90,15 +92,44 @@ public static class DownConversion
     }
 
     /// <summary>
-    /// Lowers every character in <paramref name="plan"/> for <paramref name="target"/> (<see cref="DownConvert.Below"/>) and lists what that
-    /// loses. Content revisions pass through unchanged in C1 (C2 lowers them), so the two lookups are not used yet.
+    /// Reads the <see cref="MarkerKey"/> marker of a copy (D85 part 2): exactly <c>revisionId</c> (a GUID) and <c>schemaVersion</c>
+    /// (1 to <see cref="ContentRevision.CurrentSchemaVersion"/>). Null when there is none or the shape is anything else; never throws.
     /// </summary>
-    internal static LoweredPlan Lower(PackageService.ExportPlan plan, LadderRow target, Func<Guid, bool> isBundledSource, Func<Guid, string> sourceTitle)
+    internal static DownConvertedFrom? ReadMarker(ContentRevision revision)
+    {
+        ArgumentNullException.ThrowIfNull(revision);
+        if (revision.Extensions is null || !revision.Extensions.TryGetValue(MarkerKey, out var marker) || marker.ValueKind != JsonValueKind.Object)
+            return null;
+        Guid? id = null;
+        int? schema = null;
+        var count = 0;
+        foreach (var property in marker.EnumerateObject())
+        {
+            count++;
+            if (property.NameEquals("revisionId") && property.Value.ValueKind == JsonValueKind.String && property.Value.TryGetGuid(out var g))
+                id = g;
+            else if (property.NameEquals("schemaVersion") && property.Value.ValueKind == JsonValueKind.Number && property.Value.TryGetInt32(out var n))
+                schema = n;
+            else
+                return null;
+        }
+        return count == 2 && id is { } revisionId && schema is >= 1 and <= ContentRevision.CurrentSchemaVersion
+            ? new DownConvertedFrom(revisionId, schema.Value)
+            : null;
+    }
+
+    /// <summary>
+    /// Lowers every character in <paramref name="plan"/> for <paramref name="target"/> (<see cref="DownConvert.Below"/>) and every
+    /// content revision too (D85 part 2): bundled revisions are kept or block, the others become copies with new ids, the copies'
+    /// references cascade, and the characters follow them. Lists what that loses. Writes nothing.
+    /// </summary>
+    internal static LoweredPlan Lower(PackageService.ExportPlan plan, LadderRow target, Func<Guid, bool> isBundledSource, Func<Guid, string> sourceTitle, IContentCatalog catalog)
     {
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(isBundledSource);
         ArgumentNullException.ThrowIfNull(sourceTitle);
+        ArgumentNullException.ThrowIfNull(catalog);
 
         var characters = new List<Character>(plan.Characters.Count);
         var changes = new List<ExportChange>();
@@ -112,7 +143,7 @@ public static class DownConversion
                 switch (change.Action)
                 {
                     case BelowAction.Dropped:
-                        changes.Add(new(entry, "character", character.Id, character.Name, null, "dropped", DropsCode, change.Message));
+                        changes.Add(new(entry, "character", character.Id, character.Name, null, "dropped", DropsCode, ToggleLabelled(change, character, plan.Revisions)));
                         break;
                     case BelowAction.Blocks:
                         changes.Add(new(entry, "character", character.Id, character.Name, null, "blocks", BlockedCode, change.Message));
@@ -121,8 +152,198 @@ public static class DownConversion
             }
         }
 
-        var lowered = plan with { Characters = characters, FileName = WithTarget(plan.FileName, target) };
+        var content = LowerContent(plan, target, isBundledSource, sourceTitle, catalog, changes);
+        for (var i = 0; i < characters.Count; i++)
+        {
+            foreach (var (from, to) in content.Moves)
+                characters[i] = characters[i].ReplaceReference(from, to);
+        }
+
+        var lowered = plan with { Characters = characters, Revisions = content.Revisions, FileName = WithTarget(plan.FileName, target) };
         return new LoweredPlan(lowered, changes, HashChanges(changes), changes.Any(c => c.Action == "blocks"), target);
+    }
+
+    /// <summary>R-C4: a rounds-left line names the toggle by its label (the id when no revision in the plan has one).</summary>
+    private static string ToggleLabelled(BelowChange change, Character character, IEnumerable<ContentRevision> revisions)
+    {
+        if (change.Code != BelowCodes.RoundsLeft)
+            return change.Message;
+        var toggles = character.Play.Toggles;
+        for (var i = 0; i < toggles.Count; i++)
+        {
+            if (change.Path != $"play.toggles[{i}].roundsLeft")
+                continue;
+            var id = toggles[i].ToggleId;
+            var label = revisions.SelectMany(r => r.Effects).OfType<ToggleEffect>().FirstOrDefault(t => t.ToggleId == id)?.Label;
+            return label is null ? change.Message : change.Message.Replace($"'{id}'", $"'{label}'", StringComparison.Ordinal);
+        }
+        return change.Message;
+    }
+
+    private sealed record ContentOutcome(List<ContentRevision> Revisions, List<(ContentReference From, ContentReference To)> Moves);
+
+    /// <summary>The plan's revisions over the catalog, so a lookup resolves a revision that is in the export but not yet stored.</summary>
+    private sealed class OverlayCatalog(IContentCatalog inner, IEnumerable<ContentRevision> extra) : IContentCatalog
+    {
+        private readonly Dictionary<Guid, ContentRevision> _extra = extra.GroupBy(r => r.RevisionId).ToDictionary(g => g.Key, g => g.First());
+
+        public ContentRevision? FindRevision(ContentReference reference) =>
+            inner.FindRevision(reference) ?? (_extra.TryGetValue(reference.RevisionId, out var found) ? found : null);
+
+        public SourceRecord? FindSource(Guid sourceId) => inner.FindSource(sourceId);
+
+        public IEnumerable<ContentRevision> ChoiceExtensions(Guid contentId, string choiceId) => inner.ChoiceExtensions(contentId, choiceId);
+
+        public IEnumerable<ContentRevision> RevisionsOf(Guid contentId) => inner.RevisionsOf(contentId);
+    }
+
+    /// <summary>The revision ids a revision refers to through <c>grant.content</c> and <c>choice.options</c>, the only two fields that hold them.</summary>
+    private static IEnumerable<Guid> RefsOf(ContentRevision revision) =>
+        revision.Effects.SelectMany(e => e switch
+        {
+            GrantEffect { Content: { } c } => [c.RevisionId],
+            ChoiceEffect ch => ch.Options.Select(o => o.RevisionId),
+            _ => [],
+        });
+
+    private static ContentOutcome LowerContent(PackageService.ExportPlan plan, LadderRow target, Func<Guid, bool> isBundledSource,
+        Func<Guid, string> sourceTitle, IContentCatalog catalog, List<ExportChange> changes)
+    {
+        var release = target.Release.ToString(3);
+        var revisions = new List<ContentRevision>();
+        foreach (var revision in plan.Revisions)
+        {
+            if (revisions.All(r => r.RevisionId != revision.RevisionId))
+                revisions.Add(revision);
+        }
+        var overlay = new OverlayCatalog(catalog, revisions);
+        var lowered = new Dictionary<Guid, ContentRevision>();
+        var own = new HashSet<Guid>();
+        var kept = new HashSet<Guid>();
+
+        ExportChange Line(ContentRevision r, string action, string code, string message) =>
+            new($"content/{r.RevisionId:D}.json", "content", r.RevisionId, r.Name, sourceTitle(r.Provenance.SourceId), action, code, message);
+        string Prefixed(ContentRevision r, string message)
+        {
+            var title = sourceTitle(r.Provenance.SourceId);
+            var lead = $"'{r.Name}': ";
+            var rest = message.StartsWith(lead, StringComparison.Ordinal) ? message[lead.Length..] : message;
+            return title.Length == 0 ? $"'{r.Name}': {rest}" : $"'{r.Name}' ({title}): {rest}";
+        }
+
+        foreach (var r in revisions)
+        {
+            if (isBundledSource(r.Provenance.SourceId))
+            {
+                if (target.BundledRevisionIds.Contains(r.RevisionId))
+                    continue;
+                var title = sourceTitle(r.Provenance.SourceId).Replace("System Reference Document", "SRD", StringComparison.Ordinal);
+                if (title.Length == 0)
+                    title = "SRD";
+                var reference = new ContentReference(r.ContentId, r.RevisionId);
+                var user = plan.Characters.FirstOrDefault(c => c.AllReferences().Contains(reference));
+                const string tail = "Update the receiver's TomeStack; this content cannot be copied into the file.";
+                var message = user is null
+                    ? $"'{r.Name}' from the bundled {title} pack is not in TomeStack {release}. {tail}"
+                    : $"'{user.Name}' uses '{r.Name}' from the bundled {title} pack, which TomeStack {release} does not have. {tail}";
+                changes.Add(Line(r, "blocks", BlockedCode, message));
+                kept.Add(r.RevisionId);
+                continue;
+            }
+
+            var below = DownConvert.Below(r, target.ContentSchema, overlay);
+            lowered[r.RevisionId] = below.Revision;
+            if (!ReferenceEquals(below.Revision, r))
+                own.Add(r.RevisionId);
+            foreach (var change in below.Changes)
+            {
+                switch (change.Action)
+                {
+                    case BelowAction.Dropped:
+                        changes.Add(Line(r, "dropped", DropsCode, Prefixed(r, change.Message)));
+                        break;
+                    case BelowAction.Blocks:
+                        changes.Add(Line(r, "blocks", BlockedCode, Prefixed(r, change.Message)));
+                        break;
+                }
+            }
+        }
+
+        // A revision is changed when lowering changed it, or when something it grants or offers is changed.
+        var movable = revisions.Where(r => lowered.ContainsKey(r.RevisionId)).ToList();
+        var edges = movable.ToDictionary(r => r.RevisionId, r => RefsOf(r).Where(lowered.ContainsKey).Distinct().ToList());
+        var changed = new HashSet<Guid>(own);
+        for (var grew = true; grew;)
+        {
+            grew = false;
+            foreach (var r in movable)
+            {
+                if (!changed.Contains(r.RevisionId) && edges[r.RevisionId].Any(changed.Contains))
+                    grew |= changed.Add(r.RevisionId);
+            }
+        }
+
+        // Leaves first: a copy can be made once every changed revision it refers to has its copy.
+        var copies = new Dictionary<Guid, ContentRevision>();
+        for (var progress = true; progress;)
+        {
+            progress = false;
+            foreach (var r in movable.Where(r => changed.Contains(r.RevisionId) && !copies.ContainsKey(r.RevisionId)))
+            {
+                if (edges[r.RevisionId].Where(changed.Contains).All(copies.ContainsKey))
+                {
+                    copies[r.RevisionId] = MakeCopy(r, lowered[r.RevisionId], copies);
+                    progress = true;
+                }
+            }
+        }
+
+        var stuck = movable.Where(r => changed.Contains(r.RevisionId) && !copies.ContainsKey(r.RevisionId)).ToList();
+        foreach (var r in stuck.Where(r => ReachesItself(r.RevisionId, edges, copies)))
+            changes.Add(Line(r, "blocks", BlockedCode, $"{Prefixed(r, $"'{r.Name}': ")}it refers to itself through other changed content, so a copy cannot be made."));
+        foreach (var r in movable.Where(r => copies.ContainsKey(r.RevisionId) && !own.Contains(r.RevisionId)))
+            changes.Add(Line(r, "copied", CopiedCode, $"{Prefixed(r, $"'{r.Name}': ")}copied because it grants a changed feature; nothing of its own is left out."));
+
+        var moves = movable.Where(r => copies.ContainsKey(r.RevisionId))
+            .Select(r => (new ContentReference(r.ContentId, r.RevisionId), new ContentReference(r.ContentId, copies[r.RevisionId].RevisionId))).ToList();
+        var written = plan.Revisions.Select(r => copies.TryGetValue(r.RevisionId, out var c) ? c : r).ToList();
+        return new ContentOutcome(written, moves);
+    }
+
+    private static bool ReachesItself(Guid start, Dictionary<Guid, List<Guid>> edges, Dictionary<Guid, ContentRevision> copies)
+    {
+        var seen = new HashSet<Guid>();
+        var queue = new Queue<Guid>(edges[start]);
+        while (queue.Count > 0)
+        {
+            var next = queue.Dequeue();
+            if (next == start)
+                return true;
+            if (copies.ContainsKey(next) || !seen.Add(next))
+                continue;
+            foreach (var onward in edges[next])
+                queue.Enqueue(onward);
+        }
+        return false;
+    }
+
+    /// <summary>The copy of <paramref name="original"/>: its lowered body, references moved to the copies made so far, the marker, and the new id.</summary>
+    private static ContentRevision MakeCopy(ContentRevision original, ContentRevision body, Dictionary<Guid, ContentRevision> copies)
+    {
+        var marker = ReadMarker(original);
+        var root = marker?.RevisionId ?? original.RevisionId;
+        var rootSchema = marker?.SchemaVersion ?? original.SchemaVersion;
+        ContentReference Move(ContentReference r) => copies.TryGetValue(r.RevisionId, out var c) ? new ContentReference(r.ContentId, c.RevisionId) : r;
+        Effect Rewrite(Effect e) => e switch
+        {
+            GrantEffect { Content: { } c } g => g with { Content = Move(c) },
+            ChoiceEffect ch => ch with { Options = [.. ch.Options.Select(Move)] },
+            _ => e,
+        };
+        var extensions = body.Extensions is null ? new Dictionary<string, JsonElement>() : new Dictionary<string, JsonElement>(body.Extensions);
+        extensions[MarkerKey] = JsonDocument.Parse(FormattableString.Invariant($$"""{"revisionId":"{{root:D}}","schemaVersion":{{rootSchema}}}""")).RootElement.Clone();
+        var copy = body with { Effects = [.. body.Effects.Select(Rewrite)], Extensions = extensions };
+        return copy with { RevisionId = CopyId(root, copy.SchemaVersion, CanonicalBytes(copy)) };
     }
 
     /// <summary>The file name with <c>-for-&lt;release&gt;</c> before its suffix: <c>Hero-for-0.6.0.tomestack.zip</c>, <c>Hero-for-0.6.0-personal-backup.tomestack.zip</c>.</summary>
