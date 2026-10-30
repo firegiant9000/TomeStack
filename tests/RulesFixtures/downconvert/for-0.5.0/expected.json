@@ -16,8 +16,8 @@
         "passive.perception": 11,
         "speed": 30,
         "initiative": 2,
-        "armorClass": 12,
-        "hitPoints": 0
+        "armorClass": 13,
+        "hitPoints": 9
       }
     }
   }

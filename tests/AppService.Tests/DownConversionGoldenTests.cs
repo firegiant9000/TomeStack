@@ -145,6 +145,8 @@ public class DownConversionGoldenTests
         "speed", "initiative", "armorClass", "hitPoints",
     ];
 
+    // armorClass (a kept bonus in a lowered copy) and hitPoints (a hit die in the class) are what the lowered content feeds.
+
     /// <summary>
     /// Produces the harness inputs of <paramref name="folder"/> from its golden library with the clock pinned (<see cref="TempApp.Now"/>)
     /// and no bundled pin (R-C17: no SRD text under tests/): the character's bundled revision is dropped from a test-time copy only.
@@ -160,7 +162,34 @@ public class DownConversionGoldenTests
             // The drawsDown golden revisions (a counting-up pool and the roll that draws it down) block a whole-source export by
             // design (spec section 2), so a test-time copy of the pack leaves them out; the committed library is not edited.
             var pack = TempApp.LoadFixture<ContentPack>($"{library}/pack.json");
-            pack = pack with { Revisions = [.. pack.Revisions.Where(r => !BlockingInPacks.Contains(r.RevisionId))] };
+            var sourceOfPack = pack.Sources[0].Id;
+            // The sheet must depend on lowered content, so a test-time copy adds (the library files are not edited): an always-on
+            // armor class bonus in a revision that is lowered (0.6.0: the cascade copy "Compat Tide Mark"; 0.5.0: the v11 revision
+            // going straight to v9), and a class level (0.6.0: the library's "Compat Path of Tides", a cascade copy; 0.5.0: a class of its own).
+            var bonusRevision = Guid.Parse(target == "0.6.0" ? "c1060000-0000-4000-8000-0000000000e8" : "c1050000-0000-4000-8000-0000000000e4");
+            var ward = new ModifierEffect { Id = "mark-ward", Operation = ModifierOperation.Bonus, Target = FieldIds.ArmorClass, Value = "1" };
+            ContentReference classReference;
+            List<ContentRevision> revisions = [.. pack.Revisions.Where(r => !BlockingInPacks.Contains(r.RevisionId))
+                .Select(r => r.RevisionId == bonusRevision ? r with { Effects = [.. r.Effects, ward] } : r)];
+            if (target == "0.6.0")
+                classReference = new(Guid.Parse("c1060000-0000-4000-8000-0000000000c6"), Guid.Parse("c1060000-0000-4000-8000-0000000000e6"));
+            else
+            {
+                var teacher = new ContentRevision
+                {
+                    ContentId = Guid.Parse("c1050000-0000-4000-8000-0000000000c9"),
+                    RevisionId = Guid.Parse("c1050000-0000-4000-8000-0000000000e9"),
+                    Kind = ContentKind.Class,
+                    Name = "Compat Test Class",
+                    RulesFamilies = [RulesFamilies.Srd51],
+                    Provenance = new(sourceOfPack),
+                    Status = RevisionStatus.Published,
+                    Effects = [new HitDieEffect { Id = "test-hit-die", Die = 8 }],
+                };
+                revisions.Add(teacher);
+                classReference = teacher.Reference;
+            }
+            pack = pack with { Revisions = revisions };
             app.App.Store.InTransaction(() =>
             {
                 foreach (var source in pack.Sources)
@@ -171,7 +200,12 @@ public class DownConversionGoldenTests
             var sourceId = pack.Sources[0].Id;
             app.App.SetShareable(new ShareableRequest(sourceId, true, ConfirmOwnWork: true));
             var character = TempApp.LoadFixture<Character>($"{library}/character.json");
-            character = character with { Pins = [.. character.Pins.Where(p => p.RevisionId != BundledRevision && !BlockingInPacks.Contains(p.RevisionId))] };
+            character = character with
+            {
+                // Tide Mark is pinned directly as well: reached only through class and subclass grants, its bonus did not reach the sheet.
+                Pins = [.. character.Pins.Where(p => p.RevisionId != BundledRevision && !BlockingInPacks.Contains(p.RevisionId)).Append(new ContentReference(Guid.Parse(target == "0.6.0" ? "c1060000-0000-4000-8000-0000000000c8" : "c1050000-0000-4000-8000-0000000000c4"), bonusRevision)).DistinctBy(p => p.RevisionId)],
+                Classes = [new ClassLevel(classReference, 1)],
+            };
             id = app.App.SaveCharacter(character).Character.Id;
             var campaignId = Guid.Parse(sourceId.ToString("D")[..8] + "-0000-4000-8000-0000000000d1");
             var campaign = app.App.SaveCampaign(new() { Id = campaignId,Name = "Compat Campaign", RulesFamily = character.RulesFamily, AllowedSources = [sourceId] });
@@ -196,10 +230,10 @@ public class DownConversionGoldenTests
         }
 
         // expected.json: import the written character share into a fresh store and calculate it with the current build.
-        var share = zips.Single(z => !z.Key.StartsWith("library-backup", StringComparison.Ordinal) && z.Key.StartsWith("Compat-Hero", StringComparison.Ordinal) && !z.Key.Contains("backup", StringComparison.Ordinal));
+        var share = zips[$"Compat-Hero-for-{target}.tomestack.zip"];
         using var fresh = new TempApp(fresh: true);
         var dispatch = new CommandDispatcher(fresh.App);
-        Dispatch(dispatch, "package.apply", $$"""{"base64":"{{Convert.ToBase64String(share.Value)}}"}""");
+        Dispatch(dispatch, "package.apply", $$"""{"base64":"{{Convert.ToBase64String(share)}}"}""");
         var fields = SheetFields(dispatch, id);
         // The committed backup restores to the same sheet (it is a valid backup, not only a well-formed zip).
         Assert.Equal(fields.ToJsonString(Indented), Restores(zips[$"library-backup-for-{target}.tomestack.zip"], id));
@@ -217,10 +251,9 @@ public class DownConversionGoldenTests
     {
         var kept = new List<(string Name, DateTimeOffset Time, byte[] Bytes)>();
         var keptRevisions = new HashSet<string>();
-        JsonObject manifest;
+        JsonObject? found = null;
         using (var zip = new ZipArchive(new MemoryStream(backup)))
         {
-            manifest = null!;
             foreach (var entry in zip.Entries)
             {
                 using var stream = entry.Open();
@@ -229,7 +262,7 @@ public class DownConversionGoldenTests
                 var bytes = buffer.ToArray();
                 if (entry.FullName == "manifest.json")
                 {
-                    manifest = JsonNode.Parse(bytes)!.AsObject();
+                    found = JsonNode.Parse(bytes)!.AsObject();
                     continue;
                 }
                 if (entry.FullName.StartsWith("sources/", StringComparison.Ordinal) && entry.FullName != $"sources/{sourceId:D}.json")
@@ -245,6 +278,7 @@ public class DownConversionGoldenTests
             }
         }
 
+        var manifest = found ?? throw new InvalidOperationException("The library backup has no manifest.json.");
         var names = kept.Select(k => k.Name).ToHashSet(StringComparer.Ordinal);
         manifest["entries"] = new JsonArray([.. manifest["entries"]!.AsArray().Where(e => names.Contains(e!["path"]!.GetValue<string>())).Select(e => e!.DeepClone())]);
         manifest["notices"] = new JsonArray([.. manifest["notices"]!.AsArray().Where(n => n!["sourceId"]!.GetValue<string>() == sourceId.ToString("D")).Select(n => n!.DeepClone())]);
@@ -316,7 +350,7 @@ public class DownConversionGoldenTests
                 root["appVersion"] = "{appVersion}";
                 text = root.ToJsonString();
             }
-            entries[entry.FullName] = text;
+            entries.Add(entry.FullName, text); // a duplicate entry name throws: a zip with two entries of one name is never expected
         }
         return entries;
     }

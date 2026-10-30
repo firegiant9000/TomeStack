@@ -52,6 +52,13 @@ Three test-time choices keep the committed zips free of SRD text (CONTRIBUTING i
 the character's sheet (`character.get`, the field names the harness emits: `fields[<field>] = value`). It lists the fields
 the lowered copy keeps (ability scores, a modifier, proficiency bonus, a save, a skill, passive Perception, speed, initiative,
 armor class, hit points), none of which comes from a dropped effect. It sits beside `expected/` (entry goldens); they are separate.
+Two fields depend on lowered content, so an old build that mis-reads a lowered copy fails here: `armorClass` 13 (10 + Dex 2 +
+an always-on bonus of 1 added at test time to a lowered revision: 0.6.0 "Compat Tide Mark", 0.5.0 the v11 revision that goes
+straight to v9) and `hitPoints` 9 (a level-1 class with a d8 hit die: 0.6.0 "Compat Path of Tides", a cascade copy; 0.5.0 a test-time
+"Compat Test Class"). If lowering dropped either effect, those would read 12 and 0.
+
+The owner's first `scripts/old-release-check.ps1` run is the real validation of the library backup, which is post-processed
+(above) and was only checked against the current build.
 
 The test produces every zip again and compares entry by entry (names and bytes; the manifest's `appVersion` is neutral, so a
 release bump does not stale the files), and compares `expected.json` as text. A stale input fails. Entry bytes are as the writer
