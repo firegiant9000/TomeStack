@@ -1248,7 +1248,10 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
     committing.current = true;
     setBusy(true);
     try {
-      const draft = withExceptions(view.character);
+      await choosing.current; // a tick still previewing lands first, so the save carries it
+      if (!mounted.current) return;
+      const current = latest.current ?? view;
+      const draft = withExceptions(current.character);
       const saved =
         mode.kind === 'create'
           ? await client.createCharacter({

@@ -1423,6 +1423,33 @@ describe('a pick that needs a campaign exception reason after the reason is clea
     expect(client.saveCharacter).toHaveBeenCalledTimes(1);
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Save choices' }));
   });
+
+  it('Save waits for a tick whose preview has not landed, so the saved draft carries it (choices mode)', async () => {
+    const user = userEvent.setup();
+    const source = { contentId: 'fixture-feature', revisionId: 'fixture-feature-r1' };
+    const mine = content(7, 'feature', 'Fixture Mine', 'srd-5.1');
+    vi.mocked(client.listContent).mockResolvedValue([mine]);
+    const answer = (selected: ContentOption[]) => {
+      const v = choiceView(selected, [mine]);
+      v.character = { ...v.character, choices: [{ source, choiceId: 'pick', selected: selected.map((o) => o.reference) }] };
+      return v;
+    };
+    let land: (v: CharacterView) => void = () => {};
+    vi.mocked(client.previewChoice).mockReset();
+    vi.mocked(client.previewChoice).mockImplementation(() => new Promise<CharacterView>((resolve) => (land = resolve)));
+    vi.mocked(client.saveCharacter).mockReset();
+    vi.mocked(client.saveCharacter).mockImplementation(async (c) => ({ ...viewWith(c.spells), character: c }));
+    render(<CharacterBuilder mode={{ kind: 'choices', view: answer([]) }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+    const picker = await screen.findByRole('group', { name: /Fixture feature: choose 2/ });
+    await user.click(await within(picker).findByRole('checkbox', { name: /Fixture Mine/ }));
+    await user.click(screen.getByRole('button', { name: 'Save choices' })); // before the preview lands
+    expect(vi.mocked(client.previewChoice)).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Saving…' })).toBeTruthy();
+    expect(vi.mocked(client.saveCharacter)).not.toHaveBeenCalled();
+    land(answer([mine]));
+    await waitFor(() => expect(vi.mocked(client.saveCharacter)).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(client.saveCharacter).mock.calls[0]![0].choices).toEqual([{ source, choiceId: 'pick', selected: [mine.reference] }]);
+  });
 });
 
 // R43 (follow-up F3): level-up Next says why it waits (3.3.2, 4.1.2) and is never natively disabled.
