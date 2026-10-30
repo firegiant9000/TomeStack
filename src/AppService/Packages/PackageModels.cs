@@ -79,6 +79,19 @@ public sealed record PackageManifest
     /// </summary>
     public IReadOnlyList<SourceAttestation>? Attestations { get; init; }
 
+    /// <summary>
+    /// D85, "Save for an older TomeStack": the release this package was lowered for (<c>"0.6.0"</c>). Absent in an ordinary
+    /// export, so those bytes do not change; <see cref="AppVersion"/> stays the true maker. No format bump. A malformed value
+    /// is read as null (with a <c>package.marker-ignored</c> warning in the import preview).
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? MadeFor { get; init; }
+
+    /// <summary>Whether <paramref name="value"/> is a release string this build accepts as <see cref="MadeFor"/>: <c>x.y.z</c>, each part 1 to 4 digits.</summary>
+    public static bool IsValidMadeFor(string? value) =>
+        value is not null && System.Text.RegularExpressions.Regex.IsMatch(value, @"^\d{1,4}\.\d{1,4}\.\d{1,4}$", System.Text.RegularExpressions.RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1))
+        && Version.TryParse(value, out _);
+
     public string AttachmentPolicy { get; init; } = CharacterAttachmentPolicy;
 
     public const string CharacterAttachmentPolicy = "PDF attachments are never included in packages; linked pages must be re-attached on the receiving machine.";

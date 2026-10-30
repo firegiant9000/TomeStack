@@ -418,7 +418,8 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         IReadOnlyList<GapNote> GapNotes,
         IReadOnlyList<Attachment> Attachments,
         IReadOnlyDictionary<string, ZipArchiveEntry> Pdfs,
-        IReadOnlyDictionary<string, byte[]> Extensions);
+        IReadOnlyDictionary<string, byte[]> Extensions,
+        bool MarkerIgnored = false);
 
     private (PackagePreview Preview, ParsedPackage? Parsed) Read(byte[] package)
     {
@@ -438,6 +439,8 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
     {
         if (parsed is null || errors.Count > 0)
             return (new PackagePreview(false, parsed?.Manifest, [], errors, warnings), null);
+        if (parsed.MarkerIgnored)
+            warnings.Add(new("package.marker-ignored", "The package says which TomeStack it was made for, but the value is not a version number, so it was ignored."));
         var items = new List<PackageItem>();
         var packageRevisions = parsed.Revisions.ToDictionary(r => r.Reference);
         var packageSources = parsed.Sources.ToDictionary(s => s.Id);
@@ -767,6 +770,13 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         if (manifest is null)
             return null;
         // Untrusted JSON can carry null where the model has none; reject it here rather than fail later.
+        var markerIgnored = false;
+        if (manifest.MadeFor is not null && !PackageManifest.IsValidMadeFor(manifest.MadeFor))
+        {
+            // A marker is a courtesy, never a gate: ignore a malformed one rather than refuse the package.
+            manifest = manifest with { MadeFor = null };
+            markerIgnored = true;
+        }
         if (manifest.Entries is null || manifest.Entries.Any(e => e?.Path is null || e.Sha256 is null)
             || manifest.Notices is null || manifest.Notices.Any(n => n is null)
             || manifest.Omitted is null || manifest.Omitted.Any(s => s?.Revisions is null || s.Revisions.Any(r => r?.Reference is null)))
@@ -911,7 +921,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         // order the sender stored them, not in entry (id) order.
         if (library || sourcePack || campaignPack)
             revisions = OrderAsStored(revisions, manifest.RevisionOrder, errors);
-        return errors.Count > 0 ? null : new ParsedPackage(manifest, sources, revisions, characters, campaigns, gapNotes, attachments, pdfs, extensions);
+        return errors.Count > 0 ? null : new ParsedPackage(manifest, sources, revisions, characters, campaigns, gapNotes, attachments, pdfs, extensions, markerIgnored);
     }
 
     /// <summary>Field-by-field differences in serialized form, ignoring the machine-local <c>pdfRef</c> and <c>attachmentId</c>.</summary>
