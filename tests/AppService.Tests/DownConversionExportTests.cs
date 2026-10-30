@@ -449,4 +449,21 @@ public class DownConversionExportTests
         Assert.False(doc.RootElement.TryGetProperty(DownConversion.MarkerKey, out _));
         Assert.Equal(1, doc.RootElement.GetProperty("someOtherKey").GetInt32());
     }
+
+    // Pinned once from the implementation. A change here means every saved copy id changes: do not update casually.
+    private const string PinnedDigest = "31223da1d19aa359f5bc251a8213547d78067240427b4f215e0b6dd07f2f5a02";
+    private static readonly Guid PinnedCopyId = new("ea8b2cc8-293e-52f0-8f99-4110fe16bc66");
+
+    [Fact]
+    public void CanonicalBytes_and_CopyId_are_pinned()
+    {
+        var root = Guid.Parse("c1000000-0000-4000-8000-000000000001");
+        var copy = CompatFeat(Guid.Parse("c100e000-0000-4000-8000-0000000000cc"), new() { ["someOtherKey"] = JsonDocument.Parse("1").RootElement.Clone() });
+
+        var bytes = DownConversion.CanonicalBytes(copy);
+
+        Assert.DoesNotContain((byte)'\r', bytes);
+        Assert.Equal(PinnedDigest, Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes)));
+        Assert.Equal(PinnedCopyId, DownConversion.CopyId(root, 10, bytes));
+    }
 }

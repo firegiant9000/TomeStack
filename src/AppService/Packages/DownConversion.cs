@@ -67,7 +67,9 @@ public static class DownConversion
 
     /// <summary>
     /// The bytes a copy is identified by: the copy as the package writer serializes it, with the revision id zeroed and the
-    /// <see cref="MarkerKey"/> removed, so a copy and the bytes it was lowered from hash the same way.
+    /// <see cref="MarkerKey"/> removed, so a copy and the bytes it was lowered from hash the same way. The canonical form is
+    /// LF (every <c>\r\n</c> becomes <c>\n</c>; written entries are unchanged). Extension keys keep their serialized order, so
+    /// the form is order-sensitive by design: a reordered extension is a different copy.
     /// </summary>
     public static byte[] CanonicalBytes(ContentRevision copy)
     {
@@ -75,7 +77,8 @@ public static class DownConversion
         var extensions = copy.Extensions?.Where(p => p.Key != MarkerKey).ToDictionary(p => p.Key, p => p.Value);
         if (extensions is { Count: 0 })
             extensions = null;
-        return PackageService.Json(copy with { RevisionId = Guid.Empty, Extensions = extensions });
+        var written = PackageService.Json(copy with { RevisionId = Guid.Empty, Extensions = extensions });
+        return Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(written).Replace("\r\n", "\n", StringComparison.Ordinal));
     }
 
     /// <summary>SHA-256 (lowercase hex) of the changes, one <c>action|entry|code|message</c> line each, so a save can prove it is the list that was previewed.</summary>
