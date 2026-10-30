@@ -18,6 +18,7 @@ public partial class MainWindow : Window
     private const string AppHost = "app.tomestack.localhost";
     private const string AppOrigin = $"https://{AppHost}/";
     private static readonly TimeSpan SmokeTimeout = TimeSpan.FromSeconds(30);
+    private static readonly string[] SmokeRulesFamilies = ["srd-5.1"];
 
     private readonly TomeStackApp _tomeStack;
     private readonly CommandDispatcher _dispatcher;
@@ -282,7 +283,7 @@ public partial class MainWindow : Window
 
         // M2 item 6 (ADR-005, SPEC S-04): a managed PDF opens at a cited page in the offline viewer. The smoke attaches a
         // generated two-page PDF to a throwaway homebrew source and opens page 2; the viewer's load finishes the smoke.
-        using var source = Command("source.createHomebrew", new { title = "Smoke PDF", rulesFamilies = new[] { "srd-5.1" } });
+        using var source = Command("source.createHomebrew", new { title = "Smoke PDF", rulesFamilies = SmokeRulesFamilies });
         if (!source.RootElement.GetProperty("ok").GetBoolean())
             return (false, "data-check-failed:source.createHomebrew");
         var sourceId = source.RootElement.GetProperty("result").GetProperty("id").GetString();

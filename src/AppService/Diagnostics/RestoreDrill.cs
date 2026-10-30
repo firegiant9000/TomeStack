@@ -234,6 +234,7 @@ public static class RestoreDrill
     }
 
     /// <summary>SHA-256 over the sorted lines <c>id:hash</c>; for a JSON row the hash is SHA-256 of the stored JSON.</summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Security", "CA2100", Justification = "Constant SQL from Digests.")]
     private static TableDigest Digest(SqliteConnection connection, string table, string sql)
     {
         var lines = new List<string>();
@@ -255,6 +256,7 @@ public static class RestoreDrill
 
     private static string TableOf(string countSql) => countSql[(countSql.LastIndexOf(' ') + 1)..];
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Security", "CA2100", Justification = "Callers pass constant SQL text.")]
     private static object? Execute(SqliteConnection connection, string sql)
     {
         using var command = connection.CreateCommand();
@@ -262,6 +264,7 @@ public static class RestoreDrill
         return command.ExecuteScalar();
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Security", "CA2100", Justification = "Callers pass constant SQL text.")]
     private static List<(string, string)> Rows(SqliteConnection connection, string sql)
     {
         var rows = new List<(string, string)>();

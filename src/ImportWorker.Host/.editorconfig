@@ -3,7 +3,9 @@
 # keeps applying in full to the worker's own code:
 # - CS8500: pointers to blittable structs, by design in its interop code;
 # - CS86xx: files that opt in with #nullable enable and disagree with the BCL's newer annotations;
-# - CS9191, CS0618: newer-compiler style hints and its own deprecated helpers.
+# - CS9191, CS0618: newer-compiler style hints and its own deprecated helpers;
+# - CA5392, CA5394, CA5350 (the Security analyzers report into generated code too; docs/testing/analyzers.md): its
+#   P/Invokes to Windows' own COM/WinRT DLLs, Random in event-token tables, SHA-1 for WinRT interface ids (not security).
 [obj/**/CsWinRT/*.cs]
 generated_code = true
 dotnet_diagnostic.CS8500.severity = none
@@ -18,3 +20,6 @@ dotnet_diagnostic.CS8625.severity = none
 dotnet_diagnostic.CS8765.severity = none
 dotnet_diagnostic.CS9191.severity = none
 dotnet_diagnostic.CS0618.severity = none
+dotnet_diagnostic.CA5392.severity = none
+dotnet_diagnostic.CA5394.severity = none
+dotnet_diagnostic.CA5350.severity = none
