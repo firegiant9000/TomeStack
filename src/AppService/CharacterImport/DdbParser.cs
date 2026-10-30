@@ -193,6 +193,8 @@ public static partial class DdbParser
 
     private sealed class SheetReader(CompiledMap compiled, Dictionary<string, (FormField Field, FieldRule Rule)> values)
     {
+        private static readonly string[] DeathSaveRows = ["play.deathSuccesses", "play.deathFailures"];
+
         /// <summary>A text value, trimmed; through the field's pattern when it has one.</summary>
         public Read<string> Text(string semantic, bool applyPattern = true)
         {
@@ -498,7 +500,7 @@ public static partial class DdbParser
 
         /// <summary>True when the layout has death-save boxes and any is ticked.</summary>
         public bool AnyDeathBoxTicked() =>
-            new[] { "play.deathSuccesses", "play.deathFailures" }
+            DeathSaveRows
                 .SelectMany(s => Enumerable.Range(1, DdbSemantics.DeathBoxes).Select(i => $"{s}.{i}"))
                 .Where(values.ContainsKey)
                 .Any(box => Bool(box) is { Status: ReadStatus.Ok, Value: true });
