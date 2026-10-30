@@ -210,37 +210,44 @@ export function CompanionsPanel({ view, act, roll, rollMode = 'normal', onChange
   // MECH-X item 4: companions that content gives come first, calculated; their attacks and pools are drawn here, not in Actions or Resources.
   const sheet = view.sheet as CharacterSheet | undefined;
   const given = sheet?.companions ?? [];
-  const givenModel = (value: CompanionValue): CardModel => ({
-    ...contentCompanionModel(value),
-    extra: (
-      <>
-        {contentAttacks(sheet, value).length > 0 && (
-          <ul className="features">
-            {contentAttacks(sheet, value).map((attack) => (
-              <AttackItem
-                key={`${attack.item.revisionId}-${attack.effectId}`}
-                attack={attack}
-                label={attack.name}
-                critical={critical}
-                rollMode={rollMode}
-                roll={roll}
-                rollDamage={(target) => roll(target)}
-                pool={poolFor(sheet?.resources ?? [], attack.resourceId ?? undefined, attack.costResourceContent ?? undefined)}
-                availability={attackAvailability(attack, poolFor(sheet?.resources ?? [], attack.resourceId ?? undefined, attack.costResourceContent ?? undefined))}
-              />
-            ))}
-          </ul>
-        )}
-        {contentPools(sheet, value).length > 0 && (
-          <ul className="resources">
-            {contentPools(sheet, value).map((resource) => (
-              <ResourceCard key={`${resource.content.revisionId}-${resource.resourceId}`} resource={resource} act={act} level={5} />
-            ))}
-          </ul>
-        )}
-      </>
-    ),
-  });
+  const givenModel = (value: CompanionValue): CardModel => {
+    const attacks = contentAttacks(sheet, value);
+    const pools = contentPools(sheet, value);
+    return {
+      ...contentCompanionModel(value),
+      extra: (
+        <>
+          {attacks.length > 0 && (
+            <ul className="features">
+              {attacks.map((attack) => {
+                const pool = poolFor(sheet?.resources ?? [], attack.resourceId ?? undefined, attack.costResourceContent ?? undefined);
+                return (
+                  <AttackItem
+                    key={`${attack.item.revisionId}-${attack.effectId}`}
+                    attack={attack}
+                    label={attack.name}
+                    critical={critical}
+                    rollMode={rollMode}
+                    roll={roll}
+                    rollDamage={(target) => roll(target)}
+                    pool={pool}
+                    availability={attackAvailability(attack, pool)}
+                  />
+                );
+              })}
+            </ul>
+          )}
+          {pools.length > 0 && (
+            <ul className="resources">
+              {pools.map((resource) => (
+                <ResourceCard key={`${resource.content.revisionId}-${resource.resourceId}`} resource={resource} act={act} level={5} />
+              ))}
+            </ul>
+          )}
+        </>
+      ),
+    };
+  };
   const anyDamage = entries.some((c) => c.attacks?.some((a) => a.damage)) || given.some((v) => contentAttacks(sheet, v).some((a) => a.damage));
 
   return (
@@ -350,13 +357,13 @@ function handCardModel(
 /** The attacks of a content companion, as the Actions list shows an attack (rolled by its content and effect). */
 function contentAttacks(sheet: CharacterSheet | undefined, value: CompanionValue): AttackEntry[] {
   return (sheet?.attacks ?? []).filter(
-    (a) => a.item.contentId === value.content.contentId && (a.companionId ?? value.companionId) === value.companionId && value.attackEffectIds.includes(a.effectId),
+    (a) => a.item.contentId === value.content.contentId && a.companionId === value.companionId && value.attackEffectIds.includes(a.effectId),
   );
 }
 
 function contentPools(sheet: CharacterSheet | undefined, value: CompanionValue): ResourceValue[] {
   return (sheet?.resources ?? []).filter(
-    (r) => r.content.contentId === value.content.contentId && (r.companionId ?? value.companionId) === value.companionId && value.resourceIds.includes(r.resourceId),
+    (r) => r.content.contentId === value.content.contentId && r.companionId === value.companionId && value.resourceIds.includes(r.resourceId),
   );
 }
 

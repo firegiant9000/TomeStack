@@ -1131,3 +1131,19 @@ it('Actions and Resources panels hide companion rows but a roll that spends a co
   expect(within(resources).queryByRole('heading', { name: /Testy howl/ })).toBeNull();
   expect(within(resources).getByRole('heading', { name: /Testy guard/ })).toBeTruthy();
 });
+
+it('does not make an allowance group of a companion allowance pool', () => {
+  const content = { contentId: 'c-charm', revisionId: 'r-charm' };
+  const pool = (id: string, extra: object = {}) => ({ content, contentName: 'Testy Charm', effectId: `e-${id}`, resourceId: id, label: `Testy ${id}`, maximum: 1, spent: 0, current: 1, trace: [], warnings: [], automation: 'automatic', recoveries: [], allowance: true, ...extra });
+  const rollFeature = (resourceId: string) => ({
+    content,
+    name: 'Testy Charm',
+    kind: 'feature',
+    diagnostics: [],
+    effects: [{ id: `r-${resourceId}`, type: 'roll', automation: 'automatic', label: `Roll ${resourceId}`, dice: '1d6', resourceId, cost: 1, activation: 'action', available: true }],
+  });
+  const v = { character: { id: 'fixture' }, sheet: { attacks: [], toggles: [], features: [rollFeature('mine'), rollFeature('pet')], resources: [pool('mine'), pool('pet', { companionId: 'g1' })] } } as unknown as CharacterView;
+  render(<ActionsPanel view={v} roll={() => {}} act={() => {}} />);
+  expect(screen.getByRole('region', { name: 'Testy mine' })).toBeTruthy();
+  expect(screen.queryByRole('region', { name: 'Testy pet' })).toBeNull();
+});
