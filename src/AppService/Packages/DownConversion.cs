@@ -328,6 +328,26 @@ public static class DownConversion
                 reasons.TryAdd(r.RevisionId, blockingReason);
         }
 
+        // A bundled revision outside the target's set blocks. A written revision that grants or offers it blocks the same way
+        // (spec Q9): the sentence names that revision, and one that is left out is never the one named while another is written.
+        var bundledTitles = new Dictionary<Guid, string>();
+        string BundledBlock(ContentRevision r, string title, HashSet<Guid> skipped)
+        {
+            var reference = new ContentReference(r.ContentId, r.RevisionId);
+            var user = plan.Characters.FirstOrDefault(c => c.AllReferences().Contains(reference));
+            const string tail = "Update the receiver's TomeStack; this content cannot be copied into the file.";
+            var referrers = user is null
+                ? revisions.Where(x => !isBundledSource(x.Provenance.SourceId) && RefsOf(x).Contains(r.RevisionId)).ToList()
+                : [];
+            var referrer = referrers.FirstOrDefault(x => !skipped.Contains(x.RevisionId)) ?? referrers.FirstOrDefault();
+            var from = referrer is null ? "" : sourceTitle(referrer.Provenance.SourceId) is { Length: > 0 } rs ? $"'{referrer.Name}' ({rs})" : $"'{referrer.Name}'";
+            return user is not null
+                ? $"'{user.Name}' uses '{r.Name}' from the bundled {title} pack, which TomeStack {release} does not have. {tail}"
+                : referrer is not null
+                    ? $"{from} uses '{r.Name}' from the bundled {title} pack, which TomeStack {release} does not have. {tail}"
+                    : $"'{r.Name}' from the bundled {title} pack is not in TomeStack {release}. {tail}";
+        }
+
         foreach (var r in revisions)
         {
             if (isBundledSource(r.Provenance.SourceId))
@@ -337,20 +357,9 @@ public static class DownConversion
                 var title = sourceTitle(r.Provenance.SourceId).Replace("System Reference Document", "SRD", StringComparison.Ordinal);
                 if (title.Length == 0)
                     title = "SRD";
-                var reference = new ContentReference(r.ContentId, r.RevisionId);
-                var user = plan.Characters.FirstOrDefault(c => c.AllReferences().Contains(reference));
-                const string tail = "Update the receiver's TomeStack; this content cannot be copied into the file.";
-                // A written revision that grants or offers it blocks the same way (spec Q9): the sentence names that revision.
-                var referrer = user is null
-                    ? revisions.FirstOrDefault(x => !isBundledSource(x.Provenance.SourceId) && RefsOf(x).Contains(r.RevisionId))
-                    : null;
-                var from = referrer is null ? "" : sourceTitle(referrer.Provenance.SourceId) is { Length: > 0 } rs ? $"'{referrer.Name}' ({rs})" : $"'{referrer.Name}'";
-                var message = user is not null
-                    ? $"'{user.Name}' uses '{r.Name}' from the bundled {title} pack, which TomeStack {release} does not have. {tail}"
-                    : referrer is not null
-                        ? $"{from} uses '{r.Name}' from the bundled {title} pack, which TomeStack {release} does not have. {tail}"
-                        : $"'{r.Name}' from the bundled {title} pack is not in TomeStack {release}. {tail}";
+                var message = BundledBlock(r, title, []);
                 Note(r, Line(r, "blocks", BlockedCode, message), message);
+                bundledTitles[r.RevisionId] = title;
                 continue;
             }
 
@@ -391,6 +400,9 @@ public static class DownConversion
         {
             if (leftOut.Contains(r.RevisionId))
             {
+                // A bundled revision is never written, so it has no line to leave out (the revisions that reached it have theirs).
+                if (bundledTitles.ContainsKey(r.RevisionId))
+                    continue;
                 var siblings = revisions.Where(x => x.ContentId == r.ContentId).Select(x => x.RevisionId).ToList();
                 var title = sourceTitle(r.Provenance.SourceId);
                 var where = title.Length == 0 ? "" : $" ({title})";
@@ -398,6 +410,8 @@ public static class DownConversion
             }
             else if (linesOf.TryGetValue(r.RevisionId, out var mine))
             {
+                if (bundledTitles.TryGetValue(r.RevisionId, out var bundledTitle))
+                    mine = [Line(r, "blocks", BlockedCode, BundledBlock(r, bundledTitle, leftOut))];
                 changes.AddRange(mine);
             }
         }

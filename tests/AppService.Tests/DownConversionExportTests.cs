@@ -767,6 +767,68 @@ public class DownConversionExportTests
         Assert.All(preview.Changes.Except(uses), c => Assert.Equal($"'{c.Name}' from the bundled SRD 5.1 pack is not in TomeStack 0.6.0. {tail}", c.Message));
     }
 
+    private static readonly Guid BundledSourceId = Guid.Parse("c2000000-0000-4000-8000-0000000000b0");
+
+    private static ContentRevision CompatBundled(Guid n, params Effect[] effects) => new()
+    {
+        ContentId = Guid.Parse($"c1000000-0000-4000-8000-{n.ToString("N")[20..]}"),
+        RevisionId = n,
+        SchemaVersion = ContentRevision.CurrentSchemaVersion,
+        Kind = ContentKind.Feature,
+        Name = $"Compat Bundled {n.ToString("N")[28..]}",
+        RulesFamilies = [RulesFamilies.Srd51],
+        Provenance = new(BundledSourceId),
+        Status = RevisionStatus.Published,
+        Effects = effects,
+    };
+
+    private static ContentRevision CompatGranting(Guid n, string name, ContentReference granted, bool blocker) => V11Feature(n) with
+    {
+        ContentId = Guid.Parse($"c1000000-0000-4000-8000-{n.ToString("N")[20..]}"),
+        Name = name,
+        SchemaVersion = ContentRevision.CurrentSchemaVersion,
+        Effects =
+        [
+            new GrantEffect { Id = "grant-bundled", Grant = GrantKind.Content, Content = granted, Level = 1 },
+            .. blocker ? new Effect[] { new ToggleEffect { Id = "form", ToggleId = "form", Label = "Form", Cost = "1", ResourceId = "focus" } } : [],
+        ],
+    };
+
+    [Fact]
+    public void Bundled_revision_left_out_with_its_referrer_gets_no_line()
+    {
+        var bundledId = Guid.Parse("c100e000-0000-4000-8000-0000000000c1");
+        var referrerId = Guid.Parse("c100e000-0000-4000-8000-0000000000c2");
+        var bundled = CompatBundled(bundledId);
+        var referrer = CompatBundled(referrerId, new GrantEffect { Id = "grant-bundled", Grant = GrantKind.Content, Content = new(bundled.ContentId, bundledId), Level = 1 });
+        var row = Row("0.6.0") with { BundledRevisionIds = new HashSet<Guid>() };
+
+        var lowered = DownConversion.Lower(new([Hero(c => c)], [bundled, referrer], [], [], "x.tomestack.zip"), row, id => id == BundledSourceId, _ => "Compat Bundle", new HomebrewCatalog(), _ => true);
+
+        Assert.Empty(lowered.Changes);
+        Assert.False(lowered.Blocked);
+        Assert.Empty(lowered.Plan.Revisions);
+    }
+
+    [Fact]
+    public void Bundled_block_names_a_referrer_that_is_written()
+    {
+        var bundledId = Guid.Parse("c100e000-0000-4000-8000-0000000000d1");
+        var leftId = Guid.Parse("c100e000-0000-4000-8000-0000000000d2");
+        var writtenId = Guid.Parse("c100e000-0000-4000-8000-0000000000d3");
+        var bundled = CompatBundled(bundledId);
+        var reference = new ContentReference(bundled.ContentId, bundledId);
+        var left = CompatGranting(leftId, "Compat Left Out", reference, blocker: true);
+        var written = CompatGranting(writtenId, "Compat Written", reference, blocker: false);
+        var row = Row("0.6.0") with { BundledRevisionIds = new HashSet<Guid>() };
+
+        var lowered = DownConversion.Lower(new([Hero(c => c)], [left, written, bundled], [], [], "x.tomestack.zip"), row, id => id == BundledSourceId, id => id == BundledSourceId ? "Compat Bundle" : "Compat Homebrew A", new HomebrewCatalog(), r => r.RevisionId == leftId);
+
+        Assert.Contains(lowered.Changes, c => c.Action == "leftOut" && c.Name == "Compat Left Out");
+        var block = Assert.Single(lowered.Changes, c => c.Action == "blocks" && c.Id == bundledId);
+        Assert.StartsWith("'Compat Written' (Compat Homebrew A) uses ", block.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Bundled_revision_is_never_lowered()
     {
