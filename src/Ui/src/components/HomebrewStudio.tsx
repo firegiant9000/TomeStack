@@ -42,6 +42,7 @@ import { abilities, nextGroupKey, nextScaleKey, parseSlotRows, parseTwenty } fro
 import { nextAttackKey, type ToggleChoice } from '../attackAuthoring';
 import { AttackFields, RiderFields, ToggleSelect } from './AttackFields';
 import { WeaponFields } from './WeaponFields';
+import { CompanionFields } from './CompanionFields';
 import { ItemModFields } from './ItemModFields';
 import { ModifierFields } from './ModifierFields';
 import { DefenceFields, RollModeFields, isDamageDefence } from './RollModeFields';
@@ -916,8 +917,13 @@ function EntryEditor(props: {
             : false;
   const listed = revision.effects.map((effect, index) => ({ effect, index })).filter(({ effect }) => !shownByEditor(effect));
 
-  function add(type: 'modifier' | 'resource' | 'recovery' | 'roll' | 'armor' | 'grant' | 'scale' | 'value' | 'spellcasting' | 'toggle' | 'toggleGroup' | 'upkeep' | 'attack' | 'attackRider' | 'rollMode' | 'damageDefence' | 'response' | 'weapon' | 'itemMod') {
+  function add(type: 'modifier' | 'resource' | 'recovery' | 'roll' | 'armor' | 'grant' | 'scale' | 'value' | 'spellcasting' | 'toggle' | 'toggleGroup' | 'upkeep' | 'attack' | 'attackRider' | 'rollMode' | 'damageDefence' | 'response' | 'weapon' | 'itemMod' | 'companion') {
     const id = nextId(type === 'damageDefence' ? 'grant' : type);
+    if (type === 'companion') {
+      // Content v12 (MECH-X item 4): a valid start except the label. The companion id is made once, here, and never shown.
+      update({ effects: [...revision.effects, { type, id, companionId: crypto.randomUUID(), label: '', armorClass: '13', hitPointMaximum: '5 * LEVEL' }] });
+      return;
+    }
     if (type === 'itemMod') {
       // Content v12 (MECH-X item 3): a valid start (a +1 bonus on a weapon).
       update({ effects: [...revision.effects, { type, id, appliesTo: 'weapon', bonus: 1 }] });
@@ -1170,6 +1176,7 @@ function EntryEditor(props: {
           warnings={(report?.warnings ?? []).filter((d) => d.effectId === effect.id)}
           grantable={grantable}
           previewRevision={previewRevision}
+          revision={revision}
           onChange={(e) => setEffect(index, e)}
           onProblem={reportProblem}
           onRemove={() => {
@@ -1297,6 +1304,11 @@ function EntryEditor(props: {
             title={hasItemMod || hasWeaponOrArmor ? 'An item is a mod, a weapon or an armor, not more than one; remove the other rule first' : undefined}
           >
             Add mod
+          </button>
+        )}
+        {revision.kind !== 'item' && revision.kind !== 'spell' && (
+          <button type="button" onClick={() => add('companion')}>
+            Add companion
           </button>
         )}
       </div>
@@ -1693,6 +1705,8 @@ function EffectEditor(props: {
   grantable: StudioEntry[];
   /** The draft the formula previews are worked out against (D61). */
   previewRevision?: ContentRevision;
+  /** The revision being edited (a companion lists its attacks and pools). */
+  revision: ContentRevision;
   onChange: (effect: Effect) => void;
   onProblem: ReportProblem;
   onRemove: () => void;
@@ -2101,6 +2115,7 @@ function EffectEditor(props: {
       )}
       {effect.type === 'weapon' && <WeaponFields effect={effect} onChange={onChange} onProblem={onProblem} />}
       {effect.type === 'itemMod' && <ItemModFields effect={effect} fields={props.fields} previewRevision={props.previewRevision} onChange={onChange} onProblem={onProblem} />}
+      {effect.type === 'companion' && <CompanionFields effect={effect} revision={props.revision} onChange={onChange} onProblem={onProblem} />}
       {effect.type === 'scale' && <ScaleFields effect={effect} onChange={onChange} onProblem={onProblem} />}
       {effect.type === 'value' && <ValueFields effect={effect} previewRevision={props.previewRevision} onChange={onChange} onProblem={onProblem} />}
       {effect.type === 'spellcasting' && <SpellcastingFields effect={effect} previewRevision={props.previewRevision} onChange={onChange} onProblem={onProblem} />}
