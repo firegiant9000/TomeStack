@@ -21,7 +21,13 @@ export function CompanionFields(props: { effect: CompanionEffect; revision: Cont
     set(field, list.length === 0 ? undefined : list);
   };
   const attacks = revision.effects.flatMap((e) => (e.type === 'attack' ? [{ key: e.id, text: e.label || e.id }] : []));
-  const pools = revision.effects.flatMap((e) => (e.type === 'resource' ? [{ key: e.resourceId, text: e.label || e.resourceId }] : []));
+  // A resource with no key yet cannot be listed (an empty id is never written).
+  const pools = revision.effects.flatMap((e) => (e.type === 'resource' && e.resourceId !== '' ? [{ key: e.resourceId, text: e.label || e.resourceId }] : []));
+  // Ids kept from effects that are gone or renamed stay visible so the author can untick them.
+  const dangling = (field: 'attacks' | 'resourceIds', known: { key: string }[]) =>
+    (effect[field] ?? []).filter((k) => !known.some((x) => x.key === k)).map((k) => ({ key: k, text: `(removed) ${k}` }));
+  const attackRows = [...attacks, ...dangling('attacks', attacks)];
+  const poolRows = [...pools, ...dangling('resourceIds', pools)];
   return (
     <>
       <label className="field">
@@ -43,7 +49,7 @@ export function CompanionFields(props: { effect: CompanionEffect; revision: Cont
       <fieldset>
         <legend>Attacks</legend>
         {attacks.length === 0 && <p>Add an attack to this content first.</p>}
-        {attacks.map((a) => (
+        {attackRows.map((a) => (
           <label key={a.key} className="check">
             <input type="checkbox" checked={(effect.attacks ?? []).includes(a.key)} onChange={(e) => toggle('attacks', a.key, e.target.checked)} />
             {a.text}
@@ -53,7 +59,7 @@ export function CompanionFields(props: { effect: CompanionEffect; revision: Cont
       <fieldset>
         <legend>Pools</legend>
         {pools.length === 0 && <p>This content has no pools.</p>}
-        {pools.map((p) => (
+        {poolRows.map((p) => (
           <label key={p.key} className="check">
             <input type="checkbox" checked={(effect.resourceIds ?? []).includes(p.key)} onChange={(e) => toggle('resourceIds', p.key, e.target.checked)} />
             {p.text}

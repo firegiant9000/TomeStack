@@ -1203,8 +1203,25 @@ function EntryEditor(props: {
               const rows = e.alsoChange.filter((row) => row.resourceContent || row.resourceId !== removedResource);
               return rows.length === e.alsoChange.length ? e : { ...e, alsoChange: rows.length === 0 ? undefined : rows };
             };
+            // MECH-X item 4: a companion stops listing a removed attack or pool; an empty list deletes its key.
+            const removedAttack = effect.type === 'attack' ? effect.id : undefined;
+            const withoutRemovedCompanionRef = (e: Effect): Effect => {
+              if (e.type !== 'companion') return e;
+              const next: Record<string, unknown> = { ...e };
+              if (removedAttack !== undefined && e.attacks?.includes(removedAttack)) {
+                const list = e.attacks.filter((a) => a !== removedAttack);
+                if (list.length === 0) delete next.attacks;
+                else next.attacks = list;
+              }
+              if (removedResource !== undefined && !resourceStillDefined && e.resourceIds?.includes(removedResource)) {
+                const list = e.resourceIds.filter((r) => r !== removedResource);
+                if (list.length === 0) delete next.resourceIds;
+                else next.resourceIds = list;
+              }
+              return next as unknown as Effect;
+            };
             update({
-              effects: kept.map(withoutRemovedPool).map((e) =>
+              effects: kept.map(withoutRemovedPool).map(withoutRemovedCompanionRef).map((e) =>
                 e.type === 'modifier' && removedToggle !== undefined && !e.toggleContent && e.toggle === removedToggle
                   ? { ...e, toggle: undefined, timing: undefined }
                   : (e.type === 'attack' || e.type === 'roll') && removedToggle !== undefined && !e.whileToggle?.contentId && e.whileToggle?.toggleId === removedToggle

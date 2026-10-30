@@ -92,6 +92,26 @@ it('an emptied speed removes the key', async () => {
   expect('speed' in seen.last!).toBe(false);
 });
 
+it('shows an id that matches no effect as a removable entry', async () => {
+  const user = userEvent.setup();
+  const seen: { last?: Companion } = {};
+  render(<Harness start={{ ...start, attacks: ['gone-1'], resourceIds: ['gone-pool'] }} effects={[attack('attack-1', 'Bite')]} onSeen={record(seen)} />);
+  const box = within(screen.getByRole('group', { name: 'Attacks' }));
+  const stale = box.getByRole('checkbox', { name: '(removed) gone-1' }) as HTMLInputElement;
+  expect(stale.checked).toBe(true);
+  await user.click(stale);
+  expect('attacks' in seen.last!).toBe(false);
+  await user.click(within(screen.getByRole('group', { name: 'Pools' })).getByRole('checkbox', { name: '(removed) gone-pool' }));
+  expect('resourceIds' in seen.last!).toBe(false);
+});
+
+it('lists no checkbox for a pool whose key is still empty', () => {
+  render(<Harness start={start} effects={[pool('resource-1', ''), pool('resource-2', 'pool-b')]} onSeen={() => {}} />);
+  const box = within(screen.getByRole('group', { name: 'Pools' }));
+  expect(box.getAllByRole('checkbox')).toHaveLength(1);
+  expect(box.getByRole('checkbox', { name: 'pool-b' })).toBeTruthy();
+});
+
 it('says to add an attack first when the revision has none', () => {
   render(<Harness start={start} effects={[]} onSeen={() => {}} />);
   expect(screen.getByText('Add an attack to this content first.')).toBeTruthy();
