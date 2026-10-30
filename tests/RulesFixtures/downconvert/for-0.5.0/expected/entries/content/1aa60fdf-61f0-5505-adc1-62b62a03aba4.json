@@ -1,0 +1,23 @@
+{
+  "contentId": "c1050000-0000-4000-8000-0000000000c3",
+  "revisionId": "1aa60fdf-61f0-5505-adc1-62b62a03aba4",
+  "schemaVersion": 9,
+  "kind": "item",
+  "name": "Compat Tide Charm",
+  "rulesFamilies": [
+    "srd-5.1"
+  ],
+  "provenance": {
+    "sourceId": "c1050000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 4
+    }
+  },
+  "status": "published",
+  "summary": "A test charm with charges and a passive bonus.",
+  "effects": [],
+  "downConvertedFrom": {
+    "revisionId": "c1050000-0000-4000-8000-0000000000e3",
+    "schemaVersion": 10
+  }
+}

@@ -1,7 +1,7 @@
 using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
-using System.Text.RegularExpressions;
+using System.Text.Json.Nodes;
 using TomeStack.AppService.Packages;
 using TomeStack.RulesCore;
 
@@ -14,8 +14,6 @@ namespace TomeStack.AppService.Tests;
 /// </summary>
 public class DownConversionGoldenTests
 {
-    private static readonly Regex AppVersion = new("(\"appVersion\"\\s*:\\s*\")[^\"]*(\")", RegexOptions.CultureInvariant);
-
     private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
     public static TheoryData<string, string> Folders => new() { { "for-0.6.0", "0.6.0" }, { "for-0.5.0", "0.5.0" } };
@@ -28,11 +26,37 @@ public class DownConversionGoldenTests
         return Path.Combine(directory?.FullName ?? throw new InvalidOperationException("The repository root was not found."), "tests", "RulesFixtures", "downconvert", folder);
     }
 
-    /// <summary>The build's version varies, so it is written as <c>{appVersion}</c> in the manifest (the README says so).</summary>
+    // The bundled SRD revision a fixture character pins, and its source. Their text is SRD material, which lives only in
+    // src/AppService/Content/ (CONTRIBUTING invariant): the goldens do not hold these entries; the test compares them with the store.
+    private static readonly Guid BundledContent = Guid.Parse("51c00000-0000-4000-8000-000000000001");
+    private static readonly Guid BundledRevision = Guid.Parse("51e00000-0000-4000-8000-000000000001");
+    private static readonly Guid BundledSource = Guid.Parse("51500000-0000-4000-8000-000000000001");
+    private static readonly string BundledContentPath = $"content/{BundledRevision:D}.json";
+    private static readonly string BundledSourcePath = $"sources/{BundledSource:D}.json";
+
+    private static bool IsBundled(string path) => path == BundledContentPath || path == BundledSourcePath;
+
+    /// <summary>
+    /// The build's version varies, so it is written as <c>{appVersion}</c> in the manifest (the README says so). The bundled
+    /// entries' sha256 and size, and the bundled source's notice text, are SRD-derived, so they become placeholders.
+    /// </summary>
     private static string Normalise(string entry, byte[] bytes)
     {
         var text = Encoding.UTF8.GetString(bytes).ReplaceLineEndings("\n"); // the repository stores LF; the writer uses the platform's line ending
-        return entry == "manifest.json" ? AppVersion.Replace(text, "$1{appVersion}$2") : text;
+        if (entry != "manifest.json")
+            return text;
+        var root = JsonNode.Parse(text)!.AsObject();
+        root["appVersion"] = "{appVersion}";
+        foreach (var item in root["entries"]!.AsArray().Select(n => n!.AsObject()).Where(o => IsBundled(o["path"]!.GetValue<string>())))
+        {
+            item["sha256"] = "{bundled}";
+            item["size"] = "{bundled}";
+        }
+        var notices = root["notices"]!.AsArray();
+        for (var i = 0; i < notices.Count; i++)
+            if (notices[i]!["sourceId"]!.GetValue<string>() == BundledSource.ToString("D"))
+                notices[i] = new JsonObject { ["sourceId"] = BundledSource.ToString("D"), ["text"] = "{bundled}" };
+        return root.ToJsonString(Indented).ReplaceLineEndings("\n");
     }
 
     [Theory]
@@ -61,6 +85,16 @@ public class DownConversionGoldenTests
                 stream.CopyTo(buffer);
                 entries[entry.FullName] = buffer.ToArray();
             }
+
+        // The bundled revision is written as it is, and its source as a character package writes it: byte for byte what the store holds.
+        Assert.True(entries.ContainsKey(BundledContentPath) && entries.ContainsKey(BundledSourcePath), "The bundled revision and its source must be in the package.");
+        Assert.Equal(PackageService.Json(app.App.Store.FindRevision(new ContentReference(BundledContent, BundledRevision))!), entries[BundledContentPath]);
+        var storedSource = app.App.Store.FindSource(BundledSource)!;
+        Assert.Equal(
+            PackageService.Json(storedSource with { PdfRef = null, AttachmentId = null, ImportDerived = null, Origin = null, ShareConfirmedAt = null }),
+            entries[BundledSourcePath]);
+        entries.Remove(BundledContentPath);
+        entries.Remove(BundledSourcePath);
 
         var expected = Path.Combine(SourceFolder(folder), "expected");
         if (Environment.GetEnvironmentVariable("TOMESTACK_REGENERATE_GOLDENS") == "1")

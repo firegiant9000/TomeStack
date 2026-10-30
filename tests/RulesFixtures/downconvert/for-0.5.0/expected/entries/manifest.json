@@ -11,11 +11,60 @@
     {
       "path": "characters/c1050000-0000-4000-8000-0000000000a1.json",
       "kind": "character",
-      "sha256": "93d9a5cc84c490c8f759e84ce06eb62c5704df16788855170121175a1396c3eb",
-      "size": 904
+      "sha256": "7d38bb1eac73404405f9e2aa7f06a7c45557d6be503e1e0dd0155f68be8ec575",
+      "size": 1447
+    },
+    {
+      "path": "content/1aa60fdf-61f0-5505-adc1-62b62a03aba4.json",
+      "kind": "contentRevision",
+      "sha256": "9e6d7800aebfee467638b086f51d9a7dc5e9448ba24b61a951ffb10fdd07c2bb",
+      "size": 580
+    },
+    {
+      "path": "content/49ee9e13-9e93-5c26-ad4b-1d05cab4b5b2.json",
+      "kind": "contentRevision",
+      "sha256": "e35ae7230c5b467a95d068955617e578751698872a8fb05ca9d261acf29fd69d",
+      "size": 604
+    },
+    {
+      "path": "content/4eb921ed-4000-5612-a455-930b93d6404c.json",
+      "kind": "contentRevision",
+      "sha256": "16abe65ed4598437e53298f554b7e71f884a3ecac62ececd263ee7405de3c6e2",
+      "size": 598
+    },
+    {
+      "path": "content/51e00000-0000-4000-8000-000000000001.json",
+      "kind": "contentRevision",
+      "sha256": "{bundled}",
+      "size": "{bundled}"
+    },
+    {
+      "path": "sources/51500000-0000-4000-8000-000000000001.json",
+      "kind": "source",
+      "sha256": "{bundled}",
+      "size": "{bundled}"
+    },
+    {
+      "path": "sources/c1050000-0000-4000-8000-000000000001.json",
+      "kind": "source",
+      "sha256": "215d06f697edb92d41c7bf2d1eafe2e5eb22df41322868cccd8a8894bf2374b0",
+      "size": 317
     }
   ],
-  "notices": [],
+  "notices": [
+    {
+      "sourceId": "51500000-0000-4000-8000-000000000001",
+      "text": "{bundled}"
+    },
+    {
+      "sourceId": "c1050000-0000-4000-8000-000000000001",
+      "title": "Compat Homebrew A",
+      "publisher": "TomeStack project",
+      "license": "Original test fixture",
+      "redistributable": true,
+      "attribution": "Written for TomeStack tests."
+    }
+  ],
   "omitted": [],
   "madeFor": "0.5.0",
   "attachmentPolicy": "PDF attachments are never included in packages; linked pages must be re-attached on the receiving machine."
