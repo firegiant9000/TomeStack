@@ -836,10 +836,12 @@ it('content companions: a published feature\'s companion is a card with its own 
   await waitFor(() => expect(within(card()).getByRole('heading', { name: /^Fixture Charges: 2 of 3/ })).toBeTruthy());
 
   // The attack and the pool are drawn on the card only: not in the Actions or Resources panels.
-  const actions = screen.queryByRole('region', { name: 'Attacks and actions' });
-  if (actions) expect(within(actions).queryByRole('button', { name: /Fixture Bite/ })).toBeNull();
-  const resources = screen.queryByRole('region', { name: 'Resources' });
-  if (resources) expect(within(resources).queryByText(/Fixture Charges/)).toBeNull();
+  const attackRolls = screen.queryAllByRole('button', { name: /^Roll Fixture Bite attack/ });
+  expect(attackRolls).toHaveLength(1);
+  expect(card().contains(attackRolls[0]!)).toBe(true);
+  const poolHeadings = screen.queryAllByRole('heading', { name: /^Fixture Charges/ });
+  expect(poolHeadings).toHaveLength(1);
+  expect(card().contains(poolHeadings[0]!)).toBe(true);
 });
 
 it('attaches a PDF to a source, offers the cited page on a feature, and removes it after a warning', async () => {

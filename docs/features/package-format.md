@@ -190,7 +190,7 @@ A **campaign pack** shares one campaign profile with the people who play in it.
 
 **Not verified:** a pack moved to a second machine and imported there (the clean-folder test stands in), and a Narrator pass (accessibility item 25). Owner checks.
 
-## Down-conversion engine: content v12 and character v11 (MECH-X item 3)
+## Down-conversion engine: content v12 and character v11 (MECH-X items 3 and 4)
 
 No export screen calls the engine yet; when the export uses it, it lowers each record to the version the older build reads, one step per version, and lists what each step drops or blocks. Two steps cover MECH-X:
 
