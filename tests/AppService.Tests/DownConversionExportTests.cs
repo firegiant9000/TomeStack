@@ -1072,6 +1072,66 @@ public class DownConversionExportTests
         Assert.Contains(preview.Errors, e => e.Code == "package.own-source");
     }
 
+    // ---- C2-8: input bounds (a malformed marker never throws) -----------------------------------------------------------------
+
+    [Theory]
+    [InlineData("\"x\"")]
+    [InlineData("{\"revisionId\":\"not-a-guid\"}")]
+    [InlineData("{\"revisionId\":\"{GUID}\",\"schemaVersion\":0}")]
+    [InlineData("{\"revisionId\":\"{GUID}\",\"schemaVersion\":99}")]
+    [InlineData("99")]
+    [InlineData("[]")]
+    [InlineData("null")]
+    [InlineData("{\"revisionId\":\"{GUID}\",\"schemaVersion\":10,\"extra\":1}")]
+    [InlineData("LONG")]
+    public void Malformed_markers_never_throw(string raw)
+    {
+        using var origin = new TempApp();
+        var (_, _, fly) = PublishFlyOriginal(origin);
+        var id = Save(origin, c => c with { Pins = [.. c.Pins, fly] });
+        var bytes = ExportFor(origin.App, id);
+        var json = raw == "LONG" ? $"\"{new string('a', 10_000)}\"" : raw.Replace("{GUID}", Guid.NewGuid().ToString("D"), StringComparison.Ordinal);
+        var forged = ForgeCopy(bytes, "Compat Steady Hands", node => node.AsObject()["downConvertedFrom"] = JsonNode.Parse(json));
+        using var fresh = new TempApp();
+
+        var preview = fresh.App.PreviewImport(forged);
+
+        Assert.True(preview.CanApply, string.Join("; ", preview.Errors.Select(e => e.Message)));
+        Assert.DoesNotContain(preview.Errors, e => e.Code == "package.invalid-json");
+        Assert.Contains(preview.Warnings, w => w.Code == "package.marker-ignored");
+        Assert.Empty(preview.Repinned ?? []);
+        fresh.App.ApplyImport(forged);
+        var item = Assert.Single(preview.Items, i => i.Kind == "contentRevision" && i.Name == "Compat Steady Hands");
+        Assert.NotNull(fresh.App.Store.FindRevision(new ContentReference(FeatureContent, item.Id)));
+    }
+
+    [Theory]
+    [InlineData("\"abc\"", true)]
+    [InlineData("LONG", true)]
+    [InlineData("5", true)]
+    [InlineData("true", true)]
+    [InlineData("{}", true)]
+    [InlineData("[]", true)]
+    [InlineData("null", false)]
+    public void Malformed_made_for_never_throws(string raw, bool warns)
+    {
+        using var origin = new TempApp();
+        var (_, _, fly) = PublishFlyOriginal(origin);
+        var id = Save(origin, c => c with { Pins = [.. c.Pins, fly] });
+        var bytes = ExportFor(origin.App, id);
+        var json = raw == "LONG" ? $"\"{new string('9', 200)}\"" : raw;
+        var forged = PackageEditor.Edit(bytes, _ => false, _ => { }, manifest => manifest.AsObject()["madeFor"] = JsonNode.Parse(json));
+        using var fresh = new TempApp();
+
+        var preview = fresh.App.PreviewImport(forged);
+
+        Assert.True(preview.CanApply, string.Join("; ", preview.Errors.Select(e => e.Message)));
+        Assert.DoesNotContain(preview.Errors, e => e.Code == "package.invalid-json");
+        Assert.Equal(warns, preview.Warnings.Any(w => w.Code == "package.marker-ignored"));
+        Assert.Null(preview.Manifest!.MadeFor);
+        fresh.App.ApplyImport(forged);
+    }
+
     [Fact]
     public void Import_repins_a_closure_all_or_nothing()
     {

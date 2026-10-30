@@ -121,6 +121,52 @@ public class LibraryBackupTests
         }
     }
 
+    [Theory]
+    [InlineData("\"x\"")]
+    [InlineData("[]")]
+    [InlineData("null")]
+    public void Restore_with_a_malformed_marker_never_throws(string marker)
+    {
+        // C2-8: an unreadable note about the original is ignored with a warning; the copy restores as an ordinary revision.
+        using var app = new TempApp();
+        var source = app.App.CreateHomebrewSource(new("Compat Homebrew A", [RulesFamilies.Srd51], Redistributable: true, ConfirmOwnWork: true));
+        var fly = new ContentRevision
+        {
+            ContentId = Guid.NewGuid(), RevisionId = Guid.Empty, Kind = ContentKind.Feature, Name = "Compat Steady Hands", RulesFamilies = [RulesFamilies.Srd51],
+            Provenance = new(source.Id), Status = RevisionStatus.Draft,
+            Effects = [new ModifierEffect { Id = "fly", Operation = ModifierOperation.Bonus, Target = FieldIds.FlySpeed, Value = "10" }],
+        };
+        var published = Publish(app.App, fly);
+        var fixture = TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json");
+        app.App.SaveCharacter(fixture with { Pins = [.. fixture.Pins, published] });
+        var row = ReleaseLadder.Target("0.6.0")!;
+        var hash = app.App.PreviewLibraryBackup(row).ChangesHash;
+        var path = TempFile();
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            using (var file = File.Create(path))
+                app.App.WriteLibraryBackup(file, row, hash);
+            EditBackup(path, "content/", node =>
+            {
+                if (node["downConvertedFrom"] is not null)
+                    node["downConvertedFrom"] = System.Text.Json.Nodes.JsonNode.Parse(marker);
+            });
+
+            var preview = app.App.PreviewLibraryRestore(path);
+
+            Assert.True(preview.CanApply, string.Join("; ", preview.Errors.Select(e => e.Message)));
+            Assert.DoesNotContain(preview.Errors, e => e.Code == "package.invalid-json");
+            Assert.Contains(preview.Warnings, w => w.Code == "package.marker-ignored");
+            Assert.Empty(preview.Repinned ?? []);
+            app.App.ApplyLibraryRestore(path);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     [Fact]
     public void A_full_backup_restores_everything_into_a_clean_data_folder()
     {

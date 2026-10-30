@@ -85,7 +85,30 @@ public sealed record PackageManifest
     /// is read as null (with a <c>package.marker-ignored</c> warning in the import preview).
     /// </summary>
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    [System.Text.Json.Serialization.JsonConverter(typeof(MadeForConverter))]
     public string? MadeFor { get; init; }
+
+    /// <summary>
+    /// Reads <c>madeFor</c> leniently: a string as is, <c>null</c> as null, and any other JSON value (number, boolean, object, array) as
+    /// <see cref="NotAVersion"/>, which <see cref="IsValidMadeFor"/> refuses, so the parser ignores it with a warning instead of failing the file.
+    /// Writes the string unchanged.
+    /// </summary>
+    private sealed class MadeForConverter : System.Text.Json.Serialization.JsonConverter<string?>
+    {
+        public override string? Read(ref System.Text.Json.Utf8JsonReader reader, Type typeToConvert, System.Text.Json.JsonSerializerOptions options)
+        {
+            if (reader.TokenType == System.Text.Json.JsonTokenType.String)
+                return reader.GetString();
+            reader.Skip();
+            return NotAVersion;
+        }
+
+        public override void Write(System.Text.Json.Utf8JsonWriter writer, string? value, System.Text.Json.JsonSerializerOptions options) =>
+            writer.WriteStringValue(value);
+    }
+
+    /// <summary>What a non-string <c>madeFor</c> is read as; never a valid release.</summary>
+    private const string NotAVersion = "not a version";
 
     /// <summary>Whether <paramref name="value"/> is a release string this build accepts as <see cref="MadeFor"/>: <c>x.y.z</c>, each part 1 to 4 digits.</summary>
     public static bool IsValidMadeFor(string? value) =>
