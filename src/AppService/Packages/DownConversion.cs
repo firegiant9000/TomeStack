@@ -170,12 +170,76 @@ public static class DownConversion
 
     /// <summary>
     /// The pack rule for <c>mayLeaveOut</c>: a published revision that is not the newest published one of its content in
-    /// <paramref name="revisions"/> (newest is the last stored). The one place "newest" is decided, so a Q14-aware helper can replace it.
+    /// <paramref name="revisions"/> (<see cref="Newest"/>: the last stored, but never a copy while an unmarked revision exists).
     /// </summary>
     internal static Func<ContentRevision, bool> Superseded(IEnumerable<ContentRevision> revisions)
     {
-        var newest = revisions.Where(r => r.Status == RevisionStatus.Published).GroupBy(r => r.ContentId).ToDictionary(g => g.Key, g => g.Last().RevisionId);
+        var newest = revisions.Where(r => r.Status == RevisionStatus.Published).GroupBy(r => r.ContentId).ToDictionary(g => g.Key, g => Newest(g)!.RevisionId);
         return r => r.Status == RevisionStatus.Published && newest.TryGetValue(r.ContentId, out var id) && id != r.RevisionId;
+    }
+
+    /// <summary>Whether <paramref name="revision"/> is a stored copy: its marker verifies against its own bytes (<see cref="VerifiedRoot"/>). A forged or malformed marker makes it an ordinary revision.</summary>
+    internal static bool IsCopy(ContentRevision revision) => VerifiedRoot(revision).RevisionId != revision.RevisionId;
+
+    /// <summary>
+    /// "Newest" (SPEC I-06, owner answer Q14): the last stored revision of one content, but a copy never counts while an unmarked
+    /// revision exists. <paramref name="revisions"/> are the content's revisions in stored order; null when there are none. With no copies
+    /// this is exactly the last one.
+    /// </summary>
+    internal static ContentRevision? Newest(IEnumerable<ContentRevision> revisions)
+    {
+        ArgumentNullException.ThrowIfNull(revisions);
+        var list = revisions as IReadOnlyList<ContentRevision> ?? [.. revisions];
+        for (var i = list.Count - 1; i >= 0; i--)
+        {
+            if (!IsCopy(list[i]))
+                return list[i];
+        }
+        return list.Count == 0 ? null : list[^1];
+    }
+
+    /// <summary>The revision without the <see cref="MarkerKey"/> extension (an edit is no longer the copy); every other key is kept, and an emptied extension map becomes null.</summary>
+    internal static ContentRevision WithoutMarker(ContentRevision revision)
+    {
+        ArgumentNullException.ThrowIfNull(revision);
+        if (revision.Extensions?.ContainsKey(MarkerKey) != true)
+            return revision;
+        var rest = revision.Extensions.Where(p => p.Key != MarkerKey).ToDictionary(p => p.Key, p => p.Value);
+        return revision with { Extensions = rest.Count == 0 ? null : rest };
+    }
+
+    /// <summary>
+    /// The warning for a lowered character that would replace a fuller one on this machine (spec section 4, D85 part 2): when
+    /// <paramref name="incoming"/> has a lower schema than <paramref name="local"/> and lowering <paramref name="local"/> to it loses
+    /// anything but silent details, lists what the file has less of. Null otherwise. <paramref name="revisions"/> is read only to name a
+    /// toggle by its label. Writes nothing.
+    /// </summary>
+    internal static Diagnostic? CharacterLoss(Character local, Character incoming, string? madeFor, Func<IEnumerable<ContentRevision>> revisions)
+    {
+        ArgumentNullException.ThrowIfNull(local);
+        ArgumentNullException.ThrowIfNull(incoming);
+        ArgumentNullException.ThrowIfNull(revisions);
+        if (incoming.SchemaVersion >= local.SchemaVersion || incoming.SchemaVersion < Character.PreviousSchemaVersion)
+            return null;
+        var lines = new List<string>();
+        foreach (var change in DownConvert.Below(local, incoming.SchemaVersion).Changes.Where(c => c.Action != BelowAction.Silent))
+        {
+            if (change.Code == BelowCodes.EncounterRunning)
+            {
+                lines.Add("the running encounter");
+                continue;
+            }
+            var message = change.Code == BelowCodes.RoundsLeft ? ToggleLabelled(change, local, revisions()) : change.Message;
+            var prefix = $"'{local.Name}': ";
+            if (message.StartsWith(prefix, StringComparison.Ordinal))
+                message = message[prefix.Length..];
+            lines.Add(message.TrimEnd('.'));
+        }
+        if (lines.Count == 0)
+            return null;
+        var made = PackageManifest.IsValidMadeFor(madeFor) ? $"TomeStack {madeFor}" : "an older TomeStack";
+        return new("package.down-converted-character",
+            $"'{incoming.Name}' in this file was made for {made} and has less than your copy: {string.Join("; ", lines)}. Importing replaces your copy; a backup is taken first.");
     }
 
     /// <summary>R-C4: a rounds-left line names the toggle by its label (the id when no revision in the plan has one).</summary>

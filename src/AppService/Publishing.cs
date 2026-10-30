@@ -90,7 +90,8 @@ public sealed partial class TomeStackApp
         // A draft may be incomplete, but not malformed: validation and publishing must be able to read it.
         if (ContentValidator.EmptyEntries(revision) is { Count: > 0 } empty)
             throw new AppValidationException(empty);
-        var draft = revision.RevisionId == Guid.Empty ? revision with { RevisionId = Guid.NewGuid() } : revision;
+        // D85 part 2: an edited copy is no longer the copy, so the marker never reaches a draft.
+        var draft = Packages.DownConversion.WithoutMarker(revision.RevisionId == Guid.Empty ? revision with { RevisionId = Guid.NewGuid() } : revision);
         BeforeSaveDraft?.Invoke(draft);
         try
         {
@@ -129,12 +130,12 @@ public sealed partial class TomeStackApp
         // M2.2: write the lowest schema version the content needs (never above the draft's), so homebrew that uses no
         // newer field stays readable by older builds. The published revision is a new insert with its own hash; the
         // draft keeps its version, and no existing revision changes.
-        var published = draft with
+        var published = Packages.DownConversion.WithoutMarker(draft with
         {
             RevisionId = Guid.NewGuid(),
             Status = RevisionStatus.Published,
             SchemaVersion = Math.Min(draft.SchemaVersion, report.RequiredSchemaVersion),
-        };
+        });
         _store.InTransaction(() => _store.AddRevision(published));
         // The report states the version actually written (it can be the draft's own, lower than the requirement when only a
         // spell field target raises it; those were never refused).
@@ -516,8 +517,8 @@ public sealed partial class TomeStackApp
             if (offers.Any(o => o.From == reference) || _store.FindRevision(reference) is null)
                 return;
             var exception = character.CrossFamilyExceptions.Any(e => e.Content == reference);
-            var newest = _store.ListRevisions(reference.ContentId)
-                .LastOrDefault(r => r.Status == RevisionStatus.Published && (exception || r.RulesFamilies.Contains(character.RulesFamily)));
+            var newest = Packages.DownConversion.Newest(_store.ListRevisions(reference.ContentId)
+                .Where(r => r.Status == RevisionStatus.Published && (exception || r.RulesFamilies.Contains(character.RulesFamily))));
             if (newest is null || newest.RevisionId == reference.RevisionId)
                 return;
             var source = sources.GetValueOrDefault(newest.Provenance.SourceId);

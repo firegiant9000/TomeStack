@@ -977,6 +977,7 @@ public class DownConversionExportTests
         var pins = app.App.Store.FindCharacter(id)!.Pins;
         Assert.Contains(fly, pins);
         Assert.DoesNotContain(pins, p => p.RevisionId == repinned.CopyId);
+        AssertNoPublishedRevisionCarriesMarker(app);
     }
 
     [Fact]
@@ -993,6 +994,7 @@ public class DownConversionExportTests
         Assert.Empty(preview.Errors);
         app.App.ApplyImport(bytes);
         Assert.Contains(fly, app.App.Store.FindCharacter(id)!.Pins);
+        AssertNoPublishedRevisionCarriesMarker(app);
     }
 
     [Fact]
@@ -1012,6 +1014,7 @@ public class DownConversionExportTests
         app.App.ApplyImport(bytes);
         Assert.Equal(stored, app.App.Store.ListRevisions().Count);
         Assert.Contains(path, app.App.Store.FindCharacter(id)!.Pins);
+        AssertNoPublishedRevisionCarriesMarker(app);
     }
 
     [Fact]
@@ -1207,5 +1210,183 @@ public class DownConversionExportTests
         var pins = app.App.Store.FindCharacter(id)!.Pins;
         Assert.Single(pins, p => p == fly);
         Assert.Equal(pins.Count, pins.Distinct().Count());
+        AssertNoPublishedRevisionCarriesMarker(app);
+    }
+
+    // ---- C2-6: marker strip, the newest rule (Q14), the character loss warning ----------------------------------------------
+
+    /// <summary>After a re-pin nothing in the store is a stored copy: no published revision carries the marker.</summary>
+    private static void AssertNoPublishedRevisionCarriesMarker(TempApp app) =>
+        Assert.DoesNotContain(app.App.Store.ListRevisions(), r => r.Status == RevisionStatus.Published && r.Extensions?.ContainsKey(DownConversion.MarkerKey) == true);
+
+    private static ContentRevision StoreCopyOf(TempApp app, ContentReference original)
+    {
+        var copy = LowerFor(Row("0.6.0"), Hero(c => c), app.App.Store.FindRevision(original)!).Plan.Revisions.Single();
+        Assert.NotNull(DownConversion.ReadMarker(copy));
+        app.App.Store.AddRevision(copy);
+        return copy;
+    }
+
+    [Fact]
+    public void Publish_and_saveDraft_strip_downConvertedFrom()
+    {
+        using var app = new TempApp();
+        var source = app.App.CreateHomebrewSource(new("Compat Homebrew A", [RulesFamilies.Srd51], Redistributable: true, ConfirmOwnWork: true));
+        var marker = JsonDocument.Parse($$"""{"revisionId":"{{Guid.NewGuid():D}}","schemaVersion":11}""").RootElement.Clone();
+        var note = JsonDocument.Parse("\"kept\"").RootElement.Clone();
+        var draft = V11Feature(Guid.NewGuid()) with
+        {
+            Provenance = new(source.Id),
+            Status = RevisionStatus.Draft,
+            Extensions = new Dictionary<string, JsonElement> { [DownConversion.MarkerKey] = marker, ["compat-note"] = note },
+        };
+
+        var saved = app.App.SaveDraft(draft);
+
+        var storedDraft = app.App.Store.FindRevision(saved)!;
+        Assert.DoesNotContain(DownConversion.MarkerKey, storedDraft.Extensions!.Keys);
+        Assert.Equal("kept", storedDraft.Extensions!["compat-note"].GetString());
+        var published = app.App.Store.FindRevision(app.App.Publish(saved).Published)!;
+        Assert.DoesNotContain(DownConversion.MarkerKey, published.Extensions!.Keys);
+        Assert.Equal("kept", published.Extensions!["compat-note"].GetString());
+        AssertNoPublishedRevisionCarriesMarker(app);
+    }
+
+    [Fact]
+    public void Publish_strips_a_marker_a_draft_already_carries()
+    {
+        using var app = new TempApp();
+        var source = app.App.CreateHomebrewSource(new("Compat Homebrew A", [RulesFamilies.Srd51], Redistributable: true, ConfirmOwnWork: true));
+        var marker = JsonDocument.Parse($$"""{"revisionId":"{{Guid.NewGuid():D}}","schemaVersion":11}""").RootElement.Clone();
+        var draft = V11Feature(Guid.NewGuid()) with { Provenance = new(source.Id), Status = RevisionStatus.Draft, Extensions = new Dictionary<string, JsonElement> { [DownConversion.MarkerKey] = marker } };
+        app.App.Store.AddRevision(draft);
+
+        var published = app.App.Store.FindRevision(app.App.Publish(draft.Reference).Published)!;
+
+        Assert.Null(published.Extensions);
+    }
+
+    [Fact]
+    public void Copy_never_counts_as_newest_while_an_unmarked_revision_exists()
+    {
+        using var app = new TempApp();
+        var (_, _, fly) = PublishFlyOriginal(app);
+        var copy = StoreCopyOf(app, fly);
+        var id = Save(app, c => c with { Pins = [.. c.Pins, fly] });
+
+        Assert.Empty(app.App.AvailableUpdates(id));
+        var options = app.App.ListContent(RulesFamilies.Srd51).Where(o => o.Reference.ContentId == fly.ContentId).ToList();
+        Assert.False(Assert.Single(options, o => o.Reference == fly).Superseded);
+        Assert.True(Assert.Single(options, o => o.Reference.RevisionId == copy.RevisionId).Superseded);
+    }
+
+    [Fact]
+    public void A_source_pack_whose_newest_is_a_copy_raises_no_newest_changes_from_it()
+    {
+        using var origin = new TempApp();
+        var (source, _, fly) = PublishFlyOriginal(origin);
+        var copy = StoreCopyOf(origin, fly);
+        var pack = origin.App.ExportSourcePack([source.Id]).Content;
+
+        using var destination = new TempApp();
+        destination.App.Store.UpsertSource(origin.App.Store.FindSource(source.Id)! with { Origin = SourceOrigin.Received, ShareConfirmedAt = null });
+        destination.App.Store.AddRevision(copy);
+
+        Assert.DoesNotContain(destination.App.PreviewImport(pack).Warnings, w => w.Code == "pack.newest-changes");
+    }
+
+    [Fact]
+    public void Newest_is_unchanged_for_a_store_without_copies()
+    {
+        using var app = new TempApp();
+        var (source, _, first) = PublishFlyOriginal(app);
+        var secondDraft = app.App.SaveDraft(V11Feature(Guid.NewGuid()) with { Provenance = new(source.Id), Status = RevisionStatus.Draft, Name = "Compat Steady Hands" });
+        var second = app.App.Publish(secondDraft).Published;
+        var id = Save(app, c => c with { Pins = [.. c.Pins, first] });
+
+        var revisions = app.App.Store.ListRevisions(first.ContentId).Where(r => r.Status == RevisionStatus.Published).ToList();
+        Assert.Equal(revisions[^1], DownConversion.Newest(revisions));
+        Assert.Null(DownConversion.Newest([]));
+        Assert.Equal(second, Assert.Single(app.App.AvailableUpdates(id)).To);
+        var options = app.App.ListContent(RulesFamilies.Srd51).Where(o => o.Reference.ContentId == first.ContentId).ToList();
+        Assert.True(Assert.Single(options, o => o.Reference == first).Superseded);
+        Assert.False(Assert.Single(options, o => o.Reference == second).Superseded);
+    }
+
+    [Fact]
+    public void Newest_of_only_copies_is_the_last_one_and_forged_markers_count_as_unmarked()
+    {
+        using var app = new TempApp();
+        var (_, _, fly) = PublishFlyOriginal(app);
+        var original = app.App.Store.FindRevision(fly)!;
+        var copy = LowerFor(Row("0.6.0"), Hero(c => c), original).Plan.Revisions.Single();
+        var secondCopy = copy with { RevisionId = Guid.NewGuid() }; // marker no longer verifies against its id
+        var onlyCopies = new[] { copy with { RevisionId = DownConversion.CopyId(fly.RevisionId, copy.SchemaVersion, DownConversion.CanonicalBytes(copy)) } };
+
+        Assert.Equal(onlyCopies[0], DownConversion.Newest(onlyCopies));
+        Assert.Equal(secondCopy, DownConversion.Newest([original, secondCopy]));
+        Assert.Equal(original, DownConversion.Newest([original, onlyCopies[0]]));
+    }
+
+    private static ContentReference PublishRoundsToggle(TempApp app, SourceRecord source)
+    {
+        var toggle = new ToggleEffect { Id = "surge-toggle", ToggleId = "surge", Label = "Surge of Tides" };
+        var draft = app.App.SaveDraft(V9Path(Guid.Parse("c1000000-0000-4000-8000-0000000000c1"), Guid.NewGuid(), toggle) with { Kind = ContentKind.Feat, Provenance = new(source.Id), Status = RevisionStatus.Draft });
+        return app.App.Publish(draft).Published;
+    }
+
+    private const string LossSentence = "'Compat Hero' in this file was made for TomeStack 0.6.0 and has less than your copy: the rounds left on 'Surge of Tides'. Importing replaces your copy; a backup is taken first.";
+
+    [Fact]
+    public void Import_warns_when_a_lowered_character_replaces_a_fuller_one()
+    {
+        using var app = new TempApp();
+        var source = app.App.CreateHomebrewSource(new("Compat Homebrew A", [RulesFamilies.Srd51], Redistributable: true, ConfirmOwnWork: true));
+        var toggle = PublishRoundsToggle(app, source);
+        var id = Save(app, c => WithDetails(c with
+        {
+            Pins = [.. c.Pins, toggle],
+            Play = (c.Play ?? new PlayState()) with { Toggles = [new ActiveToggle(toggle.ContentId, "surge", 3)] },
+        }));
+        var bytes = ExportFor(app.App, id);
+
+        var preview = app.App.PreviewImport(bytes);
+
+        Assert.True(preview.CanApply, string.Join("; ", preview.Errors.Select(e => e.Message)));
+        Assert.Equal(LossSentence, Assert.Single(preview.Warnings, w => w.Code == "package.down-converted-character").Message);
+        Assert.Single(preview.Warnings, w => w.Code == "package.character-replace");
+        var result = app.App.ApplyImport(bytes);
+        Assert.NotNull(result.BackupFile);
+    }
+
+    [Fact]
+    public void Loss_warning_says_an_older_TomeStack_when_the_file_does_not_say_for_which()
+    {
+        using var app = new TempApp();
+        var source = app.App.CreateHomebrewSource(new("Compat Homebrew A", [RulesFamilies.Srd51], Redistributable: true, ConfirmOwnWork: true));
+        var toggle = PublishRoundsToggle(app, source);
+        var id = Save(app, c => WithDetails(c with
+        {
+            Pins = [.. c.Pins, toggle],
+            Play = (c.Play ?? new PlayState()) with { Toggles = [new ActiveToggle(toggle.ContentId, "surge", 3)] },
+        }));
+        var bytes = PackageEditor.Edit(ExportFor(app.App, id), _ => false, _ => { }, manifest => manifest.AsObject().Remove("madeFor"));
+
+        var warning = Assert.Single(app.App.PreviewImport(bytes).Warnings, w => w.Code == "package.down-converted-character");
+
+        Assert.StartsWith("'Compat Hero' in this file was made for an older TomeStack and has less than your copy: ", warning.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void No_loss_warning_when_the_local_copy_has_nothing_more()
+    {
+        using var app = new TempApp();
+        var id = Save(app, c => WithDetails(c));
+        var bytes = ExportFor(app.App, id);
+
+        var preview = app.App.PreviewImport(bytes);
+
+        Assert.Contains(preview.Warnings, w => w.Code == "package.character-replace");
+        Assert.DoesNotContain(preview.Warnings, w => w.Code == "package.down-converted-character");
     }
 }

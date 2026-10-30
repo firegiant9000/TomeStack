@@ -254,10 +254,13 @@ public sealed partial class PackageService
     {
         // Newest means last stored. A revision this machine already has keeps its place, so when the sender's newest is
         // already here and the pack adds older ones, one of those becomes the newest here. Say so (review fix).
+        // Q14: a copy never counts as the newest while an unmarked revision exists, so neither side of this check is a copy then.
         foreach (var content in parsed.Revisions.GroupBy(r => r.ContentId))
         {
-            if (store.RevisionHash(content.Last().RevisionId) is not null && content.Any(r => store.RevisionHash(r.RevisionId) is null))
-                warnings.Add(new("pack.newest-changes", $"'{content.Last().Name}': the pack's newest revision is already here, and the pack adds older ones. Afterwards an older one counts as the newest: new picks and update offers use it. Characters keep the revision they pin.", content.Last().Reference));
+            var newest = DownConversion.Newest(content)!;
+            var unmarked = content.Any(r => !DownConversion.IsCopy(r));
+            if (store.RevisionHash(newest.RevisionId) is not null && content.Any(r => store.RevisionHash(r.RevisionId) is null && (!unmarked || !DownConversion.IsCopy(r))))
+                warnings.Add(new("pack.newest-changes", $"'{newest.Name}': the pack's newest revision is already here, and the pack adds older ones. Afterwards an older one counts as the newest: new picks and update offers use it. Characters keep the revision they pin.", newest.Reference));
         }
         var packSources = parsed.Sources.ToDictionary(s => s.Id);
         var attested = (parsed.Manifest.Attestations ?? []).Where(a => a is not null).Select(a => a.SourceId).ToHashSet();

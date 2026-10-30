@@ -521,9 +521,14 @@ public sealed partial class PackageService
         var inBackup = parsed.Revisions.Select(r => r.RevisionId).ToHashSet();
         foreach (var group in parsed.Revisions.Where(r => r.Status == RevisionStatus.Published && store.RevisionHash(r.RevisionId) is null).GroupBy(r => r.ContentId))
         {
-            var localOnly = store.RevisionsOf(group.Key).Any(r => r.Status == RevisionStatus.Published && !inBackup.Contains(r.RevisionId));
-            if (localOnly)
-                warnings.Add(new("restore.newest-changes", $"'{group.Last().Name}' has a newer published revision here that is not in this file. Afterwards, the file's revision counts as the newest: new picks and update offers use it. Characters keep the revision they pin.", group.Last().Reference));
+            var localOnly = store.RevisionsOf(group.Key).Where(r => r.Status == RevisionStatus.Published && !inBackup.Contains(r.RevisionId)).ToList();
+            // Q14: file copies do not take the newest place from an unmarked revision that only this library has.
+            var overtaken = localOnly.Count > 0 && !(group.All(DownConversion.IsCopy) && localOnly.Any(r => !DownConversion.IsCopy(r)));
+            if (overtaken)
+            {
+                var newest = DownConversion.Newest(group)!;
+                warnings.Add(new("restore.newest-changes", $"'{newest.Name}' has a newer published revision here that is not in this file. Afterwards, the file's revision counts as the newest: new picks and update offers use it. Characters keep the revision they pin.", newest.Reference));
+            }
         }
         return warnings;
     }

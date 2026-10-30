@@ -213,7 +213,7 @@ public sealed partial class TomeStackApp : IDisposable
         var published = _store.ListRevisionsInOrder().Where(r => r.Status == RevisionStatus.Published).ToList();
         // SPEC I-06: the newest published revision of each content is what new picks get; older ones stay listed (saved
         // characters still pin them and show their names) but are marked, so pickers offer only the newest.
-        var newest = published.GroupBy(r => r.ContentId).ToDictionary(g => g.Key, g => g.Last().RevisionId);
+        var newest = published.GroupBy(r => r.ContentId).ToDictionary(g => g.Key, g => Packages.DownConversion.Newest(g)!.RevisionId);
         // Content that another revision grants or offers in a choice (class features, skill options) arrives through it;
         // pickers for directly pinned content leave it out.
         var reachable = published

@@ -625,7 +625,10 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
             }
             if (missesBundled)
                 unseededCharacters.Add(character.Name);
-            var exists = store.FindCharacter(character.Id) is not null;
+            var localCharacter = store.FindCharacter(character.Id);
+            var exists = localCharacter is not null;
+            if (exists && !malformed && DownConversion.CharacterLoss(localCharacter!, character, parsed.Manifest.MadeFor, store.ListRevisionsInOrder) is { } loss)
+                warnings.Add(loss);
             if (exists && parsed.Manifest.Scope == PackageScope.Library)
                 warnings.Add(new("restore.character-replace", $"'{character.Name}' already exists and will be replaced by the backup's copy. Your whole database is copied to the {BackupFolderName} folder first (pre-restore-….db); to go back, close TomeStack and put that file in place of {TomeStackApp.DatabaseFileName}."));
             else if (exists)
