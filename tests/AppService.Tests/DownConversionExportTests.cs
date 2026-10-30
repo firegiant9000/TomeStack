@@ -399,4 +399,54 @@ public class DownConversionExportTests
         Assert.True(plain.GetProperty("ok").GetBoolean(), plain.ToString());
         Assert.Empty(plain.GetProperty("result").GetProperty("changes").EnumerateArray());
     }
+
+    private static ContentRevision CompatFeat(Guid revisionId, Dictionary<string, JsonElement>? extensions) => new()
+    {
+        ContentId = Guid.Parse("c1000000-0000-4000-8000-000000000009"),
+        RevisionId = revisionId,
+        Kind = ContentKind.Feat,
+        Name = "Compat Steady Hands",
+        RulesFamilies = [RulesFamilies.Srd51],
+        Provenance = new(Guid.Parse("c2000000-0000-4000-8000-000000000009")),
+        Status = RevisionStatus.Published,
+        Effects = [],
+        Extensions = extensions,
+    };
+
+    [Fact]
+    public void Uuid5_matches_known_vector()
+    {
+        // RFC 4122 NAMESPACE_DNS with "www.example.com" (Python uuid.uuid5 gives the same value).
+        Assert.Equal(new Guid("2ed6657d-e927-568b-95e1-2665a8aea6a2"), DownConversion.Uuid5(new Guid("6ba7b810-9dad-11d1-80b4-00c04fd430c8"), "www.example.com"));
+    }
+
+    [Fact]
+    public void CopyId_is_stable_and_changes_with_bytes()
+    {
+        var root = Guid.Parse("c1000000-0000-4000-8000-000000000001");
+        var id = DownConversion.CopyId(root, 9, "{\"a\":1}"u8);
+
+        Assert.Equal(id, DownConversion.CopyId(root, 9, "{\"a\":1}"u8));
+        Assert.NotEqual(id, DownConversion.CopyId(root, 9, "{\"a\":2}"u8));
+        Assert.NotEqual(id, DownConversion.CopyId(root, 8, "{\"a\":1}"u8));
+        Assert.NotEqual(id, DownConversion.CopyId(Guid.Parse("c1000000-0000-4000-8000-000000000002"), 9, "{\"a\":1}"u8));
+        Assert.Equal(5, id.Version);
+    }
+
+    [Fact]
+    public void CanonicalBytes_zeroes_revisionId_and_removes_marker()
+    {
+        var marker = JsonDocument.Parse("""{"revisionId":"c100e000-0000-4000-8000-000000000001","schemaVersion":9}""").RootElement.Clone();
+        var other = JsonDocument.Parse("1").RootElement.Clone();
+        var marked = CompatFeat(Guid.Parse("c100e000-0000-4000-8000-0000000000aa"), new() { [DownConversion.MarkerKey] = marker, ["someOtherKey"] = other });
+        var plain = CompatFeat(Guid.Parse("c100e000-0000-4000-8000-0000000000bb"), new() { ["someOtherKey"] = other });
+
+        var bytes = DownConversion.CanonicalBytes(marked);
+
+        Assert.Equal(bytes, DownConversion.CanonicalBytes(plain));
+        using var doc = JsonDocument.Parse(bytes);
+        Assert.Equal("00000000-0000-0000-0000-000000000000", doc.RootElement.GetProperty("revisionId").GetString());
+        Assert.False(doc.RootElement.TryGetProperty(DownConversion.MarkerKey, out _));
+        Assert.Equal(1, doc.RootElement.GetProperty("someOtherKey").GetInt32());
+    }
 }

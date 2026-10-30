@@ -1028,7 +1028,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         stream.Write(bytes);
     }
 
-    private static byte[] Json<T>(T value) => Encoding.UTF8.GetBytes(JsonSerializer.Serialize(value, RulesJson.Options) + "\n");
+    internal static byte[] Json<T>(T value) => Encoding.UTF8.GetBytes(JsonSerializer.Serialize(value, RulesJson.Options) + "\n");
 
     private static string Hash(byte[] bytes) => Convert.ToHexStringLower(SHA256.HashData(bytes));
 

@@ -19,11 +19,64 @@ public sealed record ExportChange(string Entry, string Kind, Guid Id, string Nam
 /// <summary>An export plan lowered for an older release: the plan to write, what it loses, and the hash of that list.</summary>
 internal sealed record LoweredPlan(PackageService.ExportPlan Plan, IReadOnlyList<ExportChange> Changes, string ChangesHash, bool Blocked, LadderRow Target);
 
+/// <summary>
+/// The marker a down-converted copy carries in its extensions (D85 part 2): the original revision it was lowered from and
+/// the schema version it was lowered to. Import re-pins a copy to its original when the marker and the bytes verify.
+/// </summary>
+public sealed record DownConvertedFrom(Guid RevisionId, int SchemaVersion);
+
 public static class DownConversion
 {
     public const string DropsCode = "package.target-drops";
     public const string BlockedCode = "package.target-blocked";
     public const string ChangedCode = "package.target-changed";
+
+    /// <summary>The extensions key of the <see cref="DownConvertedFrom"/> marker. Fixed: changing it breaks re-pinning.</summary>
+    public const string MarkerKey = "downConvertedFrom";
+
+    /// <summary>The fixed namespace for copy ids (D85 part 2). Never change it: every saved copy id depends on it.</summary>
+    public static readonly Guid Namespace = new("5b2e7c4a-9d31-4f6e-8a07-2c1d3e4f5a6b");
+
+    /// <summary>RFC 4122 §4.3 name-based (SHA-1) UUID, version 5.</summary>
+    public static Guid Uuid5(Guid ns, string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        Span<byte> nsBytes = stackalloc byte[16];
+        ns.TryWriteBytes(nsBytes, bigEndian: true, out _);
+        var nameBytes = Encoding.UTF8.GetBytes(name);
+        var input = new byte[nsBytes.Length + nameBytes.Length];
+        nsBytes.CopyTo(input);
+        nameBytes.CopyTo(input, nsBytes.Length);
+        Span<byte> hash = stackalloc byte[SHA1.HashSizeInBytes];
+        SHA1.HashData(input, hash);
+        var b = hash[..16];
+        b[6] = (byte)((b[6] & 0x0F) | 0x50);
+        b[8] = (byte)((b[8] & 0x3F) | 0x80);
+        return new Guid(b, bigEndian: true);
+    }
+
+    /// <summary>
+    /// The id of a lowered copy (D85 part 2): a UUIDv5 over the original, the target schema and the SHA-256 of the copy's
+    /// <see cref="CanonicalBytes"/>, so the same lowering always gives the same id and different bytes never share one.
+    /// </summary>
+    public static Guid CopyId(Guid rootOriginal, int targetContentSchema, ReadOnlySpan<byte> loweredBytes)
+    {
+        var digest = Convert.ToHexStringLower(SHA256.HashData(loweredBytes));
+        return Uuid5(Namespace, FormattableString.Invariant($"{rootOriginal:D}:{targetContentSchema}:{digest}"));
+    }
+
+    /// <summary>
+    /// The bytes a copy is identified by: the copy as the package writer serializes it, with the revision id zeroed and the
+    /// <see cref="MarkerKey"/> removed, so a copy and the bytes it was lowered from hash the same way.
+    /// </summary>
+    public static byte[] CanonicalBytes(ContentRevision copy)
+    {
+        ArgumentNullException.ThrowIfNull(copy);
+        var extensions = copy.Extensions?.Where(p => p.Key != MarkerKey).ToDictionary(p => p.Key, p => p.Value);
+        if (extensions is { Count: 0 })
+            extensions = null;
+        return PackageService.Json(copy with { RevisionId = Guid.Empty, Extensions = extensions });
+    }
 
     /// <summary>SHA-256 (lowercase hex) of the changes, one <c>action|entry|code|message</c> line each, so a save can prove it is the list that was previewed.</summary>
     public static string HashChanges(IReadOnlyList<ExportChange> changes)
