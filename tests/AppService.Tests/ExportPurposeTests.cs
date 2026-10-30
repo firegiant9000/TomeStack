@@ -26,7 +26,7 @@ public class ExportPurposeTests
     };
 
     /// <summary>A character pinning seeded (redistributable) fixture content plus one non-redistributable homebrew feat.</summary>
-    private static Guid SaveMixedCharacter(TempApp app, int homebrewSchemaVersion = ContentRevision.CurrentSchemaVersion)
+    private static Guid SaveMixedCharacter(TempApp app, int homebrewSchemaVersion = ContentRevision.CurrentSchemaVersion, RevisionStatus homebrewStatus = RevisionStatus.Published)
     {
         app.App.Store.UpsertSource(new SourceRecord
         {
@@ -38,7 +38,7 @@ public class ExportPurposeTests
             License = "Personal homebrew",
             Redistributable = false,
         });
-        app.App.Store.AddRevision(HomebrewFeat with { SchemaVersion = homebrewSchemaVersion });
+        app.App.Store.AddRevision(HomebrewFeat with { SchemaVersion = homebrewSchemaVersion, Status = homebrewStatus });
         var character = TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json");
         return app.App.SaveCharacter(character with { Pins = [.. character.Pins, HomebrewFeat.Reference] }).Character.Id;
     }
@@ -117,6 +117,19 @@ public class ExportPurposeTests
         Assert.Equal($"Opening this needs TomeStack 0.7.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Homebrew Quick Draw' is content at schema 11. Older versions refuse the file.", Assert.Single(backup).Message);
         // A share leaves the non-redistributable homebrew out, so nothing at v11 would be written.
         Assert.Empty(NewerBuildWarnings(origin.App.PreviewExport([id], ExportPurpose.Share)));
+    }
+
+    [Fact]
+    public void Export_preview_warns_once_with_the_v12_text_when_a_pinned_draft_revision_is_at_schema_v12()
+    {
+        // A character package carries drafts (PackageService.Plan includes them), so a v12 draft triggers the v12 warning (R26).
+        using var origin = new TempApp();
+        var id = SaveMixedCharacter(origin, homebrewSchemaVersion: 12, homebrewStatus: RevisionStatus.Draft);
+
+        var backup = NewerBuildWarnings(origin.App.PreviewExport([id], ExportPurpose.Backup));
+        Assert.Equal("Opening this needs a TomeStack version that reads content schema 12 or later: it holds content that older versions refuse.", Assert.Single(backup).Message);
+        // No released row opens content v12, so the ladder (D83) names no release (R22).
+        Assert.Null(origin.App.PreviewExport([id], ExportPurpose.Backup).OpensIn);
     }
 
     [Fact]

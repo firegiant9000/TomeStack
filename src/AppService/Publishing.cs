@@ -485,7 +485,11 @@ public sealed partial class TomeStackApp
             foreach (var selected in character.Choices.SelectMany(c => c.Selected))
                 Add(selected, ReferenceRole.Choice);
             foreach (var entry in character.Equipment)
+            {
                 Add(entry.Item, ReferenceRole.Equipment);
+                foreach (var mod in entry.Mods ?? [])
+                    Add(mod, ReferenceRole.Equipment);
+            }
             foreach (var spell in character.Spells)
                 Add(spell.Spell, ReferenceRole.Spell);
             foreach (var reference in character.AllReferences())
@@ -530,7 +534,11 @@ public sealed partial class TomeStackApp
         foreach (var selected in character.Choices.SelectMany(c => c.Selected))
             Consider(selected, ReferenceRole.Choice);
         foreach (var entry in character.Equipment)
+        {
             Consider(entry.Item, ReferenceRole.Equipment);
+            foreach (var mod in entry.Mods ?? [])
+                Consider(mod, ReferenceRole.Equipment);
+        }
         foreach (var spell in character.Spells)
             Consider(spell.Spell, ReferenceRole.Spell);
         return offers;

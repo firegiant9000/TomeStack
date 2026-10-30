@@ -1,5 +1,6 @@
 import { useId, useRef, useState, type KeyboardEvent } from 'react';
 import type { PlayAction, ResourceValue, ToggleValue } from '../api/types';
+import { paying, paymentText } from '../payment';
 
 /**
  * D43 slice 1: the form picker. Toggles that share a form group (`group` + `groupContent`) are one radio group, "Base" first
@@ -88,6 +89,8 @@ function FormGroup({
 
   // What the server spends: `cost` (1 when it names a pool and no cost) of `resourceId` from `costResourceContent` (its own content when none).
   const costText = (t: ToggleValue) => {
+    // MECH-X item 1: a form that pays hit points or a slot says so instead.
+    if (paying(t.payment)) return paymentText(t.payment, t.cost);
     if (!t.resourceId) return undefined;
     const amount = t.cost ?? 1;
     if (amount <= 0) return undefined;
@@ -95,11 +98,15 @@ function FormGroup({
     return `${amount} ${pool?.label ?? inWords(t.resourceId)}`;
   };
 
-  const reasonId = (t: ToggleValue) => (!t.available && t.unavailableReason ? `${id}-${t.content.contentId}-${t.toggleId}-why` : undefined);
+  // R40: a form that is off and cannot be paid for now is held with the payment's own reason; one that is on is never held by it (B1).
+  const unpayable = (t: ToggleValue) => !t.on && paying(t.payment) && !t.payment.payable;
+  const whyNot = (t: ToggleValue) =>
+    (!t.available && t.unavailableReason) || (unpayable(t) ? (t.payment?.reason ?? 'Cannot be paid now') : undefined);
+  const reasonId = (t: ToggleValue) => (whyNot(t) ? `${id}-${t.content.contentId}-${t.toggleId}-why` : undefined);
   const reason = (t: ToggleValue) =>
     reasonId(t) && (
       <p id={reasonId(t)} className="hint">
-        {t.unavailableReason}
+        {whyNot(t)}
       </p>
     );
   const cost = (t: ToggleValue) => {
@@ -110,7 +117,7 @@ function FormGroup({
   // The radios: "Base" (no form) then each primary. Disabled options are skipped by the arrow keys.
   const options: Option[] = [
     { key: 'base', label: 'Base', checked: !current, disabled: busy },
-    ...primaries.map((t) => ({ key: `${t.content.contentId}-${t.toggleId}`, label: t.label, toggle: t, checked: t.on, disabled: busy || (!t.available && !t.on) })),
+    ...primaries.map((t) => ({ key: `${t.content.contentId}-${t.toggleId}`, label: t.label, toggle: t, checked: t.on, disabled: busy || (!t.available && !t.on) || unpayable(t) })),
   ];
   const [roving, setRoving] = useState<string>();
   const elements = useRef(new Map<string, HTMLElement>());
@@ -194,7 +201,7 @@ function FormGroup({
             <input
               type="checkbox"
               checked={t.on}
-              disabled={busy || (!t.available && !t.on)}
+              disabled={busy || (!t.available && !t.on) || unpayable(t)}
               aria-describedby={reasonId(t)}
               onChange={() => run({ action: t.on ? 'toggleOff' : 'toggleOn', ...ref(t) })}
             />

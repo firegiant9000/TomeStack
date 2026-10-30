@@ -18,6 +18,8 @@ export interface SpellFilter {
   casting: CastingBucket[];
   concentration?: boolean;
   ritual?: boolean;
+  /** MECH-X item 1 (R39): spells carrying any of these tags. Absent or empty means any. */
+  tags?: string[];
 }
 
 const castingStart = /^(?:1\s+)?(bonus action|action|reaction)\b/i;
@@ -35,6 +37,7 @@ export function castingBucket(castingTime: string | undefined): CastingBucket {
 /** P09 (D70): every dimension is ANDed and an empty one means any. A spell with no school matches only when no school is ticked. */
 export function filterSpells(spells: SpellEntry[], filter: SpellFilter): SpellEntry[] {
   const schools = new Set(filter.schools.map(foldName));
+  const tags = new Set((filter.tags ?? []).map(foldName));
   return spells.filter(
     (s) =>
       matchesSpell(s.name, filter.text) &&
@@ -42,6 +45,7 @@ export function filterSpells(spells: SpellEntry[], filter: SpellFilter): SpellEn
       (schools.size === 0 || (s.school !== undefined && schools.has(foldName(s.school)))) &&
       (filter.casting.length === 0 || filter.casting.includes(castingBucket(s.castingTime))) &&
       (filter.concentration === undefined || s.concentration === filter.concentration) &&
-      (filter.ritual === undefined || s.ritual === filter.ritual),
+      (filter.ritual === undefined || s.ritual === filter.ritual) &&
+      (tags.size === 0 || (s.tags ?? []).some((t) => tags.has(foldName(t)))),
   );
 }

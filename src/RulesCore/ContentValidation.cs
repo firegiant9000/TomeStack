@@ -56,6 +56,15 @@ public static class ContentValidator
     /// <summary>The most other pools one roll also changes (content v11, <c>alsoChange</c>).</summary>
     public const int MaxAlsoChanges = 4;
 
+    /// <summary>The most companions one revision declares (content v12).</summary>
+    private const int MaxCompanionsPerRevision = 10;
+
+    /// <summary>The longest companion label or speed (content v12).</summary>
+    private const int MaxCompanionText = 80;
+
+    /// <summary>The largest weapon bonus (content v12, <c>weapon.bonus</c>); the smallest is 0.</summary>
+    internal const int MaxWeaponBonus = 10;
+
     /// <summary>The largest area size or line width a roll declares, in feet (content v11).</summary>
     private const int MaxAreaFeet = 1_000;
 
@@ -85,6 +94,12 @@ public static class ContentValidator
 
     /// <summary>Content v11 (D43): a modifier target <c>resource.&lt;resourceId&gt;</c> raises the maximum of a pool.</summary>
     internal const string ResourceTargetPrefix = "resource.";
+
+    /// <summary>The highest slot level a payment can ask for (content v12, <c>payment.minSlotLevel</c>); the lowest is 1.</summary>
+    private const int MaxPaymentSlotLevel = SpellcastingEffect.MaxSpellLevel;
+
+    /// <summary>Whether a payment takes hit points or a spell slot, so the effect needs no pool (content v12).</summary>
+    private static bool PaysOutsidePool(CostPayment? payment) => payment is { Kind: PaymentKind.HitPoints or PaymentKind.Slot };
 
     /// <summary>Whether an untyped toggle carries a content v11 key (any spelling), which decides the version its failure needs.</summary>
     private static bool CarriesV11Key(UnknownEffect effect, string[] keys) =>
@@ -169,12 +184,69 @@ public static class ContentValidator
         var needsV9 = false;
         var needsV10 = false; // content v10 (Wave 3, D42): speed/passive targets, autoWhen, activation, damage grants, item
         var needsV11 = false; // content v11 (D43): toggleGroup and upkeep effects, the toggle's group, layer, cost, level and duration keys, and the resource's counts, resourceFull and allowance keys
+        var needsV12 = false; // content v12 (MECH-X items 0–3): weapon.bonus, payment, roll.castsSpell, spell.tags, choice.replaceable, itemMod
+        var v12Phrases = new List<string>(); // what the v12 keys found are called in validate.requires-v12
+        void NeedV12(string phrase)
+        {
+            needsV12 = true;
+            if (!v12Phrases.Contains(phrase))
+                v12Phrases.Add(phrase);
+        }
         var upkeeps = 0;
         var responses = 0;
         var diceLessRoll = false; // an untyped roll with no dice: publishing it needs v11, where a roll may omit them
         var usedScales = new HashSet<string>(StringComparer.Ordinal); // SCALE.<id> in any formula (content v9)
         var usedValues = new HashSet<string>(StringComparer.Ordinal); // VALUE.<id> in any formula (content v11)
         var spellTargets = false; // raises the written version only; older revisions with them were never refused
+        void CheckModifier(ModifierEffect modifier)
+        {
+            needsV3 |= modifier.Target is FieldIds.ArmorClass or FieldIds.HitPoints;
+            needsV8 |= modifier.Target is FieldIds.Attacks or FieldIds.CriticalRange || modifier.WhileArmored is not null;
+            spellTargets |= IsSpellField(modifier.Target);
+            if (modifier.Target.StartsWith(ResourceTargetPrefix, StringComparison.Ordinal))
+                CheckResourceTarget(modifier);
+            else if (!CharacterCalculator.IsField(modifier.Target))
+                Error("validate.unknown-target", $"Effect '{modifier.Id}' targets '{modifier.Target}', which is not a calculated field.", modifier.Id);
+            else if (IsCharacterOnlyField(modifier.Target, revision))
+                Error("validate.unknown-target", $"Effect '{modifier.Id}' targets '{modifier.Target}', which cannot be targeted by content yet (needs content schema v{ContentRevision.PlayDetailsSchemaVersion}).", modifier.Id);
+            else
+                needsV10 |= CharacterCalculator.IsSpeedOrPassive(modifier.Target); // allowed: this revision is v10
+            // Content v11 (D43): fly speed. Below v11 the revision gets validate.requires-v11 (and the calculator ignores it).
+            needsV11 |= modifier.Target == FieldIds.FlySpeed;
+            // Content v8: a lower critical range is better, but set and replace keep the highest value, so only a
+            // bonus (such as -1 for Improved Critical) can lower it.
+            if (modifier.Target == FieldIds.CriticalRange && modifier.Operation != ModifierOperation.Bonus)
+                Error("validate.critical-range-operation", $"Effect '{modifier.Id}' uses {modifier.Operation.ToString().ToLowerInvariant()} on criticalRange; only a bonus can change it (for example -1 for a critical hit on 19-20).", modifier.Id);
+            // Worn armor turns off every Armor Class replacement (they are unarmored alternatives), so a replacement
+            // that applies only while armored could never apply.
+            if (modifier.WhileArmored == true && modifier.Target == FieldIds.ArmorClass && modifier.Operation == ModifierOperation.Replace)
+                Error("validate.while-armored-replace", $"Effect '{modifier.Id}' replaces Armor Class only while armor is worn, but worn armor sets the base Armor Class itself, so it could never apply. Use a bonus.", modifier.Id);
+            if (modifier.Stacking == StackingRule.HighestInGroup && string.IsNullOrWhiteSpace(modifier.StackGroup))
+                Error("validate.stack-group-missing", $"Effect '{modifier.Id}' uses highest-in-group stacking without a stackGroup.", modifier.Id);
+            CheckFormula(modifier.Value, modifier.Id, "value");
+            if (modifier.Toggle is { } toggle)
+            {
+                needsV6 = true;
+                if (modifier.Timing != EffectTiming.WhileActive)
+                    Error("validate.toggle-timing", $"Modifier '{modifier.Id}' names toggle '{toggle}', so its timing must be whileActive.", modifier.Id);
+                // Content v11 (D43): the toggle may be another content's (toggleContent); the same lookup as a rider's.
+                if (modifier.ToggleContent is null)
+                {
+                    if (!revision.Effects.OfType<ToggleEffect>().Any(t => t.ToggleId == toggle))
+                        Error("validate.toggle-unknown", $"Modifier '{modifier.Id}' names toggle '{toggle}', which this revision does not define.", modifier.Id);
+                }
+                else
+                {
+                    CheckToggleReference(modifier.ToggleContent, toggle, modifier.Id, "validate.toggle-unknown");
+                }
+            }
+            if (modifier.ToggleContent is not null)
+            {
+                needsV11 = true;
+                if (modifier.Toggle is null)
+                    Error("validate.toggle-unknown", $"Modifier '{modifier.Id}' names the content that declares its toggle but names no toggle; add the toggle, or remove toggleContent.", modifier.Id);
+            }
+        }
         foreach (var effect in revision.Effects)
         {
             switch (effect)
@@ -202,7 +274,12 @@ public static class ContentValidator
                 // read. The version it needs is the field's own tier: a v11 key (or a toggleGroup) needs 11, anything else 10.
                 case UnknownEffect { DeclaredType: ToggleEffect.TypeName or ResourceEffect.TypeName or GrantEffect.TypeName or ToggleGroupEffect.TypeName or UpkeepEffect.TypeName or AttackEffect.TypeName or AttackRiderEffect.TypeName } malformed
                     when revision.SchemaVersion >= (malformed.DeclaredType is ToggleGroupEffect.TypeName or UpkeepEffect.TypeName or AttackEffect.TypeName or AttackRiderEffect.TypeName ? ContentRevision.PlayMechanicsSchemaVersion : ContentRevision.PlayDetailsSchemaVersion):
-                    if (malformed.DeclaredType is ToggleGroupEffect.TypeName or UpkeepEffect.TypeName or AttackEffect.TypeName or AttackRiderEffect.TypeName
+                    // Content v12 (MECH-X item 1): a toggle or attack that carries a payment (any spelling) needs v12, whatever else is wrong.
+                    if (revision.SchemaVersion >= ContentRevision.PaymentSchemaVersion
+                        && ((malformed.DeclaredType == ToggleEffect.TypeName && CarriesV11Key(malformed, ToggleEffect.V12Keys))
+                            || (malformed.DeclaredType == AttackEffect.TypeName && CarriesV11Key(malformed, AttackEffect.V12Keys))))
+                        NeedV12("a cost payment");
+                    else if (malformed.DeclaredType is ToggleGroupEffect.TypeName or UpkeepEffect.TypeName or AttackEffect.TypeName or AttackRiderEffect.TypeName
                         || (revision.SchemaVersion >= ContentRevision.PlayMechanicsSchemaVersion
                             && ((malformed.DeclaredType == ToggleEffect.TypeName && CarriesV11Key(malformed, ToggleEffect.V11Keys))
                                 || (malformed.DeclaredType == ResourceEffect.TypeName && CarriesV11Key(malformed, ResourceEffect.V11Keys))
@@ -211,6 +288,16 @@ public static class ContentValidator
                     else
                         needsV10 = true;
                     Error("validate.effect-malformed", $"Effect '{malformed.Id}' has type '{malformed.DeclaredType}' but a value or field that does not read (a name that is not allowed, such as an activation, autoWhen, layer, kind, ability or grant kind, or a missing field); fix it before publishing.", malformed.Id);
+                    break;
+                // Content v12 (MECH-X item 1): from v12 a roll or spell that carries a v12 key is read with it; one that stays unknown did not
+                // read (a payment whose kind names no member, a castsSpell that is not an id, tags that are not a list of text, or another
+                // field that does not read), so the key would silently do nothing. Published at a lower version the key is stripped and the
+                // effect reads without it, so it blocks. Below v12 the key is stripped first, so nothing changes there.
+                case UnknownEffect { DeclaredType: RollEffect.TypeName or SpellEffect.TypeName } unreadableV12
+                    when revision.SchemaVersion >= ContentRevision.PaymentSchemaVersion
+                        && CarriesV11Key(unreadableV12, unreadableV12.DeclaredType == RollEffect.TypeName ? RollEffect.V12Keys : SpellEffect.V12Keys):
+                    NeedV12(unreadableV12.DeclaredType == RollEffect.TypeName ? "a cost payment" : "spell tags");
+                    Error("validate.effect-malformed", $"Effect '{unreadableV12.Id}' has type '{unreadableV12.DeclaredType}' but a value or field that does not read (a payment needs a kind of resource, hitPoints or slot; castsSpell is a content id; tags are a list of keys; or a missing field); fix it before publishing.", unreadableV12.Id);
                     break;
                 // Content v11 (D43): a modifier or roll whose v11 key does not read (toggleContent that is not an id, a whileToggle
                 // without a toggleId). Published at a lower version it would read back as a modifier or roll that ignores the key and
@@ -241,6 +328,38 @@ public static class ContentValidator
                     needsV11 = true;
                     Error("validate.effect-malformed", $"Effect '{unknownResponse.Id}' has type '{unknownResponse.DeclaredType}' but a value or field that does not read (it needs a responseId, a label and a phase of damageReduction, hitPointOutcome or threshold; each outcome needs a kind of spend, regain, toggleOn, offerRoll, regainHitPoints or temporaryHitPoints; a content is an id); fix it before publishing.", unknownResponse.Id);
                     break;
+                // Content v12 (MECH-X item 0): from v12 a weapon that carries a bonus key is read with it; one that stays unknown did
+                // not read (a bonus that is not a whole number, or another field that does not read), so the bonus would silently do
+                // nothing. Published at a lower version the key is stripped and the weapon reads without it, so it blocks. Without a
+                // bonus key it is what it always was: a warning. Below v12 the key is stripped first, so nothing changes there.
+                case UnknownEffect { DeclaredType: WeaponEffect.TypeName } unreadableWeapon
+                    when revision.SchemaVersion >= ContentRevision.WeaponBonusSchemaVersion && CarriesV11Key(unreadableWeapon, WeaponEffect.V12Keys):
+                    NeedV12("a weapon bonus");
+                    Error("validate.effect-malformed", $"Effect '{unreadableWeapon.Id}' has type 'weapon' but a value or field that does not read (its bonus must be a whole number from 0 to 10; a category, attack, damage, damageType and weaponKey are needed); fix it before publishing.", unreadableWeapon.Id);
+                    break;
+                // Content v12 (MECH-X item 2): from v12 a choice that carries replaceable (any spelling) is read with it; one that stays
+                // unknown did not read (a window that is not levelUp or longRest, a max that is not a whole number, a replaceable that is
+                // not an object, or another field that does not read), so the key would silently do nothing. Published at a lower version
+                // the key is stripped and the choice reads without it, so it blocks. Below v12 the key is stripped first.
+                case UnknownEffect { DeclaredType: ChoiceEffect.TypeName } unreadableChoice
+                    when revision.SchemaVersion >= ContentRevision.ReplaceableChoiceSchemaVersion && CarriesV11Key(unreadableChoice, ChoiceEffect.V12Keys):
+                    NeedV12("a replaceable choice");
+                    Error("validate.effect-malformed", $"Effect '{unreadableChoice.Id}' has type 'choice' but a value or field that does not read (replaceable needs a when of levelUp or longRest and, if present, a whole-number max; a choiceId is needed); fix it before publishing.", unreadableChoice.Id);
+                    break;
+                // Content v12 (MECH-X item 3): from v12 an itemMod that stays unknown did not read (an appliesTo that is not weapon, armor
+                // or any, a bonus that is not a whole number, modifiers that are not modifier effects), so the mod would silently do
+                // nothing. Published at a lower version it is an unsupported effect, so it blocks.
+                case UnknownEffect { DeclaredType: ItemModEffect.TypeName } unreadableMod when revision.SchemaVersion >= ItemModEffect.SchemaVersion:
+                    NeedV12("an item mod");
+                    Error("validate.effect-malformed", $"Effect '{unreadableMod.Id}' has type '{unreadableMod.DeclaredType}' but a value or field that does not read (appliesTo must be weapon, armor or any; bonus a whole number from 0 to {ItemModEffect.MaxBonus}; modifiers a list of modifier effects); fix it before publishing.", unreadableMod.Id);
+                    break;
+                // Content v12 (MECH-X item 4): from v12 a companion that stays unknown did not read (a companionId that is not a
+                // canonical non-empty Guid, a missing or non-string label, armorClass or hitPointMaximum, attacks or resourceIds
+                // that are not lists of strings). Published at a lower version it is an unsupported effect, so it blocks.
+                case UnknownEffect { DeclaredType: CompanionEffect.TypeName } unreadableCompanion when revision.SchemaVersion >= CompanionEffect.SchemaVersion:
+                    NeedV12("a companion");
+                    Error("validate.effect-malformed", $"Effect '{unreadableCompanion.Id}' has type '{unreadableCompanion.DeclaredType}' but a value or field that does not read (companionId must be a lowercase GUID that is not empty; label, armorClass and hitPointMaximum are text; attacks and resourceIds lists of ids); fix it before publishing.", unreadableCompanion.Id);
+                    break;
                 case UnknownEffect unknown:
                     // Content v11 (D43): a roll with no dice is typed only from v11, so below it the roll stays reference-only as it
                     // always did, but publishing it needs v11.
@@ -248,52 +367,7 @@ public static class ContentValidator
                     Warn("validate.effect-unsupported", $"Effect '{unknown.Id}' is of a type this version does not automate; it stays reference-only.", unknown.Id);
                     break;
                 case ModifierEffect modifier:
-                    needsV3 |= modifier.Target is FieldIds.ArmorClass or FieldIds.HitPoints;
-                    needsV8 |= modifier.Target is FieldIds.Attacks or FieldIds.CriticalRange || modifier.WhileArmored is not null;
-                    spellTargets |= IsSpellField(modifier.Target);
-                    if (modifier.Target.StartsWith(ResourceTargetPrefix, StringComparison.Ordinal))
-                        CheckResourceTarget(modifier);
-                    else if (!CharacterCalculator.IsField(modifier.Target))
-                        Error("validate.unknown-target", $"Effect '{modifier.Id}' targets '{modifier.Target}', which is not a calculated field.", modifier.Id);
-                    else if (IsCharacterOnlyField(modifier.Target, revision))
-                        Error("validate.unknown-target", $"Effect '{modifier.Id}' targets '{modifier.Target}', which cannot be targeted by content yet (needs content schema v{ContentRevision.PlayDetailsSchemaVersion}).", modifier.Id);
-                    else
-                        needsV10 |= CharacterCalculator.IsSpeedOrPassive(modifier.Target); // allowed: this revision is v10
-                    // Content v11 (D43): fly speed. Below v11 the revision gets validate.requires-v11 (and the calculator ignores it).
-                    needsV11 |= modifier.Target == FieldIds.FlySpeed;
-                    // Content v8: a lower critical range is better, but set and replace keep the highest value, so only a
-                    // bonus (such as -1 for Improved Critical) can lower it.
-                    if (modifier.Target == FieldIds.CriticalRange && modifier.Operation != ModifierOperation.Bonus)
-                        Error("validate.critical-range-operation", $"Effect '{modifier.Id}' uses {modifier.Operation.ToString().ToLowerInvariant()} on criticalRange; only a bonus can change it (for example -1 for a critical hit on 19-20).", modifier.Id);
-                    // Worn armor turns off every Armor Class replacement (they are unarmored alternatives), so a replacement
-                    // that applies only while armored could never apply.
-                    if (modifier.WhileArmored == true && modifier.Target == FieldIds.ArmorClass && modifier.Operation == ModifierOperation.Replace)
-                        Error("validate.while-armored-replace", $"Effect '{modifier.Id}' replaces Armor Class only while armor is worn, but worn armor sets the base Armor Class itself, so it could never apply. Use a bonus.", modifier.Id);
-                    if (modifier.Stacking == StackingRule.HighestInGroup && string.IsNullOrWhiteSpace(modifier.StackGroup))
-                        Error("validate.stack-group-missing", $"Effect '{modifier.Id}' uses highest-in-group stacking without a stackGroup.", modifier.Id);
-                    CheckFormula(modifier.Value, modifier.Id, "value");
-                    if (modifier.Toggle is { } toggle)
-                    {
-                        needsV6 = true;
-                        if (modifier.Timing != EffectTiming.WhileActive)
-                            Error("validate.toggle-timing", $"Modifier '{modifier.Id}' names toggle '{toggle}', so its timing must be whileActive.", modifier.Id);
-                        // Content v11 (D43): the toggle may be another content's (toggleContent); the same lookup as a rider's.
-                        if (modifier.ToggleContent is null)
-                        {
-                            if (!revision.Effects.OfType<ToggleEffect>().Any(t => t.ToggleId == toggle))
-                                Error("validate.toggle-unknown", $"Modifier '{modifier.Id}' names toggle '{toggle}', which this revision does not define.", modifier.Id);
-                        }
-                        else
-                        {
-                            CheckToggleReference(modifier.ToggleContent, toggle, modifier.Id, "validate.toggle-unknown");
-                        }
-                    }
-                    if (modifier.ToggleContent is not null)
-                    {
-                        needsV11 = true;
-                        if (modifier.Toggle is null)
-                            Error("validate.toggle-unknown", $"Modifier '{modifier.Id}' names the content that declares its toggle but names no toggle; add the toggle, or remove toggleContent.", modifier.Id);
-                    }
+                    CheckModifier(modifier);
                     break;
                 case ToggleEffect toggleEffect:
                     needsV6 = true;
@@ -393,6 +467,15 @@ public static class ContentValidator
                     foreach (var option in choice.Options.Distinct())
                         CheckReference(option, choice.Id, $"option of choice '{choice.ChoiceId}'");
                     needsV5 |= choice.OnlyAs is not null;
+                    if (choice.Replaceable is { } replaceable)
+                    {
+                        NeedV12("a replaceable choice");
+                        var max = replaceable.Max ?? 1;
+                        if (max is < 1 or > ChoiceEffect.MaxReplaceable)
+                            Error("validate.choice-replaceable", $"Choice '{choice.ChoiceId}' lets {max} picks be replaced; the most is {ChoiceEffect.MaxReplaceable} and the least 1.", choice.Id);
+                        else if (choice.Count >= 1 && max > choice.Count)
+                            Error("validate.choice-replaceable", $"Choice '{choice.ChoiceId}' lets {max} picks be replaced but has only {choice.Count}.", choice.Id);
+                    }
                     break;
                 case RestrictionEffect restriction:
                     needsV3 |= restriction.Field is FieldIds.ArmorClass or FieldIds.HitPoints;
@@ -421,6 +504,49 @@ public static class ContentValidator
                             Error("validate.item-charges", $"Item '{item.Id}' has {charges.Max} charges; it must be 1 to {ItemCharges.MaxCharges}.", item.Id);
                         if (charges.Recovery?.Regain is { } regain && !DiceExpression.TryParse(regain, out _, out var regainError))
                             Error("validate.dice-invalid", $"Item '{item.Id}' regain is not a dice expression such as 1d4+1 ({regainError!.Code})", item.Id);
+                    }
+                    break;
+                case ItemModEffect mod:
+                    NeedV12("an item mod");
+                    if (revision.Kind != ContentKind.Item)
+                        Error("validate.item-mod-kind", $"An item mod belongs on an item; this revision is {revision.Kind.ToString().ToLowerInvariant()} content.", mod.Id);
+                    if (mod.Bonus is < 0 or > ItemModEffect.MaxBonus)
+                        Error("validate.item-mod-bonus", $"Item mod '{mod.Id}' has bonus {mod.Bonus}; it must be a whole number from 0 to {ItemModEffect.MaxBonus}.", mod.Id);
+                    if (mod.Modifiers is { Count: > ItemModEffect.MaxModifiers })
+                        Error("validate.item-mod-modifiers", $"Item mod '{mod.Id}' has {mod.Modifiers.Count} modifiers; at most {ItemModEffect.MaxModifiers}.", mod.Id);
+                    foreach (var nested in mod.Modifiers?.Where(m => m is not null) ?? [])
+                    {
+                        if (nested.Toggle is not null || nested.ToggleContent is not null || nested.WhileArmored is not null
+                            || nested.Target.StartsWith(ResourceTargetPrefix, StringComparison.Ordinal)
+                            || nested.Stacking != StackingRule.Stack || nested.StackGroup is not null
+                            || nested.Timing != EffectTiming.Always || nested.Automation != AutomationStatus.Automatic)
+                            Error("validate.item-mod-modifier", $"Item mod '{mod.Id}': modifier '{nested.Id}' may only set operation, target, value and text (always on, automatic).", mod.Id);
+                        CheckModifier(nested);
+                    }
+                    if (mod.Bonus is null && mod.Modifiers is not { Count: > 0 })
+                        Warn("validate.item-mod-empty", $"Item mod '{mod.Id}' has no bonus and no modifiers, so it does nothing.", mod.Id);
+                    break;
+                case CompanionEffect companion:
+                    NeedV12("a companion");
+                    if (revision.Kind is ContentKind.Item or ContentKind.Spell)
+                        Error("validate.companion-kind", $"A companion belongs on a feature, feat or other character content; this revision is {revision.Kind.ToString().ToLowerInvariant()} content.", companion.Id);
+                    if (string.IsNullOrWhiteSpace(companion.Label) || companion.Label.Length > MaxCompanionText || companion.Speed?.Length > MaxCompanionText)
+                        Error("validate.companion-incomplete", $"Companion '{companion.Id}' needs a label, and its label and speed are at most {MaxCompanionText} characters.", companion.Id);
+                    CheckFormula(companion.ArmorClass, companion.Id, "armor class");
+                    CheckFormula(companion.HitPointMaximum, companion.Id, "hit point maximum");
+                    if (companion.Attacks is { Count: > CompanionEffect.MaxAttacks } || companion.ResourceIds is { Count: > CompanionEffect.MaxResources })
+                        Error("validate.companion-too-many", $"Companion '{companion.Id}' lists more than {CompanionEffect.MaxAttacks} attacks or {CompanionEffect.MaxResources} pools.", companion.Id);
+                    foreach (var attackId in companion.Attacks?.Distinct() ?? [])
+                    {
+                        if (!revision.Effects.OfType<AttackEffect>().Any(a => a.Id == attackId))
+                            Error("validate.companion-attack", $"Companion '{companion.Id}' lists attack '{attackId}', which this revision does not have.", companion.Id);
+                    }
+                    if (companion.Attacks is not null && companion.Attacks.Distinct().Count() != companion.Attacks.Count)
+                        Error("validate.companion-attack", $"Companion '{companion.Id}' lists an attack more than once.", companion.Id);
+                    foreach (var poolId in companion.ResourceIds?.Distinct() ?? [])
+                    {
+                        if (!revision.Effects.OfType<ResourceEffect>().Any(r => r.ResourceId == poolId))
+                            Error("validate.companion-resource", $"Companion '{companion.Id}' lists pool '{poolId}', which this revision does not have.", companion.Id);
                     }
                     break;
                 case ResourceEffect resource:
@@ -503,7 +629,8 @@ public static class ContentValidator
                     if (roll.Dice is null)
                     {
                         needsV11 = true;
-                        if (roll.Cost is null)
+                        // A roll that casts a spell needs no dice or cost of its own: its dice come from the spell (content v12).
+                        if (roll.Cost is null && roll.CastsSpell is null)
                             Error("validate.roll-dice-or-cost", $"Roll '{roll.Id}' has neither dice nor a cost, so it does nothing; add dice or a cost.", roll.Id);
                     }
                     else if (!DiceExpression.TryParse(roll.Dice, out _, out var diceError))
@@ -513,6 +640,17 @@ public static class ContentValidator
                     needsV11 |= roll.Save is not null || roll.Area is not null || roll.Range is not null || roll.Targets is not null || roll.PerUnit is not null
                         || roll.AlsoChange is not null || roll.DrawsDown is not null;
                     CheckRollDetails(roll);
+                    if (roll.Payment is { } rollPayment)
+                    {
+                        NeedV12("a cost payment");
+                        CheckPayment(roll.Id, "Roll", rollPayment, roll.Cost, roll.ResourceId is not null || roll.ResourceContent is not null,
+                            roll.DrawsDown == true || roll.VariableCost == true || roll.AlsoChange is { Count: > 0 }, roll.PerUnit is not null, roll.CastsSpell is not null);
+                    }
+                    if (roll.CastsSpell is { } castsSpell)
+                    {
+                        NeedV12("casting without a slot");
+                        CheckCastsSpell(roll.Id, castsSpell);
+                    }
                     needsV5 |= roll.Activation is not null;
                     needsV6 |= roll.ResourceContent is not null || roll.Cost is not null || roll.VariableCost is not null;
                     if (roll.Cost is { } cost)
@@ -527,7 +665,7 @@ public static class ContentValidator
                         needsV11 = true;
                         CheckToggleReference(whileToggle.ContentId, whileToggle.ToggleId, roll.Id, "validate.while-toggle-unknown");
                     }
-                    if ((roll.Cost is not null || roll.VariableCost == true) && roll.ResourceId is null)
+                    if ((roll.Cost is not null || roll.VariableCost == true) && roll.ResourceId is null && !PaysOutsidePool(roll.Payment))
                         Error("validate.roll-cost", $"Roll '{roll.Id}' has a cost but names no resource to spend.", roll.Id);
                     if (roll.ResourceId is { } rollPool && roll.DrawsDown != true && FindResource(roll.ResourceContent, rollPool)?.Counts == ResourceCounting.Up)
                         Warn("validate.cost-counts-up", $"Roll '{roll.Id}' spends from '{rollPool}', a pool that counts up; a cost fills it instead of using it up.", roll.Id);
@@ -550,6 +688,12 @@ public static class ContentValidator
                         Error("validate.weapon-incomplete", $"Weapon '{weapon.Id}' needs a weaponKey and a damageType.", weapon.Id);
                     if (weapon.Has("versatile") != (weapon.Versatile is not null))
                         Warn("validate.weapon-versatile", $"Weapon '{weapon.Id}': the versatile property and versatile damage go together.", weapon.Id);
+                    if (weapon.Bonus is { } weaponBonus)
+                    {
+                        NeedV12("a weapon bonus"); // present at all (0 too) is a v12 key
+                        if (weaponBonus is < 0 or > MaxWeaponBonus)
+                            Error("validate.weapon-bonus", $"Weapon '{weapon.Id}' has bonus {weaponBonus}; it must be a whole number from 0 to {MaxWeaponBonus}.", weapon.Id);
+                    }
                     if (revision.Kind != ContentKind.Item)
                         Warn("validate.weapon-kind", $"A weapon gives an attack only on an equipped item; '{revision.Name}' is {revision.Kind.ToString().ToLowerInvariant()} content.", weapon.Id);
                     break;
@@ -608,6 +752,11 @@ public static class ContentValidator
                         Warn("validate.spell-lists", $"Spell '{spell.Id}' is on no spell list, so no caster can choose it. Add it to a spell list.", spell.Id);
                     if (spell.Dice is { } dice && !DiceExpression.TryParse(dice, out _, out var spellDiceError))
                         Error("validate.dice-invalid", $"Spell '{spell.Id}' dice '{dice}': {spellDiceError!.Message} ({spellDiceError.Code})", spell.Id);
+                    if (spell.Tags is not null)
+                    {
+                        NeedV12("spell tags"); // present at all (an empty list too) is a v12 key
+                        CheckTags(spell.Tags, spell.Id, isSpell: true);
+                    }
                     if (revision.Kind != ContentKind.Spell)
                         Warn("validate.spell-kind", $"Spell data is used only on spell content; '{revision.Name}' is {revision.Kind.ToString().ToLowerInvariant()} content.", spell.Id);
                     break;
@@ -634,6 +783,19 @@ public static class ContentValidator
             Error("validate.spell-duplicate", "A spell revision declares its spell data once.");
         if (revision.Effects.OfType<ItemEffect>().Count() > 1)
             Error("validate.item-duplicate", "An item declares its attunement and charges once.");
+        if (revision.Effects.OfType<ItemModEffect>().Count() > 1)
+            Error("validate.item-mod-duplicate", "An item is at most one mod.");
+        if (revision.Effects.OfType<ItemModEffect>().Any() && revision.Effects.Any(e => e is WeaponEffect or ArmorEffect))
+            Error("validate.item-mod-host", "A mod attaches to a weapon or armor; it cannot be one itself.");
+        var companions = revision.Effects.OfType<CompanionEffect>().ToList();
+        foreach (var group in companions.GroupBy(c => c.CompanionId).Where(g => g.Count() > 1))
+            Error("validate.companion-id-duplicate", $"Companion id '{group.Key}' is declared {group.Count()} times in this revision; declare each companion once.", group.Skip(1).First().Id);
+        foreach (var group in companions.SelectMany(c => (c.Attacks ?? []).Distinct().Select(a => (Companion: c, Attack: a))).GroupBy(x => x.Attack).Where(g => g.Count() > 1))
+            Error("validate.companion-attack", $"Attack '{group.Key}' is listed by {group.Count()} companions; each attack belongs to one companion.", group.Skip(1).First().Companion.Id);
+        foreach (var group in companions.SelectMany(c => (c.ResourceIds ?? []).Distinct().Select(r => (Companion: c, Pool: r))).GroupBy(x => x.Pool).Where(g => g.Count() > 1))
+            Error("validate.companion-resource", $"Pool '{group.Key}' is listed by {group.Count()} companions; each pool belongs to one companion.", group.Skip(1).First().Companion.Id);
+        if (companions.Count > MaxCompanionsPerRevision)
+            Error("validate.companion-too-many", $"This revision declares {companions.Count} companions; the most is {MaxCompanionsPerRevision}.");
         if (revision.Kind == ContentKind.Spell && !revision.Effects.OfType<SpellEffect>().Any())
             Warn("validate.spell-data-missing", "This spell has no spell data (level, lists), so no caster can use it from the sheet.");
         if (revision.Effects.Any(e => e is SpellcastingEffect or SpellEffect or WeaponEffect) && revision.SchemaVersion < SpellcastingEffect.SchemaVersion)
@@ -647,6 +809,8 @@ public static class ContentValidator
         // Typed v10 details exist only in a v10 revision when read from JSON (below v10 the keys stay extension data); a
         // revision built in code can still declare an older version, and an older build would ignore or refuse them.
         needsV11 |= usedValues.Count > 0;
+        if (needsV12 && revision.SchemaVersion < ContentRevision.WeaponBonusSchemaVersion)
+            Error("validate.requires-v12", $"This revision uses content schema v12 features ({(v12Phrases.Count > 0 ? string.Join(", ", v12Phrases) : "see the keys it carries")}) but declares v{revision.SchemaVersion}; an older build would ignore or refuse them.");
         if (needsV11 && revision.SchemaVersion < ContentRevision.PlayMechanicsSchemaVersion)
             Error("validate.requires-v11", $"This revision uses content schema v11 features (toggle groups, toggle layers, costs, levels or durations, upkeeps, counting-up pools or allowances, attacks, attack riders, a toggle of another content or a resource target, roll saves, areas, ranges, targets or per-unit dice, a roll with no dice, named values or VALUE in a formula, roll modes, damage responses, fly speed, form-only defences) but declares v{revision.SchemaVersion}; an older build would ignore, misread or refuse them.");
         if (needsV10 && revision.SchemaVersion < ContentRevision.PlayDetailsSchemaVersion)
@@ -694,7 +858,8 @@ public static class ContentValidator
         // The same features as the requires-vN checks above, highest first. Typed effects are covered too: armor (v4),
         // spellcasting, spell and weapon (v5) and toggle (v6) are read as typed only from their version.
         var required =
-            needsV11 || diceLessRoll ? ContentRevision.PlayMechanicsSchemaVersion
+            needsV12 ? ContentRevision.WeaponBonusSchemaVersion
+            : needsV11 || diceLessRoll ? ContentRevision.PlayMechanicsSchemaVersion
             : needsV10 ? ContentRevision.PlayDetailsSchemaVersion
             : needsV9 ? ScaleEffect.SchemaVersion
             : needsV8 ? ContentRevision.CombatDetailsSchemaVersion
@@ -744,7 +909,8 @@ public static class ContentValidator
             {
                 if (!AttackRiderEffect.TryParseDice(perUnit.Dice, out _, out _))
                     Error("validate.roll-per-unit", $"Roll '{id}' per-unit dice '{perUnit.Dice}' must be a count and a die such as 1d6 (1 to {DiceLimits.MaxDice} dice of d4, d6, d8, d10 or d12).", id);
-                if (roll.Cost is null || roll.ResourceId is null)
+                // A payment from hit points counts units of its cost and needs no pool (validate.payment-cost asks for the cost).
+                if (!PaysOutsidePool(roll.Payment) && (roll.Cost is null || roll.ResourceId is null))
                     Error("validate.roll-per-unit", $"Roll '{id}' has per-unit dice but no cost and resource to count units of; add both.", id);
                 if (perUnit.MaxUnits is < 1 or > MaxPerUnitUnits)
                     Error("validate.roll-per-unit", $"Roll '{id}' maxUnits {perUnit.MaxUnits} must be 1 to {MaxPerUnitUnits}.", id);
@@ -1035,10 +1201,50 @@ public static class ContentValidator
         }
 
         // Content v11 (D43): attack and rider tags are keys like a scale id; "all" (a rider's) matches every attack.
-        void CheckTags(IReadOnlyList<string>? tags, string effectId)
+        // Content v12 (MECH-X item 1): a spell's tags are keys the same way, but "all" is the riders' reserved word, so a spell may not use it.
+        void CheckTags(IReadOnlyList<string>? tags, string effectId, bool isSpell = false)
         {
-            foreach (var tag in (tags ?? []).Where(t => t != AttackRiderEffect.AllTag && !ScaleEffect.IsValidScaleId(t)))
-                Error("validate.tag-invalid", $"Effect '{effectId}' has the tag '{tag}'; a tag is a lowercase letter followed by up to {ScaleEffect.MaxScaleIdLength - 1} letters or digits (or all).", effectId);
+            foreach (var tag in (tags ?? []).Where(t => isSpell ? t == AttackRiderEffect.AllTag || !ScaleEffect.IsValidScaleId(t) : t != AttackRiderEffect.AllTag && !ScaleEffect.IsValidScaleId(t)))
+                Error("validate.tag-invalid", isSpell
+                    ? $"Spell '{effectId}' has the tag '{tag}'; a spell tag is a lowercase letter followed by up to {ScaleEffect.MaxScaleIdLength - 1} letters or digits, and not all (which is reserved for attack riders)."
+                    : $"Effect '{effectId}' has the tag '{tag}'; a tag is a lowercase letter followed by up to {ScaleEffect.MaxScaleIdLength - 1} letters or digits (or all).", effectId);
+        }
+
+        // Content v12 (MECH-X item 1): a payment from hit points or a spell slot, and what it may be combined with. The caller passes what
+        // the effect carries: a cost, a pool (resourceId or resourceContent), pool-only extras (draws down, variable cost, also-change),
+        // per-unit dice and castsSpell. Kind resource keeps every existing rule and only refuses the fields that belong to the other kinds.
+        void CheckPayment(string id, string label, CostPayment payment, string? cost, bool pool, bool poolExtras, bool perUnit, bool casts)
+        {
+            var kind = payment.Kind;
+            if (payment.MayDropToZero is not null && kind != PaymentKind.HitPoints)
+                Error("validate.payment-field", $"{label} '{id}' sets mayDropToZero, which only a hit point payment takes.", id);
+            if (payment.MinSlotLevel is not null && kind != PaymentKind.Slot)
+                Error("validate.payment-field", $"{label} '{id}' sets minSlotLevel, which only a slot payment takes.", id);
+            if (payment.MinSlotLevel is < 1 or > MaxPaymentSlotLevel)
+                Error("validate.payment-slot-level", $"{label} '{id}' minSlotLevel {payment.MinSlotLevel} must be 1 to {MaxPaymentSlotLevel}.", id);
+            if (kind == PaymentKind.Resource)
+                return;
+            var from = kind == PaymentKind.HitPoints ? "hit points" : "a spell slot";
+            if (pool || poolExtras)
+                Error("validate.payment-combination", $"{label} '{id}' pays from {from}, so it takes no resourceId, resourceContent, drawsDown, alsoChange or variableCost; remove them, or pay from a pool.", id);
+            if (kind == PaymentKind.HitPoints && cost is null)
+                Error("validate.payment-cost", $"{label} '{id}' pays hit points but has no cost; add the number of hit points as a cost.", id);
+            if (kind == PaymentKind.Slot && (cost is not null || perUnit))
+                Error("validate.payment-combination", $"{label} '{id}' pays a spell slot, which is one slot a use; it takes no cost or perUnit.", id);
+            if (kind == PaymentKind.Slot && casts)
+                Error("validate.payment-combination", $"{label} '{id}' casts a spell without a slot, so it cannot also pay a slot.", id);
+        }
+
+        // Content v12 (MECH-X item 1): castsSpell names spell content. Any revision of that id counts (a published one, a draft in the
+        // catalog, or one validated together with this one). Content that is not installed is a warning: it may arrive later.
+        void CheckCastsSpell(string id, Guid spell)
+        {
+            var named = (revision.ContentId == spell ? new List<ContentRevision> { revision } : [])
+                .Concat(local.OfContent(spell)).Concat(catalog.RevisionsOf(spell)).Where(r => r.ContentId == spell).ToList();
+            if (named.Count == 0)
+                Warn("validate.casts-spell-missing", $"Roll '{id}' casts content {spell}, which is not installed; it casts nothing until it is.", id);
+            else if (!named.Any(r => r.Kind == ContentKind.Spell))
+                Error("validate.casts-spell", $"Roll '{id}' casts content {spell}, which is not a spell.", id);
         }
 
         // Content v11 (D43): a feature attack's shape, damage, pool and toggle.
@@ -1062,8 +1268,16 @@ public static class ContentValidator
             CheckTags(attack.Tags, id);
             if (attack.Cost is { } cost)
                 CheckFormula(cost, id, "cost");
-            if (attack.Cost is not null && attack.ResourceId is null)
+            if (attack.Cost is not null && attack.ResourceId is null && !PaysOutsidePool(attack.Payment))
                 Error("validate.attack-resource", $"Attack '{id}' has a cost but names no resource to spend.", id);
+            if (attack.Payment is { } payment)
+            {
+                NeedV12("a cost payment");
+                CheckPayment(id, "Attack", payment, attack.Cost, attack.ResourceId is not null || attack.ResourceContent is not null, false, false, false);
+                // The rolls of a revision are found by rollId and a paying attack by its effect id (R36), so one name must not be both.
+                if (PaysOutsidePool(payment) && revision.Effects.OfType<RollEffect>().Any(r => r.RollId == id))
+                    Error("validate.payment-id-clash", $"Attack '{id}' pays from {(payment.Kind == PaymentKind.HitPoints ? "hit points" : "a spell slot")} and shares its id with a roll of this revision; give one of them another id.", id);
+            }
             if (attack.ResourceId is { } pool)
             {
                 // Content that is not installed is an error here, unlike a roll's: an attack is calculated, so a pool nobody declares is a typo.
@@ -1228,8 +1442,13 @@ public static class ContentValidator
             if (toggle.Cost is { } cost)
             {
                 CheckFormula(cost, id, "cost");
-                if (toggle.ResourceId is null)
+                if (toggle.ResourceId is null && !PaysOutsidePool(toggle.Payment))
                     Error("validate.toggle-cost", $"Toggle '{id}' has a cost but names no resource to spend.", id);
+            }
+            if (toggle.Payment is { } payment)
+            {
+                NeedV12("a cost payment");
+                CheckPayment(id, "Toggle", payment, toggle.Cost, toggle.ResourceId is not null || toggle.ResourceContent is not null, false, false, false);
             }
             if (toggle.ResourceContent is { } resourceHolder && resourceHolder != revision.ContentId && toggle.ResourceId is { } shared)
             {
@@ -1285,6 +1504,7 @@ public static class ContentValidator
         Check("rulesFamilies", revision.RulesFamilies is null || revision.RulesFamilies.Any(f => f is null));
         Check("choice options", revision.Effects?.OfType<ChoiceEffect>().Any(c => c.Options is null || c.Options.Any(o => o is null)) == true);
         Check("response outcomes", revision.Effects?.OfType<ResponseEffect>().Any(r => r.Outcomes?.Any(o => o is null) == true) == true);
+        Check("item mod modifiers", revision.Effects?.OfType<ItemModEffect>().Any(m => m.Modifiers?.Any(x => x is null) == true) == true);
         Check("roll alsoChange", revision.Effects?.OfType<RollEffect>().Any(r => r.AlsoChange?.Any(a => a is null) == true) == true);
         return problems;
     }

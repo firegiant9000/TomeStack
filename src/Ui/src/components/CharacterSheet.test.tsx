@@ -289,6 +289,52 @@ it('Use on an action with alsoChange sends useAction stamped with the view (D43 
   expect(vi.mocked(client.play).mock.calls[0]?.[1]).toEqual({ action: 'useAction', contentId: 'c-gather', rollId: 'gather-roll', expectedUpdatedAt: '2026-10-03T00:00:00Z' });
 });
 
+it('a second press of a paying Use while the first is being saved is dropped; a later press goes through', async () => {
+  const user = userEvent.setup();
+  const ref = { contentId: 'c-gather', revisionId: 'r-gather' };
+  const pools = [{ content: ref, contentName: 'Fixture Gatherer', effectId: 'e-focus', resourceId: 'focus', label: 'Fixture focus', maximum: 5, spent: 0, current: 5, trace: [], warnings: [], automation: 'automatic', recoveries: [] }];
+  const gatherEffect = { id: 'gather', rollId: 'gather-roll', type: 'roll', automation: 'automatic', label: 'Gather', activation: 'action', resourceId: 'focus', cost: 1, available: true };
+  const shown = view({ resources: pools, features: [{ content: ref, name: 'Fixture Gatherer', kind: 'feature', origin: {}, automation: 'automatic', diagnostics: [], effects: [gatherEffect] }] } as never);
+  let release: (v: typeof shown) => void = () => undefined;
+  vi.mocked(client.play).mockReset();
+  vi.mocked(client.play).mockReturnValueOnce(new Promise((resolve) => { release = resolve as typeof release; }) as never);
+  vi.mocked(client.play).mockResolvedValue(shown);
+  const changed = vi.fn();
+  render(<CharacterSheet view={shown} onChanged={changed} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+  const use = screen.getByRole('button', { name: /^Use Gather/ });
+  await user.click(use);
+  await user.click(use);
+  expect(client.play).toHaveBeenCalledTimes(1);
+  release(shown);
+  await waitFor(() => expect(changed).toHaveBeenCalled());
+  const before = vi.mocked(client.play).mock.calls.length;
+  await user.click(screen.getByRole('button', { name: /^Use Gather/ }));
+  await waitFor(() => expect(client.play).toHaveBeenCalledTimes(before + 1));
+});
+
+it('Pay on the Last roll sends useAction stamped with the view, once (MECH-X item 1, S6)', async () => {
+  const user = userEvent.setup();
+  const ref = { contentId: 'c-fury', revisionId: 'r-fury' };
+  const lash = { id: 'lash', rollId: 'lash-roll', type: 'roll', automation: 'automatic', label: 'Lash', dice: '2d6', cost: 3, activation: 'action', available: true, payment: { kind: 'hitPoints', payable: true } };
+  const shown = view({ features: [{ content: ref, name: 'Fixture Fury', kind: 'feature', origin: {}, automation: 'automatic', diagnostics: [], effects: [lash] }] } as never);
+  const record = {
+    formula: '2d6', mode: 'normal', critical: false, dice: [], diceTotal: 7, expressionConstant: 0, modifiers: [], total: 7,
+    provenance: { rollId: 'lash-roll', label: 'Lash', content: ref, effectId: 'lash' }, payment: { contentId: 'c-fury', useId: 'lash-roll', kind: 'hitPoints', amount: 3, mayDropToZero: false },
+  } as unknown as RollRecord;
+  vi.mocked(client.roll).mockReset();
+  vi.mocked(client.roll).mockResolvedValue(record);
+  vi.mocked(client.play).mockReset();
+  vi.mocked(client.play).mockResolvedValue(shown);
+  render(<CharacterSheet view={shown} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+  await user.click(screen.getByRole('button', { name: 'Roll Lash (2d6)' }));
+  expect(client.play).not.toHaveBeenCalled(); // rolling never pays
+  const pay = await screen.findByRole('button', { name: 'Pay 3 hit points' });
+  await user.click(pay);
+  await user.click(pay);
+  await waitFor(() => expect(client.play).toHaveBeenCalledTimes(1));
+  expect(vi.mocked(client.play).mock.calls[0]?.[1]).toEqual({ action: 'useAction', contentId: 'c-fury', rollId: 'lash-roll', amount: 3, expectedUpdatedAt: '2026-10-03T00:00:00Z' });
+});
+
 it('says what the reply noticed after a play change (here, ending an encounter), in the status line (D43 S3)', async () => {
   const user = userEvent.setup();
   const onStatus = vi.fn();
@@ -2439,4 +2485,92 @@ describe('D74 level-up checklist', () => {
     expect(region()).not.toBeNull();
     expect(document.activeElement).toBe(focused);
   });
+});
+
+// MECH-X item 2: after a long rest the sheet names the choices whose picks may be replaced (page state only).
+describe('after your long rest', () => {
+  const picked = (when: 'levelUp' | 'longRest', selected: number) => ({
+    source: { contentId: 'fixture-src', revisionId: 'fixture-src-r1' },
+    sourceName: 'Fixture Repertoire',
+    choiceId: 'technique',
+    count: 2,
+    options: [],
+    selected: Array.from({ length: selected }, (_, i) => ({ contentId: `p${i}`, revisionId: `p${i}-r1` })),
+    resolved: selected === 2,
+    replaceable: { when, max: 1 },
+  });
+  async function finishRest(user: ReturnType<typeof userEvent.setup>, kind: 'Short' | 'Long', rested: CharacterView, onMakeChoices = noop) {
+    vi.mocked(client.restPreview).mockResolvedValue({ kind: kind === 'Long' ? 'longRest' : 'shortRest', changes: [], manual: [], basis: 'fixture' });
+    vi.mocked(client.rest).mockResolvedValue(rested);
+    render(<CharacterSheet view={view({ choices: [picked('longRest', 1)] })} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={onMakeChoices} onArchiveChanged={noop} />);
+    await user.click(screen.getByRole('button', { name: `${kind} rest…` }));
+    const finish = await screen.findByRole('button', { name: `Finish ${kind.toLowerCase()} rest` });
+    await waitFor(() => expect(finish.getAttribute('aria-disabled')).not.toBe('true'));
+    await user.click(finish);
+  }
+
+  it('shows a labelled region with Make choices and Dismiss; Dismiss removes it and focuses the sheet heading', async () => {
+    const user = userEvent.setup();
+    const onMakeChoices = vi.fn();
+    await finishRest(user, 'Long', view({ choices: [picked('longRest', 1)] }), onMakeChoices);
+    const region = await screen.findByRole('region', { name: 'After your long rest' });
+    expect(within(region).getByText('You may replace one pick of: Fixture Repertoire.')).toBeTruthy();
+    await user.click(within(region).getByRole('button', { name: 'Make choices' }));
+    expect(onMakeChoices).toHaveBeenCalledTimes(1);
+    await user.click(within(region).getByRole('button', { name: 'Dismiss' }));
+    expect(screen.queryByRole('region', { name: 'After your long rest' })).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Fixture Quill' }));
+  });
+
+  it('shows nothing after a short rest, or when no longRest choice has picks', async () => {
+    const user = userEvent.setup();
+    await finishRest(user, 'Short', view({ choices: [picked('longRest', 1)] }));
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Short rest' })).toBeNull());
+    expect(screen.queryByRole('region', { name: 'After your long rest' })).toBeNull();
+    cleanup();
+    await finishRest(user, 'Long', view({ choices: [picked('longRest', 0), picked('levelUp', 1)] }));
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Long rest' })).toBeNull());
+    expect(screen.queryByRole('region', { name: 'After your long rest' })).toBeNull();
+  });
+
+  // Owner 2026-10-28: a permanent way to change picks, even when every choice is resolved.
+  it('offers Change picks in the header while every choice is resolved, and none without choices', async () => {
+    const user = userEvent.setup();
+    const onMakeChoices = vi.fn();
+    render(<CharacterSheet view={view({ choices: [picked('levelUp', 2)] })} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={onMakeChoices} onArchiveChanged={noop} />);
+    expect(screen.queryByRole('button', { name: 'Make choices' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Change picks' }));
+    expect(onMakeChoices).toHaveBeenCalledTimes(1);
+    cleanup();
+    render(<CharacterSheet view={view({ choices: [] })} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+    expect(screen.queryByRole('button', { name: 'Change picks' })).toBeNull();
+  });
+});
+
+it('does not echo the save notice through the status line when a play reply carries it (MECH-X item 2)', async () => {
+  const user = userEvent.setup();
+  const onStatus = vi.fn();
+  const v = view();
+  const reply: CharacterView = { ...v, notices: [{ code: 'choice.replaced-outside-window', message: "Choice 'technique' had 2 pick(s) replaced outside its window." }, { code: 'resource.full', message: 'Fixture pool is full.' }] };
+  vi.mocked(client.play).mockResolvedValue(reply);
+  render(<CharacterSheet view={v} onChanged={noop} onError={noop} onStatus={onStatus} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' }));
+  await waitFor(() => expect(onStatus).toHaveBeenCalled());
+  expect(onStatus).toHaveBeenCalledWith('Fixture pool is full.'); // other notices still say
+});
+
+it('says once when a saved view reset a companion, and leaves the view it opened with to the opener (MECH-X R69)', () => {
+  const pruned = "A companion's hit points were reset, because the content that gives it is no longer active.";
+  const withNotice = (): CharacterView => ({ ...view(), notices: [{ code: 'companion.play-pruned', message: pruned }] });
+  const onStatus = vi.fn<(text: string) => void>();
+  const props = { onChanged: noop, onError: noop, onStatus, onLevelUp: noop, onMakeChoices: noop, onArchiveChanged: noop };
+  const opened = withNotice();
+  const { rerender } = render(<CharacterSheet view={opened} {...props} />);
+  expect(onStatus).not.toHaveBeenCalledWith(pruned); // the builder's save reports its own reply
+  const saved = withNotice();
+  rerender(<CharacterSheet view={saved} {...props} />);
+  expect(onStatus).toHaveBeenCalledWith(pruned);
+  rerender(<CharacterSheet view={saved} {...props} onStatus={onStatus} />);
+  rerender(<CharacterSheet view={view()} {...props} />);
+  expect(onStatus.mock.calls.filter(([text]) => text === pruned)).toHaveLength(1);
 });

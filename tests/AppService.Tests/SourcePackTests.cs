@@ -122,6 +122,23 @@ public class SourcePackTests
         Assert.Single(temp.App.PreviewSourcePack([old.Id, newer.Id]).Warnings, w => w.Code == "package.needs-newer-build");
     }
 
+    [Fact]
+    public void A_source_pack_preview_for_content_at_schema_v12_warns_once_without_a_release_number_and_that_text_wins()
+    {
+        using var temp = new TempApp();
+        var source = Shared(temp, "Test Blade Source");
+        temp.App.Store.AddRevision(Feat(source.Id, "Test Eleven", Guid.NewGuid(), Guid.NewGuid()) with { Status = RevisionStatus.Published, SchemaVersion = 11 });
+        Assert.Equal($"Opening this needs TomeStack 0.7.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Test Eleven' is content at schema 11. Older versions refuse the file.",
+            Assert.Single(temp.App.PreviewSourcePack([source.Id]).Warnings, w => w.Code == "package.needs-newer-build").Message);
+
+        // Any published revision at v12 counts (R26); source packs carry published revisions only.
+        temp.App.Store.AddRevision(Feat(source.Id, "Test Twelve", Guid.NewGuid(), Guid.NewGuid()) with { Status = RevisionStatus.Published, SchemaVersion = 12 });
+        var warning = Assert.Single(temp.App.PreviewSourcePack([source.Id]).Warnings, w => w.Code == "package.needs-newer-build");
+        Assert.Equal("Opening this needs a TomeStack version that reads content schema 12 or later: it holds content that older versions refuse.", warning.Message);
+        Assert.Contains("content schema 12", warning.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("0.7.0", warning.Message, StringComparison.Ordinal);
+    }
+
     private static readonly string PackageWarningText = $"Opening this needs TomeStack 0.7.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Test Newer One' is content at schema 11, and 'Test Newer Two' is content at schema 11. Older versions refuse the file.";
 
     [Fact]
@@ -237,6 +254,7 @@ public class SourcePackTests
         "attack whileToggle" => new AttackEffect { Id = "e", AttackId = "bolt", Label = "Bolt", Kind = WeaponAttack.Ranged, Abilities = [Ability.Dex], Damage = new("1", "6"), DamageType = "force", WhileToggle = new(holder, "form") },
         "roll whileToggle" => new RollEffect { Id = "e", RollId = "burst", Label = "Burst", Dice = "1d6", WhileToggle = new(holder, "form") },
         "roll alsoChange" => new RollEffect { Id = "e", RollId = "burst", Label = "Burst", Dice = "1d6", AlsoChange = [new("charge", holder, UpkeepChange.Spend, "1")] },
+        "roll castsSpell" => new RollEffect { Id = "e", RollId = "burst", Label = "Burst", CastsSpell = holder },
         "rollMode toggleContent" => new RollModeEffect { Id = "e", Target = "skill.stealth", Mode = RollMode.Disadvantage, Toggle = "form", ToggleContent = holder },
         "grant whileToggle" => new GrantEffect { Id = "e", Grant = GrantKind.DamageResistance, DamageType = "Fire", WhileToggle = new(holder, "form") },
         "response resourceContent" => new ResponseEffect { Id = "e", ResponseId = "brace", Label = "Brace", Phase = ResponsePhase.DamageReduction, Amount = "1", ResourceId = "grit", ResourceContent = holder, Cost = "1" },
@@ -252,6 +270,7 @@ public class SourcePackTests
     [InlineData("attack whileToggle")]
     [InlineData("roll whileToggle")]
     [InlineData("roll alsoChange")]
+    [InlineData("roll castsSpell")]
     [InlineData("rollMode toggleContent")]
     [InlineData("grant whileToggle")]
     [InlineData("response resourceContent")]
@@ -269,7 +288,7 @@ public class SourcePackTests
         temp.App.Store.AddRevision(Feat(own.Id, "Test Taker", Guid.NewGuid(), Guid.NewGuid()) with
         {
             Status = RevisionStatus.Published,
-            SchemaVersion = 11,
+            SchemaVersion = kind == "roll castsSpell" ? 12 : 11, // castsSpell is read from v12 on; below it the key is kept inert
             Effects = [NamingOtherContent(kind, holder.ContentId)],
         });
 

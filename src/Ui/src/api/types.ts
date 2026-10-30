@@ -90,6 +90,8 @@ export interface EquipmentEntry {
   attuned?: boolean;
   /** Character schema v9: absent means none spent. */
   chargesSpent?: number;
+  /** Character schema v11 (MECH-X item 3): mods attached to this one copy, at most 4. Absent means none; an emptied list is dropped. */
+  mods?: ContentReference[];
 }
 
 /** Character schema v9 (D42): how the character looks, as free text. */
@@ -153,6 +155,29 @@ export interface CompanionPlay {
   id: string;
   current?: number | null;
   temporary: number;
+  /** MECH-X item 4: set for a content companion (the content that gives it); `id` is then its `companionId`. */
+  contentId?: string;
+}
+
+/** MECH-X item 4: a companion that content gives, calculated by the server. Its attacks and pools stay in `attacks` / `resources`, tagged with its `companionId`. */
+export interface CompanionValue {
+  content: ContentReference;
+  contentName: string;
+  effectId: string;
+  companionId: string;
+  label: string;
+  armorClass?: number | null;
+  armorClassTrace: TraceEntry[];
+  hitPointMaximum?: number | null;
+  hitPointTrace: TraceEntry[];
+  current: number;
+  temporary: number;
+  speed?: string;
+  attackEffectIds: string[];
+  resourceIds: string[];
+  automation: AutomationStatus;
+  warnings: Diagnostic[];
+  origin: TraceOrigin;
 }
 
 export interface ClassLevel {
@@ -176,6 +201,8 @@ export interface ChoiceStatus {
   options: ContentReference[];
   selected: ContentReference[];
   resolved: boolean;
+  /** Content v12: when picks may be replaced (`max` is always set on the sheet). Absent below v12. */
+  replaceable?: { when: 'levelUp' | 'longRest'; max: number };
 }
 
 export interface Diagnostic {
@@ -279,6 +306,42 @@ export interface ResourceValue {
   fullText?: string;
   /** Content v11 (D43): the pool is a per-turn allowance (such as reactions); actions that spend it are listed under its name. */
   allowance?: boolean;
+  /** MECH-X item 4: the content companion this pool belongs to; the companion card shows it, not the Resources panel. */
+  companionId?: string;
+}
+
+/** Content v12 (MECH-X item 1): how a payment is made. A pool payment is `resource` (the sheet leaves `payment` out for it). */
+export type PaymentKind = 'resource' | 'hitPoints' | 'slot';
+
+/** The slot a slot payment would take now (R35). */
+export interface SlotChoice {
+  level: number;
+  pact: boolean;
+}
+
+/**
+ * Content v12 (MECH-X item 1, R40): a hit-point or slot payment on a roll, an attack or a toggle, and whether it can be made now.
+ * `payable` is false, with `reason`, when it cannot; it never changes `available`.
+ */
+export interface PaymentValue {
+  kind: PaymentKind;
+  payable: boolean;
+  reason?: string;
+  mayDropToZero?: boolean;
+  minSlotLevel?: number;
+  slot?: SlotChoice;
+}
+
+/** Content v12 (R38): the spell a roll casts without a slot; the numbers are the primary caster's (absent without a caster: by hand). */
+export interface CastSpellValue {
+  spell: ContentReference;
+  name: string;
+  level: number;
+  attack: 'none' | 'melee' | 'ranged';
+  save?: Ability;
+  dice?: string;
+  attackBonus?: number;
+  saveDc?: number;
 }
 
 export interface FeatureEffect {
@@ -316,6 +379,10 @@ export interface FeatureEffect {
   drawsDown?: boolean;
   /** The roll's content `rollId` (what `useAction` names); it can differ from `id`. */
   rollId?: string;
+  /** Content v12 (MECH-X item 1): a hit-point or slot payment and whether it can be made now; absent for a pool payment. */
+  payment?: PaymentValue;
+  /** Content v12 (R38): the spell this roll casts without a slot; absent when it casts none or the spell cannot be used. */
+  castsSpell?: CastSpellValue;
 }
 
 export interface AlsoChangeValue {
@@ -363,6 +430,8 @@ export interface ToggleValue {
   /** What switching it on spends from `costResourceContent`'s pool of `resourceId`; absent with a pool means 1. */
   cost?: number;
   costResourceContent?: string;
+  /** Content v12 (MECH-X item 1): a hit-point or slot payment and whether it can be made now; absent for a pool payment. */
+  payment?: PaymentValue;
   /** False when the group rules currently refuse switching it on (`unavailableReason` says why). The server always sends it. */
   available: boolean;
   unavailableReason?: string;
@@ -427,6 +496,8 @@ export interface AttackEntry {
   origin: TraceOrigin;
   /** Content v11 (D43): where the row comes from. A feature attack is rolled by `item` + `effectId` (`content` + `effectId`), not as a weapon. */
   source: 'weapon' | 'feature';
+  /** MECH-X item 3: the position of the equipment entry, set only when the weapon is carried as several copies (one row per copy). */
+  entryIndex?: number;
   tags?: string[] | null;
   /** The attack can stand in for one attack of the Attack action. */
   replacesAttack: boolean;
@@ -439,6 +510,10 @@ export interface AttackEntry {
   costResourceContent?: string | null;
   resourceId?: string | null;
   cost?: number | null;
+  /** Content v12 (MECH-X item 1): a hit-point or slot payment (a feature attack); absent for a pool payment. */
+  payment?: PaymentValue | null;
+  /** MECH-X item 4: the content companion this attack belongs to; the companion card shows it, not the Actions list. */
+  companionId?: string;
 }
 
 /** SPEC I-05: an active revision with its text and automation status. */
@@ -518,6 +593,8 @@ export interface CharacterSheet {
   choices?: ChoiceStatus[];
   active?: ContentReference[];
   resources?: ResourceValue[];
+  /** MECH-X item 4: companions that content gives (absent when none). */
+  companions?: CompanionValue[];
   features?: FeatureEntry[];
   hitPoints?: HitPointState;
   hitDice?: HitDiceValue[];
@@ -534,7 +611,7 @@ export interface CharacterSheet {
   bloodied?: boolean;
   /** Wave 3 item 21: the character's own damage defences and the v10 damage grants, merged; absent when there are none. */
   damageDefences?: DamageDefenceValue[];
-  /** Wave 3 item 25: each equipment entry of an item that needs attunement or has charges, carried or equipped; absent when there are none. */
+  /** Wave 3 item 25: each equipment entry of an item that needs attunement or has charges, or (MECH-X item 3) any weapon or armor entry or one with mods, carried or equipped; absent when there are none. */
   itemUses?: ItemUseValue[];
   /** Wave 3 item 27: experience points are tracked and the total has reached the next level's threshold. Display only; absent otherwise. */
   levelUpAvailable?: boolean;
@@ -567,6 +644,18 @@ export interface ItemUseValue {
   chargesSpent: number;
   chargesLeft?: number;
   recovery?: ItemChargeRecovery;
+  /** MECH-X item 3: the mods attached to this entry. */
+  mods: ItemModInfo[];
+  /** MECH-X item 3: which kinds of mod this entry can host (a weapon, armor or shield effect on its item); empty for other items. */
+  hosts: ('weapon' | 'armor')[];
+}
+
+/** MECH-X item 3: one mod on an equipment entry, named by the service. */
+export interface ItemModInfo {
+  reference: ContentReference;
+  name: string;
+  appliesTo: 'weapon' | 'armor' | 'any';
+  bonus?: number;
 }
 
 /** What the player rolled for the `regain` dice of one entry's charges on a rest: the whole total. */
@@ -762,6 +851,7 @@ export type PlayActionKind =
 export interface PlayAction {
   action: PlayActionKind;
   amount?: number;
+  /** With a `companion*` action: the content that gives the companion (a content companion); absent for a hand companion. */
   contentId?: string;
   resourceId?: string;
   condition?: string;
@@ -913,6 +1003,18 @@ export interface RollRecord {
   modeSources?: string[];
   /** D72: the sheet's trace for the number rolled (a field, an attack, a caster's spell attack); absent when the roll has none. */
   explain?: TraceEntry[];
+  /** MECH-X item 1: the hit-point or slot payment a roll or a feature attack's to-hit roll implies. Rolling never pays; the Pay button sends `useAction`. */
+  payment?: RollPayment;
+}
+
+/** `contentId` declares the roll; `useId` is what `useAction` names (a roll's `rollId`, or a feature attack's effect id). `amount` is absent for a slot. */
+export interface RollPayment {
+  contentId: string;
+  useId: string;
+  kind: PaymentKind;
+  amount?: number;
+  minSlotLevel?: number;
+  mayDropToZero: boolean;
 }
 
 export interface RollSpend {
@@ -941,6 +1043,8 @@ export interface RollTarget {
   spellAttack?: boolean;
   /** An equipped weapon: its attack roll, or its damage (`damage`), two-handed (`versatile`). */
   weapon?: ContentReference;
+  /** MECH-X R68: with `weapon`, the copy's equipment index (`AttackEntry.entryIndex`), so a weapon carried as several copies rolls that copy's row. */
+  entryIndex?: number;
   damage?: boolean;
   versatile?: boolean;
   /** One of the character's own hand-typed attacks (`character.customAttacks`): its attack roll, or its damage (`damage`). */
@@ -1063,7 +1167,9 @@ export interface ContentOption {
   /** False when another revision grants it or offers it in a choice (class features, skill options): it is not pinned directly. */
   standalone?: boolean;
   /** Spell options only (content schema v5). */
-  spell?: { level: number; lists: string[]; school?: string; concentration: boolean; ritual: boolean };
+  spell?: { level: number; lists: string[]; school?: string; concentration: boolean; ritual: boolean; tags?: string[] };
+  /** Item options only (content schema v12): the item is a mod and attaches to a weapon, armor, or either. */
+  modOf?: 'weapon' | 'armor' | 'any';
 }
 
 /** A spell recorded for one caster; `caster` is the content id of the class or subclass with spellcasting. */
@@ -1095,6 +1201,8 @@ export interface SpellEntry {
   duration?: string;
   concentration: boolean;
   ritual: boolean;
+  /** Content v12 (R39): the spell's tags, kept apart from `school`. */
+  tags?: string[];
   attack: 'none' | 'melee' | 'ranged';
   save?: Ability;
   dice?: string;
@@ -1397,7 +1505,7 @@ export interface ExportPreview {
   omitted: OmittedSource[];
   /** Gap notes the package would carry: all of the characters' notes in a backup, 0 in a share (M3 B3). */
   gapNotes: number;
-  /** G6: `package.needs-newer-build` when the package would hold content or a character that TomeStack 0.6.x refuses. */
+  /** G6: `package.needs-newer-build` when the package would hold content or a character that TomeStack 0.6.x refuses, or content at schema 12 (a weapon's bonus), which names no release. */
   warnings?: Diagnostic[];
   /** The oldest TomeStack release that opens the file; null when it needs a newer one than this. Absent from a service without the feature. */
   opensIn?: string | null;
@@ -1731,6 +1839,13 @@ export type ClassEntry = 'startingClass' | 'multiclass';
 
 export type SpellcastingAbility = 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha';
 
+/** Content v12 (MECH-X item 1): the payment an authored roll, attack or toggle makes. Absent means the pool cost (never written as `resource`). */
+export interface EffectPayment {
+  kind: PaymentKind;
+  mayDropToZero?: boolean;
+  minSlotLevel?: number;
+}
+
 export type Effect =
   | (EffectBase & {
       type: 'modifier';
@@ -1763,6 +1878,8 @@ export type Effect =
       level?: number;
       /** Content v11 (D43): the rounds it lasts once on, a formula; absent: until switched off. */
       duration?: string;
+      /** Content v12 (MECH-X item 1): pay from hit points or a spell slot instead of a pool. */
+      payment?: EffectPayment;
     })
   | (EffectBase & { type: 'toggleGroup'; groupId: string; label: string })
   // Content v11 (D43): a pool change at the start or end of the turn, while a toggle is on (absent: always). `amount` is a formula, or `all` for a regain.
@@ -1823,6 +1940,8 @@ export type Effect =
       allowance?: boolean;
     })
   | (EffectBase & { type: 'item'; requiresAttunement?: boolean; charges?: { max: number; recovery?: { period: RestPeriod; regain?: string } } })
+  | (EffectBase & { type: 'itemMod'; appliesTo: 'weapon' | 'armor' | 'any'; bonus?: number; modifiers?: Extract<Effect, { type: 'modifier' }>[] })
+  | (EffectBase & { type: 'companion'; companionId: string; label: string; armorClass: string; hitPointMaximum: string; speed?: string; attacks?: string[]; resourceIds?: string[] })
   | (EffectBase & { type: 'recovery'; resourceId: string; on: RestPeriod; amount: string })
   | (EffectBase & {
       type: 'roll';
@@ -1853,6 +1972,10 @@ export type Effect =
       alsoChange?: { resourceId: string; resourceContent?: string; change: 'spend' | 'regain'; amount: string }[];
       /** Content v11 (D43 S8): the roll draws down the built-up charge of its pool (a pool that counts up). */
       drawsDown?: boolean;
+      /** Content v12 (MECH-X item 1): pay from hit points or a spell slot instead of a pool. */
+      payment?: EffectPayment;
+      /** Content v12 (R38): the content id of a spell this roll casts without a slot. */
+      castsSpell?: string;
     })
   // Content v11 (D43, slice 5): a named formula, read as VALUE.<valueId>.
   | (EffectBase & { type: 'value'; valueId: string; formula: string })
@@ -1875,6 +1998,8 @@ export type Effect =
       resourceContent?: string;
       cost?: string;
       whileToggle?: { contentId?: string; toggleId: string };
+      /** Content v12 (MECH-X item 1): pay from hit points or a spell slot instead of a pool. */
+      payment?: EffectPayment;
     })
   | (EffectBase & {
       type: 'attackRider';
@@ -1887,8 +2012,22 @@ export type Effect =
       toggleContent?: string;
       stackGroup?: string;
     })
+  // An item's weapon. Content v12 (MECH-X item 0) adds bonus (0 to 10), added to to-hit and damage.
+  | (EffectBase & {
+      type: 'weapon';
+      category: 'simple' | 'martial';
+      attack: 'melee' | 'ranged';
+      damage: string;
+      damageType: string;
+      properties?: string[];
+      versatile?: string;
+      range?: string;
+      weaponKey: string;
+      mastery?: string;
+      bonus?: number;
+    })
   | (EffectBase & { type: 'armor'; category: 'light' | 'medium' | 'heavy' | 'shield'; armorClass: number; dexterityCap?: number })
-  | (EffectBase & { type: 'choice'; choiceId: string; count: number; options: ContentReference[]; level?: number; onlyAs?: ClassEntry })
+  | (EffectBase & { type: 'choice'; choiceId: string; count: number; options: ContentReference[]; level?: number; onlyAs?: ClassEntry; replaceable?: { when: 'levelUp' | 'longRest'; max?: number } })
   // M5 slice 1b: the class editor (content v3/v5 effects, and v9 scale and multiclassCasterTable; ADR-010).
   | (EffectBase & { type: 'hitDie'; die: number })
   | (EffectBase & { type: 'restriction'; field: string; minimum: number; multiclass?: boolean; group?: string })
@@ -1921,6 +2060,8 @@ export type Effect =
       attack?: 'none' | 'melee' | 'ranged';
       save?: SpellcastingAbility;
       dice?: string;
+      /** Content v12 (R39): tags kept apart from the school; `all` is refused. */
+      tags?: string[];
     });
 
 export interface ChoiceExtension {

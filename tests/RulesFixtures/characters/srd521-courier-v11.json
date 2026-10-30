@@ -1,0 +1,173 @@
+{
+  "id": "5f0dca00-0000-4000-8000-000000000523",
+  "schemaVersion": 11,
+  "name": "Testy Wren (2024 fixture, schema v11)",
+  "rulesFamily": "srd-5.2.1",
+  "level": 1,
+  "classes": [],
+  "choices": [],
+  "spells": [],
+  "crossFamilyExceptions": [],
+  "campaignExceptions": [],
+  "baseAbilities": {
+    "str": 10,
+    "dex": 14,
+    "con": 12,
+    "int": 10,
+    "wis": 13,
+    "cha": 8
+  },
+  "pins": [
+    {
+      "contentId": "5f0dc000-0000-4000-8000-000000000002",
+      "revisionId": "5f0de000-0000-4000-8000-000000000002"
+    },
+    {
+      "contentId": "5f0dc000-0000-4000-8000-000000000003",
+      "revisionId": "5f0de000-0000-4000-8000-000000000003"
+    },
+    {
+      "contentId": "5f0dc000-0000-4000-8000-000000000005",
+      "revisionId": "5f0de000-0000-4000-8000-000000000005"
+    },
+    {
+      "contentId": "5f0dc000-0000-4000-8000-000000000006",
+      "revisionId": "5f0de000-0000-4000-8000-000000000006"
+    }
+  ],
+  "overrides": [],
+  "play": {
+    "temporaryHitPoints": 0,
+    "resources": [],
+    "conditions": [],
+    "exhaustion": 0,
+    "hitDiceSpent": [],
+    "deathSaves": {
+      "successes": 0,
+      "failures": 0
+    },
+    "inspiration": false,
+    "spellSlotsSpent": [],
+    "pactSlotsSpent": 0,
+    "toggles": [
+      {
+        "contentId": "5f0dc000-0000-4000-8000-000000000002",
+        "toggleId": "fixture-ward",
+        "roundsLeft": 3
+      }
+    ],
+    "companions": [
+      {
+        "id": "5f0dca00-0000-4000-8000-0000000005c1",
+        "current": 7,
+        "temporary": 0
+      }
+    ],
+    "encounter": {
+      "round": 2
+    }
+  },
+  "equipment": [
+    {
+      "item": {
+        "contentId": "6a7e00f3-0000-4000-8000-000000000011",
+        "revisionId": "6a7e00f3-0000-4000-8000-000000000111"
+      },
+      "equipped": true,
+      "quantity": 1,
+      "id": "5f0dca00-0000-4000-8000-0000000005d1",
+      "mods": [
+        {
+          "contentId": "6a7e00f3-0000-4000-8000-000000000001",
+          "revisionId": "6a7e00f3-0000-4000-8000-000000000101"
+        }
+      ]
+    }
+  ],
+  "currency": {
+    "cp": 0,
+    "sp": 0,
+    "ep": 0,
+    "gp": 0,
+    "pp": 0
+  },
+  "notes": [],
+  "details": {
+    "alignment": "Fixture neutral",
+    "personalityTraits": "Fixture trait: carries every message twice.",
+    "ideals": "Fixture ideal.",
+    "bonds": "Fixture bond.",
+    "flaws": "Fixture flaw.",
+    "appearance": {
+      "age": "27",
+      "height": "5 ft",
+      "eyes": "Grey"
+    },
+    "backstory": "Fixture backstory.",
+    "alliesAndOrganisations": "The Fixture Couriers\u0027 Guild.",
+    "languages": [
+      "Common",
+      "Fixture tongue"
+    ],
+    "toolsAndOther": [
+      "Fixture cartographer\u0027s kit"
+    ]
+  },
+  "customItems": [
+    {
+      "id": "5f0dca00-0000-4000-8000-0000000005a1",
+      "name": "Fixture satchel",
+      "quantity": 1,
+      "note": "Waxed canvas.",
+      "equipped": true
+    },
+    {
+      "id": "5f0dca00-0000-4000-8000-0000000005a2",
+      "name": "Fixture rations",
+      "quantity": 5,
+      "equipped": false
+    }
+  ],
+  "customAttacks": [
+    {
+      "id": "5f0dca00-0000-4000-8000-0000000005b1",
+      "name": "Fixture sling",
+      "toHit": 4,
+      "damage": "1d4\u002B2",
+      "damageType": "bludgeoning",
+      "note": "Range 30/120."
+    }
+  ],
+  "damageDefences": [
+    {
+      "type": "fire",
+      "kind": "resistance"
+    },
+    {
+      "type": "poison",
+      "kind": "immunity"
+    }
+  ],
+  "companions": [
+    {
+      "id": "5f0dca00-0000-4000-8000-0000000005c1",
+      "name": "Fixture hound",
+      "kind": "Beast",
+      "armorClass": 12,
+      "hitPointMaximum": 11,
+      "speed": "40 ft",
+      "attacks": [
+        {
+          "id": "5f0dca00-0000-4000-8000-0000000005c2",
+          "name": "Fixture bite",
+          "toHit": 3,
+          "damage": "1d6\u002B1",
+          "damageType": "piercing"
+        }
+      ],
+      "note": "Follows the courier."
+    }
+  ],
+  "xp": 900,
+  "updatedAt": "2026-10-16T00:00:00+00:00"
+}

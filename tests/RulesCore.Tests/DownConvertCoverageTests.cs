@@ -14,6 +14,7 @@ public class DownConvertCoverageTests
         "below.resource-counts-up", "below.roll-detail", "below.roll-also-change", "below.diceless-roll",
         "below.modifier-toggle-content", "below.unknown-target", "below.restriction-lifted", "below.defence-while-toggle",
         "below.grant-defence", "below.item-attunement", "below.item-charges", "below.activation", "below.validation-error",
+        "below.weapon-bonus", "below.v12-key", "below.payment", "below.casts-spell", "below.item-mods", "below.item-mod-copies", "below.companion-content",
     ];
 
     private sealed record Entry(string Group, string Version, string Feature, string? Rule);
@@ -37,7 +38,7 @@ public class DownConvertCoverageTests
         var entries = Load();
         var known = DownConvert.KnownCodes;
 
-        Assert.Equal(33, Contract.Length);
+        Assert.Equal(40, Contract.Length);
         Assert.True(known.SetEquals(Contract), "KnownCodes must equal the contract set.");
 
         foreach (var entry in entries.Where(e => e.Rule is not null))
@@ -58,7 +59,7 @@ public class DownConvertCoverageTests
     [Fact]
     public void A_new_schema_version_needs_a_lowering_step_and_requires_vN_entries()
     {
-        Assert.True(Character.CurrentSchemaVersion == 10 && ContentRevision.CurrentSchemaVersion == 11,
+        Assert.True(Character.CurrentSchemaVersion == 11 && ContentRevision.CurrentSchemaVersion == 12,
             "A new schema version needs a lowering step in DownConvert and requires-vN.json entries (then update this pin).");
     }
 }

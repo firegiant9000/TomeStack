@@ -534,6 +534,75 @@ A character is on the revisions they are pinned to, so a `drawsDown` roll can me
 
 A roll with a pool gains "Also changes", a list of up to four rows. Each row has "Change N: pool" (the same pool list as the roll's own pool, without the roll's own pool, keyed by content and id), "Change N: spend or regain", "Change N: amount (a number or a formula)" with its preview, and "Remove change N". "Add change" is `aria-disabled` at four rows with the reason as text (or when there is no other pool), and focus moves to the new row or, after a remove, to the next row or to "Add change". The "Draws down built-up charge" checkbox is enabled only when the chosen pool counts up; otherwise it is disabled and "Only for a pool that counts up" is visible text linked to it. A stored `drawsDown: true` on a pool that does not count up stays enabled so it can be cleared, is marked `aria-invalid`, and blocks Save and Publish from the moment the rule loads. While either is set the "player chooses how much to spend" box is hidden, and setting either clears `variableCost` (a stored `variableCost` with either stays visible so it can be cleared). Changing or clearing the roll's pool clears `alsoChange` and `drawsDown`; removing a pool from the entry clears the rows of this revision's rolls that name it. An empty list and an unticked box are saved as absent. The server's `validate.also-change` and `validate.draws-down` results appear with the other results of the check.
 
+## Target marks (MECH-X item 5, no schema)
+
+A feature that marks a creature (extra damage or an edge while the marked target is present) needs nothing new. The mark is a toggle the player sets, for example "Marked target present". It is usually a bonus action with a pool cost, and its riders, `rollMode` effects and `whileActive` modifiers name the toggle (`toggle`, plus `toggleContent` when another entry declares it). While the toggle is off none of them apply. A toggle with no `duration` is untimed: it lasts until the player switches it off.
+
+```json
+{ "type": "toggle", "id": "marked", "toggleId": "marked", "label": "Marked target present", "activation": "bonusAction", "resourceId": "marks" },
+{ "type": "attackRider", "id": "mark-dice", "tags": ["all"], "dice": "1d6", "toggle": "marked" }
+```
+
+The tag `all` matches every attack. A rider in a second entry follows the first entry's toggle by naming its content (the id here is a sample):
+
+```json
+{ "type": "attackRider", "id": "mark-hit", "tags": ["weapon"], "toHit": "1", "toggle": "marked", "toggleContent": "00000000-0000-4000-8000-000000000001" }
+```
+
+The app never knows which creature is marked. Moving the mark to another creature is leaving the toggle on. Turning the toggle on spends its pool use; with none left the mark is refused with a reason on the sheet (`resource.insufficient`) and the riders stay off. The extra dice are doubled on a critical hit like any rider dice, and flat parts are not. Switching the mark on can be undone from the sheet, which gives the pool use back; switching it off is not undoable when the toggle has a pool.
+
+What it cannot do:
+
+- Advantage on attack rolls against the marked target. Roll modes do not target attack rolls, so give the mark a flat `toHit` rider or a note to apply by hand (R28).
+- Remember a target. Per-target state, several marked creatures at once, or ending the mark when the creature drops are a target model (D63) and are not built.
+
+Fixture and tests: `fixture-pack-target-marks.json`, `characters/pm-marker-l5.json`, `TargetMarkTests` (RulesCore) and `TargetMarkServiceTests` (the service path).
+
+## Paying with hit points or a slot (MECH-X item 1, content v12)
+
+A roll, a feature attack or a toggle can pay its cost from current hit points or from a spell slot instead of a pool. The fields exist only from content v12 (`payment`, `castsSpell`, spell `tags`; [schemas/README.md](../schemas/README.md)); below v12 they stay extension data and do nothing.
+
+```json
+{ "type": "roll", "id": "rite", "rollId": "rite", "label": "Fixture Blood Rite", "dice": "2d6", "cost": "3", "payment": { "kind": "hitPoints" } },
+{ "type": "roll", "id": "surge", "rollId": "surge", "label": "Fixture Slot Surge", "dice": "1d8", "payment": { "kind": "slot", "minSlotLevel": 2 } }
+```
+
+- **Shape.** `payment` sits beside `cost`: `kind` is `resource` (or no `payment` at all: today's pool cost), `hitPoints` or `slot`. `mayDropToZero` belongs to hit points and `minSlotLevel` (1 to 9) to a slot.
+- **What combines.** A hit-point or slot payment takes no pool: no `resourceId`, `resourceContent`, `drawsDown`, `alsoChange` or `variableCost` (`validate.payment-combination`). Hit points need `cost` (`validate.payment-cost`), which is the amount; `perUnit` works as for a pool (the player picks the amount, from the base cost up to the base plus `maxUnits`, and that whole amount is paid in hit points). A slot takes no `cost` or `perUnit`: it is one slot per use. `mayDropToZero` with a slot and `minSlotLevel` with hit points are `validate.payment-field`; a slot level outside 1 to 9 is `validate.payment-slot-level`. A hit-point payment needs no pool, so it satisfies `validate.roll-cost`, `validate.attack-resource` and `validate.toggle-cost` without one. A feature attack whose effect id equals a roll's `rollId` in the same revision is `validate.payment-id-clash`, because `PlayCommand.RollId` names a roll by its `rollId` and else a feature attack by its effect id.
+- **Hit points** are paid from current hit points only; temporary hit points are untouched. Paying is allowed when current hit points are above the amount, or at least the amount with `mayDropToZero`; otherwise it is refused with `pay.hit-points-too-low` ("Paying 3 hit points needs more than 3 current hit points."). Reaching 0 ends concentration, as setting hit points to 0 does. By-slot-level hit-point payment ("N per slot level", a tier table) stays by hand (owner, 2026-10-27): the cost is worked out before a slot is chosen and has no slot-level input. A flat cost per use is `cost: "N"` and a cost per die is `perUnit`.
+- **Which slot.** The lowest level at or above `minSlotLevel` (default 1) that still has a slot left, over the ordinary slots and the pact slots; on a tie the pact slot is taken, because it refills on a short rest. With none left the use is refused with `slots.none-left`. A feature belongs to no caster, so both kinds of slot count; the Spells tab's Cast rule is unchanged.
+- **Using it.** Rolling pays nothing. The Last roll offers "Pay 2 hit points" (or "Spend a spell slot"), and pressing it is one `character.play` `useAction` change, so the payment and any roll record are one undoable step ("Undo use <name>"); the service holds the undo. The button is held, with the reason, when the sheet says it cannot be paid now. A feature attack's Pay is on its to-hit record. A cost of 0 on a roll or an attack is refused when used (`use.unavailable`), as a use that changes no pool.
+- **Paying toggles.** A toggle that pays is paid when it is switched on, as one compound change with the basis check, and the service undoes it ("Undo switch on <toggle>"). Switching a paying toggle off has no undo, because undoing it would pay again. An ON paying toggle can always be switched off, or changed by a form switch, even when it could no longer be paid. A toggle with a payment of 0 turns on free. A damage response's `toggleOn` outcome switches a paying toggle on with no payment, as it does for pool costs.
+- **Affordability, not availability.** The sheet's `payment` on a row (`kind`, `payable`, a `reason`, `mayDropToZero`, `minSlotLevel` and the slot it would take now) says whether the payment can be made. `available` keeps its meaning (the group rules allow it) and is never changed by a payment. The page disables Pay or Use with the reason; the service's own check is the backstop.
+- **The quickbar never pays hit points or slots (R37).** A pinned paying roll or attack only rolls, so one press never pays by accident; the Last roll's Pay button is the deliberate press. A paying toggle cannot be pinned. A paying roll or attack that cannot be paid now is blocked on the quickbar; the Actions panel Roll still rolls, as with a pool shortage ([sheet-play.md](sheet-play.md)).
+
+### Casting a spell without a slot
+
+`castsSpell` on a roll is a spell's content id (a bare id, like `resourceContent`; characters pin revisions, so it names content, not a revision). The spell must be spell content (`validate.casts-spell`; an id that is missing is `validate.casts-spell-missing`), and a roll that casts a spell cannot also pay a slot (`validate.payment-combination`). The roll needs no dice of its own: with none, it rolls the spell's dice. The sheet row shows the spell's name and level and, when the character has a primary caster, that caster's spell attack bonus and save DC; with no caster those numbers are by hand. Nothing spends a slot; the roll's own cost, from a pool or from hit points, is paid as usual. The spell is the newest published revision (or the pinned one, if the character pins it) in the same rules family. A character package exported with such a roll includes the spell. In the studio, "Casts a spell (without spending a slot)" offers the source's own published spells; a stored id from other content is kept and shown as "(other content)", never moved silently.
+
+### Spell tags
+
+A spell can carry `tags`, keys under the rule for attack tags (`validate.tag-invalid`: letters and digits only), kept apart from its school. `all` is refused as a spell tag, because it is the riders' reserved word. The sheet's spell entry and the builder's spell summary carry the tags, and the Spells tab filters ([sheet-play.md](sheet-play.md)) gain a Tags group, shown only when some listed spell has a tag. The studio's spell editor has a Tags box (comma separated).
+
+Fixture and tests: the payment goldens in `golden/payment-revisions.json`, `PaymentSchemaTests`, `PaymentCalculationTests`, `SlotPaymentsTests` (RulesCore) and `PaymentPlayTests` (the service path).
+
+## Item mods and rolling (MECH-X item 3)
+
+Item mods ([equipment.md](equipment.md) "Mods") change a weapon copy's to-hit and damage per equipment entry, and the sheet shows one attack row per copy. A copy's row and a quickbar pin made from it roll that copy's numbers, because the weapon roll names the copy's `entryIndex` (R68).
+
+## Content companions (MECH-X item 4, content v12)
+
+Content of any kind except item and spell can give the character a companion (the D63 clarification in ADR-021: a player-side card, owned by one character; no initiative, turn order or other creatures). The effect is `companion`: `companionId` (a lowercase Guid the studio makes once and never shows), `label` (1 to 80 characters), `armorClass` and `hitPointMaximum` (formulas), optional `speed` (up to 80 characters), `attacks` (effect ids of this revision's `attack` effects, up to 5) and `resourceIds` (the `resourceId` keys of this revision's `resource` effects, up to 5). A revision holds up to 10. Below content v12 the effect is an unknown effect and does nothing.
+
+- **The card (R60).** The calculator adds one card per companion to `CharacterSheet.Companions` (not for reference-only content): both formulas are evaluated with a trace; Armor Class is kept within 0 to 50 and the hit point maximum within 0 to `PlayState.MaxHitPoints` (`companion.out-of-range`). Current hit points are the stored number or the maximum, never above the maximum; a maximum that cannot be calculated shows 0 and holds the hit point controls. More than 10 are cut (`companion.too-many`); a listed attack or pool with no row is reported (`companion.missing-part`).
+- **Attacks and pools are tagged, not moved (R60).** The listed attacks and pools stay the character's own rows with a `CompanionId` tag, so to-hit, riders, payment, recovery, rolling and spending are exactly those of any feature attack or pool. A companion's attack uses the owner's proficiency bonus and ability scores, owner `attackRider`s apply by the tag, and a `hitPoints` payment spends the owner's hit points. The card draws the tagged rows; the Actions list, allowances, Resources panel and Combat strip leave them out.
+- **Hit points (R61).** The current and temporary hit points of a content companion are a row in `play.companions[]` with `contentId` (the declaring revision's content id; `id` is the `companionId`). The existing `companionDamage`, `companionHeal`, `companionSetHitPoints` and `companionTemporary` actions take `contentId` and `companionId`; there is no new command, and undo works. A rest never changes a companion's hit points; its pools recharge like any pool. The orphan rule (a row whose companion is gone) applies to hand companions only; an ordinary save removes content rows whose companion is no longer on the sheet, so content that comes back later starts at full hit points. That save's status line says so once: "A companion's hit points were reset, because the content that gives it is no longer active." (or "N companions' hit points were reset…"; notice `companion.play-pruned`, never stored, R69). Play actions, rests and restoring a snapshot never remove rows. A sheet keeps up to 64 companion rows (`play.companion-too-many`).
+- **Exports (R63).** The sheet export, and so the Foundry export, leave companion-tagged attack and pool rows out.
+- **Down-conversion (R62).** The content step to v11 drops the effect (`below.effect-unsupported`: a companion card is lost, and its attacks and pools remain as the character's own); the character step to v10 drops the content rows (`below.companion-content`). Both are drops, not blocks.
+- **Out of scope (R66).** A level-gated companion upgrade is a rider or a new revision, not a field. A companion's attacks and pools must be in the declaring revision. There is no initiative, turn order or other creature (D63), and no companion proficiency, saves, skills or conditions.
+
+The card and the studio editor are described in [sheet-play.md](sheet-play.md) and [homebrew-studio.md](homebrew-studio.md).
+
 ## On Play and in the studio
 
 - **Play** lists each group under "Forms" (in the Combat strip since slice 3) as a labelled group of radio choices: "Base" first, then each form with its cost ("5 Focus"), and the overlays as checkboxes. A choice that cannot be made is disabled and says why. See [accessibility-checklist.md](accessibility-checklist.md) row 69 for the keyboard rule: the arrow keys move focus and do not choose, because each choice spends from a pool. The strip also shows the round, the timed effects, the combat pools and the turn buttons ([sheet-play.md](sheet-play.md)). Since slice 7, taking damage on a sheet that has responses opens the damage panel (see "Slice 7"). Since slice 8, an action that also changes pools or draws a charge down is used as one change ("Use <name>", "Undo use <name>"), and End encounter offers to clear built-up pools (see "Slice 8").
@@ -541,7 +610,7 @@ A roll with a pool gains "Also changes", a list of up to four rows. Each row has
 
 ## Sharing
 
-TomeStack 0.6.0 refuses a package that holds a content revision at schema v11 or a character at schema v10 (`package.schema-unsupported`). The previews of an export, a source pack and a campaign pack (`package.exportPreview`, `package.sourcePackPreview`, `package.campaignPackPreview`) warn with `package.needs-newer-build` (once per preview) when the package they describe would hold either, so the sender knows the receiver needs 0.7.0 or later.
+TomeStack 0.6.0 refuses a package that holds a content revision at schema v11 or a character at schema v10 (`package.schema-unsupported`). The previews of an export, a source pack and a campaign pack (`package.exportPreview`, `package.sourcePackPreview`, `package.campaignPackPreview`) warn with `package.needs-newer-build` (once per preview) when the package they describe would hold either, so the sender knows the receiver needs 0.7.0 or later. A package holding a content revision at schema v12 (a weapon's `bonus`, MECH-X item 0) gets a different text, "a TomeStack version that reads content schema 12 or later", with no release number; it is still one warning, and that text wins.
 
 ## Not yet
 

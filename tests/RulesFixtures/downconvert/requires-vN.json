@@ -61,7 +61,16 @@
       { "feature": "formula:VALUE", "rule": "below.value-formula" }
     ],
     "12": [
-      { "feature": "weapon.bonus", "rule": null, "note": "MECH-X: rule added when it merges" }
+      { "feature": "weapon.bonus", "rule": "below.weapon-bonus" },
+      { "feature": "itemMod", "rule": "below.effect-unsupported" },
+      { "feature": "companion", "rule": "below.effect-unsupported" },
+      { "feature": "spell.tags", "rule": "below.v12-key" },
+      { "feature": "choice.replaceable", "rule": "below.v12-key" },
+      { "feature": "roll.payment", "rule": "below.payment" },
+      { "feature": "attack.payment", "rule": "below.payment" },
+      { "feature": "toggle.payment", "rule": "below.payment" },
+      { "feature": "roll.castsSpell", "rule": "below.casts-spell" },
+      { "feature": "payment.kind:resource", "rule": "below.v12-key" }
     ]
   },
   "character": {
@@ -81,6 +90,11 @@
     "10": [
       { "feature": "play.encounter", "rule": "below.encounter-running" },
       { "feature": "play.toggles[].roundsLeft", "rule": "below.rounds-left" }
+    ],
+    "11": [
+      { "feature": "equipment[].mods", "rule": "below.item-mods" },
+      { "feature": "equipment[].mods:copies", "rule": "below.item-mod-copies" },
+      { "feature": "play.companions[].contentId", "rule": "below.companion-content" }
     ]
   }
 }

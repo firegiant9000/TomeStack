@@ -213,6 +213,7 @@ async function createCharacter(
   await user.click(screen.getByRole('button', { name: 'Next: choices' }));
 }
 
+// The longest flow in the suite (create, two level-ups, play, rests): 120 s, twice the suite's per-test budget.
 it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to 3 with a subclass', async () => {
   const user = userEvent.setup();
   render(<App />);
@@ -286,15 +287,17 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   // Answer it from the sheet: Survival is already chosen elsewhere, so pick Animal Handling.
   await user.click(within(open).getByRole('button', { name: 'Make choices' }));
   await pick(user, /^Primal Knowledge: choose 1/, /^Barbarian Skill: Animal Handling/);
+  expect(await screen.findByRole('checkbox', { name: /^Barbarian Skill: Animal Handling/, checked: true })).toBeTruthy();
   await user.click(await screen.findByRole('button', { name: 'Save choices' }));
 
   // The M1 acceptance values for Brenna (m1-acceptance.md): AC 13, HP 35, Animal Handling +3.
+  // The builder waits for the tick's preview before saving, and the saved view opens the sheet; wait for the re-render all the same.
   sheet = await screen.findByRole('article', { name: 'E2E Brenna' });
   await openTab(user, sheet, 'Stats');
-  expect(within(sheet).getByRole('heading', { name: /^Armor Class: 13/ })).toBeTruthy();
-  expect(within(sheet).getByRole('heading', { name: /^Hit point maximum: 35/ })).toBeTruthy();
-  expect(within(sheet).getByRole('heading', { name: /^Animal Handling: \+3/ })).toBeTruthy();
-  expect(within(sheet).queryByRole('heading', { name: 'Choices to make' })).toBeNull();
+  expect(await within(sheet).findByRole('heading', { name: /^Armor Class: 13/ })).toBeTruthy();
+  expect(await within(sheet).findByRole('heading', { name: /^Hit point maximum: 35/ })).toBeTruthy();
+  expect(await within(sheet).findByRole('heading', { name: /^Animal Handling: \+3/ })).toBeTruthy();
+  await waitFor(() => expect(within(sheet).queryByRole('heading', { name: 'Choices to make' })).toBeNull());
 
   // M2 item 2, play: resources with calculated maximums, explicit spending, hit points, conditions and rolls.
   await openTab(user, sheet, 'Play');
@@ -501,7 +504,7 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   await waitFor(() => expect(summaryValue(sheet, 'Armor Class')).toBe('17'));
   await user.click(within(equipment()).getByRole('checkbox', { name: 'Equip Fixture Scale Vest' })); // take the armor off
   await waitFor(() => expect(summaryValue(sheet, 'Armor Class')).toBe('15')); // Unarmored Defense 13 + shield 2
-});
+}, 120_000);
 
 const srd = (n: number) => ({
   contentId: `52c00000-0000-4000-8000-${String(n).padStart(12, '0')}`,
@@ -648,6 +651,201 @@ it('authors a homebrew subclass in the studio, plays it, and reviews an update',
   const progression = await within(editor()).findByRole('region', { name: 'Class progression, scrollable' });
   await waitFor(() => expect(within(within(progression).getByRole('table', { name: 'Class progression' })).getAllByRole('row')).toHaveLength(21)); // header + 20 levels
   expect(within(editor()).getByText('Draft: not yet published')).toBeTruthy();
+});
+
+it('authors a +1 weapon in the studio, equips it and rolls it, and "Why?" names the weapon bonus (MECH-X item 0)', async () => {
+  const user = userEvent.setup();
+  await client.createCharacter({ name: 'E2E Plus Hero', rulesFamily: 'srd-5.2.1', baseAbilities: { str: 14, dex: 12, con: 12, int: 10, wis: 10, cha: 10 }, pins: [] });
+  render(<App />);
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  await waitFor(() => expect(studioButton.disabled).toBe(false));
+  await user.click(studioButton);
+
+  const newSource = await screen.findByRole('form', { name: 'New homebrew source' });
+  await user.type(within(newSource).getByRole('textbox', { name: 'Source title' }), 'E2E Plus Book');
+  await user.click(within(newSource).getByRole('checkbox', { name: 'SRD 5.2.1 (2024 rules)' }));
+  await user.click(within(newSource).getByRole('button', { name: 'Create source' }));
+  await screen.findByRole('heading', { name: 'Content in E2E Plus Book' });
+
+  const editor = () => screen.getByRole('region', { name: /^New |^Edit / });
+  await user.click(screen.getByRole('button', { name: 'New item' }));
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Plus Blade');
+  await user.click(within(editor()).getByRole('button', { name: 'Add weapon' }));
+  const weapon = within(within(editor()).getByRole('group', { name: /^Rule 1: Weapon/ }));
+  await user.type(weapon.getByRole('textbox', { name: /^Weapon key/ }), 'blade');
+  await user.clear(weapon.getByRole('textbox', { name: /^Damage \(/ }));
+  await user.type(weapon.getByRole('textbox', { name: /^Damage \(/ }), '1d6');
+  await user.clear(weapon.getByRole('textbox', { name: /^Damage type/ }));
+  await user.type(weapon.getByRole('textbox', { name: /^Damage type/ }), 'slashing');
+  await user.type(weapon.getByRole('textbox', { name: /^Bonus/ }), '1');
+  await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Published E2E Plus Blade.'));
+
+  // Carry and equip it; both rolls name the weapon bonus under "Why?".
+  await user.click(screen.getByRole('button', { name: /^E2E Plus Hero/ }));
+  const hero = await screen.findByRole('article', { name: 'E2E Plus Hero' });
+  await openTab(user, hero, 'Inventory');
+  const equipment = () => screen.getByRole('region', { name: 'Equipment' });
+  await waitFor(() => expect(within(equipment()).getByRole('option', { name: /^E2E Plus Blade/ })).toBeTruthy());
+  await user.selectOptions(within(equipment()).getByRole('combobox', { name: 'Add an item' }), within(equipment()).getByRole('option', { name: /^E2E Plus Blade/ }));
+  await user.click(within(equipment()).getByRole('button', { name: 'Add' }));
+  await user.click(await within(equipment()).findByRole('checkbox', { name: 'Equip E2E Plus Blade' }));
+
+  await openTab(user, hero, 'Play');
+  const actions = () => screen.getByRole('region', { name: 'Attacks and actions' });
+  const whyList = async () => {
+    const why = within(screen.getByRole('region', { name: 'Summary' })).getByText('Why?').closest('details')!;
+    if (!why.open) await user.click(within(why).getByText('Why?'));
+    return within(why).getByRole('list', { name: 'Why this roll came out this way' }).textContent ?? '';
+  };
+  await waitFor(() => expect(within(actions()).getByRole('button', { name: 'Roll E2E Plus Blade attack' })).toBeTruthy());
+  await user.click(within(actions()).getByRole('button', { name: 'Roll E2E Plus Blade attack' }));
+  await waitFor(() => expect(screen.getByRole('region', { name: 'Last roll' }).textContent).toMatch(/E2E Plus Blade attack: \d+ \(1d20\)/));
+  expect(await whyList()).toMatch(/\+1 to hit \(weapon\)/);
+  await user.click(within(actions()).getByRole('button', { name: /^Roll E2E Plus Blade damage/ }));
+  await waitFor(() => expect(screen.getByRole('region', { name: 'Last roll' }).textContent).toMatch(/E2E Plus Blade damage \(slashing\): \d+/));
+  expect(await whyList()).toMatch(/\+1 damage \(weapon\)/);
+});
+
+it('item mods: a published mod attached to one copy changes only that copy\'s attack (MECH-X item 3)', async () => {
+  const user = userEvent.setup();
+  await client.createCharacter({ name: 'E2E Mod Hero', rulesFamily: 'srd-5.2.1', baseAbilities: { str: 14, dex: 12, con: 12, int: 10, wis: 10, cha: 10 }, pins: [] });
+  render(<App />);
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  await waitFor(() => expect(studioButton.disabled).toBe(false));
+  await user.click(studioButton);
+
+  const newSource = await screen.findByRole('form', { name: 'New homebrew source' });
+  await user.type(within(newSource).getByRole('textbox', { name: 'Source title' }), 'E2E Mod Book');
+  await user.click(within(newSource).getByRole('checkbox', { name: 'SRD 5.2.1 (2024 rules)' }));
+  await user.click(within(newSource).getByRole('button', { name: 'Create source' }));
+  await screen.findByRole('heading', { name: 'Content in E2E Mod Book' });
+
+  // The host: a plain blade. The mod: item content with an item mod effect (applies to a weapon, +2).
+  const editor = () => screen.getByRole('region', { name: /^New |^Edit / });
+  await user.click(screen.getByRole('button', { name: 'New item' }));
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Mod Blade');
+  await user.click(within(editor()).getByRole('button', { name: 'Add weapon' }));
+  const weapon = within(within(editor()).getByRole('group', { name: /^Rule 1: Weapon/ }));
+  await user.type(weapon.getByRole('textbox', { name: /^Weapon key/ }), 'modblade');
+  await user.clear(weapon.getByRole('textbox', { name: /^Damage \(/ }));
+  await user.type(weapon.getByRole('textbox', { name: /^Damage \(/ }), '1d6');
+  await user.clear(weapon.getByRole('textbox', { name: /^Damage type/ }));
+  await user.type(weapon.getByRole('textbox', { name: /^Damage type/ }), 'slashing');
+  await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Published E2E Mod Blade.'));
+
+  await user.click(screen.getByRole('button', { name: 'New item' }));
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Keen Rune');
+  await user.click(within(editor()).getByRole('button', { name: 'Add mod' }));
+  const mod = within(within(editor()).getByRole('group', { name: /^Rule 1: Item mod/ }));
+  expect((mod.getByRole('combobox', { name: 'Applies to' }) as HTMLSelectElement).value).toBe('weapon');
+  await user.clear(mod.getByRole('textbox', { name: /^Bonus/ }));
+  await user.type(mod.getByRole('textbox', { name: /^Bonus/ }), '2');
+  await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Published E2E Keen Rune.'));
+
+  // Carry and equip the blade, then attach the mod to a new copy: one plain copy and one modded copy.
+  await user.click(screen.getByRole('button', { name: /^E2E Mod Hero/ }));
+  const hero = await screen.findByRole('article', { name: 'E2E Mod Hero' });
+  await openTab(user, hero, 'Inventory');
+  const equipment = () => screen.getByRole('region', { name: 'Equipment' });
+  await waitFor(() => expect(within(equipment()).getByRole('option', { name: /^E2E Mod Blade/ })).toBeTruthy());
+  await user.selectOptions(within(equipment()).getByRole('combobox', { name: 'Add an item' }), within(equipment()).getByRole('option', { name: /^E2E Mod Blade/ }));
+  await user.click(within(equipment()).getByRole('button', { name: 'Add' }));
+  await user.click(await within(equipment()).findByRole('checkbox', { name: 'Equip E2E Mod Blade' }));
+
+  const attach = await within(equipment()).findByRole('combobox', { name: 'Attach a mod to E2E Mod Blade' });
+  await waitFor(() => expect(within(attach).getAllByRole('option').some((o) => o.textContent?.startsWith('E2E Keen Rune'))).toBe(true));
+  await user.selectOptions(attach, within(attach).getAllByRole('option').find((o) => o.textContent?.startsWith('E2E Keen Rune'))!);
+  await user.click(within(equipment()).getByRole('button', { name: 'Attach to a new copy of E2E Mod Blade' }));
+  await user.click(await within(equipment()).findByRole('checkbox', { name: 'Equip E2E Mod Blade (copy 2 of 2)' }));
+  await within(equipment()).findByText(/^Mods on E2E Mod Blade \(copy 2 of 2\): E2E Keen Rune/);
+
+  // Play: two attack rows; only the modded copy carries the +2, and its trace names the mod.
+  await openTab(user, hero, 'Play');
+  const row = async (copy: number) => {
+    const item = await waitFor(() => {
+      const found = within(screen.getByRole('region', { name: 'Attacks and actions' })).getAllByRole('listitem').find((li) => li.textContent?.includes(`E2E Mod Blade (copy ${copy} of 2): `));
+      expect(found).toBeTruthy();
+      return found!;
+    });
+    return item.textContent ?? '';
+  };
+  const toHit = (text: string) => Number(/([+-]\d+) to hit/.exec(text)![1]);
+  const first = await row(1);
+  const second = await row(2);
+  expect(toHit(second)).toBe(toHit(first) + 2);
+  expect(second).toMatch(/E2E Keen Rune: \+2 to hit \(mod\)/);
+  expect(first).not.toMatch(/E2E Keen Rune/);
+});
+
+it('content companions: a published feature\'s companion is a card with its own pool (MECH-X item 4)', async () => {
+  const user = userEvent.setup();
+  const source = await client.createHomebrewSource('E2E Bonded Book', ['srd-5.2.1']);
+  await openStudioOn(user, 'E2E Bonded Book');
+
+  // One feature: a pool, an attack, and a companion that lists both (the checkboxes name them by label).
+  const editor = () => screen.getByRole('region', { name: /^New |^Edit / });
+  await user.click(screen.getByRole('button', { name: 'New feature' }));
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'Fixture Warden Bond');
+  await user.click(within(editor()).getByRole('button', { name: 'Add resource' }));
+  const pool = within(within(editor()).getByRole('group', { name: /^Rule 1: Resource/ }));
+  await user.type(pool.getByRole('textbox', { name: 'Resource name' }), 'Fixture Charges');
+  await user.clear(pool.getByRole('textbox', { name: /^Uses/ }));
+  await user.type(pool.getByRole('textbox', { name: /^Uses/ }), '3');
+  await user.click(within(editor()).getByRole('button', { name: 'Add attack' }));
+  await user.type(within(within(editor()).getByRole('group', { name: /^Rule 2: Attack/ })).getByRole('textbox', { name: 'Attack name' }), 'Fixture Bite');
+  await user.click(within(editor()).getByRole('button', { name: 'Add companion' }));
+  const companion = within(within(editor()).getByRole('group', { name: /^Rule 3: Companion/ }));
+  await user.type(companion.getByRole('textbox', { name: 'Label' }), 'Fixture Warden');
+  await user.clear(companion.getByRole('textbox', { name: 'Armor Class formula' }));
+  await user.type(companion.getByRole('textbox', { name: 'Armor Class formula' }), '15');
+  await user.clear(companion.getByRole('textbox', { name: 'Hit point maximum formula' }));
+  await user.type(companion.getByRole('textbox', { name: 'Hit point maximum formula' }), '20');
+  await user.click(companion.getByRole('checkbox', { name: 'Fixture Bite' }));
+  await user.click(companion.getByRole('checkbox', { name: 'Fixture Charges' }));
+  await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Published Fixture Warden Bond.'));
+
+  // The server stored a v12 revision with the companion and both lists.
+  const published = (await newestOf(source.id, 'Fixture Warden Bond'))!;
+  expect(published.schemaVersion).toBe(12);
+  expect(published.effects.find((e) => e.type === 'companion')).toMatchObject({ label: 'Fixture Warden', armorClass: '15', hitPointMaximum: '20' });
+
+  await client.createCharacter({ name: 'E2E Bonded Hero', rulesFamily: 'srd-5.2.1', baseAbilities: { str: 14, dex: 12, con: 12, int: 10, wis: 10, cha: 10 }, pins: [published] });
+  cleanup();
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: /^E2E Bonded Hero/ }));
+  const hero = await screen.findByRole('article', { name: 'E2E Bonded Hero' });
+  await openTab(user, hero, 'Play');
+
+  // The card shows Armor Class and hit points, calculated (no Edit or Remove), with its attack and pool inside it.
+  const card = () => screen.getByRole('region', { name: 'Fixture Warden' });
+  await waitFor(() => expect(within(card()).getByText('Armor Class 15')).toBeTruthy());
+  expect(within(card()).getByText('Hit points: 20 of 20')).toBeTruthy();
+  expect(within(card()).queryByRole('button', { name: /^Edit / })).toBeNull();
+  expect(within(card()).queryByRole('button', { name: /^Remove / })).toBeNull();
+  expect(card().textContent).toMatch(/From Fixture Warden Bond/);
+  expect(within(card()).getByRole('button', { name: 'Roll Fixture Bite attack' })).toBeTruthy();
+
+  // "Take damage" goes through the play command and lowers the hit points.
+  await user.type(within(card()).getByRole('spinbutton', { name: 'Amount' }), '3');
+  await user.click(within(card()).getByRole('button', { name: /^Take damage/ }));
+  await waitFor(() => expect(within(card()).getByText('Hit points: 17 of 20')).toBeTruthy());
+
+  // "Spend" on its own pool lowers the pool.
+  expect(within(card()).getByRole('heading', { name: /^Fixture Charges: 3 of 3/ })).toBeTruthy();
+  await user.click(within(card()).getByRole('button', { name: 'Spend 1 Fixture Charges' }));
+  await waitFor(() => expect(within(card()).getByRole('heading', { name: /^Fixture Charges: 2 of 3/ })).toBeTruthy());
+
+  // The attack and the pool are drawn on the card only: not in the Actions or Resources panels.
+  const attackRolls = screen.queryAllByRole('button', { name: /^Roll Fixture Bite attack/ });
+  expect(attackRolls).toHaveLength(1);
+  expect(card().contains(attackRolls[0]!)).toBe(true);
+  const poolHeadings = screen.queryAllByRole('heading', { name: /^Fixture Charges/ });
+  expect(poolHeadings).toHaveLength(1);
+  expect(card().contains(poolHeadings[0]!)).toBe(true);
 });
 
 it('attaches a PDF to a source, offers the cited page on a feature, and removes it after a warning', async () => {

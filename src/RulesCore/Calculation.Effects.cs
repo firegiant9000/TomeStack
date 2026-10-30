@@ -6,7 +6,7 @@ public static partial class CharacterCalculator
 
     /// <param name="SkipReason">Set when the rules say this modifier does not apply now (for example, Unarmored Defense while armor is worn); it is traced as not used.</param>
     /// <param name="FollowedToggle">Set when the modifier follows another entry's toggle (content v11 <c>toggleContent</c>): that toggle's label, named in the trace.</param>
-    private sealed record Modifier(ActiveContent Content, ModifierEffect Effect, Formula Formula, IReadOnlyList<string> ReadsFields, string? SkipReason = null, string? FollowedToggle = null);
+    private sealed record Modifier(ActiveContent Content, ModifierEffect Effect, Formula Formula, IReadOnlyList<string> ReadsFields, string? SkipReason = null, string? FollowedToggle = null, bool ModBonus = false);
 
     private const string ResourceTargetPrefix = ContentValidator.ResourceTargetPrefix;
 
@@ -42,8 +42,23 @@ public static partial class CharacterCalculator
     /// </remarks>
     private static WornArmor AddArmor(
         List<ActiveContent> active, List<Modifier> modifiers, List<Diagnostic> diagnostics, Dictionary<string, Proficiency> training, bool checkTraining,
-        RulesFamilyPolicy policy, Dictionary<string, List<Diagnostic>> warnings)
+        RulesFamilyPolicy policy, Dictionary<string, List<Diagnostic>> warnings, IReadOnlyList<ModdedEntry> modded)
     {
+        // MECH-X item 3 (R49): the armor mods of the first modded entry (list order) of the worn item add their bonus to Armor Class,
+        // built like Synthetic (origin the mod's revision). Nothing for a mod that applies to weapons only or has no bonus.
+        List<Modifier> ModBonuses(ActiveContent host, string? skipReason) =>
+        [
+            .. modded.Where(m => m.Host.Revision.Reference == host.Revision.Reference).Take(1)
+                .SelectMany(m => m.Mods)
+                .Where(x => x.Effect.AppliesTo is ModTarget.Armor or ModTarget.Any && x.Effect.Bonus is > 0)
+                .Select(x =>
+                {
+                    var value = x.Effect.Bonus!.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    var effect = new ModifierEffect { Id = x.Effect.Id, Operation = ModifierOperation.Bonus, Target = FieldIds.ArmorClass, Value = value, Text = $"{x.Mod.Revision.Name} on {host.Revision.Name}" };
+                    var formula = Formula.TryParse(value, out var parsed, out _) ? parsed! : throw new InvalidOperationException($"Armor mod bonus '{value}' does not parse."); // an integer, as in Synthetic
+                    return new Modifier(x.Mod, effect, formula, [], skipReason, ModBonus: true);
+                }),
+        ];
         var armor = active
             .SelectMany(a => a.Revision.Effects.OfType<ArmorEffect>()
                 .Where(e => e.Automation == AutomationStatus.Automatic && e.Timing == EffectTiming.Always)
@@ -72,6 +87,7 @@ public static partial class CharacterCalculator
                 _ => $"{effect.ArmorClass}",
             };
             modifiers.Add(Synthetic(content, effect, ModifierOperation.Replace, value));
+            modifiers.AddRange(ModBonuses(content, null));
             var key = effect.Category.ToString().ToLowerInvariant();
             if (checkTraining && !training.ContainsKey(key))
             {
@@ -107,6 +123,7 @@ public static partial class CharacterCalculator
                     shield = shield with { SkipReason = "the character has no training with shields" };
             }
             modifiers.Add(shield);
+            modifiers.AddRange(ModBonuses(content, shield.SkipReason));
         }
         return new(body.Count > 0 ? body[0] : null, shields.Count > 0 ? shields[0] : null);
     }
@@ -243,16 +260,23 @@ public static partial class CharacterCalculator
 
     private static List<Modifier> CollectModifiers(
         List<ActiveContent> active, Character character, RulesFamilyPolicy policy, List<Diagnostic> diagnostics, Dictionary<string, List<Diagnostic>> warnings,
-        HashSet<string> manual, EffectiveToggles effective, bool autoOn, List<ResourceBonus> resourceBonuses, ClassLevelMap classLevels)
+        HashSet<string> manual, EffectiveToggles effective, bool autoOn, List<ResourceBonus> resourceBonuses, ClassLevelMap classLevels,
+        IReadOnlyList<ModdedEntry> modded)
     {
         var modifiers = new List<Modifier>();
-        foreach (var item in active)
+        // MECH-X item 3 (R49, R50): the modifiers of the active content, then those of each modded entry's mods (a mod's own top-level
+        // modifiers and its nested ones), once per entry: the same mod on two entries applies twice. A mod is a leaf: it names no toggle
+        // of the character's, so its modifiers are always on or, when not, left for the player like any assisted modifier.
+        var sources = active
+            .SelectMany(a => a.Revision.Effects.OfType<ModifierEffect>().Select(e => (Item: a, Effect: e, Leaf: false)))
+            .Concat(modded.SelectMany(m => m.Mods.SelectMany(x =>
+                x.Mod.Revision.Effects.OfType<ModifierEffect>().Concat(x.Effect.Modifiers ?? []).Select(e => (Item: x.Mod, Effect: e, Leaf: true)))));
         {
-            var revision = item.Revision;
-            foreach (var effect in revision.Effects.OfType<ModifierEffect>())
+            foreach (var (item, effect, leaf) in sources)
             {
+                var revision = item.Revision;
                 string? followedToggle = null;
-                var gate = effect.Automation == AutomationStatus.Automatic && effect.Timing == EffectTiming.WhileActive && effect.Toggle is { } followed
+                var gate = !leaf && effect.Automation == AutomationStatus.Automatic && effect.Timing == EffectTiming.WhileActive && effect.Toggle is { } followed
                     ? GateOnToggle(active, revision, effect.Id, followed, effect.ToggleContent, effective, autoOn, diagnostics, out followedToggle)
                     : ToggleGate.Unresolved;
                 if (gate == ToggleGate.Skips)

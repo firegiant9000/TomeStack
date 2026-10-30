@@ -89,6 +89,10 @@ The choices step (create, level-up and "Make choices") has a picker per caster. 
 
 Each caster has a search box, "Search {caster} spells by name", in two places: in the builder's picker (right after its legend) and at the top of the caster's list on the Spells tab. It matches a part of the name, ignoring case and accents ("EMBER" finds "Émber"), and the picker's or list's rows that do not match are removed. A blank query, or one of only spaces or accent marks, shows everything and announces nothing. While a query filters, a polite status says "N of M spells shown", and when none match the Spells tab's list says so and how to clear the search (the builder's picker says only "No spells match “…”."). In the builder the counts still count the spells picked, not the spells shown, and if the search hides spells already picked the status adds ", N chosen hidden by the search". On the Spells tab the text is kept per caster while the sheet is open; in the builder it lasts until the picker closes. It is never saved and is not printed.
 
+## Spell tags and casting without a slot (MECH-X item 1, content v12)
+
+A spell can carry `tags` (keys beyond its school; `all` is refused), which the sheet's spell entry and the builder's summary show and the Spells tab filters by ([sheet-play.md](sheet-play.md)). A feature's roll can cast a spell without spending a slot (`castsSpell`, a spell's content id): the sheet shows the spell with the primary caster's attack bonus and save DC, and nothing is spent from the slots. A feature that pays a slot (`payment.kind` `slot`) is a different thing: it spends one slot, the lowest at or above its level, and the Spells tab's Cast rule is unchanged. See [play-mechanics.md](play-mechanics.md).
+
 ## Not yet
 
 - Always-prepared subclass spells (domain, oath, patron and circle spells) are text only. The player records them, and the sheet may flag them "not on the list".

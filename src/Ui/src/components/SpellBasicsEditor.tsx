@@ -1,7 +1,9 @@
 import { useEffect, useId, useState } from 'react';
+import { parseTags } from '../attackAuthoring';
 import { schools, setSpell, spellOf, type SpellPatch } from '../entryBasics';
 import { normaliseSpellListKey, spellListKeyProblem } from '../spellListKey';
 import type { BasicsProps } from './OriginPieces';
+import { StrictField } from './AttackFields';
 import { SpellListKeyInput } from './SpellListKeyInput';
 
 const ordinal = (n: number) => `${n}${n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th'} level`;
@@ -100,6 +102,22 @@ export function SpellBasicsEditor(props: BasicsProps) {
           Spell text
           <textarea rows={4} value={spell?.text ?? ''} onChange={(e) => set({ text: e.target.value })} />
         </label>
+      </fieldset>
+
+      <fieldset id="spell-basics-tags" tabIndex={-1}>
+        <legend>Tags</legend>
+        <StrictField
+          id="spell-tags"
+          label="Tags (separated by commas, such as ritualLike; empty for none)"
+          initial={(spell?.tags ?? []).join(', ')}
+          parse={(text) => {
+            const parsed = parseTags(text);
+            if (!parsed.problem && parsed.tags.includes('all')) return { value: [], problem: '"all" is kept for attack riders and cannot be a spell tag' };
+            return { value: parsed.tags, problem: parsed.problem };
+          }}
+          onValue={(tags) => set({ tags: tags.length > 0 ? tags : undefined })}
+          onProblem={props.onProblem}
+        />
       </fieldset>
 
       <fieldset id="spell-basics-lists" tabIndex={-1}>

@@ -132,3 +132,81 @@ it('with a lifted spent pair, a record named as spent disables Spend and a press
   rerender(<RollResult record={spendRecord} resources={pool} features={[]} act={act} spent={{ record: spendRecord, spendOnce }} />);
   expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Spend 1 Fixture pool (3 left)' }).disabled).toBe(true);
 });
+
+// MECH-X item 1 (R37, R40): a paying record offers Pay (hit points) or Spend (a slot) from the Last roll, once.
+const payee = {
+  content: { contentId: 'c-fury', revisionId: 'r-fury' },
+  name: 'Fixture Fury',
+  kind: 'feature',
+  origin: {},
+  automation: 'automatic',
+  diagnostics: [],
+  effects: [{ id: 'lash', rollId: 'lash-roll', type: 'roll', automation: 'automatic', label: 'Lash', dice: '2d6', cost: 3, available: true, payment: { kind: 'hitPoints', payable: true } }],
+};
+const features = (payment: object) => [{ ...payee, effects: [{ ...payee.effects[0]!, payment }] }] as never;
+const payRecord = (payment: object = {}) =>
+  record({ payment: { contentId: 'c-fury', useId: 'lash-roll', kind: 'hitPoints', amount: 3, mayDropToZero: false, ...payment } });
+
+it('a hit-point record offers "Pay 3 hit points", sends useAction by the record useId with the amount, and no Spend button', async () => {
+  const user = userEvent.setup();
+  const act = vi.fn();
+  render(<RollResult record={payRecord()} resources={[]} features={features({ kind: 'hitPoints', payable: true })} act={act} />);
+  expect(screen.queryByRole('button', { name: /^Spend/ })).toBeNull();
+  await user.click(screen.getByRole('button', { name: 'Pay 3 hit points' }));
+  expect(act).toHaveBeenCalledExactlyOnceWith({ action: 'useAction', contentId: 'c-fury', rollId: 'lash-roll', amount: 3 });
+});
+
+it('a slot record offers "Spend a level 2+ spell slot" and sends no amount', async () => {
+  const user = userEvent.setup();
+  const act = vi.fn();
+  const slot = { kind: 'slot', payable: true, minSlotLevel: 2, slot: { level: 3, pact: false } };
+  render(<RollResult record={payRecord({ kind: 'slot', amount: undefined, minSlotLevel: 2 })} resources={[]} features={features(slot)} act={act} />);
+  await user.click(screen.getByRole('button', { name: 'Spend a level 2+ spell slot' }));
+  expect(act).toHaveBeenCalledExactlyOnceWith({ action: 'useAction', contentId: 'c-fury', rollId: 'lash-roll' });
+  expect(region().textContent).toContain('Slot, level 3 now');
+});
+
+it('Pay goes through the shared spent state: a second click sends nothing (S6)', async () => {
+  const user = userEvent.setup();
+  let release: (applied: boolean) => void = () => {};
+  const act = vi.fn(() => new Promise<boolean>((resolve) => (release = resolve)));
+  const shown = payRecord();
+  render(<RollResult record={shown} resources={[]} features={features({ kind: 'hitPoints', payable: true })} act={act} />);
+  const pay = screen.getByRole<HTMLButtonElement>('button', { name: 'Pay 3 hit points' });
+  await user.click(pay);
+  await user.click(pay);
+  expect(act).toHaveBeenCalledTimes(1);
+  expect(pay.disabled).toBe(true);
+  release(true);
+});
+
+it('Pay with a lifted spent pair goes through the pair, and a record named as spent disables it', async () => {
+  const user = userEvent.setup();
+  const spendOnce = vi.fn().mockResolvedValue(true);
+  const act = vi.fn();
+  const shown = payRecord();
+  const f = features({ kind: 'hitPoints', payable: true });
+  const { rerender } = render(<RollResult record={shown} resources={[]} features={f} act={act} spent={{ record: undefined, spendOnce }} />);
+  await user.click(screen.getByRole('button', { name: 'Pay 3 hit points' }));
+  expect(spendOnce).toHaveBeenCalledExactlyOnceWith(shown, { action: 'useAction', contentId: 'c-fury', rollId: 'lash-roll', amount: 3 }, undefined);
+  expect(act).not.toHaveBeenCalled();
+  rerender(<RollResult record={shown} resources={[]} features={f} act={act} spent={{ record: shown, spendOnce }} />);
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Pay 3 hit points' }).disabled).toBe(true);
+});
+
+it('a payment the row says cannot be made is disabled and shows the reason (R40)', () => {
+  const reason = 'Needs more than 3 current hit points.';
+  render(<RollResult record={payRecord()} resources={[]} features={features({ kind: 'hitPoints', payable: false, reason })} act={() => {}} />);
+  const pay = screen.getByRole<HTMLButtonElement>('button', { name: 'Pay 3 hit points' });
+  expect(pay.disabled).toBe(true);
+  expect(region().textContent).toContain(reason);
+  expect(pay.getAttribute('aria-describedby')).toBeTruthy();
+});
+
+it('a refused payment gives the button back so it can be tried again', async () => {
+  const user = userEvent.setup();
+  const act = vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true);
+  render(<RollResult record={payRecord()} resources={[]} features={features({ kind: 'hitPoints', payable: true })} act={act} />);
+  await user.click(screen.getByRole('button', { name: 'Pay 3 hit points' }));
+  await vi.waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Pay 3 hit points' }).disabled).toBe(false));
+});

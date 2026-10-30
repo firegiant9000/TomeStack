@@ -130,8 +130,31 @@ public sealed record ContentRevision : IJsonOnDeserialized
     /// the <c>upkeep</c> effect, and the resource fields <c>counts</c>, <c>resourceFull</c> and <c>allowance</c>. All are
     /// optional, so older revisions serialize unchanged; each is read only in a v11 revision, and below v11 a key stays
     /// extension data (a <c>toggleGroup</c> or <c>upkeep</c> stays an unknown effect) and does nothing.
+    /// v12 (MECH-X item 0) adds <c>weapon.bonus</c>, a whole number from 0 to 10 that a weapon adds to its to-hit and damage. It
+    /// is optional, so older revisions serialize unchanged; it is read only in a v12 revision, and below v12 the key stays
+    /// extension data and does nothing.
+    /// v12 also carries MECH-X item 1: <c>payment</c> (hit points or a spell slot instead of a pool) on a roll, a feature attack and
+    /// a toggle, <c>castsSpell</c> on a roll, and <c>tags</c> on a spell. All are optional and read only in a v12 revision; below
+    /// v12 each key stays extension data and does nothing. MECH-X item 2 adds <c>choice.replaceable</c> (when picks may be replaced:
+    /// a level-up or a long rest, and how many), under the same rule. Item 3 adds the <c>itemMod</c> effect (content that attaches
+    /// to one carried copy of another item); below v12 it stays an unknown effect.
     /// </summary>
-    public const int CurrentSchemaVersion = 11;
+    public const int CurrentSchemaVersion = 12;
+
+    /// <summary>MECH-X item 1: cost payment, roll.castsSpell, spell.tags. <b>v12</b>, the same version as <see cref="WeaponBonusSchemaVersion"/>.</summary>
+    public const int PaymentSchemaVersion = 12;
+
+    /// <summary>MECH-X item 2: choice.replaceable. <b>v12</b>, the same version as <see cref="PaymentSchemaVersion"/>.</summary>
+    public const int ReplaceableChoiceSchemaVersion = 12;
+
+    /// <summary>MECH-X item 3: the itemMod effect. <b>v12</b>, the same version as <see cref="WeaponBonusSchemaVersion"/>.</summary>
+    public const int ItemModSchemaVersion = 12;
+
+    /// <summary>MECH-X item 4: the companion effect. <b>v12</b>, the same version as <see cref="WeaponBonusSchemaVersion"/>.</summary>
+    public const int CompanionSchemaVersion = 12;
+
+    /// <summary>The content schema version that adds <c>weapon.bonus</c> (MECH-X item 0): <b>v12</b>. A test pins that this is <see cref="PlayMechanicsSchemaVersion"/> plus one.</summary>
+    public const int WeaponBonusSchemaVersion = 12;
 
     /// <summary>
     /// The content schema version that adds the Wave 3 details listed above: <b>v10</b> (speed and passive targets,

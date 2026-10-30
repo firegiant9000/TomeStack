@@ -299,3 +299,28 @@ it('renders for a sheet whose only D43 content is a toggle with a duration, so a
   strip(view({ toggles: [toggle('iron', { on: false, duration: 3 })] }));
   expect(screen.getByRole('button', { name: 'Start encounter' })).toBeTruthy();
 });
+
+// MECH-X item 4: a content companion's pools are on its card, so the strip leaves them out and does not appear for them alone.
+it('lists only the character pools and offers only the character built-up pools to clear, not a companion pool', async () => {
+  const act = vi.fn();
+  const v = view({
+    round: 1,
+    resources: [
+      pool('strain', { countsUp: true, maximum: 5, spent: 3, current: 2 }),
+      pool('pet-strain', { countsUp: true, maximum: 5, spent: 2, current: 3, companionId: 'g1' }),
+      pool('pet-reactions', { allowance: true, maximum: 2, spent: 0, current: 2, companionId: 'g1' }),
+    ],
+  });
+  strip(v, { act });
+  const region = screen.getByRole('region', { name: 'Combat' });
+  expect(within(region).getByText(/Fixture strain: built up 3 of 5/)).toBeTruthy();
+  expect(region.textContent).not.toMatch(/pet-/);
+  await userEvent.click(within(region).getByRole('button', { name: 'End encounter' }));
+  expect(screen.getByRole('checkbox', { name: /Clear Fixture strain/ })).toBeTruthy();
+  expect(screen.queryByRole('checkbox', { name: /pet-strain/ })).toBeNull();
+});
+
+it('shows no Combat strip when the only combat pools belong to a companion', () => {
+  strip(view({ resources: [pool('pet-reactions', { allowance: true, companionId: 'g1' }), pool('pet-strain', { countsUp: true, spent: 1, companionId: 'g1' })] }));
+  expect(screen.queryByRole('region', { name: 'Combat' })).toBeNull();
+});

@@ -158,6 +158,7 @@ export function SpellsPanel({
                     <p className="hint">
                       {[spell.school, spell.castingTime, spell.range, spell.components, spell.duration].filter(Boolean).join(' · ')}
                       {spell.save && ` · ${abilityNames[spell.save]} save (DC ${entry.saveDc})`}
+                      {spell.tags && spell.tags.length > 0 && ` · Tags: ${spell.tags.join(', ')}`}
                     </p>
                     {spell.summary && <p>{spell.summary}</p>}
                     {spell.text && <p>{spell.text}</p>}

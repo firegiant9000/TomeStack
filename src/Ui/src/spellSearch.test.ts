@@ -84,3 +84,25 @@ it('A_spell_with_no_school_matches_only_when_no_school_is_ticked', () => {
   expect(names({ schools: ['Evocation'] })).not.toContain('Elm Mystery');
   expect(names({ schools: ['Evocation', 'Divination', 'Illusion'] })).not.toContain('Elm Mystery');
 });
+
+// MECH-X item 1 (R39): tags are kept apart from school; a tag filter keeps the spells that carry any ticked tag, ANDed with the rest.
+const tagged: SpellEntry[] = [
+  sp('Alder Spark', 0, { tags: ['time'] }),
+  sp('Birch Veil', 1, { tags: ['Time', 'ward'] }),
+  sp('Cedar Ward', 1),
+  sp('Dune Rite', 2, { tags: ['ward'], school: 'Divination' }),
+];
+const taggedNames = (f: Partial<SpellFilter>) => filterSpells(tagged, { ...none, ...f }).map((s) => s.name);
+
+it('a tag filter keeps only the spells that carry the tag, case-insensitively', () => {
+  expect(taggedNames({ tags: ['time'] })).toEqual(['Alder Spark', 'Birch Veil']);
+  expect(taggedNames({ tags: ['TIME', 'ward'] })).toEqual(['Alder Spark', 'Birch Veil', 'Dune Rite']);
+  expect(taggedNames({ tags: [] })).toHaveLength(4);
+  expect(taggedNames({})).toHaveLength(4);
+});
+
+it('a tag filter is ANDed with the other dimensions, and a spell with no tags never matches one', () => {
+  expect(taggedNames({ tags: ['ward'], levels: [1] })).toEqual(['Birch Veil']);
+  expect(taggedNames({ tags: ['ward'], schools: ['divination'] })).toEqual(['Dune Rite']);
+  expect(taggedNames({ tags: ['nothing'] })).toEqual([]);
+});

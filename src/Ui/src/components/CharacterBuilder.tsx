@@ -32,6 +32,7 @@ import {
   type Assignment,
   type ScoreMethod,
 } from '../abilityScores';
+import { hadPicks, replaceHint, replaceOffer } from '../replaceable';
 import { matchesSpell } from '../spellSearch';
 import { shown } from './SandboxPanel';
 import { SpellSearch } from './sheet/SpellSearch';
@@ -882,6 +883,8 @@ function ChoicePicker(props: {
   optionsLoaded: boolean;
   /** Ticks (`add`) or unticks one option; the builder applies it to the latest draft. */
   onChange: (ref: ContentReference, add: boolean) => void;
+  /** MECH-X item 2: "You may replace one pick now." (level-up) or the window hint (Make choices); real text in the group. */
+  replaceNote?: string;
 }) {
   const { choice } = props;
   const full = choice.selected.length >= choice.count;
@@ -895,6 +898,7 @@ function ChoicePicker(props: {
           {choice.sourceName}: choose {choice.count}
         </legend>
         <p className="hint">Loading the options…</p>
+        {props.replaceNote && <p className="hint">{props.replaceNote}</p>}
       </fieldset>
     );
   }
@@ -905,6 +909,7 @@ function ChoicePicker(props: {
         <span className={choice.resolved ? 'hint' : 'warn'}>{choice.resolved ? '(done)' : `(to do: ${choice.selected.length} of ${choice.count} chosen)`}</span>
       </legend>
       {choice.text && <p className="hint">{choice.text}</p>}
+      {props.replaceNote && <p className="hint">{props.replaceNote}</p>}
       <ul className="options">
         {choice.options.map((ref) => {
           const option = props.optionOf(ref);
@@ -1046,6 +1051,10 @@ function ChoicesStep(props: {
   onCommit: () => void;
   onCancel: () => void;
   busy: boolean;
+  /** Level-up builder only: the view it started from. A `levelUp` choice that had picks in it shows the replace offer (R44, S5). */
+  startView?: CharacterView;
+  /** "Make choices": a replaceable choice shows its window as a hint (R44). */
+  choicesMode?: boolean;
   /** R41: set while a pick in the draft needs a campaign exception reason that is not given; the commit button waits. */
   reasonHint?: string;
   review?: { name: string; family: string; campaign?: string; scores: AbilityScores; method: string; species?: string; cls?: string; background?: string };
@@ -1096,6 +1105,13 @@ function ChoicesStep(props: {
           optionOf={props.optionOf}
           optionsLoaded={props.optionsLoaded}
           onChange={(ref, add) => props.onChoose(choice, ref, add)}
+          replaceNote={
+            props.choicesMode
+              ? replaceHint(choice)
+              : props.startView && hadPicks(props.startView, choice)
+                ? replaceOffer(choice)
+                : undefined
+          }
         />
       ))}
       {casters.map((entry) => (
@@ -1320,11 +1336,13 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
   // gone). The smaller safe option: say so in plain words and stop offering a save that cannot succeed; Cancel and reopen starts from
   // the current copy.
   const [stale, setStale] = useState(false);
-  const commitHint = stale
-    ? 'This character changed after you opened this screen, so it cannot be saved from here. Cancel, then open it again to start from the current copy.'
-    : view
-      ? reasonHint(needReason(picksOf(view.character)))
-      : undefined;
+  const hintFor = (v: CharacterView | undefined) =>
+    stale
+      ? 'This character changed after you opened this screen, so it cannot be saved from here. Cancel, then open it again to start from the current copy.'
+      : v
+        ? reasonHint(needReason(picksOf(v.character)))
+        : undefined;
+  const commitHint = hintFor(view);
 
   /**
    * Previews the draft and moves to the choices. The reply applies only if it is the latest request and the player is still
@@ -1390,7 +1408,11 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
     committing.current = true;
     setBusy(true);
     try {
-      const draft = withExceptions(view.character);
+      await choosing.current; // a tick still previewing lands first, so the save carries it
+      if (!mounted.current) return;
+      const current = latest.current ?? view;
+      if (hintFor(current)) return; // R41: a tick that landed meanwhile may need its reason first; the hint shows on the re-render
+      const draft = withExceptions(current.character);
       const saved =
         mode.kind === 'create'
           ? await client.createCharacter({
@@ -1501,6 +1523,8 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
             if (!busy) onCancel(); // a save in flight cannot be discarded; the button says so with aria-disabled
           }}
           busy={busy}
+          startView={mode.kind === 'levelUp' ? mode.view : undefined}
+          choicesMode={mode.kind === 'choices'}
           reasonHint={commitHint}
           review={
             mode.kind === 'create'

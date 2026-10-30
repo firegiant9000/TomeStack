@@ -171,6 +171,66 @@ public class AttackCommandTests
         Assert.Equal(record.Dice.Sum(d => d.Value) + 5, record.Total); // the constant counts once
     }
 
+    /// <summary>MECH-X item 0: a +2 copy of the Longblade (v12), equipped by a Str +2, PB +2 Duelist.</summary>
+    private static (TempApp Temp, Guid Id, ContentReference Blade) BonusBlade()
+    {
+        var temp = new TempApp();
+        var original = temp.App.Store.FindRevision(Longblade)!;
+        var blade = original with
+        {
+            ContentId = Guid.Parse("6a7e0300-0000-4000-8000-000000000001"),
+            RevisionId = Guid.Parse("6a7e0300-0000-4000-8000-000000000101"),
+            Name = "Fixture Bonus Longblade",
+            SchemaVersion = 12,
+            Effects = [.. original.Effects.Select(e => e is WeaponEffect w ? w with { Bonus = 2 } : e)],
+        };
+        temp.App.Store.AddRevision(blade);
+        var character = new Character
+        {
+            Id = Guid.NewGuid(),
+            Name = "Test Duelist",
+            RulesFamily = RulesFamilies.Srd51,
+            Level = 1,
+            Classes = [new(Duelist, 1)],
+            BaseAbilities = new(14, 16, 12, 10, 10, 10),
+            Equipment = [new(blade.Reference, Equipped: true)],
+        };
+        return (temp, temp.App.SaveCharacter(character).Character.Id, blade.Reference);
+    }
+
+    [Fact]
+    public void A_weapon_bonus_is_in_the_to_hit_and_damage_rolls_and_their_explanation()
+    {
+        var (temp, id, blade) = BonusBlade();
+        using var _ = temp;
+        var entry = temp.App.GetCharacter(id).Sheet.Attacks!.Single(a => a.Source == AttackSource.Weapon && a.Item == blade);
+
+        var toHit = temp.App.Roll(new(id, Weapon: blade));
+        var damage = temp.App.Roll(new(id, Weapon: blade, Damage: true));
+
+        Assert.Equal(6, entry.ToHit); // Str +2, PB +2, weapon +2
+        Assert.Equal(6, toHit.Modifiers.Sum(m => m.Amount));
+        Assert.Equal("1d8+4", damage.Formula);
+        Assert.Equal(TempApp.Json(entry.Trace), TempApp.Json(toHit.Explain));
+        Assert.Equal(TempApp.Json(entry.Trace), TempApp.Json(damage.Explain));
+        Assert.Contains(damage.Explain!, s => s.Description == "Fixture Bonus Longblade: +2 damage (weapon)" && s.Amount == 2);
+        Assert.Equal(entry.ToHit, toHit.Explain![^1].Result);
+    }
+
+    [Fact]
+    public void A_weapon_bonus_is_flat_so_a_critical_hit_doubles_the_dice_and_not_the_bonus()
+    {
+        var (temp, id, blade) = BonusBlade();
+        using var _ = temp;
+
+        var normal = temp.App.Roll(new(id, Weapon: blade, Damage: true));
+        var critical = temp.App.Roll(new(id, Weapon: blade, Damage: true, Critical: true));
+
+        Assert.Equal(("1d8+4", 1, 0), (normal.Formula, normal.Dice.Count, normal.Dice.Count(d => d.FromCritical)));
+        Assert.Equal(("1d8+4", 2, 1), (critical.Formula, critical.Dice.Count, critical.Dice.Count(d => d.FromCritical))); // one die doubled
+        Assert.Equal(critical.Dice.Sum(d => d.Value) + 4, critical.Total); // Str +2 and the weapon +2 count once
+    }
+
     [Fact]
     public void An_attack_with_an_invalid_die_is_refused()
     {

@@ -167,7 +167,7 @@ public class FeatureAttackContentTests
     {
         string[] common = ["Id", "Automation", "Timing", "Text", "Extensions"];
         AssertKeys<ModifierEffect>([.. common, "Operation", "Target", "Value", "Stacking", "StackGroup", "Toggle", "WhileArmored"], Properties.RevisionHashProperties.ModifierV11Keys);
-        AssertKeys<RollEffect>([.. common, "RollId", "Label", "Dice", "ResourceId", "Activation", "ResourceContent", "Cost", "VariableCost", "Bonus"], Properties.RevisionHashProperties.RollV11Keys);
+        AssertKeys<RollEffect>([.. common, "RollId", "Label", "Dice", "ResourceId", "Activation", "ResourceContent", "Cost", "VariableCost", "Bonus", "Payment", "CastsSpell"], Properties.RevisionHashProperties.RollV11Keys); // Payment and CastsSpell are v12 keys (MECH-X item 1)
 
         static void AssertKeys<T>(string[] pinned, string[] hashTestCopy)
         {

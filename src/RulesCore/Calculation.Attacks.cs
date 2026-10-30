@@ -11,7 +11,7 @@ public static partial class CharacterCalculator
     /// </summary>
     private static List<AttackEntry> CollectAttacks(
         List<ActiveContent> active, Dictionary<string, int> values, string family, Dictionary<string, Proficiency> weapons,
-        Character character, ClassLevelMap classLevels, EffectiveToggles effective, bool autoOn, List<Diagnostic> diagnostics)
+        Character character, ClassLevelMap classLevels, EffectiveToggles effective, bool autoOn, List<Diagnostic> diagnostics, IReadOnlyList<ModdedEntry> modded)
     {
         var attacks = new List<AttackEntry>();
         var rules = new TraceOrigin(TraceOriginKind.RulesPolicy, family);
@@ -27,47 +27,90 @@ public static partial class CharacterCalculator
                     attack.WhileToggle is { } form ? OutOfForm(active, item, form, effective, autoOn) : null));
             if (item.Revision.Kind != ContentKind.Item)
                 continue;
+            // R159 keeps one row for an item equipped twice. When one of its equipped entries carries mods, each equipped entry that passes the
+            // host's attunement gate gets its own row instead (the modded ones add their bonuses), told apart by EntryIndex.
+            var copies = modded.Where(m => m.Host.Revision.Reference == item.Revision.Reference).ToList();
+            var variants = new List<(int? EntryIndex, ModdedEntry? Modded)>();
+            if (copies.Count == 0)
+                variants.Add((null, null));
+            else
+            {
+                for (var i = 0; i < character.Equipment.Count; i++)
+                {
+                    var entry = character.Equipment[i];
+                    if (entry.Equipped && entry.Item == item.Revision.Reference && (!RequiresAttunement(item.Revision) || entry.Attuned == true))
+                        variants.Add((i, copies.FirstOrDefault(m => m.EntryIndex == i)));
+                }
+            }
             foreach (var weapon in item.Revision.Effects.OfType<WeaponEffect>().Where(w => w.Automation != AutomationStatus.Reference))
             {
-                var str = values[FieldIds.Modifier(Ability.Str)];
-                var dex = values[FieldIds.Modifier(Ability.Dex)];
-                var ability = weapon.Attack == WeaponAttack.Ranged ? Ability.Dex
-                    : weapon.Has("finesse") && dex > str ? Ability.Dex
-                    : Ability.Str;
-                var mod = ability == Ability.Dex ? dex : str;
-                var pb = values[FieldIds.ProficiencyBonus];
-                var category = weapon.Category == WeaponCategory.Simple ? "simple" : "martial";
-                var proficiency = weapons.GetValueOrDefault(category) ?? weapons.GetValueOrDefault(weapon.WeaponKey);
-                var warnings = new List<Diagnostic>();
-                var automation = weapon.Automation;
-                var trace = new List<TraceEntry>();
-                var why = weapon.Has("finesse") && weapon.Attack == WeaponAttack.Melee ? " (finesse: the better of Strength and Dexterity)" : "";
-                trace.Add(new(1, "base", $"{AbilityNames[ability]} modifier{why}", mod, mod, rules, FieldIds.Modifier(ability), [new(FieldIds.Modifier(ability), mod)]));
-                var toHit = mod;
-                if (proficiency is not null)
+                foreach (var variant in variants)
                 {
-                    toHit += pb;
-                    trace.Add(new(2, "add", $"Proficiency bonus: proficient with {category} weapons or {weapon.WeaponKey}, from {Describe(proficiency.Content)}", pb, toHit, ContentOrigin(family, proficiency.Content, proficiency.Effect), null, [new(FieldIds.ProficiencyBonus, pb)]));
+                    var str = values[FieldIds.Modifier(Ability.Str)];
+                    var dex = values[FieldIds.Modifier(Ability.Dex)];
+                    var ability = weapon.Attack == WeaponAttack.Ranged ? Ability.Dex
+                        : weapon.Has("finesse") && dex > str ? Ability.Dex
+                        : Ability.Str;
+                    var mod = ability == Ability.Dex ? dex : str;
+                    var pb = values[FieldIds.ProficiencyBonus];
+                    var category = weapon.Category == WeaponCategory.Simple ? "simple" : "martial";
+                    var proficiency = weapons.GetValueOrDefault(category) ?? weapons.GetValueOrDefault(weapon.WeaponKey);
+                    var warnings = new List<Diagnostic>();
+                    var automation = weapon.Automation;
+                    var trace = new List<TraceEntry>();
+                    var why = weapon.Has("finesse") && weapon.Attack == WeaponAttack.Melee ? " (finesse: the better of Strength and Dexterity)" : "";
+                    trace.Add(new(1, "base", $"{AbilityNames[ability]} modifier{why}", mod, mod, rules, FieldIds.Modifier(ability), [new(FieldIds.Modifier(ability), mod)]));
+                    var toHit = mod;
+                    if (proficiency is not null)
+                    {
+                        toHit += pb;
+                        trace.Add(new(2, "add", $"Proficiency bonus: proficient with {category} weapons or {weapon.WeaponKey}, from {Describe(proficiency.Content)}", pb, toHit, ContentOrigin(family, proficiency.Content, proficiency.Effect), null, [new(FieldIds.ProficiencyBonus, pb)]));
+                    }
+                    else if (weapons.Count == 0)
+                    {
+                        // No content says which weapons the character knows (for example classes published before weapons existed).
+                        automation = AutomationStatus.Assisted;
+                        warnings.Add(new("attack.proficiency-unknown", $"No content records weapon proficiencies for this character, so the proficiency bonus (+{pb}) is not added to '{item.Revision.Name}'. Add it if the character is proficient.", item.Revision.Reference, weapon.Id));
+                    }
+                    else
+                    {
+                        warnings.Add(new("attack.not-proficient", $"Not proficient with '{item.Revision.Name}' ({category}): no proficiency bonus.", item.Revision.Reference, weapon.Id));
+                    }
+                    // The weapon's own bonus (content v12): to hit and damage, after the proficiency bonus and before the riders. A revision
+                    // below v12 gets nothing, even one built in code with the property set. Two steps, like a rider's, so a damage roll's
+                    // explanation keeps the damage one (R21); the last step's result stays the to-hit.
+                    var weaponBonus = 0;
+                    if (weapon.Bonus is int b and not 0 && item.Revision.SchemaVersion >= ContentRevision.WeaponBonusSchemaVersion)
+                    {
+                        weaponBonus = b;
+                        var weaponOrigin = ContentOrigin(family, item, weapon);
+                        toHit += b;
+                        trace.Add(new(trace.Count + 1, "add", $"{item.Revision.Name}: +{b} to hit (weapon)", b, toHit, weaponOrigin));
+                        trace.Add(new(trace.Count + 1, "add", $"{item.Revision.Name}: +{b} damage (weapon)", b, toHit, weaponOrigin));
+                    }
+                    // MECH-X item 3 (R49): this copy's weapon mods add after the weapon's own bonus and before the riders, two steps each.
+                    var modBonus = 0;
+                    foreach (var (modContent, modEffect) in variant.Modded?.Mods ?? [])
+                    {
+                        if (modEffect.AppliesTo is not (ModTarget.Weapon or ModTarget.Any) || modEffect.Bonus is not (int mb and not 0))
+                            continue;
+                        modBonus += mb;
+                        var modOrigin = ContentOrigin(family, modContent, modEffect);
+                        toHit += mb;
+                        trace.Add(new(trace.Count + 1, "add", $"{modContent.Revision.Name}: +{mb} to hit (mod)", mb, toHit, modOrigin));
+                        trace.Add(new(trace.Count + 1, "add", $"{modContent.Revision.Name}: +{mb} damage (mod)", mb, toHit, modOrigin));
+                    }
+                    // Riders that match (the tags weapon and melee or ranged) add to the numbers; none matching leaves them as they were.
+                    var applied = ApplyRiders(family, riders, ["weapon", weapon.Attack == WeaponAttack.Ranged ? "ranged" : "melee"], trace, ref toHit, out var riderBonus);
+                    var damageBonus = mod + weaponBonus + modBonus + riderBonus;
+                    attacks.Add(new(
+                        item.Revision.Reference, item.Revision.Name, weapon.Id, weapon.Attack, weapon.Category, ability, toHit,
+                        DamageWith(weapon.Damage, applied, damageBonus), weapon.Versatile is { } versatile ? DamageWith(versatile, applied, damageBonus) : null,
+                        weapon.DamageType, weapon.Properties, weapon.Range, hasWeaponMastery ? weapon.Mastery : null, proficiency is not null, automation, trace, warnings,
+                        ContentOrigin(family, item, weapon),
+                        Riders: applied.Count == 0 ? null : [.. applied.Select(r => r.Value)],
+                        EntryIndex: variant.EntryIndex));
                 }
-                else if (weapons.Count == 0)
-                {
-                    // No content says which weapons the character knows (for example classes published before weapons existed).
-                    automation = AutomationStatus.Assisted;
-                    warnings.Add(new("attack.proficiency-unknown", $"No content records weapon proficiencies for this character, so the proficiency bonus (+{pb}) is not added to '{item.Revision.Name}'. Add it if the character is proficient.", item.Revision.Reference, weapon.Id));
-                }
-                else
-                {
-                    warnings.Add(new("attack.not-proficient", $"Not proficient with '{item.Revision.Name}' ({category}): no proficiency bonus.", item.Revision.Reference, weapon.Id));
-                }
-                // Riders that match (the tags weapon and melee or ranged) add to the numbers; none matching leaves them as they were.
-                var applied = ApplyRiders(family, riders, ["weapon", weapon.Attack == WeaponAttack.Ranged ? "ranged" : "melee"], trace, ref toHit, out var riderBonus);
-                var damageBonus = mod + riderBonus;
-                attacks.Add(new(
-                    item.Revision.Reference, item.Revision.Name, weapon.Id, weapon.Attack, weapon.Category, ability, toHit,
-                    DamageWith(weapon.Damage, applied, damageBonus), weapon.Versatile is { } versatile ? DamageWith(versatile, applied, damageBonus) : null,
-                    weapon.DamageType, weapon.Properties, weapon.Range, hasWeaponMastery ? weapon.Mastery : null, proficiency is not null, automation, trace, warnings,
-                    ContentOrigin(family, item, weapon),
-                    Riders: applied.Count == 0 ? null : [.. applied.Select(r => r.Value)]));
             }
         }
         return attacks;
@@ -287,7 +330,41 @@ public static partial class CharacterCalculator
             (invalid is not null || costFailed) && attack.Automation == AutomationStatus.Automatic ? AutomationStatus.Assisted : attack.Automation,
             trace, [], origin,
             AttackSource.Feature, attack.Tags, attack.ReplacesAttack ?? false, appliedRiders, invalid is null && outOfForm is null, invalid ?? outOfForm, attack.Activation,
-            attack.ResourceId is null ? null : attack.ResourceContent ?? revision.ContentId, attack.ResourceId, cost);
+            attack.ResourceId is null ? null : attack.ResourceContent ?? revision.ContentId, attack.ResourceId, cost, PaymentOf(attack.Payment, revision));
+    }
+
+    /// <summary>
+    /// MECH-X item 1: the payment a roll, feature attack or toggle shows, before hit points and slots are known (so
+    /// <see cref="PaymentValue.Payable"/> is true here; <see cref="Affordability"/> settles it). Null for a pool payment, none, and any
+    /// revision below v12 (even one built in code with the property set).
+    /// </summary>
+    private static PaymentValue? PaymentOf(CostPayment? payment, ContentRevision revision) =>
+        payment is { Kind: not PaymentKind.Resource } && revision.SchemaVersion >= ContentRevision.PaymentSchemaVersion
+            ? new(payment.Kind, true, null, payment.Kind == PaymentKind.HitPoints && payment.MayDropToZero == true, payment.Kind == PaymentKind.Slot ? payment.MinSlotLevel : null)
+            : null;
+
+    /// <summary>
+    /// R34, R35, R40: whether <paramref name="payment"/> can be made now. Hit points: the evaluated <paramref name="cost"/> must be below
+    /// current hit points, or at most equal with <c>mayDropToZero</c> (a cost that failed to calculate, or 0, blocks nothing). Slot: the
+    /// slot <see cref="SlotPayments.Pick"/> gives, or none left. Temporary hit points never count.
+    /// </summary>
+    private static PaymentValue Affordability(PaymentValue payment, int? cost, HitPointState hitPoints, IReadOnlyList<SlotValue>? slots, SlotValue? pact)
+    {
+        switch (payment.Kind)
+        {
+            case PaymentKind.HitPoints when cost is > 0 and var amount:
+                var payable = payment.MayDropToZero ? hitPoints.Current >= amount : hitPoints.Current > amount;
+                return payable
+                    ? payment with { Payable = true, Reason = null }
+                    : payment with { Payable = false, Reason = $"Needs {(payment.MayDropToZero ? "at least" : "more than")} {amount} current hit points." };
+            case PaymentKind.Slot:
+                var level = payment.MinSlotLevel ?? 1;
+                return SlotPayments.Pick(slots, pact, level) is { } slot
+                    ? payment with { Payable = true, Reason = null, Slot = slot }
+                    : payment with { Payable = false, Reason = $"No spell slot of level {level} or higher is left.", Slot = null };
+            default:
+                return payment;
+        }
     }
 
     /// <summary>Dice plus a flat modifier, as a dice expression: <c>1d8+3</c>, <c>1d8-1</c>, or <c>1d8</c> for 0.</summary>

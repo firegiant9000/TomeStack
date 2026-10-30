@@ -598,7 +598,7 @@ public class DdbImportTests
         var preview = h.Preview(new SheetBuilder($"{h.Name(Barbarian)} 1").Item("Fixture Rope Coil", 6_000).Item("fixture rope coil", 5_000, equipped: true), RulesFamilies.Srd521);
 
         // The 2014 layout has no equipped mark (S0), so the asked-for mark is not on the sheet and the entry is not equipped.
-        Assert.Equal([new EquipmentEntry(item, Equipped: false, Quantity: EquipmentEntry.MaxQuantity)], preview.Character.Equipment);
+        Assert.Equal(TempApp.Json(new[] { new EquipmentEntry(item, Equipped: false, Quantity: EquipmentEntry.MaxQuantity) }), TempApp.Json(preview.Character.Equipment));
         Assert.All(preview.Matches.Where(r => r.Kind == MatchKind.Item), r => Assert.Equal(PlacementKind.Equipment, r.Chosen!.Placement.Kind));
     }
 

@@ -820,6 +820,7 @@ public sealed partial class TomeStackApp
             .Concat(draft.Effects.OfType<ModifierEffect>().Select(m => m.ToggleContent).OfType<Guid>())
             .Concat(draft.Effects.OfType<RollEffect>().Select(r => r.WhileToggle?.ContentId).OfType<Guid>())
             .Concat(draft.Effects.OfType<RollEffect>().SelectMany(r => (r.AlsoChange ?? []).Select(a => a?.ResourceContent).OfType<Guid>()))
+            .Concat(draft.Effects.OfType<RollEffect>().Select(r => r.CastsSpell).OfType<Guid>())
             .Concat(draft.Effects.OfType<RollModeEffect>().Select(m => m.ToggleContent).OfType<Guid>())
             .Concat(draft.Effects.OfType<GrantEffect>().Select(g => g.WhileToggle?.ContentId).OfType<Guid>())
             .Concat(draft.Effects.OfType<ResponseEffect>().SelectMany(r => r.ReferencedContent()))

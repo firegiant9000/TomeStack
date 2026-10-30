@@ -156,6 +156,16 @@ public static class Preflight
                 }
             }
         }
+        // MECH-X item 1 (R38, S8): a v12 roll that casts a spell without a slot needs that spell on the receiving machine. The sheet
+        // uses the revision the character pins, else the newest published one (CastSpellsOf), so the export carries the same.
+        foreach (var roll in revisions.Values.Where(r => r.SchemaVersion >= ContentRevision.PaymentSchemaVersion).SelectMany(r => r.Effects.OfType<RollEffect>()).Where(r => r.CastsSpell is not null).ToList())
+        {
+            var spellId = roll.CastsSpell!.Value;
+            if (revisions.Values.Any(r => r.ContentId == spellId))
+                continue; // a pinned (or granted) revision of it is already in
+            if (store.ListRevisions(spellId).LastOrDefault(r => r.Status == RevisionStatus.Published) is { } newest)
+                revisions[newest.RevisionId] = newest;
+        }
 
         var sources = new Dictionary<Guid, SourceRecord>();
         foreach (var revision in revisions.Values)

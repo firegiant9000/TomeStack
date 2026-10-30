@@ -1,0 +1,119 @@
+{
+  "packId": "tomestack-item-mods-fixtures",
+  "formatVersion": 1,
+  "notice": "Original TomeStack test fixtures (MECH-X item 3, content v12: item mods that attach to one carried copy of another item). Invented; no SRD or third-party rules text.",
+  "sources": [
+    {
+      "id": "6a7e0000-0000-4000-8000-000000000001",
+      "title": "TomeStack Fixtures: Item mods",
+      "publisher": "TomeStack project",
+      "rulesFamilies": ["srd-5.2.1"],
+      "editionVersion": "fixture-1",
+      "license": "Original test fixture",
+      "redistributable": true,
+      "attribution": "Written for TomeStack tests."
+    }
+  ],
+  "revisions": [
+    {
+      "contentId": "6a7e00f3-0000-4000-8000-000000000001", "revisionId": "6a7e00f3-0000-4000-8000-000000000101", "schemaVersion": 12, "kind": "item",
+      "name": "Fixture Keen Rune", "rulesFamilies": ["srd-5.2.1"], "provenance": { "sourceId": "6a7e0000-0000-4000-8000-000000000001" }, "status": "published",
+      "effects": [
+        { "type": "itemMod", "id": "keen-rune", "appliesTo": "weapon", "bonus": 1 }
+      ]
+    },
+    {
+      "contentId": "6a7e00f3-0000-4000-8000-000000000002", "revisionId": "6a7e00f3-0000-4000-8000-000000000102", "schemaVersion": 12, "kind": "item",
+      "name": "Fixture Warding Plating", "rulesFamilies": ["srd-5.2.1"], "provenance": { "sourceId": "6a7e0000-0000-4000-8000-000000000001" }, "status": "published",
+      "effects": [
+        {
+          "type": "itemMod", "id": "warding-plating", "appliesTo": "armor", "bonus": 1,
+          "modifiers": [
+            { "type": "modifier", "id": "warding-save", "operation": "bonus", "target": "save.dex", "value": "1" }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "6a7e00f3-0000-4000-8000-000000000003", "revisionId": "6a7e00f3-0000-4000-8000-000000000103", "schemaVersion": 12, "kind": "item",
+      "name": "Fixture Steady Lining", "rulesFamilies": ["srd-5.2.1"], "provenance": { "sourceId": "6a7e0000-0000-4000-8000-000000000001" }, "status": "published",
+      "effects": [
+        {
+          "type": "itemMod", "id": "steady-lining", "appliesTo": "any",
+          "modifiers": [
+            { "type": "modifier", "id": "steady-initiative", "operation": "bonus", "target": "initiative", "value": "1" }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "6a7e00f3-0000-4000-8000-000000000004", "revisionId": "6a7e00f3-0000-4000-8000-000000000104", "schemaVersion": 12, "kind": "item",
+      "name": "Fixture Riddle Rune", "rulesFamilies": ["srd-5.2.1"], "provenance": { "sourceId": "6a7e0000-0000-4000-8000-000000000001" }, "status": "published",
+      "summary": "A mod that also carries a choice and a grant, which a mod never follows.",
+      "effects": [
+        { "type": "itemMod", "id": "riddle-rune", "appliesTo": "weapon", "bonus": 1 },
+        {
+          "type": "choice", "id": "riddle-choice", "choiceId": "riddle-choice", "count": 1, "text": "Choose an echo.",
+          "options": [
+            { "contentId": "6a7e00f3-0000-4000-8000-000000000022", "revisionId": "6a7e00f3-0000-4000-8000-000000000122" },
+            { "contentId": "6a7e00f3-0000-4000-8000-000000000023", "revisionId": "6a7e00f3-0000-4000-8000-000000000123" }
+          ]
+        },
+        { "type": "grant", "id": "riddle-grant", "grant": "content", "content": { "contentId": "6a7e00f3-0000-4000-8000-000000000021", "revisionId": "6a7e00f3-0000-4000-8000-000000000121" } }
+      ]
+    },
+    {
+      "contentId": "6a7e00f3-0000-4000-8000-000000000011", "revisionId": "6a7e00f3-0000-4000-8000-000000000111", "schemaVersion": 12, "kind": "item",
+      "name": "Fixture Longblade", "rulesFamilies": ["srd-5.2.1"], "provenance": { "sourceId": "6a7e0000-0000-4000-8000-000000000001" }, "status": "published",
+      "effects": [
+        { "type": "weapon", "id": "longblade-weapon", "category": "martial", "attack": "melee", "damage": "1d8", "damageType": "slashing", "weaponKey": "longblade" },
+        { "type": "modifier", "id": "longblade-initiative", "operation": "bonus", "target": "initiative", "value": "1" }
+      ]
+    },
+    {
+      "contentId": "6a7e00f3-0000-4000-8000-000000000012", "revisionId": "6a7e00f3-0000-4000-8000-000000000112", "schemaVersion": 12, "kind": "item",
+      "name": "Fixture Scale Coat", "rulesFamilies": ["srd-5.2.1"], "provenance": { "sourceId": "6a7e0000-0000-4000-8000-000000000001" }, "status": "published",
+      "effects": [
+        { "type": "armor", "id": "scale-coat-armor", "category": "medium", "armorClass": 14, "dexterityCap": 2 }
+      ]
+    },
+    {
+      "contentId": "6a7e00f3-0000-4000-8000-000000000013", "revisionId": "6a7e00f3-0000-4000-8000-000000000113", "schemaVersion": 12, "kind": "item",
+      "name": "Fixture Round Guard", "rulesFamilies": ["srd-5.2.1"], "provenance": { "sourceId": "6a7e0000-0000-4000-8000-000000000001" }, "status": "published",
+      "effects": [
+        { "type": "armor", "id": "round-guard-armor", "category": "shield", "armorClass": 2 }
+      ]
+    },
+    {
+      "contentId": "6a7e00f3-0000-4000-8000-000000000014", "revisionId": "6a7e00f3-0000-4000-8000-000000000114", "schemaVersion": 12, "kind": "item",
+      "name": "Fixture Bound Blade", "rulesFamilies": ["srd-5.2.1"], "provenance": { "sourceId": "6a7e0000-0000-4000-8000-000000000001" }, "status": "published",
+      "summary": "A weapon that needs attunement.",
+      "effects": [
+        { "type": "item", "id": "bound-blade-item", "requiresAttunement": true },
+        { "type": "weapon", "id": "bound-blade-weapon", "category": "martial", "attack": "melee", "damage": "1d8", "damageType": "slashing", "weaponKey": "boundblade" }
+      ]
+    },
+    {
+      "contentId": "6a7e00f3-0000-4000-8000-000000000021", "revisionId": "6a7e00f3-0000-4000-8000-000000000121", "schemaVersion": 12, "kind": "feature",
+      "name": "Fixture Rune Whisper", "rulesFamilies": ["srd-5.2.1"], "provenance": { "sourceId": "6a7e0000-0000-4000-8000-000000000001" }, "status": "published",
+      "summary": "Granted by the riddle rune; a mod never grants.",
+      "effects": [
+        { "type": "modifier", "id": "whisper-initiative", "operation": "bonus", "target": "initiative", "value": "5" }
+      ]
+    },
+    {
+      "contentId": "6a7e00f3-0000-4000-8000-000000000022", "revisionId": "6a7e00f3-0000-4000-8000-000000000122", "schemaVersion": 12, "kind": "feature",
+      "name": "Fixture Rune Echo A", "rulesFamilies": ["srd-5.2.1"], "provenance": { "sourceId": "6a7e0000-0000-4000-8000-000000000001" }, "status": "published",
+      "effects": [
+        { "type": "modifier", "id": "echo-a-initiative", "operation": "bonus", "target": "initiative", "value": "1" }
+      ]
+    },
+    {
+      "contentId": "6a7e00f3-0000-4000-8000-000000000023", "revisionId": "6a7e00f3-0000-4000-8000-000000000123", "schemaVersion": 12, "kind": "feature",
+      "name": "Fixture Rune Echo B", "rulesFamilies": ["srd-5.2.1"], "provenance": { "sourceId": "6a7e0000-0000-4000-8000-000000000001" }, "status": "published",
+      "effects": [
+        { "type": "modifier", "id": "echo-b-initiative", "operation": "bonus", "target": "initiative", "value": "1" }
+      ]
+    }
+  ]
+}

@@ -231,14 +231,19 @@ public sealed partial class TomeStackApp : IDisposable
                         r.Provenance.SourceId, source?.Title ?? "(unknown source)", r.Provenance.Page?.ToString(), Preview(r.Summary),
                         allowed?.Contains(r.Provenance.SourceId),
                         r.Effects.OfType<SpellEffect>().FirstOrDefault() is { } spell
-                            ? new SpellSummary(spell.Level, spell.Lists, spell.School, spell.Concentration, spell.Ritual)
+                            ? new SpellSummary(spell.Level, spell.Lists, spell.School, spell.Concentration, spell.Ritual, SpellTagsOf(r, spell))
                             : null,
                         Superseded: newest[r.ContentId] != r.RevisionId,
-                        Standalone: !reachable.Contains(r.ContentId));
+                        Standalone: !reachable.Contains(r.ContentId),
+                        ModOf: r.Kind == ContentKind.Item && r.SchemaVersion >= ContentRevision.ItemModSchemaVersion ? r.Effects.OfType<ItemModEffect>().FirstOrDefault()?.AppliesTo : null);
                 })
                 .OrderBy(o => o.Kind).ThenBy(o => o.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(o => o.SourceTitle, StringComparer.CurrentCultureIgnoreCase),
         ];
     }
+
+    /// <summary>MECH-X item 1 (R39): a spell's tags for the builder, only from a v12 revision (as the sheet does); null when it has none.</summary>
+    private static IReadOnlyList<string>? SpellTagsOf(ContentRevision revision, SpellEffect spell) =>
+        spell.Tags is { Count: > 0 } tags && revision.SchemaVersion >= ContentRevision.PaymentSchemaVersion ? tags : null;
 
     /// <summary>
     /// Item 1 (2026-10-14 plan): how many entries of each kind in <paramref name="rulesFamily"/> have no published revision,
@@ -318,16 +323,28 @@ public sealed partial class TomeStackApp : IDisposable
     /// match by construction. Both timestamps are the same stored 100 ns value (the <c>json</c> column round-trips it exactly), so
     /// they compare as instants. The message names no character and quotes no text.
     /// </para>
+    /// <para>
+    /// MECH-X item 2 (R43): the reply of a save of an existing character may carry the advisory
+    /// <c>choice.replaced-outside-window</c> notice in <see cref="CharacterView.Notices"/> when it swapped picks of a replaceable
+    /// choice outside its window. It is never stored and never blocks the save. R69: it may also carry
+    /// <c>companion.play-pruned</c> when the save reset the stored hit points of content companions whose content is no longer active.
+    /// </para>
     /// </summary>
     public CharacterView SaveCharacter(Character character)
     {
         ArgumentNullException.ThrowIfNull(character);
         if (_store.FindCharacter(character.Id) is not { } stored)
-            return SaveWithPlay(character with { ArchivedAt = null }); // a save never creates an archived character
+            return SaveWithPlay(character with { ArchivedAt = null }, checkMods: true); // a save never creates an archived character
         if (character.UpdatedAt != stored.UpdatedAt)
             throw new AppValidationException([new("character.stale", StaleMessage)], "character.stale");
-        return SaveWithPlay(character with { Play = WithoutOrphanedCompanionPlay(stored.Play, character), ArchivedAt = stored.ArchivedAt, Equipment = WithStoredCharges(stored.Equipment, character.Equipment) });
+        var view = SaveWithPlay(character with { Play = WithoutOrphanedCompanionPlay(stored.Play, character), ArchivedAt = stored.ArchivedAt, Equipment = WithStoredCharges(stored.Equipment, character.Equipment) }, checkMods: true);
+        // MECH-X item 2 (R42, R43, R47): advisory only, never stored and never blocking; it rides on this reply alone.
+        var notices = ChoiceReplacements.OutsideWindow(stored, view.Character, view.Sheet.Choices);
+        return notices.Count > 0 ? view with { Notices = [.. view.Notices ?? [], .. notices] } : view;
     }
+
+    /// <summary>MECH-X R69: the advisory notice of a save that reset content companions' hit points (R61's prune). Never stored.</summary>
+    public const string CompanionPlayPrunedCode = "companion.play-pruned";
 
     /// <summary>The words of the <c>character.stale</c> refusal (codes and plain words only; the page re-reads the current copy).</summary>
     public const string StaleMessage = "This character changed since you opened it. Your change wasn't saved; the current copy is shown.";
@@ -353,7 +370,7 @@ public sealed partial class TomeStackApp : IDisposable
     {
         if (play.Companions is not { } recorded)
             return play;
-        var remaining = recorded.Where(p => payload.Companions?.Any(c => c?.Id == p.Id) ?? false).ToList();
+        var remaining = recorded.Where(p => p?.ContentId is not null || payload.Companions?.Any(c => c?.Id == p?.Id) == true).ToList();
         return remaining.Count == recorded.Count ? play : play with { Companions = remaining };
     }
 
@@ -364,12 +381,28 @@ public sealed partial class TomeStackApp : IDisposable
     /// where it is: the stamp moved, so it can no longer match (the view offers nothing and the undo says <c>undo.stale</c>), and the
     /// next compound change replaces it, or the undo removes it after its own write succeeds.
     /// </summary>
-    private CharacterView SaveWithPlay(Character character, (PlayState Before, string Label)? undo = null)
+    private CharacterView SaveWithPlay(Character character, (PlayState Before, string Label)? undo = null, bool checkMods = false)
     {
-        var saved = Checked(character) with { UpdatedAt = _time.GetUtcNow() };
+        var saved = Checked(character, checkMods) with { UpdatedAt = _time.GetUtcNow() };
         // Calculate before writing: if the sheet cannot be calculated, nothing is stored (the store never holds a
         // character that cannot be opened).
         var view = View(saved);
+        // MECH-X item 4 (S1): an ordinary save forgets the hit points of a content companion whose content is no longer active. Only this
+        // path prunes; play actions, rests, charge changes and snapshot restores keep every row, so a stored character stays playable.
+        if (checkMods && saved.Play?.Companions is { } rows)
+        {
+            var kept = rows.Where(p => p.ContentId is null || view.Sheet.Companions?.Any(c => c.Content.ContentId == p.ContentId && c.CompanionId == p.Id) == true).ToList();
+            if (kept.Count != rows.Count)
+            {
+                saved = saved with { Play = saved.Play with { Companions = kept } };
+                // R69 (owner, 2026-10-30): the prune stays (R61), and the reply says so once. A count only: no name, no content id.
+                var pruned = rows.Count - kept.Count;
+                var message = pruned == 1
+                    ? "A companion's hit points were reset, because the content that gives it is no longer active."
+                    : $"{pruned} companions' hit points were reset, because the content that gives them is no longer active.";
+                view = view with { Character = saved, Notices = [new(CompanionPlayPrunedCode, message)] };
+            }
+        }
         _store.InTransaction(() => _store.SaveCharacter(saved));
         if (undo is not { } slot)
             return view;
@@ -582,10 +615,11 @@ public sealed record ContentOption(
     bool? AllowedInCampaign = null,
     SpellSummary? Spell = null,
     bool Superseded = false,
-    bool Standalone = true);
+    bool Standalone = true,
+    ModTarget? ModOf = null);
 
 /// <summary>What the builder's spell picker needs to filter and sort a spell option (content schema v5).</summary>
-public sealed record SpellSummary(int Level, IReadOnlyList<string> Lists, string? School, bool Concentration, bool Ritual);
+public sealed record SpellSummary(int Level, IReadOnlyList<string> Lists, string? School, bool Concentration, bool Ritual, IReadOnlyList<string>? Tags = null);
 
 /// <param name="ArchivedAt">SPEC C-08: set while the character is archived; the UI lists it apart, collapsed.</param>
 public sealed record CharacterSummary(Guid Id, string Name, string RulesFamily, DateTimeOffset UpdatedAt, DateTimeOffset? ArchivedAt = null, IReadOnlyList<Guid>? ExceptionContentIds = null, int Level = 1);

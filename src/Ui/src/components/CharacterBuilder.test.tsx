@@ -1484,6 +1484,62 @@ describe('a pick that needs a campaign exception reason after the reason is clea
     expect(client.saveCharacter).toHaveBeenCalledTimes(1);
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Save choices' }));
   });
+
+  it('Save waits for a tick whose preview has not landed, so the saved draft carries it (choices mode)', async () => {
+    const user = userEvent.setup();
+    const source = { contentId: 'fixture-feature', revisionId: 'fixture-feature-r1' };
+    const mine = content(7, 'feature', 'Fixture Mine', 'srd-5.1');
+    vi.mocked(client.listContent).mockResolvedValue([mine]);
+    const answer = (selected: ContentOption[]) => {
+      const v = choiceView(selected, [mine]);
+      v.character = { ...v.character, choices: [{ source, choiceId: 'pick', selected: selected.map((o) => o.reference) }] };
+      return v;
+    };
+    let land: (v: CharacterView) => void = () => {};
+    vi.mocked(client.previewChoice).mockReset();
+    vi.mocked(client.previewChoice).mockImplementation(() => new Promise<CharacterView>((resolve) => (land = resolve)));
+    vi.mocked(client.saveCharacter).mockReset();
+    vi.mocked(client.saveCharacter).mockImplementation(async (c) => ({ ...viewWith(c.spells), character: c }));
+    render(<CharacterBuilder mode={{ kind: 'choices', view: answer([]) }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+    const picker = await screen.findByRole('group', { name: /Fixture feature: choose 2/ });
+    await user.click(await within(picker).findByRole('checkbox', { name: /Fixture Mine/ }));
+    await user.click(screen.getByRole('button', { name: 'Save choices' })); // before the preview lands
+    expect(vi.mocked(client.previewChoice)).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Saving…' })).toBeTruthy();
+    expect(vi.mocked(client.saveCharacter)).not.toHaveBeenCalled();
+    land(answer([mine]));
+    await waitFor(() => expect(vi.mocked(client.saveCharacter)).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(client.saveCharacter).mock.calls[0]![0].choices).toEqual([{ source, choiceId: 'pick', selected: [mine.reference] }]);
+  });
+
+  it("Save pressed before a restricted tick's preview lands does not save it without its reason (R41)", async () => {
+    const user = userEvent.setup();
+    const source = { contentId: 'fixture-feature', revisionId: 'fixture-feature-r1' };
+    const outsider = content(8, 'feature', 'Fixture Outsider', 'srd-5.1', { allowedInCampaign: false });
+    vi.mocked(client.listContent).mockResolvedValue([outsider]);
+    const answer = (selected: ContentOption[]) => {
+      const v = choiceView(selected, [outsider], 'fixture-camp');
+      v.character = { ...v.character, choices: [{ source, choiceId: 'pick', selected: selected.map((o) => o.reference) }] };
+      return v;
+    };
+    let land: (v: CharacterView) => void = () => {};
+    vi.mocked(client.previewChoice).mockReset();
+    vi.mocked(client.previewChoice).mockImplementation(() => new Promise<CharacterView>((resolve) => (land = resolve)));
+    vi.mocked(client.saveCharacter).mockReset();
+    vi.mocked(client.saveCharacter).mockImplementation(async (c) => ({ ...viewWith(c.spells), character: c }));
+    render(<CharacterBuilder mode={{ kind: 'choices', view: answer([]) }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+    const picker = await screen.findByRole('group', { name: /Fixture feature: choose 2/ });
+    await within(picker).findByRole('checkbox', { name: /Fixture Outsider/ });
+    await allowOutside(user);
+    await user.click(within(picker).getByRole('checkbox', { name: /Fixture Outsider/ }));
+    await user.clear(reasonField()); // no reason, and the pick is not in the rendered draft yet, so the hint is not shown
+    await user.click(screen.getByRole('button', { name: 'Save choices' })); // before the preview lands
+    expect(vi.mocked(client.saveCharacter)).not.toHaveBeenCalled();
+    land(answer([outsider]));
+    await screen.findByText('Fixture Outsider needs a campaign exception reason.');
+    expect(vi.mocked(client.saveCharacter)).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Save choices' }).getAttribute('aria-disabled')).toBe('true');
+  });
 });
 
 // R43 (follow-up F3): level-up Next says why it waits (3.3.2, 4.1.2) and is never natively disabled.
@@ -1525,6 +1581,56 @@ describe('level-up Next states its reason (R43)', () => {
     expect(next.getAttribute('aria-disabled')).toBeNull();
     expect(next.hasAttribute('aria-describedby')).toBe(false);
     expect(screen.queryByText('Choose a class to continue.')).toBeNull();
+  });
+});
+
+// MECH-X item 2: the replace offer (level-up) and the window hint (Make choices) are real text in the choice group.
+describe('replaceable choices', () => {
+  const opts = [content(11, 'feature', 'Fixture Alpha', 'srd-5.1'), content(12, 'feature', 'Fixture Beta', 'srd-5.1')];
+  const replaceableView = (picked: ContentOption[], when: 'levelUp' | 'longRest', max = 1): CharacterView => {
+    const view = choiceView(picked, opts);
+    view.sheet.choices![0]!.replaceable = { when, max };
+    view.character = { ...view.character, level: 1, classes: [{ class: { contentId: 'fixture-class', revisionId: 'fixture-class-r1' }, level: 1 }] };
+    if (picked.length > 0) view.character.choices = [{ source: view.sheet.choices![0]!.source, choiceId: 'pick', selected: picked.map((o) => o.reference) }];
+    return view;
+  };
+  const group = () => screen.findByRole('group', { name: /Fixture feature: choose 2/ });
+  beforeEach(() => vi.mocked(client.listContent).mockResolvedValue(opts));
+
+  it('level-up: a levelUp choice that had picks shows the offer, in the choice group', async () => {
+    const user = userEvent.setup();
+    vi.mocked(client.preview).mockResolvedValue(replaceableView([opts[0]!], 'levelUp', 1));
+    render(<CharacterBuilder mode={{ kind: 'levelUp', view: replaceableView([opts[0]!], 'levelUp', 1) }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+    await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+    expect(within(await group()).getByText('You may replace one pick now.')).toBeTruthy();
+  });
+
+  it('level-up: words a max above 1', async () => {
+    const user = userEvent.setup();
+    vi.mocked(client.preview).mockResolvedValue(replaceableView([opts[0]!], 'levelUp', 2));
+    render(<CharacterBuilder mode={{ kind: 'levelUp', view: replaceableView([opts[0]!], 'levelUp', 2) }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+    await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+    expect(within(await group()).getByText('You may replace up to 2 picks now.')).toBeTruthy();
+  });
+
+  it('level-up: a first-time choice, and a longRest choice, show no offer', async () => {
+    const user = userEvent.setup();
+    vi.mocked(client.preview).mockResolvedValue(replaceableView([opts[0]!], 'levelUp', 1));
+    const { unmount } = render(<CharacterBuilder mode={{ kind: 'levelUp', view: replaceableView([], 'levelUp') }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+    await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+    await group();
+    expect(screen.queryByText(/You may replace/)).toBeNull();
+    unmount();
+    vi.mocked(client.preview).mockResolvedValue(replaceableView([opts[0]!], 'longRest'));
+    render(<CharacterBuilder mode={{ kind: 'levelUp', view: replaceableView([opts[0]!], 'longRest') }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+    await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+    await group();
+    expect(screen.queryByText(/You may replace/)).toBeNull();
+  });
+
+  it('choices mode shows the window as a hint', async () => {
+    render(<CharacterBuilder mode={{ kind: 'choices', view: replaceableView([opts[0]!], 'longRest') }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+    expect(within(await group()).getByText('You may replace a pick after a long rest.')).toBeTruthy();
   });
 });
 

@@ -96,6 +96,8 @@ internal static class Generators
         [ValueEffect.TypeName] = ValueEffect.SchemaVersion,
         [RollModeEffect.TypeName] = RollModeEffect.SchemaVersion,
         [ResponseEffect.TypeName] = ResponseEffect.SchemaVersion,
+        [ItemModEffect.TypeName] = ItemModEffect.SchemaVersion,
+        [CompanionEffect.TypeName] = CompanionEffect.SchemaVersion,
     };
 
     /// <summary>
@@ -210,6 +212,9 @@ internal static class Generators
                 from alsoChangeKind in Gen.Elements("spend", "regain")
                 from alsoChangeAmount in Formulas
                 from drawsDown in Gen.Elements<bool?>(null, null, true, false)
+                // Content v12 (MECH-X item 1), any version: typed from v12, below it extension data written back where it was.
+                from payment in V12Slot(v, "payment", PaymentValue)
+                from casts in V12Slot(v, "castsSpell", Guids.Select(g => (JsonNode?)g.ToString()))
                 select new JsonObject { ["rollId"] = id, ["label"] = label }.With("dice", noDice ? null : dice).With("resourceId", noDice ? "pool" : resource)
                     .With("activation", v >= SpellcastingEffect.SchemaVersion ? activation : null)
                     .With("cost", noDice ? "1" : v >= ToggleEffect.SchemaVersion ? cost : null)
@@ -221,7 +226,7 @@ internal static class Generators
                     .With("range", range).With("targets", targets)
                     .With("perUnit", perUnit ? new JsonObject { ["dice"] = perUnitDice }.With("maxUnits", maxUnits) : null)
                     .With("alsoChange", alsoChange ? new JsonArray(new JsonObject { ["resourceId"] = "pool", ["change"] = alsoChangeKind, ["amount"] = alsoChangeAmount }) : null)
-                    .With("drawsDown", drawsDown)),
+                    .With("drawsDown", drawsDown).WithV12(payment).WithV12(casts)),
             Common(RestrictionEffect.TypeName,
                 from field in Gen.Elements(FieldIds.Score(Ability.Str), FieldIds.Score(Ability.Wis))
                 from min in Gen.Choose(1, 20)
@@ -233,13 +238,15 @@ internal static class Generators
                 from options in References.ArrayOf().Select(o => o.Take(4).ToArray())
                 from level in OptionalValue(Gen.Choose(1, 20))
                 from onlyAs in Gen.Elements<string?>(null, "startingClass", "multiclass")
+                // Content v12 (MECH-X item 2), any version: typed from v12, below it extension data written back where it was.
+                from replaceable in V12Slot(v, "replaceable", ReplaceableValue)
                 select new JsonObject
                 {
                     ["choiceId"] = id,
                     ["count"] = count,
                     ["options"] = new JsonArray([.. options.Select(o => (JsonNode)new JsonObject { ["contentId"] = o.ContentId.ToString(), ["revisionId"] = o.RevisionId.ToString() })]),
                 }
-                .With("level", v >= 3 ? level : null).With("onlyAs", v >= SpellcastingEffect.SchemaVersion ? onlyAs : null)),
+                .With("level", v >= 3 ? level : null).With("onlyAs", v >= SpellcastingEffect.SchemaVersion ? onlyAs : null).WithV12(replaceable)),
             .. Versioned(v),
             Unknown(),
         ];
@@ -272,12 +279,14 @@ internal static class Generators
                 from costContent in OptionalValue(Guids)
                 from toggleLevel in OptionalValue(Gen.Choose(1, 20))
                 from duration in Optional(Gen.Elements("1", "3", "PB"))
+                // Content v12 (MECH-X item 1), any version: typed from v12, below it extension data written back where it was.
+                from payment in V12Slot(v, "payment", PaymentValue)
                 select new JsonObject { ["toggleId"] = id, ["label"] = label }.With("resourceId", resource)
                     .With("autoWhen", autoWhen).With("activation", activation)
                     .With("group", groupName).With("groupContent", groupContent?.ToString()).With("layer", layer)
                     .With("allowedWith", allowedWith ? new JsonArray(new JsonObject { ["contentId"] = partner.ToString(), ["toggleId"] = "tide" }) : null)
                     .With("allowedInBase", allowedInBase).With("cost", toggleCost).With("resourceContent", costContent?.ToString())
-                    .With("level", toggleLevel).With("duration", duration)),
+                    .With("level", toggleLevel).With("duration", duration).WithV12(payment)),
             Common(UpkeepEffect.TypeName,
                 from toggle in Optional(Keys)
                 from at in Gen.Elements("turnStart", "turnEnd")
@@ -306,6 +315,8 @@ internal static class Generators
                 from cost in Optional(Gen.Elements("1", "2", "PB"))
                 from whileToggle in Gen.Elements(false, false, true)
                 from whileId in Keys
+                // Content v12 (MECH-X item 1), any version: typed from v12, below it extension data written back where it was.
+                from payment in V12Slot(v, "payment", PaymentValue)
                 select new JsonObject
                 {
                     ["attackId"] = id, ["label"] = label, ["kind"] = kind,
@@ -317,7 +328,7 @@ internal static class Generators
                 .With("tags", tags.Length == 0 ? null : new JsonArray([.. tags.Select(t => (JsonNode)t)]))
                 .With("replacesAttack", replaces).With("activation", activation)
                 .With("resourceId", resource).With("resourceContent", resourceContent?.ToString()).With("cost", cost)
-                .With("whileToggle", whileToggle ? new JsonObject { ["toggleId"] = whileId } : null)),
+                .With("whileToggle", whileToggle ? new JsonObject { ["toggleId"] = whileId } : null).WithV12(payment)),
             Common(AttackRiderEffect.TypeName,
                 from tags in Keys.ArrayOf().Select(t => t.Distinct().Take(3).ToArray())
                 from toHit in Optional(Formulas)
@@ -379,6 +390,24 @@ internal static class Generators
                     .With("charges", max is { } m
                         ? new JsonObject { ["max"] = m }.With("recovery", period is null ? null : new JsonObject { ["period"] = period }.With("regain", regain))
                         : null)),
+            // Typed from v12, unknown (and unchanged) below. Nested modifiers are the restricted shape the validator allows.
+            Common(ItemModEffect.TypeName,
+                from applies in Gen.Elements("weapon", "armor", "any")
+                from bonus in OptionalValue(Gen.Choose(0, ItemModEffect.MaxBonus))
+                from targets in Gen.Elements(FieldIds.Initiative, FieldIds.Score(Ability.Dex), FieldIds.ProficiencyBonus).ArrayOf().Select(t => t.Take(2).ToArray())
+                from value in Formulas
+                select new JsonObject { ["appliesTo"] = applies }.With("bonus", bonus)
+                    .With("modifiers", targets.Length == 0 ? null : new JsonArray([.. targets.Select((t, i) => (JsonNode)new JsonObject
+                    {
+                        ["type"] = ModifierEffect.TypeName, ["id"] = "nested" + i, ["operation"] = "bonus", ["target"] = t, ["value"] = value,
+                    })]))),
+            // Typed from v12, unknown (and unchanged) below. Never lists attacks or pools: those are checked by the validator, not the reader.
+            Common(CompanionEffect.TypeName,
+                from companionId in Guids
+                from label in Gen.Elements("Fixture Hound", "Fixture Hawk", "Fixture Ox", "Fixture Wisp")
+                from speed in Optional(Gen.Elements("30 ft.", "40 ft.", "fly 60 ft."))
+                select new JsonObject { ["companionId"] = companionId.ToString("D"), ["label"] = label, ["armorClass"] = "13", ["hitPointMaximum"] = "5 * LEVEL" }
+                    .With("speed", speed)),
             Common(ScaleEffect.TypeName,
                 from id in Keys
                 from label in Names
@@ -417,11 +446,21 @@ internal static class Generators
                 from key in Keys
                 from properties in Gen.Elements("finesse", "light", "thrown", "versatile", "two-handed").ArrayOf().Select(p => p.Distinct().Take(3).ToArray())
                 from range in Optional(Gen.Elements("20/60", "80/320"))
-                select new JsonObject
-                {
-                    ["category"] = category, ["attack"] = attack, ["damage"] = damage, ["damageType"] = damageType, ["weaponKey"] = key,
-                    ["properties"] = new JsonArray([.. properties.Select(p => (JsonNode)p)]),
-                }.With("range", range)),
+                // The v12 key at every version, sometimes absent and in an arbitrary position: from v12 a whole number 0 to 10; below
+                // v12 any JSON value under either spelling, which must stay extension data, written back where it was.
+                from bonus in Gen.Elements(Enumerable.Range(0, 11).Select(n => (JsonNode?)n).Concat([null]))
+                from oddBonus in Gen.Elements<JsonNode?>(2, "2", 1.5, null, true, -3)
+                from spelling in Gen.Elements("bonus", "Bonus")
+                from present in Gen.Elements(false, true, true)
+                from position in Gen.Choose(0, 6)
+                select WithBonus(
+                    new JsonObject
+                    {
+                        ["category"] = category, ["attack"] = attack, ["damage"] = damage, ["damageType"] = damageType, ["weaponKey"] = key,
+                        ["properties"] = new JsonArray([.. properties.Select(p => (JsonNode)p)]),
+                    }.With("range", range),
+                    present, v >= ContentRevision.WeaponBonusSchemaVersion ? "bonus" : spelling,
+                    v >= ContentRevision.WeaponBonusSchemaVersion ? (bonus ?? 0) : oddBonus, position)),
             Common(SpellEffect.TypeName,
                 from level in Gen.Choose(0, SpellcastingEffect.MaxSpellLevel)
                 from school in Optional(Gen.Elements("evocation", "illusion", "conjuration"))
@@ -429,11 +468,54 @@ internal static class Generators
                 from concentration in Gen.Elements(true, false)
                 from attack in Gen.Elements("none", "melee", "ranged")
                 from dice in Optional(Gen.Elements("1d10", "3d6", "8d6"))
+                // Content v12 (MECH-X item 1), any version: typed from v12, below it extension data written back where it was.
+                from tags in V12Slot(v, "tags", Keys.ArrayOf().Select(t => (JsonNode?)new JsonArray([.. t.Distinct().Take(3).Select(x => (JsonNode)x)])))
                 select new JsonObject
                 {
                     ["level"] = level, ["concentration"] = concentration, ["lists"] = new JsonArray([.. lists.Select(l => (JsonNode)l)]), ["attack"] = attack,
-                }.With("school", school).With("dice", dice)),
+                }.With("school", school).With("dice", dice).WithV12(tags)),
     ];
+
+    private static JsonObject WithBonus(JsonObject weapon, bool present, string name, JsonNode? value, int position)
+    {
+        if (present)
+            weapon.Insert(Math.Min(position, weapon.Count), name, value?.DeepClone()); // a node has one parent, and the generator reuses values
+        return weapon;
+    }
+
+    /// <summary>A content v12 key of the MECH-X item 1 types: whether it is there, under which spelling, with what value, and where.</summary>
+    private readonly record struct V12Key(bool Present, string Name, JsonNode? Value, int Position);
+
+    /// <summary>
+    /// The key <paramref name="name"/> for a revision of content schema <paramref name="v"/>, sometimes absent and in an arbitrary
+    /// position: from v12 the typed value under the real name; below v12 any JSON value under either spelling, which must stay
+    /// extension data, written back where it was.
+    /// </summary>
+    private static Gen<V12Key> V12Slot(int v, string name, Gen<JsonNode?> typed) =>
+        from present in Gen.Elements(false, true, true)
+        from spelling in Gen.Elements(name, char.ToUpperInvariant(name[0]) + name[1..])
+        from position in Gen.Choose(0, 12)
+        from valid in typed
+        from odd in Gen.Elements<JsonNode?>(2, "2", 1.5, null, true, new JsonObject { ["kind"] = "hp" }, new JsonObject { ["kind"] = "slot" }, new JsonArray(1, 2))
+        select v >= ContentRevision.PaymentSchemaVersion ? new V12Key(present, name, valid, position) : new V12Key(present, spelling, odd, position);
+
+    private static Gen<JsonNode?> PaymentValue =>
+        from kind in Gen.Elements("resource", "hitPoints", "slot")
+        from drops in OptionalValue(Gen.Elements(true, false))
+        from level in OptionalValue(Gen.Choose(1, 9))
+        select (JsonNode?)new JsonObject { ["kind"] = kind }.With("mayDropToZero", drops).With("minSlotLevel", level);
+
+    private static Gen<JsonNode?> ReplaceableValue =>
+        from when in Gen.Elements("levelUp", "longRest")
+        from max in OptionalValue(Gen.Choose(1, 20))
+        select (JsonNode?)new JsonObject { ["when"] = when }.With("max", max);
+
+    private static JsonObject WithV12(this JsonObject o, V12Key key)
+    {
+        if (key.Present)
+            o.Insert(Math.Min(key.Position, o.Count), key.Name, key.Value?.DeepClone()); // a node has one parent, and the generator reuses values
+        return o;
+    }
 
     /// <summary>An effect type no build knows, with nested data, so it must survive unchanged.</summary>
     private static Gen<JsonObject> Unknown() =>
@@ -550,6 +632,14 @@ internal static class Generators
         from round in OptionalValue(Gen.Choose(0, PlayState.MaxRounds))
         from toggleIds in Gen.Choose(0, 2)
         from roundsLeft in OptionalValue(Gen.Choose(0, PlayState.MaxRounds)).ArrayOf(2)
+        // Schema v11 field (MECH-X item 3), mostly absent: 0 to 2 mods on the first equipment entry, never equal to its item. A character is written as v11 only then.
+        from modCount in Gen.Frequency((6, Gen.Constant(0)), (1, Gen.Constant(1)), (1, Gen.Constant(2)))
+        from mods in References.ArrayOf(2)
+        // Schema v11 field (MECH-X item 4), mostly absent: one play row for a content companion. A character is written as v11 then.
+        from hasContentCompanion in Gen.Frequency((6, Gen.Constant(false)), (1, Gen.Constant(true)))
+        from companionId in Guids
+        from companionContent in Guids
+        from companionCurrent in Gen.Choose(0, PlayState.MaxHitPoints)
         // A field this build does not know: it round-trips through Character.Extensions.
         from extra in Optional(Keys)
         from extraNumber in Gen.Choose(-1000, 1000)
@@ -563,7 +653,7 @@ internal static class Generators
             BaseAbilities = new(scores[0], scores[1], scores[2], scores[3], scores[4], scores[5]),
             Pins = pins,
             Overrides = overrides,
-            Equipment = [.. items.Select((item, i) => new EquipmentEntry(item, equipped[i], quantity[i], Attuned: i == 0 ? attuned : null))],
+            Equipment = [.. items.Select((item, i) => new EquipmentEntry(item, equipped[i], quantity[i], Attuned: i == 0 ? attuned : null, Mods: i == 0 && modCount > 0 ? [.. mods.Take(modCount)] : null))],
             Xp = xp,
             Details = alignment is null ? null : new(Alignment: alignment),
             Spells = [.. spells.Select((s, i) => new KnownSpell(caster, s, i % 2 == 0))],
@@ -574,6 +664,7 @@ internal static class Generators
                 TemporaryHitPoints = temporary,
                 Encounter = round is { } r ? new EncounterState(r) : null,
                 Toggles = [.. Enumerable.Range(0, toggleIds).Select(i => new ActiveToggle(caster, "toggle-" + i, roundsLeft[i]))],
+                Companions = hasContentCompanion ? [new CompanionPlay(companionId, companionCurrent, 0, companionContent)] : null,
             },
             UpdatedAt = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero).AddMinutes(updated),
             ArchivedAt = archived is { } a ? new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero).AddMinutes(a) : null,

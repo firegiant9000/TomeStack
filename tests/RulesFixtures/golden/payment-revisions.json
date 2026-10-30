@@ -1,0 +1,42 @@
+[
+  {
+    "contentId": "6a7e00f1-0000-4000-8000-000000000001",
+    "revisionId": "6a7e00f1-0000-4000-8000-000000000101",
+    "schemaVersion": 12,
+    "kind": "feature",
+    "name": "Fixture Bloodprice Rite",
+    "rulesFamilies": ["srd-5.2.1"],
+    "provenance": { "sourceId": "6a7e0000-0000-4000-8000-000000000001" },
+    "status": "published",
+    "effects": [
+      {
+        "type": "roll", "id": "rite-roll", "rollId": "rite", "label": "Bloodprice Rite", "dice": "1d6", "cost": "2",
+        "perUnit": { "dice": "1d6", "maxUnits": 3 }, "payment": { "kind": "hitPoints", "mayDropToZero": false }
+      },
+      { "type": "toggle", "id": "rite-ward", "toggleId": "ward", "label": "Rite Ward", "payment": { "kind": "slot", "minSlotLevel": 2 } },
+      {
+        "type": "attack", "id": "rite-bolt", "attackId": "bolt", "label": "Rite Bolt", "kind": "ranged", "abilities": ["int"],
+        "damage": { "count": "1", "die": "8" }, "damageType": "necrotic", "cost": "3", "payment": { "kind": "hitPoints", "mayDropToZero": true }
+      },
+      { "type": "roll", "id": "rite-cast", "rollId": "cast", "label": "Cast the Ward", "castsSpell": "6a7e00f1-0000-4000-8000-000000000002" },
+      { "type": "xRiteLore", "id": "rite-lore", "verses": { "ebb": 1, "flow": [2, 3] }, "note": "Kept as written." }
+    ],
+    "xFixtureNote": { "kept": "as written", "list": [1, "two", true, null] }
+  },
+  {
+    "contentId": "6a7e00f1-0000-4000-8000-000000000002",
+    "revisionId": "6a7e00f1-0000-4000-8000-000000000102",
+    "schemaVersion": 12,
+    "kind": "spell",
+    "name": "Fixture Hourglass Ward",
+    "rulesFamilies": ["srd-5.2.1"],
+    "provenance": { "sourceId": "6a7e0000-0000-4000-8000-000000000001" },
+    "status": "published",
+    "effects": [
+      {
+        "type": "spell", "id": "hourglass", "level": 2, "school": "abjuration", "castingTime": "1 action", "range": "Self", "components": "V, S",
+        "duration": "1 minute", "concentration": true, "lists": ["fixture"], "dice": "2d6", "tags": ["time", "ritualLike"]
+      }
+    ]
+  }
+]

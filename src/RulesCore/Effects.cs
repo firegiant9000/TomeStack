@@ -438,12 +438,26 @@ public sealed record AttackEffect : Effect
     /// <summary>The attack is available only while this toggle is on (it may be another content's). Null: always.</summary>
     public ToggleRef? WhileToggle { get; init; }
 
-    internal static Effect FromUnknown(UnknownEffect unknown) =>
-        VersionedEffects.NamesMember<WeaponAttack>(unknown.Raw, "kind")
-        && VersionedEffects.NamesMember<Activation>(unknown.Raw, "activation")
-        && VersionedEffects.NamesEveryMember<Ability>(unknown.Raw, "abilities")
-            ? VersionedEffects.Typed<AttackEffect>(unknown)
-            : unknown;
+    /// <summary>
+    /// Content schema v12 (MECH-X item 1): how the attack pays a cost that is not a pool (hit points, or a spell slot). Null: a pool
+    /// cost as today. Below v12 the key stays extension data and does nothing.
+    /// </summary>
+    public CostPayment? Payment { get; init; }
+
+    /// <summary>The keys content schema v12 adds to this effect; below v12 they stay extension data.</summary>
+    internal static readonly string[] V12Keys = ["payment"];
+
+    /// <summary>Typed by the revision (see <see cref="VersionedEffects.ByName"/>): the v12 key, and the check on its kind, only from v12.</summary>
+    internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion)
+    {
+        if (!(VersionedEffects.NamesMember<WeaponAttack>(unknown.Raw, "kind")
+            && VersionedEffects.NamesMember<Activation>(unknown.Raw, "activation")
+            && VersionedEffects.NamesEveryMember<Ability>(unknown.Raw, "abilities")))
+            return unknown;
+        if (revisionSchemaVersion < ContentRevision.PaymentSchemaVersion)
+            return VersionedEffects.TypedWithout<AttackEffect>(unknown, V12Keys);
+        return VersionedEffects.PaymentKindReads(unknown.Raw) ? VersionedEffects.Typed<AttackEffect>(unknown) : unknown;
+    }
 }
 
 /// <summary>
@@ -522,7 +536,38 @@ public sealed record ChoiceEffect : Effect
 
     /// <summary>Content schema v5: only as the starting class, or only as a later class. Null: always.</summary>
     public ClassEntry? OnlyAs { get; init; }
+
+    /// <summary>Content schema v12 (MECH-X item 2): when picks may be replaced (advisory). Below v12 the key stays extension data and does nothing.</summary>
+    public ChoiceReplaceable? Replaceable { get; init; }
+
+    /// <summary>The keys content schema v12 adds to this effect (MECH-X item 2); below v12 they stay extension data.</summary>
+    internal static readonly string[] V12Keys = ["replaceable"];
+
+    /// <summary>The most picks a choice may let be replaced at once.</summary>
+    public const int MaxReplaceable = 20;
+
+    /// <summary>
+    /// Typed by the revision when the converter hands it over (see <see cref="EffectJsonConverter"/>). Below v12 the key stays
+    /// extension data, in document order, as the build before it wrote it. From v12 the choice is typed only when
+    /// <c>replaceable</c> reads: its <c>when</c> must be exactly a <see cref="ReplaceWindow"/> member (the serializer also binds
+    /// padded or combined names); otherwise the effect stays unknown and the validator refuses it.
+    /// </summary>
+    internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion)
+    {
+        if (revisionSchemaVersion < ContentRevision.ReplaceableChoiceSchemaVersion)
+            return VersionedEffects.TypedWithout<ChoiceEffect>(unknown, V12Keys);
+        return VersionedEffects.ReplaceWindowReads(unknown.Raw) ? VersionedEffects.Typed<ChoiceEffect>(unknown) : unknown;
+    }
 }
+
+/// <summary>Content schema v12 (MECH-X item 2): when a replaceable choice's picks may be changed. Wire names <c>levelUp</c>, <c>longRest</c>.</summary>
+public enum ReplaceWindow { LevelUp, LongRest }
+
+/// <summary>
+/// Content schema v12 (MECH-X item 2): picks of a choice may be replaced at a level-up or after a long rest, up to
+/// <see cref="Max"/> at once (absent: 1). Advisory: the app only notices a replacement outside the window.
+/// </summary>
+public sealed record ChoiceReplaceable([property: JsonRequired] ReplaceWindow When, int? Max = null);
 
 /// <summary>A prerequisite or limitation, for example a minimum ability score.</summary>
 public sealed record RestrictionEffect : Effect
@@ -635,6 +680,18 @@ public sealed record RollEffect : Effect
     /// </summary>
     public bool? DrawsDown { get; init; }
 
+    /// <summary>
+    /// Content schema v12 (MECH-X item 1): where the cost is paid from when it is not a pool (hit points, or a spell slot). Null
+    /// (or kind <c>resource</c>): today's pool cost. Below v12 the key stays extension data and does nothing.
+    /// </summary>
+    public CostPayment? Payment { get; init; }
+
+    /// <summary>
+    /// Content schema v12 (MECH-X item 1): the content id of a spell this roll casts without spending a slot; the roll rolls the
+    /// spell's dice when it has none of its own. Below v12 the key stays extension data and does nothing.
+    /// </summary>
+    public Guid? CastsSpell { get; init; }
+
     /// <summary>The longest <see cref="Range"/> or <see cref="Targets"/>.</summary>
     public const int MaxTextLength = 200;
 
@@ -643,6 +700,9 @@ public sealed record RollEffect : Effect
     /// <summary>The keys content schema v11 adds to this effect; below v11 they stay extension data.</summary>
     internal static readonly string[] V11Keys = ["whileToggle", "save", "area", "range", "targets", "perUnit", "alsoChange", "drawsDown"];
 
+    /// <summary>The keys content schema v12 adds to this effect (MECH-X item 1); below v12 they stay extension data.</summary>
+    internal static readonly string[] V12Keys = ["payment", "castsSpell"];
+
     /// <summary>
     /// Typed by the revision when the converter hands it over (see <see cref="EffectJsonConverter"/>): v11 keys, and a roll with
     /// no <c>dice</c>, only from v11. Below v11 a dice-less roll stays untyped, as it did when dice were required.
@@ -650,8 +710,11 @@ public sealed record RollEffect : Effect
     internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion)
     {
         if (revisionSchemaVersion < ContentRevision.PlayMechanicsSchemaVersion)
-            return LacksDice(unknown.Raw) ? unknown : VersionedEffects.TypedWithout<RollEffect>(unknown, V11Keys);
-        return ReadsEnums(unknown.Raw) ? VersionedEffects.Typed<RollEffect>(unknown) : unknown;
+            return LacksDice(unknown.Raw) ? unknown : VersionedEffects.TypedWithout<RollEffect>(unknown, [.. V11Keys, .. V12Keys]);
+        // v11 does not look at the v12 keys: a malformed payment must not leave the roll unknown and change its bytes.
+        if (revisionSchemaVersion < ContentRevision.PaymentSchemaVersion)
+            return ReadsEnums(unknown.Raw, false) ? VersionedEffects.TypedWithout<RollEffect>(unknown, V12Keys) : unknown;
+        return ReadsEnums(unknown.Raw, true) ? VersionedEffects.Typed<RollEffect>(unknown) : unknown;
     }
 
     /// <summary>Whether the JSON has no <c>dice</c> (no key in any spelling, or a null): what an older build, where it was required, could not type.</summary>
@@ -660,8 +723,10 @@ public sealed record RollEffect : Effect
         && !raw.EnumerateObject().Any(p => string.Equals(p.Name, "dice", StringComparison.OrdinalIgnoreCase) && p.Value.ValueKind != JsonValueKind.Null);
 
     /// <summary>The save ability, area shape and each alsoChange change must be exactly a member name (the serializer also binds padded or combined names, which no schema allows).</summary>
-    private static bool ReadsEnums(JsonElement raw)
+    private static bool ReadsEnums(JsonElement raw, bool v12)
     {
+        if (v12 && !VersionedEffects.PaymentKindReads(raw))
+            return false;
         foreach (var p in raw.EnumerateObject())
         {
             if (string.Equals(p.Name, AlsoChangeProperty, StringComparison.OrdinalIgnoreCase) && p.Value.ValueKind == JsonValueKind.Array)
@@ -682,6 +747,17 @@ public sealed record RollEffect : Effect
         return true;
     }
 }
+
+/// <summary>Content schema v12 (MECH-X item 1): where a cost is paid from. Wire names <c>resource</c>, <c>hitPoints</c>, <c>slot</c>.</summary>
+public enum PaymentKind { Resource, HitPoints, Slot }
+
+/// <summary>
+/// Content schema v12 (MECH-X item 1): how a roll, a feature attack or a toggle pays its cost. <see cref="PaymentKind.Resource"/>
+/// is today's pool. <see cref="PaymentKind.HitPoints"/> pays the effect's <c>cost</c> (a formula) from current hit points;
+/// <see cref="MayDropToZero"/> lets the payment leave 0. <see cref="PaymentKind.Slot"/> spends one spell slot of
+/// <see cref="MinSlotLevel"/> (1 to 9; default 1) or higher.
+/// </summary>
+public sealed record CostPayment([property: JsonRequired] PaymentKind Kind, bool? MayDropToZero = null, int? MinSlotLevel = null);
 
 /// <summary>Content schema v11 (D43): a saving throw an action asks of its targets: the ability, and a DC formula (for example <c>8 + PB + WIS.MOD</c>).</summary>
 public sealed record RollSave([property: JsonRequired] Ability Ability, [property: JsonRequired] string Dc);
@@ -944,6 +1020,12 @@ public sealed record ToggleEffect : Effect
     /// <summary>Content schema v11 (D43): rounds the toggle lasts once on (a formula, evaluated for the character). Null: until switched off.</summary>
     public string? Duration { get; init; }
 
+    /// <summary>
+    /// Content schema v12 (MECH-X item 1): how turning the toggle on pays its <see cref="Cost"/> when it is not a pool (hit points,
+    /// or a spell slot). Null: a pool cost as today. Below v12 the key stays extension data and does nothing.
+    /// </summary>
+    public CostPayment? Payment { get; init; }
+
     internal const string AutoWhenProperty = "autoWhen";
 
     internal const string ActivationProperty = "activation";
@@ -952,6 +1034,9 @@ public sealed record ToggleEffect : Effect
 
     /// <summary>The keys content schema v11 adds (matched in every spelling, like the serializer).</summary>
     internal static readonly string[] V11Keys = ["group", "groupContent", LayerProperty, "allowedWith", "allowedInBase", "cost", "resourceContent", "level", "duration"];
+
+    /// <summary>The keys content schema v12 adds (MECH-X item 1; matched in every spelling, like the serializer).</summary>
+    internal static readonly string[] V12Keys = ["payment"];
 
     /// <summary>
     /// Typed from v6, in tiers. Below v10, <c>autoWhen</c> and <c>activation</c> stay extension data; below v11, so do the
@@ -962,12 +1047,16 @@ public sealed record ToggleEffect : Effect
     internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion)
     {
         if (revisionSchemaVersion < ContentRevision.PlayDetailsSchemaVersion)
-            return VersionedEffects.TypedWithout<ToggleEffect>(unknown, [AutoWhenProperty, ActivationProperty, .. V11Keys]);
+            return VersionedEffects.TypedWithout<ToggleEffect>(unknown, [AutoWhenProperty, ActivationProperty, .. V11Keys, .. V12Keys]);
         if (!VersionedEffects.NamesMember<ToggleAutoWhen>(unknown.Raw, AutoWhenProperty) || !VersionedEffects.NamesMember<Activation>(unknown.Raw, ActivationProperty))
             return unknown;
         if (revisionSchemaVersion < ContentRevision.PlayMechanicsSchemaVersion)
-            return VersionedEffects.TypedWithout<ToggleEffect>(unknown, V11Keys);
-        return VersionedEffects.NamesMember<ToggleLayer>(unknown.Raw, LayerProperty) ? VersionedEffects.Typed<ToggleEffect>(unknown) : unknown;
+            return VersionedEffects.TypedWithout<ToggleEffect>(unknown, [.. V11Keys, .. V12Keys]);
+        if (!VersionedEffects.NamesMember<ToggleLayer>(unknown.Raw, LayerProperty))
+            return unknown;
+        if (revisionSchemaVersion < ContentRevision.PaymentSchemaVersion)
+            return VersionedEffects.TypedWithout<ToggleEffect>(unknown, V12Keys);
+        return VersionedEffects.PaymentKindReads(unknown.Raw) ? VersionedEffects.Typed<ToggleEffect>(unknown) : unknown;
     }
 }
 
@@ -1068,6 +1157,171 @@ public sealed record ItemEffect : Effect
     internal static Effect FromUnknown(UnknownEffect unknown) => VersionedEffects.Typed<ItemEffect>(unknown);
 }
 
+/// <summary>
+/// Reads a list of modifiers as plain objects (unknown keys stay in each one's extension data) and writes each exactly as a
+/// top-level effect is written (<c>type</c>, <c>id</c>, then the rest; see <see cref="EffectJsonConverter"/>), so the layout
+/// of a nested modifier is the same as everywhere else in a revision and its hash.
+/// </summary>
+internal sealed class NestedModifierListConverter : JsonConverter<IReadOnlyList<ModifierEffect>>
+{
+    private static readonly EffectJsonConverter Canonical = new();
+
+    public override IReadOnlyList<ModifierEffect>? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+        JsonSerializer.Deserialize<List<ModifierEffect>>(ref reader, options);
+
+    public override void Write(Utf8JsonWriter writer, IReadOnlyList<ModifierEffect> value, JsonSerializerOptions options)
+    {
+        writer.WriteStartArray();
+        foreach (var modifier in value)
+        {
+            if (modifier is null)
+                writer.WriteNullValue();
+            else
+                Canonical.Write(writer, modifier, options);
+        }
+        writer.WriteEndArray();
+    }
+}
+
+/// <summary>Content schema v12 (MECH-X item 3): what an <see cref="ItemModEffect"/> can attach to. Wire names <c>weapon</c>, <c>armor</c>, <c>any</c>.</summary>
+public enum ModTarget { Weapon, Armor, Any }
+
+/// <summary>
+/// Content schema v12 (MECH-X item 3): content that attaches to one carried copy of another item (a rune, a lining). While the
+/// copy is equipped (and attuned, when its item needs it) the mod adds <see cref="Bonus"/> to the host's attack or Armor Class
+/// and applies its <see cref="Modifiers"/>. Typed only in a v12 revision: below v12 it stays an <see cref="UnknownEffect"/>, byte
+/// for byte (the <see cref="ItemEffect"/> precedent). The nested modifiers are restricted by the validator to an operation, target,
+/// value and text that are always on (see <c>validate.item-mod-modifier</c>).
+/// </summary>
+public sealed record ItemModEffect : Effect
+{
+    public const string TypeName = "itemMod";
+
+    public const int SchemaVersion = ContentRevision.ItemModSchemaVersion;
+
+    /// <summary>The largest <see cref="Bonus"/>; the same bound as <c>weapon.bonus</c>.</summary>
+    public const int MaxBonus = ContentValidator.MaxWeaponBonus;
+
+    /// <summary>The most nested <see cref="Modifiers"/>.</summary>
+    public const int MaxModifiers = 8;
+
+    public override string Type => TypeName;
+
+    /// <summary>What the mod attaches to. Required; must name a <see cref="ModTarget"/> member.</summary>
+    [property: JsonRequired]
+    public required ModTarget AppliesTo { get; init; }
+
+    /// <summary>0 to <see cref="MaxBonus"/>: added to the host weapon's to-hit and damage, or to Armor Class on armor.</summary>
+    public int? Bonus { get; init; }
+
+    /// <summary>Always-on modifiers applied while the mod is active; at most <see cref="MaxModifiers"/>.</summary>
+    [JsonConverter(typeof(NestedModifierListConverter))]
+    public IReadOnlyList<ModifierEffect>? Modifiers { get; init; }
+
+    internal static Effect FromUnknown(UnknownEffect unknown) => AppliesToReads(unknown) ? VersionedEffects.Typed<ItemModEffect>(unknown) : unknown;
+
+    /// <summary>
+    /// Whether <c>appliesTo</c> (any spelling) names a <see cref="ModTarget"/> member and every item of <c>modifiers</c>, if present,
+    /// is an object of type <c>modifier</c>. The serializer alone would bind a padded name or a combined list as bits.
+    /// </summary>
+    private static bool AppliesToReads(UnknownEffect unknown)
+    {
+        if (unknown.Raw.ValueKind != JsonValueKind.Object || !VersionedEffects.NamesMember<ModTarget>(unknown.Raw, "appliesTo"))
+            return false;
+        foreach (var p in unknown.Raw.EnumerateObject())
+        {
+            if (!string.Equals(p.Name, "modifiers", StringComparison.OrdinalIgnoreCase) || p.Value.ValueKind == JsonValueKind.Null)
+                continue;
+            if (p.Value.ValueKind != JsonValueKind.Array)
+                return false;
+            foreach (var item in p.Value.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.Object || !item.TryGetProperty("type", out var type)
+                    || type.ValueKind != JsonValueKind.String || type.GetString() != ModifierEffect.TypeName)
+                    return false;
+            }
+        }
+        return true;
+    }
+}
+
+/// <summary>
+/// Content schema v12 (MECH-X item 4): a companion card a feature or feat declares. Its armor class and hit point maximum are
+/// formulas on the owner's sheet; <see cref="Attacks"/> lists the ids of this revision's attack effects and
+/// <see cref="ResourceIds"/> the resource ids of its resource effects. Typed only in a v12 revision: below v12 it stays an
+/// <see cref="UnknownEffect"/>, byte for byte.
+/// </summary>
+public sealed record CompanionEffect : Effect
+{
+    public const string TypeName = "companion";
+
+    public const int SchemaVersion = ContentRevision.CompanionSchemaVersion;
+
+    /// <summary>The most attacks (and the most pools) one companion lists.</summary>
+    public const int MaxAttacks = Character.MaxCompanionAttacks;
+
+    public const int MaxResources = 5;
+
+    public override string Type => TypeName;
+
+    /// <summary>Identifies the companion within the revision; canonical lowercase form, never empty.</summary>
+    [property: JsonRequired]
+    public required Guid CompanionId { get; init; }
+
+    public required string Label { get; init; }
+
+    /// <summary>A formula for the companion's armor class.</summary>
+    public required string ArmorClass { get; init; }
+
+    /// <summary>A formula for the companion's hit point maximum.</summary>
+    public required string HitPointMaximum { get; init; }
+
+    public string? Speed { get; init; }
+
+    /// <summary>Ids (<see cref="Effect.Id"/>) of attack effects in the same revision.</summary>
+    public IReadOnlyList<string>? Attacks { get; init; }
+
+    /// <summary><see cref="ResourceEffect.ResourceId"/> keys of resource effects in the same revision.</summary>
+    public IReadOnlyList<string>? ResourceIds { get; init; }
+
+    internal static Effect FromUnknown(UnknownEffect unknown) => CompanionReads(unknown) ? VersionedEffects.Typed<CompanionEffect>(unknown) : unknown;
+
+    /// <summary>
+    /// Whether <c>companionId</c> is a canonical non-empty Guid string, <c>label</c>, <c>armorClass</c> and <c>hitPointMaximum</c> are
+    /// strings, and <c>attacks</c> and <c>resourceIds</c>, if present, are arrays of strings (any spelling of each name).
+    /// </summary>
+    private static bool CompanionReads(UnknownEffect unknown)
+    {
+        if (unknown.Raw.ValueKind != JsonValueKind.Object)
+            return false;
+        var required = 0;
+        foreach (var p in unknown.Raw.EnumerateObject())
+        {
+            if (Is(p.Name, "companionId"))
+            {
+                var s = p.Value.ValueKind == JsonValueKind.String ? p.Value.GetString() : null;
+                if (s is null || !Guid.TryParseExact(s, "D", out var g) || g == Guid.Empty || g.ToString("D") != s)
+                    return false;
+                required++;
+            }
+            else if (Is(p.Name, "label") || Is(p.Name, "armorClass") || Is(p.Name, "hitPointMaximum"))
+            {
+                if (p.Value.ValueKind != JsonValueKind.String)
+                    return false;
+                required++;
+            }
+            else if ((Is(p.Name, "attacks") || Is(p.Name, "resourceIds")) && p.Value.ValueKind != JsonValueKind.Null)
+            {
+                if (p.Value.ValueKind != JsonValueKind.Array || p.Value.EnumerateArray().Any(i => i.ValueKind != JsonValueKind.String))
+                    return false;
+            }
+        }
+        return required == 4;
+
+        static bool Is(string name, string property) => string.Equals(name, property, StringComparison.OrdinalIgnoreCase);
+    }
+}
+
 public enum WeaponCategory { Simple, Martial }
 
 public enum WeaponAttack { Melee, Ranged }
@@ -1075,7 +1329,7 @@ public enum WeaponAttack { Melee, Ranged }
 /// <summary>
 /// Content schema v5 (SPEC C-02, C-04): a weapon on an item. An equipped weapon gives an attack: to hit = the ability
 /// modifier (Strength for melee, Dexterity for ranged, the better of the two with <c>finesse</c>) plus the proficiency bonus
-/// when proficient; damage = <see cref="Damage"/> plus the same modifier. The same in both SRDs.
+/// when proficient, plus the weapon's own <see cref="Bonus"/> (content v12); damage = <see cref="Damage"/> plus the same modifier and bonus. The same in both SRDs.
 /// </summary>
 public sealed record WeaponEffect : Effect
 {
@@ -1107,9 +1361,22 @@ public sealed record WeaponEffect : Effect
     /// <summary>The 2024 Weapon Mastery property, as text (it is not automated).</summary>
     public string? Mastery { get; init; }
 
+    /// <summary>
+    /// Content schema v12 (MECH-X item 0): the weapon's own bonus, 0 to 10, added to to-hit and damage. Below v12 the key stays
+    /// extension data and does nothing.
+    /// </summary>
+    public int? Bonus { get; init; }
+
     public bool Has(string property) => Properties.Contains(property, StringComparer.Ordinal);
 
-    internal static Effect FromUnknown(UnknownEffect unknown) => VersionedEffects.Typed<WeaponEffect>(unknown);
+    /// <summary>The keys content schema v12 adds to this effect; below v12 they stay extension data.</summary>
+    internal static readonly string[] V12Keys = ["bonus"];
+
+    /// <summary>Typed by the revision (see <see cref="VersionedEffects.ByName"/>): the v12 key only from v12.</summary>
+    internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion) =>
+        revisionSchemaVersion >= ContentRevision.WeaponBonusSchemaVersion
+            ? VersionedEffects.Typed<WeaponEffect>(unknown)
+            : VersionedEffects.TypedWithout<WeaponEffect>(unknown, V12Keys);
 }
 
 public enum ArmorCategory { Light, Medium, Heavy, Shield }
@@ -1276,7 +1543,20 @@ public sealed record SpellEffect : Effect
     /// <summary>Optional dice the sheet can roll (damage or healing at the spell's base level), for example <c>8d6</c>.</summary>
     public string? Dice { get; init; }
 
-    internal static Effect FromUnknown(UnknownEffect unknown) => VersionedEffects.Typed<SpellEffect>(unknown);
+    /// <summary>
+    /// Content schema v12 (MECH-X item 1): keys (lowercase letter, then letters and digits) the Spells tab filters on, kept apart
+    /// from <see cref="School"/>. <c>all</c> is refused. Below v12 the key stays extension data and does nothing.
+    /// </summary>
+    public IReadOnlyList<string>? Tags { get; init; }
+
+    /// <summary>The keys content schema v12 adds to this effect; below v12 they stay extension data.</summary>
+    internal static readonly string[] V12Keys = ["tags"];
+
+    /// <summary>Typed by the revision (see <see cref="VersionedEffects.ByName"/>): the v12 key only from v12.</summary>
+    internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion) =>
+        revisionSchemaVersion >= ContentRevision.PaymentSchemaVersion
+            ? VersionedEffects.Typed<SpellEffect>(unknown)
+            : VersionedEffects.TypedWithout<SpellEffect>(unknown, V12Keys);
 }
 
 /// <summary>
@@ -1292,18 +1572,21 @@ internal static class VersionedEffects
         {
             [ArmorEffect.TypeName] = (ArmorEffect.SchemaVersion, (u, _) => ArmorEffect.FromUnknown(u)),
             [SpellcastingEffect.TypeName] = (SpellcastingEffect.SchemaVersion, SpellcastingEffect.FromUnknown),
-            [SpellEffect.TypeName] = (SpellcastingEffect.SchemaVersion, (u, _) => SpellEffect.FromUnknown(u)),
-            [WeaponEffect.TypeName] = (SpellcastingEffect.SchemaVersion, (u, _) => WeaponEffect.FromUnknown(u)),
+            [SpellEffect.TypeName] = (SpellcastingEffect.SchemaVersion, SpellEffect.FromUnknown),
+            [WeaponEffect.TypeName] = (SpellcastingEffect.SchemaVersion, WeaponEffect.FromUnknown),
             [ToggleEffect.TypeName] = (ToggleEffect.SchemaVersion, ToggleEffect.FromUnknown),
             [ScaleEffect.TypeName] = (ScaleEffect.SchemaVersion, (u, _) => ScaleEffect.FromUnknown(u)),
             [ItemEffect.TypeName] = (ItemEffect.SchemaVersion, (u, _) => ItemEffect.FromUnknown(u)),
             [ToggleGroupEffect.TypeName] = (ToggleGroupEffect.SchemaVersion, (u, _) => ToggleGroupEffect.FromUnknown(u)),
             [UpkeepEffect.TypeName] = (UpkeepEffect.SchemaVersion, (u, _) => UpkeepEffect.FromUnknown(u)),
-            [AttackEffect.TypeName] = (AttackEffect.SchemaVersion, (u, _) => AttackEffect.FromUnknown(u)),
+            [AttackEffect.TypeName] = (AttackEffect.SchemaVersion, AttackEffect.FromUnknown),
             [AttackRiderEffect.TypeName] = (AttackRiderEffect.SchemaVersion, (u, _) => AttackRiderEffect.FromUnknown(u)),
             // Always typed, except that the converter hands these over when they carry a key or value added after v9 (see
             // EffectJsonConverter.CarriesDetailAbove), so the revision's version decides how they read. A later slice that
-            // gives one of them a v11 key adds it to that type's V11Keys, and nothing else.
+            // gives one of them a v11 key adds it to that type's V11Keys, and nothing else. A choice is handed over for its
+            // v12 key; its first version is the lowest int, so even a revision of schema 0 or less (read, only refused by the
+            // validator) types it the way the build before this one wrote it.
+            [ChoiceEffect.TypeName] = (int.MinValue, ChoiceEffect.FromUnknown),
             [ModifierEffect.TypeName] = (1, ModifierEffect.FromUnknown),
             [GrantEffect.TypeName] = (1, GrantEffect.FromUnknown),
             [ResourceEffect.TypeName] = (1, ResourceEffect.FromUnknown),
@@ -1311,6 +1594,8 @@ internal static class VersionedEffects
             [ValueEffect.TypeName] = (ValueEffect.SchemaVersion, (u, _) => ValueEffect.FromUnknown(u)),
             [RollModeEffect.TypeName] = (RollModeEffect.SchemaVersion, (u, _) => RollModeEffect.FromUnknown(u)),
             [ResponseEffect.TypeName] = (ResponseEffect.SchemaVersion, (u, _) => ResponseEffect.FromUnknown(u)),
+            [ItemModEffect.TypeName] = (ItemModEffect.SchemaVersion, (u, _) => ItemModEffect.FromUnknown(u)),
+            [CompanionEffect.TypeName] = (CompanionEffect.SchemaVersion, (u, _) => CompanionEffect.FromUnknown(u)),
         };
 
     /// <summary>
@@ -1344,6 +1629,37 @@ internal static class VersionedEffects
                 extensions[property.Name] = property.Value.Clone(); // document order, as that build keeps it
         }
         return ((Effect)typed) with { Extensions = extensions };
+    }
+
+    /// <summary>
+    /// Content schema v12: whether a <c>payment</c> (any spelling) that is an object names a <see cref="PaymentKind"/> member as its
+    /// <c>kind</c> (see <see cref="NamesMember{TEnum}"/>). A payment that is not an object, or has no kind, does not read at all.
+    /// </summary>
+    public static bool PaymentKindReads(JsonElement raw)
+    {
+        foreach (var p in raw.EnumerateObject())
+        {
+            if (string.Equals(p.Name, "payment", StringComparison.OrdinalIgnoreCase) && p.Value.ValueKind == JsonValueKind.Object
+                && !NamesMember<PaymentKind>(p.Value, "kind"))
+                return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Content schema v12 (MECH-X item 2): whether a <c>replaceable</c> (any spelling) that is an object names a
+    /// <see cref="ReplaceWindow"/> member as its <c>when</c> (see <see cref="NamesMember{TEnum}"/>). One that is not an object, or
+    /// has no <c>when</c>, does not read at all; the typed read decides, so this only adds the check the serializer lacks.
+    /// </summary>
+    public static bool ReplaceWindowReads(JsonElement raw)
+    {
+        foreach (var p in raw.EnumerateObject())
+        {
+            if (string.Equals(p.Name, "replaceable", StringComparison.OrdinalIgnoreCase) && p.Value.ValueKind == JsonValueKind.Object
+                && !NamesMember<ReplaceWindow>(p.Value, "when"))
+                return false;
+        }
+        return true;
     }
 
     /// <summary>
@@ -1444,10 +1760,10 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
         {
             return type switch
             {
-                // An always-typed effect that carries a detail added after v9 (v10 grant and resource keys, any v11 key) is
+                // An always-typed effect that carries a detail added after v9 (v10 grant and resource keys, any v11 or v12 key) is
                 // typed by the revision, which knows its version (ContentRevision.OnDeserialized); the others are typed
                 // here, as in every earlier build.
-                ModifierEffect.TypeName or GrantEffect.TypeName or ResourceEffect.TypeName or RollEffect.TypeName
+                ModifierEffect.TypeName or GrantEffect.TypeName or ResourceEffect.TypeName or RollEffect.TypeName or ChoiceEffect.TypeName
                     when CarriesDetailAbove(element, type, UngatedVersion) => UnknownEffect.From(element),
                 ModifierEffect.TypeName => (Effect?)element.Deserialize<ModifierEffect>(options),
                 GrantEffect.TypeName => element.Deserialize<GrantEffect>(options),
@@ -1458,7 +1774,7 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
                 RollEffect.TypeName => element.Deserialize<RollEffect>(options),
                 HitDieEffect.TypeName => element.Deserialize<HitDieEffect>(options),
                 // Typed only in revisions of their schema version (ContentRevision.OnDeserialized); older ones keep them as written.
-                ArmorEffect.TypeName or SpellcastingEffect.TypeName or SpellEffect.TypeName or WeaponEffect.TypeName or ToggleEffect.TypeName or ScaleEffect.TypeName or ItemEffect.TypeName or ToggleGroupEffect.TypeName or UpkeepEffect.TypeName or AttackEffect.TypeName or AttackRiderEffect.TypeName or ValueEffect.TypeName or RollModeEffect.TypeName or ResponseEffect.TypeName => UnknownEffect.From(element),
+                ArmorEffect.TypeName or SpellcastingEffect.TypeName or SpellEffect.TypeName or WeaponEffect.TypeName or ToggleEffect.TypeName or ScaleEffect.TypeName or ItemEffect.TypeName or ToggleGroupEffect.TypeName or UpkeepEffect.TypeName or AttackEffect.TypeName or AttackRiderEffect.TypeName or ValueEffect.TypeName or RollModeEffect.TypeName or ResponseEffect.TypeName or ItemModEffect.TypeName or CompanionEffect.TypeName => UnknownEffect.From(element),
                 LegacyAbilityScoreIncrease or LegacyInitiativeBonus => FromSchemaVersion1(element, type, options),
                 _ => UnknownEffect.From(element),
             } ?? UnknownEffect.From(element);
@@ -1475,9 +1791,9 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
     private const int UngatedVersion = ContentRevision.PlayDetailsSchemaVersion - 1;
 
     /// <summary>
-    /// Whether an always-typed effect (<c>modifier</c>, <c>grant</c>, <c>resource</c>, <c>roll</c>) has something a build of
-    /// content schema <paramref name="version"/> did not read, so the revision, which knows its own version, must type it
-    /// (<see cref="VersionedEffects.ByName"/>). Detail from v10: a grant that names a damage kind (a value the v9 enum cannot
+    /// Whether an always-typed effect (<c>modifier</c>, <c>grant</c>, <c>resource</c>, <c>roll</c>, <c>choice</c>) has something a
+    /// build of content schema <paramref name="version"/> did not read, so the revision, which knows its own version, must type it
+    /// (<see cref="VersionedEffects.ByName"/>); a <c>choice</c> is handed over for a v12 key. Detail from v10: a grant that names a damage kind (a value the v9 enum cannot
     /// hold, matched case-insensitively like the serializer) or has a <c>damageType</c> key (any spelling), or a resource with
     /// an <c>activation</c> key. Detail from v11: any key in the type's <c>V11Keys</c> (empty until a later slice adds one).
     /// The names are the ones the serializer binds to those properties.
@@ -1489,7 +1805,8 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
             ModifierEffect.TypeName => ModifierEffect.V11Keys,
             GrantEffect.TypeName => GrantEffect.V11Keys,
             ResourceEffect.TypeName => ResourceEffect.V11Keys,
-            RollEffect.TypeName => RollEffect.V11Keys,
+            RollEffect.TypeName => [.. RollEffect.V11Keys, .. RollEffect.V12Keys],
+            ChoiceEffect.TypeName => ChoiceEffect.V12Keys,
             _ => [],
         };
         // Content v11: a roll may omit its dice; below v11 it must stay untyped, and only the revision knows its version.

@@ -25,4 +25,19 @@ public class GoldenRevisionStoreTests
         Assert.Equal(GoldenRevisions.Hashes[version - 1], store.RevisionHash(revision.RevisionId));
         Assert.False(store.AddRevision(store.FindRevision(revision.Reference)!)); // the same bytes again: unchanged
     }
+
+    /// <summary>MECH-X item 1: the two v12 revisions of golden/payment-revisions.json ("Fixture Bloodprice Rite", "Fixture Hourglass Ward").</summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public void The_store_hashes_each_payment_golden_revision_to_its_golden_hash(int index)
+    {
+        using var temp = new TempApp();
+        var revision = JsonSerializer.Deserialize<ContentRevision>(GoldenRevisions.PaymentJson(index), RulesJson.Compact)!;
+        var store = temp.App.Store;
+
+        Assert.True(store.AddRevision(revision));
+        Assert.Equal(GoldenRevisions.PaymentHashes[index], store.RevisionHash(revision.RevisionId));
+        Assert.False(store.AddRevision(store.FindRevision(revision.Reference)!));
+    }
 }

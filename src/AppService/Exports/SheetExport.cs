@@ -216,13 +216,13 @@ public static class SheetExportBuilder
         }
 
         List<SheetResource> resources = [];
-        foreach (var resource in sheet.Resources ?? [])
+        foreach (var resource in (sheet.Resources ?? []).Where(r => r.CompanionId is null)) // a companion's pools are on its card, not the owner's sheet
         {
             if (Out(resource.Content, out var source))
                 resources.Add(new(resource.Label, resource.ContentName, resource.Maximum, resource.Spent, [.. resource.Recoveries.Select(r => r.All ? $"{r.On}: all" : $"{r.On}: {r.Amount}")], resource.Content, source));
         }
         List<SheetAttack> attacks = [];
-        foreach (var attack in sheet.Attacks ?? [])
+        foreach (var attack in (sheet.Attacks ?? []).Where(a => a.CompanionId is null))
         {
             // D43 S4: attacks a feature gives (an unarmed strike, a bolt) are not exported in v1; the model lists equipped weapons.
             if (attack.Source == AttackSource.Weapon && Out(attack.Item, out var source))

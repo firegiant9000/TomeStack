@@ -10,6 +10,7 @@ namespace TomeStack.RulesCore;
 public sealed record Character
 {
     /// <summary>
+    /// v11 adds the mods on an equipment entry (MECH-X item 3, D75) and the content id of a play companion row (item 4), written only while one is used.
     /// v10 adds the encounter round and the rounds left of an active toggle to <see cref="Play"/>, written only while they are used (D43 slice 3).
     /// v9 adds <see cref="Details"/>, <see cref="CustomItems"/>, <see cref="CustomAttacks"/>, <see cref="DamageDefences"/>, <see cref="Companions"/>,
     /// <see cref="Xp"/>, the id, attunement and charges of an <see cref="EquipmentEntry"/>, and <see cref="PlayState.Companions"/> (Wave 2;
@@ -23,7 +24,13 @@ public sealed record Character
     /// v2 adds <see cref="Level"/> and <see cref="CrossFamilyExceptions"/>. Older versions are upcast on read with the new
     /// data at its default (no lists; full hit points, nothing spent, no conditions), which is exactly their meaning.
     /// </summary>
-    public const int CurrentSchemaVersion = EncounterSchemaVersion;
+    public const int CurrentSchemaVersion = ItemModsSchemaVersion;
+
+    /// <summary>
+    /// v11 adds <see cref="EquipmentEntry.Mods"/> (MECH-X item 3, D75). Written only while an entry has a mod (<see cref="UsesV11Fields"/>);
+    /// otherwise the character is written at <see cref="EncounterSchemaVersion"/>, <see cref="DetailsSchemaVersion"/> or <see cref="PreviousSchemaVersion"/>.
+    /// </summary>
+    public const int ItemModsSchemaVersion = 11;
 
     /// <summary>
     /// v10 adds <see cref="PlayState.Encounter"/> and <see cref="ActiveToggle.RoundsLeft"/> (D43 slice 3). Written only when one is set
@@ -82,18 +89,25 @@ public sealed record Character
     public required Guid Id { get; init; }
 
     /// <summary>
-    /// The schema version this character is written in, computed from its data (R73): <see cref="EncounterSchemaVersion"/> when a v10 field
-    /// is set, otherwise <see cref="DetailsSchemaVersion"/> when a v9 field is set, otherwise <see cref="PreviousSchemaVersion"/>. Every
+    /// The schema version this character is written in, computed from its data (R73): <see cref="ItemModsSchemaVersion"/> when an entry has a mod,
+    /// otherwise <see cref="EncounterSchemaVersion"/> when a v10 field is set, otherwise <see cref="DetailsSchemaVersion"/> when a v9 field is set, otherwise <see cref="PreviousSchemaVersion"/>. Every
     /// version from 1 reads as one of the three, since older data upcasts with the new fields at their default. A version outside 1 to
     /// <see cref="CurrentSchemaVersion"/> (data from a newer build) is kept as read, so <see cref="Validate"/> refuses it.
     /// </summary>
     public int SchemaVersion
     {
         get => _schemaVersion is >= 1 and <= CurrentSchemaVersion
-            ? (UsesV10Fields ? EncounterSchemaVersion : UsesV9Fields ? DetailsSchemaVersion : PreviousSchemaVersion)
+            ? (UsesV11Fields ? ItemModsSchemaVersion : UsesV10Fields ? EncounterSchemaVersion : UsesV9Fields ? DetailsSchemaVersion : PreviousSchemaVersion)
             : _schemaVersion;
         init => _schemaVersion = value;
     }
+
+    /// <summary>
+    /// True when an equipment entry has a mod or a play companion row names content (<see cref="CompanionPlay.ContentId"/>), the only fields that only schema v11 has.
+    /// An empty list is normalised to null, so null is the only "unset".
+    /// </summary>
+    [JsonIgnore]
+    public bool UsesV11Fields => (Equipment?.Any(e => e?.Mods is { Count: > 0 }) ?? false) || (Play?.Companions?.Any(p => p?.ContentId is not null) ?? false); // a null list or entry from untrusted JSON is Validate's to report, not this getter's to throw
 
     /// <summary>True when any field that only schema v10 has is set: an encounter, or the rounds left on a toggle.</summary>
     [JsonIgnore]
@@ -133,7 +147,7 @@ public sealed record Character
 
     /// <summary>Every content revision the character references: pins, classes, chosen options, equipment and spells. Packages and updates use this.</summary>
     public IEnumerable<ContentReference> AllReferences() =>
-        Pins.Concat(Classes.Select(c => c.Class)).Concat(Choices.SelectMany(c => c.Selected)).Concat(Equipment.Select(e => e.Item)).Concat(Spells.Select(s => s.Spell)).Distinct();
+        Pins.Concat(Classes.Select(c => c.Class)).Concat(Choices.SelectMany(c => c.Selected)).Concat(Equipment.Select(e => e.Item)).Concat(Equipment.SelectMany(e => e.Mods ?? [])).Concat(Spells.Select(s => s.Spell)).Distinct();
 
     /// <summary>
     /// Character schema v6 (M2, D04): the spells the character knows or has prepared, each for one caster (the content id
@@ -239,7 +253,7 @@ public sealed record Character
             Classes = [.. Classes.Select(c => c with { Class = Swap(c.Class) })],
             Choices = [.. Choices.Select(c => c with { Source = Swap(c.Source), Selected = [.. c.Selected.Select(Swap)] })],
             CrossFamilyExceptions = [.. CrossFamilyExceptions.Select(e => e with { Content = Swap(e.Content) })],
-            Equipment = [.. Equipment.Select(e => e with { Item = Swap(e.Item) })],
+            Equipment = [.. Equipment.Select(e => e with { Item = Swap(e.Item), Mods = e.Mods is null ? null : [.. e.Mods.Select(Swap)] })],
             CampaignExceptions = [.. CampaignExceptions.Select(e => e with { Content = Swap(e.Content) })],
             Spells = [.. Spells.Select(s => s with { Spell = Swap(s.Spell) })],
             Play = Play.Concentration is { } con && con.Spell == from ? Play with { Concentration = con with { Spell = to } } : Play,
@@ -306,6 +320,7 @@ public sealed record Character
         foreach (var note in Notes.Where(n => n.Date.Year is < 1900 or > 2200))
             problems.Add(new("character.note-date-invalid", "A session note's date must be between 1900 and 2200."));
         ValidateV9(problems);
+        ValidateV11(problems);
         return problems;
     }
 
@@ -408,7 +423,7 @@ public sealed record Character
             }
         }
 
-        if (Play.Companions is { } companionPlay && companionPlay.Any(p => Companions is null || Companions.All(c => c.Id != p.Id)))
+        if (Play.Companions is { } companionPlay && companionPlay.Any(p => p?.ContentId is null && (Companions is null || Companions.All(c => c.Id != p?.Id))))
             problems.Add(new("character.companion-play-unknown", "Hit points are recorded for a companion the character does not have."));
     }
 
@@ -433,6 +448,21 @@ public sealed record Character
             problems.Add(new("character.custom-attack-duplicate", $"Two {label.ToLowerInvariant()}s share an id."));
     }
 
+    /// <summary>The v11 bounds (MECH-X item 3). Messages carry the entry number, never a name or text.</summary>
+    private void ValidateV11(List<Diagnostic> problems)
+    {
+        foreach (var (entry, number) in Equipment.Select((e, i) => (e, i + 1)).Where(p => p.e.Mods is { Count: > 0 }))
+        {
+            var mods = entry.Mods!;
+            if (mods.Count > EquipmentEntry.MaxMods)
+                problems.Add(new("character.equipment-mods-too-many", $"At most {EquipmentEntry.MaxMods} mods on equipment entry {number}.", entry.Item));
+            if (mods.Distinct().Count() != mods.Count)
+                problems.Add(new("character.equipment-mod-duplicate", $"Equipment entry {number} lists a mod twice.", entry.Item));
+            if (mods.Contains(entry.Item))
+                problems.Add(new("character.equipment-mod-self", $"Equipment entry {number} lists its own item as a mod.", entry.Item));
+        }
+    }
+
     private List<Diagnostic> EmptyEntries()
     {
         var problems = new List<Diagnostic>();
@@ -446,7 +476,7 @@ public sealed record Character
         Check("choices", Choices is null || Choices.Any(c => c?.Source is null || c.Selected is null || c.Selected.Any(s => s is null)));
         Check("cross-family exceptions", CrossFamilyExceptions is null || CrossFamilyExceptions.Any(e => e?.Content is null));
         Check("overrides", Overrides is null || Overrides.Any(o => o?.Field is null));
-        Check("equipment", Equipment is null || Equipment.Any(e => e?.Item is null));
+        Check("equipment", Equipment is null || Equipment.Any(e => e?.Item is null || e.Mods?.Any(m => m is null) == true));
         Check("campaign exceptions", CampaignExceptions is null || CampaignExceptions.Any(e => e?.Content is null));
         Check("spells", Spells is null || Spells.Any(s => s?.Spell is null));
         Check("notes", Notes is null || Notes.Any(n => n is null || n.Text is null));
@@ -502,8 +532,14 @@ public sealed record CrossFamilyException(ContentReference Content, string Reaso
 /// (recorded as the player says; never calculated). All three are null until set. "Not attuned" (false) and "no charges spent" (0)
 /// are the same as unset, so they are stored as null and do not make the character v9; readers treat null as false and 0.
 /// </summary>
-public sealed record EquipmentEntry(ContentReference Item, bool Equipped = false, int Quantity = 1, Guid? Id = null, bool? Attuned = null, int? ChargesSpent = null)
+/// <param name="Mods">
+/// Character schema v11 (MECH-X item 3): the mods attached to this copy, each a published item carrying an <c>itemMod</c>. Null until set;
+/// an empty list is stored as null and does not make the character v11.
+/// </param>
+public sealed record EquipmentEntry(ContentReference Item, bool Equipped = false, int Quantity = 1, Guid? Id = null, bool? Attuned = null, int? ChargesSpent = null, IReadOnlyList<ContentReference>? Mods = null)
 {
+    private readonly IReadOnlyList<ContentReference>? _mods = Mods is { Count: 0 } ? null : Mods;
+
     private readonly bool? _attuned = Attuned == false ? null : Attuned;
     private readonly int? _chargesSpent = ChargesSpent == 0 ? null : ChargesSpent;
 
@@ -511,6 +547,9 @@ public sealed record EquipmentEntry(ContentReference Item, bool Equipped = false
 
     public int? ChargesSpent { get => _chargesSpent; init => _chargesSpent = value == 0 ? null : value; }
 
+    public IReadOnlyList<ContentReference>? Mods { get => _mods; init => _mods = value is { Count: 0 } ? null : value; }
+
+    public const int MaxMods = 4;
     public const int MaxQuantity = 9_999;
     public const int MaxChargesSpent = 1_000;
 }
@@ -641,8 +680,12 @@ public sealed record Companion(Guid Id, string Name, string? Kind, int? ArmorCla
     internal Companion Normalized() => this with { Attacks = Character.NullIfEmpty(Attacks) };
 }
 
-/// <summary>Character schema v9 (D42): a companion's current hit points (null: at the maximum) and temporary hit points.</summary>
-public sealed record CompanionPlay(Guid Id, int? Current, int Temporary);
+/// <summary>
+/// Character schema v9 (D42): a companion's current hit points (null: at the maximum) and temporary hit points.
+/// Character schema v11 (MECH-X item 4): <paramref name="ContentId"/> names the revision's content whose <c>companion</c> effect this row belongs to;
+/// null for a companion the character keeps by hand (v9). Null by default, so a character without one is written below v11.
+/// </summary>
+public sealed record CompanionPlay(Guid Id, int? Current, int Temporary, Guid? ContentId = null);
 
 /// <summary>SPEC C-06. A labeled user override applied as the final display layer.</summary>
 public sealed record FieldOverride(string Field, int Value, string? Reason = null);
