@@ -213,7 +213,8 @@ async function createCharacter(
   await user.click(screen.getByRole('button', { name: 'Next: choices' }));
 }
 
-// The longest flow in the suite (create, two level-ups, play, rests): 120 s, twice the suite's per-test budget.
+// The longest flow in the suite (create, two level-ups, play, rests): ~58 s alone locally (2026-10-29), so the 60 s
+// default timed it out on a loaded machine; it gets 180 s, three times the suite's per-test budget.
 it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to 3 with a subclass', async () => {
   const user = userEvent.setup();
   render(<App />);
@@ -504,7 +505,7 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   await waitFor(() => expect(summaryValue(sheet, 'Armor Class')).toBe('17'));
   await user.click(within(equipment()).getByRole('checkbox', { name: 'Equip Fixture Scale Vest' })); // take the armor off
   await waitFor(() => expect(summaryValue(sheet, 'Armor Class')).toBe('15')); // Unarmored Defense 13 + shield 2
-}, 120_000);
+}, 180_000);
 
 const srd = (n: number) => ({
   contentId: `52c00000-0000-4000-8000-${String(n).padStart(12, '0')}`,
