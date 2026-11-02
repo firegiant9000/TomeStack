@@ -4,7 +4,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { expect, it } from 'vitest';
 
-const allowed = new Set(['ExplainList.tsx', 'RollWhy.tsx', 'CharacterSheet.tsx', 'SpellsPanel.tsx', 'PlayPanels.tsx', 'SheetSummary.tsx']);
+const allowed = new Set(['ExplainList.tsx', 'RollWhy.tsx', 'CharacterSheet.tsx', 'SpellsPanel.tsx', 'PlayPanels.tsx', 'SheetSummary.tsx', 'CompanionsPanel.tsx']);
 const importsExplain = /from\s+['"][^'"]*\/(explain|ExplainList|RollWhy)['"]/;
 
 function sources(dir: string): string[] {

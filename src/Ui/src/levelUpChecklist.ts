@@ -1,9 +1,11 @@
 import type { CharacterSheet, CharacterView, ResourceValue } from './api/types';
+import { picks, replacedPicks } from './replaceable';
 
 /** D74: one thing that is new on the sheet since the level-up. Ids and numbers only; the wording is made from the current sheet when shown. */
 export type LevelUpChange =
   | { kind: 'feature'; contentId: string }
   | { kind: 'choice'; contentId: string; choiceId: string }
+  | { kind: 'replaced'; contentId: string; choiceId: string; count: number } // MECH-X item 2: picks of a replaceable choice swapped in this level-up
   | { kind: 'hitPoints'; before: number; after: number }
   | { kind: 'slots'; level: number; before: number; after: number }
   | { kind: 'pact'; before?: { maximum: number; level: number }; after?: { maximum: number; level: number } }
@@ -28,6 +30,10 @@ export function diffLevelUp(before: CharacterView, after: CharacterView): LevelU
   const knownChoices = new Set((b.choices ?? []).map((c) => `${c.source.contentId}\n${c.choiceId}`));
   for (const c of a.choices ?? []) {
     if (!knownChoices.has(`${c.source.contentId}\n${c.choiceId}`)) changes.push({ kind: 'choice', contentId: c.source.contentId, choiceId: c.choiceId });
+  }
+
+  for (const { choice, count } of replacedPicks(before, after)) {
+    changes.push({ kind: 'replaced', contentId: choice.source.contentId, choiceId: choice.choiceId, count });
   }
 
   if (b.hitPoints && a.hitPoints && b.hitPoints.maximum !== a.hitPoints.maximum) {
@@ -109,6 +115,10 @@ export function checklistRows(checklist: LevelUpList, sheet: CharacterSheet): Ch
     const state = choice.resolved ? 'made' : 'still to make';
     add({ key: `choice:${c.contentId}:${c.choiceId}`, text: `New choice: ${choice.sourceName}: choose ${choice.count} (${state})`, target: choice.resolved ? undefined : 'choices' });
   }
+  for (const c of ofKind('replaced')) {
+    const choice = choices.find((x) => x.source.contentId === c.contentId && x.choiceId === c.choiceId);
+    if (choice) add({ key: `replaced:${c.contentId}:${c.choiceId}`, text: `Replaced ${picks(c.count)}: ${choice.sourceName}` });
+  }
   for (const c of ofKind('hitPoints')) add({ key: 'hitPoints', text: `Hit point maximum: ${c.before} → ${c.after}`, target: 'play' });
   for (const c of ofKind('slots')) add({ key: `slots:${c.level}`, text: `Level ${c.level} spell slots: ${c.before} → ${c.after}`, target: 'spells' });
   for (const c of ofKind('pact')) {
@@ -175,6 +185,10 @@ function normaliseChange(raw: unknown): LevelUpChange | undefined {
       return isText(c.contentId) ? { kind: 'feature', contentId: c.contentId } : undefined;
     case 'choice':
       return isText(c.contentId) && isText(c.choiceId) ? { kind: 'choice', contentId: c.contentId, choiceId: c.choiceId } : undefined;
+    case 'replaced':
+      return isText(c.contentId) && isText(c.choiceId) && isNum(c.count) && Number.isInteger(c.count) && c.count > 0
+        ? { kind: 'replaced', contentId: c.contentId, choiceId: c.choiceId, count: c.count }
+        : undefined;
     case 'hitPoints':
       return isNum(c.before) && isNum(c.after) ? { kind: 'hitPoints', before: c.before, after: c.after } : undefined;
     case 'slots':

@@ -15,6 +15,7 @@ import type {
   RollTarget,
   TurnMoment,
 } from '../api/types';
+import { companionPrunedText } from '../companionNotice';
 import { downloadBase64 } from '../files';
 import { ArchivePanel } from './ArchivePanel';
 import { ChangeRegion } from './export/ChangeRegion';
@@ -50,6 +51,7 @@ import { ByHandPanel } from './ByHandPanel';
 import { TabList, TabPanel, tabId, type TabSpec } from './sheet/TabList';
 import { LevelUpChecklist } from './LevelUpChecklist';
 import { dismissChecklist, readChecklist } from '../levelUpChecklist';
+import { afterLongRest, afterRestPhrase } from '../replaceable';
 import { rememberSheetTab, rememberedSheetTab, type SheetTabId } from '../sheetTab';
 import { inverseOf, isCompound, type UndoEntry } from '../undo';
 import { recordSpend } from '../actionRows';
@@ -390,6 +392,8 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   const printButton = useRef<HTMLButtonElement>(null);
   const shortRestButton = useRef<HTMLButtonElement>(null);
   const longRestButton = useRef<HTMLButtonElement>(null);
+  /** MECH-X item 2: the sources whose picks may be replaced after the long rest just finished. Page state; Dismiss clears it. */
+  const [afterRest, setAfterRest] = useState<string>();
 
   // WCAG 2.4.3: opening a sheet (after create, import or picking from the list) moves focus to its heading instead of
   // leaving it on <body>. The sheet is keyed by character, so this runs once per opened character, not on every save.
@@ -583,11 +587,20 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   useEffect(() => {
     shownView.current = view;
   }, [view]);
+  // MECH-X R69: a save that reset content companions' hit points says so once on the status line. It runs after the panel's own
+  // status (the reply is shown first), and once per view: the view the sheet opened with is the opener's to report (the builder).
+  const noticedView = useRef(view);
+  useEffect(() => {
+    if (noticedView.current === view) return;
+    noticedView.current = view;
+    const pruned = companionPrunedText(view);
+    if (pruned && mounted.current) onStatus(pruned);
+  }, [view, onStatus]);
   /** D43 S3: what the reply noticed (an encounter's durations to track by hand, a pool that filled) goes to the sheet's one status line. */
   function say(reply: CharacterView) {
     // D43 S7: the damage panel and the Hit points panel show their own notices (rolls to make, responses not chosen) by label, not by id.
     const message = reply.notices
-      ?.filter((n) => n.code !== 'damage.roll-offered' && n.code !== 'damage.responses-skipped')
+      ?.filter((n) => n.code !== 'damage.roll-offered' && n.code !== 'damage.responses-skipped' && n.code !== 'choice.replaced-outside-window')
       .map((n) => n.message)
       .join(' · ');
     if (message && mounted.current) onStatus(message);
@@ -648,7 +661,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
       const encounter = action.action === 'startEncounter' || action.action === 'endEncounter';
       const after = await runQueued(
         (latest) =>
-          client.play(character.id, encounter ? { ...action, expectedUpdatedAt: shownStamp } : isCompound(action) ? { ...action, expectedUpdatedAt: latest.updatedAt } : action),
+          client.play(character.id, encounter ? { ...action, expectedUpdatedAt: shownStamp } : isCompound(action, view) ? { ...action, expectedUpdatedAt: latest.updatedAt } : action),
         (reply) => reply.character,
       );
       const overlapped = startedWhileRunning || started.current !== mine || running.current > 1 || shownView.current !== view;
@@ -706,7 +719,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
       const concentrationOnly = steps.every((s) => s.action === 'endConcentration' || s.action === 'startConcentration');
       const target =
         steps[0]?.action === 'companionSetHitPoints'
-          ? document.getElementById(`companion-${steps[0].companionId}-heading`) // Wave 3 item 23: the companion's card
+          ? document.getElementById(`companion-${steps[0].contentId ? `${steps[0].contentId}-` : ''}${steps[0].companionId}-heading`) // Wave 3 item 23: the companion's card (MECH-X item 4: a content companion's key has its content id)
           : steps[0]?.action === 'setHitPoints' || steps[0]?.action === 'setTemporaryHitPoints'
             ? document.getElementById('hp-heading')
             : concentrationOnly && current?.character.play?.concentration
@@ -909,6 +922,12 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
             Already at level 20, the highest level.
           </span>
         )}
+        {/* MECH-X item 2 (owner, 2026-10-28): picks can always be changed; a swap outside its window gets the save notice. */}
+        {(sheet.choices?.length ?? 0) > 0 && (
+          <button type="button" onClick={onMakeChoices}>
+            Change picks
+          </button>
+        )}
         <button type="button" ref={printButton} onClick={() => setPrinting((open) => !open)} aria-expanded={printing} aria-controls={printing ? 'print-preview' : undefined}>
           Print…
         </button>
@@ -942,9 +961,34 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
               // rest is saved, but the status would describe a screen the user has left.
               if (!mounted.current) return;
               onStatus(`${kind === 'shortRest' ? 'Short' : 'Long'} rest finished: ${applied} change${applied === 1 ? '' : 's'} applied.`);
+              // MECH-X item 2 (R44): page state only, never stored. Shown after a long rest that leaves a choice replaceable.
+              const replaceable = kind === 'longRest' ? afterLongRest(rested.sheet.choices) : [];
+              setAfterRest(replaceable.length > 0 ? afterRestPhrase(replaceable) : undefined);
             }}
+            replaceable={afterLongRest(sheet.choices)}
           />
         </div>
+      )}
+
+      {afterRest && (
+        <section aria-labelledby="after-rest-heading" className="play-panel">
+          <h3 id="after-rest-heading">After your long rest</h3>
+          <p>You may replace {afterRest}.</p>
+          <div className="actions">
+            <button type="button" onClick={onMakeChoices}>
+              Make choices
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAfterRest(undefined);
+                heading.current?.focus(); // the panel is gone: the sheet heading (WCAG 2.4.3)
+              }}
+            >
+              Dismiss
+            </button>
+          </div>
+        </section>
       )}
 
       {damaging && hasResponses && (

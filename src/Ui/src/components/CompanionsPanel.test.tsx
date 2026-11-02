@@ -265,3 +265,83 @@ it('holds Add an attack line at five lines, in text', async () => {
   expect(held(add)).toBe(true);
   expect(document.getElementById(add.getAttribute('aria-describedby')!)?.textContent).toBe('A companion can have up to 5 attack lines.');
 });
+
+// ---- MECH-X item 4: companions that content gives are calculated cards, first in the list, with no Edit or Remove. ----
+const charm = { contentId: 'c-charm', revisionId: 'r-charm' };
+const origin = { kind: 'content', rulesFamily: 'srd-5.2.1', content: charm, contentName: 'Testy Charm' };
+const trace = (description: string, result: number) => [{ order: 1, operation: 'base', description, result, origin }];
+const given = (extra: object = {}) => ({
+  content: charm, contentName: 'Testy Charm', effectId: 'e-wolf', companionId: 'g1', label: 'Testy Wolf',
+  armorClass: 14, armorClassTrace: trace('Wolf armor', 14), hitPointMaximum: 12, hitPointTrace: trace('Wolf health', 12),
+  current: 9, temporary: 0, speed: '40 ft.', attackEffectIds: ['claw'], resourceIds: ['howl'], automation: 'automatic', warnings: [], origin, ...extra,
+});
+const clawRow = (extra: object = {}) => ({
+  item: charm, name: 'Testy Claw', effectId: 'claw', source: 'feature', attack: 'melee', toHit: 5, damage: '1d6+2', damageType: 'slashing',
+  properties: [], trace: [], warnings: [], automation: 'automatic', available: true, replacesAttack: false, companionId: 'g1', ...extra,
+});
+const howlPool = { content: charm, contentName: 'Testy Charm', effectId: 'e-howl', resourceId: 'howl', label: 'Testy Howl', maximum: 2, spent: 0, current: 2, trace: [], warnings: [], automation: 'automatic', recoveries: [], companionId: 'g1' };
+const contentView = (companions: object[], hand: Companion[] = [], rows: { attacks?: object[]; resources?: object[] } = {}): CharacterView =>
+  ({
+    character: { id: 'fixture', rulesFamily: 'srd-5.2.1', name: 'Testy Handler', companions: hand, play: { resources: [], conditions: [] } },
+    sheet: { companions, attacks: rows.attacks ?? [clawRow()], resources: rows.resources ?? [howlPool] },
+  }) as unknown as CharacterView;
+const showContent = (companions: object[] = [given()], hand: Companion[] = [], rows?: { attacks?: object[]; resources?: object[] }) =>
+  render(
+    <CompanionsPanel view={contentView(companions, hand, rows)} act={(a) => acted.push(a)} roll={(t) => rolled.push(t)} onChanged={() => {}} onError={() => {}} onStatus={() => {}} />,
+  );
+
+it('renders a content companion card with its attacks and pools and no Edit', async () => {
+  showContent([given()], [crow]);
+  const wolf = within(card('Testy Wolf'));
+  expect(wolf.getByText('From Testy Charm')).toBeTruthy();
+  expect(wolf.getByText('Armor Class 14')).toBeTruthy();
+  expect(wolf.getByText('Speed 40 ft.')).toBeTruthy();
+  expect(wolf.getByText('Hit points: 9 of 12')).toBeTruthy();
+  expect(wolf.getByRole('button', { name: 'Roll Testy Claw attack' })).toBeTruthy();
+  expect(wolf.getByRole('heading', { name: /^Testy Howl: 2 of 2/ })).toBeTruthy();
+  expect(wolf.queryByRole('button', { name: /^Edit|^Remove/ })).toBeNull();
+  // Content cards come first; the hand companion keeps its Edit and Remove.
+  const names = screen.getAllByRole('heading', { level: 4 }).map((h) => h.textContent);
+  expect(names.indexOf('Testy Wolf')).toBeLessThan(names.indexOf('Testy Crow'));
+  expect(within(card('Testy Crow')).getByRole('button', { name: 'Edit Testy Crow' })).toBeTruthy();
+  await userEvent.click(wolf.getByRole('button', { name: 'Roll Testy Claw attack' }));
+  expect(rolled).toEqual([{ content: charm, effectId: 'claw', mode: 'normal' }]);
+});
+
+it('takes damage on a content companion through the play action with contentId', async () => {
+  showContent();
+  const wolf = within(card('Testy Wolf'));
+  await userEvent.type(wolf.getByRole('spinbutton', { name: 'Amount' }), '5');
+  await userEvent.click(wolf.getByRole('button', { name: /^Take damage/ }));
+  expect(acted).toEqual([{ action: 'companionDamage', contentId: 'c-charm', companionId: 'g1', amount: 5 }]);
+});
+
+it('shows Why? on Armor Class and hit point maximum', () => {
+  showContent();
+  const wolf = within(card('Testy Wolf'));
+  expect(wolf.getAllByText('Why?')).toHaveLength(2);
+  expect(wolf.getByRole('list', { hidden: true, name: 'Why Testy Wolf Armor Class' }).textContent).toMatch(/Wolf armor/);
+  expect(wolf.getByRole('list', { hidden: true, name: 'Why Testy Wolf hit point maximum' }).textContent).toMatch(/Wolf health/);
+});
+
+it('holds the hit point controls when the maximum is unknown', async () => {
+  showContent([given({ hitPointMaximum: null, armorClass: null })]);
+  const wolf = within(card('Testy Wolf'));
+  await userEvent.type(wolf.getByRole('spinbutton', { name: 'Amount' }), '5');
+  for (const name of [/^Take damage/, /^Heal/, /^Set hit points/, /^Set temporary hit points/]) {
+    expect(held(wolf.getByRole('button', { name }))).toBe(true);
+  }
+  await userEvent.click(wolf.getByRole('button', { name: /^Take damage/ }));
+  expect(acted).toEqual([]);
+  expect(wolf.getByText("This companion's hit point maximum could not be calculated.")).toBeTruthy();
+  expect(wolf.queryByText(/Armor Class/)).toBeNull();
+});
+
+it('two content companions sharing a companionId get distinct ids', () => {
+  const other = { contentId: 'c-other', revisionId: 'r-other' };
+  showContent([given(), given({ content: other, contentName: 'Testy Other', label: 'Testy Hawk' })], [], { attacks: [], resources: [] });
+  const ids = Array.from(document.querySelectorAll('[id]')).map((e) => e.id);
+  expect(new Set(ids).size).toBe(ids.length);
+  expect(document.getElementById('companion-c-charm-g1-heading')).toBeTruthy();
+  expect(document.getElementById('companion-c-other-g1-heading')).toBeTruthy();
+});

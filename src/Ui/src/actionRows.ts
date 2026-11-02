@@ -1,6 +1,7 @@
 // D73: what an action row can do right now, shared by the Actions panel and the quickbar. The rules here are the ones the panel's
 // buttons already followed (RollItem's Use, RollResult's Spend); the service stays the authority for every change.
 import type { AttackEntry, FeatureEffect, FeatureEntry, PlayAction, ResourceValue, RollRecord, ToggleValue } from './api/types';
+import { paying, paymentText } from './payment';
 
 /** `byHand`: the sheet cannot check this row (an untracked pool, an assisted attack), so the "Usable now" filter never hides it. */
 export type Availability = { usable: boolean; reasons: string[]; byHand?: boolean };
@@ -18,14 +19,21 @@ function needs(pool: ResourceValue, cost: number, drawsDown: boolean): string {
   return drawsDown ? `Needs ${cost} ${pool.label} built up (${pool.spent})` : `Needs ${cost} ${pool.label} (${pool.current} left)`;
 }
 
+/** What a roll rolls: its own dice, or (R38) the dice of the spell it casts without a slot. A roll with neither is a use, or only text. */
+export const hasDice = (effect: FeatureEffect): boolean => !!(effect.dice ?? effect.castsSpell?.dice);
+
+/** The reason a hit-point or slot payment cannot be made now (R40); the sheet always gives one, the fallback only covers a missing one. */
+const unpayable = (payment: { payable: boolean; reason?: string }): string | undefined => (payment.payable ? undefined : (payment.reason ?? 'Cannot be paid now'));
+
 /** The dice-less Use of a roll effect (RollItem today): its reason when it can't be used, and the action it sends. */
 export function dicelessUse(
   feature: FeatureEntry,
   effect: FeatureEffect,
   pool: ResourceValue | undefined,
   pools: ResourceValue[],
-): { cost: number; costFailed: boolean; poolName?: string; alsoText: string; reason?: string; action?: PlayAction; untracked: boolean } {
+): { cost: number; costFailed: boolean; poolName?: string; alsoText: string; reason?: string; action?: PlayAction; untracked: boolean; payText?: string } {
   const drawsDown = effect.drawsDown === true;
+  const payment = paying(effect.payment) ? effect.payment : undefined;
   // D43 slice 4: an action outside the form it needs is disabled, with the reason as text the button is described by.
   const locked = effect.available === false;
   // An absent cost means one use only when the action declares no cost. A declared cost that failed leaves `cost` absent and
@@ -66,6 +74,8 @@ export function dicelessUse(
   let untracked = false;
   const firstReason = (): string | undefined => {
     if (locked) return effect.unavailableReason ?? 'Not available right now';
+    // MECH-X item 1: a hit-point or slot payment is made by `useAction` (named by `rollId`). A cost of 0 is still offered: the service refuses it.
+    if (payment) return effect.rollId ? unpayable(payment) : "Can't be used here";
     if (compound && !effect.rollId) return "Can't be used here";
     if (costFailed) return 'Cost unavailable';
     if (cost < 1 && alsoChange.length === 0) return 'Costs nothing here'; // a compound use is worth it for its other changes
@@ -79,20 +89,27 @@ export function dicelessUse(
   const reason = firstReason();
   // D43 S8: a use that also changes another pool, or draws a pool down, is one compound change on the service.
   const action: PlayAction | undefined =
-    reason !== undefined || effect.resourceId === undefined
+    reason !== undefined
       ? undefined
-      : compound
+      : payment
         ? { action: 'useAction', contentId: feature.content.contentId, rollId: effect.rollId! }
-        : { action: 'spend', amount: cost, contentId: effect.resourceContent ?? feature.content.contentId, resourceId: effect.resourceId };
-  return { cost, costFailed, poolName, alsoText, reason, action, untracked };
+        : effect.resourceId === undefined
+          ? undefined
+          : compound
+            ? { action: 'useAction', contentId: feature.content.contentId, rollId: effect.rollId! }
+            : { action: 'spend', amount: cost, contentId: effect.resourceContent ?? feature.content.contentId, resourceId: effect.resourceId };
+  return { cost, costFailed, poolName, alsoText, reason, action, untracked, ...(payment ? { payText: paymentText(payment, effect.cost) } : {}) };
 }
 
 /** A roll effect: a dice-less one is usable exactly when its Use has an action; a rolled one only waits on its pool. */
 export function rollAvailability(feature: FeatureEntry, effect: FeatureEffect, pool: ResourceValue | undefined, pools: ResourceValue[]): Availability {
   if (effect.available === false) return unavailable(effect.unavailableReason);
-  if (effect.resourceId === undefined) return { usable: true, reasons: [] };
+  // MECH-X item 1 (R40): a roll's own pool is out of the picture when it pays hit points or a slot; what the sheet can see is the payment's `payable`.
+  // A roll with dice stays enabled (rolling never pays) and says so; a dice-less use waits on its own Use (below).
+  if (paying(effect.payment) && hasDice(effect)) return effect.payment.payable ? { usable: true, reasons: [] } : unavailable(unpayable(effect.payment));
+  if (effect.resourceId === undefined && !paying(effect.payment)) return { usable: true, reasons: [] };
   const use = dicelessUse(feature, effect, pool, pools);
-  if (!effect.dice) {
+  if (!hasDice(effect)) {
     return { usable: use.action !== undefined, reasons: use.reason ? [use.reason] : [], ...(use.untracked ? { byHand: true } : {}) };
   }
   // A rolled action's cost is spent from its record, but the row can still say the pool could not pay it.
@@ -105,6 +122,8 @@ export function rollAvailability(feature: FeatureEntry, effect: FeatureEffect, p
 
 export function attackAvailability(attack: AttackEntry, pool: ResourceValue | undefined): Availability {
   if (attack.available === false) return unavailable(attack.unavailableReason);
+  // MECH-X item 1 (R40): an attack that pays hit points or a slot stays enabled (rolling never pays) but says when the payment could not be made.
+  if (attack.source === 'feature' && paying(attack.payment) && !attack.payment.payable) return unavailable(unpayable(attack.payment));
   if (attack.source === 'feature' && attack.resourceId && pool?.current !== undefined) {
     const cost = attack.cost ?? 1;
     if (pool.current < cost) return { usable: false, reasons: [needs(pool, cost, false)] };
@@ -115,6 +134,8 @@ export function attackAvailability(attack: AttackEntry, pool: ResourceValue | un
 export function toggleAvailability(toggle: ToggleValue, pool: ResourceValue | undefined): Availability {
   if (toggle.on || toggle.auto) return { usable: true, reasons: [] };
   if (toggle.available === false) return unavailable(toggle.unavailableReason);
+  // MECH-X item 1 (R40): only switching a paying toggle ON waits on what it pays; switching it off (above) never does.
+  if (paying(toggle.payment) && !toggle.payment.payable) return unavailable(unpayable(toggle.payment));
   if (toggle.resourceId && pool?.current !== undefined) {
     const cost = toggle.cost ?? 1;
     if (pool.current < cost) return { usable: false, reasons: [needs(pool, cost, false)] };
@@ -187,4 +208,36 @@ export function recordSpend(record: RollRecord, resources: ResourceValue[], feat
       ? spendAction(cost, spend?.contentId ?? linked.content.contentId, spend?.resourceId ?? linked.resourceId)
       : undefined;
   return { linked, cost, costUnavailable, cantUse, variableCost, stock, stockText, most, spendAction, autoAction };
+}
+
+/** What RollResult's Pay button offers for a record that implies a hit-point or slot payment (MECH-X item 1). */
+export type RecordPayment = {
+  /** "Pay 3 hit points" or "Spend a level 2+ spell slot". */
+  label: string;
+  /** False when the row says the payment cannot be made now (R40); the button is held with `reason`. A row that has left the sheet leaves it to the service. */
+  payable: boolean;
+  reason?: string;
+  /** Which slot a slot payment takes now ("Slot, level 2 now"). */
+  note?: string;
+  /** The use that pays: `useAction` naming the roll (or feature attack) by the record's `useId`, with the hit points for a hit-point payment. */
+  action: PlayAction;
+};
+
+export function recordPayment(record: RollRecord, features: FeatureEntry[], attacks: AttackEntry[]): RecordPayment | undefined {
+  const pay = record.payment;
+  if (!pay || pay.kind === 'resource') return undefined;
+  // The row (a roll effect by `rollId`, else a feature attack by its effect id, as the service finds it) says whether it can be paid now.
+  const row =
+    features.filter((f) => f.content.contentId === pay.contentId).flatMap((f) => f.effects).find((e) => e.rollId === pay.useId)?.payment ??
+    attacks.find((a) => a.source === 'feature' && a.item.contentId === pay.contentId && a.effectId === pay.useId)?.payment ??
+    undefined;
+  const text = paymentText({ kind: pay.kind, minSlotLevel: pay.minSlotLevel }, pay.amount);
+  const slot = row?.slot;
+  return {
+    label: `${pay.kind === 'hitPoints' ? 'Pay' : 'Spend'} ${text}`,
+    payable: row?.payable ?? true,
+    ...(row && !row.payable ? { reason: unpayable(row) } : {}),
+    ...(pay.kind === 'slot' && slot ? { note: `${slot.pact ? 'Pact slot' : 'Slot'}, level ${slot.level} now` } : {}),
+    action: { action: 'useAction', contentId: pay.contentId, rollId: pay.useId, ...(pay.kind === 'hitPoints' && pay.amount !== undefined ? { amount: pay.amount } : {}) },
+  };
 }

@@ -183,6 +183,7 @@ public class ToggleGroupValidationTests
         HashSet<string> pinned = new(StringComparer.OrdinalIgnoreCase)
         {
             "Id", "Automation", "Timing", "Text", "Extensions", "ToggleId", "Label", "ResourceId", "AutoWhen", "Activation",
+            "Payment", // a v12 key (MECH-X item 1); PaymentSchemaTests.V12_key_lists_match pins its list
         };
         var added = typeof(ToggleEffect).GetProperties(BindingFlags.Public | BindingFlags.Instance)
             .Where(p => p.SetMethod is { IsPublic: true } && !pinned.Contains(p.Name))

@@ -1,0 +1,1427 @@
+{
+  "packId": "srd-5.1-monk",
+  "formatVersion": 1,
+  "notice": "The Monk of the System Reference Document 5.1 (CC-BY-4.0), levels 1-20, with the Way of the Open Hand, pp. 26-29. Taken from SRD_CC_v5.1.pdf (SHA-256 2504d2a0abb0a4d491a939be4f17910a2dde0312570ab8d208080225ccf0a1f0). See docs/licensing/srd-pack-review.md.",
+  "sources": [
+    {
+      "id": "51500000-0000-4000-8000-000000000001",
+      "title": "System Reference Document 5.1",
+      "publisher": "SRD 5.1 (CC-BY-4.0)",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "editionVersion": "5.1",
+      "license": "CC-BY-4.0",
+      "redistributable": true,
+      "attribution": "This work includes material taken from the System Reference Document 5.1 (\"SRD 5.1\") by Wizards of the Coast LLC and available at https://dnd.wizards.com/resources/systems-reference-document. The SRD 5.1 is licensed under the Creative Commons Attribution 4.0 International License available at https://creativecommons.org/licenses/by/4.0/legalcode.",
+      "modificationNotice": "Modified: TomeStack adapted this material into structured data. Selected passages are excerpted or shortened, with line breaks and hyphenation repaired, and rules are encoded as machine-readable effects.",
+      "sha256": "2504d2a0abb0a4d491a939be4f17910a2dde0312570ab8d208080225ccf0a1f0"
+    }
+  ],
+  "revisions": [
+    {
+      "contentId": "51c00000-0000-4000-8000-000000420001",
+      "revisionId": "51e00000-0000-4000-8000-000000420001",
+      "schemaVersion": 9,
+      "kind": "class",
+      "name": "Monk",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 26,
+          "end": 29
+        }
+      },
+      "status": "published",
+      "summary": "Hit Dice: 1d8 per monk level. Hit Points at 1st Level: 8 + your Constitution modifier. Hit Points at Higher Levels: 1d8 (or 5) + your Constitution modifier per monk level after 1st. Armor: None. Weapons: Simple weapons, shortswords. Tools: Choose one type of artisan’s tools or one musical instrument. Saving Throws: Strength, Dexterity. Skills: Choose two from Acrobatics, Athletics, History, Insight, Religion, and Stealth. TomeStack: levels 1-20. The artisan’s tools or musical instrument proficiency is recorded by hand.",
+      "effects": [
+        {
+          "type": "hitDie",
+          "id": "monk-hit-die",
+          "die": 8
+        },
+        {
+          "type": "scale",
+          "id": "monk-martial-arts-die",
+          "scaleId": "martialArts",
+          "label": "Martial Arts die",
+          "values": [
+            4,
+            4,
+            4,
+            4,
+            6,
+            6,
+            6,
+            6,
+            6,
+            6,
+            8,
+            8,
+            8,
+            8,
+            8,
+            8,
+            10,
+            10,
+            10,
+            10
+          ]
+        },
+        {
+          "type": "scale",
+          "id": "monk-unarmored-movement",
+          "scaleId": "unarmoredMovement",
+          "label": "Unarmored Movement (ft.)",
+          "values": [
+            0,
+            10,
+            10,
+            10,
+            10,
+            15,
+            15,
+            15,
+            15,
+            20,
+            20,
+            20,
+            20,
+            25,
+            25,
+            25,
+            25,
+            30,
+            30,
+            30
+          ]
+        },
+        {
+          "type": "grant",
+          "id": "monk-save-str",
+          "grant": "proficiency",
+          "target": "save.str",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "monk-save-dex",
+          "grant": "proficiency",
+          "target": "save.dex",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "choice",
+          "id": "monk-skills",
+          "choiceId": "monk-skills",
+          "count": 2,
+          "text": "Skills: Choose two from Acrobatics, Athletics, History, Insight, Religion, and Stealth",
+          "options": [
+            {
+              "contentId": "51c00000-0000-4000-8000-000000420801",
+              "revisionId": "51e00000-0000-4000-8000-000000420801"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000420802",
+              "revisionId": "51e00000-0000-4000-8000-000000420802"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000420803",
+              "revisionId": "51e00000-0000-4000-8000-000000420803"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000420804",
+              "revisionId": "51e00000-0000-4000-8000-000000420804"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000420805",
+              "revisionId": "51e00000-0000-4000-8000-000000420805"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000420806",
+              "revisionId": "51e00000-0000-4000-8000-000000420806"
+            }
+          ],
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "feature-unarmored-defense",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420101",
+            "revisionId": "51e00000-0000-4000-8000-000000420101"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-martial-arts",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420102",
+            "revisionId": "51e00000-0000-4000-8000-000000420102"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ki",
+          "grant": "content",
+          "level": 2,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420103",
+            "revisionId": "51e00000-0000-4000-8000-000000420103"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-unarmored-movement",
+          "grant": "content",
+          "level": 2,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420104",
+            "revisionId": "51e00000-0000-4000-8000-000000420104"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-deflect-missiles",
+          "grant": "content",
+          "level": 3,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420105",
+            "revisionId": "51e00000-0000-4000-8000-000000420105"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement",
+          "grant": "content",
+          "level": 4,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420106",
+            "revisionId": "51e00000-0000-4000-8000-000000420106"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-slow-fall",
+          "grant": "content",
+          "level": 4,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420107",
+            "revisionId": "51e00000-0000-4000-8000-000000420107"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-extra-attack",
+          "grant": "content",
+          "level": 5,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420108",
+            "revisionId": "51e00000-0000-4000-8000-000000420108"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-stunning-strike",
+          "grant": "content",
+          "level": 5,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420109",
+            "revisionId": "51e00000-0000-4000-8000-000000420109"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ki-empowered-strikes",
+          "grant": "content",
+          "level": 6,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420110",
+            "revisionId": "51e00000-0000-4000-8000-000000420110"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-evasion",
+          "grant": "content",
+          "level": 7,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420111",
+            "revisionId": "51e00000-0000-4000-8000-000000420111"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-stillness-of-mind",
+          "grant": "content",
+          "level": 7,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420112",
+            "revisionId": "51e00000-0000-4000-8000-000000420112"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement-8",
+          "grant": "content",
+          "level": 8,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420106",
+            "revisionId": "51e00000-0000-4000-8000-000000420106"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-purity-of-body",
+          "grant": "content",
+          "level": 10,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420113",
+            "revisionId": "51e00000-0000-4000-8000-000000420113"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement-12",
+          "grant": "content",
+          "level": 12,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420106",
+            "revisionId": "51e00000-0000-4000-8000-000000420106"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-tongue-of-the-sun-and-moon",
+          "grant": "content",
+          "level": 13,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420114",
+            "revisionId": "51e00000-0000-4000-8000-000000420114"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-diamond-soul",
+          "grant": "content",
+          "level": 14,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420115",
+            "revisionId": "51e00000-0000-4000-8000-000000420115"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-timeless-body",
+          "grant": "content",
+          "level": 15,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420116",
+            "revisionId": "51e00000-0000-4000-8000-000000420116"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement-16",
+          "grant": "content",
+          "level": 16,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420106",
+            "revisionId": "51e00000-0000-4000-8000-000000420106"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-empty-body",
+          "grant": "content",
+          "level": 18,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420117",
+            "revisionId": "51e00000-0000-4000-8000-000000420117"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement-19",
+          "grant": "content",
+          "level": 19,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420106",
+            "revisionId": "51e00000-0000-4000-8000-000000420106"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-perfect-self",
+          "grant": "content",
+          "level": 20,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420118",
+            "revisionId": "51e00000-0000-4000-8000-000000420118"
+          }
+        },
+        {
+          "type": "choice",
+          "id": "monastic-tradition",
+          "choiceId": "monastic-tradition",
+          "count": 1,
+          "level": 3,
+          "text": "Monastic Tradition. When you reach 3rd level, you commit yourself to a monastic tradition, such as the Way of the Open Hand. Your tradition grants you features at 3rd level and again at 6th, 11th, and 17th level. (The SRD 5.1 includes the Way of the Open Hand.)",
+          "options": [
+            {
+              "contentId": "51c00000-0000-4000-8000-000000420002",
+              "revisionId": "51e00000-0000-4000-8000-000000420002"
+            }
+          ]
+        },
+        {
+          "type": "grant",
+          "id": "monk-weapon-simple",
+          "grant": "proficiency",
+          "target": "weapon.simple",
+          "text": "Weapons: Simple weapons, shortswords"
+        },
+        {
+          "type": "grant",
+          "id": "monk-weapon-shortsword",
+          "grant": "proficiency",
+          "target": "weapon.shortsword"
+        },
+        {
+          "type": "grant",
+          "id": "monk-armor-none",
+          "grant": "proficiency",
+          "target": "armor.none",
+          "text": "Armor: None"
+        },
+        {
+          "type": "restriction",
+          "id": "monk-multiclass-dex",
+          "field": "ability.dex.score",
+          "minimum": 13,
+          "multiclass": true,
+          "text": "Multiclassing prerequisite: Dexterity 13 and Wisdom 13. Multiclassing proficiencies gained: simple weapons, shortswords (SRD 5.1 pp. 56-57)."
+        },
+        {
+          "type": "restriction",
+          "id": "monk-multiclass-wis",
+          "field": "ability.wis.score",
+          "minimum": 13,
+          "multiclass": true
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000420002",
+      "revisionId": "51e00000-0000-4000-8000-000000420002",
+      "schemaVersion": 3,
+      "kind": "subclass",
+      "name": "Way of the Open Hand",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 28,
+          "end": 29
+        }
+      },
+      "status": "published",
+      "summary": "Monks of the Way of the Open Hand are the ultimate masters of martial arts combat, whether armed or unarmed. They learn techniques to push and trip their opponents, manipulate ki to heal damage to their bodies, and practice advanced meditation that can protect them from harm.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "open-hand-technique",
+          "grant": "content",
+          "level": 3,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420501",
+            "revisionId": "51e00000-0000-4000-8000-000000420501"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "wholeness-of-body",
+          "grant": "content",
+          "level": 6,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420502",
+            "revisionId": "51e00000-0000-4000-8000-000000420502"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "tranquility",
+          "grant": "content",
+          "level": 11,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420503",
+            "revisionId": "51e00000-0000-4000-8000-000000420503"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "quivering-palm",
+          "grant": "content",
+          "level": 17,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420504",
+            "revisionId": "51e00000-0000-4000-8000-000000420504"
+          }
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000420101",
+      "revisionId": "51e00000-0000-4000-8000-000000420101",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Unarmored Defense",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 26
+        }
+      },
+      "status": "published",
+      "summary": "Beginning at 1st level, while you are wearing no armor and not wielding a shield, your AC equals 10 + your Dexterity modifier + your Wisdom modifier.\n\nTomeStack: applies only while no armor is worn (the Armor Class breakdown shows it as not used otherwise). A shield is not checked: with a shield this does not apply; adjust by hand.",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "unarmored-defense-ac",
+          "operation": "replace",
+          "target": "armorClass",
+          "value": "10 + DEX.MOD + WIS.MOD",
+          "text": "Applies only while no armor is worn (the Armor Class breakdown shows it as not used otherwise). TomeStack does not check shields: with a shield this does not apply; adjust by hand."
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000420102",
+      "revisionId": "51e00000-0000-4000-8000-000000420102",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Martial Arts",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 26,
+          "end": 27
+        }
+      },
+      "status": "published",
+      "summary": "At 1st level, your practice of martial arts gives you mastery of combat styles that use unarmed strikes and monk weapons, which are shortswords and any simple melee weapons that don’t have the two-handed or heavy property.\n\nYou gain the following benefits while you are unarmed or wielding only monk weapons and you aren’t wearing armor or wielding a shield:\n• You can use Dexterity instead of Strength for the attack and damage rolls of your unarmed strikes and monk weapons.\n• You can roll a d4 in place of the normal damage of your unarmed strike or monk weapon. This die changes as you gain monk levels, as shown in the Martial Arts column of the Monk table.\n• When you use the Attack action with an unarmed strike or a monk weapon on your turn, you can make one unarmed strike as a bonus action. For example, if you take the Attack action and attack with a quarterstaff, you can also make an unarmed strike as a bonus action, assuming you haven’t already taken a bonus action this turn.\n\nCertain monasteries use specialized forms of the monk weapons. For example, you might use a club that is two lengths of wood connected by a short chain (called a nunchaku) or a sickle with a shorter, straighter blade (called a kama). Whatever name you use for a monk weapon, you can use the game statistics provided for the weapon.\n\nTomeStack: The Martial Arts die and Dexterity apply to the Unarmed Strike rows; the Bonus Unarmed Strike needs the Attack action first, and you check that by hand (the row always shows). For monk weapons, roll the die and use Dexterity by hand. TomeStack does not check that you wear no armor and wield no shield.",
+      "effects": [
+        {
+          "type": "attack",
+          "id": "martial-arts-strike",
+          "attackId": "martialArtsStrike",
+          "label": "Unarmed Strike (Martial Arts)",
+          "kind": "melee",
+          "abilities": [
+            "str",
+            "dex"
+          ],
+          "damage": {
+            "count": "1",
+            "die": "SCALE.martialArts"
+          },
+          "damageType": "Bludgeoning",
+          "tags": [
+            "unarmed"
+          ]
+        },
+        {
+          "type": "attack",
+          "id": "martial-arts-bonus-strike",
+          "attackId": "martialArtsBonusStrike",
+          "label": "Bonus Unarmed Strike",
+          "kind": "melee",
+          "abilities": [
+            "str",
+            "dex"
+          ],
+          "damage": {
+            "count": "1",
+            "die": "SCALE.martialArts"
+          },
+          "damageType": "Bludgeoning",
+          "tags": [
+            "unarmed"
+          ],
+          "activation": "bonusAction"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000420103",
+      "revisionId": "51e00000-0000-4000-8000-000000420103",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Ki",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 27
+        }
+      },
+      "status": "published",
+      "summary": "Starting at 2nd level, your training allows you to harness the mystic energy of ki. Your access to this energy is represented by a number of ki points. Your monk level determines the number of points you have, as shown in the Ki Points column of the Monk table.\n\nYou can spend these points to fuel various ki features. You start knowing three such features: Flurry of Blows, Patient Defense, and Step of the Wind. You learn more ki features as you gain levels in this class.\n\nWhen you spend a ki point, it is unavailable until you finish a short or long rest, at the end of which you draw all of your expended ki back into yourself. You must spend at least 30 minutes of the rest meditating to regain your ki points.\n\nSome of your ki features require your target to make a saving throw to resist the feature’s effects. The saving throw DC is calculated as follows:\n\nKi save DC = 8 + your proficiency bonus + your Wisdom modifier\n\nFlurry of Blows. Immediately after you take the Attack action on your turn, you can spend 1 ki point to make two unarmed strikes as a bonus action.\n\nPatient Defense. You can spend 1 ki point to take the Dodge action as a bonus action on your turn.\n\nStep of the Wind. You can spend 1 ki point to take the Disengage or Dash action as a bonus action on your turn, and your jump distance is doubled for the turn.\n\nTomeStack: Ki points are a pool equal to your monk level, restored on a short or long rest. Flurry of Blows, Patient Defense and Step of the Wind each have an action that spends 1 ki point; the actions themselves, and the 30 minutes of meditation, are done by hand.",
+      "effects": [
+        {
+          "type": "resource",
+          "id": "ki-points",
+          "resourceId": "ki",
+          "label": "Ki Points",
+          "maximum": "CLASS_LEVEL",
+          "text": "Your monk level determines the number of ki points you have (the Ki Points column of the Monk table)."
+        },
+        {
+          "type": "recovery",
+          "id": "ki-points-short-rest",
+          "timing": "onShortRest",
+          "resourceId": "ki",
+          "on": "shortRest",
+          "amount": "all"
+        },
+        {
+          "type": "recovery",
+          "id": "ki-points-long-rest",
+          "timing": "onLongRest",
+          "resourceId": "ki",
+          "on": "longRest",
+          "amount": "all"
+        },
+        {
+          "type": "roll",
+          "id": "flurry-of-blows",
+          "rollId": "flurryOfBlows",
+          "label": "Flurry of Blows",
+          "resourceId": "ki",
+          "activation": "bonusAction",
+          "cost": "1"
+        },
+        {
+          "type": "roll",
+          "id": "patient-defense",
+          "rollId": "patientDefense",
+          "label": "Patient Defense",
+          "resourceId": "ki",
+          "activation": "bonusAction",
+          "cost": "1"
+        },
+        {
+          "type": "roll",
+          "id": "step-of-the-wind",
+          "rollId": "stepOfTheWind",
+          "label": "Step of the Wind",
+          "resourceId": "ki",
+          "activation": "bonusAction",
+          "cost": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000420104",
+      "revisionId": "51e00000-0000-4000-8000-000000420104",
+      "schemaVersion": 10,
+      "kind": "feature",
+      "name": "Unarmored Movement",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 27
+        }
+      },
+      "status": "published",
+      "summary": "Starting at 2nd level, your speed increases by 10 feet while you are not wearing armor or wielding a shield. This bonus increases when you reach certain monk levels, as shown in the Monk table.\n\nAt 9th level, you gain the ability to move along vertical surfaces and across liquids on your turn without falling during the move.\n\nTomeStack: the bonus from the Unarmored Movement column is always added to your speed; take it off by hand while you wear armor or wield a shield. Moving along vertical surfaces and across liquids is by hand.",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "unarmored-movement-speed",
+          "operation": "bonus",
+          "target": "speed",
+          "value": "SCALE.unarmoredMovement",
+          "text": "Not while you wear armor or wield a shield (by hand)."
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000420105",
+      "revisionId": "51e00000-0000-4000-8000-000000420105",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Deflect Missiles",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 27
+        }
+      },
+      "status": "published",
+      "summary": "Starting at 3rd level, you can use your reaction to deflect or catch the missile when you are hit by a ranged weapon attack. When you do so, the damage you take from the attack is reduced by 1d10 + your Dexterity modifier + your monk level.\n\nIf you reduce the damage to 0, you can catch the missile if it is small enough for you to hold in one hand and you have at least one hand free. If you catch a missile in this way, you can spend 1 ki point to make a ranged attack with the weapon or piece of ammunition you just caught, as part of the same reaction. You make this attack with proficiency, regardless of your weapon proficiencies, and the missile counts as a monk weapon for the attack, which has a normal range of 20 feet and a long range of 60 feet.\n\nTomeStack: the throw spends 1 ki point. The damage reduction and the attack are done by hand.",
+      "effects": [
+        {
+          "type": "roll",
+          "id": "deflect-missiles-throw",
+          "rollId": "deflectMissilesThrow",
+          "label": "Deflect Missiles: throw",
+          "resourceId": "ki",
+          "activation": "reaction",
+          "resourceContent": "51c00000-0000-4000-8000-000000420103",
+          "cost": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000420106",
+      "revisionId": "51e00000-0000-4000-8000-000000420106",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Ability Score Improvement",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 27
+        }
+      },
+      "status": "published",
+      "summary": "When you reach 4th level, and again at 8th, 12th, 16th, and 19th level, you can increase one ability score of your choice by 2, or you can increase two ability scores of your choice by 1. As normal, you can’t increase an ability score above 20 using this feature.",
+      "effects": []
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000420107",
+      "revisionId": "51e00000-0000-4000-8000-000000420107",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Slow Fall",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 27
+        }
+      },
+      "status": "published",
+      "summary": "Beginning at 4th level, you can use your reaction when you fall to reduce any falling damage you take by an amount equal to five times your monk level.",
+      "effects": []
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000420108",
+      "revisionId": "51e00000-0000-4000-8000-000000420108",
+      "schemaVersion": 8,
+      "kind": "feature",
+      "name": "Extra Attack",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 27
+        }
+      },
+      "status": "published",
+      "summary": "Beginning at 5th level, you can attack twice, instead of once, whenever you take the Attack action on your turn.",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "extra-attack",
+          "operation": "set",
+          "target": "attacks",
+          "value": "2"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000420109",
+      "revisionId": "51e00000-0000-4000-8000-000000420109",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Stunning Strike",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 28
+        }
+      },
+      "status": "published",
+      "summary": "Starting at 5th level, you can interfere with the flow of ki in an opponent’s body. When you hit another creature with a melee weapon attack, you can spend 1 ki point to attempt a stunning strike. The target must succeed on a Constitution saving throw or be stunned until the end of your next turn.\n\nTomeStack: using it spends 1 ki point and shows the Constitution saving throw DC. The stun is by hand.",
+      "effects": [
+        {
+          "type": "roll",
+          "id": "stunning-strike",
+          "rollId": "stunningStrike",
+          "label": "Stunning Strike",
+          "resourceId": "ki",
+          "resourceContent": "51c00000-0000-4000-8000-000000420103",
+          "cost": "1",
+          "save": {
+            "ability": "con",
+            "dc": "8 + WIS.MOD + PB"
+          }
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000420110",
+      "revisionId": "51e00000-0000-4000-8000-000000420110",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Ki-Empowered Strikes",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 28
+        }
+      },
+      "status": "published",
+      "summary": "Starting at 6th level, your unarmed strikes count as magical for the purpose of overcoming resistance and immunity to nonmagical attacks and damage.",
+      "effects": []
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000420111",
+      "revisionId": "51e00000-0000-4000-8000-000000420111",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Evasion",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 28
+        }
+      },
+      "status": "published",
+      "summary": "At 7th level, your instinctive agility lets you dodge out of the way of certain area effects, such as a blue dragon’s lightning breath or a fireball spell. When you are subjected to an effect that allows you to make a Dexterity saving throw to take only half damage, you instead take no damage if you succeed on the saving throw, and only half damage if you fail.",
+      "effects": []
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000420112",
+      "revisionId": "51e00000-0000-4000-8000-000000420112",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Stillness of Mind",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 28
+        }
+      },
+      "status": "published",
+      "summary": "Starting at 7th level, you can use your action to end one effect on yourself that is causing you to be charmed or frightened.",
+      "effects": []
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000420113",
+      "revisionId": "51e00000-0000-4000-8000-000000420113",
+      "schemaVersion": 10,
+      "kind": "feature",
+      "name": "Purity of Body",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 28
+        }
+      },
+      "status": "published",
+      "summary": "At 10th level, your mastery of the ki flowing through you makes you immune to disease and poison.\n\nTomeStack: immunity to poison damage is applied. Immunity to disease and to the poisoned condition is by hand.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "purity-of-body-poison",
+          "grant": "damageImmunity",
+          "damageType": "Poison"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000420114",
+      "revisionId": "51e00000-0000-4000-8000-000000420114",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Tongue of the Sun and Moon",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 28
+        }
+      },
+      "status": "published",
+      "summary": "Starting at 13th level, you learn to touch the ki of other minds so that you understand all spoken languages. Moreover, any creature that can understand a language can understand what you say.",
+      "effects": []
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000420115",
+      "revisionId": "51e00000-0000-4000-8000-000000420115",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Diamond Soul",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 28
+        }
+      },
+      "status": "published",
+      "summary": "Beginning at 14th level, your mastery of ki grants you proficiency in all saving throws.\n\nAdditionally, whenever you make a saving throw and fail, you can spend 1 ki point to reroll it and take the second result.\n\nTomeStack: the saving throw proficiencies are applied; the reroll spends 1 ki point, and making the new roll is done by hand.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "diamond-soul-save-str",
+          "grant": "proficiency",
+          "target": "save.str"
+        },
+        {
+          "type": "grant",
+          "id": "diamond-soul-save-dex",
+          "grant": "proficiency",
+          "target": "save.dex"
+        },
+        {
+          "type": "grant",
+          "id": "diamond-soul-save-con",
+          "grant": "proficiency",
+          "target": "save.con"
+        },
+        {
+          "type": "grant",
+          "id": "diamond-soul-save-int",
+          "grant": "proficiency",
+          "target": "save.int"
+        },
+        {
+          "type": "grant",
+          "id": "diamond-soul-save-wis",
+          "grant": "proficiency",
+          "target": "save.wis"
+        },
+        {
+          "type": "grant",
+          "id": "diamond-soul-save-cha",
+          "grant": "proficiency",
+          "target": "save.cha"
+        },
+        {
+          "type": "roll",
+          "id": "diamond-soul-reroll",
+          "rollId": "diamondSoul",
+          "label": "Reroll a failed save",
+          "resourceId": "ki",
+          "resourceContent": "51c00000-0000-4000-8000-000000420103",
+          "cost": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000420116",
+      "revisionId": "51e00000-0000-4000-8000-000000420116",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Timeless Body",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 28
+        }
+      },
+      "status": "published",
+      "summary": "At 15th level, your ki sustains you so that you suffer none of the frailty of old age, and you can’t be aged magically. You can still die of old age, however. In addition, you no longer need food or water.",
+      "effects": []
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000420117",
+      "revisionId": "51e00000-0000-4000-8000-000000420117",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Empty Body",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 28
+        }
+      },
+      "status": "published",
+      "summary": "Beginning at 18th level, you can use your action to spend 4 ki points to become invisible for 1 minute. During that time, you also have resistance to all damage but force damage.\n\nAdditionally, you can spend 8 ki points to cast the astral projection spell, without needing material components. When you do so, you can’t take any other creatures with you.\n\nTomeStack: turning Empty Body on spends 4 ki points and gives resistance to all damage but force damage for 1 minute (10 rounds). Becoming invisible is by hand. “Astral Projection” spends 8 ki points; casting the spell is by hand.",
+      "effects": [
+        {
+          "type": "toggle",
+          "id": "empty-body",
+          "toggleId": "emptyBody",
+          "label": "Empty Body",
+          "resourceId": "ki",
+          "resourceContent": "51c00000-0000-4000-8000-000000420103",
+          "cost": "4",
+          "activation": "action",
+          "duration": "10",
+          "text": "Turning it on spends 4 ki points. It lasts 1 minute (10 rounds); the invisibility is by hand."
+        },
+        {
+          "type": "grant",
+          "id": "empty-body-resist-acid",
+          "grant": "damageResistance",
+          "damageType": "Acid",
+          "whileToggle": {
+            "toggleId": "emptyBody"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "empty-body-resist-bludgeoning",
+          "grant": "damageResistance",
+          "damageType": "Bludgeoning",
+          "whileToggle": {
+            "toggleId": "emptyBody"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "empty-body-resist-cold",
+          "grant": "damageResistance",
+          "damageType": "Cold",
+          "whileToggle": {
+            "toggleId": "emptyBody"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "empty-body-resist-fire",
+          "grant": "damageResistance",
+          "damageType": "Fire",
+          "whileToggle": {
+            "toggleId": "emptyBody"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "empty-body-resist-lightning",
+          "grant": "damageResistance",
+          "damageType": "Lightning",
+          "whileToggle": {
+            "toggleId": "emptyBody"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "empty-body-resist-necrotic",
+          "grant": "damageResistance",
+          "damageType": "Necrotic",
+          "whileToggle": {
+            "toggleId": "emptyBody"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "empty-body-resist-piercing",
+          "grant": "damageResistance",
+          "damageType": "Piercing",
+          "whileToggle": {
+            "toggleId": "emptyBody"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "empty-body-resist-poison",
+          "grant": "damageResistance",
+          "damageType": "Poison",
+          "whileToggle": {
+            "toggleId": "emptyBody"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "empty-body-resist-psychic",
+          "grant": "damageResistance",
+          "damageType": "Psychic",
+          "whileToggle": {
+            "toggleId": "emptyBody"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "empty-body-resist-radiant",
+          "grant": "damageResistance",
+          "damageType": "Radiant",
+          "whileToggle": {
+            "toggleId": "emptyBody"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "empty-body-resist-slashing",
+          "grant": "damageResistance",
+          "damageType": "Slashing",
+          "whileToggle": {
+            "toggleId": "emptyBody"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "empty-body-resist-thunder",
+          "grant": "damageResistance",
+          "damageType": "Thunder",
+          "whileToggle": {
+            "toggleId": "emptyBody"
+          }
+        },
+        {
+          "type": "roll",
+          "id": "astral-projection",
+          "rollId": "astralProjection",
+          "label": "Astral Projection",
+          "resourceId": "ki",
+          "activation": "action",
+          "resourceContent": "51c00000-0000-4000-8000-000000420103",
+          "cost": "8"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000420118",
+      "revisionId": "51e00000-0000-4000-8000-000000420118",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Perfect Self",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 28
+        }
+      },
+      "status": "published",
+      "summary": "At 20th level, when you roll for initiative and have no ki points remaining, you regain 4 ki points.",
+      "effects": []
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000420501",
+      "revisionId": "51e00000-0000-4000-8000-000000420501",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Open Hand Technique",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 28
+        }
+      },
+      "status": "published",
+      "summary": "Starting when you choose this tradition at 3rd level, you can manipulate your enemy’s ki when you harness your own. Whenever you hit a creature with one of the attacks granted by your Flurry of Blows, you can impose one of the following effects on that target:\n• It must succeed on a Dexterity saving throw or be knocked prone.\n• It must make a Strength saving throw. If it fails, you can push it up to 15 feet away from you.\n• It can’t take reactions until the end of your next turn.\n\nTomeStack: Use your ki save DC.",
+      "effects": []
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000420502",
+      "revisionId": "51e00000-0000-4000-8000-000000420502",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Wholeness of Body",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 28,
+          "end": 29
+        }
+      },
+      "status": "published",
+      "summary": "At 6th level, you gain the ability to heal yourself. As an action, you can regain hit points equal to three times your monk level. You must finish a long rest before you can use this feature again.\n\nTomeStack: using it spends the one use; regaining the hit points (three times your monk level) is done by hand.",
+      "effects": [
+        {
+          "type": "resource",
+          "id": "wholeness-of-body-uses",
+          "resourceId": "wholenessOfBody",
+          "label": "Wholeness of Body",
+          "maximum": "1",
+          "text": "You must finish a long rest before you can use this feature again."
+        },
+        {
+          "type": "recovery",
+          "id": "wholeness-of-body-long-rest",
+          "timing": "onLongRest",
+          "resourceId": "wholenessOfBody",
+          "on": "longRest",
+          "amount": "all"
+        },
+        {
+          "type": "roll",
+          "id": "wholeness-of-body-use",
+          "rollId": "wholenessOfBody",
+          "label": "Wholeness of Body",
+          "resourceId": "wholenessOfBody",
+          "activation": "action",
+          "cost": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000420503",
+      "revisionId": "51e00000-0000-4000-8000-000000420503",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Tranquility",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 29
+        }
+      },
+      "status": "published",
+      "summary": "Beginning at 11th level, you can enter a special meditation that surrounds you with an aura of peace. At the end of a long rest, you gain the effect of a sanctuary spell that lasts until the start of your next long rest (the spell can end early as normal). The saving throw DC for the spell equals 8 + your Wisdom modifier + your proficiency bonus.",
+      "effects": []
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000420504",
+      "revisionId": "51e00000-0000-4000-8000-000000420504",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Quivering Palm",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 29
+        }
+      },
+      "status": "published",
+      "summary": "At 17th level, you gain the ability to set up lethal vibrations in someone’s body. When you hit a creature with an unarmed strike, you can spend 3 ki points to start these imperceptible vibrations, which last for a number of days equal to your monk level. The vibrations are harmless unless you use your action to end them. To do so, you and the target must be on the same plane of existence. When you use this action, the creature must make a Constitution saving throw. If it fails, it is reduced to 0 hit points. If it succeeds, it takes 10d10 necrotic damage.\n\nYou can have only one creature under the effect of this feature at a time. You can choose to end the vibrations harmlessly without using an action.\n\nTomeStack: two actions. “Quivering Palm: start” spends 3 ki points; “Quivering Palm: end” rolls the 10d10 damage and shows the Constitution saving throw DC (the damage is necrotic and is taken on a successful save; on a failed save the creature is reduced to 0 hit points by hand). The days, the one creature and ending the vibrations harmlessly are by hand.",
+      "effects": [
+        {
+          "type": "roll",
+          "id": "quivering-palm-start",
+          "rollId": "quiveringPalmStart",
+          "label": "Quivering Palm: start",
+          "resourceId": "ki",
+          "resourceContent": "51c00000-0000-4000-8000-000000420103",
+          "cost": "3"
+        },
+        {
+          "type": "roll",
+          "id": "quivering-palm-end",
+          "rollId": "quiveringPalmEnd",
+          "label": "Quivering Palm: end",
+          "dice": "10d10",
+          "save": {
+            "ability": "con",
+            "dc": "8 + WIS.MOD + PB"
+          }
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000420801",
+      "revisionId": "51e00000-0000-4000-8000-000000420801",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Monk Skill: Acrobatics",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 26
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.acrobatics"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000420802",
+      "revisionId": "51e00000-0000-4000-8000-000000420802",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Monk Skill: Athletics",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 26
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.athletics"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000420803",
+      "revisionId": "51e00000-0000-4000-8000-000000420803",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Monk Skill: History",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 26
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.history"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000420804",
+      "revisionId": "51e00000-0000-4000-8000-000000420804",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Monk Skill: Insight",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 26
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.insight"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000420805",
+      "revisionId": "51e00000-0000-4000-8000-000000420805",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Monk Skill: Religion",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 26
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.religion"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000420806",
+      "revisionId": "51e00000-0000-4000-8000-000000420806",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Monk Skill: Stealth",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 26
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.stealth"
+        }
+      ]
+    }
+  ]
+}

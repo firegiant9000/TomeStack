@@ -11,14 +11,19 @@ const parity = JSON.parse(readFileSync(resolve(process.cwd(), '../../tests/Rules
   action: PlayActionKind;
   replace?: boolean;
   responses?: boolean;
+  paying?: boolean;
   compound: boolean;
 }[];
 
 it('agrees with the server on which play actions are compound (shared fixture)', () => {
   expect(parity.length).toBeGreaterThan(25);
-  for (const { action, replace, responses, compound } of parity) {
+  for (const { action, replace, responses, paying, compound } of parity) {
     const dummy = responses ? { responses: [{ contentId: 'c', responseId: 'r' }] } : {};
-    expect(isCompound({ action, ...(replace === undefined ? {} : { replace }), ...dummy }), `${action} replace=${String(replace)} responses=${String(responses)}`).toBe(compound);
+    // MECH-X item 1: a toggle whose sheet row has a hit-point or slot payment is compound; the view carries the row.
+    const toggle = { content: { contentId: 'c' }, toggleId: 't', ...(paying ? { payment: { kind: 'hitPoints', payable: true } } : {}) };
+    const sheetView = { sheet: { toggles: [toggle] } } as unknown as CharacterView;
+    const named = { contentId: 'c', toggleId: 't' };
+    expect(isCompound({ action, ...named, ...(replace === undefined ? {} : { replace }), ...dummy }, sheetView), `${action} replace=${String(replace)} responses=${String(responses)} paying=${String(paying)}`).toBe(compound);
   }
 });
 
@@ -33,7 +38,7 @@ it('lists every client play action kind exactly once (plus the toggleOn replace 
   };
   const named = new Set(parity.map((c) => c.action));
   expect([...named].sort()).toEqual(Object.keys(all).sort());
-  expect(parity.filter((c) => c.action === 'toggleOn').map((c) => c.replace).sort()).toEqual([false, true]);
+  expect(parity.filter((c) => c.action === 'toggleOn').map((c) => c.replace).sort()).toEqual([false, false, true]);
 });
 
 const view = (current: number, temporary: number, play: Partial<CharacterView['character']['play']> = {}): CharacterView =>
@@ -173,6 +178,24 @@ it('a compound action is marked compound and gets no client inverse (D44)', () =
   expect(inverseOf(replace, v, v)).toBeUndefined();
 });
 
+// MECH-X item 1 (R36): a toggle that pays hit points or a slot is undone by the service. A client toggleOff + regain would not restore
+// the payment, and a client toggleOn after a switch off would pay again.
+it('switching a paying toggle on is compound and has no client undo; switching it off has none either (R36)', () => {
+  const paying = withToggles({ toggleId: 't', payment: { kind: 'hitPoints', payable: true }, cost: 3 });
+  const on: PlayAction = { action: 'toggleOn', contentId: 'c', toggleId: 't' };
+  expect(isCompound(on, paying)).toBe(true);
+  expect(inverseOf(on, paying, paying)).toBeUndefined();
+  const slot = withToggles({ toggleId: 't', on: true, payment: { kind: 'slot', payable: false, reason: 'No spell slot is left.' } });
+  expect(inverseOf({ action: 'toggleOff', contentId: 'c', toggleId: 't' }, slot, slot)).toBeUndefined();
+});
+
+it('a pool toggle and a toggle with no payment are unchanged (R36)', () => {
+  const pool = withToggles({ toggleId: 't', resourceId: 'focus', cost: 2, costResourceContent: 'pool' });
+  expect(isCompound({ action: 'toggleOn', contentId: 'c', toggleId: 't' }, pool)).toBe(false);
+  const plain = withToggles({ toggleId: 't', on: true });
+  expect(inverseOf({ action: 'toggleOff', contentId: 'c', toggleId: 't' }, plain, plain)!.inverse).toEqual([{ action: 'toggleOn', contentId: 'c', toggleId: 't' }]);
+});
+
 it('turning on a primary that dropped an overlay the new form does not allow has no client undo', () => {
   const before = withToggles({ toggleId: 'p', on: false, group: 'g', layer: 'primary' }, { toggleId: 'o', on: true, group: 'g', layer: 'overlay' });
   const after = withToggles({ toggleId: 'p', on: true, group: 'g', layer: 'primary' }, { toggleId: 'o', on: false, group: 'g', layer: 'overlay' });
@@ -262,4 +285,19 @@ it('names the id an entry was given by the change it undoes, and offers nothing 
   const action = { action: 'spendCharge' as const, amount: 1, entryIndex: 1, contentId: 'c-wand' };
   expect(inverseOf(action, withUses([wandUse()]), withUses([wandUse('given')]))!.inverse).toEqual([{ action: 'regainCharge', amount: 1, entryId: 'given' }]);
   expect(inverseOf(action, withUses([wandUse()]), withUses([]))).toBeUndefined();
+});
+
+// MECH-X item 4: a content companion's hit points are on the sheet, and the inverse names its content.
+const withContentCompanion = (current: number, temporary: number): CharacterView =>
+  ({
+    character: { play: { temporaryHitPoints: 0, resources: [], conditions: [], exhaustion: 0 } },
+    sheet: { companions: [{ content: { contentId: 'c-charm', revisionId: 'r-charm' }, companionId: 'g1', label: 'Testy Wolf', hitPointMaximum: 12, current, temporary }] },
+  }) as unknown as CharacterView;
+
+it('undo of content companion damage sends heal with contentId', () => {
+  const damaged = inverseOf({ action: 'companionDamage', contentId: 'c-charm', companionId: 'g1', amount: 5 }, withContentCompanion(12, 0), withContentCompanion(7, 0))!;
+  expect(damaged.inverse).toEqual([{ action: 'companionSetHitPoints', contentId: 'c-charm', companionId: 'g1', amount: 12, temporary: 0 }]);
+  const healed = inverseOf({ action: 'companionHeal', contentId: 'c-charm', companionId: 'g1', amount: 3 }, withContentCompanion(7, 2), withContentCompanion(10, 2))!;
+  expect(healed.inverse).toEqual([{ action: 'companionSetHitPoints', contentId: 'c-charm', companionId: 'g1', amount: 7, temporary: 2 }]);
+  expect(inverseOf({ action: 'companionHeal', contentId: 'c-charm', companionId: 'g1', amount: 3 }, withContentCompanion(12, 0), withContentCompanion(12, 0))).toBeUndefined();
 });

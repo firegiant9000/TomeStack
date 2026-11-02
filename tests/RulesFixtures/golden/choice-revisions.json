@@ -1,0 +1,51 @@
+[
+  {
+    "contentId": "6a7e00f2-0000-4000-8000-000000000001",
+    "revisionId": "6a7e00f2-0000-4000-8000-000000000101",
+    "schemaVersion": 12,
+    "kind": "feature",
+    "name": "Fixture Shifting Repertoire",
+    "rulesFamilies": ["srd-5.2.1"],
+    "provenance": { "sourceId": "6a7e0000-0000-4000-8000-000000000001" },
+    "status": "published",
+    "effects": [
+      {
+        "type": "choice", "id": "repertoire-techniques", "choiceId": "techniques", "count": 2,
+        "options": [
+          { "contentId": "6a7e00f2-0000-4000-8000-000000000011", "revisionId": "6a7e00f2-0000-4000-8000-000000000111" },
+          { "contentId": "6a7e00f2-0000-4000-8000-000000000012", "revisionId": "6a7e00f2-0000-4000-8000-000000000112" },
+          { "contentId": "6a7e00f2-0000-4000-8000-000000000013", "revisionId": "6a7e00f2-0000-4000-8000-000000000113" }
+        ],
+        "replaceable": { "when": "levelUp", "max": 1 }
+      },
+      {
+        "type": "choice", "id": "repertoire-stance", "choiceId": "stance", "count": 1,
+        "options": [
+          { "contentId": "6a7e00f2-0000-4000-8000-000000000014", "revisionId": "6a7e00f2-0000-4000-8000-000000000114" },
+          { "contentId": "6a7e00f2-0000-4000-8000-000000000015", "revisionId": "6a7e00f2-0000-4000-8000-000000000115" }
+        ],
+        "replaceable": { "when": "longRest" }
+      }
+    ]
+  },
+  {
+    "contentId": "6a7e00f2-0000-4000-8000-000000000011", "revisionId": "6a7e00f2-0000-4000-8000-000000000111", "schemaVersion": 12, "kind": "feature",
+    "name": "Fixture Technique One", "rulesFamilies": ["srd-5.2.1"], "provenance": { "sourceId": "6a7e0000-0000-4000-8000-000000000001" }, "status": "published", "effects": []
+  },
+  {
+    "contentId": "6a7e00f2-0000-4000-8000-000000000012", "revisionId": "6a7e00f2-0000-4000-8000-000000000112", "schemaVersion": 12, "kind": "feature",
+    "name": "Fixture Technique Two", "rulesFamilies": ["srd-5.2.1"], "provenance": { "sourceId": "6a7e0000-0000-4000-8000-000000000001" }, "status": "published", "effects": []
+  },
+  {
+    "contentId": "6a7e00f2-0000-4000-8000-000000000013", "revisionId": "6a7e00f2-0000-4000-8000-000000000113", "schemaVersion": 12, "kind": "feature",
+    "name": "Fixture Technique Three", "rulesFamilies": ["srd-5.2.1"], "provenance": { "sourceId": "6a7e0000-0000-4000-8000-000000000001" }, "status": "published", "effects": []
+  },
+  {
+    "contentId": "6a7e00f2-0000-4000-8000-000000000014", "revisionId": "6a7e00f2-0000-4000-8000-000000000114", "schemaVersion": 12, "kind": "feature",
+    "name": "Fixture Stance Low", "rulesFamilies": ["srd-5.2.1"], "provenance": { "sourceId": "6a7e0000-0000-4000-8000-000000000001" }, "status": "published", "effects": []
+  },
+  {
+    "contentId": "6a7e00f2-0000-4000-8000-000000000015", "revisionId": "6a7e00f2-0000-4000-8000-000000000115", "schemaVersion": 12, "kind": "feature",
+    "name": "Fixture Stance High", "rulesFamilies": ["srd-5.2.1"], "provenance": { "sourceId": "6a7e0000-0000-4000-8000-000000000001" }, "status": "published", "effects": []
+  }
+]

@@ -35,6 +35,30 @@ public class SnapshotTests
     }
 
     [Fact]
+    public void A_different_mod_on_an_equipment_entry_is_an_equipment_change_and_an_equal_one_is_not()
+    {
+        var (temp, hero, _) = Setup();
+        using var _ = temp;
+        var app = temp.App;
+        // The host and mods are invented references the catalog does not hold, so write the stored character directly: a save checks mods (MECH-X item 3, R51).
+        void Put(Character character) => app.Store.InTransaction(() => app.Store.SaveCharacter(character));
+        var host = new ContentReference(Guid.NewGuid(), Guid.NewGuid());
+        var modA = new ContentReference(Guid.NewGuid(), Guid.NewGuid());
+        var modB = new ContentReference(Guid.NewGuid(), Guid.NewGuid());
+        var entryId = Guid.NewGuid();
+        Put(app.GetCharacter(hero.Id).Character with { Equipment = [new(host, true, 1, entryId, Mods: [modA])] });
+        var taken = app.Snapshot(new(hero.Id));
+
+        Assert.False(app.PreviewRestore(new(hero.Id, taken.Id)).OtherSheetValuesChange);
+
+        Put(app.GetCharacter(hero.Id).Character with { Equipment = [new(host, true, 1, entryId, Mods: [modB])] });
+        Assert.True(app.PreviewRestore(new(hero.Id, taken.Id)).OtherSheetValuesChange);
+
+        Put(app.GetCharacter(hero.Id).Character with { Equipment = [new(host, true, 1, entryId)] });
+        Assert.True(app.PreviewRestore(new(hero.Id, taken.Id)).OtherSheetValuesChange);
+    }
+
+    [Fact]
     public void A_snapshot_is_restored_after_a_preview_with_an_undo_snapshot_and_a_one_use_token()
     {
         var (temp, hero, cls) = Setup();

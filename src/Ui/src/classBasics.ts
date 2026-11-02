@@ -87,7 +87,12 @@ export function setAnyOne(effects: Effect[], on: boolean): Effect[] {
 export function setChoice(effects: Effect[], choiceId: 'skills' | 'subclass', choice: Choice | null): Effect[] {
   const index = effects.findIndex((e) => e.type === 'choice' && e.choiceId === choiceId);
   if (choice === null) return index < 0 ? effects : effects.filter((_, i) => i !== index);
-  return index < 0 ? [...effects, choice] : effects.map((e, i) => (i === index ? choice : e));
+  if (index < 0) return [...effects, choice];
+  // MECH-X item 2 (S2, R45): the studio has no editor for `replaceable` (or any key it does not own), so a rebuild keeps what is
+  // stored. A `max` above the new `count` is clamped to it, since nothing else in the studio could fix it.
+  const merged: Choice = { ...(effects[index] as Choice), ...choice };
+  if (merged.replaceable?.max !== undefined && merged.replaceable.max > merged.count) merged.replaceable = { ...merged.replaceable, max: merged.count };
+  return effects.map((e, i) => (i === index ? merged : e));
 }
 
 /** `base`, or `base-2`, `base-3` … until no effect uses it. */

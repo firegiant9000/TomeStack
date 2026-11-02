@@ -74,7 +74,8 @@ public sealed record ChoiceStatus(
     int Count,
     IReadOnlyList<ContentReference> Options,
     IReadOnlyList<ContentReference> Selected,
-    bool Resolved);
+    bool Resolved,
+    ChoiceReplaceable? Replaceable = null);
 
 /// <param name="Active">Every content revision that applies to the character (pinned, class, granted or chosen), in resolution order.</param>
 /// <param name="Resources">M2 item 2: every resource an active revision defines, with its calculated maximum and what is spent.</param>
@@ -107,7 +108,8 @@ public sealed record CharacterSheet(
     bool? LevelUpAvailable = null,
     int? XpForNextLevel = null,
     IReadOnlyList<UpkeepValue>? Upkeeps = null,
-    IReadOnlyList<ResponseValue>? Responses = null)
+    IReadOnlyList<ResponseValue>? Responses = null,
+    IReadOnlyList<CompanionValue>? Companions = null)
 {
     public DerivedValue Field(string field) => Fields.Single(f => f.Field == field);
 }
@@ -135,13 +137,47 @@ public sealed record ItemUseValue(
     int? ChargesMax,
     int ChargesSpent,
     int? ChargesLeft,
-    ItemChargeRecoveryInfo? Recovery);
+    ItemChargeRecoveryInfo? Recovery,
+    IReadOnlyList<ItemModInfo> Mods,
+    IReadOnlyList<string> Hosts);
+
+/// <summary>
+/// MECH-X item 3 (R57): one mod attached to an equipment entry, for the Inventory. <paramref name="Name"/> is the mod's own name, or
+/// "(not available)" when the catalog cannot find it (the entry keeps the reference so it can be removed); <paramref name="AppliesTo"/> and
+/// <paramref name="Bonus"/> are those of its <c>itemMod</c> effect (any and none when it has none).
+/// </summary>
+public sealed record ItemModInfo(ContentReference Reference, string Name, ModTarget AppliesTo, int? Bonus);
 
 /// <summary>
 /// Content v9 (ADR-010): one column of a class table at the character's level in that class, for example "Ink 4" for a
 /// level-5 Test Chronicler. <paramref name="Content"/> is the revision that defines it (the class or its subclass).
 /// </summary>
 public sealed record ScaleValue(ContentReference Class, string ClassName, ContentReference Content, string ScaleId, string Label, int ClassLevel, int Value);
+
+/// <summary>
+/// MECH-X item 4 (R60, R65): a companion card a <c>companion</c> effect declares. Its play state is keyed by the content id
+/// (<paramref name="Content"/>) and <paramref name="CompanionId"/>. <paramref name="ArmorClass"/> and <paramref name="HitPointMaximum"/>
+/// are null when their formula fails (with <c>effect.invalid-formula</c>); <paramref name="Current"/> is then 0. The attacks and pools
+/// named by <paramref name="AttackEffectIds"/> and <paramref name="ResourceIds"/> are rows of the sheet's own lists, tagged with the companion id.
+/// </summary>
+public sealed record CompanionValue(
+    ContentReference Content,
+    string ContentName,
+    string EffectId,
+    Guid CompanionId,
+    string Label,
+    int? ArmorClass,
+    IReadOnlyList<TraceEntry> ArmorClassTrace,
+    int? HitPointMaximum,
+    IReadOnlyList<TraceEntry> HitPointTrace,
+    int Current,
+    int Temporary,
+    string? Speed,
+    IReadOnlyList<string> AttackEffectIds,
+    IReadOnlyList<string> ResourceIds,
+    AutomationStatus Automation,
+    IReadOnlyList<Diagnostic> Warnings,
+    TraceOrigin Origin);
 
 /// <summary>
 /// A limited-use resource (ADR-003 <c>resource</c>). <paramref name="Maximum"/> is its formula evaluated in the content's
@@ -166,7 +202,8 @@ public sealed record ResourceValue(
     Activation? Activation = null,
     bool CountsUp = false,
     string? FullText = null,
-    bool Allowance = false);
+    bool Allowance = false,
+    Guid? CompanionId = null);
 
 /// <summary>
 /// Content v11 (D43): an upkeep the character's active content declares, for the turn planner. <paramref name="Content"/> and
@@ -224,13 +261,30 @@ public sealed record FeatureEntry(
 /// <param name="AlsoChange">Content v11 (D43): the other pools the use also changes, each amount evaluated for this character (never below 0). Null when the roll has none.</param>
 /// <param name="DrawsDown">Content v11 (D43): the cost and per-unit amount use up the built-up value of the counting-up pool instead of adding to it.</param>
 /// <param name="RollId">The roll's content <c>rollId</c> (what <c>useAction</c> names); it can differ from <paramref name="Id"/>. A computed sheet member, not stored.</param>
+/// <param name="Payment">Content v12 (MECH-X item 1): a hit-point or slot payment and whether it can be made now; null for a pool payment and below v12.</param>
+/// <param name="CastsSpell">Content v12 (MECH-X item 1, R38): the spell this roll casts without a slot; null when it casts none or the spell cannot be used.</param>
 public sealed record FeatureEffect(
     string Id, string Type, AutomationStatus Automation, string? Text, string? Label = null, string? Dice = null, string? ResourceId = null, Activation? Activation = null,
     Guid? ResourceContent = null, int? Cost = null, bool VariableCost = false, int? Bonus = null, bool Available = true, string? UnavailableReason = null,
     Ability? SaveAbility = null, int? SaveDc = null, IReadOnlyList<TraceEntry>? SaveTrace = null,
     RollArea? Area = null, string? Range = null, string? Targets = null,
     RollPerUnit? PerUnit = null,
-    IReadOnlyList<AlsoChangeValue>? AlsoChange = null, bool DrawsDown = false, string? RollId = null);
+    IReadOnlyList<AlsoChangeValue>? AlsoChange = null, bool DrawsDown = false, string? RollId = null,
+    PaymentValue? Payment = null, CastSpellValue? CastsSpell = null);
+
+/// <summary>
+/// Content v12 (MECH-X item 1): how a roll, a feature attack or a toggle pays, and whether it can now (R40). Null on the sheet for a
+/// pool payment (today's behaviour) and for any revision below v12. <paramref name="Payable"/> is false, with
+/// <paramref name="Reason"/>, when the payment cannot be made now (too few hit points for the cost; no slot at or above
+/// <paramref name="MinSlotLevel"/>); it never changes <c>Available</c>. <paramref name="Slot"/> is the slot a slot payment would take now.
+/// </summary>
+public sealed record PaymentValue(PaymentKind Kind, bool Payable, string? Reason = null, bool MayDropToZero = false, int? MinSlotLevel = null, SlotChoice? Slot = null);
+
+/// <summary>
+/// Content v12 (MECH-X item 1, R38): the spell a <c>castsSpell</c> roll casts without a slot. <paramref name="AttackBonus"/> and
+/// <paramref name="SaveDc"/> are the primary caster's; null when the character has no caster (the numbers are by hand).
+/// </summary>
+public sealed record CastSpellValue(ContentReference Spell, string Name, int Level, SpellAttackKind Attack, Ability? Save, string? Dice, int? AttackBonus, int? SaveDc);
 
 /// <summary>
 /// Content v11 (D43): one pool a use also changes, for this character. <paramref name="ResourceContent"/> is the content that
@@ -253,7 +307,8 @@ public sealed record AlsoChangeValue(Guid ResourceContent, string ResourceId, Up
 public sealed record ToggleValue(
     ContentReference Content, string ContentName, string EffectId, string ToggleId, string Label, bool On, string? ResourceId, string? Text, bool? Auto = null, Activation? Activation = null,
     string? Group = null, Guid? GroupContent = null, ToggleLayer? Layer = null, int? Cost = null, Guid? CostResourceContent = null, bool Available = true, string? UnavailableReason = null, string? GroupLabel = null,
-    int? Duration = null, int? RoundsLeft = null, IReadOnlyList<ToggleRef>? AllowedWith = null, bool? AllowedInBase = null);
+    int? Duration = null, int? RoundsLeft = null, IReadOnlyList<ToggleRef>? AllowedWith = null, bool? AllowedInBase = null,
+    PaymentValue? Payment = null);
 
 /// <summary>Where a damage defence on the sheet comes from: the character's own list (<paramref name="Content"/> null) or a v10 damage grant.</summary>
 public sealed record DamageDefenceSource(string Name, ContentReference? Content = null, string? EffectId = null);
@@ -317,7 +372,7 @@ public sealed record SpellcastingEntry(
 /// <summary>
 /// SPEC C-02, C-04: an attack with an equipped weapon. <paramref name="ToHit"/> = the ability modifier (Strength for
 /// melee, Dexterity for ranged, the better one with finesse) + the proficiency bonus if proficient + the weapon's own
-/// bonus; <paramref name="Damage"/> is the dice plus the same modifier and bonus. <paramref name="Trace"/> explains to-hit.
+/// bonus (content v12); <paramref name="Damage"/> is the dice plus the same modifier and bonus. <paramref name="Trace"/> explains to-hit.
 /// Content v11 (D43): a feature can give an attack too (<see cref="AttackSource.Feature"/>; <paramref name="Category"/> is null,
 /// <paramref name="Item"/> is the declaring content's revision and <paramref name="EffectId"/> the attack effect's id), and toggled
 /// riders add to either kind. An attack whose die is not a die is listed with <paramref name="Available"/> false and the reason.
@@ -352,7 +407,10 @@ public sealed record AttackEntry(
     Activation? Activation = null,
     Guid? CostResourceContent = null,
     string? ResourceId = null,
-    int? Cost = null);
+    int? Cost = null,
+    PaymentValue? Payment = null,
+    int? EntryIndex = null,
+    Guid? CompanionId = null);
 
 /// <summary>Content v11 (D43): where an attack on the sheet comes from. Custom attacks are not on the sheet's list.</summary>
 public enum AttackSource { Weapon, Feature }
@@ -379,7 +437,8 @@ public sealed record SpellEntry(
     Ability? Save,
     string? Dice,
     TraceOrigin Origin,
-    IReadOnlyList<Diagnostic> Diagnostics);
+    IReadOnlyList<Diagnostic> Diagnostics,
+    IReadOnlyList<string>? Tags = null);
 
 /// <summary>
 /// Pure, dependency-ordered calculation of derived character values (ARCHITECTURE "Rules execution"; ADR-003).
@@ -649,7 +708,7 @@ public static partial class CharacterCalculator
         var declaredToggles = DeclaredToggles(active, character, resolved.ClassLevels);
         var effective = ToggleGroups.Resolve(character.Play, declaredToggles, diagnostics, active.Select(a => a.Revision.ContentId).ToHashSet());
         var resourceBonuses = new List<ResourceBonus>();
-        var modifiers = CollectModifiers(active, character, policy, diagnostics, warnings, manual, effective, autoOn, resourceBonuses, resolved.ClassLevels);
+        var modifiers = CollectModifiers(active, character, policy, diagnostics, warnings, manual, effective, autoOn, resourceBonuses, resolved.ClassLevels, resolved.ModdedEntries);
         var rollModes = CollectRollModes(active, effective, autoOn, diagnostics);
         var weaponProficiencies = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         var armorTraining = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
@@ -661,7 +720,7 @@ public static partial class CharacterCalculator
         var classes = character.Classes.Where(e => e.Level > 0).ToList();
         var checkTraining = unseenArmor.Count == 0 && classes.Count > 0 && classes.All(e =>
             resolved.Classes.FirstOrDefault(c => c.Content.Revision.Reference == e.Class) is { } info && RecordsArmorTraining(info.Content.Revision));
-        var worn = AddArmor(active, modifiers, diagnostics, armorTraining, checkTraining, policy, warnings);
+        var worn = AddArmor(active, modifiers, diagnostics, armorTraining, checkTraining, policy, warnings, resolved.ModdedEntries);
         RemoveCycles(modifiers, diagnostics, warnings, manual);
         var order = TopologicalOrder(modifiers);
         var casters = CollectCasters(active, character, resolved.ClassLevels, diagnostics);
@@ -717,17 +776,21 @@ public static partial class CharacterCalculator
         }).ToList();
 
         // Before the feature list: an attack whose die is invalid reports on its feature (attack.die-invalid).
-        var attacks = CollectAttacks(active, values, family, weaponProficiencies, character, resolved.ClassLevels, effective, autoOn, diagnostics);
+        var attacks = CollectAttacks(active, values, family, weaponProficiencies, character, resolved.ClassLevels, effective, autoOn, diagnostics, resolved.ModdedEntries);
         var resources = CollectResources(active, character, resolved.ClassLevels, values, family, resourceBonuses);
+        // MECH-X item 4: tag the attacks and pools a companion lists (same rows, never moved) before responses and the feature list read them.
+        var companions = CollectCompanions(active, values, character, resolved.ClassLevels, family, attacks, resources, diagnostics);
         var rollBonuses = RollBonuses(active, character, resolved.ClassLevels, values, diagnostics);
         var rollDetails = RollDetailsOf(active, family, character, resolved.ClassLevels, values, diagnostics);
+        // Before the feature list: a spell that cannot be cast reports on its feature (spells.unusable), like a recorded spell that cannot be listed.
+        var castSpells = CastSpellsOf(active, catalog, character, casters.Count > 0, values, diagnostics);
         // Before the feature list: a response whose formula fails reports on its feature (effect.invalid-formula). HP.MAX is this sheet's own maximum.
         var responses = CollectResponses(active, character, resolved.ClassLevels, values, resources, effective, autoOn, values[FieldIds.HitPoints], diagnostics);
         // Before the feature list: a form-only defence of absent content reports on its feature (modifier.toggle-content-missing).
         var damageDefences = CollectDamageDefences(active, character, resolved.ClassLevels, effective, autoOn, diagnostics);
         var scoped = diagnostics.Concat(warnings.Values.SelectMany(w => w)).Concat(resources.SelectMany(r => r.Warnings)).Where(d => d.Content is not null).Distinct().ToList();
         var features = active.Select(item => Feature(
-            item, family, [.. scoped.Where(d => d.Content == item.Revision.Reference)], rollDetails, rollBonuses, form => OutOfForm(active, item, form, effective, autoOn), resources)).ToList();
+            item, family, [.. scoped.Where(d => d.Content == item.Revision.Reference)], rollDetails, rollBonuses, form => OutOfForm(active, item, form, effective, autoOn), resources, castSpells)).ToList();
         var toggles = active
             .SelectMany(item => item.Revision.Effects.OfType<ToggleEffect>()
                 .Where(t => t.Automation != AutomationStatus.Reference && LevelReached(item, t, character, resolved.ClassLevels))
@@ -769,7 +832,8 @@ public static partial class CharacterCalculator
                 IsAuto(revision, t) ? true : null, ActivationOf(revision, t.Activation),
                 inGroup ? t.Group : null, inGroup ? t.GroupContent ?? revision.ContentId : null, inGroup ? t.Layer ?? ToggleLayer.Primary : null,
                 cost, t.ResourceContent, allowed, allowed ? null : UnavailableReason(active, item, t), GroupLabelOf(active, item, t), duration, roundsLeft,
-                inGroup && t.Layer == ToggleLayer.Overlay ? t.AllowedWith : null, inGroup && t.Layer == ToggleLayer.Overlay ? t.AllowedInBase : null);
+                inGroup && t.Layer == ToggleLayer.Overlay ? t.AllowedWith : null, inGroup && t.Layer == ToggleLayer.Overlay ? t.AllowedInBase : null,
+                PaymentOf(t.Payment, revision));
         }
         // A response with an outcome that can never run (a form that is not on the sheet, is automatic or is not allowed now; a pool the character lacks) is not offered.
         responses = [.. responses.Select(r => r.Available ? WithRunnableOutcomes(r, toggles, resources) : r)];
@@ -805,6 +869,12 @@ public static partial class CharacterCalculator
         var pactSlots = values[FieldIds.PactSlots] > 0 || character.Play.PactSlotsSpent > 0
             ? Slot(pactCaster is null ? 0 : PactSlotLevel(Row(pactCaster.Effect.Slots, pactCaster.ClassLevel)), FieldIds.PactSlots, character.Play.PactSlotsSpent)
             : null;
+        // S2/R40: the payment rows were built before hit points and slots existed; settle whether each can be made now. Available is untouched.
+        toggles = [.. toggles.Select(t => t.Payment is { } p ? t with { Payment = Affordability(p, t.Cost, hitPoints, spellSlots, pactSlots) } : t)];
+        attacks = [.. attacks.Select(a => a.Payment is { } p ? a with { Payment = Affordability(p, a.Cost, hitPoints, spellSlots, pactSlots) } : a)];
+        features = [.. features.Select(f => f.Effects.Any(e => e.Payment is not null)
+            ? f with { Effects = [.. f.Effects.Select(e => e.Payment is { } p ? e with { Payment = Affordability(p, e.Cost, hitPoints, spellSlots, pactSlots) } : e)] }
+            : f)];
 
         var scales = resolved.ClassLevels.Scales
             .Where(s => resolved.ClassLevels.ContainsKey(s.Key.Class))
@@ -822,7 +892,7 @@ public static partial class CharacterCalculator
             spellcasting, spellSlots, pactSlots, attacks, toggles, scales.Count > 0 ? scales : null, bloodied ? true : null,
             damageDefences.Count > 0 ? damageDefences : null, null, // the item uses are added once by Calculate (WithItemUses)
             xpForNextLevel is { } next && character.Xp >= next ? true : null, xpForNextLevel, upkeeps.Count > 0 ? upkeeps : null,
-            responses.Count > 0 ? responses : null), active);
+            responses.Count > 0 ? responses : null, companions.Count > 0 ? companions : null), active);
     }
 
     /// <summary>
@@ -1010,16 +1080,27 @@ public static partial class CharacterCalculator
         for (var index = 0; index < character.Equipment.Count; index++)
         {
             var entry = character.Equipment[index];
-            if (catalog.FindRevision(entry.Item) is not { Kind: ContentKind.Item, Status: RevisionStatus.Published } revision
-                || revision.Effects.OfType<ItemEffect>().FirstOrDefault() is not { } item
-                || (item.RequiresAttunement != true && item.Charges is null))
+            if (catalog.FindRevision(entry.Item) is not { Kind: ContentKind.Item, Status: RevisionStatus.Published } revision)
                 continue;
+            // MECH-X item 3 (R57): an item that can host mods (it has a weapon or armor effect) or an entry that has mods gets a row too.
+            var hosts = new List<string>();
+            if (revision.Effects.OfType<WeaponEffect>().Any())
+                hosts.Add("weapon");
+            if (revision.Effects.OfType<ArmorEffect>().Any())
+                hosts.Add("armor");
+            var item = revision.Effects.OfType<ItemEffect>().FirstOrDefault();
+            if ((item is null || (item.RequiresAttunement != true && item.Charges is null)) && hosts.Count == 0 && entry.Mods is null)
+                continue;
+            var mods = (entry.Mods ?? []).Where(m => m is not null).Select(m =>
+                catalog.FindRevision(m) is { } mod
+                    ? mod.Effects.OfType<ItemModEffect>().FirstOrDefault() is { } effect ? new ItemModInfo(m, mod.Name, effect.AppliesTo, effect.Bonus) : new ItemModInfo(m, mod.Name, ModTarget.Any, null)
+                    : new ItemModInfo(m, "(not available)", ModTarget.Any, null)).ToList();
             var spent = entry.ChargesSpent ?? 0;
-            var recovery = item.Charges?.Recovery is { } r ? new ItemChargeRecoveryInfo(r.Period, r.Regain) : null;
+            var recovery = item?.Charges?.Recovery is { } r ? new ItemChargeRecoveryInfo(r.Period, r.Regain) : null;
             uses.Add(new(
                 entry.Item, revision.Name, entry.Id is { } id ? id.ToString("D") : $"#{index}", entry.Id, index, entry.Equipped,
-                item.RequiresAttunement == true, entry.Attuned == true, item.Charges?.Max, spent,
-                item.Charges is { } charges ? Math.Max(charges.Max - spent, 0) : null, recovery));
+                item?.RequiresAttunement == true, entry.Attuned == true, item?.Charges?.Max, spent,
+                item?.Charges is { } charges ? Math.Max(charges.Max - spent, 0) : null, recovery, mods, hosts));
         }
         return uses;
     }
