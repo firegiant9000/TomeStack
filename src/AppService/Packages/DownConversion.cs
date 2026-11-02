@@ -41,6 +41,7 @@ public static class DownConversion
     public static readonly Guid Namespace = new("5b2e7c4a-9d31-4f6e-8a07-2c1d3e4f5a6b");
 
     /// <summary>RFC 4122 §4.3 name-based (SHA-1) UUID, version 5.</summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Security", "CA5350", Justification = "UUIDv5 is defined over SHA-1 (RFC 4122 §4.3); the hash only names a copy and protects nothing.")]
     public static Guid Uuid5(Guid ns, string name)
     {
         ArgumentNullException.ThrowIfNull(name);

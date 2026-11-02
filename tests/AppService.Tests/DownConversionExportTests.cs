@@ -9,7 +9,7 @@ namespace TomeStack.AppService.Tests;
 /// <summary>D85 part 1, lane C1: <c>package.targets</c> and <c>target</c> on the export commands, through the dispatcher.</summary>
 public class DownConversionExportTests
 {
-    private const string UnknownSentence = "TomeStack {0} is not a version this export can be made for. Choose one of: 0.6.0, 0.5.0.";
+    private static string UnknownSentence(string target) => $"TomeStack {target} is not a version this export can be made for. Choose one of: 0.6.0, 0.5.0.";
 
     private static JsonElement Send(CommandDispatcher dispatcher, string command, string payload) =>
         JsonDocument.Parse(dispatcher.Dispatch($$"""{"id":"1","command":"{{command}}","payload":{{payload}}}""")).RootElement.Clone();
@@ -319,7 +319,7 @@ public class DownConversionExportTests
         var (code, message) = ErrorOf(Send(dispatcher, "package.exportPreview", $$"""{"characterIds":["{{id}}"],"target":"{{target}}"}"""));
 
         Assert.Equal("package.target-unknown", code);
-        Assert.Equal(string.Format(System.Globalization.CultureInfo.InvariantCulture, UnknownSentence, target), message);
+        Assert.Equal(UnknownSentence(target), message);
         // The same request without a target still succeeds.
         Result(Send(dispatcher, "package.exportPreview", $$"""{"characterIds":["{{id}}"]}"""));
     }
@@ -369,7 +369,7 @@ public class DownConversionExportTests
 
         var unknown = ErrorOf(Send(dispatcher, "package.sourcePackPreview", $$"""{"sourceIds":["{{source.Id}}"],"target":"0.4.0"}"""));
         Assert.Equal("package.target-unknown", unknown.Code);
-        Assert.Equal(string.Format(System.Globalization.CultureInfo.InvariantCulture, UnknownSentence, "0.4.0"), unknown.Message);
+        Assert.Equal(UnknownSentence("0.4.0"), unknown.Message);
 
         var valid = Result(Send(dispatcher, "package.sourcePackPreview", $$"""{"sourceIds":["{{source.Id}}"],"target":"0.6.0"}"""));
         Assert.Equal("0.6.0", valid.GetProperty("target").GetString());
