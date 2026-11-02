@@ -1,0 +1,440 @@
+{
+  "packId": "compat-for-0-6-0",
+  "formatVersion": 1,
+  "notice": "Original TomeStack test fixtures for the down-conversion goldens. Invented; no SRD or third-party rules text.",
+  "sources": [
+    {
+      "id": "c1060000-0000-4000-8000-000000000001",
+      "title": "Compat Homebrew A",
+      "publisher": "TomeStack project",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "editionVersion": "fixture-1",
+      "license": "Original test fixture",
+      "redistributable": true,
+      "attribution": "Written for TomeStack tests."
+    }
+  ],
+  "revisions": [
+    {
+      "contentId": "c1060000-0000-4000-8000-0000000000c1",
+      "revisionId": "c1060000-0000-4000-8000-0000000000e1",
+      "schemaVersion": 9,
+      "kind": "feature",
+      "name": "Compat Steady Hands",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "c1060000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 1
+        }
+      },
+      "status": "published",
+      "summary": "A test feature with a switch the player can turn on.",
+      "effects": [
+        {
+          "type": "toggle",
+          "id": "surge",
+          "toggleId": "surge",
+          "label": "Surge"
+        }
+      ]
+    },
+    {
+      "contentId": "c1060000-0000-4000-8000-0000000000c2",
+      "revisionId": "c1060000-0000-4000-8000-0000000000e2",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Compat Tide Stance",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "c1060000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 3
+        }
+      },
+      "status": "published",
+      "summary": "A test stance with a timed form, a strike it gives and a rider that rides on it.",
+      "effects": [
+        {
+          "type": "toggle",
+          "id": "tide",
+          "toggleId": "tide",
+          "label": "Tide stance",
+          "duration": "3"
+        },
+        {
+          "type": "attack",
+          "id": "tide-strike",
+          "attackId": "strike",
+          "label": "Compat tide strike",
+          "kind": "melee",
+          "abilities": [
+            "str",
+            "dex"
+          ],
+          "damage": {
+            "count": "1",
+            "die": "6"
+          },
+          "damageType": "bludgeoning",
+          "tags": [
+            "unarmed"
+          ]
+        },
+        {
+          "type": "attackRider",
+          "id": "tide-rider",
+          "tags": [
+            "unarmed"
+          ],
+          "dice": "1d4",
+          "toggle": "tide"
+        }
+      ]
+    },
+    {
+      "contentId": "c1060000-0000-4000-8000-0000000000c3",
+      "revisionId": "c1060000-0000-4000-8000-0000000000e3",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Compat Calm Waters",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "c1060000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 4
+        }
+      },
+      "status": "published",
+      "summary": "A test per-turn guard: an allowance that a turn-start upkeep refreshes, and a response that spends it.",
+      "effects": [
+        {
+          "type": "resource",
+          "id": "guard",
+          "resourceId": "guard",
+          "label": "Guard",
+          "maximum": "1",
+          "allowance": true
+        },
+        {
+          "type": "upkeep",
+          "id": "guard-refresh",
+          "at": "turnStart",
+          "resourceId": "guard",
+          "change": "regain",
+          "amount": "all"
+        },
+        {
+          "type": "response",
+          "id": "ward",
+          "responseId": "ward",
+          "label": "Ward",
+          "phase": "damageReduction",
+          "amount": "2",
+          "resourceId": "guard",
+          "cost": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "c1060000-0000-4000-8000-0000000000c4",
+      "revisionId": "c1060000-0000-4000-8000-0000000000e4",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Compat Rising Tide",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "c1060000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 5
+        }
+      },
+      "status": "published",
+      "summary": "A test feature with a named number, a bonus that reads it, and rolls with detail fields.",
+      "effects": [
+        {
+          "type": "value",
+          "id": "swell",
+          "valueId": "swell",
+          "formula": "PB + 1"
+        },
+        {
+          "type": "modifier",
+          "id": "swell-ac",
+          "timing": "always",
+          "operation": "bonus",
+          "target": "armorClass",
+          "value": "VALUE.swell"
+        },
+        {
+          "type": "resource",
+          "id": "surge",
+          "resourceId": "surge",
+          "label": "Surge",
+          "maximum": "3"
+        },
+        {
+          "type": "resource",
+          "id": "calm",
+          "resourceId": "calm",
+          "label": "Calm",
+          "maximum": "3"
+        },
+        {
+          "type": "toggle",
+          "id": "rise",
+          "toggleId": "rise",
+          "label": "Rising"
+        },
+        {
+          "type": "roll",
+          "id": "wave",
+          "rollId": "wave",
+          "label": "Compat wave",
+          "dice": "2d6",
+          "resourceId": "surge",
+          "cost": "1",
+          "whileToggle": {
+            "toggleId": "rise"
+          },
+          "save": {
+            "ability": "dex",
+            "dc": "8 + PB"
+          },
+          "area": {
+            "shape": "cone",
+            "size": 15
+          },
+          "range": "Self",
+          "targets": "Each creature in the cone",
+          "perUnit": {
+            "dice": "1d6",
+            "maxUnits": 2
+          },
+          "drawsDown": false,
+          "alsoChange": [
+            {
+              "resourceId": "calm",
+              "change": "regain",
+              "amount": "1"
+            }
+          ]
+        },
+        {
+          "type": "roll",
+          "id": "steady",
+          "rollId": "steady",
+          "label": "Compat steady breath",
+          "resourceId": "calm",
+          "cost": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "c1060000-0000-4000-8000-0000000000c5",
+      "revisionId": "c1060000-0000-4000-8000-0000000000e5",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Compat Deep Currents",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "c1060000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 6
+        }
+      },
+      "status": "published",
+      "summary": "A test feature with bonuses to a pool maximum and to a flying speed.",
+      "effects": [
+        {
+          "type": "resource",
+          "id": "currents",
+          "resourceId": "currents",
+          "label": "Currents",
+          "maximum": "2"
+        },
+        {
+          "type": "modifier",
+          "id": "currents-more",
+          "timing": "always",
+          "operation": "bonus",
+          "target": "resource.currents",
+          "value": "1"
+        },
+        {
+          "type": "modifier",
+          "id": "currents-fly",
+          "timing": "always",
+          "operation": "bonus",
+          "target": "speed.fly",
+          "value": "10"
+        }
+      ]
+    },
+    {
+      "contentId": "c1060000-0000-4000-8000-0000000000c6",
+      "revisionId": "c1060000-0000-4000-8000-0000000000e6",
+      "schemaVersion": 9,
+      "kind": "class",
+      "name": "Compat Path of Tides",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "c1060000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 7
+        }
+      },
+      "status": "published",
+      "summary": "A test class that gives its subclass at level 1.",
+      "effects": [
+        {
+          "type": "hitDie",
+          "id": "path-hit-die",
+          "die": 8
+        },
+        {
+          "type": "grant",
+          "id": "grant-walker",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "c1060000-0000-4000-8000-0000000000c7",
+            "revisionId": "c1060000-0000-4000-8000-0000000000e7"
+          }
+        }
+      ]
+    },
+    {
+      "contentId": "c1060000-0000-4000-8000-0000000000c7",
+      "revisionId": "c1060000-0000-4000-8000-0000000000e7",
+      "schemaVersion": 9,
+      "kind": "subclass",
+      "name": "Compat Tide Walker",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "c1060000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 8
+        }
+      },
+      "status": "published",
+      "summary": "A test subclass that gives one feature.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "grant-mark",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "c1060000-0000-4000-8000-0000000000c8",
+            "revisionId": "c1060000-0000-4000-8000-0000000000e8"
+          }
+        }
+      ]
+    },
+    {
+      "contentId": "c1060000-0000-4000-8000-0000000000c8",
+      "revisionId": "c1060000-0000-4000-8000-0000000000e8",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Compat Tide Mark",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "c1060000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 9
+        }
+      },
+      "status": "published",
+      "summary": "A test feature with advantage on one saving throw.",
+      "effects": [
+        {
+          "type": "rollMode",
+          "id": "mark-save",
+          "target": "save.wis",
+          "mode": "advantage"
+        }
+      ]
+    },
+    {
+      "contentId": "c1060000-0000-4000-8000-0000000000c9",
+      "revisionId": "c1060000-0000-4000-8000-0000000000e9",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Compat Reservoir",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "c1060000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 10
+        }
+      },
+      "status": "published",
+      "summary": "A test pool that builds up; the draw-down roll lives in another feature.",
+      "effects": [
+        {
+          "type": "resource",
+          "id": "strain",
+          "resourceId": "strain",
+          "label": "Strain",
+          "maximum": "3",
+          "counts": "up",
+          "resourceFull": {
+            "text": "Compat strain is full"
+          }
+        }
+      ]
+    },
+    {
+      "contentId": "c1060000-0000-4000-8000-0000000000ca",
+      "revisionId": "c1060000-0000-4000-8000-0000000000ea",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Compat Draw Down",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "c1060000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 11
+        }
+      },
+      "status": "published",
+      "summary": "A test roll that draws down the pool of another feature.",
+      "effects": [
+        {
+          "type": "roll",
+          "id": "drain",
+          "rollId": "drain",
+          "label": "Compat drain",
+          "dice": "1d6",
+          "resourceContent": "c1060000-0000-4000-8000-0000000000c9",
+          "resourceId": "strain",
+          "cost": "1",
+          "drawsDown": true
+        }
+      ]
+    }
+  ]
+}

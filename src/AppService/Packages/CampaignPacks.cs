@@ -21,21 +21,32 @@ public sealed partial class PackageService
 
     private sealed record CampaignPackPlan(
         Campaign Campaign, List<SourceRecord> Included, List<SourceRecord> Referenced, List<LeftOutSource> LeftOut,
-        List<ContentRevision> Revisions, List<Diagnostic> Warnings, string FileName);
+        List<ContentRevision> Revisions, List<Diagnostic> Warnings, string FileName, Func<IEnumerable<ContentRevision>, List<Diagnostic>> WarningsFor);
 
     /// <summary><c>package.campaignPackPreview</c>: what a campaign pack of <paramref name="campaignId"/> would hold. Writes nothing.</summary>
-    public CampaignPackPreview PreviewCampaignPack(Guid campaignId)
+    public CampaignPackPreview PreviewCampaignPack(Guid campaignId, LadderRow? target = null)
     {
         var plan = PlanCampaignPack(campaignId);
-        var opens = NewerBuild.Evaluate(plan.Revisions, [], 0, [], BundledPackTitle(plan.Revisions));
-        return new(plan.FileName, plan.Campaign.Id, plan.Campaign.Name, plan.Campaign.RulesFamily,
-            [.. plan.Included.Select(Notice)], [.. plan.Referenced.Select(Notice)], plan.LeftOut, plan.Revisions.Count, [.. plan.Warnings, .. opens.Warnings], opens.OpensIn, opens.Causes);
+        var lowered = LowerPack(plan.Revisions, plan.FileName, target);
+        var (revisions, fileName) = lowered is null ? (plan.Revisions, plan.FileName) : (lowered.Plan.Revisions, lowered.Plan.FileName);
+        var opens = NewerBuild.Evaluate(revisions, [], 0, [], BundledPackTitle(revisions));
+        var preview = new CampaignPackPreview(fileName, plan.Campaign.Id, plan.Campaign.Name, plan.Campaign.RulesFamily,
+            [.. plan.Included.Select(Notice)], [.. plan.Referenced.Select(Notice)], plan.LeftOut, revisions.Count,
+            [.. lowered is null ? plan.Warnings : plan.WarningsFor(revisions), .. opens.Warnings], opens.OpensIn, opens.Causes); // D85: warnings over what the lowered pack writes
+        return lowered is null
+            ? preview
+            : preview with { Target = lowered.Target.Release.ToString(3), Changes = lowered.Changes, ChangesHash = lowered.ChangesHash };
     }
 
     /// <summary><c>package.campaignPackExport</c> / <c>package.campaignPackSaveAs</c>: the pack's bytes.</summary>
-    public ExportResult ExportCampaignPack(Guid campaignId)
+    public ExportResult ExportCampaignPack(Guid campaignId, LadderRow? target = null, string? changesHash = null)
     {
         var plan = PlanCampaignPack(campaignId);
+        if (LowerPack(plan.Revisions, plan.FileName, target) is { } lowered)
+        {
+            RequireConfirmed(lowered, changesHash);
+            plan = plan with { Revisions = lowered.Plan.Revisions, FileName = lowered.Plan.FileName };
+        }
         var files = new SortedDictionary<string, (string Kind, byte[] Bytes)>(StringComparer.Ordinal)
         {
             [$"campaigns/{plan.Campaign.Id:D}.json"] = ("campaign", Json(ForCampaignPack(plan.Campaign))),
@@ -53,6 +64,7 @@ public sealed partial class PackageService
             Purpose = ExportPurpose.Share,
             CreatedAt = time.GetUtcNow(),
             AppVersion = typeof(PackageService).Assembly.GetName().Version?.ToString(3) ?? "0.0.0",
+            MadeFor = target?.Release.ToString(3),
             Entries = [.. files.Select(f => new PackageEntry(f.Key, f.Value.Kind, Hash(f.Value.Bytes), f.Value.Bytes.LongLength))],
             Notices = [.. plan.Included.Select(Notice)],
             // No characters go with a campaign pack, so no revision is listed: only what to get.
@@ -74,10 +86,10 @@ public sealed partial class PackageService
         var (included, referenced, leftOut) = Preflight.SortCampaignSources(store, campaign, _bundledSources);
 
         var errors = new List<Diagnostic>();
-        var (revisions, _, warnings) = PackContent(included, errors);
+        var (revisions, _, warningsFor) = PackContent(included, errors);
         if (errors.Count > 0)
             throw new PackageException(errors);
-        return new CampaignPackPlan(campaign, included, referenced, leftOut, revisions, warnings, $"{SafeFileName(campaign.Name)}-campaign-pack.tomestack.zip");
+        return new CampaignPackPlan(campaign, included, referenced, leftOut, revisions, warningsFor(revisions), $"{SafeFileName(campaign.Name)}-campaign-pack.tomestack.zip", warningsFor);
     }
 
     /// <summary>

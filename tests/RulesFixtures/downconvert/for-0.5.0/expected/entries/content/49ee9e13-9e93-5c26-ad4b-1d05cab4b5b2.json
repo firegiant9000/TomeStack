@@ -1,0 +1,23 @@
+{
+  "contentId": "c1050000-0000-4000-8000-0000000000c4",
+  "revisionId": "49ee9e13-9e93-5c26-ad4b-1d05cab4b5b2",
+  "schemaVersion": 9,
+  "kind": "feature",
+  "name": "Compat Tide Mark",
+  "rulesFamilies": [
+    "srd-5.1"
+  ],
+  "provenance": {
+    "sourceId": "c1050000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 5
+    }
+  },
+  "status": "published",
+  "summary": "A test feature written at v11 that reaches 0.5.0 through both steps.",
+  "effects": [],
+  "downConvertedFrom": {
+    "revisionId": "c1050000-0000-4000-8000-0000000000e4",
+    "schemaVersion": 11
+  }
+}

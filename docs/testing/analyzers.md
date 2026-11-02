@@ -39,7 +39,8 @@ None is a real issue.
 | Project | Rule | Count | Ruling |
 |---|---|---|---|
 | AppService | CA2100 | 4 | False positive: `SqliteStore.Command` and `RestoreDrill`'s `Digest`/`Execute`/`Rows` take SQL from callers that pass constant text; the interpolated parts are fixed clauses, placeholder names (`$i0`, `$t0`) or an `int` (`PRAGMA user_version`), and every value is a parameter. Targeted `[SuppressMessage]`. |
-| ImportWorker.Host | CA5392 22, CA5394 2, CA5350 1 | 25 | All in the C#/WinRT projection generated under `obj/` (P/Invokes to Windows' own COM/WinRT DLLs, `Random` in event-token tables, SHA-1 to derive WinRT interface ids). No hand-written P/Invoke, `Random`, SHA-1 or MD5 exists in `src/`. Silenced for that path only, in `src/ImportWorker.Host/.editorconfig`. |
+| ImportWorker.Host | CA5392 22, CA5394 2, CA5350 1 | 25 | All in the C#/WinRT projection generated under `obj/` (P/Invokes to Windows' own COM/WinRT DLLs, `Random` in event-token tables, SHA-1 to derive WinRT interface ids). When turned on, no hand-written P/Invoke, `Random`, SHA-1 or MD5 existed in `src/` (for the later SHA-1, see the next row). Silenced for that path only, in `src/ImportWorker.Host/.editorconfig`. |
+| AppService (later, D85 part 2) | CA5350 | 1 | False positive: `DownConversion.Uuid5` is the RFC 4122 §4.3 name-based UUID, which is defined over SHA-1; it only derives a down-converted copy's id, and saved copy ids depend on it, so it cannot change. Targeted `[SuppressMessage]`. |
 | Test projects | CA2100 13, CA5394 30 | 43 | Permanent: constant raw SQL against test stores; seeded `Random` for reproducible inputs. |
 
 ### Permanent (test and benchmark projects)

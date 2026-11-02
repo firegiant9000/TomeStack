@@ -38,13 +38,15 @@ public sealed partial class PackageService
 
     private sealed record LibraryPlan(
         List<SourceRecord> Sources, List<ContentRevision> Revisions, List<Character> Characters, List<Campaign> Campaigns,
-        List<GapNote> GapNotes, List<Attachment> Attachments, int LinkedPdfs, List<string> Unreadable, List<Extensions.InstalledExtension> Extensions);
+        List<GapNote> GapNotes, List<Attachment> Attachments, int LinkedPdfs, List<string> Unreadable, List<Extensions.InstalledExtension> Extensions,
+        LoweredPlan? Lowered = null);
 
     /// <summary>Where installed extension files are kept: <c>&lt;data dir&gt;/extensions</c> (M6 slice 3).</summary>
     private string ExtensionDirectory => Path.Combine(Path.GetDirectoryName(Path.GetFullPath(store.DatabasePath))!, TomeStackApp.ExtensionFolderName);
 
     /// <param name="verifyPdfs">Hash every managed PDF in full (writing); the preview only checks that each is there with its size.</param>
-    private LibraryPlan PlanLibrary(bool verifyPdfs)
+    /// <param name="target">D85: lower the characters and revisions for this release (drafts too); null writes them as they are.</param>
+    private LibraryPlan PlanLibrary(bool verifyPdfs, LadderRow? target = null)
     {
         var sources = store.ListSources().ToList();
         var titles = sources.GroupBy(s => s.AttachmentId).Where(g => g.Key is not null).ToDictionary(g => g.Key!.Value, g => g.First().Title);
@@ -71,33 +73,63 @@ public sealed partial class PackageService
             else
                 unreadable.Add(titles.GetValueOrDefault(attachment.AttachmentId) ?? attachment.OriginalFileName);
         }
+        var revisions = store.ListRevisionsInOrder().Where(r => !_bundledRevisions.Contains(r.RevisionId)).ToList();
+        LoweredPlan? lowered = null;
+        if (target is not null)
+        {
+            // The bundled revisions a character pins are not written (every install has them) but the bundled check needs them: they are
+            // lowered with the rest and dropped again, so a pin outside the target's set blocks (Q9). Drafts and superseded revisions may be left out.
+            var pinned = characters.SelectMany(c => c.AllReferences()).DistinctBy(r => r.RevisionId)
+                .Where(r => _bundledRevisions.Contains(r.RevisionId)).Select(store.FindRevision).OfType<ContentRevision>();
+            // Bundled revisions a written revision grants or offers go the same way (Q9); one only a left-out revision reaches may be left out too.
+            List<ContentRevision> all = [.. revisions, .. pinned, .. BundledReferencedBy(revisions).Where(b => pinned.All(p => p.RevisionId != b.RevisionId))];
+            var superseded = DownConversion.Superseded(all);
+            lowered = DownConversion.Lower(new ExportPlan(characters, all, [], [], LibraryFileName()), target, _bundledSources.Contains,
+                id => store.FindSource(id)?.Title ?? "", store, r => _bundledRevisions.Contains(r.RevisionId) || r.Status == RevisionStatus.Draft || superseded(r));
+            characters = lowered.Plan.Characters;
+            revisions = [.. lowered.Plan.Revisions.Where(r => !_bundledRevisions.Contains(r.RevisionId))];
+        }
         return new(
             sources,
-            [.. store.ListRevisionsInOrder().Where(r => !_bundledRevisions.Contains(r.RevisionId))],
+            revisions,
             characters,
             [.. store.ListCampaigns()],
             [.. store.ListAllGapNotes().Where(n => ids.Contains(n.CharacterId))], // a note without its character cannot be restored
             attachments,
             linked,
             unreadable,
-            [.. store.ListExtensions()]);
+            [.. store.ListExtensions()],
+            lowered);
     }
+
+    /// <summary>
+    /// D85, spec Q9: the bundled revisions that <paramref name="revisions"/> (none of them bundled) grant or offer. They are never written;
+    /// a lowered plan needs them so the bundled check can see a grant that names one the target does not have.
+    /// </summary>
+    private List<ContentRevision> BundledReferencedBy(IEnumerable<ContentRevision> revisions) =>
+        [.. revisions.SelectMany(DownConversion.ReferencesOf).DistinctBy(r => r.RevisionId)
+            .Where(r => _bundledRevisions.Contains(r.RevisionId)).Select(store.FindRevision).OfType<ContentRevision>()];
+
+    private string LibraryFileName() =>
+        $"TomeStack-full-backup-{time.GetUtcNow().ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)}.tomestack.zip";
 
     private LibraryBackupPreview Summary(LibraryPlan plan)
     {
         var managed = plan.Attachments.Where(a => a.Mode == AttachmentMode.Managed).DistinctBy(a => a.Sha256).ToList();
-        var stamp = time.GetUtcNow().ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
-        return new(
-            $"TomeStack-full-backup-{stamp}.tomestack.zip",
+        var summary = new LibraryBackupPreview(
+            plan.Lowered?.Plan.FileName ?? LibraryFileName(),
             plan.Characters.Count, plan.Campaigns.Count, plan.GapNotes.Count, plan.Sources.Count,
             plan.Revisions.Count(r => r.Status == RevisionStatus.Published), plan.Revisions.Count(r => r.Status != RevisionStatus.Published),
             managed.Count, managed.Sum(a => a.ByteLength), plan.LinkedPdfs, plan.Unreadable, plan.Extensions.Count);
+        return plan.Lowered is null
+            ? summary
+            : summary with { Target = plan.Lowered.Target.Release.ToString(3), Changes = plan.Lowered.Changes, ChangesHash = plan.Lowered.ChangesHash };
     }
 
     /// <summary><c>library.backupPreview</c>: what "Back up everything" would write. Nothing is written.</summary>
-    public LibraryBackupPreview PreviewLibraryBackup()
+    public LibraryBackupPreview PreviewLibraryBackup(LadderRow? target = null)
     {
-        var plan = PlanLibrary(verifyPdfs: false);
+        var plan = PlanLibrary(verifyPdfs: false, target);
         // For the release ladder only: the bundled revisions the characters pin are not written (every install has them) but a build must have them.
         var pinned = plan.Characters.SelectMany(c => c.AllReferences()).DistinctBy(r => r.RevisionId)
             .Where(r => _bundledRevisions.Contains(r.RevisionId)).Select(store.FindRevision).OfType<ContentRevision>().ToList();
@@ -106,15 +138,23 @@ public sealed partial class PackageService
         return Summary(plan) with { OpensIn = opens.OpensIn, OpensInCauses = opens.Causes };
     }
 
+    /// <summary>D85: a library backup for <paramref name="target"/> that is blocked, or whose list differs from the one confirmed, is refused (spec section 7).</summary>
+    public void RequireLibraryBackupConfirmed(LadderRow target, string? changesHash) =>
+        RequireConfirmed(PlanLibrary(verifyPdfs: false, target).Lowered!, changesHash);
+
     /// <summary>
     /// Writes the library backup to <paramref name="output"/> (a seekable stream; the shell writes a <c>.partial</c> file
     /// and renames it). A managed PDF that is missing or no longer matches its hash is left out with a warning, so one
     /// damaged file never blocks the backup of everything else.
     /// </summary>
-    public LibraryBackupResult WriteLibraryBackup(Stream output)
+    /// <param name="target">D85: lower the backup for this release; a blocked plan or a <paramref name="changesHash"/> that is not the previewed list writes nothing.</param>
+    public LibraryBackupResult WriteLibraryBackup(Stream output, LadderRow? target = null, string? changesHash = null)
     {
         ArgumentNullException.ThrowIfNull(output);
-        return WriteLibraryBackup(output, PlanLibrary(verifyPdfs: true));
+        var plan = PlanLibrary(verifyPdfs: true, target);
+        if (plan.Lowered is { } lowered)
+            RequireConfirmed(lowered, changesHash);
+        return WriteLibraryBackup(output, plan);
     }
 
     /// <summary>
@@ -150,6 +190,7 @@ public sealed partial class PackageService
             Purpose = ExportPurpose.Backup,
             CreatedAt = createdAt,
             AppVersion = typeof(PackageService).Assembly.GetName().Version?.ToString(3) ?? "0.0.0",
+            MadeFor = plan.Lowered?.Target.Release.ToString(3),
             Characters = [.. plan.Characters.Select(c => c.Id)],
             Entries = LibraryEntries(files, pdfs),
             Notices = [.. plan.Sources.Select(Notice)],
@@ -480,9 +521,14 @@ public sealed partial class PackageService
         var inBackup = parsed.Revisions.Select(r => r.RevisionId).ToHashSet();
         foreach (var group in parsed.Revisions.Where(r => r.Status == RevisionStatus.Published && store.RevisionHash(r.RevisionId) is null).GroupBy(r => r.ContentId))
         {
-            var localOnly = store.RevisionsOf(group.Key).Any(r => r.Status == RevisionStatus.Published && !inBackup.Contains(r.RevisionId));
-            if (localOnly)
-                warnings.Add(new("restore.newest-changes", $"'{group.Last().Name}' has a newer published revision here that is not in this file. Afterwards, the file's revision counts as the newest: new picks and update offers use it. Characters keep the revision they pin.", group.Last().Reference));
+            var localOnly = store.RevisionsOf(group.Key).Where(r => r.Status == RevisionStatus.Published && !inBackup.Contains(r.RevisionId)).ToList();
+            // Q14: file copies do not take the newest place from an unmarked revision that only this library has.
+            var overtaken = localOnly.Count > 0 && !(group.All(DownConversion.IsCopy) && localOnly.Any(r => !DownConversion.IsCopy(r)));
+            if (overtaken)
+            {
+                var newest = DownConversion.Newest(group)!;
+                warnings.Add(new("restore.newest-changes", $"'{newest.Name}' has a newer published revision here that is not in this file. Afterwards, the file's revision counts as the newest: new picks and update offers use it. Characters keep the revision they pin.", newest.Reference));
+            }
         }
         return warnings;
     }

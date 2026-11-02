@@ -1,0 +1,24 @@
+{
+  "characters": {
+    "c1060000-0000-4000-8000-0000000000a1": {
+      "fields": {
+        "ability.str.score": 10,
+        "ability.dex.score": 14,
+        "ability.con.score": 12,
+        "ability.int.score": 10,
+        "ability.wis.score": 13,
+        "ability.cha.score": 8,
+        "ability.dex.mod": 2,
+        "proficiencyBonus": 2,
+        "save.dex": 2,
+        "skill.acrobatics": 2,
+        "skill.perception": 1,
+        "passive.perception": 11,
+        "speed": 30,
+        "initiative": 2,
+        "armorClass": 13,
+        "hitPoints": 9
+      }
+    }
+  }
+}

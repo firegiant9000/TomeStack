@@ -1,0 +1,36 @@
+{
+  "contentId": "c1060000-0000-4000-8000-0000000000ca",
+  "revisionId": "f59a84dc-a6d7-5254-9a8a-305feb3ab8ab",
+  "schemaVersion": 10,
+  "kind": "feature",
+  "name": "Compat Draw Down",
+  "rulesFamilies": [
+    "srd-5.1"
+  ],
+  "provenance": {
+    "sourceId": "c1060000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 11
+    }
+  },
+  "status": "published",
+  "summary": "A test roll that draws down the pool of another feature.",
+  "effects": [
+    {
+      "type": "roll",
+      "id": "drain",
+      "rollId": "drain",
+      "label": "Compat drain",
+      "dice": "1d6",
+      "resourceId": "strain",
+      "resourceContent": "c1060000-0000-4000-8000-0000000000c9",
+      "cost": "1",
+      "automation": "automatic",
+      "timing": "always"
+    }
+  ],
+  "downConvertedFrom": {
+    "revisionId": "c1060000-0000-4000-8000-0000000000ea",
+    "schemaVersion": 11
+  }
+}

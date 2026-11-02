@@ -1,0 +1,43 @@
+{
+  "contentId": "c1060000-0000-4000-8000-0000000000c6",
+  "revisionId": "31262174-4ef5-5009-a59d-226c04c2160c",
+  "schemaVersion": 9,
+  "kind": "class",
+  "name": "Compat Path of Tides",
+  "rulesFamilies": [
+    "srd-5.1"
+  ],
+  "provenance": {
+    "sourceId": "c1060000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 7
+    }
+  },
+  "status": "published",
+  "summary": "A test class that gives its subclass at level 1.",
+  "effects": [
+    {
+      "type": "hitDie",
+      "id": "path-hit-die",
+      "die": 8,
+      "automation": "automatic",
+      "timing": "always"
+    },
+    {
+      "type": "grant",
+      "id": "grant-walker",
+      "grant": "content",
+      "content": {
+        "contentId": "c1060000-0000-4000-8000-0000000000c7",
+        "revisionId": "e10e57fc-37eb-59a6-b876-783efc7acbd2"
+      },
+      "level": 1,
+      "automation": "automatic",
+      "timing": "always"
+    }
+  ],
+  "downConvertedFrom": {
+    "revisionId": "c1060000-0000-4000-8000-0000000000e6",
+    "schemaVersion": 9
+  }
+}

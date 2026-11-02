@@ -215,7 +215,7 @@ public sealed partial class TomeStackApp : IDisposable
         var published = _store.ListRevisionsInOrder().Where(r => r.Status == RevisionStatus.Published).ToList();
         // SPEC I-06: the newest published revision of each content is what new picks get; older ones stay listed (saved
         // characters still pin them and show their names) but are marked, so pickers offer only the newest.
-        var newest = published.GroupBy(r => r.ContentId).ToDictionary(g => g.Key, g => g.Last().RevisionId);
+        var newest = published.GroupBy(r => r.ContentId).ToDictionary(g => g.Key, g => Packages.DownConversion.Newest(g)!.RevisionId);
         // Content that another revision grants or offers in a choice (class features, skill options) arrives through it;
         // pickers for directly pinned content leave it out.
         var reachable = published
@@ -471,25 +471,25 @@ public sealed partial class TomeStackApp : IDisposable
             : without with { Choices = [.. without.Choices, new ChoiceSelection(request.Source, request.ChoiceId, selected)] };
     }
 
-    public ExportResult ExportCharacters(IReadOnlyList<Guid> characterIds, ExportPurpose purpose = ExportPurpose.Backup) =>
-        _packages.Export(characterIds, purpose);
+    public ExportResult ExportCharacters(IReadOnlyList<Guid> characterIds, ExportPurpose purpose = ExportPurpose.Backup, LadderRow? target = null, string? changesHash = null) =>
+        _packages.Export(characterIds, purpose, target, changesHash);
 
-    public ExportPreview PreviewExport(IReadOnlyList<Guid> characterIds, ExportPurpose purpose) => _packages.PreviewExport(characterIds, purpose);
+    public ExportPreview PreviewExport(IReadOnlyList<Guid> characterIds, ExportPurpose purpose, LadderRow? target = null) => _packages.PreviewExport(characterIds, purpose, target);
 
     /// <summary>Import Lab L5, <c>package.preflight</c>: what a share export (package, source pack, campaign pack, sheet) would carry, omit or refuse. Writes nothing.</summary>
     public PreflightReport PackagePreflight(PreflightRequest request) => _packages.RunPreflight(request);
 
     /// <summary>M6 slice 1: what a source pack of these sources would hold (<c>package.sourcePackPreview</c>). Writes nothing.</summary>
-    public SourcePackPreview PreviewSourcePack(IReadOnlyList<Guid> sourceIds) => _packages.PreviewSourcePack(sourceIds);
+    public SourcePackPreview PreviewSourcePack(IReadOnlyList<Guid> sourceIds, LadderRow? target = null) => _packages.PreviewSourcePack(sourceIds, target);
 
     /// <summary>M6 slice 1: a source pack of sources their author marked as shareable (<c>package.sourcePackExport</c>).</summary>
-    public ExportResult ExportSourcePack(IReadOnlyList<Guid> sourceIds) => _packages.ExportSourcePack(sourceIds);
+    public ExportResult ExportSourcePack(IReadOnlyList<Guid> sourceIds, LadderRow? target = null, string? changesHash = null) => _packages.ExportSourcePack(sourceIds, target, changesHash);
 
     /// <summary>M6 slice 2: what a campaign pack of this campaign would hold (<c>package.campaignPackPreview</c>). Writes nothing.</summary>
-    public CampaignPackPreview PreviewCampaignPack(Guid campaignId) => _packages.PreviewCampaignPack(campaignId);
+    public CampaignPackPreview PreviewCampaignPack(Guid campaignId, LadderRow? target = null) => _packages.PreviewCampaignPack(campaignId, target);
 
     /// <summary>M6 slice 2: a campaign pack: the profile and the shareable content of its allowed sources (<c>package.campaignPackExport</c>).</summary>
-    public ExportResult ExportCampaignPack(Guid campaignId) => _packages.ExportCampaignPack(campaignId);
+    public ExportResult ExportCampaignPack(Guid campaignId, LadderRow? target = null, string? changesHash = null) => _packages.ExportCampaignPack(campaignId, target, changesHash);
 
     public PackagePreview PreviewImport(byte[] package) => _packages.Preview(package);
 
@@ -507,10 +507,13 @@ public sealed partial class TomeStackApp : IDisposable
     }
 
     /// <summary>M2.1 "Back up everything": what it would contain (<c>library.backupPreview</c>).</summary>
-    public LibraryBackupPreview PreviewLibraryBackup() => _packages.PreviewLibraryBackup();
+    public LibraryBackupPreview PreviewLibraryBackup(LadderRow? target = null) => _packages.PreviewLibraryBackup(target);
 
-    /// <summary>M2.1: writes the whole library, managed PDFs included, to <paramref name="output"/>.</summary>
-    public LibraryBackupResult WriteLibraryBackup(Stream output) => _packages.WriteLibraryBackup(output);
+    /// <summary>M2.1: writes the whole library, managed PDFs included, to <paramref name="output"/>. D85: with a <paramref name="target"/>, lowered for that release and refused (nothing written) unless <paramref name="changesHash"/> confirms the previewed list.</summary>
+    public LibraryBackupResult WriteLibraryBackup(Stream output, LadderRow? target = null, string? changesHash = null) => _packages.WriteLibraryBackup(output, target, changesHash);
+
+    /// <summary>D85: refuses a library backup for <paramref name="target"/> that is blocked or not confirmed, so the Save dialog is not opened for it.</summary>
+    public void RequireLibraryBackupConfirmed(LadderRow target, string? changesHash) => _packages.RequireLibraryBackupConfirmed(target, changesHash);
 
     /// <summary>M2.1 "Restore full backup": checks the file completely; writes nothing.</summary>
     public PackagePreview PreviewLibraryRestore(string backupPath) => _packages.PreviewLibraryRestore(backupPath);
