@@ -92,7 +92,7 @@ public static partial class ClassProposals
             }
             if (list.Contains("all armor", StringComparison.Ordinal))
             {
-                foreach (var kind in new[] { "light", "medium", "heavy" }.Where(k => !effects.Any(e => e.Id == $"armor-{k}")))
+                foreach (var kind in ArmorKinds.Where(k => !effects.Any(e => e.Id == $"armor-{k}")))
                     effects.Add(new GrantEffect { Id = $"armor-{kind}", Grant = GrantKind.Proficiency, Target = $"armor.{kind}" });
             }
             if (list.Contains("shield", StringComparison.Ordinal))
@@ -113,7 +113,7 @@ public static partial class ClassProposals
             if (WeaponsLine().Match(line) is not { Success: true } weapons)
                 continue;
             var list = weapons.Groups["list"].Value.ToLowerInvariant();
-            var kinds = new[] { "simple", "martial" }.Where(k => list.Contains(k, StringComparison.Ordinal)).ToList();
+            var kinds = WeaponKinds.Where(k => list.Contains(k, StringComparison.Ordinal)).ToList();
             if (kinds.Count == 0)
                 continue;
             weaponsFound = true;
@@ -204,6 +204,8 @@ public static partial class ClassProposals
             uncertainties.Add("No spells column: how many spells are prepared is not proposed.");
     }
 
+    private static readonly string[] ArmorKinds = ["light", "medium", "heavy"];
+    private static readonly string[] WeaponKinds = ["simple", "martial"];
     private static readonly string[] TraitLabels = ["Primary Ability", "Hit Point Die", "Saving Throw", "Saving Throw Proficiencies", "Skill Proficiencies", "Weapon Proficiencies", "Tool Proficiencies", "Armor Training", "Starting Equipment"];
 
     /// <summary>
