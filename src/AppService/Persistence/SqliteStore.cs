@@ -1113,6 +1113,7 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
         }
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Security", "CA2100", Justification = "Callers pass constant SQL text and placeholder names; every value is a parameter.")]
     private SqliteCommand Command(string sql, (string Name, object Value)[] parameters)
     {
         var command = _connection.CreateCommand();

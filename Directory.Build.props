@@ -8,4 +8,67 @@
     <Company>TomeStack</Company>
     <Product>TomeStack</Product>
   </PropertyGroup>
+  <!-- .NET analyzers: see docs/testing/analyzers.md. A compound AnalysisLevel also sets each category's mode, so the
+       Security and Style overrides must be AnalysisLevel<Category> (AnalysisMode<Category> loses to the "-recommended" suffix).
+       Style stays at "default", which raises no IDE rule to a warning: the formatter's layout rules (IDE0055) stay off. -->
+  <PropertyGroup>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <AnalysisLevelSecurity>latest-all</AnalysisLevelSecurity>
+    <AnalysisLevelStyle>latest-default</AnalysisLevelStyle>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+
+  <!-- Permanent exceptions for the test and benchmark projects (not burn-down), counted when the analyzers were turned on:
+       CA1707  underscores in test names: the repo's test naming convention (2,655: tests 2,652, benchmarks 3);
+       CA1825  fires on the compiler's empty params array when a collection expression builds xUnit TheoryData (14);
+       CA1861  constant array arguments in test bodies that run once; inline literals read better (22);
+       CA2100  constant raw SQL that inspects or damages a test store (13);
+       CA5394  seeded System.Random for reproducible property and fuzz inputs, not security (30). -->
+  <PropertyGroup Condition="$(MSBuildProjectName.EndsWith('.Tests')) or '$(MSBuildProjectName)' == 'TomeStack.Benchmarks'">
+    <NoWarn>$(NoWarn);CA1707;CA1825;CA1861;CA2100;CA5394</NoWarn>
+  </PropertyGroup>
+
+  <!-- Burn-down: rules not fixed when the analyzers were turned on, because the fix changes exception types, culture,
+       public API shape or signatures, or touches files other lanes are editing. Each count is the occurrences at that time;
+       remove a rule from its list when its last occurrence is fixed. docs/testing/analyzers.md has the reasons. -->
+  <!-- RulesCore: CA1859 3, CA1711 2, CA1720 2, CA1716 1, CA1854 1 -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'TomeStack.RulesCore'">
+    <NoWarn>$(NoWarn);CA1711;CA1716;CA1720;CA1854;CA1859</NoWarn>
+  </PropertyGroup>
+  <!-- AppService: CA1859 14, CA1826 6, CA1000 3, CA1305 3, CA1822 1 -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'TomeStack.AppService'">
+    <NoWarn>$(NoWarn);CA1000;CA1305;CA1822;CA1826;CA1859</NoWarn>
+  </PropertyGroup>
+  <!-- ImportWorker: CA1859 3 -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'TomeStack.ImportWorker'">
+    <NoWarn>$(NoWarn);CA1859</NoWarn>
+  </PropertyGroup>
+  <!-- DesktopShell: CA1001 1, CA1826 1 -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'TomeStack.DesktopShell'">
+    <NoWarn>$(NoWarn);CA1001;CA1826</NoWarn>
+  </PropertyGroup>
+  <!-- DevHost (dev-only): CA1848 1, CA1873 1 -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'TomeStack.DevHost'">
+    <NoWarn>$(NoWarn);CA1848;CA1873</NoWarn>
+  </PropertyGroup>
+  <!-- Benchmarks: CA1001 1 -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'TomeStack.Benchmarks'">
+    <NoWarn>$(NoWarn);CA1001</NoWarn>
+  </PropertyGroup>
+  <!-- AppService.Tests: CA1826 20, CA1305 18, CA1716 2, CA1862 2, CA1869 2, CA1822 1, CA1859 1, CA2201 1 -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'TomeStack.AppService.Tests'">
+    <NoWarn>$(NoWarn);CA1305;CA1716;CA1822;CA1826;CA1859;CA1862;CA1869;CA2201</NoWarn>
+  </PropertyGroup>
+  <!-- RulesCore.Tests: CA1305 2 -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'TomeStack.RulesCore.Tests'">
+    <NoWarn>$(NoWarn);CA1305</NoWarn>
+  </PropertyGroup>
+  <!-- ImportWorker.Tests: CA1068 1, CA1859 1, CA2201 1 -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'TomeStack.ImportWorker.Tests'">
+    <NoWarn>$(NoWarn);CA1068;CA1859;CA2201</NoWarn>
+  </PropertyGroup>
+  <!-- DesktopShell.Tests: CA1859 1 -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'TomeStack.DesktopShell.Tests'">
+    <NoWarn>$(NoWarn);CA1859</NoWarn>
+  </PropertyGroup>
 </Project>
