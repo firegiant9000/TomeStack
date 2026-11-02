@@ -24,9 +24,9 @@ public class SrdClassTableTests(ITestOutputHelper output)
 
     private static string? Folder => Environment.GetEnvironmentVariable("TOMESTACK_SRD_PDF_DIR");
 
-    /// <summary>The class packs of a family, in bundling order (the Barbarian's later revisions come last, then the Rogue).</summary>
+    /// <summary>The class packs of a family, in bundling order (the Barbarian's later revisions come last, then the Rogue, then the Monk).</summary>
     private static List<ContentPack> BundledClassPacks(string version) =>
-        [.. new[] { $"srd-{version}-classes.json", $"srd-{version}-fighter.json", $"srd-{version}-barbarian.json", $"srd-{version}-rogue.json" }
+        [.. new[] { $"srd-{version}-classes.json", $"srd-{version}-fighter.json", $"srd-{version}-barbarian.json", $"srd-{version}-rogue.json", $"srd-{version}-monk.json" }
             .Select(f => TomeStackApp.LoadBundledPack($"TomeStack.Content.{f}"))];
 
     public sealed class SrdPdfFactAttribute : FactAttribute

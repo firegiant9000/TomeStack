@@ -45,7 +45,7 @@ Brenna (Dex +1, Con +2): unarmored 13 (Unarmored Defense), light 11 → 12, medi
 - **While armored:** a modifier with `whileArmored` applies only while body armor is worn (a shield alone does not count), as the Defense fighting style needs. The validator refuses `whileArmored` on an Armor Class `replace` (`validate.while-armored-replace`): worn armor turns every Armor Class replacement off, so it could never apply.
 - **Below content v8:** a revision that declares an older schema but carries `whileArmored`, armor `strength` / `stealthDisadvantage`, a roll `bonus`, an armor training grant, or a modifier on `attacks` or `criticalRange` (an import or a hand edit; the validator refuses to publish that) has the field ignored, as an older build would, with `effect.schema-field-ignored`. A restriction on `attacks` or `criticalRange` keeps its content out, as an unknown field does in an older build. Nothing is rewritten, so no stored hash changes.
 
-Not modeled yet: speed itself, and a feature that needs "no shield" (for example the Monk's Unarmored Defense, not in the SRD slice). Weapons and attacks: [multiclass-and-attacks.md](multiclass-and-attacks.md) (content v5).
+Not modeled yet: speed itself, and a feature that needs "no shield" (for example the Monk's Unarmored Defense, bundled since C2-3, which is therefore not limited by a Shield; the Monk has no Shield training, so a Shield adds its Armor Class in SRD 5.1 and nothing in SRD 5.2.1, with the untrained-shield warning). Weapons and attacks: [multiclass-and-attacks.md](multiclass-and-attacks.md) (content v5).
 
 ## "No ability score above 20" (owner decision 2026-09-27)
 
