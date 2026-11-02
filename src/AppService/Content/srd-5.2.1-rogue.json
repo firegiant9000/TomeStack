@@ -1,0 +1,1899 @@
+{
+  "packId": "srd-5.2.1-rogue",
+  "formatVersion": 1,
+  "notice": "The Rogue of the System Reference Document 5.2.1 (CC-BY-4.0), levels 1-20, with the Thief, pp. 61-64. Taken from SRD_CC_v5.2.1.pdf (SHA-256 8974902d109d6e63672d7c490bde9ccf052410503d9cfa768237154fbc5e3d87). See docs/licensing/srd-pack-review.md.",
+  "sources": [
+    {
+      "id": "52500000-0000-4000-8000-000000000001",
+      "title": "System Reference Document 5.2.1",
+      "publisher": "SRD 5.2.1 (CC-BY-4.0)",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "editionVersion": "5.2.1",
+      "license": "CC-BY-4.0",
+      "redistributable": true,
+      "attribution": "This work includes material from the System Reference Document 5.2.1 (\"SRD 5.2.1\") by Wizards of the Coast LLC, available at https://www.dndbeyond.com/srd. The SRD 5.2.1 is licensed under the Creative Commons Attribution 4.0 International License, available at https://creativecommons.org/licenses/by/4.0/legalcode.",
+      "modificationNotice": "Modified: TomeStack adapted this material into structured data. Selected passages are excerpted or shortened, with line breaks and hyphenation repaired, and rules are encoded as machine-readable effects.",
+      "sha256": "8974902d109d6e63672d7c490bde9ccf052410503d9cfa768237154fbc5e3d87"
+    }
+  ],
+  "revisions": [
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410001",
+      "revisionId": "52e00000-0000-4000-8000-000000410001",
+      "schemaVersion": 9,
+      "kind": "class",
+      "name": "Rogue",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 61,
+          "end": 64
+        }
+      },
+      "status": "published",
+      "summary": "Primary Ability: Dexterity. Hit Point Die: D8 per Rogue level. Saving Throw Proficiencies: Dexterity and Intelligence. Skill Proficiencies: Choose 4: Acrobatics, Athletics, Deception, Insight, Intimidation, Investigation, Perception, Persuasion, Sleight of Hand, or Stealth. Weapon Proficiencies: Simple weapons and Martial weapons that have the Finesse or Light property. Tool Proficiencies: Thieves’ Tools. Armor Training: Light armor. TomeStack: levels 1-20. Thieves’ Tools proficiency is recorded by hand.",
+      "effects": [
+        {
+          "type": "hitDie",
+          "id": "rogue-hit-die",
+          "die": 8
+        },
+        {
+          "type": "scale",
+          "id": "rogue-sneak-attack-dice",
+          "scaleId": "sneakAttack",
+          "label": "Sneak Attack dice (d6)",
+          "values": [
+            1,
+            1,
+            2,
+            2,
+            3,
+            3,
+            4,
+            4,
+            5,
+            5,
+            6,
+            6,
+            7,
+            7,
+            8,
+            8,
+            9,
+            9,
+            10,
+            10
+          ]
+        },
+        {
+          "type": "grant",
+          "id": "rogue-save-dex",
+          "grant": "proficiency",
+          "target": "save.dex",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "rogue-save-int",
+          "grant": "proficiency",
+          "target": "save.int",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "choice",
+          "id": "rogue-skills",
+          "choiceId": "rogue-skills",
+          "count": 4,
+          "text": "Skill Proficiencies: Choose 4: Acrobatics, Athletics, Deception, Insight, Intimidation, Investigation, Perception, Persuasion, Sleight of Hand, or Stealth.",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410801",
+              "revisionId": "52e00000-0000-4000-8000-000000410801"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410802",
+              "revisionId": "52e00000-0000-4000-8000-000000410802"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410803",
+              "revisionId": "52e00000-0000-4000-8000-000000410803"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410804",
+              "revisionId": "52e00000-0000-4000-8000-000000410804"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410805",
+              "revisionId": "52e00000-0000-4000-8000-000000410805"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410806",
+              "revisionId": "52e00000-0000-4000-8000-000000410806"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410807",
+              "revisionId": "52e00000-0000-4000-8000-000000410807"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410808",
+              "revisionId": "52e00000-0000-4000-8000-000000410808"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410809",
+              "revisionId": "52e00000-0000-4000-8000-000000410809"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410810",
+              "revisionId": "52e00000-0000-4000-8000-000000410810"
+            }
+          ],
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "choice",
+          "id": "rogue-multiclass-skill",
+          "choiceId": "rogue-multiclass-skill",
+          "count": 1,
+          "text": "As a multiclass character, proficiency in one skill of your choice from the Rogue’s skill list.",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410801",
+              "revisionId": "52e00000-0000-4000-8000-000000410801"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410802",
+              "revisionId": "52e00000-0000-4000-8000-000000410802"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410803",
+              "revisionId": "52e00000-0000-4000-8000-000000410803"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410804",
+              "revisionId": "52e00000-0000-4000-8000-000000410804"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410805",
+              "revisionId": "52e00000-0000-4000-8000-000000410805"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410806",
+              "revisionId": "52e00000-0000-4000-8000-000000410806"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410807",
+              "revisionId": "52e00000-0000-4000-8000-000000410807"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410808",
+              "revisionId": "52e00000-0000-4000-8000-000000410808"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410809",
+              "revisionId": "52e00000-0000-4000-8000-000000410809"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410810",
+              "revisionId": "52e00000-0000-4000-8000-000000410810"
+            }
+          ],
+          "onlyAs": "multiclass"
+        },
+        {
+          "type": "choice",
+          "id": "rogue-expertise",
+          "choiceId": "rogue-expertise",
+          "count": 2,
+          "level": 1,
+          "text": "Level 1: Expertise. You gain Expertise in two of your skill proficiencies of your choice. Sleight of Hand and Stealth are recommended if you have proficiency in them.",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410821",
+              "revisionId": "52e00000-0000-4000-8000-000000410821"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410822",
+              "revisionId": "52e00000-0000-4000-8000-000000410822"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410823",
+              "revisionId": "52e00000-0000-4000-8000-000000410823"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410824",
+              "revisionId": "52e00000-0000-4000-8000-000000410824"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410825",
+              "revisionId": "52e00000-0000-4000-8000-000000410825"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410826",
+              "revisionId": "52e00000-0000-4000-8000-000000410826"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410827",
+              "revisionId": "52e00000-0000-4000-8000-000000410827"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410828",
+              "revisionId": "52e00000-0000-4000-8000-000000410828"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410829",
+              "revisionId": "52e00000-0000-4000-8000-000000410829"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410830",
+              "revisionId": "52e00000-0000-4000-8000-000000410830"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410831",
+              "revisionId": "52e00000-0000-4000-8000-000000410831"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410832",
+              "revisionId": "52e00000-0000-4000-8000-000000410832"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410833",
+              "revisionId": "52e00000-0000-4000-8000-000000410833"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410834",
+              "revisionId": "52e00000-0000-4000-8000-000000410834"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410835",
+              "revisionId": "52e00000-0000-4000-8000-000000410835"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410836",
+              "revisionId": "52e00000-0000-4000-8000-000000410836"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410837",
+              "revisionId": "52e00000-0000-4000-8000-000000410837"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410838",
+              "revisionId": "52e00000-0000-4000-8000-000000410838"
+            }
+          ]
+        },
+        {
+          "type": "choice",
+          "id": "rogue-expertise-6",
+          "choiceId": "rogue-expertise-6",
+          "count": 2,
+          "level": 6,
+          "text": "Level 6: Expertise. You gain Expertise in two more of your skill proficiencies of your choice.",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410821",
+              "revisionId": "52e00000-0000-4000-8000-000000410821"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410822",
+              "revisionId": "52e00000-0000-4000-8000-000000410822"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410823",
+              "revisionId": "52e00000-0000-4000-8000-000000410823"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410824",
+              "revisionId": "52e00000-0000-4000-8000-000000410824"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410825",
+              "revisionId": "52e00000-0000-4000-8000-000000410825"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410826",
+              "revisionId": "52e00000-0000-4000-8000-000000410826"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410827",
+              "revisionId": "52e00000-0000-4000-8000-000000410827"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410828",
+              "revisionId": "52e00000-0000-4000-8000-000000410828"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410829",
+              "revisionId": "52e00000-0000-4000-8000-000000410829"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410830",
+              "revisionId": "52e00000-0000-4000-8000-000000410830"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410831",
+              "revisionId": "52e00000-0000-4000-8000-000000410831"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410832",
+              "revisionId": "52e00000-0000-4000-8000-000000410832"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410833",
+              "revisionId": "52e00000-0000-4000-8000-000000410833"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410834",
+              "revisionId": "52e00000-0000-4000-8000-000000410834"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410835",
+              "revisionId": "52e00000-0000-4000-8000-000000410835"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410836",
+              "revisionId": "52e00000-0000-4000-8000-000000410836"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410837",
+              "revisionId": "52e00000-0000-4000-8000-000000410837"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410838",
+              "revisionId": "52e00000-0000-4000-8000-000000410838"
+            }
+          ]
+        },
+        {
+          "type": "grant",
+          "id": "feature-expertise",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000410101",
+            "revisionId": "52e00000-0000-4000-8000-000000410101"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-sneak-attack",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000410102",
+            "revisionId": "52e00000-0000-4000-8000-000000410102"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-thieves-cant",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000410103",
+            "revisionId": "52e00000-0000-4000-8000-000000410103"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-weapon-mastery",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000410104",
+            "revisionId": "52e00000-0000-4000-8000-000000410104"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-cunning-action",
+          "grant": "content",
+          "level": 2,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000410105",
+            "revisionId": "52e00000-0000-4000-8000-000000410105"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-steady-aim",
+          "grant": "content",
+          "level": 3,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000410106",
+            "revisionId": "52e00000-0000-4000-8000-000000410106"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement",
+          "grant": "content",
+          "level": 4,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000410107",
+            "revisionId": "52e00000-0000-4000-8000-000000410107"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-cunning-strike",
+          "grant": "content",
+          "level": 5,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000410108",
+            "revisionId": "52e00000-0000-4000-8000-000000410108"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-uncanny-dodge",
+          "grant": "content",
+          "level": 5,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000410109",
+            "revisionId": "52e00000-0000-4000-8000-000000410109"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-expertise-6",
+          "grant": "content",
+          "level": 6,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000410101",
+            "revisionId": "52e00000-0000-4000-8000-000000410101"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-evasion",
+          "grant": "content",
+          "level": 7,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000410110",
+            "revisionId": "52e00000-0000-4000-8000-000000410110"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-reliable-talent",
+          "grant": "content",
+          "level": 7,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000410111",
+            "revisionId": "52e00000-0000-4000-8000-000000410111"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement-8",
+          "grant": "content",
+          "level": 8,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000410107",
+            "revisionId": "52e00000-0000-4000-8000-000000410107"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement-10",
+          "grant": "content",
+          "level": 10,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000410107",
+            "revisionId": "52e00000-0000-4000-8000-000000410107"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-improved-cunning-strike",
+          "grant": "content",
+          "level": 11,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000410112",
+            "revisionId": "52e00000-0000-4000-8000-000000410112"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement-12",
+          "grant": "content",
+          "level": 12,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000410107",
+            "revisionId": "52e00000-0000-4000-8000-000000410107"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-devious-strikes",
+          "grant": "content",
+          "level": 14,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000410113",
+            "revisionId": "52e00000-0000-4000-8000-000000410113"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-slippery-mind",
+          "grant": "content",
+          "level": 15,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000410114",
+            "revisionId": "52e00000-0000-4000-8000-000000410114"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement-16",
+          "grant": "content",
+          "level": 16,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000410107",
+            "revisionId": "52e00000-0000-4000-8000-000000410107"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-elusive",
+          "grant": "content",
+          "level": 18,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000410115",
+            "revisionId": "52e00000-0000-4000-8000-000000410115"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-epic-boon",
+          "grant": "content",
+          "level": 19,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000410116",
+            "revisionId": "52e00000-0000-4000-8000-000000410116"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-stroke-of-luck",
+          "grant": "content",
+          "level": 20,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000410117",
+            "revisionId": "52e00000-0000-4000-8000-000000410117"
+          }
+        },
+        {
+          "type": "choice",
+          "id": "rogue-subclass",
+          "choiceId": "rogue-subclass",
+          "count": 1,
+          "level": 3,
+          "text": "Level 3: Rogue Subclass. You gain a Rogue subclass of your choice. (The SRD 5.2.1 includes the Thief.)",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000410002",
+              "revisionId": "52e00000-0000-4000-8000-000000410002"
+            }
+          ]
+        },
+        {
+          "type": "grant",
+          "id": "rogue-weapons-simple",
+          "grant": "proficiency",
+          "target": "weapon.simple",
+          "onlyAs": "startingClass",
+          "text": "Weapon Proficiencies: Simple weapons and Martial weapons that have the Finesse or Light property."
+        },
+        {
+          "type": "grant",
+          "id": "rogue-weapon-rapier",
+          "grant": "proficiency",
+          "target": "weapon.rapier",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "rogue-weapon-scimitar",
+          "grant": "proficiency",
+          "target": "weapon.scimitar",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "rogue-weapon-shortsword",
+          "grant": "proficiency",
+          "target": "weapon.shortsword",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "rogue-weapon-whip",
+          "grant": "proficiency",
+          "target": "weapon.whip",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "rogue-weapon-hand-crossbow",
+          "grant": "proficiency",
+          "target": "weapon.hand-crossbow",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "rogue-armor-light",
+          "grant": "proficiency",
+          "target": "armor.light",
+          "text": "Armor Training: Light armor."
+        },
+        {
+          "type": "restriction",
+          "id": "rogue-multiclass-dex",
+          "field": "ability.dex.score",
+          "minimum": 13,
+          "multiclass": true,
+          "text": "To qualify for a new class, you must have a score of at least 13 in the primary ability of the new class and your current classes (SRD 5.2.1 pp. 24-25); the Rogue’s primary ability is Dexterity. As a multiclass character you gain the Hit Point Die, proficiency in one skill of your choice from the Rogue’s skill list, proficiency with Thieves’ Tools, and training with Light armor."
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410002",
+      "revisionId": "52e00000-0000-4000-8000-000000410002",
+      "schemaVersion": 3,
+      "kind": "subclass",
+      "name": "Thief",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 64
+        }
+      },
+      "status": "published",
+      "summary": "Hunt for Treasure as a Classic Adventurer. A mix of burglar, treasure hunter, and explorer, you are the epitome of an adventurer. In addition to improving your agility and stealth, you gain abilities useful for delving into ruins and getting maximum benefit from the magic items you find there.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "fast-hands",
+          "grant": "content",
+          "level": 3,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000410501",
+            "revisionId": "52e00000-0000-4000-8000-000000410501"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "second-story-work",
+          "grant": "content",
+          "level": 3,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000410502",
+            "revisionId": "52e00000-0000-4000-8000-000000410502"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "supreme-sneak",
+          "grant": "content",
+          "level": 9,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000410503",
+            "revisionId": "52e00000-0000-4000-8000-000000410503"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "use-magic-device",
+          "grant": "content",
+          "level": 13,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000410504",
+            "revisionId": "52e00000-0000-4000-8000-000000410504"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "thiefs-reflexes",
+          "grant": "content",
+          "level": 17,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000410505",
+            "revisionId": "52e00000-0000-4000-8000-000000410505"
+          }
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410801",
+      "revisionId": "52e00000-0000-4000-8000-000000410801",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Rogue Skill: Acrobatics",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 61
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.acrobatics"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410802",
+      "revisionId": "52e00000-0000-4000-8000-000000410802",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Rogue Skill: Athletics",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 61
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.athletics"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410803",
+      "revisionId": "52e00000-0000-4000-8000-000000410803",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Rogue Skill: Deception",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 61
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.deception"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410804",
+      "revisionId": "52e00000-0000-4000-8000-000000410804",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Rogue Skill: Insight",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 61
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.insight"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410805",
+      "revisionId": "52e00000-0000-4000-8000-000000410805",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Rogue Skill: Intimidation",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 61
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.intimidation"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410806",
+      "revisionId": "52e00000-0000-4000-8000-000000410806",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Rogue Skill: Investigation",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 61
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.investigation"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410807",
+      "revisionId": "52e00000-0000-4000-8000-000000410807",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Rogue Skill: Perception",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 61
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.perception"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410808",
+      "revisionId": "52e00000-0000-4000-8000-000000410808",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Rogue Skill: Persuasion",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 61
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.persuasion"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410809",
+      "revisionId": "52e00000-0000-4000-8000-000000410809",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Rogue Skill: Sleight of Hand",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 61
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.sleightOfHand"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410810",
+      "revisionId": "52e00000-0000-4000-8000-000000410810",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Rogue Skill: Stealth",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 61
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.stealth"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410821",
+      "revisionId": "52e00000-0000-4000-8000-000000410821",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Rogue Expertise: Acrobatics",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 61
+        }
+      },
+      "status": "published",
+      "summary": "Pick a skill you are proficient in; TomeStack does not check that.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "expertise",
+          "grant": "expertise",
+          "target": "skill.acrobatics"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410822",
+      "revisionId": "52e00000-0000-4000-8000-000000410822",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Rogue Expertise: Animal Handling",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 61
+        }
+      },
+      "status": "published",
+      "summary": "Pick a skill you are proficient in; TomeStack does not check that.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "expertise",
+          "grant": "expertise",
+          "target": "skill.animalHandling"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410823",
+      "revisionId": "52e00000-0000-4000-8000-000000410823",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Rogue Expertise: Arcana",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 61
+        }
+      },
+      "status": "published",
+      "summary": "Pick a skill you are proficient in; TomeStack does not check that.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "expertise",
+          "grant": "expertise",
+          "target": "skill.arcana"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410824",
+      "revisionId": "52e00000-0000-4000-8000-000000410824",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Rogue Expertise: Athletics",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 61
+        }
+      },
+      "status": "published",
+      "summary": "Pick a skill you are proficient in; TomeStack does not check that.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "expertise",
+          "grant": "expertise",
+          "target": "skill.athletics"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410825",
+      "revisionId": "52e00000-0000-4000-8000-000000410825",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Rogue Expertise: Deception",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 61
+        }
+      },
+      "status": "published",
+      "summary": "Pick a skill you are proficient in; TomeStack does not check that.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "expertise",
+          "grant": "expertise",
+          "target": "skill.deception"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410826",
+      "revisionId": "52e00000-0000-4000-8000-000000410826",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Rogue Expertise: History",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 61
+        }
+      },
+      "status": "published",
+      "summary": "Pick a skill you are proficient in; TomeStack does not check that.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "expertise",
+          "grant": "expertise",
+          "target": "skill.history"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410827",
+      "revisionId": "52e00000-0000-4000-8000-000000410827",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Rogue Expertise: Insight",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 61
+        }
+      },
+      "status": "published",
+      "summary": "Pick a skill you are proficient in; TomeStack does not check that.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "expertise",
+          "grant": "expertise",
+          "target": "skill.insight"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410828",
+      "revisionId": "52e00000-0000-4000-8000-000000410828",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Rogue Expertise: Intimidation",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 61
+        }
+      },
+      "status": "published",
+      "summary": "Pick a skill you are proficient in; TomeStack does not check that.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "expertise",
+          "grant": "expertise",
+          "target": "skill.intimidation"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410829",
+      "revisionId": "52e00000-0000-4000-8000-000000410829",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Rogue Expertise: Investigation",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 61
+        }
+      },
+      "status": "published",
+      "summary": "Pick a skill you are proficient in; TomeStack does not check that.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "expertise",
+          "grant": "expertise",
+          "target": "skill.investigation"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410830",
+      "revisionId": "52e00000-0000-4000-8000-000000410830",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Rogue Expertise: Medicine",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 61
+        }
+      },
+      "status": "published",
+      "summary": "Pick a skill you are proficient in; TomeStack does not check that.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "expertise",
+          "grant": "expertise",
+          "target": "skill.medicine"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410831",
+      "revisionId": "52e00000-0000-4000-8000-000000410831",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Rogue Expertise: Nature",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 61
+        }
+      },
+      "status": "published",
+      "summary": "Pick a skill you are proficient in; TomeStack does not check that.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "expertise",
+          "grant": "expertise",
+          "target": "skill.nature"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410832",
+      "revisionId": "52e00000-0000-4000-8000-000000410832",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Rogue Expertise: Perception",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 61
+        }
+      },
+      "status": "published",
+      "summary": "Pick a skill you are proficient in; TomeStack does not check that.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "expertise",
+          "grant": "expertise",
+          "target": "skill.perception"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410833",
+      "revisionId": "52e00000-0000-4000-8000-000000410833",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Rogue Expertise: Performance",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 61
+        }
+      },
+      "status": "published",
+      "summary": "Pick a skill you are proficient in; TomeStack does not check that.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "expertise",
+          "grant": "expertise",
+          "target": "skill.performance"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410834",
+      "revisionId": "52e00000-0000-4000-8000-000000410834",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Rogue Expertise: Persuasion",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 61
+        }
+      },
+      "status": "published",
+      "summary": "Pick a skill you are proficient in; TomeStack does not check that.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "expertise",
+          "grant": "expertise",
+          "target": "skill.persuasion"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410835",
+      "revisionId": "52e00000-0000-4000-8000-000000410835",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Rogue Expertise: Religion",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 61
+        }
+      },
+      "status": "published",
+      "summary": "Pick a skill you are proficient in; TomeStack does not check that.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "expertise",
+          "grant": "expertise",
+          "target": "skill.religion"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410836",
+      "revisionId": "52e00000-0000-4000-8000-000000410836",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Rogue Expertise: Sleight of Hand",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 61
+        }
+      },
+      "status": "published",
+      "summary": "Pick a skill you are proficient in; TomeStack does not check that.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "expertise",
+          "grant": "expertise",
+          "target": "skill.sleightOfHand"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410837",
+      "revisionId": "52e00000-0000-4000-8000-000000410837",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Rogue Expertise: Stealth",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 61
+        }
+      },
+      "status": "published",
+      "summary": "Pick a skill you are proficient in; TomeStack does not check that.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "expertise",
+          "grant": "expertise",
+          "target": "skill.stealth"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410838",
+      "revisionId": "52e00000-0000-4000-8000-000000410838",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Rogue Expertise: Survival",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 61
+        }
+      },
+      "status": "published",
+      "summary": "Pick a skill you are proficient in; TomeStack does not check that.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "expertise",
+          "grant": "expertise",
+          "target": "skill.survival"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410101",
+      "revisionId": "52e00000-0000-4000-8000-000000410101",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Expertise",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 61
+        }
+      },
+      "status": "published",
+      "summary": "You gain Expertise in two of your skill proficiencies of your choice. Sleight of Hand and Stealth are recommended if you have proficiency in them.\n\nAt Rogue level 6, you gain Expertise in two more of your skill proficiencies of your choice.",
+      "effects": []
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410102",
+      "revisionId": "52e00000-0000-4000-8000-000000410102",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Sneak Attack",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 61,
+          "end": 62
+        }
+      },
+      "status": "published",
+      "summary": "You know how to strike subtly and exploit a foe’s distraction. Once per turn, you can deal an extra 1d6 damage to one creature you hit with an attack roll if you have Advantage on the roll and the attack uses a Finesse or a Ranged weapon. The extra damage’s type is the same as the weapon’s type.\n\nYou don’t need Advantage on the attack roll if at least one of your allies is within 5 feet of the target, the ally doesn’t have the Incapacitated condition, and you don’t have Disadvantage on the attack roll.\n\nThe extra damage increases as you gain Rogue levels, as shown in the Sneak Attack column of the Rogue Features table.\n\nTomeStack: The Sneak Attack dice column on Play shows how many d6; roll and add them by hand, once per turn, when the conditions hold.",
+      "effects": []
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410103",
+      "revisionId": "52e00000-0000-4000-8000-000000410103",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Thieves’ Cant",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 62
+        }
+      },
+      "status": "published",
+      "summary": "You picked up various languages in the communities where you plied your roguish talents. You know Thieves’ Cant and one other language of your choice, which you choose from the language tables in “Character Creation.”",
+      "effects": []
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410104",
+      "revisionId": "52e00000-0000-4000-8000-000000410104",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Weapon Mastery",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 62
+        }
+      },
+      "status": "published",
+      "summary": "Your training with weapons allows you to use the mastery properties of two kinds of weapons of your choice with which you have proficiency, such as Daggers and Shortbows.\n\nWhenever you finish a Long Rest, you can change the kinds of weapons you chose. For example, you could switch to using the mastery properties of Scimitars and Shortswords.",
+      "effects": []
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410105",
+      "revisionId": "52e00000-0000-4000-8000-000000410105",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Cunning Action",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 62
+        }
+      },
+      "status": "published",
+      "summary": "Your quick thinking and agility allow you to move and act quickly. On your turn, you can take one of the following actions as a Bonus Action: Dash, Disengage, or Hide.",
+      "effects": []
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410106",
+      "revisionId": "52e00000-0000-4000-8000-000000410106",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Steady Aim",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 62
+        }
+      },
+      "status": "published",
+      "summary": "As a Bonus Action, you give yourself Advantage on your next attack roll on the current turn. You can use this feature only if you haven’t moved during this turn, and after you use it, your Speed is 0 until the end of the current turn.",
+      "effects": []
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410107",
+      "revisionId": "52e00000-0000-4000-8000-000000410107",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Ability Score Improvement",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 63
+        }
+      },
+      "status": "published",
+      "summary": "You gain the Ability Score Improvement feat (see “Feats”) or another feat of your choice for which you qualify. You gain this feature again at Rogue levels 8, 10, 12, and 16.",
+      "effects": []
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410108",
+      "revisionId": "52e00000-0000-4000-8000-000000410108",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Cunning Strike",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 63
+        }
+      },
+      "status": "published",
+      "summary": "You’ve developed cunning ways to use your Sneak Attack. When you deal Sneak Attack damage, you can add one of the following Cunning Strike effects. Each effect has a die cost, which is the number of Sneak Attack damage dice you must forgo to add the effect. You remove the die before rolling, and the effect occurs immediately after the attack’s damage is dealt. For example, if you add the Poison effect, remove 1d6 from the Sneak Attack’s damage before rolling.\n\nIf a Cunning Strike effect requires a saving throw, the DC equals 8 plus your Dexterity modifier and Proficiency Bonus.\n\nPoison (Cost: 1d6). You add a toxin to your strike, forcing the target to make a Constitution saving throw. On a failed save, the target has the Poisoned condition for 1 minute. At the end of each of its turns, the Poisoned target repeats the save, ending the effect on itself on a success.\n\nTo use this effect, you must have a Poisoner’s Kit on your person.\n\nTrip (Cost: 1d6). If the target is Large or smaller, it must succeed on a Dexterity saving throw or have the Prone condition.\n\nWithdraw (Cost: 1d6). Immediately after the attack, you move up to half your Speed without provoking Opportunity Attacks.",
+      "effects": []
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410109",
+      "revisionId": "52e00000-0000-4000-8000-000000410109",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Uncanny Dodge",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 63
+        }
+      },
+      "status": "published",
+      "summary": "When an attacker that you can see hits you with an attack roll, you can take a Reaction to halve the attack’s damage against you (round down).",
+      "effects": []
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410110",
+      "revisionId": "52e00000-0000-4000-8000-000000410110",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Evasion",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 63
+        }
+      },
+      "status": "published",
+      "summary": "You can nimbly dodge out of the way of certain dangers. When you’re subjected to an effect that allows you to make a Dexterity saving throw to take only half damage, you instead take no damage if you succeed on the saving throw and only half damage if you fail. You can’t use this feature if you have the Incapacitated condition.",
+      "effects": []
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410111",
+      "revisionId": "52e00000-0000-4000-8000-000000410111",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Reliable Talent",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 63
+        }
+      },
+      "status": "published",
+      "summary": "Whenever you make an ability check that uses one of your skill or tool proficiencies, you can treat a d20 roll of 9 or lower as a 10.",
+      "effects": []
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410112",
+      "revisionId": "52e00000-0000-4000-8000-000000410112",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Improved Cunning Strike",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 63
+        }
+      },
+      "status": "published",
+      "summary": "You can use up to two Cunning Strike effects when you deal Sneak Attack damage, paying the die cost for each effect.",
+      "effects": []
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410113",
+      "revisionId": "52e00000-0000-4000-8000-000000410113",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Devious Strikes",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 63
+        }
+      },
+      "status": "published",
+      "summary": "You’ve practiced new ways to use your Sneak Attack deviously. The following effects are now among your Cunning Strike options.\n\nDaze (Cost: 2d6). The target must succeed on a Constitution saving throw, or on its next turn, it can do only one of the following: move or take an action or a Bonus Action.\n\nKnock Out (Cost: 6d6). The target must succeed on a Constitution saving throw, or it has the Unconscious condition for 1 minute or until it takes any damage. The Unconscious target repeats the save at the end of each of its turns, ending the effect on itself on a success.\n\nObscure (Cost: 3d6). The target must succeed on a Dexterity saving throw, or it has the Blinded condition until the end of its next turn.",
+      "effects": []
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410114",
+      "revisionId": "52e00000-0000-4000-8000-000000410114",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Slippery Mind",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 63
+        }
+      },
+      "status": "published",
+      "summary": "Your cunning mind is exceptionally difficult to control. You gain proficiency in Wisdom and Charisma saving throws.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "slippery-mind-wis",
+          "grant": "proficiency",
+          "target": "save.wis"
+        },
+        {
+          "type": "grant",
+          "id": "slippery-mind-cha",
+          "grant": "proficiency",
+          "target": "save.cha"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410115",
+      "revisionId": "52e00000-0000-4000-8000-000000410115",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Elusive",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 63
+        }
+      },
+      "status": "published",
+      "summary": "You’re so evasive that attackers rarely gain the upper hand against you. No attack roll can have Advantage against you unless you have the Incapacitated condition.",
+      "effects": []
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410116",
+      "revisionId": "52e00000-0000-4000-8000-000000410116",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Epic Boon",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 63
+        }
+      },
+      "status": "published",
+      "summary": "You gain an Epic Boon feat (see “Feats”) or another feat of your choice for which you qualify. Boon of the Night Spirit is recommended.",
+      "effects": []
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410117",
+      "revisionId": "52e00000-0000-4000-8000-000000410117",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Stroke of Luck",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 63
+        }
+      },
+      "status": "published",
+      "summary": "You have a marvelous knack for succeeding when you need to. If you fail a D20 Test, you can turn the roll into a 20.\n\nOnce you use this feature, you can’t use it again until you finish a Short or Long Rest.\n\nTomeStack: using it spends the one use; turning the roll into a 20 is done by hand.",
+      "effects": [
+        {
+          "type": "resource",
+          "id": "stroke-of-luck-uses",
+          "resourceId": "strokeOfLuck",
+          "label": "Stroke of Luck",
+          "maximum": "1"
+        },
+        {
+          "type": "recovery",
+          "id": "stroke-of-luck-short-rest",
+          "timing": "onShortRest",
+          "resourceId": "strokeOfLuck",
+          "on": "shortRest",
+          "amount": "all"
+        },
+        {
+          "type": "recovery",
+          "id": "stroke-of-luck-long-rest",
+          "timing": "onLongRest",
+          "resourceId": "strokeOfLuck",
+          "on": "longRest",
+          "amount": "all"
+        },
+        {
+          "type": "roll",
+          "id": "stroke-of-luck-use",
+          "rollId": "strokeOfLuck",
+          "label": "Stroke of Luck",
+          "resourceId": "strokeOfLuck",
+          "cost": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410501",
+      "revisionId": "52e00000-0000-4000-8000-000000410501",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Fast Hands",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 64
+        }
+      },
+      "status": "published",
+      "summary": "As a Bonus Action, you can do one of the following.\n\nSleight of Hand. Make a Dexterity (Sleight of Hand) check to pick a lock or disarm a trap with Thieves’ Tools or to pick a pocket.\n\nUse an Object. Take the Utilize action, or take the Magic action to use a magic item that requires that action.",
+      "effects": []
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410502",
+      "revisionId": "52e00000-0000-4000-8000-000000410502",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Second-Story Work",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 64
+        }
+      },
+      "status": "published",
+      "summary": "You’ve trained to get into especially hard-to-reach places, granting you these benefits.\n\nClimber. You gain a Climb Speed equal to your Speed.\n\nJumper. You can determine your jump distance using your Dexterity rather than your Strength.",
+      "effects": []
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410503",
+      "revisionId": "52e00000-0000-4000-8000-000000410503",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Supreme Sneak",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 64
+        }
+      },
+      "status": "published",
+      "summary": "You gain the following Cunning Strike option.\n\nStealth Attack (Cost: 1d6). If you have the Hide action’s Invisible condition, this attack doesn’t end that condition on you if you end the turn behind Three-Quarters Cover or Total Cover.",
+      "effects": []
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410504",
+      "revisionId": "52e00000-0000-4000-8000-000000410504",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Use Magic Device",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 64
+        }
+      },
+      "status": "published",
+      "summary": "You’ve learned how to maximize use of magic items, granting you the following benefits.\n\nAttunement. You can attune to up to four magic items at once.\n\nCharges. Whenever you use a magic item property that expends charges, roll 1d6. On a roll of 6, you use the property without expending the charges.\n\nScrolls. You can use any Spell Scroll, using Intelligence as your spellcasting ability for the spell. If the spell is a cantrip or a level 1 spell, you can cast it reliably. If the scroll contains a higher-level spell, you must first succeed on an Intelligence (Arcana) check (DC 10 plus the spell’s level). On a successful check, you cast the spell from the scroll. On a failed check, the scroll disintegrates.",
+      "effects": []
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000410505",
+      "revisionId": "52e00000-0000-4000-8000-000000410505",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Thief’s Reflexes",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 64
+        }
+      },
+      "status": "published",
+      "summary": "You are adept at laying ambushes and quickly escaping danger. You can take two turns during the first round of any combat. You take your first turn at your normal Initiative and your second turn at your Initiative minus 10.",
+      "effects": []
+    }
+  ]
+}

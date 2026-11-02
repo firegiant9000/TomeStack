@@ -1,8 +1,12 @@
-import { useEffect, useState, type SubmitEvent } from 'react';
+import { useEffect, useId, useState, type SubmitEvent } from 'react';
 import { client } from '../api/client';
 import { TomeStackError } from '../api/transport';
 import type { Campaign, CampaignPackPreview, PreflightReport, RulesFamilyId, RulesFamilyPolicy, SourceRecord } from '../api/types';
 import { downloadBase64 } from '../files';
+import { ChangeRegion } from './export/ChangeRegion';
+import { ExportConfirmation, hasBlocker, needsConfirmation } from './export/ExportConfirmation';
+import { TargetFieldset } from './export/TargetFieldset';
+import { usePackageTargets } from './export/usePackageTargets';
 import { PreflightPanel } from './PreflightPanel';
 import { canSaveAfter } from './preflightText';
 
@@ -22,33 +26,56 @@ function CampaignPackForm({ campaign, onError, onStatus }: { campaign: Campaign 
   const [preview, setPreview] = useState<CampaignPackPreview>();
   // Import Lab L5: the one sharing rule's answer; Save waits for it and stops on anything blocking.
   const [report, setReport] = useState<PreflightReport>();
+  const targets = usePackageTargets();
+  const [target, setTarget] = useState<string | null>(null);
+  const [confirmed, setConfirmed] = useState(false);
+  const [previewFailed, setPreviewFailed] = useState(false);
+  const hintId = useId();
 
-  // The preview is asked again when the campaign is saved with other sources.
+  // The preview is asked again when the campaign is saved with other sources, and for each target; a reply for an
+  // earlier one is dropped.
   const version = `${campaign.updatedAt ?? ''}~${campaign.allowedSources.join(',')}`;
   useEffect(() => {
     let current = true;
-    client
-      .campaignPackPreview(campaign.id)
-      .then((result) => {
-        if (current) setPreview(result);
+    // No target: the call is exactly as it was before there was a target.
+    (target ? client.campaignPackPreview(campaign.id, target) : client.campaignPackPreview(campaign.id))
+      .then((loaded) => {
+        if (!current) return;
+        setPreview(loaded);
+        setConfirmed(false);
       })
-      .catch((error: unknown) => {
-        if (current) onError(error);
+      .catch((error) => {
+        if (!current) return;
+        if (target) setPreviewFailed(true);
+        else onError(error);
       });
     return () => {
       current = false;
     };
-  }, [campaign.id, version, onError]);
+  }, [campaign.id, version, target, onError]);
+
+  // The fieldset stays mounted while the preview reloads, so focus stays on the radio that was chosen.
+  function chooseTarget(next: string | null) {
+    setTarget(next);
+    setPreview(undefined);
+    setPreviewFailed(false);
+    setConfirmed(false);
+  }
+
+  const blocked = hasBlocker(preview?.changes);
+  const saveDisabled = blocked || (needsConfirmation(preview?.changes) && !confirmed);
+  // Only a copy for an older TomeStack carries the target and the preview's hash.
+  const downConversion = target ? ([target, preview?.changesHash] as const) : ([] as const);
 
   async function save() {
     try {
-      const outcome = await client.saveCampaignPackAs(campaign.id);
+      const outcome = await client.saveCampaignPackAs(campaign.id, ...downConversion);
       if (outcome.saved) onStatus(`Saved the campaign pack ${outcome.fileName}.`);
     } catch (error) {
       if (error instanceof TomeStackError && error.code === 'unsupported') {
         // Browser development (DevHost) has no native Save dialog: download the pack instead.
         try {
-          const exported = await client.exportCampaignPack(campaign.id);
+          const exported = await client.exportCampaignPack(campaign.id, ...downConversion);
           downloadBase64(exported.fileName, exported.base64);
           onStatus(`Downloaded the campaign pack ${exported.fileName}.`);
         } catch (inner) {
@@ -67,8 +94,9 @@ function CampaignPackForm({ campaign, onError, onStatus }: { campaign: Campaign 
         A campaign pack carries the profile (rules, allowed sources and house rules) and the published content of homebrew
         you marked as your own work. It never carries characters, gap notes, drafts or PDFs. The SRD is named, not copied.
       </p>
+      <TargetFieldset targets={targets} value={target} onChange={chooseTarget} />
       {!preview ? (
-        <p>Checking what the pack would hold…</p>
+        <p>{previewFailed ? `Could not check what the copy for TomeStack ${target} leaves out.` : 'Checking what the pack would hold…'}</p>
       ) : (
         <>
           <p>
@@ -76,6 +104,7 @@ function CampaignPackForm({ campaign, onError, onStatus }: { campaign: Campaign 
             {preview.revisions} published revision{preview.revisions === 1 ? '' : 's'}
             {preview.referenced.length > 0 ? `; ${preview.referenced.map((s) => s.title).join(', ')} named, not copied` : ''}.
           </p>
+          <ChangeRegion target={target} opensIn={preview.opensIn} causes={preview.opensInCauses} changes={preview.changes} previousMinor={targets?.previousMinor ?? null} />
           <div role="region" aria-label="Left out of the campaign pack">
             {preview.leftOut.length === 0 ? (
               <p>Nothing is left out.</p>
@@ -100,8 +129,9 @@ function CampaignPackForm({ campaign, onError, onStatus }: { campaign: Campaign 
             </ul>
           )}
           <PreflightPanel kind="campaignPack" selection={[campaign.id]} label="campaign pack" refreshKey={version} onReport={setReport} onError={onError} />
+          <ExportConfirmation changes={preview.changes} confirmed={confirmed} onConfirmedChange={setConfirmed} hintId={hintId} />
           <div className="actions">
-            <button type="button" onClick={save} disabled={!canSaveAfter(report)}>
+            <button type="button" onClick={save} disabled={saveDisabled || !canSaveAfter(report)} aria-describedby={blocked ? hintId : undefined}>
               Save campaign pack…
             </button>
           </div>
