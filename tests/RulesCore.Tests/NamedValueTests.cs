@@ -19,7 +19,7 @@ public class NamedValueTests
     {
         var pack = Fixtures.ActionDetailsPack();
         ContentPack[] others = [Fixtures.Pack(), Fixtures.M1Pack(), Fixtures.SpellPack(), Fixtures.CombatPack(), Fixtures.EffectsPack(), Fixtures.MulticlassPack(), Fixtures.FormsPack(), Fixtures.TurnsPack(), Fixtures.FeatureAttacksPack()];
-        return new([.. others.SelectMany(p => p.Sources), .. pack.Sources], [.. others.SelectMany(p => p.Revisions), .. pack.Revisions.Select(change), ..ExtraRevisions(pack)]);
+        return new([.. others.SelectMany(p => p.Sources), .. pack.Sources], [.. others.SelectMany(p => p.Revisions), .. pack.Revisions.Select(change), .. ExtraRevisions(pack)]);
     }
 
     /// <summary>A copy of Tide Wave under another id, so a test can pin it outside any class.</summary>

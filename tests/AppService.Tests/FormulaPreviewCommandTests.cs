@@ -52,9 +52,9 @@ public class FormulaPreviewCommandTests
     public void Writes_nothing()
     {
         using var temp = new TempApp();
-        var before = temp.App.Store.ListRevisionsInOrder().Count();
+        var before = temp.App.Store.ListRevisionsInOrder().Count;
         temp.App.PreviewFormula(new("SCALE.column1", ClassDraft()));
-        Assert.Equal(before, temp.App.Store.ListRevisionsInOrder().Count());
+        Assert.Equal(before, temp.App.Store.ListRevisionsInOrder().Count);
     }
 
     [Fact]
