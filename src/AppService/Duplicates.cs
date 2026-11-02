@@ -55,7 +55,7 @@ public static class Fingerprint
     public static string Of(IReadOnlyList<Effect> effects)
     {
         ArgumentNullException.ThrowIfNull(effects);
-        return OfJson(JsonSerializer.SerializeToNode(effects, typeof(IReadOnlyList<Effect>), RulesJson.Compact)!.AsArray());
+        return OfJson(JsonSerializer.SerializeToNode<IReadOnlyList<Effect>>(effects, RulesJson.Compact)!.AsArray());
     }
 
     /// <summary>The hash of effects already written as JSON: each effect's top-level <c>id</c> removed, then <see cref="Canonical"/>. Leaves <paramref name="effects"/> unchanged.</summary>
