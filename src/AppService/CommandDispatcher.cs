@@ -35,9 +35,10 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "extension.list", "extension.installPreview", "extension.installChoose", "extension.install", "extension.review", "extension.setEnabled", "extension.remove",
         "extension.chooseInput", "extension.runPreview", "extension.runImport", "extension.runExport", "extension.runSaveAs",
         "export.preview", "export.saveAs", "export.download",
-        "library.backupPreview", "library.backupSaveAs", "library.restoreChoose", "library.restoreApply",
+        "library.backupPreview", "library.backupSaveAs", "library.restoreChoose", "library.restoreApply", "library.dailyCopies", "library.setDailyCopies",
         "ddb.read", "ddb.readData", "ddb.readText", "ddb.preview", "ddb.apply", "ddb.discard",
         "content.previewFormula", "content.coverage", "content.classTable", "content.duplicates",
+        "diagnostics.copy",
     ];
 
     /// <summary>
@@ -216,6 +217,9 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "library.backupSaveAs" => SaveLibraryBackupAs(),
         "library.restoreChoose" => ChooseLibraryRestore(),
         "library.restoreApply" => ApplyLibraryRestore(Payload<RestorePayload>(payload)),
+        "diagnostics.copy" => new { text = Diagnostics.DiagnosticsCopy.For(app) },
+        "library.dailyCopies" => app.DailyCopies(),
+        "library.setDailyCopies" => app.SetDailyCopies(Payload<DailyCopiesPayload>(payload).On),
         _ => throw new UnknownCommandException(command),
     };
 
@@ -678,6 +682,8 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     private sealed record ExtensionInstallPayload(Guid Token, IReadOnlyList<string>? Grants, bool Confirm = false);
 
     private sealed record ExtensionEnablePayload(Guid ExtensionId, bool Enabled);
+
+    private sealed record DailyCopiesPayload(bool On);
 
     private sealed record ExtensionRemovePayload(Guid ExtensionId, bool Confirm = false);
 
