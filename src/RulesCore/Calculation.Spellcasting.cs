@@ -164,16 +164,7 @@ public static partial class CharacterCalculator
         KnownSpell known, IContentCatalog catalog, Character character, string family, SpellcastingEffect caster, int highest, List<Diagnostic> warnings)
     {
         var revision = catalog.FindRevision(known.Spell);
-        string? refused = revision switch
-        {
-            null => "is not available",
-            { Status: not RevisionStatus.Published } => "is not published",
-            { SchemaVersion: > ContentRevision.CurrentSchemaVersion } => "needs a newer version of TomeStack",
-            _ when !revision.RulesFamilies.Contains(character.RulesFamily) => $"supports {string.Join(", ", revision.RulesFamilies)}, not {character.RulesFamily}",
-            _ when revision.Kind != ContentKind.Spell || !revision.Effects.OfType<SpellEffect>().Any() => "is not a spell",
-            _ => null,
-        };
-        if (refused is not null)
+        if (SpellRefusal(revision, character.RulesFamily) is { } refused)
         {
             warnings.Add(new("spells.unusable", $"Spell {revision?.Name ?? known.Spell.RevisionId.ToString()} {refused}; it is not listed.", known.Spell));
             return null;
@@ -190,6 +181,54 @@ public static partial class CharacterCalculator
         return new(
             revision.Reference, revision.Name, data.Level, known.Prepared || caster.Preparation == SpellPreparation.Known, revision.Summary, data.Text,
             data.School, data.CastingTime, data.Range, data.Components, data.Duration, data.Concentration, data.Ritual, data.Attack, data.Save, data.Dice,
-            origin, diagnostics);
+            origin, diagnostics, SpellTagsOf(revision, data));
+    }
+
+    /// <summary>Why a revision cannot be used as a spell for a character of <paramref name="rulesFamily"/> ("is not published", ...), or null when it can. Shared by recorded spells and <c>castsSpell</c>.</summary>
+    private static string? SpellRefusal(ContentRevision? revision, string rulesFamily) =>
+        revision switch
+        {
+            null => "is not available",
+            { Status: not RevisionStatus.Published } => "is not published",
+            { SchemaVersion: > ContentRevision.CurrentSchemaVersion } => "needs a newer version of TomeStack",
+            _ when !revision.RulesFamilies.Contains(rulesFamily) => $"supports {string.Join(", ", revision.RulesFamilies)}, not {rulesFamily}",
+            _ when revision.Kind != ContentKind.Spell || !revision.Effects.OfType<SpellEffect>().Any() => "is not a spell",
+            _ => null,
+        };
+
+    /// <summary>MECH-X item 1 (R39): a spell's tags, only from a v12 revision; null when it has none.</summary>
+    private static IReadOnlyList<string>? SpellTagsOf(ContentRevision revision, SpellEffect data) =>
+        data.Tags is { Count: > 0 } tags && revision.SchemaVersion >= ContentRevision.PaymentSchemaVersion ? tags : null;
+
+    /// <summary>
+    /// MECH-X item 1 (R38): the spell each v12 <c>castsSpell</c> roll casts, by roll. The revision is the one the character pins, else
+    /// the newest published one, and must pass the checks a recorded spell does (<see cref="SpellRefusal"/>); otherwise the roll gets no
+    /// entry and a <c>spells.unusable</c> diagnostic on its feature. The numbers are the primary caster's (null without a caster).
+    /// </summary>
+    private static Dictionary<(ContentReference, string), CastSpellValue> CastSpellsOf(
+        List<ActiveContent> active, IContentCatalog catalog, Character character, bool hasCaster, Dictionary<string, int> values, List<Diagnostic> diagnostics)
+    {
+        var casts = new Dictionary<(ContentReference, string), CastSpellValue>();
+        var pinned = character.AllReferences().ToList();
+        foreach (var item in active.Where(a => a.Revision.SchemaVersion >= ContentRevision.PaymentSchemaVersion))
+        {
+            foreach (var roll in item.Revision.Effects.OfType<RollEffect>().Where(r => r.CastsSpell is not null))
+            {
+                var spellId = roll.CastsSpell!.Value;
+                var revision = pinned.FirstOrDefault(r => r.ContentId == spellId) is { } pin
+                    ? catalog.FindRevision(pin)
+                    : catalog.RevisionsOf(spellId).Where(r => r.Status == RevisionStatus.Published).TakeLast(1).FirstOrDefault();
+                if (SpellRefusal(revision, character.RulesFamily) is { } refused)
+                {
+                    AddOnce(diagnostics, new("spells.unusable", $"Spell {revision?.Name ?? spellId.ToString()} {refused}; '{roll.Label}' does not cast it.", item.Revision.Reference, roll.Id));
+                    continue;
+                }
+                var data = revision!.Effects.OfType<SpellEffect>().First();
+                casts[(item.Revision.Reference, roll.Id)] = new(
+                    revision.Reference, revision.Name, data.Level, data.Attack, data.Save, data.Dice,
+                    hasCaster ? values[FieldIds.SpellAttack] : null, hasCaster ? values[FieldIds.SpellSaveDc] : null);
+            }
+        }
+        return casts;
     }
 }

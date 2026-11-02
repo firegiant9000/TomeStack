@@ -273,3 +273,36 @@ it('keeps each caster’s filters of its own', async () => {
   expect((arcanist.getByRole('checkbox', { name: 'Cantrip' }) as HTMLInputElement).checked).toBe(true);
   expect((warden.getByRole('checkbox', { name: 'Cantrip' }) as HTMLInputElement).checked).toBe(false);
 });
+
+// MECH-X item 1 (R39): a Tags group in the filters, only when some listed spell has a tag.
+function tagView(): CharacterView {
+  const v = view();
+  v.sheet.spellcasting![0]!.spells = [
+    { ...spell(40, 'Fixture Tick', 0, false), tags: ['time'] },
+    { ...spell(41, 'Fixture Tock', 1, false), tags: ['time', 'ward'] },
+    { ...spell(42, 'Fixture Plain', 1, false) },
+  ];
+  return v;
+}
+
+it('shows a Tags group only when a listed spell has a tag, and filters by it', async () => {
+  const user = userEvent.setup();
+  panel(filterView());
+  const none = await openFilters(user);
+  expect(none.queryByRole('group', { name: 'Tags' })).toBeNull();
+  cleanup();
+  panel(tagView());
+  const group = await openFilters(user);
+  const tags = within(group.getByRole('group', { name: 'Tags' }));
+  expect(tags.getAllByRole('checkbox').map((c) => c.parentElement?.textContent)).toEqual(['time', 'ward']);
+  await user.click(tags.getByRole('checkbox', { name: 'ward' }));
+  expect(listed()).toEqual(['Fixture Tock']);
+  expect(screen.getByRole('button', { name: 'Filters: Fixture Arcanist spells, on' })).toBeTruthy(); // the tag counts as an active filter
+  await user.click(group.getByRole('button', { name: 'Clear filters' }));
+  expect(listed()).toHaveLength(3);
+});
+
+it('names a spell’s tags on its entry', () => {
+  panel(tagView());
+  expect(screen.getByText(/Tags: time, ward/)).toBeTruthy();
+});

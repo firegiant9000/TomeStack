@@ -118,7 +118,7 @@ The Lab reports these as unsupported or assisted; building them is play-mechanic
 | Replacement and conditional choices | Swap a daily power, replace a pick at level-up, a temporary feature package |
 | Targeting and typed outcomes | Cones, lines, radius, several targets, forced movement, conditions |
 | Prepare, charge, release | Multi-turn actions that can be interrupted or queued |
-| Equipment mods and crafting | Attachments, switch weapons, ammunition and reload, item upgrades, a crafting recipe |
+| Ammunition, reload and crafting | Ammunition and reload (ammunition is an item's quantity; nothing tracks a shot), a crafting recipe. Equipment mods are now supported as the `itemMod` effect (MECH-X item 3; [equipment.md](equipment.md)) |
 | Other power systems | Casting from points or from hit points, powers that are not spells |
 | Context and marks | Target type, a marked creature, distance, nearby allies, while equipped or charged |
 | Deterministic composition | Provenance, conflict and order rules, atomic state changes, explainable results |

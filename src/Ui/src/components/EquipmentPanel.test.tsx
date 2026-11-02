@@ -99,6 +99,8 @@ const use = (index: number, entry: EquipmentEntry, over: Partial<ItemUseValue> =
   chargesMax: 7,
   chargesSpent: 0,
   chargesLeft: 7,
+  mods: [],
+  hosts: [],
   ...over,
 });
 const withSpent = (spent: number): Partial<ItemUseValue> => ({ chargesSpent: spent, chargesLeft: 7 - spent });
@@ -221,4 +223,123 @@ it('offers a charged or attunement item again to carry a second copy, and a plai
 
   await waitFor(() => expect(screen.getByRole('option', { name: /Fixture wand/ })).toBeTruthy());
   expect(screen.queryByRole('option', { name: /Fixture cup/ })).toBeNull();
+});
+
+it('does not offer a plain carried weapon again just because it has a hosts-only row', async () => {
+  const blade = entry('blade', true);
+  vi.mocked(client.listContent).mockResolvedValue([
+    { kind: 'item', name: 'Fixture blade', reference: blade.item, compatible: true, superseded: false, sourceTitle: 'Fixture', page: '' },
+    { kind: 'item', name: 'Fixture rod', reference: { contentId: 'c-rod', revisionId: 'r-rod' }, compatible: true, superseded: false, sourceTitle: 'Fixture', page: '' },
+  ] as never);
+  const row = use(0, blade, { chargesMax: undefined, chargesLeft: undefined, hosts: ['weapon'] });
+  render(<EquipmentPanel view={view([blade], [row])} onChanged={() => {}} onError={() => {}} onStatus={() => {}} />);
+
+  await waitFor(() => expect(screen.getByRole('option', { name: /Fixture rod/ })).toBeTruthy());
+  expect(screen.queryByRole('option', { name: /Fixture blade/ })).toBeNull();
+});
+
+// MECH-X item 3 (R55, R51a): mods attach to one carried copy of a weapon or armor, through the same save queue.
+const sight = { contentId: 'c-sight', revisionId: 'r-sight' };
+const plating = { contentId: 'c-plating', revisionId: 'r-plating' };
+const rune = { contentId: 'c-rune', revisionId: 'r-rune' };
+const blade = (equipped: boolean, extra: Partial<EquipmentEntry> = {}): EquipmentEntry => ({ item: { contentId: 'c-blade', revisionId: 'r-blade' }, equipped, quantity: 1, id: '44444444-4444-4444-8444-444444444444', ...extra });
+const rowOf = use;
+const hostRow = (index: number, e: EquipmentEntry, over: Partial<ItemUseValue> = {}): ItemUseValue =>
+  rowOf(index, e, { name: 'Fixture blade', chargesMax: undefined, chargesLeft: undefined, hosts: ['weapon'], mods: [], ...over });
+const modOptions = [
+  { kind: 'item', name: 'Fixture blade', reference: { contentId: 'c-blade', revisionId: 'r-blade' }, compatible: true, superseded: false, sourceTitle: 'Fixture', page: '' },
+  { kind: 'item', name: 'Fixture sight', reference: sight, compatible: true, superseded: false, sourceTitle: 'Fixture', page: '', modOf: 'weapon' },
+  { kind: 'item', name: 'Fixture plating', reference: plating, compatible: true, superseded: false, sourceTitle: 'Fixture', page: '', modOf: 'armor' },
+  { kind: 'item', name: 'Fixture rune', reference: rune, compatible: true, superseded: false, sourceTitle: 'Fixture', page: '', modOf: 'any' },
+];
+const modInfo = (reference: typeof sight, name: string) => ({ reference, name, appliesTo: 'weapon' as const });
+
+it('lists mods on an equipped host and attaches one through the save queue', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listContent).mockResolvedValue(modOptions as never);
+  const e = blade(true, { mods: [rune] });
+  const q = queue([e]);
+  render(
+    <EquipmentPanel view={view([e], [hostRow(0, e, { mods: [modInfo(rune, 'Fixture rune')] })])} onChanged={() => {}} onError={() => {}} onStatus={() => {}} saveCharacter={q.saveCharacter} />,
+  );
+
+  expect(await screen.findByText('Mods on Fixture blade: Fixture rune')).toBeTruthy();
+  const select = await screen.findByRole('combobox', { name: 'Attach a mod to Fixture blade' });
+  const offered = Array.from(select.querySelectorAll('option')).map((o) => o.textContent);
+  expect(offered.some((t) => t?.startsWith('Fixture sight'))).toBe(true);
+  expect(offered.some((t) => t?.startsWith('Fixture plating'))).toBe(false); // armor-only, the host is a weapon
+  expect(offered.some((t) => t?.startsWith('Fixture rune'))).toBe(false); // already on the entry
+
+  await user.selectOptions(select, sight.revisionId);
+  await user.click(screen.getByRole('button', { name: 'Attach Fixture sight to Fixture blade' }));
+
+  await waitFor(() => expect(q.equipment()![0]!.mods).toEqual([rune, sight]));
+});
+
+it('attaches a mod to a new copy in one save', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listContent).mockResolvedValue(modOptions as never);
+  const e = blade(true);
+  const q = queue([e]);
+  render(<EquipmentPanel view={view([e], [hostRow(0, e)])} onChanged={() => {}} onError={() => {}} onStatus={() => {}} saveCharacter={q.saveCharacter} />);
+
+  const select = await screen.findByRole('combobox', { name: 'Attach a mod to Fixture blade' });
+  const copy = screen.getByRole('button', { name: 'Attach to a new copy of Fixture blade' });
+  expect((copy as HTMLButtonElement).disabled).toBe(true); // nothing chosen yet
+  await user.selectOptions(select, sight.revisionId);
+  await user.click(copy);
+
+  await waitFor(() => expect(q.equipment()).toHaveLength(2));
+  expect(q.equipment()![0]).toEqual(e);
+  expect(q.equipment()![1]).toEqual({ item: e.item, equipped: false, quantity: 1, mods: [sight] });
+});
+
+it('removes a mod and drops the empty list', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listContent).mockResolvedValue(modOptions as never);
+  const e = blade(true, { mods: [rune, sight] });
+  const q = queue([e]);
+  const mods = [modInfo(rune, 'Fixture rune'), modInfo(sight, 'Fixture sight')];
+  render(<EquipmentPanel view={view([e], [hostRow(0, e, { mods })])} onChanged={() => {}} onError={() => {}} onStatus={() => {}} saveCharacter={q.saveCharacter} />);
+
+  await user.click(await screen.findByRole('button', { name: 'Remove mod Fixture rune from Fixture blade' }));
+  await waitFor(() => expect(q.equipment()![0]!.mods).toEqual([sight]));
+  await user.click(screen.getByRole('button', { name: 'Remove mod Fixture sight from Fixture blade' }));
+  await waitFor(() => expect(q.equipment()![0]!.mods).toBeUndefined());
+});
+
+it('offers no attach control on a carried entry or a full one (4), and lists a carried entry mods read-only', async () => {
+  vi.mocked(client.listContent).mockResolvedValue(modOptions as never);
+  const carried = blade(false, { mods: [rune] });
+  const full = blade(true, { id: '55555555-5555-4555-8555-555555555555', mods: [rune, rune, rune, rune].map((r, i) => ({ ...r, contentId: `c-m${i}`, revisionId: `r-m${i}` })) });
+  const fullInfo = (full.mods ?? []).map((r, i) => modInfo(r, `Fixture mod ${i + 1}`));
+  render(
+    <EquipmentPanel
+      view={view([carried, full], [hostRow(0, carried, { mods: [modInfo(rune, 'Fixture rune')] }), hostRow(1, full, { mods: fullInfo })])}
+      onChanged={() => {}}
+      onError={() => {}}
+      onStatus={() => {}}
+    />,
+  );
+
+  await screen.findByText(/^Mods \(not equipped\): Fixture rune/);
+  expect(screen.queryByRole('combobox', { name: /^Attach a mod to/ })).toBeNull();
+  expect(screen.queryByRole('button', { name: /^Attach/ })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Remove mod Fixture rune from Fixture blade (copy 1 of 2)' })).toBeNull(); // read-only while carried
+  expect(screen.getByRole('button', { name: 'Remove mod Fixture mod 4 from Fixture blade (copy 2 of 2)' })).toBeTruthy(); // a full entry can still shed one
+});
+
+it('labels every control with the item and mod names', async () => {
+  vi.mocked(client.listContent).mockResolvedValue(modOptions as never);
+  const a = blade(true, { mods: [sight] });
+  const b = blade(true, { id: '66666666-6666-4666-8666-666666666666' });
+  const rows = [hostRow(0, a, { mods: [modInfo(sight, 'Fixture sight')] }), hostRow(1, b)];
+  render(<EquipmentPanel view={view([a, b], rows)} onChanged={() => {}} onError={() => {}} onStatus={() => {}} />);
+
+  await screen.findByRole('combobox', { name: 'Attach a mod to Fixture blade (copy 1 of 2)' });
+  expect(screen.getByRole('combobox', { name: 'Attach a mod to Fixture blade (copy 2 of 2)' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Remove mod Fixture sight from Fixture blade (copy 1 of 2)' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Attach to a new copy of Fixture blade (copy 1 of 2)' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Attach to a new copy of Fixture blade (copy 2 of 2)' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Attach a mod to Fixture blade (copy 2 of 2)' })).toBeTruthy();
 });

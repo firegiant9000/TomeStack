@@ -231,7 +231,18 @@ public static partial class CharacterCalculator
     }
 
     private sealed record ResolvedContent(
-        List<ActiveContent> Active, List<ClassInfo> Classes, ClassLevelMap ClassLevels, List<ChoiceStatus> Choices);
+        List<ActiveContent> Active, List<ClassInfo> Classes, ClassLevelMap ClassLevels, List<ChoiceStatus> Choices, IReadOnlyList<ModdedEntry> ModdedEntries);
+
+    /// <summary>
+    /// MECH-X item 3 (R49, R50): one equipped entry of a host item that carries mods and passes the per-entry attunement gate, with the
+    /// admitted mods in order. Mods are leaves: they are never put in <c>active</c>, only this side list, which <c>CollectAttacks</c>,
+    /// <c>AddArmor</c> and <c>CollectModifiers</c> read. <paramref name="EntryIndex"/> is the entry's position in the character's equipment.
+    /// </summary>
+    private sealed record ModdedEntry(int EntryIndex, ActiveContent Host, IReadOnlyList<(ActiveContent Mod, ItemModEffect Effect)> Mods);
+
+    /// <summary>Whether an item revision's v10 <c>item</c> effect needs attunement (a revision below v10 has no typed item effect, so no gate).</summary>
+    private static bool RequiresAttunement(ContentRevision revision) =>
+        revision.Kind == ContentKind.Item && revision.Effects.OfType<ItemEffect>().Any(e => e.RequiresAttunement == true);
 
     /// <summary>
     /// Pins and classes first. Then, in a worklist: content granted by a root (one level deep only: granted content's own
@@ -315,7 +326,7 @@ public static partial class CharacterCalculator
         }
 
         // The attunement gate (Wave 3 item 25): an item that needs attunement applies only while an entry of it is recorded as attuned.
-        bool NeedsAttunement(ActiveContent item) => item.Revision.Kind == ContentKind.Item && item.Revision.Effects.OfType<ItemEffect>().Any(e => e.RequiresAttunement == true);
+        bool NeedsAttunement(ActiveContent item) => RequiresAttunement(item.Revision);
         // R189: content a grant or a choice brings in passes the same gate, through an attuned equipped copy.
         bool AttunedCopyEquipped(ContentReference reference) => character.Equipment.Any(e => e.Equipped && e.Item == reference && e.Attuned == true);
         void NotAttuned(ContentReference reference) =>
@@ -352,6 +363,55 @@ public static partial class CharacterCalculator
                 continue;
             }
             active.Add(item);
+        }
+
+        // MECH-X item 3 (R49 to R52): the mods on equipped entries. Mods are leaves (never in `active`, so a mod's choice, grant or other
+        // effects are never offered or followed); they live in a side list read by three collectors. The host must have been admitted
+        // above, and a host that needs attunement needs this entry attuned (the item-wide gate above stays for the host itself).
+        var modded = new List<ModdedEntry>();
+        var admittedMods = new Dictionary<ContentReference, ActiveContent?>();
+        var ignoredNoted = new HashSet<ContentReference>();
+        for (var index = 0; index < character.Equipment.Count; index++)
+        {
+            var entry = character.Equipment[index];
+            if (!entry.Equipped || entry.Mods is not { Count: > 0 } references)
+                continue;
+            if (active.FirstOrDefault(a => a.Revision.Kind == ContentKind.Item && a.Revision.Reference == entry.Item) is not { } host)
+                continue; // not applied: Admit, the kind check or the item-wide attunement gate above already said why
+            if (NeedsAttunement(host) && entry.Attuned != true)
+            {
+                diagnostics.Add(new("item-mod.host-not-attuned", $"The mods on an equipped copy of '{host.Revision.Name}' add nothing: that copy needs attunement, which is not recorded for it. Mark it attuned in the Inventory.", entry.Item));
+                continue;
+            }
+            var built = new List<(ActiveContent Mod, ItemModEffect Effect)>();
+            foreach (var reference in references)
+            {
+                if (reference is null)
+                    continue;
+                if (!admittedMods.TryGetValue(reference, out var mod))
+                {
+                    mod = Admit(reference, null); // once per reference, so the same mod on two entries explains itself once
+                    admittedMods[reference] = mod;
+                }
+                if (mod is null)
+                    continue;
+                var effects = mod.Revision.Effects.OfType<ItemModEffect>().ToList();
+                if (mod.Revision.Kind != ContentKind.Item || effects.Count != 1 || mod.Revision.SchemaVersion < ContentRevision.ItemModSchemaVersion)
+                {
+                    AddOnce(diagnostics, new("item-mod.not-a-mod", $"'{mod.Revision.Name}' is attached to '{host.Revision.Name}' as a mod but is not one; it adds nothing.", reference));
+                    continue;
+                }
+                var effect = effects[0];
+                if (ignoredNoted.Add(reference) && mod.Revision.Effects.Where(e => e is not (ItemModEffect or ModifierEffect or ItemEffect)).Select(e => e.Type).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList() is { Count: > 0 } ignored)
+                    diagnostics.Add(new("item-mod.effect-ignored", $"The mod '{mod.Revision.Name}' also carries {string.Join(", ", ignored)} effects, which a mod does not use; they are ignored.", reference));
+                var hasWeapon = host.Revision.Effects.OfType<WeaponEffect>().Any(w => w.Automation != AutomationStatus.Reference);
+                var hasArmor = host.Revision.Effects.OfType<ArmorEffect>().Any(a => a.Automation == AutomationStatus.Automatic && a.Timing == EffectTiming.Always);
+                if (effect.Bonus is > 0 && !(effect.AppliesTo is ModTarget.Weapon or ModTarget.Any && hasWeapon) && !(effect.AppliesTo is ModTarget.Armor or ModTarget.Any && hasArmor))
+                    diagnostics.Add(new("item-mod.no-host-effect", $"The mod '{mod.Revision.Name}' has a bonus, but '{host.Revision.Name}' has no {(effect.AppliesTo == ModTarget.Any ? "weapon or armor" : effect.AppliesTo.ToString().ToLowerInvariant())} effect for it to add to; the bonus adds nothing.", reference, effect.Id));
+                built.Add((mod, effect));
+            }
+            if (built.Count > 0)
+                modded.Add(new(index, host, built));
         }
 
         var classes = new List<ClassInfo>();
@@ -491,7 +551,11 @@ public static partial class CharacterCalculator
                         revision.Reference,
                         choice.Id));
                 }
-                choices.Add(new(revision.Reference, revision.Name, choice.ChoiceId, choice.Text, choice.Count, options, applied, resolved));
+                // MECH-X item 2: only a v12 revision's replaceable window counts (below v12 it is never typed); the sheet always carries a max.
+                var replaceable = revision.SchemaVersion >= ContentRevision.ReplaceableChoiceSchemaVersion && choice.Replaceable is { } window
+                    ? window with { Max = window.Max ?? 1 }
+                    : null;
+                choices.Add(new(revision.Reference, revision.Name, choice.ChoiceId, choice.Text, choice.Count, options, applied, resolved, replaceable));
             }
         }
 
@@ -499,7 +563,7 @@ public static partial class CharacterCalculator
             diagnostics.Add(new("choice.orphaned", $"A selection is recorded for choice '{orphan.ChoiceId}' of revision {orphan.Source.RevisionId}, which is not active or does not offer that choice (yet); it is not applied.", orphan.Source));
         CollectScales(active, classLevels, diagnostics);
         CollectValues(active, classLevels, diagnostics);
-        return new(active, classes, classLevels, choices);
+        return new(active, classes, classLevels, choices, modded);
     }
 
     /// <summary>

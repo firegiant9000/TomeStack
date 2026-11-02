@@ -277,3 +277,38 @@ it("removing a pool clears an attack's pool and cost, and removes a modifier tha
   expect(sent.effect('modifier-5')).toBeTruthy();
   expect(sent.count).toBe(3);
 });
+
+// MECH-X item 1 (T5): an attack pays with hit points or a spell slot.
+it('an attack pays with hit points or a slot, drops its pool keys, and keeps what the editor does not touch', async () => {
+  const user = userEvent.setup();
+  const paid: Raw = { ...attack, id: 'attack-2', resourceId: 'focus', cost: '2', automation: 'manual', text: 'Fixture note', flair: [1] };
+  const { rule, checked } = await openDraft(user, [focus, paid]);
+  const a = rule(/^Rule 2: Attack/);
+  await user.selectOptions(a.getByRole('combobox', { name: 'Pays with' }), 'hitPoints');
+  expect(a.queryByRole('combobox', { name: 'Spends from' })).toBeNull();
+  let sent = (await checked()).effect('attack-2') as Raw;
+  expect(sent.payment).toEqual({ kind: 'hitPoints' });
+  expect(sent.resourceId).toBeUndefined();
+  expect(sent).toMatchObject({ cost: '2', automation: 'manual', text: 'Fixture note', flair: [1] });
+  await user.click(a.getByRole('checkbox', { name: 'May drop to 0 hit points' }));
+  expect(((await checked()).effect('attack-2') as Raw).payment).toEqual({ kind: 'hitPoints', mayDropToZero: true });
+
+  await user.selectOptions(a.getByRole('combobox', { name: 'Pays with' }), 'slot');
+  await user.selectOptions(a.getByRole('combobox', { name: 'Lowest slot level' }), '3');
+  sent = (await checked()).effect('attack-2') as Raw;
+  expect(sent.payment).toEqual({ kind: 'slot', minSlotLevel: 3 });
+  expect(sent.cost).toBeUndefined();
+  expect(sent).toMatchObject({ automation: 'manual', flair: [1] });
+
+  await user.selectOptions(a.getByRole('combobox', { name: 'Pays with' }), 'resource');
+  expect('payment' in ((await checked()).effect('attack-2') as Raw)).toBe(false);
+  expect(a.getByRole('combobox', { name: 'Spends from' })).toBeTruthy();
+});
+
+it('a stored attack payment of an unknown kind shows read-only and blocks Save', async () => {
+  const user = userEvent.setup();
+  const { rule } = await openDraft(user, [{ ...attack, payment: { kind: 'mystery' } }]);
+  expect(rule(/^Rule 1: Attack/).getByText(/This payment doesn't read/)).toBeTruthy();
+  expect(rule(/^Rule 1: Attack/).queryByRole('combobox', { name: 'Pays with' })).toBeNull();
+  await waitFor(() => expect(saveBlocked()).toBe(true));
+});

@@ -103,7 +103,7 @@ public enum PlayActionKind
 /// <param name="Replace">With <c>toggleOn</c> of a primary form: switch off the primary of the same group that is on instead of refusing (D43).</param>
 /// <param name="ExpectedUpdatedAt">The <c>Character.UpdatedAt</c> of the copy the page acted on (D43 S2). When sent and not the stored one, the command is refused with <c>character.stale</c> and nothing is written, as <see cref="TomeStackApp.SaveCharacter"/> does. Compound changes require it.</param>
 /// <param name="Responses">D43 S7, with <c>damage</c>: the damage responses chosen for the hit (<c>character.damagePreview</c> lists them). A non-empty list makes the change compound: it needs <paramref name="ExpectedUpdatedAt"/> and is one undo step.</param>
-/// <param name="RollId">D43 S8, with <c>useAction</c> and <paramref name="ContentId"/>: the roll (its <c>rollId</c>) to use.</param>
+/// <param name="RollId">D43 S8, with <c>useAction</c> and <paramref name="ContentId"/>: the roll (its <c>rollId</c>) to use. MECH-X item 1 (R36): else the feature attack with this effect id (a paying attack); a revision where both match is ambiguous and refused <c>use.not-found</c>.</param>
 /// <param name="Clear">D43 S8, with <c>endEncounter</c> only: counting-up pools whose built-up value goes to 0 in the same change, as <c>"{contentId:D}/{resourceId}"</c> (at most 64). Refused <c>play.clear-invalid</c> with any other action or any entry that is not a counting-up pool of the character.</param>
 /// <param name="ContentId">With <paramref name="ResourceId"/>, the resource to spend or regain (the content that defines it).</param>
 public sealed record PlayCommand(
@@ -160,8 +160,15 @@ public sealed partial class TomeStackApp
             throw new AppValidationException([new("play.clear-invalid", "Pools can be cleared only when an encounter ends.")], "play.clear-invalid");
 
         if (command.Action is PlayActionKind.CompanionDamage or PlayActionKind.CompanionHeal or PlayActionKind.CompanionSetHitPoints or PlayActionKind.CompanionSetTemporaryHitPoints)
-            return SaveWithPlay(character with { Play = ChangeCompanion(character, command) }); // a companion's hit points are not the character's: no sheet needed
+        {
+            // A hand companion's hit points are not the character's: no sheet needed. A content companion's maximum is on the sheet.
+            var companionSheet = command.ContentId is null ? null : CharacterCalculator.Calculate(character, _store);
+            return SaveWithPlay(character with { Play = ChangeCompanion(character, command, companionSheet) });
+        }
         var sheet = CharacterCalculator.Calculate(character, _store);
+        // MECH-X item 1: a toggle that pays is compound only once the sheet shows its payment; the stale check above already ran and nothing is written yet.
+        if (command.ExpectedUpdatedAt is null && CompoundUndo(command, sheet).Compound)
+            throw new AppValidationException([new("play.basis-required", "This change needs the character's current state. Reload it and try again.")], "play.basis-required");
         if (command.Action is PlayActionKind.SpendCharge or PlayActionKind.RegainCharge)
             return SaveWithPlay(ChangeCharges(character, sheet, command)); // charges live on the equipment entry, not in the play state
         var play = character.Play;
@@ -338,11 +345,25 @@ public sealed partial class TomeStackApp
                 break;
             }
         }
+        // MECH-X item 1 (R36): RollId names a roll, or else a feature attack by its effect id; where both match it is ambiguous and nothing is used.
+        var attacks = sheet.Attacks?.Where(a => a.Source == AttackSource.Feature && a.Item.ContentId == contentId && a.EffectId == command.RollId).Take(2).ToList() ?? [];
         if (feature is null || roll is null || calculated is null)
-            throw new AppValidationException([new("use.not-found", $"Content {contentId:D} has no roll '{command.RollId}' for this character.")], "use.not-found");
+        {
+            if (attacks.Count != 1)
+                throw new AppValidationException([new("use.not-found", $"Content {contentId:D} has no roll '{command.RollId}' for this character.")], "use.not-found");
+            return UseFeatureAttack(play, sheet, attacks[0], out label);
+        }
+        // Only a paying attack is usable here, so only one can make the roll ambiguous; a plain attack sharing the id never shadows a roll.
+        if (attacks.Any(a => a.Payment is not null))
+            throw new AppValidationException([new("use.not-found", $"Content {contentId:D} has both a roll and an attack '{command.RollId}', so it cannot be told which to use.")], "use.not-found");
         var reference = feature.Content;
         if (!calculated.Available)
             throw new AppValidationException([new("use.unavailable", $"Roll '{roll.Id}' is not available now.", reference, roll.Id)], "use.unavailable");
+        if (calculated.Payment is { } payment)
+        {
+            label = $"use {(string.IsNullOrWhiteSpace(roll.Label) ? roll.RollId : roll.Label)}";
+            return Pay(play, sheet, payment, PaymentAmount(sheet, payment, roll, calculated, command, reference), reference, roll.Id);
+        }
 
         var changes = new List<PoolChange>();
         if (roll.ResourceId is { } ownPool)
@@ -405,6 +426,54 @@ public sealed partial class TomeStackApp
     }
 
     /// <summary>
+    /// MECH-X item 1 (R34): what a paying roll pays. A slot payment is one slot (the amount is ignored). A hit-point payment is the
+    /// evaluated cost, or for a per-unit roll the amount sent (bounded as a pool's is, with no maximum); a cost that did not calculate
+    /// refuses with the calculation's own diagnostic, and an amount of 0 changes nothing, so it is refused (<c>use.unavailable</c>).
+    /// </summary>
+    private static int PaymentAmount(CharacterSheet sheet, PaymentValue payment, RollEffect roll, FeatureEffect calculated, PlayCommand command, ContentReference reference)
+    {
+        if (payment.Kind == PaymentKind.Slot)
+            return 1;
+        if (roll.Cost is not null && calculated.Cost is null)
+            throw CostNotCalculated(sheet, reference, roll.Id, "roll");
+        var amount = calculated.Cost ?? 0;
+        if (calculated.PerUnit is { } perUnit)
+        {
+            amount = command.Amount;
+            if (PerUnitRangeProblem(roll.Id, reference, amount, calculated.Cost ?? 0, perUnit, null) is { } outOfRange)
+                throw new AppValidationException([outOfRange], outOfRange.Code);
+        }
+        if (amount <= 0)
+            throw new AppValidationException([new("use.unavailable", $"Using '{roll.Id}' would pay nothing.", reference, roll.Id)], "use.unavailable");
+        return amount;
+    }
+
+    /// <summary>The refusal for a cost formula that did not calculate: the sheet's own <c>effect.invalid-formula</c> diagnostic for that content and effect.</summary>
+    private static AppValidationException CostNotCalculated(CharacterSheet sheet, ContentReference reference, string effectId, string noun)
+    {
+        var failure = sheet.Diagnostics.FirstOrDefault(d => d.Code == "effect.invalid-formula" && d.Content == reference && d.EffectId == effectId)
+            ?? new Diagnostic("effect.invalid-formula", $"The cost of {noun} '{effectId}' could not be calculated.", reference, effectId);
+        return new AppValidationException([failure], failure.Code);
+    }
+
+    /// <summary>
+    /// MECH-X item 1 (R36): <c>useAction</c> of a feature attack by its effect id. Only a paying attack that is available can be used
+    /// here (an attack with a pool cost spends through its roll's Spend button, unchanged); the payment is made through <see cref="Pay"/>.
+    /// </summary>
+    private static PlayState UseFeatureAttack(PlayState play, CharacterSheet sheet, AttackEntry attack, out string label)
+    {
+        label = $"use {attack.Name}";
+        if (attack.Payment is not { } payment || !attack.Available)
+            throw new AppValidationException([new("use.unavailable", $"Attack '{attack.EffectId}' cannot be used now.", attack.Item, attack.EffectId)], "use.unavailable");
+        if (payment.Kind == PaymentKind.HitPoints && attack.Cost is null)
+            throw CostNotCalculated(sheet, attack.Item, attack.EffectId, "attack");
+        var amount = payment.Kind == PaymentKind.Slot ? 1 : attack.Cost ?? 0;
+        if (amount <= 0)
+            throw new AppValidationException([new("use.unavailable", $"Using '{attack.EffectId}' would pay nothing.", attack.Item, attack.EffectId)], "use.unavailable");
+        return Pay(play, sheet, payment, amount, attack.Item, attack.EffectId);
+    }
+
+    /// <summary>
     /// <c>character.undoPlay</c> (D43 S2, D44): puts the play state back to what the last compound change started from. One level,
     /// in memory, and only while nothing else has written the character. Refused, writing nothing, in this order: without
     /// <c>confirm</c> (<c>undo.confirmation-required</c>); unknown character (<c>character.not-found</c>); a page stamp that is not the
@@ -442,6 +511,10 @@ public sealed partial class TomeStackApp
     {
         PlayActionKind.ToggleOn when command.Replace => (true,
             sheet?.Toggles?.FirstOrDefault(t => t.Content.ContentId == command.ContentId && t.ToggleId == command.ToggleId) is { } switched ? $"switch to {switched.Label}" : null),
+        // MECH-X item 1 (R36): switching on a toggle that pays hit points or a slot also changes them, so it is one compound change. Only the
+        // calculated sheet knows (the pre-sheet stamp check answers false); Play repeats the basis check once it has the sheet.
+        PlayActionKind.ToggleOn when sheet?.Toggles?.FirstOrDefault(t => t.Content.ContentId == command.ContentId && t.ToggleId == command.ToggleId) is { Payment: not null } paying =>
+            (true, $"switch on {paying.Label}"),
         PlayActionKind.StartEncounter => (true, "start encounter"),
         PlayActionKind.EndEncounter => (true, "end encounter"),
         // D43 S7: a damage with responses decides several writes from one preview. Its label ("damage 15 fire (7 taken)") needs the outcome, so Play builds it.
@@ -491,13 +564,31 @@ public sealed partial class TomeStackApp
     /// unchanged when not sent). Set temporary takes only the temporary hit points and keeps the stored current. Current at the maximum is stored as null, and an entry that says nothing (null, 0) is dropped.
     /// Errors are codes only; the companion's name never appears in them.
     /// </summary>
-    private static PlayState ChangeCompanion(Character character, PlayCommand command)
+    private static PlayState ChangeCompanion(Character character, PlayCommand command, CharacterSheet? sheet)
     {
-        var companion = command.CompanionId is { } id ? character.Companions?.FirstOrDefault(c => c.Id == id) : null;
-        if (companion is null)
-            throw new AppValidationException([new("play.companion-unknown", "This character has no such companion.")]);
-        var recorded = character.Play.Companions?.FirstOrDefault(p => p.Id == companion.Id);
-        var maximum = companion.HitPointMaximum;
+        // MECH-X item 4: with a content id the companion is a card on the sheet (keyed by content id and companion id); without, a hand companion.
+        int maximum;
+        Guid companionId;
+        Guid? contentId = command.ContentId;
+        if (contentId is null)
+        {
+            var companion = command.CompanionId is { } id ? character.Companions?.FirstOrDefault(c => c.Id == id) : null;
+            if (companion is null)
+                throw new AppValidationException([new("play.companion-unknown", "This character has no such companion.")]);
+            maximum = companion.HitPointMaximum;
+            companionId = companion.Id;
+        }
+        else
+        {
+            var card = command.CompanionId is { } cardId
+                ? sheet?.Companions?.FirstOrDefault(c => c.Content.ContentId == contentId && c.CompanionId == cardId)
+                : null;
+            if (card?.HitPointMaximum is not { } cardMaximum)
+                throw new AppValidationException([new("play.companion-unknown", "This character has no such companion.")]);
+            maximum = cardMaximum;
+            companionId = card.CompanionId;
+        }
+        var recorded = character.Play.Companions?.FirstOrDefault(p => p.Id == companionId && p.ContentId == contentId);
         var current = Math.Min(recorded?.Current ?? maximum, maximum); // a maximum lowered since is respected
         var temporary = recorded?.Temporary ?? 0;
         switch (command.Action)
@@ -522,9 +613,9 @@ public sealed partial class TomeStackApp
                 temporary = command.Temporary ?? temporary;
                 break;
         }
-        var entry = new CompanionPlay(companion.Id, current >= maximum ? null : current, temporary);
-        var others = character.Play.Companions?.Where(p => p.Id != companion.Id).ToList() ?? [];
-        List<CompanionPlay> all = recorded is null ? [.. others, entry] : character.Play.Companions!.Select(p => p.Id == companion.Id ? entry : p).ToList();
+        var entry = new CompanionPlay(companionId, current >= maximum ? null : current, temporary, contentId);
+        var others = character.Play.Companions?.Where(p => p.ContentId != contentId || p.Id != companionId).ToList() ?? [];
+        List<CompanionPlay> all = recorded is null ? [.. others, entry] : character.Play.Companions!.Select(p => p.ContentId == contentId && p.Id == companionId ? entry : p).ToList();
         return character.Play with { Companions = entry is { Current: null, Temporary: 0 } ? others : all };
     }
 
@@ -581,6 +672,10 @@ public sealed partial class TomeStackApp
         var declaresCost = _store.FindRevision(toggle.Content)?.Effects.OfType<ToggleEffect>().FirstOrDefault(t => t.Id == toggle.EffectId)?.Cost is not null;
         if (declaresCost && toggle.Cost is null)
             throw new AppValidationException([new("effect.invalid-formula", $"The cost of '{toggle.Label}' ({toggle.ToggleId}) could not be calculated, so it cannot be turned on.", toggle.Content, toggle.EffectId)]);
+        // MECH-X item 1 (S9): a toggle that pays hit points or a slot pays through Pay, checked again on the sheet it was decided on; a
+        // hit-point cost of 0 turns it on and pays nothing, as a pool toggle does. The Pay is the compound change Play labelled.
+        if (toggle.Payment is { } payment)
+            return Pay(candidate, sheet, payment, payment.Kind == PaymentKind.Slot ? 1 : toggle.Cost ?? 0, toggle.Content, toggle.EffectId);
         var amount = toggle.Cost ?? 1;
         if (toggle.ResourceId is { } resourceId && amount > 0)
             candidate = ChangeResource(candidate, sheet, new(command.CharacterId, PlayActionKind.Spend, Confirm: true, Amount: amount, ContentId: toggle.CostResourceContent ?? toggle.Content.ContentId, ResourceId: resourceId));

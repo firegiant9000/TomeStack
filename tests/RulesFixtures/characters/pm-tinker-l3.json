@@ -1,0 +1,95 @@
+{
+  "id": "6a7e0ca0-0000-4000-8000-000000000001",
+  "schemaVersion": 11,
+  "name": "Testy Tinker (item mods fixture, schema v11)",
+  "rulesFamily": "srd-5.2.1",
+  "level": 3,
+  "classes": [
+    { "class": { "contentId": "5f6dc000-0000-4000-8000-000000000011", "revisionId": "5f6de000-0000-4000-8000-000000000011" }, "level": 3 }
+  ],
+  "choices": [],
+  "spells": [],
+  "crossFamilyExceptions": [],
+  "campaignExceptions": [],
+  "baseAbilities": {
+    "str": 14,
+    "dex": 14,
+    "con": 12,
+    "int": 10,
+    "wis": 10,
+    "cha": 8
+  },
+  "pins": [],
+  "overrides": [],
+  "play": {
+    "temporaryHitPoints": 0,
+    "resources": [],
+    "conditions": [],
+    "exhaustion": 0,
+    "hitDiceSpent": [],
+    "deathSaves": {
+      "successes": 0,
+      "failures": 0
+    },
+    "inspiration": false,
+    "spellSlotsSpent": [],
+    "pactSlotsSpent": 0,
+    "toggles": []
+  },
+  "equipment": [
+    {
+      "item": { "contentId": "6a7e00f3-0000-4000-8000-000000000011", "revisionId": "6a7e00f3-0000-4000-8000-000000000111" },
+      "equipped": true,
+      "quantity": 1,
+      "id": "6a7e0ca0-0000-4000-8000-0000000000a1"
+    },
+    {
+      "item": { "contentId": "6a7e00f3-0000-4000-8000-000000000011", "revisionId": "6a7e00f3-0000-4000-8000-000000000111" },
+      "equipped": true,
+      "quantity": 1,
+      "id": "6a7e0ca0-0000-4000-8000-0000000000a2",
+      "mods": [
+        { "contentId": "6a7e00f3-0000-4000-8000-000000000001", "revisionId": "6a7e00f3-0000-4000-8000-000000000101" }
+      ]
+    },
+    {
+      "item": { "contentId": "6a7e00f3-0000-4000-8000-000000000012", "revisionId": "6a7e00f3-0000-4000-8000-000000000112" },
+      "equipped": true,
+      "quantity": 1,
+      "id": "6a7e0ca0-0000-4000-8000-0000000000a3",
+      "mods": [
+        { "contentId": "6a7e00f3-0000-4000-8000-000000000002", "revisionId": "6a7e00f3-0000-4000-8000-000000000102" }
+      ]
+    },
+    {
+      "item": { "contentId": "6a7e00f3-0000-4000-8000-000000000013", "revisionId": "6a7e00f3-0000-4000-8000-000000000113" },
+      "equipped": true,
+      "quantity": 1
+    },
+    {
+      "item": { "contentId": "6a7e00f3-0000-4000-8000-000000000014", "revisionId": "6a7e00f3-0000-4000-8000-000000000114" },
+      "equipped": true,
+      "quantity": 1,
+      "id": "6a7e0ca0-0000-4000-8000-0000000000a4",
+      "attuned": true
+    },
+    {
+      "item": { "contentId": "6a7e00f3-0000-4000-8000-000000000014", "revisionId": "6a7e00f3-0000-4000-8000-000000000114" },
+      "equipped": true,
+      "quantity": 1,
+      "id": "6a7e0ca0-0000-4000-8000-0000000000a5",
+      "mods": [
+        { "contentId": "6a7e00f3-0000-4000-8000-000000000003", "revisionId": "6a7e00f3-0000-4000-8000-000000000103" }
+      ]
+    }
+  ],
+  "currency": {
+    "cp": 0,
+    "sp": 0,
+    "ep": 0,
+    "gp": 0,
+    "pp": 0
+  },
+  "notes": [],
+  "updatedAt": "2026-10-28T00:00:00+00:00"
+}

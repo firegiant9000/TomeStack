@@ -18,6 +18,7 @@
   { "action": "spendPactSlot", "compound": false },
   { "action": "regainPactSlot", "compound": false },
   { "action": "toggleOn", "replace": false, "compound": false },
+  { "action": "toggleOn", "replace": false, "paying": true, "compound": true },
   { "action": "toggleOn", "replace": true, "compound": true },
   { "action": "toggleOff", "compound": false },
   { "action": "startConcentration", "compound": false },

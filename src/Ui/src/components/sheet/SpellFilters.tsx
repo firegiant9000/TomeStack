@@ -9,18 +9,20 @@ export interface SpellFilterState {
   casting: CastingBucket[];
   concentration: Tri;
   ritual: Tri;
+  /** MECH-X item 1 (R39): the ticked spell tags. */
+  tags: string[];
 }
 
-export const noFilters: SpellFilterState = { levels: [], schools: [], casting: [], concentration: 'any', ritual: 'any' };
+export const noFilters: SpellFilterState = { levels: [], schools: [], casting: [], concentration: 'any', ritual: 'any', tags: [] };
 
 export const filtersActive = (f: SpellFilterState): boolean =>
-  f.levels.length > 0 || f.schools.length > 0 || f.casting.length > 0 || f.concentration !== 'any' || f.ritual !== 'any';
+  f.levels.length > 0 || f.schools.length > 0 || f.casting.length > 0 || f.concentration !== 'any' || f.ritual !== 'any' || f.tags.length > 0;
 
 const tri = (t: Tri): boolean | undefined => (t === 'any' ? undefined : t === 'yes');
 
 /** The input for `filterSpells`: the text query plus these choices. */
 export const toSpellFilter = (text: string, f: SpellFilterState): SpellFilter => ({
-  text, levels: f.levels, schools: f.schools, casting: f.casting, concentration: tri(f.concentration), ritual: tri(f.ritual),
+  text, levels: f.levels, schools: f.schools, casting: f.casting, concentration: tri(f.concentration), ritual: tri(f.ritual), tags: f.tags,
 });
 
 const castingLabels: [CastingBucket, string][] = [
@@ -34,6 +36,13 @@ const castingLabels: [CastingBucket, string][] = [
 function schoolsPresent(spells: SpellEntry[]): string[] {
   const seen = new Map<string, string>();
   for (const s of spells) if (s.school && !seen.has(foldName(s.school))) seen.set(foldName(s.school), s.school);
+  return [...seen.values()].sort((a, b) => a.localeCompare(b));
+}
+
+/** The tags present, compared case-insensitively; the first spelling seen is shown. The group is drawn only when this is not empty. */
+function tagsPresent(spells: SpellEntry[]): string[] {
+  const seen = new Map<string, string>();
+  for (const s of spells) for (const t of s.tags ?? []) if (!seen.has(foldName(t))) seen.set(foldName(t), t);
   return [...seen.values()].sort((a, b) => a.localeCompare(b));
 }
 
@@ -55,6 +64,7 @@ export function SpellFilters(props: {
 }) {
   const { value, onChange } = props;
   const schools = schoolsPresent(props.spells);
+  const tags = tagsPresent(props.spells);
   const panelId = `${props.id}-panel`;
   const triSelect = (key: 'concentration' | 'ritual', label: string) => (
     <div className="spell-filter-select">
@@ -110,6 +120,24 @@ export function SpellFilters(props: {
               </label>
             ))}
           </fieldset>
+          {tags.length > 0 && (
+            <fieldset>
+              <legend>Tags</legend>
+              {tags.map((tag) => {
+                const ticked = value.tags.some((t) => foldName(t) === foldName(tag));
+                return (
+                  <label key={foldName(tag)} className="choice">
+                    <input
+                      type="checkbox"
+                      checked={ticked}
+                      onChange={() => onChange({ ...value, tags: ticked ? value.tags.filter((t) => foldName(t) !== foldName(tag)) : [...value.tags, tag] })}
+                    />
+                    {tag}
+                  </label>
+                );
+              })}
+            </fieldset>
+          )}
           {triSelect('concentration', 'Concentration')}
           {triSelect('ritual', 'Ritual')}
           <button type="button" onClick={() => onChange(noFilters)}>
