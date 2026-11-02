@@ -180,7 +180,7 @@ public sealed partial class PackageService
     /// existing source's redistributable flag. A source that ends up with a PDF is import-derived, which also covers a
     /// v6 backup written before the flag existed.
     /// </summary>
-    private SourceRecord Merged(SourceRecord imported, SourceRecord? local, PackageScope scope, Guid? attachmentId)
+    private static SourceRecord Merged(SourceRecord imported, SourceRecord? local, PackageScope scope, Guid? attachmentId)
     {
         var library = scope == PackageScope.Library;
         // A backup whose source had a PDF is evidence even when the PDF does not come back (an unsafe linked path).
