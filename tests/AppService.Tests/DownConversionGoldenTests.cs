@@ -179,6 +179,7 @@ public class DownConversionGoldenTests
                 {
                     ContentId = Guid.Parse("c1050000-0000-4000-8000-0000000000c9"),
                     RevisionId = Guid.Parse("c1050000-0000-4000-8000-0000000000e9"),
+                    SchemaVersion = 11, // the version the goldens were made at; not CurrentSchemaVersion, which moves
                     Kind = ContentKind.Class,
                     Name = "Compat Test Class",
                     RulesFamilies = [RulesFamilies.Srd51],

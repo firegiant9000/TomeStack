@@ -496,7 +496,7 @@ public class DownConversionExportTests
     public void CanonicalBytes_and_CopyId_are_pinned()
     {
         var root = Guid.Parse("c1000000-0000-4000-8000-000000000001");
-        var copy = CompatFeat(Guid.Parse("c100e000-0000-4000-8000-0000000000cc"), new() { ["someOtherKey"] = JsonDocument.Parse("1").RootElement.Clone() });
+        var copy = CompatFeat(Guid.Parse("c100e000-0000-4000-8000-0000000000cc"), new() { ["someOtherKey"] = JsonDocument.Parse("1").RootElement.Clone() }) with { SchemaVersion = 11 }; // fixed, not the moving current version
 
         var bytes = DownConversion.CanonicalBytes(copy);
 
@@ -538,6 +538,7 @@ public class DownConversionExportTests
     {
         ContentId = FeatureContent,
         RevisionId = revisionId ?? FeatureRevision,
+        SchemaVersion = 11,
         Kind = ContentKind.Feature,
         Name = "Compat Steady Hands",
         RulesFamilies = [RulesFamilies.Srd51],
@@ -727,7 +728,7 @@ public class DownConversionExportTests
         Assert.Null(DownConversion.ReadMarker(With("""{"revisionId":"c100e000-0000-4000-8000-0000000000f1"}""")));
         Assert.Null(DownConversion.ReadMarker(With("""{"revisionId":"c100e000-0000-4000-8000-0000000000f1","schemaVersion":11,"x":1}""")));
         Assert.Null(DownConversion.ReadMarker(With("""{"revisionId":"nope","schemaVersion":11}""")));
-        Assert.Null(DownConversion.ReadMarker(With("""{"revisionId":"c100e000-0000-4000-8000-0000000000f1","schemaVersion":12}""")));
+        Assert.Null(DownConversion.ReadMarker(With("""{"revisionId":"c100e000-0000-4000-8000-0000000000f1","schemaVersion":""" + (ContentRevision.CurrentSchemaVersion + 1).ToString(System.Globalization.CultureInfo.InvariantCulture) + "}")));
         Assert.Null(DownConversion.ReadMarker(With("""{"revisionId":"c100e000-0000-4000-8000-0000000000f1","schemaVersion":0}""")));
         Assert.Null(DownConversion.ReadMarker(With("""{"revisionId":"c100e000-0000-4000-8000-0000000000f1","schemaVersion":"11"}""")));
         Assert.Null(DownConversion.ReadMarker(With("[1]")));

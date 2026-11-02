@@ -70,7 +70,9 @@
       { "feature": "attack.payment", "rule": "below.payment" },
       { "feature": "toggle.payment", "rule": "below.payment" },
       { "feature": "roll.castsSpell", "rule": "below.casts-spell" },
-      { "feature": "payment.kind:resource", "rule": "below.v12-key" }
+      { "feature": "roll.payment.kind:resource", "rule": "below.v12-key" },
+      { "feature": "attack.payment.kind:resource", "rule": "below.v12-key" },
+      { "feature": "toggle.payment.kind:resource", "rule": "below.v12-key" }
     ]
   },
   "character": {
@@ -93,7 +95,7 @@
     ],
     "11": [
       { "feature": "equipment[].mods", "rule": "below.item-mods" },
-      { "feature": "equipment[].mods:copies", "rule": "below.item-mod-copies" },
+      { "feature": "equipment[].mods", "rule": "below.item-mod-copies" },
       { "feature": "play.companions[].contentId", "rule": "below.companion-content" }
     ]
   }

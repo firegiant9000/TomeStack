@@ -17,8 +17,10 @@ public sealed class SchemaCoverageTests
     {
         { "content", 9, 10 },
         { "content", 10, 11 },
+        { "content", 11, 12 },
         { "character", 8, 9 },
         { "character", 9, 10 },
+        { "character", 10, 11 },
     };
 
     /// <summary>One case per (kind, version) block of requires-vN.json.</summary>
