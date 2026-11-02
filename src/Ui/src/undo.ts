@@ -1,4 +1,5 @@
 import type { CharacterView, PlayAction } from './api/types';
+import { paying } from './payment';
 
 export interface UndoEntry {
   /** What is undone, for the button's name ("damage 12"). */
@@ -15,8 +16,8 @@ export interface UndoEntry {
  * D43 S3 adds starting and ending an encounter; slice 7 adds damage with responses; slice 8 adds `useAction`. The server's switch
  * (`CompoundUndo` in Play.cs) and this one are checked against `tests/RulesFixtures/compound-play-actions.json`.
  */
-export const isCompound = (action: PlayAction): boolean =>
-  (action.action === 'toggleOn' && !!action.replace) ||
+export const isCompound = (action: PlayAction, view?: CharacterView): boolean =>
+  (action.action === 'toggleOn' && (!!action.replace || paying(findToggle(view, action)?.payment))) ||
   action.action === 'startEncounter' ||
   action.action === 'endEncounter' ||
   action.action === 'useAction' ||
@@ -35,8 +36,8 @@ const droppedOthers = (action: PlayAction, before: CharacterView, after: Charact
       !(o.content.contentId === action.contentId && o.toggleId === action.toggleId) &&
       after.sheet.toggles?.some((n) => n.content.contentId === o.content.contentId && n.toggleId === o.toggleId && !n.on),
   );
-const findToggle =(view: CharacterView, toggle: PlayAction) =>
-  view.sheet.toggles?.find((t) => t.content.contentId === toggle.contentId && t.toggleId === toggle.toggleId);
+const findToggle = (view: CharacterView | undefined, toggle: PlayAction) =>
+  view?.sheet.toggles?.find((t) => t.content.contentId === toggle.contentId && t.toggleId === toggle.toggleId);
 
 /**
  * D23 (owner, 2026-10-06): undo is the inverse play command, computed from the view before and after, never a stored
@@ -48,7 +49,7 @@ const findToggle =(view: CharacterView, toggle: PlayAction) =>
  * by concentrating on the earlier one. A change that changed nothing (a condition already held) has no entry.
  */
 export function inverseOf(action: PlayAction, before: CharacterView, after: CharacterView): UndoEntry | undefined {
-  if (isCompound(action)) return undefined; // D44: the service undoes it (`undoLabel`), exactly
+  if (isCompound(action, before)) return undefined; // D44: the service undoes it (`undoLabel`), exactly
   // Wave 3 item 21: typed damage names its type and what was taken after defences ("damage 13 slashing (6 taken)"); untyped keeps "damage 12".
   const typed = action.action === 'damage' && after.damage?.type ? ` ${after.damage.type} (${after.damage.adjusted} taken)` : '';
   const label = `${action.action === 'setTemporaryHitPoints' ? 'temporary hit points' : action.action.replace(/[A-Z]/g, (c) => ` ${c.toLowerCase()}`)}${action.amount !== undefined ? ` ${action.amount}` : ''}${typed}${action.condition ? ` ${action.condition}` : ''}`;
@@ -112,6 +113,8 @@ export function inverseOf(action: PlayAction, before: CharacterView, after: Char
     case 'toggleOff': {
       // Switching a resource-backed toggle back on would spend a use the player did not spend, so it is not undoable.
       if (backing(action)) return undefined;
+      // MECH-X item 1 (R36): switching a hit-point or slot paying toggle back on would pay again.
+      if (paying(findToggle(before, action)?.payment)) return undefined;
       // A timed toggle that is counting its rounds would restart at the full duration if switched back on, and toggleOff is not compound (no service undo), so it cannot be undone.
       if (before.character.play?.toggles?.some((t) => t.contentId === action.contentId && t.toggleId === action.toggleId && t.roundsLeft != null)) return undefined;
       return droppedOthers(action, before, after) ? undefined : entry([{ action: 'toggleOn', contentId: action.contentId, toggleId: action.toggleId }]);
@@ -123,6 +126,11 @@ export function inverseOf(action: PlayAction, before: CharacterView, after: Char
       // Wave 3 item 23: a companion's hit points are put back exactly, current and temporary both. No recorded entry means at the
       // maximum with none temporary. A change that left both as they were, or a companion the view no longer has, has no entry.
       const state = (v: CharacterView) => {
+        // MECH-X item 4: a content companion (the action names its content) is read from the sheet, which carries its current and temporary.
+        if (action.contentId) {
+          const value = v.sheet.companions?.find((c) => c.content.contentId === action.contentId && c.companionId === action.companionId);
+          return value && value.hitPointMaximum != null ? { current: value.current, temporary: value.temporary } : undefined;
+        }
         const companion = v.character.companions?.find((c) => c.id === action.companionId);
         if (!companion) return undefined;
         const recorded = v.character.play?.companions?.find((c) => c.id === action.companionId);
@@ -131,7 +139,7 @@ export function inverseOf(action: PlayAction, before: CharacterView, after: Char
       const was = state(before);
       const now = state(after);
       if (!was || !now || (was.current === now.current && was.temporary === now.temporary)) return undefined;
-      return entry([{ action: 'companionSetHitPoints', companionId: action.companionId, amount: was.current, temporary: was.temporary }]);
+      return entry([{ action: 'companionSetHitPoints', ...(action.contentId ? { contentId: action.contentId } : {}), companionId: action.companionId, amount: was.current, temporary: was.temporary }]);
     }
     case 'spendCharge':
     case 'regainCharge': {

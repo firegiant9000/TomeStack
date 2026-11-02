@@ -279,3 +279,78 @@ it('resolves a toggle to the play change it sends, and leaves auto and grouped o
   expect(pinnable(view({ toggles: [off] }), pin)).toBe(true);
   expect(pinnable(view(), pin)).toBe(false);
 });
+
+// MECH-X item 1 (R37): the quickbar never pays hit points or a slot.
+const hpPay = { kind: 'hitPoints', payable: true };
+const slotPay = { kind: 'slot', payable: true };
+
+it('a paying roll with dice pins as a plain roll: no "and spend", and a press only rolls (R37)', () => {
+  const e = effect({ resourceId: undefined, cost: 3, payment: hpPay, rollId: 'wave-roll' });
+  const got = resolvePin(view({ features: [feature([e])] }), { kind: 'roll', contentId: 'c1', effectId: 'wave' })!;
+  expect(got.name).toBe('Roll Tide Wave');
+  expect(got.spends).toBe(false);
+  expect(got.action).toBeUndefined();
+  expect(got.target).toEqual({ content: ref, effectId: 'wave' });
+});
+
+it('a paying roll with no dice cannot be pinned, so one tap never pays (R37)', () => {
+  const e = effect({ resourceId: undefined, dice: undefined, cost: 3, payment: slotPay, rollId: 'wave-roll' });
+  const v = view({ features: [feature([e])] });
+  expect(resolvePin(v, { kind: 'roll', contentId: 'c1', effectId: 'wave' })).toBeUndefined();
+  expect(pinnable(v, { kind: 'roll', contentId: 'c1', effectId: 'wave' })).toBe(false);
+});
+
+it('a paying feature attack pins as a plain roll with no "and spend" (R37)', () => {
+  const a = featureAttack({ resourceId: null, costResourceContent: null, cost: 4, payment: hpPay });
+  const got = resolvePin(view({ attacks: [a] }), { kind: 'attack', contentId: 'c1', effectId: 'lash' })!;
+  expect(got.name).toBe('Roll Testy Lash attack');
+  expect(got.spends).toBe(false);
+});
+
+it('a paying toggle cannot be pinned (S4), but a pool toggle still can', () => {
+  const paying = toggle({ cost: 2, payment: hpPay });
+  expect(resolvePin(view({ toggles: [paying] }), { kind: 'toggle', contentId: 'c1', effectId: 'e-form' })).toBeUndefined();
+  expect(resolvePin(view({ toggles: [toggle({ resourceId: 'focus', cost: 2 })] }), { kind: 'toggle', contentId: 'c1', effectId: 'e-form' })).toBeDefined();
+});
+
+it('quickbar hides an attack pin whose row has companionId', () => {
+  const own = featureAttack({ companionId: 'g1' });
+  expect(resolvePin(view({ attacks: [own] }), attackPin(own))).toBeUndefined();
+  const plain = featureAttack();
+  expect(resolvePin(view({ attacks: [plain] }), attackPin(plain))).toBeDefined();
+});
+
+// MECH-X R68: a pin made from a copy's row keeps the copy, rolls it, and resolves the way the service rolls it.
+it('an attack pin from a copy of a weapon keeps its entry index and rolls that copy', () => {
+  const first = weapon({ entryIndex: 0, toHit: 5 });
+  const second = weapon({ entryIndex: 2, toHit: 7 });
+  const pin = attackPin(second);
+  expect(pin).toEqual({ kind: 'attack', contentId: 'w1', effectId: 'attack', entryIndex: 2 });
+  expect(pinKey(pin)).not.toBe(pinKey(attackPin(first)));
+  expect(attackPin(weapon())).toEqual({ kind: 'attack', contentId: 'w1', effectId: 'attack' });
+
+  const both = view({ attacks: [first, second] });
+  expect(resolvePin(both, pin)!.target).toEqual({ weapon: second.item, entryIndex: 2 });
+  expect(resolvePin(both, { kind: 'attack', contentId: 'w1', effectId: 'attack' })!.target).toEqual({ weapon: first.item, entryIndex: 0 }); // an older pin: the first row
+  // The copies no longer differ: the one plain row. The copy is gone while others differ: nothing (the pin is kept, R14).
+  expect(resolvePin(view({ attacks: [weapon()] }), pin)!.target).toEqual({ weapon: first.item });
+  expect(resolvePin(view({ attacks: [first, weapon({ entryIndex: 3 })] }), pin)).toBeUndefined();
+});
+
+it('stores an attack pin entry index and drops a bad one or one on another kind', () => {
+  writePins('c1', [{ kind: 'attack', contentId: 'w1', effectId: 'attack', entryIndex: 2 }]);
+  expect(readPins('c1')).toEqual([{ kind: 'attack', contentId: 'w1', effectId: 'attack', entryIndex: 2 }]);
+  localStorage.setItem(
+    'tomestack.quickbar.c1',
+    JSON.stringify([
+      { kind: 'attack', contentId: 'w1', effectId: 'attack', entryIndex: -1 },
+      { kind: 'attack', contentId: 'w2', effectId: 'attack', entryIndex: 1.5 },
+      { kind: 'roll', contentId: 'c1', effectId: 'wave', entryIndex: 1 },
+    ]),
+  );
+  expect(readPins('c1')).toEqual([
+    { kind: 'attack', contentId: 'w1', effectId: 'attack' },
+    { kind: 'attack', contentId: 'w2', effectId: 'attack' },
+    { kind: 'roll', contentId: 'c1', effectId: 'wave' },
+  ]);
+});

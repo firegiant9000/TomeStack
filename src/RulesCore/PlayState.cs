@@ -25,6 +25,9 @@ public sealed record PlayState
     /// <summary>A bound on spent slots of one level (untrusted input); overrides can raise a maximum, never past this.</summary>
     public const int MaxSlots = 100;
 
+    /// <summary>MECH-X item 4: the most companion play rows (hand and content) a character records.</summary>
+    public const int MaxCompanionRows = 64;
+
     /// <summary>Current hit points; <c>null</c> means at the maximum, so a character keeps full hit points when it levels up.</summary>
     public int? CurrentHitPoints { get; init; }
 
@@ -174,7 +177,12 @@ public sealed record PlayState
                 yield return new("play.companion-invalid", $"A companion's current and temporary hit points must be between 0 and {MaxHitPoints}.");
             if (companions.Any(c => c is not null && c.Id == Guid.Empty))
                 yield return new("play.companion-id-missing", "A companion's hit points are recorded without the companion's id.");
-            if (companions.OfType<CompanionPlay>().GroupBy(c => c.Id).Any(g => g.Count() > 1))
+            var rows = companions.OfType<CompanionPlay>().ToList();
+            if (rows.Any(c => c.ContentId == Guid.Empty))
+                yield return new("play.companion-content-missing", "A content companion's hit points are recorded without the content's id.");
+            if (rows.Count > MaxCompanionRows)
+                yield return new("play.companion-too-many", $"At most {MaxCompanionRows} companions' hit points can be recorded.");
+            if (rows.GroupBy(c => (c.ContentId, c.Id)).Any(g => g.Count() > 1))
                 yield return new("play.companion-duplicate", "A companion's hit points are recorded more than once.");
         }
     }

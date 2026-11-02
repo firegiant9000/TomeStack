@@ -7,9 +7,11 @@ import { SettingsPanel } from './components/SettingsPanel';
 import type { BuilderMode } from './components/CharacterBuilder';
 import { CharacterSheet } from './components/CharacterSheet';
 import { HomePanel } from './components/HomePanel';
+import { companionPrunedText } from './companionNotice';
 import { readFileAsBase64 } from './files';
 import { isTypingTarget } from './keys';
 import { diffLevelUp, dismissChecklist, writeChecklist } from './levelUpChecklist';
+import { noticeText } from './replaceable';
 import { applyPreferences, setSidebarCollapsed, sidebarCollapsed } from './settings';
 import type { SheetTabId } from './sheetTab';
 
@@ -371,14 +373,26 @@ export function App() {
                     dismissChecklist(view.character.id);
                   }
                 }
+                // MECH-X item 2: the save's advisory notice (picks replaced outside their window), worded from the sheets. It never blocks.
+                let notice: string | undefined;
+                try {
+                  notice = builder.kind === 'create' ? undefined : noticeText(builder.view, view);
+                } catch {
+                  notice = view.notices?.some((n) => n.code === 'choice.replaced-outside-window') ? 'A choice had picks replaced outside its window.' : undefined; // the save landed; the wording must not block the screen (R39)
+                }
+                // MECH-X R69: the save reset content companions' hit points; the sheet this opens leaves its first view to us.
+                const pruned = companionPrunedText(view);
+                if (pruned) notice = notice ? `${notice} ${pruned}` : pruned;
                 if (stillHere) {
                   setMessage(undefined);
+                  if (notice) setMessage({ tone: 'status', text: notice }); // after the clear above, or it is wiped
                   setScreen(builder.kind === 'levelUp' ? { kind: 'sheet', view, tab: 'features', levelledUp: true } : { kind: 'sheet', view });
                 } else {
-                  setMessage({ tone: 'status', text: `Saved ${view.character.name}.` });
+                  setMessage({ tone: 'status', text: notice ? `Saved ${view.character.name}. ${notice}` : `Saved ${view.character.name}.` });
                   // A sheet of this character opened while the save was in flight shows the saved version, never the older read
-                  // (a stale sheet could later be saved over it).
-                  setScreen((cur) => (cur.kind === 'sheet' && cur.view.character.id === view.character.id ? { ...cur, view } : cur));
+                  // (a stale sheet could later be saved over it). Its notices are already in the message above, so the sheet gets none
+                  // to repeat (R69: one reporter per path; the sheet would otherwise replace "Saved …" with the bare notice).
+                  setScreen((cur) => (cur.kind === 'sheet' && cur.view.character.id === view.character.id ? { ...cur, view: { ...view, notices: undefined } } : cur));
                 }
                 try {
                   await refresh();

@@ -88,7 +88,7 @@ public static partial class CharacterCalculator
                 continue;
             }
             value = (int)next;
-            steps.Add(new(field, "add", $"Bonus from {Name(bonus.Modifier)}", bonus.Amount, value, Origin(bonus.Modifier), Inputs(bonus.Inputs)));
+            steps.Add(new(field, "add", bonus.Modifier.ModBonus && !string.IsNullOrEmpty(bonus.Modifier.Effect.Text) ? bonus.Modifier.Effect.Text : $"Bonus from {Name(bonus.Modifier)}", bonus.Amount, value, Origin(bonus.Modifier), Inputs(bonus.Inputs)));
         }
 
         var sets = evaluated.Where(e => e.Modifier.Effect.Operation == ModifierOperation.Set).ToList();

@@ -139,6 +139,40 @@ describe('diffLevelUp and checklistRows', () => {
     expect(texts(rows)).toEqual(['New feature: A', 'New feature: Auto One', 'New feature: B', 'Hit point maximum: 8 → 12', 'By hand from now on: A, B']);
   });
 
+  describe('replaced picks (MECH-X item 2)', () => {
+    const rep = (over: object = {}) => choice('cls', 'technique', { resolved: true, replaceable: { when: 'levelUp', max: 1 }, ...over });
+    const stored = (picks: string[]) => [{ source: ref('cls'), choiceId: 'technique', selected: picks.map((p) => ref(p)) }];
+    const withChoices = (level: number, picks: string[], sheetChoices: ChoiceStatus[]) => {
+      const v = view(level, { choices: sheetChoices });
+      (v.character as unknown as { choices: unknown }).choices = stored(picks);
+      return v;
+    };
+
+    it('lists a swap as one row with no target, and nothing for a re-pin', () => {
+      const rows = rowsOf(withChoices(2, ['a', 'b'], [rep()]), withChoices(3, ['a', 'c'], [rep()]));
+      expect(texts(rows)).toEqual(['Replaced 1 pick: Fixture Class']);
+      expect(rows[0]!.target).toBeUndefined();
+      const repinned = withChoices(3, ['a', 'b'], [rep({ source: ref('cls', 'r2') })]);
+      (repinned.character as unknown as { choices: unknown }).choices = [{ source: ref('cls', 'r2'), choiceId: 'technique', selected: [ref('a', 'o2'), ref('b', 'o2')] }];
+      expect(rowsOf(withChoices(2, ['a', 'b'], [rep()]), repinned)).toEqual([]);
+    });
+
+    it('S3: an option dropped from the applied list is no replacement', () => {
+      const dropped = rep({ selected: [ref('a')] }); // the sheet applies only a; the stored picks are still a and z
+      expect(rowsOf(withChoices(2, ['a', 'z'], [rep({ selected: [ref('a')] })]), withChoices(3, ['a', 'z'], [dropped]))).toEqual([]);
+    });
+
+    it('lists no swap of a choice without replaceable', () => {
+      const plain = choice('cls', 'technique', { resolved: true });
+      expect(rowsOf(withChoices(2, ['a'], [plain]), withChoices(3, ['b'], [plain]))).toEqual([]);
+    });
+
+    it('drops the row when the choice is gone from the sheet', () => {
+      const list: LevelUpList = { level: 3, changes: [{ kind: 'replaced', contentId: 'cls', choiceId: 'gone', count: 1 }] };
+      expect(checklistRows(list, view(3, {}).sheet)).toEqual([]);
+    });
+  });
+
   it('drops a by-hand feature missing from the current sheet, and omits the row when none remain', () => {
     const list: LevelUpList = { level: 2, changes: [{ kind: 'feature', contentId: 'a' }, { kind: 'feature', contentId: 'gone' }] };
     const sheet = view(2, { features: [feature('a', 'A', 'reference')] }).sheet;
@@ -151,6 +185,7 @@ describe('page storage', () => {
   const changes: LevelUpChange[] = [
     { kind: 'feature', contentId: 'a' },
     { kind: 'choice', contentId: 'a', choiceId: 'x' },
+    { kind: 'replaced', contentId: 'a', choiceId: 'x', count: 2 },
     { kind: 'hitPoints', before: 1, after: 2 },
     { kind: 'slots', level: 1, before: 2, after: 3 },
     { kind: 'pact', after: { maximum: 1, level: 1 } },
@@ -196,6 +231,9 @@ describe('page storage', () => {
           { kind: 'feature', contentId: 'a', extra: 1 },
           { kind: 'bogus', contentId: 'a' },
           { kind: 'feature', contentId: 7 },
+          { kind: 'replaced', contentId: 'a', choiceId: 'x', count: 'two' },
+          { kind: 'replaced', contentId: 'a', choiceId: 'x' },
+          { kind: 'replaced', contentId: 'a', choiceId: 'x', count: 0 },
           { kind: 'hitPoints', before: 1, after: null },
           { kind: 'pool', contentId: 'a', resourceId: 'r', before: 'x' },
           { kind: 'pact', after: { maximum: 1 } },

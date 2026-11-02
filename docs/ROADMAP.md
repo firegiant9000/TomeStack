@@ -191,6 +191,13 @@ On another physical machine or a clean VM: install the T5 release, restore a ful
 - **Timebox.** TomeStack's share of the portfolio plan, about 15 %. The spec's Phase 0 (AUD-01 … AUD-04, owner sign-off) runs first and takes no more than a week.
 - **Risk.** The lab absorbs the plan, as content work did from 2026-09-30 to 2026-10-18. The timebox is the mitigation.
 
+#### Any SRD character (content milestone; added 2026-10-28, D76)
+
+- **Scope.** Every SRD class, species, background and feat, in both rules families (`srd-5.1` and `srd-5.2.1`), bundled as published content. Classes are added one per branch (Lane C2: Barbarian and Rogue merged 2026-10-28, Monk in review); SRD 5.2.1 origins and SRD 5.1 races are bundled.
+- **Engine work.** The mechanics the classes now leave as Reference rows go into content schema v12 (ADR-022), one slice at a time in the order G6, G7, G1 (with G2 and G3), G9, G10, G11, G5, G4 (the gap ids in [features/effect-vocabulary-coverage.md](features/effect-vocabulary-coverage.md)). The bundled classes then get new v12 revisions (insert-only), which ship with the release that closes v12.
+- **Gate.** Every SRD class, species, background and feat in both families is bundled; a fixture character per class per family passes side-by-side tests; the coverage report's Reference rows are listed per class in `docs/features/`; MVP definition of done #2 holds for every class.
+- **Release rule.** Bundled SRD content changes ship only in a minor release.
+
 #### Owed owner checks (added 2026-10-18, D60)
 
 Each row gets an owner date when it is done, or the word "deferred" with a reason. Built-but-never-run work is listed here instead of being scattered across the milestones. A milestone that depends on a row is not complete until that row has an owner date.
