@@ -76,7 +76,7 @@
          target removes only the net8.0 one, not the net9.0 one NuGet picks for net10.0). PrivateAssets keeps the
          generator out of the shell, which references this project. Publish="true" undoes the Publish=false that
          PrivateAssets implies: with it, the shell's publish drops this exe's deps.json. The package ships no file. -->
-    <PackageReference Include="Microsoft.Windows.CsWinRT" Version="2.3.1" ExcludeAssets="compile;runtime" PrivateAssets="all" Publish="true" />
+    <PackageReference Include="Microsoft.Windows.CsWinRT" ExcludeAssets="compile;runtime" PrivateAssets="all" Publish="true" />
     <PackageDownload Include="Microsoft.Windows.SDK.Contracts" Version="[10.0.19041.2]" />
   </ItemGroup>
 
