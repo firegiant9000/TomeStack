@@ -173,7 +173,7 @@ export function BackgroundBasicsEditor(props: BackgroundProps) {
     if (unchangedOptions) return unchanged;
     const stay = current ? current.options.filter((o) => !refs.some((r) => r.contentId === o.contentId)).length : 0;
     setLeftBehind(stay);
-    return { revision: { ...rev, effects: setIncreaseChoice(rev.effects, increaseChoice(rev.name, refs, current?.choiceId)) }, drafts };
+    return { revision: { ...rev, effects: setIncreaseChoice(rev.effects, increaseChoice(rev.name, refs, current?.choiceId, current)) }, drafts };
   };
   const { registerBeforeSave } = props;
   useEffect(() => {

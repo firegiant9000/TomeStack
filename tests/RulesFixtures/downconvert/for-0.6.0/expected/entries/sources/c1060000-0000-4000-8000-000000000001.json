@@ -1,0 +1,12 @@
+{
+  "id": "c1060000-0000-4000-8000-000000000001",
+  "title": "Compat Homebrew A",
+  "publisher": "TomeStack project",
+  "rulesFamilies": [
+    "srd-5.1"
+  ],
+  "editionVersion": "fixture-1",
+  "license": "Original test fixture",
+  "redistributable": true,
+  "attribution": "Written for TomeStack tests."
+}

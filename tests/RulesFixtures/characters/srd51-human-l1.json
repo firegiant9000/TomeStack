@@ -1,0 +1,52 @@
+{
+  "id": "51f10000-0000-4000-8000-000000000004",
+  "schemaVersion": 3,
+  "name": "Testy Plainsworth (SRD 5.1 Human fixture)",
+  "rulesFamily": "srd-5.1",
+  "level": 1,
+  "classes": [
+    {
+      "class": {
+        "contentId": "51c00000-0000-4000-8000-000000000003",
+        "revisionId": "51e00000-0000-4000-8000-000000000003"
+      },
+      "level": 1
+    }
+  ],
+  "choices": [
+    {
+      "source": {
+        "contentId": "51c00000-0000-4000-8000-000000000003",
+        "revisionId": "51e00000-0000-4000-8000-000000000003"
+      },
+      "choiceId": "barbarian-skills",
+      "selected": [
+        {
+          "contentId": "51c00000-0000-4000-8000-000000000009",
+          "revisionId": "51e00000-0000-4000-8000-000000000009"
+        },
+        {
+          "contentId": "51c00000-0000-4000-8000-000000000013",
+          "revisionId": "51e00000-0000-4000-8000-000000000013"
+        }
+      ]
+    }
+  ],
+  "baseAbilities": {
+    "str": 15,
+    "dex": 13,
+    "con": 14,
+    "int": 8,
+    "wis": 12,
+    "cha": 10
+  },
+  "pins": [
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000401",
+      "revisionId": "51e10000-0000-4000-8000-000000000401"
+    }
+  ],
+  "overrides": [],
+  "crossFamilyExceptions": [],
+  "updatedAt": "2026-10-26T00:00:00+00:00"
+}

@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using TomeStack.AppService.Packages;
+using TomeStack.AppService.Persistence;
 using TomeStack.RulesCore;
 
 namespace TomeStack.AppService.Tests;
@@ -52,6 +53,110 @@ public class CampaignPackTests
     {
         using var zip = new ZipArchive(new MemoryStream(package), ZipArchiveMode.Read);
         return JsonDocument.Parse(new StreamReader(zip.GetEntry(path)!.Open()).ReadToEnd());
+    }
+
+    [Fact]
+    public void Campaign_pack_for_0_6_0_leaves_out_a_superseded_blocked_revision()
+    {
+        using var temp = new TempApp();
+        var shared = Homebrew(temp, "Compat Homebrew A", withContent: false);
+        var content = Guid.Parse("c3000000-0000-4000-8000-0000000000d1");
+        ContentRevision Steady(int n, bool blocker) => new()
+        {
+            ContentId = content,
+            RevisionId = Guid.Parse($"c300e000-0000-4000-8000-0000000000d{n}"),
+            Kind = ContentKind.Feat,
+            Name = "Compat Steady Hands",
+            RulesFamilies = [RulesFamilies.Srd521],
+            Provenance = new(shared.Id),
+            Status = RevisionStatus.Published,
+            SchemaVersion = blocker ? ContentRevision.CurrentSchemaVersion : 3,
+            Effects = blocker
+                ? [new ToggleEffect { Id = "form", ToggleId = "form", Label = "Form", Cost = "1", ResourceId = "focus" }]
+                : [new ModifierEffect { Id = "init", Operation = ModifierOperation.Bonus, Target = FieldIds.Initiative, Value = "1" }],
+        };
+        foreach (var revision in new[] { Steady(1, false), Steady(2, true), Steady(3, false) })
+            temp.App.Store.AddRevision(revision);
+        var campaign = Campaign(temp, "Compat Table", shared.Id);
+        var row = ReleaseLadder.Target("0.6.0")!;
+
+        var preview = temp.App.PreviewCampaignPack(campaign.Id, row);
+        var pack = temp.App.ExportCampaignPack(campaign.Id, row, preview.ChangesHash);
+
+        var line = Assert.Single(preview.Changes);
+        Assert.Equal(("leftOut", Steady(2, true).RevisionId), (line.Action, line.Id));
+        Assert.Equal(2, preview.Revisions);
+        Assert.Equal([Steady(1, false).RevisionId, Steady(3, false).RevisionId], pack.Manifest.RevisionOrder);
+        Assert.DoesNotContain(pack.Manifest.Entries, e => e.Path == $"content/{Steady(2, true).RevisionId:D}.json");
+    }
+
+    [Fact]
+    public void Campaign_pack_for_0_6_0_leaves_out_a_superseded_blocked_revision_s_outside_reference_warning()
+    {
+        using var temp = new TempApp();
+        var shared = Homebrew(temp, "Compat Homebrew A", withContent: false);
+        var other = Homebrew(temp, "Compat Homebrew B");
+        var otherContent = temp.App.Store.ListRevisions().First(r => r.Provenance.SourceId == other.Id);
+        var content = Guid.Parse("c3000000-0000-4000-8000-0000000000d2");
+        ContentRevision Steady(int n, bool blocker) => new()
+        {
+            ContentId = content,
+            RevisionId = Guid.Parse($"c300e000-0000-4000-8000-0000000000d{n + 4}"),
+            Kind = ContentKind.Feat,
+            Name = "Compat Steady Hands",
+            RulesFamilies = [RulesFamilies.Srd521],
+            Provenance = new(shared.Id),
+            Status = RevisionStatus.Published,
+            SchemaVersion = blocker ? ContentRevision.CurrentSchemaVersion : 3,
+            Effects = blocker
+                ? [new ToggleEffect { Id = "form", ToggleId = "form", Label = "Form", Cost = "1", ResourceId = "focus" }, new GrantEffect { Id = "gives", Grant = GrantKind.Content, Content = otherContent.Reference, Level = 1 }]
+                : [new ModifierEffect { Id = "init", Operation = ModifierOperation.Bonus, Target = FieldIds.Initiative, Value = "1" }],
+        };
+        foreach (var revision in new[] { Steady(1, true), Steady(2, false) })
+            temp.App.Store.AddRevision(revision);
+        var campaign = Campaign(temp, "Compat Table", shared.Id);
+
+        var plain = temp.App.PreviewCampaignPack(campaign.Id);
+        var preview = temp.App.PreviewCampaignPack(campaign.Id, ReleaseLadder.Target("0.6.0")!);
+
+        Assert.Contains(plain.Warnings, w => w.Code == "pack.reference-outside");
+        Assert.DoesNotContain(preview.Warnings, w => w.Code == "pack.reference-outside");
+    }
+
+    [Fact]
+    public void Campaign_pack_for_0_6_0_carries_lowered_allowed_content()
+    {
+        using var temp = new TempApp();
+        var shared = Homebrew(temp, "Compat Homebrew A", withContent: false);
+        var original = new ContentRevision
+        {
+            ContentId = Guid.Parse("c3000000-0000-4000-8000-0000000000c1"),
+            RevisionId = Guid.Parse("c300e000-0000-4000-8000-0000000000c1"),
+            Kind = ContentKind.Feat,
+            Name = "Compat Steady Hands",
+            RulesFamilies = [RulesFamilies.Srd521],
+            Provenance = new(shared.Id),
+            Status = RevisionStatus.Published,
+            Effects = [new ModifierEffect { Id = "fly", Operation = ModifierOperation.Bonus, Target = FieldIds.FlySpeed, Value = "10" }],
+        };
+        temp.App.Store.AddRevision(original);
+        var campaign = Campaign(temp, "Compat Table", shared.Id);
+        var row = ReleaseLadder.Target("0.6.0")!;
+
+        var plain = temp.App.PreviewCampaignPack(campaign.Id);
+        var preview = temp.App.PreviewCampaignPack(campaign.Id, row);
+        var pack = temp.App.ExportCampaignPack(campaign.Id, row, preview.ChangesHash);
+
+        Assert.Equal("0.6.0", preview.Target);
+        Assert.Equal("Compat-Table-campaign-pack-for-0.6.0.tomestack.zip", pack.FileName);
+        Assert.Equal("Compat-Table-campaign-pack.tomestack.zip", plain.FileName);
+        Assert.Equal("0.6.0", pack.Manifest.MadeFor);
+        var written = Assert.Single(pack.Manifest.RevisionOrder!);
+        Assert.NotEqual(original.RevisionId, written);
+        var entry = Entry(pack.Content, $"content/{written:D}.json").RootElement;
+        Assert.True(entry.GetProperty("schemaVersion").GetInt32() <= 10);
+        Assert.Equal(original.RevisionId.ToString("D"), entry.GetProperty("downConvertedFrom").GetProperty("revisionId").GetString());
+        Assert.DoesNotContain(pack.Manifest.Entries, e => e.Path == $"content/{original.RevisionId:D}.json");
     }
 
     [Fact]
@@ -109,7 +214,8 @@ public class CampaignPackTests
         }
         var campaign = Campaign(temp, "Test Newer Table", Srd521Source, old.Id, newer.Id);
         var warning = Assert.Single(temp.App.PreviewCampaignPack(campaign.Id).Warnings, w => w.Code == "package.needs-newer-build");
-        Assert.Equal("Opening this needs TomeStack 0.7.0 or later: it holds content or a character that older versions refuse.", warning.Message);
+        Assert.Equal($"Opening this needs TomeStack 0.7.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Test Newer One' is content at schema 11, and 'Test Newer Two' is content at schema 11. Older versions refuse the file.", warning.Message);
+        Assert.Equal("0.7.0", temp.App.PreviewCampaignPack(campaign.Id).OpensIn);
     }
 
     [Fact]

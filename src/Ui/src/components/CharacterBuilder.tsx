@@ -32,7 +32,9 @@ import {
   type Assignment,
   type ScoreMethod,
 } from '../abilityScores';
+import { hadPicks, replaceHint, replaceOffer } from '../replaceable';
 import { matchesSpell } from '../spellSearch';
+import { shown } from './SandboxPanel';
 import { SpellSearch } from './sheet/SpellSearch';
 
 const abilities: { key: Ability; label: string }[] = [
@@ -651,6 +653,7 @@ function LevelStep(props: {
   nameOf: (ref: ContentReference) => string;
   onNext: (classes: ClassLevel[]) => void;
   onCancel: () => void;
+  onError: (error: unknown) => void;
 }) {
   const { character } = props;
   const [target, setTarget] = useState<ContentReference | undefined>(character.classes[0]?.class);
@@ -668,64 +671,205 @@ function LevelStep(props: {
         ? 'This class needs a campaign exception reason.'
         : undefined;
 
+  // The service takes the level from the class levels; a character whose level they do not add up to (an import with a level
+  // and no class) would preview at another level than the one asked for, so it is not offered a preview.
+  const classTotal = character.classes.reduce((sum, c) => sum + c.level, 0);
+
+  /** The classes after `gain` more levels in the picked class. */
+  function classesWith(picked: ContentReference, gain: number): ClassLevel[] {
+    const existing = character.classes.find((c) => sameRef(c.class, picked));
+    return existing
+      ? character.classes.map((c) => (c === existing ? { ...c, level: c.level + gain } : c))
+      : [...character.classes, { class: picked, level: gain }];
+  }
+
   function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     if (blocked || !target) return; // aria-disabled with its reason shown, so this press is refused openly
-    const existing = character.classes.find((c) => sameRef(c.class, target));
-    props.onNext(
-      existing
-        ? character.classes.map((c) => (c === existing ? { ...c, level: c.level + 1 } : c))
-        : [...character.classes, { class: target, level: 1 }],
-    );
+    props.onNext(classesWith(target, 1));
   }
 
   return (
-    <form onSubmit={submit} aria-label="Level">
-      <p>
-        Level {character.level} → {character.level + 1}
-      </p>
-      {atMaximum ? null : (
-        <fieldset>
-          <legend>Class to gain a level in</legend>
-          {character.classes.map((c) => (
-            <label key={c.class.revisionId} className="choice">
-              <input type="radio" name="levelClass" checked={!!target && sameRef(target, c.class)} onChange={() => setTarget(c.class)} />
-              {props.nameOf(c.class)} (level {c.level} → {c.level + 1})
-            </label>
-          ))}
-          {newClasses.map((option) => (
-            <label key={option.reference.revisionId} className={`choice${option.compatible ? '' : ' incompatible'}`}>
-              <input
-                type="radio"
-                name="levelClass"
-                aria-disabled={!option.compatible || undefined}
-                checked={!!target && sameRef(target, option.reference)}
-                onChange={() => {
-                  if (option.compatible) setTarget(option.reference);
-                }}
-              />
-              {option.name} (new class, level 1) {sourceLine(option)}
-            </label>
-          ))}
-        </fieldset>
-      )}
-      {!atMaximum && (
-        <p className="hint">
-          Hit points use the fixed value for each new level. If you rolled, record the total as an override on the sheet.
+    <>
+      <form onSubmit={submit} aria-label="Level">
+        <p>
+          Level {character.level} → {character.level + 1}
         </p>
+        {atMaximum ? null : (
+          <fieldset>
+            <legend>Class to gain a level in</legend>
+            {character.classes.map((c) => (
+              <label key={c.class.revisionId} className="choice">
+                <input type="radio" name="levelClass" checked={!!target && sameRef(target, c.class)} onChange={() => setTarget(c.class)} />
+                {props.nameOf(c.class)} (level {c.level} → {c.level + 1})
+              </label>
+            ))}
+            {newClasses.map((option) => (
+              <label key={option.reference.revisionId} className={`choice${option.compatible ? '' : ' incompatible'}`}>
+                <input
+                  type="radio"
+                  name="levelClass"
+                  aria-disabled={!option.compatible || undefined}
+                  checked={!!target && sameRef(target, option.reference)}
+                  onChange={() => {
+                    if (option.compatible) setTarget(option.reference);
+                  }}
+                />
+                {option.name} (new class, level 1) {sourceLine(option)}
+              </label>
+            ))}
+          </fieldset>
+        )}
+        {!atMaximum && (
+          <p className="hint">
+            Hit points use the fixed value for each new level. If you rolled, record the total as an override on the sheet.
+          </p>
+        )}
+        <div className="actions">
+          <button type="submit" aria-disabled={!!blocked || undefined} aria-describedby={blocked ? 'next-hint' : undefined}>
+            Next: choices
+          </button>
+          <button type="button" onClick={props.onCancel}>
+            Cancel
+          </button>
+        </div>
+        {blocked && (
+          <p id="next-hint" className="hint">
+            {blocked}
+          </p>
+        )}
+      </form>
+      {!blocked && target && classTotal === character.level && (
+        // Keyed by the class: picking another one starts a fresh form, so a preview never shows a class that is no longer picked.
+        <LevelPreview
+          key={`${target.contentId}|${target.revisionId}`}
+          from={character.level}
+          draftAt={(level) => ({ ...character, classes: classesWith(target, level - character.level) })}
+          onError={props.onError}
+        />
       )}
-      <div className="actions">
-        <button type="submit" aria-disabled={!!blocked || undefined} aria-describedby={blocked ? 'next-hint' : undefined}>
-          Next: choices
-        </button>
-        <button type="button" onClick={props.onCancel}>
-          Cancel
-        </button>
-      </div>
-      {blocked && (
-        <p id="next-hint" className="hint">
-          {blocked}
+    </>
+  );
+}
+
+/**
+ * D82 (F9a): the sheet of an unsaved copy at a later level, with the picked class gaining every level, through
+ * `character.preview` (D14: calculated on a copy, writes nothing). Read only; choices of the skipped levels stay open.
+ */
+function LevelPreview(props: { from: number; draftAt: (level: number) => Character; onError: (error: unknown) => void }) {
+  const [level, setLevel] = useState(String(props.from + 1));
+  const [busy, setBusy] = useState(false);
+  const [shownView, setShownView] = useState<{ level: number; view: CharacterView }>();
+  const button = useRef<HTMLButtonElement>(null);
+  // An answer applies only while this form is mounted (another class, Next or Cancel unmount it).
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  const asked = Number(level);
+  const invalid = !Number.isInteger(asked) || asked <= props.from || asked > maxLevel ? `Enter a level from ${props.from + 1} to ${maxLevel}.` : undefined;
+  const reason = busy ? 'Calculating the preview.' : invalid;
+
+  async function submit(event: SubmitEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (reason) return; // aria-disabled with its reason shown
+    setBusy(true);
+    try {
+      const view = await client.preview(props.draftAt(asked));
+      if (mounted.current) setShownView({ level: asked, view });
+    } catch (error) {
+      if (mounted.current) props.onError(error);
+    } finally {
+      if (mounted.current) setBusy(false);
+    }
+  }
+
+  const sheet = shownView?.view.sheet;
+  const open = (sheet?.choices ?? []).filter((c) => !c.resolved).length;
+  // noValidate: an out-of-range level is refused by the aria-disabled button and its reason (R43), not the browser's bubble.
+  return (
+    <form onSubmit={submit} aria-label="Preview at level" noValidate>
+      <fieldset>
+        <legend>Preview at level</legend>
+        <label className="field">
+          Level to preview
+          <input type="number" min={props.from + 1} max={maxLevel} step={1} value={level} onChange={(e) => setLevel(e.target.value)} />
+        </label>
+        <div className="actions">
+          <button type="submit" ref={button} aria-disabled={!!reason || undefined} aria-describedby={reason ? 'preview-level-hint' : undefined}>
+            Preview
+          </button>
+        </div>
+        {reason && (
+          <p id="preview-level-hint" className="hint">
+            {reason}
+          </p>
+        )}
+        <p aria-live="polite" className="hint">
+          {shownView ? `Preview at level ${shownView.level} shown below.` : ''}
         </p>
+      </fieldset>
+      {shownView && sheet && (
+        <div role="region" aria-labelledby="preview-level-heading">
+          <h4 id="preview-level-heading">Preview at level {shownView.level}</h4>
+          <p className="hint">
+            An unsaved copy. Nothing is saved, and Next: choices still gains one level.
+          </p>
+          {open > 0 && <p className="hint">{open === 1 ? '1 choice is' : `${open} choices are`} open on this copy; you make them as you level up.</p>}
+          <h5>Values</h5>
+          <ul>
+            {sheet.fields
+              .filter((f) => shown.includes(f.field) && (f.field !== 'spellSaveDc' || (sheet.spellcasting ?? []).length > 0))
+              .map((f) => (
+                <li key={f.field}>
+                  {f.label}: {f.value}
+                </li>
+              ))}
+            {(sheet.resources ?? []).map((r) => (
+              <li key={`${r.content.revisionId}-${r.resourceId}`}>
+                {r.label}: {r.maximum ?? 'tracked by hand'}
+              </li>
+            ))}
+            {(sheet.scales ?? []).map((s) => (
+              <li key={`${s.content.revisionId}-${s.scaleId}`}>
+                {s.label}: {s.value}
+              </li>
+            ))}
+          </ul>
+          <h5>Features</h5>
+          <ul>
+            {(sheet.features ?? []).map((f) => (
+              <li key={f.content.revisionId}>{f.name}</li>
+            ))}
+          </ul>
+          {sheet.diagnostics.length > 0 && (
+            <>
+              <h5>Problems</h5>
+              <ul>
+                {sheet.diagnostics.map((d, i) => (
+                  <li key={`d-${d.code}-${i}`} className="warn">
+                    {d.message}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          <div className="actions">
+            <button
+              type="button"
+              onClick={() => {
+                setShownView(undefined);
+                button.current?.focus();
+              }}
+            >
+              Close preview
+            </button>
+          </div>
+        </div>
       )}
     </form>
   );
@@ -739,6 +883,8 @@ function ChoicePicker(props: {
   optionsLoaded: boolean;
   /** Ticks (`add`) or unticks one option; the builder applies it to the latest draft. */
   onChange: (ref: ContentReference, add: boolean) => void;
+  /** MECH-X item 2: "You may replace one pick now." (level-up) or the window hint (Make choices); real text in the group. */
+  replaceNote?: string;
 }) {
   const { choice } = props;
   const full = choice.selected.length >= choice.count;
@@ -752,6 +898,7 @@ function ChoicePicker(props: {
           {choice.sourceName}: choose {choice.count}
         </legend>
         <p className="hint">Loading the options…</p>
+        {props.replaceNote && <p className="hint">{props.replaceNote}</p>}
       </fieldset>
     );
   }
@@ -762,6 +909,7 @@ function ChoicePicker(props: {
         <span className={choice.resolved ? 'hint' : 'warn'}>{choice.resolved ? '(done)' : `(to do: ${choice.selected.length} of ${choice.count} chosen)`}</span>
       </legend>
       {choice.text && <p className="hint">{choice.text}</p>}
+      {props.replaceNote && <p className="hint">{props.replaceNote}</p>}
       <ul className="options">
         {choice.options.map((ref) => {
           const option = props.optionOf(ref);
@@ -771,6 +919,21 @@ function ChoicePicker(props: {
           // D31: an option of the other family is not offered, unless it was chosen when the picker appeared (an imported character).
           const kept = atMount.has(ref.revisionId);
           if (option && !visible(option) && !checked && !kept) return null;
+          // SPEC I-06: a class lists the old and the new revision of an option (an old Berserker stays valid for saved characters);
+          // a new pick sees only the newest, while a character that holds the old one still sees it ticked (and, like any
+          // option ticked when the picker appeared, unticking it never removes the focused row, R33). The old revision hides
+          // while the choice also offers a newer one of the same content that is shown (an outside-campaign one is shown, as not
+          // allowed, so the old one stays hidden); a lone older option, or one whose newer revision is hidden, stays pickable.
+          if (
+            option?.superseded &&
+            !checked &&
+            !kept &&
+            choice.options.some((o) => {
+              const newer = props.optionOf(o);
+              return o.contentId === ref.contentId && o.revisionId !== ref.revisionId && !!newer && !newer.superseded && visible(newer);
+            })
+          )
+            return null;
           // Never natively `disabled`: the count fills, or the campaign reason changes, while a row can hold the focus (2.4.3).
           const inert = !checked && (full || unavailable);
           return (
@@ -888,6 +1051,10 @@ function ChoicesStep(props: {
   onCommit: () => void;
   onCancel: () => void;
   busy: boolean;
+  /** Level-up builder only: the view it started from. A `levelUp` choice that had picks in it shows the replace offer (R44, S5). */
+  startView?: CharacterView;
+  /** "Make choices": a replaceable choice shows its window as a hint (R44). */
+  choicesMode?: boolean;
   /** R41: set while a pick in the draft needs a campaign exception reason that is not given; the commit button waits. */
   reasonHint?: string;
   review?: { name: string; family: string; campaign?: string; scores: AbilityScores; method: string; species?: string; cls?: string; background?: string };
@@ -938,6 +1105,13 @@ function ChoicesStep(props: {
           optionOf={props.optionOf}
           optionsLoaded={props.optionsLoaded}
           onChange={(ref, add) => props.onChoose(choice, ref, add)}
+          replaceNote={
+            props.choicesMode
+              ? replaceHint(choice)
+              : props.startView && hadPicks(props.startView, choice)
+                ? replaceOffer(choice)
+                : undefined
+          }
         />
       ))}
       {casters.map((entry) => (
@@ -1162,11 +1336,13 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
   // gone). The smaller safe option: say so in plain words and stop offering a save that cannot succeed; Cancel and reopen starts from
   // the current copy.
   const [stale, setStale] = useState(false);
-  const commitHint = stale
-    ? 'This character changed after you opened this screen, so it cannot be saved from here. Cancel, then open it again to start from the current copy.'
-    : view
-      ? reasonHint(needReason(picksOf(view.character)))
-      : undefined;
+  const hintFor = (v: CharacterView | undefined) =>
+    stale
+      ? 'This character changed after you opened this screen, so it cannot be saved from here. Cancel, then open it again to start from the current copy.'
+      : v
+        ? reasonHint(needReason(picksOf(v.character)))
+        : undefined;
+  const commitHint = hintFor(view);
 
   /**
    * Previews the draft and moves to the choices. The reply applies only if it is the latest request and the player is still
@@ -1232,7 +1408,11 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
     committing.current = true;
     setBusy(true);
     try {
-      const draft = withExceptions(view.character);
+      await choosing.current; // a tick still previewing lands first, so the save carries it
+      if (!mounted.current) return;
+      const current = latest.current ?? view;
+      if (hintFor(current)) return; // R41: a tick that landed meanwhile may need its reason first; the hint shows on the re-render
+      const draft = withExceptions(current.character);
       const saved =
         mode.kind === 'create'
           ? await client.createCharacter({
@@ -1325,6 +1505,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
           nameOf={nameOf}
           onNext={(classes) => preview({ ...(view?.character ?? mode.view.character), classes }, 'level')}
           onCancel={onCancel}
+          onError={fail}
         />
       )}
       {step === 'choices' && view && (
@@ -1342,6 +1523,8 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
             if (!busy) onCancel(); // a save in flight cannot be discarded; the button says so with aria-disabled
           }}
           busy={busy}
+          startView={mode.kind === 'levelUp' ? mode.view : undefined}
+          choicesMode={mode.kind === 'choices'}
           reasonHint={commitHint}
           review={
             mode.kind === 'create'

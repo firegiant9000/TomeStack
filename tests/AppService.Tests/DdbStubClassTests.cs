@@ -172,11 +172,25 @@ public class DdbStubClassTests
     }
 
     [Fact]
-    public void Cancel_and_discard_at_every_step_write_nothing()
+    public void Cancel_and_discard_at_every_step_write_nothing_for_a_stub_class_and_for_reference_drafts()
     {
         using var h = new DdbHarness();
         var before = Counts(h);
 
+        // Reference drafts (D16(c)): a sheet whose feats and features carry text the app does not have.
+        var draftsToken = DdbReferenceDraftTests.Read(h);
+        Assert.Equal(before, Counts(h)); // read
+        h.Temp.App.PreviewDdbImport(DdbReferenceDraftTests.Preview(draftsToken));
+        Assert.Equal(before, Counts(h)); // matches, numbers and summary
+        Assert.True(h.Temp.App.DiscardDdbSheet(draftsToken));
+        Assert.Equal(before, Counts(h));
+        Assert.Equal("ddb.token-invalid", Assert.Throws<AppValidationException>(() => h.Temp.App.PreviewDdbImport(DdbReferenceDraftTests.Preview(draftsToken))).Code);
+        var draftsRefused = DdbReferenceDraftTests.Read(h);
+        Assert.Throws<AppValidationException>(() => h.Temp.App.ApplyDdbImport(DdbReferenceDraftTests.Apply(draftsRefused, publish: true) with { Confirm = false }));
+        Assert.Equal(before, Counts(h));
+        Assert.NotNull(h.Temp.App.DdbSessions.Peek(draftsRefused));
+
+        // The stub class (D35).
         var read = Read(h, Sheet());
         Assert.Equal(before, Counts(h)); // read
         h.Temp.App.PreviewDdbImport(Preview(read));

@@ -1,0 +1,32 @@
+{
+  "contentId": "c1060000-0000-4000-8000-0000000000c2",
+  "revisionId": "f76ee763-cb6d-552a-a923-f79c9de4dbfd",
+  "schemaVersion": 10,
+  "kind": "feature",
+  "name": "Compat Tide Stance",
+  "rulesFamilies": [
+    "srd-5.1"
+  ],
+  "provenance": {
+    "sourceId": "c1060000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 3
+    }
+  },
+  "status": "published",
+  "summary": "A test stance with a timed form, a strike it gives and a rider that rides on it.",
+  "effects": [
+    {
+      "type": "toggle",
+      "id": "tide",
+      "toggleId": "tide",
+      "label": "Tide stance",
+      "automation": "automatic",
+      "timing": "always"
+    }
+  ],
+  "downConvertedFrom": {
+    "revisionId": "c1060000-0000-4000-8000-0000000000e2",
+    "schemaVersion": 11
+  }
+}

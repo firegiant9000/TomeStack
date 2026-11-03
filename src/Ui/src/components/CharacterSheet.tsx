@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type SubmitEvent } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type SubmitEvent } from 'react';
 import { client } from '../api/client';
 import { TomeStackError } from '../api/transport';
 import type {
@@ -8,14 +8,20 @@ import type {
   ExportPurpose,
   FieldOverride,
   PlayAction,
+  PreflightReport,
   RestPeriod,
   RollMode,
   RollRecord,
   RollTarget,
   TurnMoment,
 } from '../api/types';
+import { companionPrunedText } from '../companionNotice';
 import { downloadBase64 } from '../files';
 import { ArchivePanel } from './ArchivePanel';
+import { ChangeRegion } from './export/ChangeRegion';
+import { ExportConfirmation, hasBlocker, needsConfirmation } from './export/ExportConfirmation';
+import { TargetFieldset } from './export/TargetFieldset';
+import { usePackageTargets } from './export/usePackageTargets';
 import { CombatStrip } from './CombatStrip';
 import { DamagePanel } from './DamagePanel';
 import { TurnPanel } from './TurnPanel';
@@ -30,18 +36,27 @@ import { DefencesPanel } from './DefencesPanel';
 import { DetailsPanel } from './DetailsPanel';
 import { ExperiencePanel } from './ExperiencePanel';
 import { GapNotesPanel, gapAboutFeature, gapAboutField } from './GapNotesPanel';
+import { PreflightPanel } from './PreflightPanel';
+import { canSaveAfter } from './preflightText';
 import { PrintView } from './PrintView';
 import { RestPanel } from './RestPanel';
 import { logged, rollLogLimit, type LoggedRoll } from './RollLog';
 import { SheetSummary } from './SheetSummary';
 import { SpellsPanel } from './SpellsPanel';
+import { ExplainList } from './ExplainList';
 import { TraceTable } from './TraceTable';
 import { UpdatesPanel } from './UpdatesPanel';
 import { VttExportPanel } from './VttExportPanel';
 import { ByHandPanel } from './ByHandPanel';
 import { TabList, TabPanel, tabId, type TabSpec } from './sheet/TabList';
+import { LevelUpChecklist } from './LevelUpChecklist';
+import { dismissChecklist, readChecklist } from '../levelUpChecklist';
+import { afterLongRest, afterRestPhrase } from '../replaceable';
 import { rememberSheetTab, rememberedSheetTab, type SheetTabId } from '../sheetTab';
 import { inverseOf, isCompound, type UndoEntry } from '../undo';
+import { recordSpend } from '../actionRows';
+import { editPins, readPins, resolvePin, visiblePins, writePins, type Pin, type QuickAction } from '../quickbar';
+import { Quickbar } from './Quickbar';
 import { applyPreferences, compactPlay, setCompactPlay } from '../settings';
 
 import { assistedNotes, rollButtonSuffix } from '../rollModes';
@@ -119,6 +134,7 @@ function FieldCard({ value, labels, onOverride, onRoll, onReportGap }: FieldProp
             ))}
           </ul>
         )}
+        <ExplainList label={value.label} steps={value.trace} />
         <TraceTable label={value.label} trace={value.trace} labels={labels} />
         {value.warnings.length > 0 && (
           <ul className="warnings" aria-label={`${value.label} warnings`}>
@@ -162,28 +178,48 @@ interface ExportProps {
 }
 
 /** ADR-007: choose backup or share; a share first lists everything it will leave out. */
-function ExportPanel({ characterId, active, updatedAt, onError, onStatus }: ExportProps) {
+export function ExportPanel({ characterId, active, updatedAt, onError, onStatus }: ExportProps) {
   const [purpose, setPurpose] = useState<ExportPurpose>('backup');
   const [preview, setPreview] = useState<ExportPreview>();
+  // Import Lab L5: a share goes through the one sharing rule's preflight; a backup keeps its own rule (everything, personal).
+  const [report, setReport] = useState<PreflightReport>();
+  const targets = usePackageTargets();
+  const [target, setTarget] = useState<string | null>(null);
+  const [confirmed, setConfirmed] = useState(false);
+  const hintId = useId();
 
   const [backupFailed, setBackupFailed] = useState(false);
+  const [targetFailed, setTargetFailed] = useState(false);
 
   // G6: both purposes are previewed, so the package's warnings (it needs a newer TomeStack) show before the file is saved. A share needs
   // its preview (the export button waits for it); a backup's is advisory, so a failure shows one plain line. The preview loads only while
-  // the Manage tab is shown and again when the character changes (updatedAt), so the warning never goes stale.
+  // the Manage tab is shown and again when the character changes (updatedAt), so the warning never goes stale. A copy for an older
+  // TomeStack always needs its preview: it lists what the copy leaves out, and its failure is one plain line too.
   const chosen = useRef<ExportPurpose>('backup');
+  const chosenTarget = useRef<string | null>(null);
   const requestId = useRef(0);
   const load = useCallback(
-    async (next: ExportPurpose) => {
+    async (next: ExportPurpose, nextTarget: string | null) => {
       const id = ++requestId.current;
+      const stale = () => requestId.current !== id || chosen.current !== next || chosenTarget.current !== nextTarget;
       setBackupFailed(false);
+      setTargetFailed(false);
+      if (nextTarget) {
+        // A copy for an older TomeStack is sent with its preview's hash: an earlier preview must not stand in while this one loads.
+        setPreview(undefined);
+        setConfirmed(false);
+      }
       try {
-        const loaded = await client.previewExport([characterId], next);
-        if (requestId.current === id && chosen.current === next) setPreview(loaded);
+        // No target: the call is exactly as it was before there was a target.
+        const loaded = nextTarget ? await client.previewExport([characterId], next, nextTarget) : await client.previewExport([characterId], next);
+        if (stale()) return;
+        setPreview(loaded);
+        setConfirmed(false);
       } catch (error) {
-        if (requestId.current !== id || chosen.current !== next) return;
+        if (stale()) return;
         setPreview(undefined); // an older preview must not stand in for the one that failed
-        if (next === 'share') onError(error);
+        if (nextTarget) setTargetFailed(true);
+        else if (next === 'share') onError(error);
         else setBackupFailed(true);
       }
     },
@@ -195,19 +231,33 @@ function ExportPanel({ characterId, active, updatedAt, onError, onStatus }: Expo
   }, [load]);
   useEffect(() => {
     if (!active) return;
-    void loadRef.current(chosen.current);
+    void loadRef.current(chosen.current, chosenTarget.current);
   }, [active, characterId, updatedAt]);
 
   async function choose(next: ExportPurpose) {
     chosen.current = next;
     setPurpose(next);
     setPreview(undefined);
-    await load(next);
+    await load(next, chosenTarget.current);
   }
+
+  // The fieldset stays mounted while the preview reloads, so focus stays on the radio that was chosen.
+  async function chooseTarget(next: string | null) {
+    chosenTarget.current = next;
+    setTarget(next);
+    setPreview(undefined);
+    setConfirmed(false);
+    await load(chosen.current, next);
+  }
+
+  const blocked = hasBlocker(preview?.changes);
+  const exportDisabled = ((purpose === 'share' || target !== null) && !preview) || blocked || (needsConfirmation(preview?.changes) && !confirmed);
+  // Only a copy for an older TomeStack carries the target and the preview's hash.
+  const downConversion = target ? ([target, preview?.changesHash] as const) : ([] as const);
 
   async function exportCharacter() {
     try {
-      const outcome = await client.saveExportAs([characterId], purpose);
+      const outcome = await client.saveExportAs([characterId], purpose, ...downConversion);
       if (outcome.saved) onStatus(`Saved ${outcome.fileName}.`);
     } catch (error) {
       if (!(error instanceof TomeStackError && error.code === 'unsupported')) {
@@ -216,7 +266,7 @@ function ExportPanel({ characterId, active, updatedAt, onError, onStatus }: Expo
       }
       // Browser development (DevHost) has no native dialog: fall back to a download.
       try {
-        const exported = await client.exportCharacters([characterId], purpose);
+        const exported = await client.exportCharacters([characterId], purpose, ...downConversion);
         downloadBase64(exported.fileName, exported.base64);
       } catch (fallbackError) {
         onError(fallbackError);
@@ -239,6 +289,10 @@ function ExportPanel({ characterId, active, updatedAt, onError, onStatus }: Expo
           Share with someone: leaves out content you may not share, and never includes gap notes or PDFs
         </label>
       </fieldset>
+      <TargetFieldset targets={targets} value={target} onChange={chooseTarget} />
+      {preview && (
+        <ChangeRegion target={target} opensIn={preview.opensIn} causes={preview.opensInCauses} changes={preview.changes} previousMinor={targets?.previousMinor ?? null} />
+      )}
       {purpose === 'share' && preview && (
         <div role="region" aria-label="Left out of the shared package">
           {preview.omitted.length === 0 ? (
@@ -265,7 +319,17 @@ function ExportPanel({ characterId, active, updatedAt, onError, onStatus }: Expo
         </ul>
       )}
       {backupFailed && purpose === 'backup' && <p>Could not check whether this package needs a newer TomeStack.</p>}
-      <button type="button" onClick={exportCharacter} disabled={purpose === 'share' && !preview}>
+      {targetFailed && <p>Could not check what the copy for TomeStack {target} leaves out.</p>}
+      {purpose === 'share' && active && (
+        <PreflightPanel kind="package" selection={[characterId]} label="shared package" refreshKey={updatedAt} onReport={setReport} onError={onError} />
+      )}
+      <ExportConfirmation changes={preview?.changes} confirmed={confirmed} onConfirmedChange={setConfirmed} hintId={hintId} />
+      <button
+        type="button"
+        onClick={exportCharacter}
+        disabled={exportDisabled || (purpose === 'share' && !canSaveAfter(report))}
+        aria-describedby={blocked ? hintId : undefined}
+      >
         Export package
       </button>
     </section>
@@ -285,9 +349,11 @@ interface Props {
   onArchiveChanged: () => Promise<void> | void;
   /** The tab to open on (a deep link, for example from the Gap notes screen); Play when absent (ADR-014). */
   initialTab?: SheetTabId;
+  /** D74 R19: true only right after a level-up save; the "What changed" heading takes focus instead of the sheet heading. */
+  focusChecklist?: boolean;
 }
 
-export function CharacterSheet({ view, onChanged, onError: reportError, onStatus, onLevelUp, onMakeChoices, onArchiveChanged, initialTab }: Props) {
+export function CharacterSheet({ view, onChanged, onError: reportError, onStatus, onLevelUp, onMakeChoices, onArchiveChanged, initialTab, focusChecklist }: Props) {
   const { character, sheet } = view;
   // D43: `toggle.group-absent` is information (the toggle works as a group of one), not content that failed to apply.
   const notApplied = sheet.diagnostics.filter((d) => d.code !== 'toggle.group-absent');
@@ -326,10 +392,25 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   const printButton = useRef<HTMLButtonElement>(null);
   const shortRestButton = useRef<HTMLButtonElement>(null);
   const longRestButton = useRef<HTMLButtonElement>(null);
+  /** MECH-X item 2: the sources whose picks may be replaced after the long rest just finished. Page state; Dismiss clears it. */
+  const [afterRest, setAfterRest] = useState<string>();
 
   // WCAG 2.4.3: opening a sheet (after create, import or picking from the list) moves focus to its heading instead of
   // leaving it on <body>. The sheet is keyed by character, so this runs once per opened character, not on every save.
-  useEffect(() => heading.current?.focus(), []);
+  // D74 R19: on the save path the "What changed" panel takes focus instead; child effects run first, so it must be skipped here.
+  const [checklist, setChecklist] = useState(() => readChecklist(character.id, character.level));
+  const [checklistLevel, setChecklistLevel] = useState(character.level);
+  // A5: a save that lands on this open sheet changes the level; read the list again (no focus moves).
+  const [panelTakesFocus, setPanelTakesFocus] = useState(() => !!focusChecklist && checklist !== undefined);
+  const skipHeadingFocus = useRef(panelTakesFocus);
+  if (character.level !== checklistLevel) {
+    setChecklistLevel(character.level);
+    setChecklist(readChecklist(character.id, character.level));
+    setPanelTakesFocus(false); // a panel that appears later never takes focus
+  }
+  useEffect(() => {
+    if (!skipHeadingFocus.current) heading.current?.focus();
+  }, []);
 
   const [rollMode, setRollMode] = useState<RollMode>('normal');
   const [lastRoll, setLastRoll] = useState<RollRecord>();
@@ -386,7 +467,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
     { id: 'manage', label: 'Manage' },
   ];
   // The sheet is keyed by character, so this runs once per opened character. A deep link wins over the memory.
-  const [tab, setTabState] = useState<SheetTabId>(() => initialTab ?? rememberedSheetTab(character.id) ?? 'play');
+  const [tab, setTabState] = useState<SheetTabId>(() => (panelTakesFocus ? 'features' : undefined) ?? initialTab ?? rememberedSheetTab(character.id) ?? 'play');
   function setTab(next: SheetTabId) {
     setTabState(next);
     rememberSheetTab(character.id, next);
@@ -430,6 +511,22 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   function editDetails() {
     setTab('notes');
     setDetailsFocus((n) => n + 1);
+  }
+  // D74: the checklist's links and Dismiss. Focus waits for the render, so it is an effect on a fresh object per press.
+  const [checklistFocus, setChecklistFocus] = useState<{ id: string }>();
+  useEffect(() => {
+    if (checklistFocus) document.getElementById(checklistFocus.id)?.focus();
+  }, [checklistFocus]);
+  function goFromChecklist(target: 'play' | 'spells' | 'choices') {
+    // The choices section shows on every tab, so that link changes no tab (A6).
+    if (target === 'spells' && !showSpells) return; // not offered: the panel shows no such button
+    if (target !== 'choices') setTab(target);
+    setChecklistFocus({ id: target === 'choices' ? 'choices-heading' : tabId('sheet', target) });
+  }
+  function dismissLevelUp() {
+    dismissChecklist(character.id);
+    setChecklist(undefined);
+    setChecklistFocus({ id: tabId('sheet', 'features') });
   }
   const [pdfSources, setPdfSources] = useState<ReadonlySet<string>>(new Set());
 
@@ -490,11 +587,20 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   useEffect(() => {
     shownView.current = view;
   }, [view]);
+  // MECH-X R69: a save that reset content companions' hit points says so once on the status line. It runs after the panel's own
+  // status (the reply is shown first), and once per view: the view the sheet opened with is the opener's to report (the builder).
+  const noticedView = useRef(view);
+  useEffect(() => {
+    if (noticedView.current === view) return;
+    noticedView.current = view;
+    const pruned = companionPrunedText(view);
+    if (pruned && mounted.current) onStatus(pruned);
+  }, [view, onStatus]);
   /** D43 S3: what the reply noticed (an encounter's durations to track by hand, a pool that filled) goes to the sheet's one status line. */
   function say(reply: CharacterView) {
     // D43 S7: the damage panel and the Hit points panel show their own notices (rolls to make, responses not chosen) by label, not by id.
     const message = reply.notices
-      ?.filter((n) => n.code !== 'damage.roll-offered' && n.code !== 'damage.responses-skipped')
+      ?.filter((n) => n.code !== 'damage.roll-offered' && n.code !== 'damage.responses-skipped' && n.code !== 'choice.replaced-outside-window')
       .map((n) => n.message)
       .join(' · ');
     if (message && mounted.current) onStatus(message);
@@ -555,7 +661,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
       const encounter = action.action === 'startEncounter' || action.action === 'endEncounter';
       const after = await runQueued(
         (latest) =>
-          client.play(character.id, encounter ? { ...action, expectedUpdatedAt: shownStamp } : isCompound(action) ? { ...action, expectedUpdatedAt: latest.updatedAt } : action),
+          client.play(character.id, encounter ? { ...action, expectedUpdatedAt: shownStamp } : isCompound(action, view) ? { ...action, expectedUpdatedAt: latest.updatedAt } : action),
         (reply) => reply.character,
       );
       const overlapped = startedWhileRunning || started.current !== mine || running.current > 1 || shownView.current !== view;
@@ -613,7 +719,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
       const concentrationOnly = steps.every((s) => s.action === 'endConcentration' || s.action === 'startConcentration');
       const target =
         steps[0]?.action === 'companionSetHitPoints'
-          ? document.getElementById(`companion-${steps[0].companionId}-heading`) // Wave 3 item 23: the companion's card
+          ? document.getElementById(`companion-${steps[0].contentId ? `${steps[0].contentId}-` : ''}${steps[0].companionId}-heading`) // Wave 3 item 23: the companion's card (MECH-X item 4: a content companion's key has its content id)
           : steps[0]?.action === 'setHitPoints' || steps[0]?.action === 'setTemporaryHitPoints'
             ? document.getElementById('hp-heading')
             : concentrationOnly && current?.character.play?.concentration
@@ -664,6 +770,60 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
     }
     lastLogged.current = logged(record);
     setLastRoll(record);
+  }
+
+  // D73: a roll record's Spend is used once, whether the Spend button or a quickbar press spends it. The state lives here (not in
+  // Last roll) so both go through one `spendOnce`; the record it was used for stays spent, and a new record starts fresh.
+  const [spentFor, setSpentFor] = useState<RollRecord>();
+  /** Holds the record's Spend while the change is under way, gives it back when the change is refused (and calls `refused`); resolves to whether it applied. */
+  async function spendOnce(record: RollRecord, action: PlayAction, refused?: () => void): Promise<boolean> {
+    setSpentFor(record);
+    const applied = await Promise.resolve(act(action))
+      .then((result) => result !== false) // a caller that returns nothing is taken to have applied it
+      .catch(() => false);
+    if (!applied) {
+      setSpentFor((current) => (current === record ? undefined : current));
+      refused?.();
+    }
+    return applied;
+  }
+
+  // D73: the pins are this character's, kept in the page's storage; the sheet is keyed by character, so another one never sees them.
+  const [pins, setPins] = useState(() => readPins(character.id));
+  const visible = visiblePins(view, pins);
+  const quickActions = visible.map((p) => resolvePin(view, p)).filter((a): a is QuickAction => a !== undefined);
+  function pinAction(pin: Pin) {
+    const next = editPins(view, pins, pin);
+    writePins(character.id, next);
+    setPins(next);
+  }
+  // The ref is the guard: two native keydowns can arrive before a re-render, so state could still read "not busy". `quickBusy` only shows it.
+  const busyRef = useRef(false);
+  const [quickBusy, setQuickBusy] = useState(false);
+  /** A quickbar press: rolls or changes the play state, and, only when the button's name says "and spend", makes that spend once. The next press waits for it to settle. */
+  async function quickRun(a: QuickAction) {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setQuickBusy(true);
+    try {
+      if (a.action) {
+        await act(a.action);
+      } else if (a.target) {
+        // A d20 attack follows the sheet's roll mode; a roll effect takes none and is never critical.
+        const withMode = a.pin.kind === 'attack' || a.pin.kind === 'custom';
+        const record = await client.roll(character.id, withMode ? { ...a.target, mode: rollMode } : a.target);
+        showRoll(record);
+        // Only a button named "... and spend" spends (R13); any other pin leaves the record's Spend on the Last roll.
+        if (!a.spends || !mounted.current) return;
+        const { autoAction } = recordSpend(record, view.sheet.resources ?? [], view.sheet.features ?? [], view.sheet.attacks ?? []);
+        if (autoAction) await spendOnce(record, autoAction);
+      }
+    } catch (error) {
+      onError(error);
+    } finally {
+      busyRef.current = false;
+      setQuickBusy(false);
+    }
   }
 
   /** A roll the strip does not show (hit dice in a rest, dice-engine.md "Display"): logged only. */
@@ -762,12 +922,24 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
             Already at level 20, the highest level.
           </span>
         )}
+        {/* MECH-X item 2 (owner, 2026-10-28): picks can always be changed; a swap outside its window gets the save notice. */}
+        {(sheet.choices?.length ?? 0) > 0 && (
+          <button type="button" onClick={onMakeChoices}>
+            Change picks
+          </button>
+        )}
         <button type="button" ref={printButton} onClick={() => setPrinting((open) => !open)} aria-expanded={printing} aria-controls={printing ? 'print-preview' : undefined}>
           Print…
         </button>
       </header>
 
-      <SheetSummary view={view} rollMode={rollMode} onRollMode={setRollMode} lastRoll={lastRoll} rollLog={rollLog} act={act} onDamage={openDamage} spellsTab={showSpells} onRoll={(f) => roll({ field: f, mode: rollMode })} onRollDice={rollDice} />
+      <SheetSummary view={view} rollMode={rollMode} onRollMode={setRollMode} lastRoll={lastRoll} rollLog={rollLog} act={act} onDamage={openDamage} spellsTab={showSpells}
+        onRoll={(f) => roll({ field: f, mode: rollMode })}
+        onRollDice={rollDice}
+        quickbar={<Quickbar actions={quickActions} busy={quickBusy} run={quickRun} />}
+        hasQuickbar={quickActions.length > 0}
+        spent={{ record: spentFor, spendOnce }}
+      />
 
       {resting && (
         <div className="rest-sheet" id="rest-panel">
@@ -789,9 +961,34 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
               // rest is saved, but the status would describe a screen the user has left.
               if (!mounted.current) return;
               onStatus(`${kind === 'shortRest' ? 'Short' : 'Long'} rest finished: ${applied} change${applied === 1 ? '' : 's'} applied.`);
+              // MECH-X item 2 (R44): page state only, never stored. Shown after a long rest that leaves a choice replaceable.
+              const replaceable = kind === 'longRest' ? afterLongRest(rested.sheet.choices) : [];
+              setAfterRest(replaceable.length > 0 ? afterRestPhrase(replaceable) : undefined);
             }}
+            replaceable={afterLongRest(sheet.choices)}
           />
         </div>
+      )}
+
+      {afterRest && (
+        <section aria-labelledby="after-rest-heading" className="play-panel">
+          <h3 id="after-rest-heading">After your long rest</h3>
+          <p>You may replace {afterRest}.</p>
+          <div className="actions">
+            <button type="button" onClick={onMakeChoices}>
+              Make choices
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAfterRest(undefined);
+                heading.current?.focus(); // the panel is gone: the sheet heading (WCAG 2.4.3)
+              }}
+            >
+              Dismiss
+            </button>
+          </div>
+        </section>
       )}
 
       {damaging && hasResponses && (
@@ -844,7 +1041,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
       {/* Open choices and content problems stay visible whatever tab is open (SPEC C-03). */}
       {sheet.choices?.some((c) => !c.resolved) && (
         <section aria-labelledby="choices-heading">
-          <h3 id="choices-heading">Choices to make</h3>
+          <h3 id="choices-heading" tabIndex={-1}>Choices to make</h3>
           <ul className="warnings">
             {sheet.choices
               .filter((c) => !c.resolved)
@@ -937,7 +1134,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
           <ClassColumnsPanel view={view} />
         </div>
         <div className="play-column">
-          <ActionsPanel view={view} roll={roll} act={act} rollMode={rollMode} onDamageType={setDamageType} />
+          <ActionsPanel view={view} roll={roll} act={act} rollMode={rollMode} onDamageType={setDamageType} pins={visible} onPin={pinAction} />
           <CompanionsPanel view={view} act={act} roll={roll} rollMode={rollMode} onChanged={onChanged} onError={onError} onStatus={onStatus} saveCharacter={saveCharacter} />
         </div>
       </TabPanel>
@@ -967,6 +1164,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
       </TabPanel>
 
       <TabPanel idPrefix="sheet" id="features" active={active === 'features'}>
+        {checklist && <LevelUpChecklist checklist={checklist} sheet={sheet} focusOnOpen={panelTakesFocus} spellsOffered={showSpells} onGo={goFromChecklist} onDismiss={dismissLevelUp} />}
         {(sheet.features ?? []).length === 0 && <p className="hint">No features yet.</p>}
         <FeaturesPanel view={view} pdfSources={pdfSources} openPage={openPage} reportGap={(id) => reportGap(gapAboutFeature(id))} />
         <ByHandPanel characterId={character.id} sheet={sheet} active={active === 'features'} />

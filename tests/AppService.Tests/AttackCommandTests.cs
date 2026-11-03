@@ -94,6 +94,68 @@ public class AttackCommandTests
         Assert.Null(boltDamage.LinkedResourceId);
     }
 
+    private static readonly Guid KindledContent = Guid.Parse("6f0dc000-0000-4000-8000-000000000042");
+
+    [Fact]
+    public void An_attack_roll_and_its_damage_roll_both_carry_the_attack_trace()
+    {
+        var (temp, id) = Adept();
+        using var _ = temp;
+        temp.App.Play(new(id, PlayActionKind.ToggleOn, Confirm: true, ContentId: KindledContent, ToggleId: "kindled"));
+        var entry = temp.App.GetCharacter(id).Sheet.Attacks!.Single(a => a.Source == AttackSource.Feature && a.Item == Strike && a.EffectId == "strike");
+
+        var toHit = temp.App.Roll(new(id, Content: Strike, EffectId: "strike"));
+        var damage = temp.App.Roll(new(id, Content: Strike, EffectId: "strike", Damage: true));
+
+        Assert.Equal(TempApp.Json(entry.Trace), TempApp.Json(toHit.Explain));
+        Assert.Equal(entry.ToHit, toHit.Explain![^1].Result);
+        Assert.Equal(toHit.Modifiers.Sum(m => m.Amount), toHit.Explain[^1].Result);
+        Assert.Equal(TempApp.Json(entry.Trace), TempApp.Json(damage.Explain));
+        // R6: the rider's dice step has no amount and its text ends "damage (attack rider)"; the damage step is a "set" with no amount.
+        Assert.Contains(damage.Explain!, s => s.Amount is null && s.Description.EndsWith("damage (attack rider)", StringComparison.Ordinal));
+        Assert.Contains(damage.Explain!, s => s.Operation == "set" && s.Amount is null && s.Description.StartsWith("Damage ", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_losing_stack_group_rider_keeps_the_running_to_hit()
+    {
+        var (temp, id) = Adept();
+        using var _ = temp;
+        temp.App.Play(new(id, PlayActionKind.ToggleOn, Confirm: true, ContentId: KindledContent, ToggleId: "kindled"));
+        // Kindled and Blazing are one toggle group, so the second rider that shares stack group "modeRider" comes from the ungrouped Ember Fist.
+        temp.App.Play(new(id, PlayActionKind.ToggleOn, Confirm: true, ContentId: Guid.Parse("6f0dc000-0000-4000-8000-000000000045"), ToggleId: "fist"));
+
+        var record = temp.App.Roll(new(id, Content: Strike, EffectId: "strike"));
+
+        Assert.Contains(record.Explain!, s => s.Operation == "rider.not-applied");
+        Assert.Equal(record.Modifiers.Sum(m => m.Amount), record.Explain![^1].Result);
+    }
+
+    [Fact]
+    public void A_weapon_attack_and_damage_carry_the_attack_trace()
+    {
+        using var temp = new TempApp();
+        var character = new Character
+        {
+            Id = Guid.NewGuid(),
+            Name = "Test Duelist",
+            RulesFamily = RulesFamilies.Srd51,
+            Level = 1,
+            Classes = [new(Duelist, 1)],
+            BaseAbilities = new(14, 16, 12, 10, 10, 10),
+            Equipment = [new(Longblade, Equipped: true)],
+        };
+        var id = temp.App.SaveCharacter(character).Character.Id;
+        var entry = temp.App.GetCharacter(id).Sheet.Attacks!.Single(a => a.Source == AttackSource.Weapon && a.Item == Longblade);
+
+        var toHit = temp.App.Roll(new(id, Weapon: Longblade));
+        var damage = temp.App.Roll(new(id, Weapon: Longblade, Damage: true));
+
+        Assert.Equal(TempApp.Json(entry.Trace), TempApp.Json(toHit.Explain));
+        Assert.Equal(toHit.Modifiers.Sum(m => m.Amount), toHit.Explain![^1].Result);
+        Assert.Equal(TempApp.Json(entry.Trace), TempApp.Json(damage.Explain));
+    }
+
     [Fact]
     public void Rider_dice_double_on_a_critical_hit_and_flat_bonuses_do_not()
     {
@@ -107,6 +169,66 @@ public class AttackCommandTests
         Assert.Equal(10, record.Dice.Count); // 5 dice, each doubled
         Assert.Equal(5, record.Dice.Count(d => d.FromCritical));
         Assert.Equal(record.Dice.Sum(d => d.Value) + 5, record.Total); // the constant counts once
+    }
+
+    /// <summary>MECH-X item 0: a +2 copy of the Longblade (v12), equipped by a Str +2, PB +2 Duelist.</summary>
+    private static (TempApp Temp, Guid Id, ContentReference Blade) BonusBlade()
+    {
+        var temp = new TempApp();
+        var original = temp.App.Store.FindRevision(Longblade)!;
+        var blade = original with
+        {
+            ContentId = Guid.Parse("6a7e0300-0000-4000-8000-000000000001"),
+            RevisionId = Guid.Parse("6a7e0300-0000-4000-8000-000000000101"),
+            Name = "Fixture Bonus Longblade",
+            SchemaVersion = 12,
+            Effects = [.. original.Effects.Select(e => e is WeaponEffect w ? w with { Bonus = 2 } : e)],
+        };
+        temp.App.Store.AddRevision(blade);
+        var character = new Character
+        {
+            Id = Guid.NewGuid(),
+            Name = "Test Duelist",
+            RulesFamily = RulesFamilies.Srd51,
+            Level = 1,
+            Classes = [new(Duelist, 1)],
+            BaseAbilities = new(14, 16, 12, 10, 10, 10),
+            Equipment = [new(blade.Reference, Equipped: true)],
+        };
+        return (temp, temp.App.SaveCharacter(character).Character.Id, blade.Reference);
+    }
+
+    [Fact]
+    public void A_weapon_bonus_is_in_the_to_hit_and_damage_rolls_and_their_explanation()
+    {
+        var (temp, id, blade) = BonusBlade();
+        using var _ = temp;
+        var entry = temp.App.GetCharacter(id).Sheet.Attacks!.Single(a => a.Source == AttackSource.Weapon && a.Item == blade);
+
+        var toHit = temp.App.Roll(new(id, Weapon: blade));
+        var damage = temp.App.Roll(new(id, Weapon: blade, Damage: true));
+
+        Assert.Equal(6, entry.ToHit); // Str +2, PB +2, weapon +2
+        Assert.Equal(6, toHit.Modifiers.Sum(m => m.Amount));
+        Assert.Equal("1d8+4", damage.Formula);
+        Assert.Equal(TempApp.Json(entry.Trace), TempApp.Json(toHit.Explain));
+        Assert.Equal(TempApp.Json(entry.Trace), TempApp.Json(damage.Explain));
+        Assert.Contains(damage.Explain!, s => s.Description == "Fixture Bonus Longblade: +2 damage (weapon)" && s.Amount == 2);
+        Assert.Equal(entry.ToHit, toHit.Explain![^1].Result);
+    }
+
+    [Fact]
+    public void A_weapon_bonus_is_flat_so_a_critical_hit_doubles_the_dice_and_not_the_bonus()
+    {
+        var (temp, id, blade) = BonusBlade();
+        using var _ = temp;
+
+        var normal = temp.App.Roll(new(id, Weapon: blade, Damage: true));
+        var critical = temp.App.Roll(new(id, Weapon: blade, Damage: true, Critical: true));
+
+        Assert.Equal(("1d8+4", 1, 0), (normal.Formula, normal.Dice.Count, normal.Dice.Count(d => d.FromCritical)));
+        Assert.Equal(("1d8+4", 2, 1), (critical.Formula, critical.Dice.Count, critical.Dice.Count(d => d.FromCritical))); // one die doubled
+        Assert.Equal(critical.Dice.Sum(d => d.Value) + 4, critical.Total); // Str +2 and the weapon +2 count once
     }
 
     [Fact]

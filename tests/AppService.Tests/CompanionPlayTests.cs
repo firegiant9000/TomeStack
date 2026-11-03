@@ -242,7 +242,7 @@ public class CompanionPlayTests
 
         var played = Dispatch("character.play", new { characterId = id, action = "companionDamage", amount = 3, companionId = HoundId, confirm = true });
         Assert.True(played.GetProperty("ok").GetBoolean(), played.ToString());
-        var rolled = Dispatch("roll",new { characterId = id, companionAttack = new { companionId = HoundId, attackId = BiteId } });
+        var rolled = Dispatch("roll", new { characterId = id, companionAttack = new { companionId = HoundId, attackId = BiteId } });
         Assert.True(rolled.GetProperty("ok").GetBoolean(), rolled.ToString());
         Assert.Equal("companion.attack", rolled.GetProperty("result").GetProperty("provenance").GetProperty("rollId").GetString());
     }

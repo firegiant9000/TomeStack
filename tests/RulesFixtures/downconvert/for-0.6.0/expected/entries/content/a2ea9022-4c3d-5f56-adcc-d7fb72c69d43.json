@@ -1,0 +1,61 @@
+{
+  "contentId": "c1060000-0000-4000-8000-0000000000c4",
+  "revisionId": "a2ea9022-4c3d-5f56-adcc-d7fb72c69d43",
+  "schemaVersion": 10,
+  "kind": "feature",
+  "name": "Compat Rising Tide",
+  "rulesFamilies": [
+    "srd-5.1"
+  ],
+  "provenance": {
+    "sourceId": "c1060000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 5
+    }
+  },
+  "status": "published",
+  "summary": "A test feature with a named number, a bonus that reads it, and rolls with detail fields.",
+  "effects": [
+    {
+      "type": "resource",
+      "id": "surge",
+      "resourceId": "surge",
+      "label": "Surge",
+      "maximum": "3",
+      "automation": "automatic",
+      "timing": "always"
+    },
+    {
+      "type": "resource",
+      "id": "calm",
+      "resourceId": "calm",
+      "label": "Calm",
+      "maximum": "3",
+      "automation": "automatic",
+      "timing": "always"
+    },
+    {
+      "type": "toggle",
+      "id": "rise",
+      "toggleId": "rise",
+      "label": "Rising",
+      "automation": "automatic",
+      "timing": "always"
+    },
+    {
+      "type": "roll",
+      "id": "wave",
+      "rollId": "wave",
+      "label": "Compat wave",
+      "dice": "2d6",
+      "resourceId": "surge",
+      "cost": "1",
+      "automation": "automatic",
+      "timing": "always"
+    }
+  ],
+  "downConvertedFrom": {
+    "revisionId": "c1060000-0000-4000-8000-0000000000e4",
+    "schemaVersion": 11
+  }
+}

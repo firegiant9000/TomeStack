@@ -31,8 +31,7 @@ function sheetSourceIds(sheet: CharacterSheet): string[] {
 
 /**
  * The one place the mechanics report is read (D69). It asks for the sheet's own sources only while `active`, again whenever
- * the `sheet` object changes, and a result is used only for the sheet and character it was asked for. Lab Task 3 swaps
- * this for the effective automation; nothing else in the panel changes.
+ * the `sheet` object changes, and a result is used only for the sheet and character it was asked for.
  */
 function useMechanicsReport(characterId: string, sheet: CharacterSheet, sourceIds: string[], active: boolean) {
   const [result, setResult] = useState<ReportResult | null>(null);
@@ -63,16 +62,20 @@ function spendRows(sheet: CharacterSheet): ByHandRow[] {
 function groupReport(sheet: CharacterSheet, report: MechanicsReport | null): ByHandGroups {
   const toRow = (m: MechanicEntry): ByHandRow => ({ key: rowKey(m), name: m.featureName, page: m.page });
   const unique = (rows: ByHandRow[]) => rows.filter((r, i) => rows.findIndex((o) => o.key === r.key) === i);
-  const unsupported = report?.unsupported ?? [];
+  // Not understood: the host's list, plus any entry whose effective value says the type is unknown.
+  const unsupported = (report?.mechanics ?? []).filter((m) => m.effective?.unsupported).concat(report?.unsupported ?? []);
   const unsupportedKeys = new Set(unsupported.map(rowKey));
   const spend = unique(spendRows(sheet));
   const spendKeys = new Set(spend.map((r) => r.key)); // same key shape as rowKey: revision | effect id | effect type
-  // Each row appears once: Not understood (a subset of Mechanics) > Spend by hand > the rest. Pure text is never listed.
-  const rest = (report?.mechanics ?? []).filter((m) => !unsupportedKeys.has(rowKey(m)) && !spendKeys.has(rowKey(m)) && m.effectType !== 'text');
+  // Each row appears once: Not understood (a subset of Mechanics) > Spend by hand > the rest. A feature with no effects (pure
+  // text: the one `text` line with no effect id) is never listed. The group is what the engine delivers (`effective`), not what
+  // the author wrote; an older host sends no `effective`, so the author's value stands in.
+  const rest = (report?.mechanics ?? []).filter((m) => !unsupportedKeys.has(rowKey(m)) && !spendKeys.has(rowKey(m)) && !(m.effectType === 'text' && !m.effectId));
+  const delivered = (m: MechanicEntry) => m.effective?.status ?? m.automation;
   return {
     spend,
-    reference: unique(rest.filter((m) => m.automation === 'reference').map(toRow)),
-    assisted: unique(rest.filter((m) => m.automation === 'assisted').map(toRow)),
+    reference: unique(rest.filter((m) => delivered(m) === 'reference').map(toRow)),
+    assisted: unique(rest.filter((m) => delivered(m) === 'assisted').map(toRow)),
     unsupported: unique(unsupported.map(toRow)),
   };
 }

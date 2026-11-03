@@ -473,7 +473,7 @@ namespace TomeStack.AppService
             {
                 _store.UpsertSource(source);
                 foreach (var draft in run.Drafts)
-                    _store.AddRevision(draft);
+                    _store.AddRevision(Packages.DownConversion.WithoutMarker(draft)); // an extension's draft is never a down-converted copy
             });
             return new(source.Id, source.Title, run.Drafts.Count);
         }

@@ -6,6 +6,7 @@ import { Pips } from './Pips';
 import { SpellSearch } from './sheet/SpellSearch';
 import { SpellFilters, filtersActive, noFilters, toSpellFilter, type SpellFilterState } from './sheet/SpellFilters';
 import { filterSpells, foldName } from '../spellSearch';
+import { ExplainList } from './ExplainList';
 import { TraceTable } from './TraceTable';
 
 const abilityNames: Record<Ability, string> = {
@@ -105,7 +106,9 @@ export function SpellsPanel({
           {!entry.primary && entry.attackTrace && entry.saveDcTrace && (
             <details>
               <summary>How {entry.name}’s spell attack and save DC are calculated</summary>
+              <ExplainList label={`${entry.name} spell attack bonus`} steps={entry.attackTrace} />
               <TraceTable label={`${entry.name} spell attack bonus`} trace={entry.attackTrace} labels={labels} />
+              <ExplainList label={`${entry.name} spell save DC`} steps={entry.saveDcTrace} />
               <TraceTable label={`${entry.name} spell save DC`} trace={entry.saveDcTrace} labels={labels} />
             </details>
           )}
@@ -155,6 +158,7 @@ export function SpellsPanel({
                     <p className="hint">
                       {[spell.school, spell.castingTime, spell.range, spell.components, spell.duration].filter(Boolean).join(' · ')}
                       {spell.save && ` · ${abilityNames[spell.save]} save (DC ${entry.saveDc})`}
+                      {spell.tags && spell.tags.length > 0 && ` · Tags: ${spell.tags.join(', ')}`}
                     </p>
                     {spell.summary && <p>{spell.summary}</p>}
                     {spell.text && <p>{spell.text}</p>}

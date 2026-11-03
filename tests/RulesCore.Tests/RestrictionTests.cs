@@ -16,6 +16,21 @@ public class RestrictionTests
         return CharacterCalculator.Calculate(character, Fixtures.M1Catalog());
     }
 
+    /// <summary>Capability evidence (ADR-020): a restriction is delivered automatically; an unmet one keeps its content out with a diagnostic.</summary>
+    [Fact]
+    public void The_capability_registry_ceiling_for_restriction_is_automatic()
+    {
+        var met = MechanicsInventoryTests.Holder("Test Restriction Met", 10, new RestrictionEffect { Id = "needs", Field = FieldIds.Score(Ability.Str), Minimum = 1 });
+        var unmet = MechanicsInventoryTests.Holder("Test Restriction Unmet", 10, new RestrictionEffect { Id = "needs", Field = FieldIds.Score(Ability.Str), Minimum = 30 });
+
+        var (report, metSheet) = MechanicsInventoryTests.Pinned(met);
+        var (_, unmetSheet) = MechanicsInventoryTests.Pinned(unmet);
+
+        CapabilityRegistryTests.AssertAutomaticallyDelivered(report, met, RestrictionEffect.TypeName, "needs");
+        Assert.DoesNotContain(metSheet.Diagnostics, d => d.Code == "restriction.unmet");
+        Assert.Contains(unmetSheet.Diagnostics, d => d.Code == "restriction.unmet" && d.EffectId == "needs");
+    }
+
     [Fact]
     public void Content_whose_prerequisite_is_not_met_is_not_applied_and_the_diagnostic_names_it()
     {

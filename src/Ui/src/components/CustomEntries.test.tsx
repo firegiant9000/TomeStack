@@ -10,6 +10,7 @@ import { TomeStackError } from '../api/transport';
 import type { Character, CharacterView, CustomAttack, CustomItem } from '../api/types';
 import { CustomAttacksPanel, CustomItemsPanel } from './CustomEntries';
 import type { SheetSave } from './sheetSave';
+import { fill } from '../test/fill';
 
 vi.mock('../api/client', () => ({ client: { saveCharacter: vi.fn(), rollDice: vi.fn() } }));
 
@@ -94,7 +95,7 @@ it('links an out-of-range quantity and an over-long note to their fields and hol
   const user = userEvent.setup();
   items();
   await user.click(screen.getByRole('button', { name: 'Add an item of your own' }));
-  await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Testy Chalk');
+  await fill(user, screen.getByRole('textbox', { name: 'Name' }), 'Testy Chalk');
   const quantity = screen.getByRole('spinbutton', { name: 'Quantity' });
   await user.clear(quantity);
   await user.type(quantity, '10000');
@@ -176,9 +177,9 @@ it('keeps the text typed while a save is in flight and leaves the form open on t
   );
   items();
   await user.click(screen.getByRole('button', { name: 'Add an item of your own' }));
-  await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Testy Chalk');
+  await fill(user, screen.getByRole('textbox', { name: 'Name' }), 'Testy Chalk');
   await user.click(screen.getByRole('button', { name: 'Save item' }));
-  await user.type(screen.getByRole('textbox', { name: 'Note (optional)' }), 'typed meanwhile');
+  await fill(user, screen.getByRole('textbox', { name: 'Note (optional)' }), 'typed meanwhile');
   await act(async () => finish(view()));
   await waitFor(() => expect(latest.character.customItems).toHaveLength(1));
   expect((screen.getByRole('textbox', { name: 'Note (optional)' }) as HTMLInputElement).value).toBe('typed meanwhile');
@@ -221,10 +222,10 @@ it('adds an attack with its damage type and the dice engine accepting the damage
   const user = userEvent.setup();
   attacks();
   await user.click(screen.getByRole('button', { name: 'Add an attack of your own' }));
-  await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Testy Sling');
+  await fill(user, screen.getByRole('textbox', { name: 'Name' }), 'Testy Sling');
   await user.clear(screen.getByRole('spinbutton', { name: 'To hit bonus' }));
   await user.type(screen.getByRole('spinbutton', { name: 'To hit bonus' }), '5');
-  await user.type(screen.getByRole('textbox', { name: 'Damage (optional)' }), '1d6+2');
+  await fill(user, screen.getByRole('textbox', { name: 'Damage (optional)' }), '1d6+2');
   await user.selectOptions(screen.getByRole('combobox', { name: 'Damage type (optional)' }), 'Bludgeoning');
   await user.click(screen.getByRole('button', { name: 'Save attack' }));
   await waitFor(() => expect(latest.character.customAttacks).toHaveLength(1));
@@ -239,7 +240,7 @@ it("shows the dice engine's own message for bad damage, linked to the field, sav
   vi.mocked(client.rollDice).mockRejectedValue(new TomeStackError({ code: 'validation', message: 'Refused.', diagnostics: [{ code: 'dice.no-dice', message: "'5' has no dice to roll." }] }));
   attacks();
   await user.click(screen.getByRole('button', { name: 'Add an attack of your own' }));
-  await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Testy Sling');
+  await fill(user, screen.getByRole('textbox', { name: 'Name' }), 'Testy Sling');
   const damage = screen.getByRole('textbox', { name: 'Damage (optional)' });
   await user.type(damage, '5');
   await user.click(screen.getByRole('button', { name: 'Save attack' }));

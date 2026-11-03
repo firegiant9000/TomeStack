@@ -19,6 +19,6 @@ public sealed partial class TomeStackApp
         var sources = request.SourceIds is { Count: > 0 } ids
             ? ids.ToHashSet()
             : _store.ListSources().Where(s => s.EditionVersion == "homebrew").Select(s => s.Id).ToHashSet();
-        return MechanicsInventory.Of(view.Sheet, sources);
+        return MechanicsInventory.Of(view.Sheet, sources, _store);
     }
 }

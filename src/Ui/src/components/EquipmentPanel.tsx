@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { client } from '../api/client';
-import type { CharacterView, ContentOption, EquipmentEntry, ItemUseValue, PlayAction } from '../api/types';
+import type { CharacterView, ContentOption, ContentReference, EquipmentEntry, ItemUseValue, PlayAction } from '../api/types';
 import { Pips } from './Pips';
 import { directSave, EntryGone, type SheetSave } from './sheetSave';
 
@@ -28,6 +28,9 @@ const sameEntry = (a: EquipmentEntry, b: EquipmentEntry) => (a.id || b.id ? a.id
 /** The rules allow attuning to three items at a time (both SRDs); more is a warning, never a refusal. */
 const attunementLimit = 3;
 
+/** Character schema v11: at most this many mods on one entry (the service refuses more). */
+const maxMods = 4;
+
 /**
  * M2 item 4: items carried, and which are equipped. Equipped armor sets the Armor Class (the trace says which item);
  * each change is one explicit action saved with the character.
@@ -38,6 +41,8 @@ export function EquipmentPanel({ view, onChanged, onError, onStatus, saveCharact
   const equipment = character.equipment ?? [];
   const [items, setItems] = useState<ContentOption[]>([]);
   const [adding, setAdding] = useState('');
+  // The mod chosen per entry (by its id, or its position while it has none), so two copies never share a choice.
+  const [picks, setPicks] = useState<Record<string, string>>({});
 
   useEffect(() => {
     client
@@ -70,6 +75,17 @@ export function EquipmentPanel({ view, onChanged, onError, onStatus, saveCharact
     return list.map((e) => (sameEntry(e, entry) ? { ...e, attuned: e.attuned ? undefined : true } : e));
   }
 
+  // Mods are an ordinary saved field of the entry (R55); an emptied list is dropped, never saved as [].
+  function withMods(list: EquipmentEntry[], entry: EquipmentEntry, change: (mods: ContentReference[]) => ContentReference[]): EquipmentEntry[] {
+    if (!list.some((e) => sameEntry(e, entry))) throw new EntryGone(`${nameOf(entry)} was removed meanwhile, so nothing was saved.`);
+    return list.map((e) => {
+      if (!sameEntry(e, entry)) return e;
+      const mods = change(e.mods ?? []);
+      if (mods.length > maxMods) throw new EntryGone(`${nameOf(entry)} already has ${maxMods} mods, so nothing was saved.`);
+      return { ...e, mods: mods.length > 0 ? mods : undefined };
+    });
+  }
+
   // Charges are play state: they change only by the play command (R160), never by the save above.
   async function charge(use: ItemUseValue, kind: 'spendCharge' | 'regainCharge', label: string) {
     const left = use.chargesLeft ?? 0;
@@ -96,7 +112,9 @@ export function EquipmentPanel({ view, onChanged, onError, onStatus, saveCharact
   // Carried items keep their names from every revision; new items are offered at their newest revision (SPEC I-06).
   // R159: an item with charges or attunement may be carried again as a separate entry; any other item is one entry with a quantity.
   const uses = view.sheet.itemUses ?? [];
-  const repeatable = (o: ContentOption) => uses.some((u) => sameRef(u.item, o.reference));
+  // Every weapon or armor entry has a row now (for its mods), so a row alone no longer means charges or attunement.
+  const repeatable = (o: ContentOption) => uses.some((u) => sameRef(u.item, o.reference) && (u.requiresAttunement || (u.chargesMax !== undefined && u.chargesMax !== null)));
+  const modOptions = items.filter((o) => o.compatible && !o.superseded && o.modOf);
   const addable = items.filter((o) => o.compatible && !o.superseded && (!equipment.some((e) => sameRef(e.item, o.reference)) || repeatable(o)));
   const attunedCount = uses.filter((u) => u.attuned).length;
 
@@ -125,6 +143,17 @@ export function EquipmentPanel({ view, onChanged, onError, onStatus, saveCharact
                   const copies = equipment.filter((e) => sameRef(e.item, entry.item));
                   const name = `${nameOf(entry)}${copies.length > 1 ? ` (copy ${copies.indexOf(entry) + 1} of ${copies.length})` : ''}`;
                   const left = use?.chargesLeft ?? 0;
+                  const key = entry.id ?? `#${index}`;
+                  const attached = use?.mods ?? [];
+                  const offered = !use
+                    ? []
+                    : modOptions.filter(
+                        (o) =>
+                          (o.modOf === 'any' ? use.hosts.length > 0 : o.modOf !== undefined && use.hosts.includes(o.modOf)) &&
+                          !attached.some((m) => sameRef(m.reference, o.reference)),
+                      );
+                  const picked = offered.find((o) => o.reference.revisionId === picks[key]);
+                  const canAttach = entry.equipped && attached.length < maxMods && offered.length > 0;
                   return (
                     <li key={entry.id ?? `item-${entry.item.revisionId}`} className="resource">
                       <label className="choice">
@@ -143,6 +172,56 @@ export function EquipmentPanel({ view, onChanged, onError, onStatus, saveCharact
                       )}
                       {use?.requiresAttunement && entry.equipped && !use.attuned && (
                         <p className="hint">{name} is not attuned, so its effects do not apply.</p>
+                      )}
+                      {attached.length > 0 && (
+                        <div className="item-mods">
+                          <span>{entry.equipped ? `Mods on ${name}: ${attached.map((m) => m.name).join(', ')}` : `Mods (not equipped): ${attached.map((m) => m.name).join(', ')}`}</span>
+                          {entry.equipped &&
+                            attached.map((m) => (
+                              <button key={m.reference.revisionId} type="button" onClick={() => save((list) => withMods(list, entry, (mods) => mods.filter((r) => !sameRef(r, m.reference))))}>
+                                Remove mod {m.name} from {name}
+                              </button>
+                            ))}
+                        </div>
+                      )}
+                      {canAttach && (
+                        <div className="inline-form">
+                          <label className="field">
+                            Attach a mod to {name}
+                            <select value={picked?.reference.revisionId ?? ''} onChange={(e) => setPicks({ ...picks, [key]: e.target.value })}>
+                              <option value="">Choose a mod…</option>
+                              {offered.map((o) => (
+                                <option key={o.reference.revisionId} value={o.reference.revisionId}>
+                                  {o.name} ({o.sourceTitle}
+                                  {o.page ? `, ${o.page}` : ''})
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <button
+                            type="button"
+                            disabled={!picked}
+                            aria-label={picked ? `Attach ${picked.name} to ${name}` : `Attach a mod to ${name}`}
+                            onClick={() => {
+                              if (!picked) return;
+                              setPicks({ ...picks, [key]: '' });
+                              void save((list) => withMods(list, entry, (mods) => (mods.some((r) => sameRef(r, picked.reference)) ? mods : [...mods, picked.reference])));
+                            }}
+                          >
+                            Attach
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!picked}
+                            onClick={() => {
+                              if (!picked) return;
+                              setPicks({ ...picks, [key]: '' });
+                              void save((list) => [...list, { item: entry.item, equipped: false, quantity: 1, mods: [picked.reference] }]);
+                            }}
+                          >
+                            Attach to a new copy of {name}
+                          </button>
+                        </div>
                       )}
                       {use?.chargesMax !== undefined && use.chargesMax !== null && (
                         <div className="charges">

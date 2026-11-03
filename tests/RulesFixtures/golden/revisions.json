@@ -196,5 +196,24 @@
       },
       { "type": "modifier", "id": "tide-low-ac", "timing": "whileActive", "toggle": "low", "operation": "bonus", "target": "armorClass", "value": "1" }
     ]
+  },
+  {
+    "contentId": "6a7e000c-0000-4000-8000-000000000001",
+    "revisionId": "6a7e000c-0000-4000-8000-000000000101",
+    "schemaVersion": 12,
+    "kind": "item",
+    "name": "Fixture Tidal Blade",
+    "rulesFamilies": ["srd-5.2.1"],
+    "provenance": { "sourceId": "6a7e0000-0000-4000-8000-000000000001" },
+    "status": "published",
+    "effects": [
+      {
+        "type": "weapon", "id": "tidal-blade", "category": "martial", "attack": "melee", "bonus": 2, "damage": "1d8", "damageType": "slashing",
+        "properties": ["finesse", "versatile"], "versatile": "1d10", "weaponKey": "tidalblade"
+      },
+      { "type": "item", "id": "tidal-item", "requiresAttunement": false },
+      { "type": "xTideLore", "id": "tidal-lore", "verses": { "ebb": 1, "flow": [2, 3] }, "note": "Kept as written." }
+    ],
+    "xFixtureNote": { "kept": "as written", "list": [1, "two", true, null] }
   }
 ]

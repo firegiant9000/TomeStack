@@ -224,8 +224,9 @@ public class SchemaTests
 
     [Theory]
     [InlineData(10, false)]
-    [InlineData(11, true)]
-    public void A_package_character_entry_at_schema_v10_is_accepted_and_v11_is_refused(int version, bool refused)
+    [InlineData(11, false)]
+    [InlineData(12, true)]
+    public void A_package_character_entry_at_schema_v11_is_accepted_and_v12_is_refused(int version, bool refused)
     {
         using var origin = new TempApp();
         var saved = origin.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json"));
@@ -237,7 +238,7 @@ public class SchemaTests
 
         Assert.Equal(refused, errors.Count > 0);
         if (refused)
-            Assert.All(errors, e => Assert.Contains("character schema v11", e.Message, StringComparison.Ordinal));
+            Assert.All(errors, e => Assert.Contains("character schema v12", e.Message, StringComparison.Ordinal));
     }
 
     [Fact]
@@ -333,10 +334,11 @@ public class SchemaTests
     [Theory]
     [InlineData(10, false)]
     [InlineData(11, false)]
-    [InlineData(12, true)]
-    public void A_package_content_entry_at_content_schema_v11_is_accepted_and_v12_is_refused(int version, bool refused)
+    [InlineData(12, false)]
+    [InlineData(13, true)]
+    public void A_package_content_entry_at_content_schema_v12_is_accepted_and_v13_is_refused(int version, bool refused)
     {
-        // Content schema v11 (play mechanics, D43) is the current version; v12 is reserved for a later build and is refused here.
+        // Content schema v12 (weapon bonus, MECH-X item 0) is the current version; v13 is reserved for a later build and is refused here.
         using var origin = new TempApp();
         var saved = origin.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json"));
         var package = origin.App.ExportCharacters([saved.Character.Id]).Content;
@@ -348,7 +350,7 @@ public class SchemaTests
         var errors = preview.Errors.Where(e => e.Code == "package.schema-unsupported").ToList();
         Assert.Equal(refused, errors.Count > 0);
         if (refused)
-            Assert.All(errors, e => Assert.Contains("content schema v12", e.Message, StringComparison.Ordinal));
+            Assert.All(errors, e => Assert.Contains("content schema v13", e.Message, StringComparison.Ordinal));
     }
 
     [Fact]
@@ -438,6 +440,42 @@ public class SchemaTests
         Assert.Equal("content.schema-unsupported", Assert.Single(sheet.Diagnostics).Code);
         Assert.Contains((character with { SchemaVersion = 99 }).Validate(), d => d.Code == "character.schema-unsupported");
     }
+
+    [Theory]
+    [InlineData(5)]
+    [InlineData(7)]
+    [InlineData(8)]
+    [InlineData(9)]
+    public void Package_manifest_schemas_accept_madeFor_and_still_reject_an_unknown_key(int formatVersion)
+    {
+        string ErrorsWith(Action<JsonObject> change)
+        {
+            var manifest = new JsonObject
+            {
+                ["format"] = "tomestack.package",
+                ["formatVersion"] = formatVersion,
+                ["createdAt"] = "2026-10-30T00:00:00+00:00",
+                ["appVersion"] = "0.7.0",
+                ["purpose"] = "backup",
+                ["characters"] = new JsonArray(),
+                ["entries"] = new JsonArray(),
+                ["notices"] = new JsonArray(),
+                ["omitted"] = new JsonArray(),
+                ["attachmentPolicy"] = MadeForPolicy,
+            };
+            change(manifest);
+            using var document = JsonDocument.Parse(manifest.ToJsonString());
+            return Validate("package-manifest", document.RootElement);
+        }
+
+        Assert.Equal("", ErrorsWith(_ => { }));
+        Assert.Equal("", ErrorsWith(m => m["madeFor"] = "0.6.0"));
+        Assert.NotEqual("", ErrorsWith(m => m["madeFor"] = "abc"));
+        Assert.NotEqual("", ErrorsWith(m => m["madeFor"] = "12345.0.0"));
+        Assert.NotEqual("", ErrorsWith(m => m["madeForever"] = "0.6.0"));
+    }
+
+    private const string MadeForPolicy = PackageManifest.CharacterAttachmentPolicy;
 }
 
 /// <summary>Rewrites package entries and re-signs the manifest so that only the edited content differs.</summary>

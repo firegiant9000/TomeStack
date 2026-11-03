@@ -32,7 +32,7 @@ Docs checked through Context7 (`/uglytoad/pdfpig`): `PdfDocument.Open`, `Parsing
 ### (b) OCR fallback: Windows.Media.Ocr, rendered by Windows.Data.Pdf
 
 - For a page with **no text layer** (PdfPig finds no letters), the worker renders the page with **`Windows.Data.Pdf`** (`PdfDocument.LoadFromStreamAsync`, `PdfPage.RenderToStreamAsync`). It then reads the image with **`Windows.Media.Ocr`** (`OcrEngine.TryCreateFromUserProfileLanguages`, `RecognizeAsync`; lines and words with boxes). Both are part of Windows 10 and 11, work offline, and add no package. PdfPig cannot render pages, so OCR needs a renderer, and Windows has one.
-- **Cost:** the process that runs OCR must target `net10.0-windows10.0.19041.0`, which brings the C#/WinRT projection assembly (`Microsoft.Windows.SDK.NET.dll`). The installer growth is measured in D1 and recorded below. The estimate is about 25 MB on the 145 MB self-contained build.
+- **Cost:** the process that runs OCR must target `net10.0-windows10.0.19041.0`, which brings the C#/WinRT projection assembly (`Microsoft.Windows.SDK.NET.dll`). The installer growth is measured in D1 and recorded below. The estimate is about 25 MB on the 145 MB self-contained build. (Since 2026-10-27 the worker embeds its own projection instead; see the note under "License finding".)
 - **Accuracy:** good on clean printed text. It needs an installed OCR language (`ocr.unavailable` when there is none) and gives **no per-word confidence**, so candidate confidence comes from the detectors, never from OCR. An OCR'd page is marked `fromOcr`, and its candidates carry an "OCR text" uncertainty.
 
 ### (c) Isolation: a child process over stdin/stdout
@@ -62,7 +62,7 @@ Docs checked through Context7 (`/uglytoad/pdfpig`): `PdfDocument.Open`, `Parsing
 - OCR quality depends on the Windows language packs of the user's machine, and OCR has no confidence. A clean VM without the OCR language is an owner check.
 - The service keeps page navigation independent of extraction. A job that fails leaves the attachment and "Open page" working (ARCHITECTURE).
 - The worker answers a second request kind, `formFields` (the character-sheet importer's read, `features/ddb-pdf-import.md` S1), under the same isolation and its own smaller limits; extraction requests are unchanged ([pdf-import.md](../features/pdf-import.md) D1).
-- The `extract` kind also serves the character importer: a PDF with no form fields has its first 20 pages read with the sheet limits (20 MB, 50 pages, 30 s) and nothing stored, then parsed as text (ADR-013, ADR-017). There is no third request kind; the allowed set is still `extract` and `formFields`.
+- The `extract` kind also serves the character importer: a PDF with no form fields has its first 20 pages read with the sheet limits (20 MB, 50 pages, 30 s) and nothing stored, then parsed as text (ADR-013, ADR-017). The allowed set is `extract`, `formFields` and, since the Import Lab (D67), `extractMarkdown`: the same worker reads a `.md` temp copy with the pure `MarkdownExtractor` (no PDF library, no OCR) and sends pages under the same message cap; the character importer still uses only `extract` and `formFields`.
 
 ## Alternatives considered
 
@@ -91,6 +91,8 @@ The projection that (b) needs (`Microsoft.Windows.SDK.NET.dll`, 24.9 MB, and `Wi
 - the distributor indemnifies Microsoft.
 
 Apache-2.0 covers only TomeStack's own code, so it is compatible as long as the DLLs are never relicensed. This is recorded in `ATTRIBUTION.md` and `NOTICE`. Two items stay open before a public release: confirm the files are on REDIST.TXT, and add the end-user terms.
+
+**Note (2026-10-27, release checklist §2 option (b)):** the two DLLs no longer ship. The worker builds with C#/WinRT 2.3.1 in embedded mode, which compiles a projection of only the Windows types it calls (from `Microsoft.Windows.SDK.Contracts` 10.0.19041.2 metadata, read at build time) and C#/WinRT's MIT runtime into `TomeStack.ImportWorker.Host.dll`. The worker and the shell keep `net10.0-windows10.0.19041.0` and set `IncludeWindowsSDKRefFrameworkReferences=false`. OCR is unchanged (`OcrTests` in process and in the worker process). The self-contained publish shrinks by 22.7 MB and the installer by 6.1 MB; the evidence below is the D1 state. Build-time SDK terms may still apply ([release checklist](../licensing/release-checklist.md) §2).
 
 ## Evidence (D1, 2026-09-28, Windows 11 26200)
 

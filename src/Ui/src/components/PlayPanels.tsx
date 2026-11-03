@@ -2,8 +2,8 @@ import { useEffect, useId, useRef, useState, type SubmitEvent } from 'react';
 import type {
   Ability,
   Activation,
-  AlsoChangeValue,
   AttackEntry,
+  EquipmentEntry,
   AutomationStatus,
   CharacterView,
   ContentKind,
@@ -20,11 +20,16 @@ import type {
   RollTarget,
   ToggleValue,
 } from '../api/types';
+import { attackAvailability, dicelessUse, hasDice, poolFor, recordPayment, recordSpend, rollAvailability, toggleAvailability, type Availability } from '../actionRows';
+import { castsText, paying, paymentText } from '../payment';
+import { explainSteps } from '../explain';
 import { hitDiceText, rollBonus } from '../format';
+import { attackPin, customPin, maxPins, pinKey, rollPin, togglePin, weaponTarget, type Pin } from '../quickbar';
 import { rollButtonSuffix } from '../rollModes';
-import { diceLine, rollModeText } from '../rollText';
+import { diceLine, rollKey, rollModeText } from '../rollText';
 import { announceRollsOn, diceAnimationOn } from '../settings';
 import { damageTypeLabel, damageTypes, normalizeDamageType } from './customModel';
+import { ExplainList } from './ExplainList';
 import { Pips } from './Pips';
 
 /** The one name for the inspiration toggle and its summary line: "Heroic Inspiration" in 5.2.1, "Inspiration" otherwise. */
@@ -380,7 +385,7 @@ export function ConditionsPanel({ view, act }: { view: CharacterView; act: Act }
   );
 }
 
-function ResourceCard({ resource, act, level = 4 }: { resource: ResourceValue; act: Act; level?: 4 | 5 }) {
+export function ResourceCard({ resource, act, level = 4 }: { resource: ResourceValue; act: Act; level?: 4 | 5 }) {
   const key = { contentId: resource.content.contentId, resourceId: resource.resourceId };
   const tracked = resource.current !== undefined && resource.maximum !== undefined;
   const headingId = `resource-${resource.content.revisionId}-${resource.resourceId}`;
@@ -454,6 +459,7 @@ function ResourceCard({ resource, act, level = 4 }: { resource: ResourceValue; a
           ))}
         </ul>
       )}
+      <ExplainList label={`${resource.label} maximum`} steps={resource.trace} />
       {resource.trace.length > 0 && (
         <details>
           <summary>How the maximum is calculated</summary>
@@ -496,7 +502,8 @@ export function ClassColumnsPanel({ view }: { view: CharacterView }) {
 }
 
 export function ResourcesPanel({ view, act }: { view: CharacterView; act: Act }) {
-  const resources = view.sheet.resources ?? [];
+  // MECH-X item 4: a content companion's pools are on its card.
+  const resources = (view.sheet.resources ?? []).filter((r) => !r.companionId);
   if (resources.length === 0) return null;
   // Wave 3 item 22 (R157): a resource with an activation sits under the same group headings as the actions; the rest are listed as before.
   const ungrouped = resources.filter((r) => !r.activation);
@@ -534,7 +541,9 @@ const signed = (n: number) => `${n >= 0 ? '+' : ''}${n}`;
  * One toggle of the active effects. D38: an auto toggle follows the hit points, so it shows its state as text and has no switch
  * (there is nothing to confirm). Kept small so activation groups can take it over.
  */
-function ToggleRow({ toggle: t, act }: { toggle: ToggleValue; act: Act }) {
+function ToggleRow({ toggle: t, act, availability, pinning }: { toggle: ToggleValue; act: Act; availability: Availability; pinning?: Pinning }) {
+  const reasonId = useId();
+  const reason = availability.reasons.join(' ');
   if (t.auto) {
     return (
       <div className="choice">
@@ -546,26 +555,64 @@ function ToggleRow({ toggle: t, act }: { toggle: ToggleValue; act: Act }) {
       </div>
     );
   }
+  // MECH-X item 1 (R40): only switching a paying toggle ON waits on whether it can be paid; switching it off never does.
+  const payment = paying(t.payment) ? t.payment : undefined;
+  const held = !t.on && payment?.payable === false;
   return (
-    <label className="choice">
-      <input
-        type="checkbox"
-        checked={t.on}
-        onChange={() => act({ action: t.on ? 'toggleOff' : 'toggleOn', contentId: t.content.contentId, toggleId: t.toggleId })}
-      />
-      {t.label}
-      <span className="option-source">
-        {t.contentName}
-        {t.resourceId ? ' · turning it on spends 1 use' : ''}
-        {t.text ? ` · ${t.text}` : ''}
-      </span>
-    </label>
+    <>
+      <label className="choice">
+        <input
+          type="checkbox"
+          checked={t.on}
+          disabled={held}
+          aria-describedby={reason ? reasonId : undefined}
+          onChange={() => act({ action: t.on ? 'toggleOff' : 'toggleOn', contentId: t.content.contentId, toggleId: t.toggleId })}
+        />
+        {t.label}
+        <span className="option-source">
+          {t.contentName}
+          {t.resourceId ? ' · turning it on spends 1 use' : ''}
+          {payment ? ` · Costs ${paymentText(payment, t.cost)}` : ''}
+          {t.text ? ` · ${t.text}` : ''}
+        </span>
+      </label>
+      {reason && (
+        <span id={reasonId} className="hint">
+          {' '}
+          {reason}
+        </span>
+      )}
+      {pinning && <PinButton {...pinning} />}
+    </>
+  );
+}
+
+/** D73: how a row is pinned to the quickbar; absent when the panel is not given `onPin`. */
+type Pinning = { name: string; pinned: boolean; full: boolean; onPin: () => void };
+
+/** Pin / Unpin at the end of a row. The name stays the same in both states (`aria-pressed` says which); at the limit a new pin is refused, not hidden. */
+function PinButton({ name, pinned, full, onPin }: Pinning) {
+  const hintId = useId();
+  const blocked = full && !pinned;
+  return (
+    <>
+      {' '}
+      <button type="button" aria-label={`Pin ${name} to the quickbar`} aria-pressed={pinned} aria-disabled={blocked ? true : undefined} aria-describedby={blocked ? hintId : undefined} onClick={() => !blocked && onPin()}>
+        {pinned ? 'Unpin' : 'Pin'}
+      </button>
+      {blocked && (
+        <span id={hintId} className="hint">
+          {' '}
+          The quickbar holds {maxPins} actions.
+        </span>
+      )}
+    </>
   );
 }
 
 /**
- * SPEC C-04: attacks and feature rolls grouped by action, bonus action, reaction and other. Rolling never spends anything;
- * a roll that names a resource offers "Spend" in its record.
+ * SPEC C-04: attacks and feature rolls grouped by action, bonus action, reaction and other. A roll from the panel never spends; a quickbar
+ * press rolls and then spends, once (D73). A roll that names a resource offers "Spend" in its record.
  */
 export function ActionsPanel({
   view,
@@ -573,21 +620,51 @@ export function ActionsPanel({
   act,
   rollMode = 'normal',
   onDamageType,
+  pins = [],
+  onPin,
 }: {
   view: CharacterView;
   roll: (target: RollTarget) => void;
   act: Act;
+  /** D73: the visible, resolved quickbar pins; a row whose pin is among them shows "Unpin". */
+  pins?: Pin[];
+  /** D73: pins the row's action, or unpins it when already pinned. Without it no Pin buttons show. */
+  onPin?: (pin: Pin) => void;
   /** The summary's advantage / disadvantage choice. Used by the attack rolls of weapons and of the character's own attacks (R93); damage is always normal. */
   rollMode?: RollMode;
   /** Wave 3 item 21: a damage roll pre-fills the Hit points damage type with the attack's type ('' when it names none of the thirteen). */
   onDamageType?: (type: string) => void;
 }) {
   const [critical, setCritical] = useState(false);
+  const [usableOnly, setUsableOnly] = useState(false);
+  // D73: a click can empty the pool and so unmount its own row under "Usable now"; focus then goes to the filter checkbox, not <body>.
+  const usableRef = useRef<HTMLInputElement>(null);
+  // The row control last clicked while the filter was on. Armed until that control has left the page: the action's reply arrives after
+  // other renders of the same view (the sheet's in-flight state), so spending it on the first render would miss the row being hidden.
+  const refocusFrom = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const el = refocusFrom.current;
+    if (!el) return;
+    if (!usableOnly) {
+      refocusFrom.current = null;
+      return;
+    }
+    if (el.isConnected) return;
+    refocusFrom.current = null;
+    const active = document.activeElement;
+    // Focus lost to <body> means the row just used was hidden; a real element anywhere else was chosen, so leave it.
+    if (active === null || active === document.body) usableRef.current?.focus();
+  });
+  const disarmUnless = (target: EventTarget) => {
+    const armed = refocusFrom.current;
+    if (armed && !(target instanceof Node && armed.contains(target))) refocusFrom.current = null;
+  };
   const rollDamage = (target: RollTarget, type?: string) => {
     onDamageType?.(normalizeDamageType(type));
     roll(target);
   };
-  const attacks = view.sheet.attacks ?? [];
+  // MECH-X item 4: a content companion's attacks and pools are shown on its card, so this display list skips them. Lookups keep every pool.
+  const attacks = (view.sheet.attacks ?? []).filter((a) => !a.companionId);
   const customAttacks = view.character.customAttacks ?? [];
   const toggles = view.sheet.toggles ?? [];
   const rolls = (view.sheet.features ?? []).flatMap((feature) =>
@@ -597,42 +674,77 @@ export function ActionsPanel({
   const plainToggles = toggles.filter((t) => !t.group);
   // D43 slice 3: an action or switch that spends an allowance pool (reactions, say) is listed under that pool's name, not its activation group.
   const resourcePools = view.sheet.resources ?? [];
-  const allowances = resourcePools.filter((r) => r.allowance);
-  const allowanceOf = (resourceId: string | undefined, contentId: string) =>
-    resourceId ? allowances.find((r) => r.resourceId === resourceId && r.content.contentId === contentId) : undefined;
-  const rollPool = ({ feature, effect }: (typeof rolls)[number]) => allowanceOf(effect.resourceId, effect.resourceContent ?? feature.content.contentId);
+  const allowances = resourcePools.filter((r) => r.allowance && !r.companionId);
+  const allowanceOf = (resourceId: string | undefined, contentId: string) => poolFor(allowances, resourceId, contentId);
   const togglePool = (t: ToggleValue) => allowanceOf(t.resourceId, t.costResourceContent ?? t.content.contentId);
-  const poolGroups = allowances
-    .map((pool) => ({ pool, rolls: rolls.filter((r) => rollPool(r) === pool), toggles: plainToggles.filter((t) => togglePool(t) === pool) }))
-    .filter((g) => g.rolls.length > 0 || g.toggles.length > 0);
   if (attacks.length === 0 && customAttacks.length === 0 && rolls.length === 0 && plainToggles.length === 0) return null;
+  // D73: "Usable now" hides what the sheet can see is not usable; a by-hand row and a pinned one (so it can be unpinned) always stay.
+  const pinned = (pin: Pin) => pins.some((p) => pinKey(p) === pinKey(pin));
+  const pinning = (pin: Pin | undefined, name: string): Pinning | undefined =>
+    onPin && pin ? { name, pinned: pinned(pin), full: pins.length >= maxPins, onPin: () => onPin(pin) } : undefined;
+  const listed = (a: Availability, pin?: Pin) => !usableOnly || a.usable || a.byHand === true || (pin !== undefined && pinned(pin));
+  const rollRows = rolls
+    .map(({ feature, effect }) => ({
+      feature,
+      effect,
+      availability: rollAvailability(feature, effect, poolFor(resourcePools, effect.resourceId, effect.resourceContent ?? feature.content.contentId), resourcePools),
+      // A roll with nothing to roll and nothing to spend is only text.
+      // (A paying roll with nothing to roll has no resource, so it is not pinned either: a tap would pay, R37.)
+      pin: hasDice(effect) || effect.resourceId !== undefined ? rollPin(feature, effect) : undefined,
+    }))
+    .filter((r) => listed(r.availability, r.pin));
+  const attackRows = attacks
+    .map((attack) => ({ attack, availability: attackAvailability(attack, poolFor(resourcePools, attack.resourceId ?? undefined, attack.costResourceContent ?? undefined)), pin: attackPin(attack) }))
+    .filter((r) => listed(r.availability, r.pin));
+  const toggleRows = plainToggles
+    .map((t) => ({ toggle: t, availability: toggleAvailability(t, poolFor(resourcePools, t.resourceId, t.costResourceContent ?? t.content.contentId)), pin: t.auto || paying(t.payment) ? undefined : togglePin(t) }))
+    .filter((r) => listed(r.availability, r.pin));
+  const rowPool = ({ feature, effect }: (typeof rollRows)[number]) => allowanceOf(effect.resourceId, effect.resourceContent ?? feature.content.contentId);
+  const poolGroups = allowances
+    .map((pool) => ({ pool, rolls: rollRows.filter((r) => rowPool(r) === pool), toggles: toggleRows.filter((r) => togglePool(r.toggle) === pool) }))
+    .filter((g) => g.rolls.length > 0 || g.toggles.length > 0);
   // Wave 3 item 22 (R157): a toggle with an activation is listed in that group; one without stays in "Active effects".
-  const ungroupedToggles = plainToggles.filter((t) => !t.activation && !togglePool(t));
-  const rollItem = ({ feature, effect }: (typeof rolls)[number]) => (
+  const ungroupedToggles = toggleRows.filter((r) => !r.toggle.activation && !togglePool(r.toggle));
+  const rollItem = (r: (typeof rollRows)[number]) => (
     <RollItem
-      key={`${feature.content.revisionId}-${effect.id}`}
-      feature={feature}
-      effect={effect}
-      pool={effect.resourceId ? resourcePools.find((r) => r.resourceId === effect.resourceId && r.content.contentId === (effect.resourceContent ?? feature.content.contentId)) : undefined}
+      key={`${r.feature.content.revisionId}-${r.effect.id}`}
+      feature={r.feature}
+      effect={r.effect}
+      pool={poolFor(resourcePools, r.effect.resourceId, r.effect.resourceContent ?? r.feature.content.contentId)}
       pools={resourcePools}
+      availability={r.availability}
+      pinning={pinning(r.pin, r.effect.label || r.effect.id)}
       critical={critical}
       roll={roll}
       act={act}
     />
   );
-  const toggleItem = (t: ToggleValue) => (
-    <li key={`${t.content.revisionId}-${t.toggleId}`} className="feature">
-      <ToggleRow toggle={t} act={act} />
+  const toggleItem = (r: (typeof toggleRows)[number]) => (
+    <li key={`${r.toggle.content.revisionId}-${r.toggle.toggleId}`} className="feature">
+      <ToggleRow toggle={r.toggle} act={act} availability={r.availability} pinning={pinning(r.pin, r.toggle.label)} />
     </li>
   );
+  const nothingListed = attackRows.length === 0 && customAttacks.length === 0 && rollRows.length === 0 && toggleRows.length === 0;
   return (
-    <section aria-labelledby="actions-heading" className="play-panel">
+    <section
+      aria-labelledby="actions-heading"
+      className="play-panel"
+      onClickCapture={(e) => {
+        // Any row control (Roll, Use, Pin, a switch) may hide its own row; the filter checkbox itself and plain inputs do not count.
+        const control = e.target instanceof Element ? e.target.closest('button, input[type="checkbox"]') : null;
+        if (usableOnly && control && control !== usableRef.current) refocusFrom.current = control as HTMLElement;
+      }}
+      // The refocus is for the control just used. A pointer or focus move to anything else in the panel means the user has moved on, so a
+      // row that left later (another action emptied its pool) must not pull focus back to "Usable now".
+      onPointerDownCapture={(e) => disarmUnless(e.target)}
+      onFocusCapture={(e) => disarmUnless(e.target)}
+    >
       <h3 id="actions-heading">Attacks and actions</h3>
       {ungroupedToggles.length > 0 && (
         <fieldset>
           <legend>Active effects (a switch is a confirmed change)</legend>
-          {ungroupedToggles.map((t) => (
-            <ToggleRow key={`${t.content.revisionId}-${t.toggleId}`} toggle={t} act={act} />
+          {ungroupedToggles.map((r) => (
+            <ToggleRow key={`${r.toggle.content.revisionId}-${r.toggle.toggleId}`} toggle={r.toggle} act={act} availability={r.availability} pinning={pinning(r.pin, r.toggle.label)} />
           ))}
         </fieldset>
       )}
@@ -640,26 +752,36 @@ export function ActionsPanel({
         <input type="checkbox" checked={critical} onChange={(e) => setCritical(e.target.checked)} />
         Critical hit (double the damage dice)
       </label>
+      <label className="choice">
+        <input ref={usableRef} type="checkbox" checked={usableOnly} onChange={(e) => setUsableOnly(e.target.checked)} />
+        Usable now
+      </label>
+      <p className="hint" aria-live="polite">
+        {usableOnly && nothingListed ? 'Nothing is usable right now.' : ''}
+      </p>
       {activationGroups.map(({ key, title }) => {
         // Weapons stay in 'action'; a feature attack goes where its activation says (default 'action').
-        const groupAttacks = attacks.filter((a) => (a.source === 'feature' ? (a.activation ?? 'action') : 'action') === key);
+        const groupAttacks = attackRows.filter((r) => (r.attack.source === 'feature' ? (r.attack.activation ?? 'action') : 'action') === key);
         const groupCustom = key === 'action' ? customAttacks : [];
-        const groupRolls = rolls.filter((r) => (r.effect.activation ?? 'other') === key && !rollPool(r));
-        const groupToggles = plainToggles.filter((t) => t.activation === key && !togglePool(t));
+        const groupRolls = rollRows.filter((r) => (r.effect.activation ?? 'other') === key && !rowPool(r));
+        const groupToggles = toggleRows.filter((r) => r.toggle.activation === key && !togglePool(r.toggle));
         if (groupAttacks.length === 0 && groupCustom.length === 0 && groupRolls.length === 0 && groupToggles.length === 0) return null;
         return (
           <section key={key} aria-labelledby={`actions-${key}`}>
             <h4 id={`actions-${key}`}>{title}</h4>
             <ul className="features">
-              {groupAttacks.map((attack) => (
+              {groupAttacks.map(({ attack, availability, pin }) => (
                 <AttackItem
-                  key={`${attack.item.revisionId}-${attack.effectId}`}
+                  key={`${attack.item.revisionId}-${attack.effectId}-${attack.entryIndex ?? ''}`}
                   attack={attack}
+                  label={attackLabel(attack, view.character.equipment ?? [])}
                   critical={critical}
                   rollMode={rollMode}
                   roll={roll}
                   rollDamage={rollDamage}
-                  pool={attack.resourceId ? resourcePools.find((r) => r.resourceId === attack.resourceId && r.content.contentId === attack.costResourceContent) : undefined}
+                  pool={poolFor(resourcePools, attack.resourceId ?? undefined, attack.costResourceContent ?? undefined)}
+                  availability={availability}
+                  pinning={pinning(pin, attackLabel(attack, view.character.equipment ?? []))}
                 />
               ))}
               {groupCustom.map((attack) => (
@@ -675,6 +797,7 @@ export function ActionsPanel({
                       Roll {attack.name} damage
                     </button>
                   )}
+                  {onPin && <PinButton {...pinning(customPin(attack), attack.name)!} />}
                 </li>
               ))}
               {groupRolls.map(rollItem)}
@@ -738,6 +861,8 @@ function RollItem({
   effect,
   pool,
   pools,
+  availability,
+  pinning,
   critical,
   roll,
   act,
@@ -747,6 +872,9 @@ function RollItem({
   pool?: ResourceValue;
   /** Every pool on the sheet: an `alsoChange` entry can name another one. */
   pools: ResourceValue[];
+  /** D73: what the sheet can see about using this row now; its reasons are shown as text the main control is described by. */
+  availability: Availability;
+  pinning?: Pinning;
   critical: boolean;
   roll: (target: RollTarget) => void;
   act: Act;
@@ -754,7 +882,10 @@ function RollItem({
   const baseId = `${feature.content.revisionId}-${effect.id}`;
   const baseCost = effect.cost ?? 0;
   // An untracked pool has no points to choose from: the roll goes without an amount and the service charges the base cost.
-  const perUnit = effect.dice && pool?.current !== undefined ? effect.perUnit : undefined;
+  // MECH-X item 1: a per-unit roll that pays hit points has no pool; the points it pays are still the player's to choose.
+  const payment = paying(effect.payment) ? effect.payment : undefined;
+  const rolled = hasDice(effect);
+  const perUnit = rolled && (pool?.current !== undefined || payment?.kind === 'hitPoints') ? effect.perUnit : undefined;
   const drawsDown = effect.drawsDown === true;
   // D43 S8: a release can only draw down what has built up, so its most is limited by the pool's `spent`.
   const unitMax = perUnit ? (perUnit.maxUnits !== undefined ? baseCost + perUnit.maxUnits : pool?.maximum) : undefined;
@@ -773,76 +904,38 @@ function RollItem({
   const amountReasonId = `roll-amount-reason-${baseId}`;
   const details = actionDetails(effect);
   const label = effect.label || effect.id;
-  const diceless = !effect.dice;
-  // An absent cost means one use only when the action declares no cost. A declared cost that failed leaves `cost` absent and
-  // puts an effect.invalid-formula diagnostic on the effect (the sheet does not say which formula); never guess one use then.
-  const costFailed =
-    effect.cost === undefined &&
-    effect.resourceId !== undefined &&
-    (feature.diagnostics ?? []).some((d) => d.code === 'effect.invalid-formula' && d.effectId === effect.id);
-  const useCost = effect.cost ?? 1;
-  // A draw-down use spends what has built up (`spent`); any other use spends what is left (`current`).
-  const available = drawsDown ? pool?.spent : pool?.current;
-  const unaffordable = diceless && effect.resourceId !== undefined && (pool?.current === undefined || (available ?? 0) < useCost);
-  const poolName = pool?.label ?? effect.resourceId;
-  const alsoChange = effect.alsoChange ?? [];
-  const compound = alsoChange.length > 0 || drawsDown;
-  const alsoPool = (a: AlsoChangeValue) => pools.find((r) => r.resourceId === a.resourceId && r.content.contentId === a.resourceContent);
-  const alsoName = (a: AlsoChangeValue) => alsoPool(a)?.label ?? a.resourceId;
-  const alsoText = alsoChange
-    .filter((a) => a.amount != null)
-    // The sign follows what happens to the pool's number: a spend builds a counting-up pool up and uses a normal one up.
-    .map((a) => `, ${(a.change === 'spend') === (alsoPool(a)?.countsUp === true) ? '+' : '−'}${a.amount} ${alsoName(a)}`)
-    .join('');
-  /** The first reason the client can already see that one of the other pools will not take the change; the service stays the authority. */
-  const alsoReason = (): string | undefined => {
-    for (const a of alsoChange) {
-      if (a.amount == null) return 'Cost unavailable';
-      const p = alsoPool(a);
-      if (!p || p.current === undefined) return `${alsoName(a)} is not tracked on this sheet.`;
-      if (a.change !== 'spend') continue;
-      if (p.countsUp ? p.maximum !== undefined && p.spent + a.amount > p.maximum : p.current < a.amount) {
-        return p.countsUp ? `${p.label} is full (${p.spent} of ${p.maximum}).` : `Not enough ${p.label} left (${p.current}).`;
-      }
-    }
-    return undefined;
-  };
-  // A compound use is named by `rollId`; without it there is nothing to send (never a plain spend for such a roll).
-  const useReason = locked
-    ? (effect.unavailableReason ?? 'Not available right now')
-    : compound && !effect.rollId
-      ? "Can't be used here"
-      : costFailed
-      ? 'Cost unavailable'
-      : useCost < 1 && alsoChange.length === 0 // a compound use is worth it for its other changes
-        ? 'Costs nothing here'
-        : unaffordable
-          ? pool?.current === undefined
-            ? `${poolName} is not tracked on this sheet.`
-            : drawsDown
-              ? `Not enough ${poolName} built up (${pool.spent}).`
-              : `Not enough ${poolName} left (${pool.current}).`
-          : alsoReason();
-  const rollDescribedBy = [locked ? reasonId : undefined, perUnit && !amountOk ? amountReasonId : undefined].filter(Boolean).join(' ') || undefined;
+  const diceless = !rolled;
+  // D73: the Use (its reason, its cost text and the action it sends) lives in actionRows.ts, shared with the quickbar.
+  const { cost: useCost, costFailed, poolName, alsoText, reason: useReason, action: useAction, payText } = dicelessUse(feature, effect, pool, pools);
+  // A compound useAction names the stamp the save queue holds when it runs, so a second press queued behind the first would carry the
+  // stamp the first wrote and spend again: the Use ignores presses while its change is under way. (A roll record's Spend is held by
+  // `spendOnce` instead.)
+  const using = useRef(false);
+  // D73: a roll with dice that the pool can't pay stays enabled (the cost is spent from its record) but says so; a locked one reuses the lock's reason.
+  const needsId = `roll-needs-${baseId}`;
+  const needs = !diceless && !locked ? availability.reasons.join(' ') : '';
+  const rollDescribedBy =
+    [locked ? reasonId : undefined, needs ? needsId : undefined, perUnit && !amountOk ? amountReasonId : undefined].filter(Boolean).join(' ') || undefined;
   return (
     <li className="feature">
       {diceless ? (
-        effect.resourceId ? (
+        effect.resourceId || payment ? (
           <button
             type="button"
             disabled={useReason !== undefined}
             aria-describedby={useReason !== undefined ? reasonId : undefined}
             onClick={() => {
-              // D43 S8: a use that also changes another pool, or draws a pool down, is one compound change on the service.
-              if (compound) {
-                if (effect.rollId) act({ action: 'useAction', contentId: feature.content.contentId, rollId: effect.rollId });
-                return;
-              }
-              act({ action: 'spend', amount: useCost, contentId: effect.resourceContent ?? feature.content.contentId, resourceId: effect.resourceId! });
+              if (!useAction || using.current) return;
+              using.current = true;
+              void Promise.resolve(act(useAction))
+                .catch(() => undefined)
+                .finally(() => {
+                  using.current = false;
+                });
             }}
           >
             Use {label}
-            {costFailed ? '' : ` (${useCost} ${poolName}${alsoText})`}
+            {payText ? ` (${payText})` : costFailed ? '' : ` (${useCost} ${poolName}${alsoText})`}
           </button>
         ) : (
           <span className="option-name">{label}</span>
@@ -855,12 +948,13 @@ function RollItem({
           onClick={() => roll({ content: feature.content, effectId: effect.id, critical, ...(perUnit ? { amount: chosen } : {}) })}
         >
           Roll {label}
-          {` (${effect.dice}${rollBonus(effect.bonus)})`}
+          {` (${effect.dice ?? effect.castsSpell?.dice}${rollBonus(effect.bonus)})`}
         </button>
       )}{' '}
       <span className="hint">
         {feature.name}
         {effect.resourceId && !diceless ? ' · uses a resource (spend it separately)' : ''}
+        {payment && !diceless ? ` · Costs ${paymentText(payment, effect.cost)} (pay it from the roll)` : ''}
       </span>
       {(locked || (diceless && useReason !== undefined)) && (
         <span id={reasonId} className="hint">
@@ -868,8 +962,18 @@ function RollItem({
           · {locked ? (effect.unavailableReason ?? 'Not available right now') : useReason}
         </span>
       )}
-      {diceless && !effect.resourceId && effect.text && <span className="hint"> · {effect.text}</span>}
+      {needs && (
+        <span id={needsId} className="hint">
+          {' '}
+          · {needs}
+        </span>
+      )}
+      {diceless && !effect.resourceId && !payment && effect.text && <span className="hint"> · {effect.text}</span>}
+      {effect.castsSpell && <p className="hint">{castsText(effect.castsSpell)}</p>}
       {details && <p className="hint">{details}</p>}
+      {effect.saveDc !== undefined && effect.saveTrace && (
+        <ExplainList label={`${label} save DC`} steps={effect.saveTrace} summary={`Why DC ${effect.saveDc}?`} />
+      )}
       {perUnit && (
         <div className="inline-form">
           <label className="field">
@@ -891,38 +995,60 @@ function RollItem({
           )}
         </div>
       )}
+      {pinning && <PinButton {...pinning} />}
     </li>
   );
 }
 
-function AttackItem({
+/**
+ * MECH-X item 3: a weapon carried as several copies has one row per copy (`entryIndex`, the equipment index). The copies are numbered
+ * exactly as the Inventory numbers them: every equipment entry of the item, in list order, equipped or not.
+ */
+function attackLabel(attack: AttackEntry, equipment: EquipmentEntry[]): string {
+  if (attack.entryIndex === undefined || attack.entryIndex === null) return attack.name;
+  const copies = equipment.map((e, i) => ({ e, i })).filter(({ e }) => e.item.contentId === attack.item.contentId && e.item.revisionId === attack.item.revisionId);
+  const n = copies.findIndex(({ i }) => i === attack.entryIndex) + 1;
+  return copies.length > 1 && n > 0 ? `${attack.name} (copy ${n} of ${copies.length})` : attack.name;
+}
+
+export function AttackItem({
   attack,
+  label,
   critical,
   rollMode,
   roll,
   rollDamage,
   pool,
+  availability,
+  pinning,
 }: {
   attack: AttackEntry;
+  /** The name shown and used in control names: the attack's, with its copy number when the weapon is carried several times. */
+  label: string;
   critical: boolean;
   rollMode: RollMode;
   roll: (target: RollTarget) => void;
   rollDamage: (target: RollTarget, type?: string) => void;
   /** The pool a feature attack spends from, to name it in the cost line. */
   pool?: ResourceValue;
+  /** D73: a feature attack the pool can't pay stays enabled and says so. */
+  availability: Availability;
+  pinning?: Pinning;
 }) {
   const reasonId = useId();
+  const needsId = useId();
   // D43 slice 4: a feature attack is rolled by the content that gives it and its effect id; a weapon by its item.
   const feature = attack.source === 'feature';
-  const target: RollTarget = feature ? { content: attack.item, effectId: attack.effectId } : { weapon: attack.item };
+  const target: RollTarget = feature ? { content: attack.item, effectId: attack.effectId } : weaponTarget(attack);
   // An unavailable attack is a disabled button whose reason is text beside it, not a tooltip.
   const locked = attack.available === false;
-  const described = locked ? reasonId : undefined;
+  const needs = locked ? '' : availability.reasons.join(' ');
+  const described = locked ? reasonId : needs ? needsId : undefined;
   return (
     <li className="feature">
       <details>
         <summary>
-          <span className="option-name">{attack.name}</span>: {signed(attack.toHit)} to hit, {attack.damage ? `${attack.damage} ` : ''}{attack.damageType}
+          <span className="option-name">{label}</span>: {signed(attack.toHit)} to hit, {attack.damage ? `${attack.damage} ` : ''}{attack.damageType}
           {attack.versatileDamage ? ` (${attack.versatileDamage} two-handed)` : ''}
           {attack.automation !== 'automatic' && <span className="warn"> {automationLabels[attack.automation]}</span>}
         </summary>
@@ -932,17 +1058,15 @@ function AttackItem({
           {attack.properties.length > 0 ? ` · ${attack.properties.join(', ')}` : ''}
           {attack.mastery ? ` · mastery: ${attack.mastery}` : ''}
           {feature && attack.resourceId ? ` · uses ${attack.cost ?? 1} ${pool?.label ?? 'of a resource'} (spend it from the roll)` : ''}
+          {feature && paying(attack.payment) ? ` · Costs ${paymentText(attack.payment, attack.cost)} (pay it from the roll)` : ''}
         </p>
-        <ul aria-label={`How the ${attack.name} attack is calculated`}>
-          {attack.trace.map((step) => (
-            <li key={step.order}>
-              {/* A step with no amount (damage dice, a rider that lost) is the sentence alone: no invented "+0". */}
-              {typeof step.amount === 'number' ? `${step.description}: ${signed(step.amount)} = ${signed(step.result)}` : step.description}
-            </li>
+        <ul aria-label={`How the ${label} attack is calculated`}>
+          {explainSteps(attack.trace, 'attack').map((sentence, i) => (
+            <li key={i}>{sentence}</li>
           ))}
         </ul>
         {attack.warnings.length > 0 && (
-          <ul className="warnings" aria-label={`${attack.name} warnings`}>
+          <ul className="warnings" aria-label={`${label} warnings`}>
             {attack.warnings.map((w) => (
               <li key={`${w.code}-${w.effectId ?? ''}`}>{w.message}</li>
             ))}
@@ -951,10 +1075,10 @@ function AttackItem({
       </details>
       {feature && attack.replacesAttack && <p className="hint">replaces one attack of the Attack action</p>}
       <button type="button" disabled={locked} aria-describedby={described} onClick={() => roll({ ...target, mode: rollMode })}>
-        Roll {attack.name} attack
+        Roll {label} attack
       </button>
       <button type="button" disabled={locked} aria-describedby={described} onClick={() => rollDamage({ ...target, damage: true, critical }, attack.damageType)}>
-        Roll {attack.name} damage{attack.damage ? ` (${attack.damage})` : ''}
+        Roll {label} damage{attack.damage ? ` (${attack.damage})` : ''}
       </button>
       {locked && (
         <span id={reasonId} className="hint">
@@ -962,11 +1086,18 @@ function AttackItem({
           {attack.unavailableReason ?? 'Not available right now'}
         </span>
       )}
+      {needs && (
+        <span id={needsId} className="hint">
+          {' '}
+          {needs}
+        </span>
+      )}
       {attack.versatileDamage && (
-        <button type="button" onClick={() => rollDamage({ weapon: attack.item, damage: true, versatile: true, critical }, attack.damageType)}>
-          Roll {attack.name} two-handed damage ({attack.versatileDamage})
+        <button type="button" onClick={() => rollDamage({ ...weaponTarget(attack), damage: true, versatile: true, critical }, attack.damageType)}>
+          Roll {label} two-handed damage ({attack.versatileDamage})
         </button>
       )}
+      {pinning && <PinButton {...pinning} />}
     </li>
   );
 }
@@ -1067,17 +1198,11 @@ function FeatureItem({
 /** ADR-015: at most this many dice are drawn; the record's text always lists every die. */
 const drawnDice = 10;
 
-/**
- * A key per record object, so an identical second roll (a new object with the same faces) mounts a new dice row and the
- * CSS tumble runs again. A WeakMap keeps it pure: no state, no effect, and old records are collected.
- */
-const rollKeys = new WeakMap<RollRecord, number>();
-let nextRollKey = 0;
-function rollKey(record: RollRecord): number {
-  let key = rollKeys.get(record);
-  if (key === undefined) rollKeys.set(record, (key = ++nextRollKey));
-  return key;
-}
+/** D73: which record's Spend is used, and the one way to spend (resolves to whether the change applied; a refusal gives the button back and calls `refused`). */
+export type RecordSpent = {
+  record?: RollRecord;
+  spendOnce: (record: RollRecord, action: PlayAction, refused?: () => void) => Promise<boolean>;
+};
 
 /** The last roll's record (SPEC C-04): formula, every die, modifiers and provenance. Announced politely. */
 export function RollResult({
@@ -1086,6 +1211,7 @@ export function RollResult({
   features,
   attacks = [],
   act,
+  spent,
 }: {
   record?: RollRecord;
   resources: ResourceValue[];
@@ -1093,17 +1219,25 @@ export function RollResult({
   /** D43 slice 4: a feature attack's cost is on its sheet row, not on a feature effect. */
   attacks?: AttackEntry[];
   act: Act;
+  /** D73: the sheet's own "this record was spent" state and spender, shared with the quickbar so a press and this button spend once between them. Absent: kept here. */
+  spent?: RecordSpent;
 }) {
   // The typed amount belongs to the roll it was typed for, so a new roll never inherits it.
   const [typed, setTyped] = useState<{ record?: RollRecord; value: string }>({ value: '' });
   const amount = typed.record === record ? typed.value : '';
   const setAmount = (value: string) => setTyped({ record, value });
   // A record's Spend is used once: the record it was used for stays spent, and a new record starts fresh.
-  const [spentFor, setSpentFor] = useState<RollRecord>();
+  const [ownSpentFor, setSpentFor] = useState<RollRecord>();
+  const spentFor = spent ? spent.record : ownSpentFor;
   const spentAlready = record !== undefined && spentFor === record;
   const cantUseId = useId();
+  const payReasonId = useId();
   /** Holds the button while the change is under way, and gives it back when the change is refused so it can be retried. */
   function spendOnce(action: PlayAction, refused?: () => void) {
+    if (spent) {
+      if (record) void spent.spendOnce(record, action, refused);
+      return;
+    }
     setSpentFor(record);
     void Promise.resolve(act(action))
       .then((applied) => applied !== false) // a caller that returns nothing is taken to have applied it
@@ -1118,38 +1252,11 @@ export function RollResult({
   // full effect on the next sheet open, which the Settings hint says.
   if (!record) return <div role="region" aria-label="Last roll" aria-live={announceRollsOn() ? 'polite' : undefined} className="roll-result" />;
   const p = record.provenance;
-  // A roll may name a resource its action spends; spending is a separate, explicit button (never automatic). A shared
-  // resource (content v6) is found through the content that defines it.
-  // D43 S5: `record.spend` (set by the service for a roll effect that names a pool) says exactly which pool and how much.
-  const spend = record.spend;
-  const holder = spend?.contentId ?? p?.linkedResourceContent ?? p?.content?.contentId;
-  const linkedId = spend?.resourceId ?? p?.linkedResourceId;
-  const linked = linkedId
-    ? (resources.find((r) => r.resourceId === linkedId && r.content.contentId === holder) ?? (spend ? undefined : resources.find((r) => r.resourceId === linkedId)))
-    : undefined;
-  const effect = features.find((f) => f.content.revisionId === p?.content?.revisionId)?.effects.find((e) => e.id === p?.effectId);
-  const featureAttack = attacks.find((a) => a.source === 'feature' && a.item.revisionId === p?.content?.revisionId && a.effectId === p?.effectId);
-  // The service leaves `spend` out of a content roll effect's record exactly when its cost formula failed: never guess 1 then.
-  const costUnavailable = effect !== undefined && featureAttack === undefined && spend === undefined && linkedId !== undefined;
-  const cost = spend?.amount ?? featureAttack?.cost ?? effect?.cost ?? 1;
-  // D43 S8: a roll that draws a counting-up pool down, or also changes another pool, is spent as one `useAction` (a plain `spend`
-  // would build the charge up instead). The roll is named by the record's own `rollId`; a draw-down is bounded by what has built up.
-  const drawsDown = spend?.drawsDown === true || effect?.drawsDown === true;
-  const useRollId = p?.rollId ?? effect?.rollId;
-  const compound = drawsDown || (effect?.alsoChange?.length ?? 0) > 0;
-  // Never a plain `spend` for such a roll: without the roll's content, its id or its effect, the Spend is held with a reason.
-  // A content roll's record whose effect has left the sheet cannot say whether it was compound: hold it as well.
-  const cantUse = (compound && (useRollId === undefined || p?.content?.contentId === undefined)) || (effect === undefined && featureAttack === undefined && p?.content !== undefined && p.rollId !== undefined);
-  const spendAction = (amount: number, resourceContent: string, resourceId: string): PlayAction | undefined =>
-    cantUse
-      ? undefined
-      : compound
-        ? { action: 'useAction', contentId: p!.content!.contentId, rollId: useRollId!, ...(effect?.perUnit ? { amount } : {}) }
-        : { action: 'spend', amount, contentId: resourceContent, resourceId };
+  // D73: which pool a record spends, what it costs and the action that spends it are worked out in actionRows.ts.
+  const { linked, cost, costUnavailable, cantUse, variableCost, stockText, most, spendAction, autoAction } = recordSpend(record, resources, features, attacks);
+  // MECH-X item 1 (R37): hit points and slots are paid here, by a deliberate press, once per record through the same `spendOnce`.
+  const payment = recordPayment(record, features, attacks);
   const cantUseText = "Can't be used here";
-  const stock = linked ? (drawsDown ? linked.spent : linked.current) : undefined;
-  const stockText = linked ? (drawsDown ? `${linked.spent} built up` : `${linked.current} left`) : '';
-  const most = linked?.current !== undefined && stock !== undefined ? Math.min(cost, stock) : 0;
   const chosen = Number(amount);
   const validChoice = amount !== '' && Number.isInteger(chosen) && chosen >= 1 && chosen <= most;
   return (
@@ -1182,20 +1289,19 @@ export function RollResult({
         {p?.sourceTitle ? ` · ${p.contentName ?? ''} (${p.sourceTitle}${p.page ? `, ${pageText(p.page)}` : ''})` : ''}
       </p>
       {costUnavailable && <p className="hint">Cost unavailable</p>}
-      {!costUnavailable && linked && linked.current !== undefined && !effect?.variableCost && (
+      {!costUnavailable && linked && linked.current !== undefined && !variableCost && (
         <button
           type="button"
-          disabled={spentAlready || cantUse || (cost < 1 && (effect?.alsoChange?.length ?? 0) === 0) /* a cost formula can evaluate to 0 at some levels */ || (stock ?? 0) < cost}
+          disabled={spentAlready || autoAction === undefined /* held, a cost of 0 (a cost formula can evaluate to 0 at some levels) or too little stock */}
           aria-describedby={cantUse ? cantUseId : undefined}
           onClick={() => {
-            const action = spendAction(cost, spend?.contentId ?? linked.content.contentId, spend?.resourceId ?? linked.resourceId);
-            if (action) spendOnce(action);
+            if (autoAction) spendOnce(autoAction);
           }}
         >
           Spend {cost} {linked.label} ({stockText})
         </button>
       )}
-      {!costUnavailable && linked && linked.current !== undefined && effect?.variableCost && (
+      {!costUnavailable && linked && linked.current !== undefined && variableCost && (
         <div className="inline-form">
           <label className="field">
             {linked.label} to spend (1 to {most})
@@ -1221,6 +1327,25 @@ export function RollResult({
         <span id={cantUseId} className="hint">
           {cantUseText}
         </span>
+      )}
+      {payment && (
+        <>
+          <button
+            type="button"
+            disabled={spentAlready || !payment.payable}
+            aria-describedby={payment.reason ? payReasonId : undefined}
+            onClick={() => spendOnce(payment.action)}
+          >
+            {payment.label}
+          </button>
+          {payment.note && <span className="hint"> {payment.note}</span>}
+          {payment.reason && (
+            <span id={payReasonId} className="hint">
+              {' '}
+              {payment.reason}
+            </span>
+          )}
+        </>
       )}
     </div>
   );

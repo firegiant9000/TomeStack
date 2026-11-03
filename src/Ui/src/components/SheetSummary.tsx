@@ -1,9 +1,11 @@
+import type { ReactNode } from 'react';
 import type { CharacterView, DerivedValue, PlayAction, RollMode, RollRecord } from '../api/types';
 import { hitDiceText } from '../format';
 import { DiceBox } from './DiceBox';
 import { rollButtonSuffix } from '../rollModes';
-import { inspirationLabel, RollModePicker, RollResult } from './PlayPanels';
+import { inspirationLabel, RollModePicker, RollResult, type RecordSpent } from './PlayPanels';
 import { RollLog, type LoggedRoll } from './RollLog';
+import { RollWhy } from './RollWhy';
 
 const abilities = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const;
 const abilityNames: Record<(typeof abilities)[number], string> = {
@@ -33,6 +35,12 @@ interface Props {
   onRollDice: (formula: string) => Promise<void>;
   /** True when the sheet offers a Spells tab; the hint names it only then. */
   spellsTab?: boolean;
+  /** D73: the quickbar, in its own row after the summary line (never inside the roll strip). */
+  quickbar?: ReactNode;
+  /** D73: whether the bar has any pin; the hint then says only a button named "and spend" spends. */
+  hasQuickbar?: boolean;
+  /** D73: the sheet's record-spent state, shared with the quickbar; absent, Last roll keeps its own. */
+  spent?: RecordSpent;
 }
 
 /**
@@ -41,7 +49,7 @@ interface Props {
  * `getByRole` and confuse screen readers). Traces and overrides stay on the field cards (Stats, Spells). An overridden
  * value says so in text (WCAG 1.4.1). The d20 roll mode and the last roll live here so they are reachable from every tab.
  */
-export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, act, onDamage, onRoll, onRollDice, spellsTab = false }: Props) {
+export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, act, onDamage, onRoll, onRollDice, spellsTab = false, quickbar, hasQuickbar = false, spent }: Props) {
   const { character, sheet } = view;
   const field = (id: string): DerivedValue | undefined => sheet.fields.find((f) => f.field === id);
   const show = (id: string): string => {
@@ -177,17 +185,21 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, ac
           </div>
         )}
       </dl>
+      {quickbar}
       <div className="roll-controls">
         <RollModePicker mode={rollMode} onChange={onRollMode} />
         <DiceBox onRoll={onRollDice} />
       </div>
       <p className="hint">
+        {/* D73 R13: a quickbar button whose name says "and spend" rolls and then makes that spend once; other pins only roll (Use and toggle pins make their own play change). */}
+        {hasQuickbar ? 'Rolling from here never spends anything; a quickbar button that says "and spend" rolls and then spends.' : 'Rolling never spends anything.'}
         {spellsTab
-          ? 'Rolling never spends anything. Roll a check here; a save, skill or initiative from its field on Stats; an attack or feature on Play; or a spell on Spells.'
-          : 'Rolling never spends anything. Roll a check here; a save, skill or initiative from its field on Stats; or an attack or feature on Play.'}
+          ? ' Roll a check here; a save, skill or initiative from its field on Stats; an attack or feature on Play; or a spell on Spells.'
+          : ' Roll a check here; a save, skill or initiative from its field on Stats; or an attack or feature on Play.'}
       </p>
       <div className="roll-strip">
-        <RollResult record={lastRoll} resources={sheet.resources ?? []} features={sheet.features ?? []} attacks={sheet.attacks ?? []} act={act} />
+        <RollResult record={lastRoll} resources={sheet.resources ?? []} features={sheet.features ?? []} attacks={sheet.attacks ?? []} act={act} spent={spent} />
+        <RollWhy record={lastRoll} />
         <RollLog rolls={rollLog} />
       </div>
     </section>

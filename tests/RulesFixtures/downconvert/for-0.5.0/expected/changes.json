@@ -1,0 +1,109 @@
+[
+  {
+    "entry": "characters/c1050000-0000-4000-8000-0000000000a1.json",
+    "kind": "character",
+    "id": "c1050000-0000-4000-8000-0000000000a1",
+    "name": "Compat Hero",
+    "action": "dropped",
+    "code": "package.target-drops",
+    "message": "'Compat Hero': backstory and details."
+  },
+  {
+    "entry": "characters/c1050000-0000-4000-8000-0000000000a1.json",
+    "kind": "character",
+    "id": "c1050000-0000-4000-8000-0000000000a1",
+    "name": "Compat Hero",
+    "action": "dropped",
+    "code": "package.target-drops",
+    "message": "'Compat Hero': the custom items."
+  },
+  {
+    "entry": "characters/c1050000-0000-4000-8000-0000000000a1.json",
+    "kind": "character",
+    "id": "c1050000-0000-4000-8000-0000000000a1",
+    "name": "Compat Hero",
+    "action": "dropped",
+    "code": "package.target-drops",
+    "message": "'Compat Hero': the damage resistances and immunities."
+  },
+  {
+    "entry": "content/c1050000-0000-4000-8000-0000000000e2.json",
+    "kind": "content",
+    "id": "c1050000-0000-4000-8000-0000000000e2",
+    "name": "Compat Warm Skin",
+    "sourceTitle": "Compat Homebrew A",
+    "action": "dropped",
+    "code": "package.target-drops",
+    "message": "'Compat Warm Skin' (Compat Homebrew A): its bonus to 'speed', which the older version has no field for."
+  },
+  {
+    "entry": "content/c1050000-0000-4000-8000-0000000000e2.json",
+    "kind": "content",
+    "id": "c1050000-0000-4000-8000-0000000000e2",
+    "name": "Compat Warm Skin",
+    "sourceTitle": "Compat Homebrew A",
+    "action": "dropped",
+    "code": "package.target-drops",
+    "message": "'Compat Warm Skin' (Compat Homebrew A): its resistance or immunity to damage."
+  },
+  {
+    "entry": "content/c1050000-0000-4000-8000-0000000000e2.json",
+    "kind": "content",
+    "id": "c1050000-0000-4000-8000-0000000000e2",
+    "name": "Compat Warm Skin",
+    "sourceTitle": "Compat Homebrew A",
+    "action": "dropped",
+    "code": "package.target-drops",
+    "message": "'Compat Warm Skin' (Compat Homebrew A): its resistance or immunity to damage."
+  },
+  {
+    "entry": "content/c1050000-0000-4000-8000-0000000000e3.json",
+    "kind": "content",
+    "id": "c1050000-0000-4000-8000-0000000000e3",
+    "name": "Compat Tide Charm",
+    "sourceTitle": "Compat Homebrew A",
+    "action": "dropped",
+    "code": "package.target-drops",
+    "message": "'Compat Tide Charm' (Compat Homebrew A): its bonus to 'passive.perception', which the older version has no field for."
+  },
+  {
+    "entry": "content/c1050000-0000-4000-8000-0000000000e3.json",
+    "kind": "content",
+    "id": "c1050000-0000-4000-8000-0000000000e3",
+    "name": "Compat Tide Charm",
+    "sourceTitle": "Compat Homebrew A",
+    "action": "dropped",
+    "code": "package.target-drops",
+    "message": "'Compat Tide Charm' (Compat Homebrew A): the charges of the item."
+  },
+  {
+    "entry": "content/c1050000-0000-4000-8000-0000000000e4.json",
+    "kind": "content",
+    "id": "c1050000-0000-4000-8000-0000000000e4",
+    "name": "Compat Tide Mark",
+    "sourceTitle": "Compat Homebrew A",
+    "action": "dropped",
+    "code": "package.target-drops",
+    "message": "'Compat Tide Mark' (Compat Homebrew A): its advantage on rolls; the feature stays as text."
+  },
+  {
+    "entry": "content/c1050000-0000-4000-8000-0000000000e4.json",
+    "kind": "content",
+    "id": "c1050000-0000-4000-8000-0000000000e4",
+    "name": "Compat Tide Mark",
+    "sourceTitle": "Compat Homebrew A",
+    "action": "dropped",
+    "code": "package.target-drops",
+    "message": "'Compat Tide Mark' (Compat Homebrew A): its bonus to 'speed.fly', which the older version has no field for."
+  },
+  {
+    "entry": "content/c1050000-0000-4000-8000-0000000000e4.json",
+    "kind": "content",
+    "id": "c1050000-0000-4000-8000-0000000000e4",
+    "name": "Compat Tide Mark",
+    "sourceTitle": "Compat Homebrew A",
+    "action": "dropped",
+    "code": "package.target-drops",
+    "message": "'Compat Tide Mark' (Compat Homebrew A): its resistance or immunity to damage."
+  }
+]

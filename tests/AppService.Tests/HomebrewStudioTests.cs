@@ -83,7 +83,8 @@ public class HomebrewStudioTests
         var id = Brenna(temp.App);
 
         var offered = temp.App.GetCharacter(id).Sheet.Choices!.Single(c => c.ChoiceId == "barbarian-subclass");
-        Assert.Equal([Srd(23), authored.Path], offered.Options); // Berserker (declared), then the extension
+        // Berserker (declared), the levels 1-20 Berserker (C2-1: it extends the choice, so the old class revision offers it too), then the homebrew extension
+        Assert.Equal([Srd(23), new(Srd(23).ContentId, Srd(409023).RevisionId), authored.Path], offered.Options);
 
         var sheet = temp.App.Choose(new(id, Barbarian, "barbarian-subclass", [authored.Path])).Sheet;
 
@@ -223,5 +224,29 @@ public class HomebrewStudioTests
         var path = Assert.Single(entries, e => e.ContentId == authored.Path.ContentId);
         Assert.Equal([RevisionStatus.Draft, RevisionStatus.Published], path.Revisions.Select(r => r.Status));
         Assert.Equal(authored.Path, path.LatestPublished!.Reference);
+    }
+
+    [Fact]
+    public void A_weapon_copied_to_a_draft_publishes_at_v5_until_it_carries_a_bonus_which_publishes_at_v12()
+    {
+        using var temp = new TempApp();
+        var source = temp.App.CreateHomebrewSource(new("Test Homebrew", [RulesFamilies.Srd521]));
+        var contentId = Guid.NewGuid();
+        var blade = new WeaponEffect { Id = "weapon", Category = WeaponCategory.Simple, Attack = WeaponAttack.Melee, Damage = "1d6", DamageType = "slashing", WeaponKey = "testblade", Properties = ["light"] };
+        var first = Publish(temp.App, Draft(source, contentId, ContentKind.Item, "Test Blade", null, blade));
+        var published = temp.App.ContentBySource(source.Id).Single().LatestPublished!;
+        Assert.Equal(5, published.SchemaVersion);
+
+        // The studio copy starts a new draft at the current version (HomebrewStudio.tsx); publishing unchanged keeps the lowest.
+        var copy = published with { RevisionId = Guid.Empty, Status = RevisionStatus.Draft, SchemaVersion = ContentRevision.CurrentSchemaVersion };
+        var unchanged = Publish(temp.App, copy);
+        Assert.NotEqual(first, unchanged);
+        Assert.Equal(5, temp.App.ContentBySource(source.Id).Single().LatestPublished!.SchemaVersion);
+
+        var withBonus = copy with { Effects = [blade with { Bonus = 1 }] };
+        Publish(temp.App, withBonus);
+        var latest = temp.App.ContentBySource(source.Id).Single().LatestPublished!;
+        Assert.Equal(12, latest.SchemaVersion);
+        Assert.Equal(1, Assert.IsType<WeaponEffect>(Assert.Single(latest.Effects)).Bonus);
     }
 }

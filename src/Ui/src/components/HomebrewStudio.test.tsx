@@ -7,9 +7,10 @@ import { client } from '../api/client';
 import type { AppInfo, SourceRecord, StudioEntry } from '../api/types';
 import { expectNoAxeViolations } from '../test/axe';
 import { HomebrewStudio } from './HomebrewStudio';
+import { fill } from '../test/fill';
 
 vi.mock('../api/client', () => ({
-  client: { listSources: vi.fn(), contentBySource: vi.fn(), publishManyPreview: vi.fn(), createHomebrewSource: vi.fn(), previewFormula: vi.fn(), listCharacters: vi.fn(), validateRevision: vi.fn() },
+  client: { listSources: vi.fn(), contentBySource: vi.fn(), publishManyPreview: vi.fn(), createHomebrewSource: vi.fn(), previewFormula: vi.fn(), listCharacters: vi.fn(), validateRevision: vi.fn(), contentDuplicates: vi.fn() },
 }));
 
 const info = { rulesFamilies: [{ id: 'srd-5.1', displayName: 'SRD 5.1' }] } as unknown as AppInfo;
@@ -18,8 +19,36 @@ const homebrew = (id: string, title: string) => ({ id, title, rulesFamilies: ['s
 beforeEach(() => {
   vi.mocked(client.listSources).mockResolvedValue([homebrew('a', 'Testy Alpha'), homebrew('b', 'Testy Beta')]);
   vi.mocked(client.contentBySource).mockResolvedValue([]);
+  vi.mocked(client.contentDuplicates).mockResolvedValue([]);
 });
 afterEach(cleanup);
+
+// Import Lab L6: a library row that looks like another entry says so in words; the other entry may be in another source.
+it('shows "Possible duplicate of {name} ({source})" on the library rows that have a twin', async () => {
+  const entry = (name: string): StudioEntry => ({
+    contentId: `id-${name}`,
+    name,
+    kind: 'feat',
+    revisions: [],
+    latest: { contentId: `id-${name}`, revisionId: `r-${name}`, status: 'published', effects: [] } as unknown as StudioEntry['latest'],
+  });
+  vi.mocked(client.contentBySource).mockResolvedValue([entry('Testy Twin'), entry('Testy Single')]);
+  vi.mocked(client.contentDuplicates).mockResolvedValue([
+    {
+      class: 'exact',
+      family: 'srd-5.1',
+      members: [
+        { contentId: 'id-Testy Twin', revisionId: 'r-Testy Twin', kind: 'feat', name: 'Testy Twin', sourceId: 'a', sourceName: 'Testy Alpha' },
+        { contentId: 'id-other', revisionId: 'r-other', kind: 'feat', name: 'Testy Twin Copy', sourceId: 'b', sourceName: 'Testy Beta' },
+      ],
+    },
+  ]);
+  render(<HomebrewStudio info={info} onError={() => {}} onStatus={() => {}} />);
+  const twin = (await screen.findByText('Testy Twin')).closest('li')!;
+  expect(await within(twin).findByText('Possible duplicate of Testy Twin Copy (Testy Beta)')).toBeTruthy();
+  expect(within(screen.getByText('Testy Single').closest('li')!).queryByText(/Possible duplicate/)).toBeNull();
+  expect(client.contentDuplicates).toHaveBeenCalledWith({ sourceId: 'a', jobId: undefined });
+});
 
 it('opens on the source it was asked for, and takes focus on its heading', async () => {
   render(<HomebrewStudio info={info} initialSourceId="b" onError={() => {}} onStatus={() => {}} />);
@@ -103,7 +132,7 @@ it('creating a new source closes the open publish panel and drops the old rows',
   vi.mocked(client.contentBySource).mockImplementation((id) => (id === 'c' ? new Promise((resolve) => (release = resolve)) : Promise.resolve([draftEntry])));
   vi.mocked(client.createHomebrewSource).mockResolvedValue(homebrew('c', 'Testy Gamma'));
   vi.mocked(client.listSources).mockResolvedValue([homebrew('a', 'Testy Alpha'), homebrew('b', 'Testy Beta'), homebrew('c', 'Testy Gamma')]);
-  await user.type(screen.getByLabelText('Source title'), 'Testy Gamma');
+  await fill(user, screen.getByLabelText('Source title'), 'Testy Gamma');
   await user.click(screen.getByRole('checkbox', { name: 'SRD 5.1' }));
   await user.click(screen.getByRole('button', { name: 'Create source' }));
 

@@ -10,7 +10,7 @@ import { expectNoAxeViolations } from '../test/axe';
 import { CandidateReviewPanel } from './CandidateReviewPanel';
 
 vi.mock('../api/client', () => ({
-  client: { candidates: vi.fn(), checkCandidate: vi.fn(), editCandidate: vi.fn(), acceptCandidate: vi.fn(), ignoreCandidate: vi.fn(), acceptCandidates: vi.fn() },
+  client: { candidates: vi.fn(), checkCandidate: vi.fn(), editCandidate: vi.fn(), acceptCandidate: vi.fn(), ignoreCandidate: vi.fn(), acceptCandidates: vi.fn(), importedPage: vi.fn(), contentDuplicates: vi.fn() },
 }));
 
 const source = { id: 'src-1', title: 'Testy Tome', rulesFamilies: ['srd-5.1'] } as SourceRecord;
@@ -19,7 +19,10 @@ const job = { id: 'job-1', sourceId: 'src-1' } as ImportJob;
 
 const pageOf = (items: StoredCandidate[], total = items.length) => ({ items, total });
 
-beforeEach(() => vi.mocked(client.candidates).mockResolvedValue(pageOf([])));
+beforeEach(() => {
+  vi.mocked(client.candidates).mockResolvedValue(pageOf([]));
+  vi.mocked(client.contentDuplicates).mockResolvedValue([]);
+});
 afterEach(cleanup);
 
 function renderPanel(onOpenStudio = vi.fn(), forSource: SourceRecord = source) {
@@ -1208,4 +1211,161 @@ it('holds Accept as a draft, Accept as reference and Ignore, with a linked reaso
   for (const button of buttons) expect(held(button)).toBe(false);
   await user.click(buttons[2]!);
   await waitFor(() => expect(client.ignoreCandidate).toHaveBeenCalledExactlyOnceWith('cand-1', 'etag-1'));
+});
+
+// D64 (Import Lab, task 9): the selected effect's span, highlighted on the stored page text.
+beforeEach(() => vi.mocked(client.importedPage).mockReset());
+const span = { page: 4, blockStart: 1, blockEnd: 2, patternId: 'fixture.pattern', confidence: 0.9 };
+const spanned = (over: Partial<DraftCandidate>): StoredCandidate => {
+  const base = detected(['srd-5.1']);
+  return {
+    ...base,
+    candidate: { ...base.candidate, excerpt: 'Whole excerpt of the fixture', proposedEffects: [{ id: 'eff-1', type: 'note' }], effectSpans: { 'eff-1': span }, ...over },
+  };
+};
+const storedPage = (texts: string[]) => ({
+  page: 4,
+  text: texts.join('\n'),
+  fromOcr: false,
+  width: 600,
+  height: 800,
+  blocks: texts.map((text) => ({ text, x: 0, y: 0, width: 10, height: 10, fontSize: 10, bold: false })),
+  warnings: [],
+});
+async function openSpanned(candidate: StoredCandidate) {
+  vi.mocked(client.candidates).mockResolvedValue(pageOf([candidate]));
+  vi.mocked(client.checkCandidate).mockResolvedValue(checkOf({}));
+  renderPanel();
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole('button', { name: 'Testy Coat' }));
+  return user;
+}
+
+it('selecting an effect highlights its span', async () => {
+  vi.mocked(client.importedPage).mockResolvedValue(storedPage(['First block', 'Second block', 'Third block\nwith two lines', 'Fourth block']));
+  const user = await openSpanned(spanned({}));
+  await user.click(await screen.findByRole('button', { name: 'The effect eff-1' }));
+  expect(client.importedPage).toHaveBeenCalledWith('src-2', 4, undefined);
+  const region = await screen.findByRole('region', { name: 'The effect eff-1' });
+  expect(within(region).getByText('Lines 2–4')).toBeTruthy();
+  const marks = region.querySelectorAll('mark');
+  expect(Array.from(marks).map((m) => m.textContent)).toEqual(['Second block', 'Third block\nwith two lines']);
+  expect(region.textContent).toContain('First block');
+  expect(region.textContent).toContain('Fourth block');
+  expect(region.getAttribute('tabindex')).toBe('0'); // the scrollable text is reachable by keyboard
+});
+
+it('candidate without spans shows the whole excerpt', async () => {
+  await openSpanned(spanned({ effectSpans: undefined }));
+  expect(await screen.findByText('Whole excerpt of the fixture')).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'The effect eff-1' })).toBeNull();
+  expect(client.importedPage).not.toHaveBeenCalled();
+});
+
+async function settled() {
+  await act(async () => {});
+}
+
+it('shows the whole excerpt, with no highlight, when the page cannot be fetched', async () => {
+  const unhandled: unknown[] = [];
+  const record = (reason: unknown) => unhandled.push(reason);
+  process.on('unhandledRejection', record);
+  vi.mocked(client.importedPage).mockRejectedValueOnce(new Error('no page'));
+  const user = await openSpanned(spanned({}));
+  await user.click(await screen.findByRole('button', { name: 'The effect eff-1' }));
+  await waitFor(() => expect(client.importedPage).toHaveBeenCalledTimes(1));
+  await settled();
+  await new Promise((resolve) => setTimeout(resolve, 20)); // Node reports an unhandled rejection after the microtask queue drains
+  process.off('unhandledRejection', record);
+  expect(unhandled).toEqual([]); // the failed read is caught, not left rejected
+  expect(unhandled.length).toBe(0);
+  expect(screen.getByText('Whole excerpt of the fixture')).toBeTruthy();
+  expect(document.querySelector('mark')).toBeNull();
+  expect(screen.queryByRole('region', { name: 'The effect eff-1' })).toBeNull();
+});
+
+it('shows the whole excerpt, with no highlight, when the span does not fit the fetched page', async () => {
+  vi.mocked(client.importedPage).mockResolvedValue(storedPage(['Only block']));
+  const user = await openSpanned(spanned({}));
+  await user.click(await screen.findByRole('button', { name: 'The effect eff-1' }));
+  await waitFor(() => expect(client.importedPage).toHaveBeenCalledTimes(1));
+  await settled();
+  expect(screen.getByText('Whole excerpt of the fixture')).toBeTruthy();
+  expect(document.querySelector('mark')).toBeNull();
+  expect(screen.queryByRole('region', { name: 'The effect eff-1' })).toBeNull();
+});
+
+it('lists no effects and fetches nothing when the effect with the span was edited away', async () => {
+  await openSpanned(spanned({ proposedEffects: [{ id: 'eff-2', type: 'note' }] }));
+  await screen.findByText('Whole excerpt of the fixture');
+  await settled();
+  expect(screen.queryByRole('list', { name: /^Proposed effects/ })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'The effect eff-1' })).toBeNull();
+  expect(client.importedPage).not.toHaveBeenCalled();
+});
+
+it('reads the page of the PDF the candidate was detected on, by its stored hash', async () => {
+  vi.mocked(client.importedPage).mockResolvedValue(storedPage(['First block', 'Second block', 'Third block']));
+  const stored = { ...spanned({}), attachmentSha256: 'ab'.repeat(32) };
+  const user = await openSpanned(stored);
+  await user.click(await screen.findByRole('button', { name: 'The effect eff-1' }));
+  await screen.findByRole('region', { name: 'The effect eff-1' });
+  expect(client.importedPage).toHaveBeenCalledWith('src-2', 4, 'ab'.repeat(32));
+});
+
+it('puts each confirm tick beside its effect button in one group', async () => {
+  vi.mocked(client.importedPage).mockResolvedValue(storedPage(['First block', 'Second block', 'Third block']));
+  const user = await openSpanned(spanned({ proposedKind: 'class', proposedEffects: [{ id: 'hd', type: 'hitDie', die: 8 }], effectSpans: { hd: span } }));
+  const group = await screen.findByRole('group', { name: 'Confirm what was read' });
+  expect(within(group).getByRole('checkbox', { name: 'Confirm the hit die, d8' })).toBeTruthy();
+  await user.click(within(group).getByRole('button', { name: 'The hit die, d8' }));
+  expect(await screen.findByRole('region', { name: 'The hit die, d8' })).toBeTruthy();
+});
+
+it('page text is rendered as text, not HTML', async () => {
+  const hostile = '<img src=x onerror=alert(1)>';
+  vi.mocked(client.importedPage).mockResolvedValue(storedPage(['First block', hostile, 'Third block']));
+  const user = await openSpanned(spanned({ excerpt: hostile }));
+  expect(document.querySelector('img')).toBeNull();
+  expect(screen.getByText(hostile)).toBeTruthy();
+  await user.click(await screen.findByRole('button', { name: 'The effect eff-1' }));
+  const region = await screen.findByRole('region', { name: 'The effect eff-1' });
+  expect(region.querySelector('img')).toBeNull();
+  expect(document.querySelector('img')).toBeNull();
+  expect(region.querySelector('mark')!.textContent).toContain(hostile);
+});
+
+// Import Lab L6: a pending candidate that looks like content in the library says so, in words; nothing is merged.
+it('shows "Possible duplicate of {name} ({source})" beside a candidate that has a twin, and none beside one that has not', async () => {
+  const twin = detected(['srd-5.1']);
+  const alone = { ...twin, id: 'cand-2', candidate: { ...twin.candidate, id: 'cand-2', proposedName: 'Testy Lone Coat' } };
+  vi.mocked(client.candidates).mockResolvedValue(pageOf([twin, alone]));
+  vi.mocked(client.contentDuplicates).mockResolvedValue([
+    {
+      class: 'sameNameDifferentRules',
+      family: 'srd-5.1',
+      members: [
+        { candidateId: 'cand-1', kind: 'item', name: 'Testy Coat', sourceId: 'src-2', sourceName: 'Testy Both' },
+        { contentId: 'c-9', revisionId: 'r-9', kind: 'item', name: 'Testy Coat', sourceId: 'src-9', sourceName: 'Testy Library' },
+      ],
+    },
+  ]);
+  renderPanel(vi.fn(), bothSource);
+  const rows = await screen.findAllByRole('listitem');
+  const first = rows.find((r) => within(r).queryByRole('button', { name: 'Testy Coat' }))!;
+  const second = rows.find((r) => within(r).queryByRole('button', { name: 'Testy Lone Coat' }))!;
+  expect(await within(first).findByText('Possible duplicate of Testy Coat (Testy Library)')).toBeTruthy();
+  expect(within(second).queryByText(/Possible duplicate/)).toBeNull();
+  expect(client.contentDuplicates).toHaveBeenCalledWith({ sourceId: undefined, jobId: 'job-1' });
+});
+
+it('shows no chip, and no error, when the duplicates cannot be read', async () => {
+  vi.mocked(client.candidates).mockResolvedValue(pageOf([detected(['srd-5.1'])]));
+  vi.mocked(client.contentDuplicates).mockRejectedValue(new Error('unavailable'));
+  const onError = vi.fn();
+  render(<CandidateReviewPanel job={job} source={bothSource} onError={onError} onStatus={() => {}} onOpenPage={() => {}} onOpenStudio={() => {}} />);
+  await screen.findByRole('button', { name: 'Testy Coat' });
+  await waitFor(() => expect(client.contentDuplicates).toHaveBeenCalled());
+  expect(screen.queryByText(/Possible duplicate/)).toBeNull();
+  expect(onError).not.toHaveBeenCalled();
 });

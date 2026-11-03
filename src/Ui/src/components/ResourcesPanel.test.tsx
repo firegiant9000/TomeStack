@@ -32,6 +32,36 @@ it('groups resources under Action, Bonus action and Reaction, and lists those wi
   expect(within(panel).getByRole('heading', { name: /^Testy plain: 2 of 2/ })).toBeTruthy();
 });
 
+it('a resource with a trace shows its sentences under a closed "Why?" (D72 X04)', () => {
+  const trace = [
+    { order: 1, operation: 'base', description: 'Level', amount: 2, result: 2, origin: { kind: 'rulesPolicy' } },
+    { order: 2, operation: 'add', description: 'Fixture Wellspring boon', amount: 1, result: 3, origin: { kind: 'rulesPolicy' } },
+  ];
+  render(<ResourcesPanel view={view([resource('plain', { trace })])} act={() => {}} />);
+  const why = screen.getByText('Why?').closest('details')!;
+  expect(why.open).toBe(false);
+  const list = within(why).getByRole('list', { hidden: true, name: 'Why Testy plain maximum' });
+  expect(list.textContent).toMatch(/Starts at 2: Level/);
+  expect(list.textContent).toMatch(/\+1 Fixture Wellspring boon/);
+  cleanup();
+  render(<ResourcesPanel view={view([resource('plain')])} act={() => {}} />);
+  expect(screen.queryByText('Why?')).toBeNull();
+});
+
+it('keeps the original maximum detail (inputs and source citation) beside the closed "Why?" (D72 X04)', () => {
+  const trace = [
+    {
+      order: 1, operation: 'derive', description: 'Fixture maximum', result: 8, inputs: [{ name: 'Level', value: 5 }, { name: 'Wisdom modifier', value: 3 }],
+      origin: { kind: 'content', rulesFamily: 'srd-5.2.1', sourceTitle: 'Fixture Pack', page: { start: 12 } },
+    },
+  ];
+  render(<ResourcesPanel view={view([resource('plain', { trace })])} act={() => {}} />);
+  expect((screen.getByText('Why?').closest('details') as HTMLDetailsElement).open).toBe(false);
+  const detail = screen.getByText('How the maximum is calculated').closest('details')!;
+  expect(detail.textContent).toContain('Fixture maximum = 8 (Level 5, Wisdom modifier 3)');
+  expect(detail.textContent).toContain('· Fixture Pack, p. 12');
+});
+
 it('renders no group at all when no resource has an activation', () => {
   render(<ResourcesPanel view={view([resource('plain')])} act={() => {}} />);
   const panel = screen.getByRole('region', { name: 'Resources' });

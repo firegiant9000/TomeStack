@@ -1,33 +1,53 @@
-import { useCallback, useEffect, useState, type SubmitEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type SubmitEvent } from 'react';
 import { client } from '../api/client';
 import { TomeStackError } from '../api/transport';
-import type { ImportJob, ImportSearchHit, RulesFamilyId, SourceRecord } from '../api/types';
+import type { ImportJob, ImportSearchHit, RulesFamilyId, SourceRecord, StoredPage } from '../api/types';
+import { readFileAsBase64 } from '../files';
 import { CandidateReviewPanel } from './CandidateReviewPanel';
 import { familyLabel, familyShortName } from './familyLabels';
+import { failureWords, pageWarningWords } from './importWords';
 
 interface Props {
   source: SourceRecord;
+  /** The source has a PDF to read pages from. Without one only a Markdown import is offered, and stored page text opens in the app. */
+  hasPdf: boolean;
   onError: (error: unknown) => void;
   onStatus: (text: string) => void;
   onOpenStudio: (sourceId: string) => void;
 }
 
 const active = (job: ImportJob) => job.status === 'queued' || job.status === 'running';
-const resumable = (job: ImportJob) => job.status === 'cancelled' || job.status === 'failed' || job.status === 'interrupted';
+const isMarkdown = (job: ImportJob) => job.format === 'markdown';
+// D67: a Markdown import keeps no copy of the file, so it cannot be resumed; the file is imported again.
+const resumable = (job: ImportJob) => !isMarkdown(job) && (job.status === 'cancelled' || job.status === 'failed' || job.status === 'interrupted');
+const importAgain = (job: ImportJob) => isMarkdown(job) && (job.status === 'cancelled' || job.status === 'failed' || job.status === 'interrupted');
 
 function progress(job: ImportJob): string {
-  const scope = job.wholeDocument ? 'whole document' : `pages ${job.firstPage}–${job.lastPage ?? job.pageCount ?? '…'}`;
+  const scope = isMarkdown(job) ? 'Markdown file' : job.wholeDocument ? 'whole document' : `pages ${job.firstPage}–${job.lastPage ?? job.pageCount ?? '…'}`;
   const counts = `${job.pagesDone} page${job.pagesDone === 1 ? '' : 's'} read${job.pagesFromOcr ? `, ${job.pagesFromOcr} by OCR` : ''}${job.pagesWithoutText ? `, ${job.pagesWithoutText} without text` : ''}${job.pagesFailed ? `, ${job.pagesFailed} unreadable` : ''}`;
-  const failure = job.failureMessage ? ` ${job.failureMessage}` : '';
+  const words = failureWords(job.failureCode, job.failureMessage);
+  const failure = words ? ` ${words}` : '';
   return `${scope}: ${job.status}, ${counts}${job.status === 'completed' ? `, ${job.candidates} candidate${job.candidates === 1 ? '' : 's'}` : ''}.${failure}`;
+}
+
+/** A refused Markdown start, in words when this build knows the code. The service puts its code in the first diagnostic. */
+function markdownRefusal(error: unknown): unknown {
+  if (!(error instanceof TomeStackError)) return error;
+  const words = failureWords(error.diagnostics[0]?.code ?? error.code);
+  return words ? new Error(words) : error;
 }
 
 /**
  * M4 D2, D5 (SPEC I-01, I-03): extract a source's PDF as a cancellable, resumable job, search its text, and review
  * what was found. Nothing here changes content: accepting a candidate creates a draft, which the studio publishes.
  */
-export function ImportPanel({ source, onError, onStatus, onOpenStudio }: Props) {
+export function ImportPanel({ source, hasPdf, onError, onStatus, onOpenStudio }: Props) {
   const [jobs, setJobs] = useState<ImportJob[]>([]);
+  const [viewing, setViewing] = useState<{ page: number; stored: StoredPage }>();
+  const viewer = useRef<HTMLElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  // Set when the button is pressed, before the host replies: a file chosen in the browser picker must never find no target.
+  const browserTarget = useRef<{ sourceId: string; writtenFor?: RulesFamilyId[] }>(undefined);
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [reviewing, setReviewing] = useState<string>();
@@ -98,13 +118,66 @@ export function ImportPanel({ source, onError, onStatus, onOpenStudio }: Props) 
     }
   }
 
-  async function openPage(page: number) {
+  /** D67: the Open dialog picks a Markdown file; the browser has none, so a file input sends the bytes instead. */
+  async function importMarkdown(blocked: boolean) {
+    if (blocked) return;
+    browserTarget.current = { sourceId: source.id, writtenFor };
+    let job: ImportJob | undefined;
+    try {
+      job = await client.startMarkdownImport(source.id, writtenFor);
+    } catch (error) {
+      if (error instanceof TomeStackError && error.code === 'unsupported') {
+        fileInput.current?.click();
+        return;
+      }
+      onError(markdownRefusal(error));
+      return;
+    }
+    if (job) {
+      onStatus(`Reading the Markdown file for ${source.title}. Nothing changes until you review what is found.`);
+      // The import started. A failed list refresh is its own problem (and the poll tries again), never a refusal of the start.
+      await refresh().catch(onError);
+    }
+  }
+
+  async function importMarkdownFromBrowser(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    const target = browserTarget.current;
+    if (!file || !target) return;
+    try {
+      await client.startMarkdownImportData(target.sourceId, file.name, await readFileAsBase64(file), target.writtenFor);
+      onStatus(`Reading ${file.name}. Nothing changes until you review what is found.`);
+    } catch (error) {
+      onError(markdownRefusal(error));
+      return;
+    }
+    await refresh().catch(onError);
+  }
+
+  /**
+   * A PDF page opens in the PDF viewer. Without a PDF, or for a page of a Markdown job, the text TomeStack stored opens in the
+   * app instead (`job` names the document the page was read from).
+   */
+  async function openPage(page: number, job?: ImportJob) {
+    if (!hasPdf || (job && isMarkdown(job))) {
+      try {
+        setViewing({ page, stored: await client.importedPage(source.id, page, job?.sha256) });
+      } catch (error) {
+        onError(error);
+      }
+      return;
+    }
     try {
       await client.openPage(source.id, page);
     } catch (error) {
       onError(error instanceof TomeStackError && error.code === 'unsupported' ? new Error('Opening a PDF page needs the TomeStack desktop app.') : error);
     }
   }
+
+  useEffect(() => {
+    if (viewing) viewer.current?.focus();
+  }, [viewing]);
 
   const first = Number(from);
   const last = to === '' ? undefined : Number(to);
@@ -122,8 +195,9 @@ export function ImportPanel({ source, onError, onStatus, onOpenStudio }: Props) 
         Read the text and find candidates <span className="tag">Experimental</span>
       </h4>
       <p className="hint">
-        TomeStack reads the PDF on this computer and proposes entries for you to review. The text is never exported. Experimental: it has not been
-        proven on a real third-party book yet, so check every candidate against its page. Nothing becomes a rule until you publish it.
+        {hasPdf ? 'TomeStack reads the PDF on this computer' : 'TomeStack reads a Markdown file you choose, on this computer,'} and proposes entries for you to review.
+        The text is never exported. Experimental: it has not been proven on a real third-party book yet, so check every candidate against its page. Nothing
+        becomes a rule until you publish it.
       </p>
       {askFamily ? (
         <fieldset>
@@ -154,7 +228,7 @@ export function ImportPanel({ source, onError, onStatus, onOpenStudio }: Props) 
           {busyText}
         </p>
       )}
-      {!valid && (
+      {hasPdf && !valid && (
         <p id={pagesHintId} className="hint">
           {from === ''
             ? 'Enter a first page.'
@@ -163,33 +237,44 @@ export function ImportPanel({ source, onError, onStatus, onOpenStudio }: Props) 
               : 'Check the pages: the last page cannot be before the first.'}
         </p>
       )}
+      {hasPdf && (
+        <div className="inline-form">
+          <label className="field">
+            From page
+            <input type="number" min={1} value={from} onChange={(e) => setFrom(e.target.value)} />
+          </label>
+          <label className="field">
+            To page (optional)
+            <input type="number" min={1} value={to} onChange={(e) => setTo(e.target.value)} />
+          </label>
+          {/* aria-disabled, never `disabled`: the pressed button stays focused when the job starts (2.4.3, 4.1.2). */}
+          <button
+            type="button"
+            aria-disabled={pagesBlocked || undefined}
+            aria-describedby={pagesReason}
+            onClick={() => start({ firstPage: first, lastPage: last ?? first }, pagesBlocked)}
+          >
+            Read these pages
+          </button>
+          <button
+            type="button"
+            aria-disabled={wholeBlocked || undefined}
+            aria-describedby={wholeReason}
+            onClick={() => start({ wholeDocument: true }, wholeBlocked)}
+          >
+            Read the whole document
+          </button>
+        </div>
+      )}
       <div className="inline-form">
-        <label className="field">
-          From page
-          <input type="number" min={1} value={from} onChange={(e) => setFrom(e.target.value)} />
-        </label>
-        <label className="field">
-          To page (optional)
-          <input type="number" min={1} value={to} onChange={(e) => setTo(e.target.value)} />
-        </label>
-        {/* aria-disabled, never `disabled`: the pressed button stays focused when the job starts (2.4.3, 4.1.2). */}
-        <button
-          type="button"
-          aria-disabled={pagesBlocked || undefined}
-          aria-describedby={pagesReason}
-          onClick={() => start({ firstPage: first, lastPage: last ?? first }, pagesBlocked)}
-        >
-          Read these pages
+        <button type="button" aria-disabled={wholeBlocked || undefined} aria-describedby={wholeReason} onClick={() => importMarkdown(wholeBlocked)}>
+          Import a Markdown file…
         </button>
-        <button
-          type="button"
-          aria-disabled={wholeBlocked || undefined}
-          aria-describedby={wholeReason}
-          onClick={() => start({ wholeDocument: true }, wholeBlocked)}
-        >
-          Read the whole document
-        </button>
+        <input ref={fileInput} type="file" accept=".md" hidden onChange={importMarkdownFromBrowser} aria-label="Markdown file" />
       </div>
+      <p className="hint">
+        A Markdown file is read whole. TomeStack keeps the pages it read, not a copy of the file, and a Markdown import cannot be resumed: import the file again.
+      </p>
 
       {jobs.length > 0 && (
         <ul className="resources" aria-label={`Imports of ${source.title}`}>
@@ -217,6 +302,7 @@ export function ImportPanel({ source, onError, onStatus, onOpenStudio }: Props) 
                     Resume
                   </button>
                 )}
+                {importAgain(job) && <span className="hint">{failureWords('import.markdown-read-again')}</span>}
                 {job.status === 'completed' && (
                   <button type="button" aria-expanded={reviewing === job.id} onClick={() => setReviewing(reviewing === job.id ? undefined : job.id)}>
                     Review {job.candidates} candidate{job.candidates === 1 ? '' : 's'}
@@ -230,7 +316,7 @@ export function ImportPanel({ source, onError, onStatus, onOpenStudio }: Props) 
                 )}
               </div>
               {reviewing === job.id && (
-                <CandidateReviewPanel job={job} source={source} onError={onError} onStatus={onStatus} onOpenPage={openPage} onOpenStudio={onOpenStudio} />
+                <CandidateReviewPanel job={job} source={source} onError={onError} onStatus={onStatus} onOpenPage={(page) => openPage(page, job)} onOpenStudio={onOpenStudio} />
               )}
             </li>
           ))}
@@ -258,6 +344,28 @@ export function ImportPanel({ source, onError, onStatus, onOpenStudio }: Props) 
             </li>
           ))}
         </ul>
+      )}
+      {viewing && (
+        <section ref={viewer} tabIndex={-1} aria-label={`Stored text of page ${viewing.page} of ${source.title}`} className="play-panel">
+          <h5>Page {viewing.page} as TomeStack read it</h5>
+          {viewing.stored.error && <p className="hint">This page could not be read.</p>}
+          {viewing.stored.warnings.length > 0 && (
+            <ul aria-label="Notes about this page" className="resources">
+              {viewing.stored.warnings.map((code) => (
+                <li key={code} className="hint">
+                  {pageWarningWords(code)}
+                </li>
+              ))}
+            </ul>
+          )}
+          {/* Plain text only: React escapes it, and nothing here ever sets HTML. */}
+          <pre className="excerpt">{viewing.stored.text}</pre>
+          <div className="actions">
+            <button type="button" onClick={() => setViewing(undefined)}>
+              Close
+            </button>
+          </div>
+        </section>
       )}
     </section>
   );

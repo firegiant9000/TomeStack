@@ -121,23 +121,23 @@ public static partial class DdbParser
     /// One class part: a name, a level from 1 to 20 (written bare, or after "LVL" or "Level", as the fillable sheet's owners
     /// write it), and an optional subclass in parentheses (unverified shape, S0).
     /// </summary>
-    [GeneratedRegex(@"^(?<name>[^/\d]{1,60}?)\s+(?:(?:[Ll][Vv][Ll]|[Ll][Ee][Vv][Ee][Ll])\.?\s*)?(?<level>[1-9]|1[0-9]|20)(?:\s*\((?<sub>[^()]{1,60})\))?$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?<name>[^/\d]{1,60}?)\s+(?:(?:[Ll][Vv][Ll]|[Ll][Ee][Vv][Ee][Ll])\.?\s*)?(?<level>[1-9]|1[0-9]|20)(?:\s*\((?<sub>[^()]{1,60})\))?$", RegexOptions.None, ImportRegex.TimeoutMs)]
     private static partial Regex ClassPart();
 
     /// <summary>A hit dice total: a count and one die size ("3d8").</summary>
-    [GeneratedRegex(@"^(?<count>[0-9]{1,2})\s*[dD]\s*(?<die>6|8|10|12)$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?<count>[0-9]{1,2})\s*[dD]\s*(?<die>6|8|10|12)$", RegexOptions.None, ImportRegex.TimeoutMs)]
     private static partial Regex DiceTotal();
 
     /// <summary>Hit dice left: a count, with the die size optional ("2d8", "2").</summary>
-    [GeneratedRegex(@"^(?<count>[0-9]{1,2})(?:\s*[dD]\s*(?<die>[0-9]{1,2}))?$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?<count>[0-9]{1,2})(?:\s*[dD]\s*(?<die>[0-9]{1,2}))?$", RegexOptions.None, ImportRegex.TimeoutMs)]
     private static partial Regex DiceLeft();
 
     /// <summary>A signed whole number: a plus, a hyphen or a minus sign, then at most five digits.</summary>
-    [GeneratedRegex(@"^(?<sign>[+\-−]?)\s*(?<digits>[0-9]{1,5})$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?<sign>[+\-−]?)\s*(?<digits>[0-9]{1,5})$", RegexOptions.None, ImportRegex.TimeoutMs)]
     private static partial Regex Number();
 
     /// <summary>A coin count: digits only, at most seven (the character bound is 1,000,000).</summary>
-    [GeneratedRegex(@"^(?<sign>[+\-−]?)\s*(?<digits>[0-9]{1,7})$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?<sign>[+\-−]?)\s*(?<digits>[0-9]{1,7})$", RegexOptions.None, ImportRegex.TimeoutMs)]
     private static partial Regex Coin();
 
     /// <summary>A map with its patterns compiled and its row-numbered names split around <c>{n}</c>.</summary>
@@ -193,6 +193,8 @@ public static partial class DdbParser
 
     private sealed class SheetReader(CompiledMap compiled, Dictionary<string, (FormField Field, FieldRule Rule)> values)
     {
+        private static readonly string[] DeathSaveRows = ["play.deathSuccesses", "play.deathFailures"];
+
         /// <summary>A text value, trimmed; through the field's pattern when it has one.</summary>
         public Read<string> Text(string semantic, bool applyPattern = true)
         {
@@ -498,7 +500,7 @@ public static partial class DdbParser
 
         /// <summary>True when the layout has death-save boxes and any is ticked.</summary>
         public bool AnyDeathBoxTicked() =>
-            new[] { "play.deathSuccesses", "play.deathFailures" }
+            DeathSaveRows
                 .SelectMany(s => Enumerable.Range(1, DdbSemantics.DeathBoxes).Select(i => $"{s}.{i}"))
                 .Where(values.ContainsKey)
                 .Any(box => Bool(box) is { Status: ReadStatus.Ok, Value: true });
