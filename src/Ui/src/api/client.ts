@@ -9,9 +9,12 @@ import type {
   CandidateEdit,
   CandidateFilter,
   CandidatePage,
+  DailyCopies,
+  DiagnosticsText,
   ImportJob,
   ImportSearchHit,
   StoredCandidate,
+  StoredPage,
   DetachPreview,
   OpenPageOutcome,
   ContentKind,
@@ -25,6 +28,10 @@ import type {
   SpellListKeyCount,
   SourcePackPreview,
   CampaignPackPreview,
+  PreflightReport,
+  PreflightRequest,
+  DuplicateGroup,
+  DuplicatesRequest,
   ExtensionInstallPreview,
   ExtensionRunPreview,
   ExtensionRunRequest,
@@ -55,6 +62,9 @@ import type {
   ExportPreview,
   ExportPurpose,
   FormulaPreviewResult,
+  ClassTableView,
+  CoverageReport,
+  CoverageRequest,
   GapNote,
   GapNoteListing,
   GapNoteStatus,
@@ -68,9 +78,15 @@ import type {
   LibraryRestoreResult,
   MechanicsReport,
   PackagePreview,
+  PackageTargets,
   PlayAction,
   RestPeriod,
   RestPreview,
+  TurnChoiceOption,
+  TurnMoment,
+  TurnPreview,
+  DamagePreview,
+  ResponseChoice,
   RollRecord,
   RollTarget,
   RestorePreview,
@@ -84,6 +100,20 @@ import type {
   SourceChoice,
   ValidationReport,
 } from './types';
+
+/** The optional down-conversion payload keys: each is present only when its argument is given. */
+function downConversion(target?: string | null, changesHash?: string | null) {
+  return {
+    ...(target == null ? {} : { target }),
+    ...(changesHash == null ? {} : { changesHash }),
+  };
+}
+
+/** As `downConversion`, but `undefined` (no payload) when neither is given. */
+function downConversionOrNone(target?: string | null, changesHash?: string | null) {
+  const keys = downConversion(target, changesHash);
+  return Object.keys(keys).length === 0 ? undefined : keys;
+}
 
 /** Typed application client. Components use this, never the transport or fetch directly. */
 export function createClient(transport: Transport) {
@@ -133,6 +163,10 @@ export function createClient(transport: Transport) {
     /** A formula's value at sample class levels (D61). Read-only; `revision` is the unsaved draft whose scales `SCALE.<id>` reads. */
     previewFormula: (formula: string, revision?: ContentRevision, floorAtZero?: boolean) =>
       call<FormulaPreviewResult>('content.previewFormula', { formula, revision, floorAtZero }),
+    /** What the engine really does with each effect of a source's content (Import Lab, D62 L1). Read-only; drafts only when asked. */
+    contentCoverage: (args: CoverageRequest = {}) => call<CoverageReport>('content.coverage', args),
+    contentDuplicates: (args: DuplicatesRequest = {}) => call<DuplicateGroup[]>('content.duplicates', args),
+    contentClassTable: (revisionId: string) => call<ClassTableView>('content.classTable', { revisionId }),
     listSources: () => call<SourceRecord[]>('source.list'),
     createHomebrewSource: (title: string, rulesFamilies: RulesFamilyId[]) =>
       call<SourceRecord>('source.createHomebrew', { title, rulesFamilies }),
@@ -164,12 +198,26 @@ export function createClient(transport: Transport) {
     // ---- PDF import (M4): extraction jobs, search and candidate review. Accepting creates a draft only (ADR-004). ----
     startImport: (sourceId: string, request: { firstPage?: number; lastPage?: number; wholeDocument?: boolean; writtenFor?: RulesFamilyId[] }) =>
       call<ImportJob>('import.start', { sourceId, ...request }),
+    /**
+     * D67: native Open dialog for a `.md` file, then a Markdown import of it (import pages only; no copy of the file is kept).
+     * Resolves to `undefined` when the dialog was cancelled; fails with `unsupported` outside the desktop app. No timeout: it waits for the dialog.
+     */
+    startMarkdownImport: (sourceId: string, writtenFor?: RulesFamilyId[]) =>
+      call<ImportJob | undefined>('import.startMarkdown', { sourceId, ...(writtenFor ? { writtenFor } : {}) }, { timeoutMs: null }),
+    /** D67, browser development: the chosen file's bytes. */
+    startMarkdownImportData: (sourceId: string, fileName: string, base64: string, writtenFor?: RulesFamilyId[]) =>
+      call<ImportJob>('import.startMarkdownData', { sourceId, fileName, base64, ...(writtenFor ? { writtenFor } : {}) }, { timeoutMs: null }),
     importStatus: (jobId: string) => call<ImportJob>('import.status', { jobId }),
     listImports: (sourceId: string) => call<ImportJob[]>('import.list', { sourceId }),
     cancelImport: (jobId: string) => call<ImportJob>('import.cancel', { jobId }, { timeoutMs: null }),
     resumeImport: (jobId: string) => call<ImportJob>('import.resume', { jobId }),
     /** SPEC I-03: pages of one source whose extracted text contains the query; writes nothing. */
     searchImport: (sourceId: string, query: string) => call<ImportSearchHit[]>('import.search', { sourceId, query }),
+    /**
+     * D64: the stored extraction of one page of the source's current PDF, or with `sha256` of the PDF a candidate was read from
+     * (`import.page-not-extracted` when it was never read).
+     */
+    importedPage: (sourceId: string, page: number, sha256?: string) => call<StoredPage>('import.page', { sourceId, page, ...(sha256 ? { sha256 } : {}) }),
     /** One page (50 unless `limit` says; at most 200) of a job's candidates in page order, and the total the filter matches. */
     candidates: (jobId: string, filter: CandidateFilter = {}, paging: { offset?: number; limit?: number } = {}) =>
       call<CandidatePage>('import.candidates', { jobId, ...filter, ...paging }),
@@ -219,6 +267,17 @@ export function createClient(transport: Transport) {
       call<CharacterView>('character.previewChoice', { draft, source, choiceId, selected }),
     /** One play-state change; `confirm` is always sent because only a deliberate button press calls this (SPEC C-05). */
     play: (characterId: string, action: PlayAction) => call<CharacterView>('character.play', { characterId, ...action, confirm: true }),
+    /** D44: puts the play state back to what the last compound change (a form switch) started from. `updatedAt` is the view's stamp. */
+    undoPlay: (characterId: string, updatedAt: string) => call<CharacterView>('character.undoPlay', { characterId, updatedAt, confirm: true }),
+    /** D43 S3: what a turn start or end would change for the selection (change ids to skip, a choice per shortfall prompt); writes nothing. */
+    /** D43 S7: one hit with the chosen responses, previewed (nothing is written). `type` is any case of a damage type; absent or empty is untyped. */
+    damagePreview: (characterId: string, amount: number, type: string | undefined, responses: ResponseChoice[]) =>
+      call<DamagePreview>('character.damagePreview', { characterId, amount, ...(type ? { type } : {}), responses }),
+    turnPreview: (characterId: string, at: TurnMoment, skip: string[], choices: Record<string, TurnChoiceOption>) =>
+      call<TurnPreview>('character.turnPreview', { characterId, at, skip, choices }),
+    /** Applies exactly the previewed turn. `expectedUpdatedAt` is the preview's `updatedAt` (`turn.preview-stale` when the character changed since). Only the panel's Confirm calls this. */
+    turn: (characterId: string, at: TurnMoment, expectedUpdatedAt: string, skip: string[], choices: Record<string, TurnChoiceOption>) =>
+      call<CharacterView>('character.turn', { characterId, at, confirm: true, expectedUpdatedAt, skip, choices }),
     /** What a rest would change; writes nothing (D01). A short rest spends `hitDice`, each with what the die shows. */
     restPreview: (characterId: string, kind: RestPeriod, hitDice: HitDieRoll[] = [], chargeRolls: ChargeRoll[] = []) =>
       call<RestPreview>('character.restPreview', { characterId, kind, hitDice, chargeRolls }),
@@ -240,29 +299,40 @@ export function createClient(transport: Transport) {
     setGapNoteStatus: (id: string, status: GapNoteStatus) => call<GapNote>('gap.setStatus', { id, status }),
     /** Only the "Delete note" confirmation calls this. */
     deleteGapNote: (id: string) => call<{ deleted: boolean }>('gap.delete', { id, confirm: true }),
-    /** What an export would contain and leave out, without writing anything (ADR-007). */
-    previewExport: (characterIds: string[], purpose: ExportPurpose) =>
-      call<ExportPreview>('package.exportPreview', { characterIds, purpose }),
-    exportCharacters: (characterIds: string[], purpose: ExportPurpose = 'backup') =>
-      call<ExportedPackage>('package.export', { characterIds, purpose }),
+    /** The releases a copy can be made for ("Save for an older TomeStack"); the current row is not in `targets`. */
+    packageTargets: () => call<PackageTargets>('package.targets', {}),
+    /**
+     * What an export would contain and leave out, without writing anything (ADR-007). `target` (a release from packageTargets) and
+     * `changesHash` (from the preview) are sent only when given, so an omitted target leaves the call as it was.
+     */
+    previewExport: (characterIds: string[], purpose: ExportPurpose, target?: string | null) =>
+      call<ExportPreview>('package.exportPreview', { characterIds, purpose, ...downConversion(target) }),
+    exportCharacters: (characterIds: string[], purpose: ExportPurpose = 'backup', target?: string | null, changesHash?: string | null) =>
+      call<ExportedPackage>('package.export', { characterIds, purpose, ...downConversion(target, changesHash) }),
     /**
      * Native Save dialog in the shell; fails with code `unsupported` on hosts without one (DevHost). No timeout: the
      * response waits for the user to close the dialog.
      */
-    saveExportAs: (characterIds: string[], purpose: ExportPurpose = 'backup') =>
-      call<SaveOutcome>('package.saveAs', { characterIds, purpose }, { timeoutMs: null }),
+    saveExportAs: (characterIds: string[], purpose: ExportPurpose = 'backup', target?: string | null, changesHash?: string | null) =>
+      call<SaveOutcome>('package.saveAs', { characterIds, purpose, ...downConversion(target, changesHash) }, { timeoutMs: null }),
+    /** Import Lab L5: what a share export would include, leave out or refuse, by the one sharing rule. Writes nothing; export re-checks. */
+    packagePreflight: (request: PreflightRequest) => call<PreflightReport>('package.preflight', request),
     // ---- source packs (M6 slice 1): only sources you marked as shareable; import goes through previewImport/applyImport ----
-    sourcePackPreview: (sourceIds: string[]) => call<SourcePackPreview>('package.sourcePackPreview', { sourceIds }),
-    exportSourcePack: (sourceIds: string[]) => call<ExportedPackage>('package.sourcePackExport', { sourceIds }),
+    sourcePackPreview: (sourceIds: string[], target?: string | null) =>
+      call<SourcePackPreview>('package.sourcePackPreview', { sourceIds, ...downConversion(target) }),
+    exportSourcePack: (sourceIds: string[], target?: string | null, changesHash?: string | null) =>
+      call<ExportedPackage>('package.sourcePackExport', { sourceIds, ...downConversion(target, changesHash) }),
     /** Native Save dialog in the shell; `unsupported` elsewhere (DevHost). No timeout, as for saveExportAs. */
-    saveSourcePackAs: (sourceIds: string[]) =>
-      call<SaveOutcome>('package.sourcePackSaveAs', { sourceIds }, { timeoutMs: null }),
+    saveSourcePackAs: (sourceIds: string[], target?: string | null, changesHash?: string | null) =>
+      call<SaveOutcome>('package.sourcePackSaveAs', { sourceIds, ...downConversion(target, changesHash) }, { timeoutMs: null }),
     // ---- campaign packs (M6 slice 2): the profile and the shareable content of its allowed sources ----
-    campaignPackPreview: (campaignId: string) => call<CampaignPackPreview>('package.campaignPackPreview', { campaignId }),
-    exportCampaignPack: (campaignId: string) => call<ExportedPackage>('package.campaignPackExport', { campaignId }),
+    campaignPackPreview: (campaignId: string, target?: string | null) =>
+      call<CampaignPackPreview>('package.campaignPackPreview', { campaignId, ...downConversion(target) }),
+    exportCampaignPack: (campaignId: string, target?: string | null, changesHash?: string | null) =>
+      call<ExportedPackage>('package.campaignPackExport', { campaignId, ...downConversion(target, changesHash) }),
     /** Native Save dialog in the shell; `unsupported` elsewhere (DevHost). No timeout, as for saveExportAs. */
-    saveCampaignPackAs: (campaignId: string) =>
-      call<SaveOutcome>('package.campaignPackSaveAs', { campaignId }, { timeoutMs: null }),
+    saveCampaignPackAs: (campaignId: string, target?: string | null, changesHash?: string | null) =>
+      call<SaveOutcome>('package.campaignPackSaveAs', { campaignId, ...downConversion(target, changesHash) }, { timeoutMs: null }),
     // ---- extensions (M6 slice 3, ADR-011): declarative only; every run previews first ----
     listExtensions: () => call<InstalledExtension[]>('extension.list'),
     /** Checks an extension file and shows what it asks for; installs nothing. */
@@ -321,14 +391,23 @@ export function createClient(transport: Transport) {
     /** Cancel at any step: drops the read sheet. */
     ddbDiscard: (token: string) => call<{ discarded: boolean }>('ddb.discard', { token }),
     // ---- full library backup (M2.1): native dialogs only; no path or backup bytes cross the bridge ----
-    libraryBackupPreview: () => call<LibraryBackupPreview>('library.backupPreview'),
+    // With no target these send no payload at all, as before.
+    libraryBackupPreview: (target?: string | null) =>
+      call<LibraryBackupPreview>('library.backupPreview', downConversionOrNone(target)),
     /** Native Save dialog, then writes everything (PDFs included). No timeout: it waits for the dialog and the copy. */
-    saveLibraryBackup: () => call<LibraryBackupOutcome>('library.backupSaveAs', undefined, { timeoutMs: null }),
+    libraryBackupSaveAs: (target?: string | null, changesHash?: string | null) =>
+      call<LibraryBackupOutcome>('library.backupSaveAs', downConversionOrNone(target, changesHash), { timeoutMs: null }),
     /** Native Open dialog, then checks the whole file (every PDF too); writes nothing. */
     chooseLibraryRestore: () => call<LibraryRestoreChoice>('library.restoreChoose', undefined, { timeoutMs: null }),
     /** Only the preview's "Restore" button calls this. */
     applyLibraryRestore: (token: string, sourceChoices: Record<string, SourceChoice> = {}) =>
       call<LibraryRestoreResult>('library.restoreApply', { token, sourceChoices, confirm: true }, { timeoutMs: null }),
+    /** Settings "Copy diagnostics": versions and the newest error-log entries, redacted by the service; reads only. */
+    copyDiagnostics: () => call<DiagnosticsText>('diagnostics.copy'),
+    /** D77: the daily copies setting and the copies kept. */
+    dailyCopies: () => call<DailyCopies>('library.dailyCopies'),
+    /** Turning it off keeps the copies already taken. */
+    setDailyCopies: (on: boolean) => call<DailyCopies>('library.setDailyCopies', { on }),
   };
 }
 

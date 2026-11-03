@@ -1,0 +1,115 @@
+{
+  "packId": "tomestack-action-details-fixtures",
+  "formatVersion": 1,
+  "notice": "Original TomeStack test fixtures (play mechanics, content v11: action details such as saves, areas, per-unit dice, actions with no dice, and named values). Invented; no SRD or third-party rules text.",
+  "sources": [
+    {
+      "id": "6f0d5000-0000-4000-8000-000000000050",
+      "title": "TomeStack Fixtures: Action Details",
+      "publisher": "TomeStack project",
+      "rulesFamilies": ["srd-5.2.1"],
+      "editionVersion": "fixture-1",
+      "license": "Original test fixture",
+      "redistributable": true,
+      "attribution": "Written for TomeStack tests."
+    }
+  ],
+  "revisions": [
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000000050",
+      "revisionId": "6f0de000-0000-4000-8000-000000000050",
+      "schemaVersion": 11,
+      "kind": "class",
+      "name": "Fixture Wave Adept",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000000050", "page": { "start": 1 } },
+      "status": "published",
+      "summary": "A test class with a focus pool, a choice between two named values and one granted action feature.",
+      "effects": [
+        { "type": "hitDie", "id": "wave-hit-die", "die": 8 },
+        { "type": "resource", "id": "focus", "resourceId": "focus", "label": "Focus", "maximum": "LEVEL + 4" },
+        { "type": "recovery", "id": "focus-long", "timing": "onLongRest", "resourceId": "focus", "on": "longRest", "amount": "all" },
+        {
+          "type": "choice",
+          "id": "focus-ability",
+          "choiceId": "focusAbility",
+          "count": 1,
+          "level": 1,
+          "text": "Choose where your focus comes from.",
+          "options": [
+            { "contentId": "6f0dc000-0000-4000-8000-000000000051", "revisionId": "6f0de000-0000-4000-8000-000000000051" },
+            { "contentId": "6f0dc000-0000-4000-8000-000000000052", "revisionId": "6f0de000-0000-4000-8000-000000000052" }
+          ]
+        },
+        { "type": "grant", "id": "wave-tide", "grant": "content", "level": 1, "content": { "contentId": "6f0dc000-0000-4000-8000-000000000053", "revisionId": "6f0de000-0000-4000-8000-000000000053" } }
+      ]
+    },
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000000051",
+      "revisionId": "6f0de000-0000-4000-8000-000000000051",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Fixture Focus of Body",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000000050", "page": { "start": 2 } },
+      "status": "published",
+      "summary": "A test feature that names a value from Constitution.",
+      "effects": [
+        { "type": "value", "id": "focus-mod", "valueId": "focusMod", "formula": "CON.MOD" }
+      ]
+    },
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000000052",
+      "revisionId": "6f0de000-0000-4000-8000-000000000052",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Fixture Focus of Mind",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000000050", "page": { "start": 3 } },
+      "status": "published",
+      "summary": "A test feature that names a value from Wisdom.",
+      "effects": [
+        { "type": "value", "id": "focus-mod", "valueId": "focusMod", "formula": "WIS.MOD" }
+      ]
+    },
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000000053",
+      "revisionId": "6f0de000-0000-4000-8000-000000000053",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Fixture Tide Wave",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000000050", "page": { "start": 4 } },
+      "status": "published",
+      "summary": "A test feature with a save, an area and extra dice per unit spent, and a reaction with no dice.",
+      "effects": [
+        {
+          "type": "roll",
+          "id": "wave",
+          "rollId": "wave",
+          "label": "Tide wave",
+          "dice": "4d10",
+          "resourceContent": "6f0dc000-0000-4000-8000-000000000050",
+          "resourceId": "focus",
+          "cost": "2",
+          "perUnit": { "dice": "1d10", "maxUnits": 4 },
+          "save": { "ability": "dex", "dc": "8 + PB + VALUE.focusMod" },
+          "area": { "shape": "line", "size": 100, "width": 5 },
+          "range": "Self",
+          "targets": "Each creature in the line"
+        },
+        {
+          "type": "roll",
+          "id": "brace",
+          "rollId": "brace",
+          "label": "Brace",
+          "resourceContent": "6f0dc000-0000-4000-8000-000000000050",
+          "resourceId": "focus",
+          "cost": "2",
+          "activation": "reaction",
+          "text": "+4 AC until the start of your next turn."
+        }
+      ]
+    }
+  ]
+}

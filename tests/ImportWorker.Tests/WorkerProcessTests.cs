@@ -348,10 +348,111 @@ public class WorkerProcessTests
         Assert.InRange(clock.Elapsed, TimeSpan.FromMilliseconds(150), TimeSpan.FromSeconds(20));
     }
 
+    // Import Lab Task 13 (R3): a third request kind, extractMarkdown, reads a Markdown file in the same child.
+
+    private static async Task<List<ExtractionEvent>> RunMarkdown(string path, PageScope? scope = null)
+    {
+        var events = new List<ExtractionEvent>();
+        var extractor = new WorkerProcessExtractor(Worker) { Kind = WorkerRequest.MarkdownKind };
+        await foreach (var item in extractor.ExtractAsync(path, scope ?? PageScope.WholeDocument, CancellationToken.None))
+            events.Add(item);
+        return events;
+    }
+
+    private static readonly string MarkdownFixture = Path.Combine(AppContext.BaseDirectory, "RulesFixtures", "lab", "placeholder-class.md");
+
+    [Fact]
+    public async Task Worker_extracts_markdown_out_of_process()
+    {
+        var events = await RunMarkdown(MarkdownFixture);
+        var expected = MarkdownExtractor.Parse(File.ReadAllBytes(MarkdownFixture));
+
+        Assert.Equal(expected[^1].PageNumber, Assert.IsType<DocumentOpened>(events[0]).PageCount);
+        var pages = events.OfType<ExtractedPage>().ToList();
+        Assert.Equal(expected.Select(p => p.PageNumber), pages.Select(p => p.PageNumber));
+        Assert.Equal(expected.Select(p => p.Text), pages.Select(p => p.Text));
+        Assert.Equal(expected.Select(p => p.Blocks!.Count), pages.Select(p => p.Blocks!.Count));
+        Assert.Equal(expected.Select(p => p.Warnings ?? []), pages.Select(p => p.Warnings ?? []));
+    }
+
+    [Fact]
+    public async Task Worker_reads_markdown_pages_that_skip_numbers_and_honours_the_scope()
+    {
+        // Empty marker pages are not emitted, so the numbers have gaps; the parent must not wait for the missing ones.
+        using var file = FixturePdfs.Write(System.Text.Encoding.UTF8.GetBytes("<!-- page: 2 -->\nSecond page text\n\n<!-- page: 5 -->\n\n<!-- page: 7 -->\nSeventh page text\n"), "gaps.md");
+
+        var all = await RunMarkdown(file.Path);
+        Assert.Equal(7, Assert.IsType<DocumentOpened>(all[0]).PageCount);
+        Assert.Equal([2, 7], all.OfType<ExtractedPage>().Select(p => p.PageNumber));
+
+        var scoped = await RunMarkdown(file.Path, new PageScope(3, 7));
+        Assert.Equal([7], scoped.OfType<ExtractedPage>().Select(p => p.PageNumber));
+    }
+
+    [Fact]
+    public async Task Worker_reports_a_document_with_only_warnings_as_one_page_without_text()
+    {
+        using var file = FixturePdfs.Write(System.Text.Encoding.UTF8.GetBytes("---\ntitle: nothing else\n---\n"), "only-front-matter.md");
+
+        var events = await RunMarkdown(file.Path);
+
+        Assert.Equal(1, Assert.IsType<DocumentOpened>(events[0]).PageCount);
+        var page = Assert.Single(events.OfType<ExtractedPage>());
+        Assert.Equal("", page.Text);
+        Assert.Contains("page.no-text", page.Warnings!);
+        Assert.Contains("markdown.front-matter-ignored", page.Warnings!);
+    }
+
+    [Fact]
+    public async Task Worker_rejects_unknown_kind_still()
+    {
+        using var file = FixturePdfs.Write(System.Text.Encoding.UTF8.GetBytes("# Placeholder\n"), "unknown-kind.md");
+        var (exit, lines) = await RunInProcess(new WorkerRequest(file.Path, null, null, ExtractionLimits.Default, Kind: "extractMarkdown2"));
+        Assert.Equal(3, exit);
+        Assert.Equal("worker.bad-request", Assert.Single(lines).Code);
+    }
+
+    [Fact]
+    public async Task Worker_markdown_limits_enforced_in_host()
+    {
+        using var file = FixturePdfs.Write(new byte[ExtractionLimits.MarkdownMaxBytes + 1], "too-large.md");
+
+        var refused = await Assert.ThrowsAsync<ExtractionException>(() => RunMarkdown(file.Path));
+
+        Assert.Equal("markdown.too-large", refused.Code);
+    }
+
+    [Fact]
+    public async Task Worker_reports_a_missing_markdown_file_by_its_code()
+    {
+        var refused = await Assert.ThrowsAsync<ExtractionException>(() => RunMarkdown(Path.Combine(Path.GetTempPath(), "tomestack-no-such-" + Guid.NewGuid().ToString("N") + ".md")));
+        Assert.Equal("markdown.missing", refused.Code);
+    }
+
+    [Fact]
+    public async Task Worker_largest_markdown_page_fits_the_message_cap()
+    {
+        // The most one page can carry under the extractor's own caps: 20,000 lines of 10 characters that JSON escapes as six
+        // each (so 200,000 characters, the text cap), in one block, with the text three times in the line (page, block, lines).
+        // It must arrive whole, never as worker.message-too-large.
+        var line = new string('字', 10);
+        var text = "<!-- page: 1 -->\n" + string.Join('\n', Enumerable.Repeat(line, ExtractionLimits.Default.MaxLinesPerPage + 500)) + "\n";
+        using var file = FixturePdfs.Write(System.Text.Encoding.UTF8.GetBytes(text), "largest.md");
+
+        var events = await RunMarkdown(file.Path);
+
+        var page = Assert.Single(events.OfType<ExtractedPage>());
+        Assert.Contains("page.text-truncated", page.Warnings!);
+        Assert.Equal(ExtractionLimits.Default.MaxLinesPerPage, page.Blocks!.Sum(b => b.Lines!.Count));
+        var json = System.Text.Json.JsonSerializer.Serialize(new WorkerMessage("page", Page: page), WorkerJson.Options);
+        Assert.True(json.Length <= WorkerJson.MaxMessageChars(ExtractionLimits.Default), $"{json.Length} chars against the cap");
+        Assert.True(json.Length > 3_000_000, "the page is near the worst case, not a small one");
+    }
+
     [Fact]
     public async Task An_extract_request_stores_nothing_and_the_worker_has_no_page_text_kind()
     {
-        // R114: the allowed set is unchanged; "pageText" is refused as any unknown kind is.
+        // R114: "pageText" is refused as any unknown kind is. (Task 13 adds extractMarkdown as a third kind; this one stays unknown.)
         using var file = FixturePdfs.Write(FixturePdfs.TextSheet());
         var (exit, lines) = await RunInProcess(new WorkerRequest(file.Path, null, null, WorkerFormReader.DefaultLimits, Kind: "pageText"));
         Assert.Equal(3, exit);

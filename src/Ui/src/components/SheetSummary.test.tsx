@@ -78,6 +78,10 @@ it('names the Spells tab in the rolling hint only when it is offered', () => {
   expect(screen.getByText('Rolling never spends anything. Roll a check here; a save, skill or initiative from its field on Stats; or an attack or feature on Play.')).toBeTruthy();
   rerender(<SheetSummary view={fixtureView()} rollMode="normal" onRollMode={() => {}} rollLog={[]} act={() => {}} onRoll={() => {}} onRollDice={async () => {}} spellsTab />);
   expect(screen.getByText('Rolling never spends anything. Roll a check here; a save, skill or initiative from its field on Stats; an attack or feature on Play; or a spell on Spells.')).toBeTruthy();
+  rerender(<SheetSummary view={fixtureView()} rollMode="normal" onRollMode={() => {}} rollLog={[]} act={() => {}} onRoll={() => {}} onRollDice={async () => {}} spellsTab hasQuickbar />);
+  expect(screen.getByText('Rolling from here never spends anything; a quickbar button that says "and spend" rolls and then spends. Roll a check here; a save, skill or initiative from its field on Stats; an attack or feature on Play; or a spell on Spells.')).toBeTruthy();
+  rerender(<SheetSummary view={fixtureView()} rollMode="normal" onRollMode={() => {}} rollLog={[]} act={() => {}} onRoll={() => {}} onRollDice={async () => {}} hasQuickbar />);
+  expect(screen.getByText('Rolling from here never spends anything; a quickbar button that says "and spend" rolls and then spends. Roll a check here; a save, skill or initiative from its field on Stats; or an attack or feature on Play.')).toBeTruthy();
 });
 
 it('lists the core numbers as terms and definitions, with no heading or named region of its own', () => {
@@ -287,6 +291,52 @@ it('keeps one markup for both ability-box orders: modifier, then score, then the
   expect(strength.textContent!.replace(/\s+/g, ' ').trim()).toBe('+3 16 Roll Strength check (+3)');
 });
 
+const reason = (mode: 'advantage' | 'disadvantage', source: string, against?: string[]) => ({
+  mode, source, content: { contentId: 'c1', revisionId: 'r1' }, against, automatic: !against,
+});
+const withMode = (id: string, mode: NonNullable<DerivedValue['mode']>): CharacterView => {
+  const v = fixtureView();
+  return { ...v, sheet: { ...v.sheet, fields: v.sheet.fields.map((f) => (f.field === id ? { ...f, mode } : f)) } };
+};
+const plain = { rollMode: 'normal' as const, onRollMode: () => {}, rollLog: [], act: () => {}, onRoll: () => {}, onRollDice: async () => {} };
+
+it('a check with automatic advantage says so on its button and in its accessible name', async () => {
+  const user = userEvent.setup();
+  const onRoll = vi.fn();
+  const mode = { automatic: 'advantage' as const, reasons: [reason('advantage', 'Fixture Swift Instinct'), reason('advantage', 'Fixture Light Step')] };
+  render(<SheetSummary view={withMode('ability.dex.mod', mode)} {...plain} onRoll={onRoll} />);
+  const button = screen.getByRole('button', { name: 'Roll (advantage: Fixture Swift Instinct, Fixture Light Step) Dexterity check (+2)' });
+  expect(button.textContent!.replace(/\s+/g, ' ').trim()).toBe('Roll (advantage: Fixture Swift Instinct, Fixture Light Step) Dexterity check (+2)');
+  expect(button.querySelector('.visually-hidden')?.textContent).toBe(' Dexterity check (+2)');
+  await user.click(button);
+  expect(onRoll).toHaveBeenCalledWith('ability.dex.mod');
+  expect(screen.getByRole('button', { name: 'Roll Strength check (+3)' })).toBeTruthy(); // the others are unchanged
+});
+
+it('advantage and disadvantage together read as normal with the reason, on the summary button', () => {
+  const mode = { automatic: 'normal' as const, reasons: [reason('advantage', 'Fixture Swift Instinct'), reason('disadvantage', 'Fixture Heavy Armor')] };
+  render(<SheetSummary view={withMode('ability.dex.mod', mode)} {...plain} />);
+  expect(screen.getByRole('button', { name: /^Roll \(normal: advantage and disadvantage cancel\) Dexterity check/ })).toBeTruthy();
+});
+
+it('an assisted mode leaves the summary button as it was', () => {
+  const mode = { automatic: 'normal' as const, reasons: [reason('advantage', 'Fixture Swift Instinct', ['paralyzed'])] };
+  render(<SheetSummary view={withMode('ability.dex.mod', mode)} {...plain} />);
+  expect(screen.getByRole('button', { name: 'Roll Dexterity check (+2)' })).toBeTruthy();
+});
+
+it('fly speed shows only when above 0', () => {
+  const base = fixtureView();
+  const flying = (n: number): CharacterView => ({ ...base, sheet: { ...base.sheet, fields: [...base.sheet.fields, field('speed.fly', 'Fly speed', n, 'feet')] } });
+  const { rerender } = render(<SheetSummary view={flying(0)} {...plain} />);
+  expect(dd('Speed')).toBe('30 ft.');
+  rerender(<SheetSummary view={flying(30)} {...plain} />);
+  expect(dd('Speed')).toBe('30 ft., Fly 30 ft.');
+  const overridden = { ...field('speed.fly', 'Fly speed', 0, 'feet'), computedValue: 30, override: { field: 'speed.fly', value: 0 } };
+  rerender(<SheetSummary view={{ ...base, sheet: { ...base.sheet, fields: [...base.sheet.fields, overridden] } }} {...plain} />);
+  expect(dd('Speed')).toBe('30 ft., Fly 0 ft.'); // an override of 0 stays visible
+});
+
 it('shows a "Bloodied" chip as text when the sheet says bloodied, in the hit points box, with no live region (D38)', () => {
   const base = fixtureView();
   const summary = (bloodied?: boolean) => (
@@ -302,4 +352,49 @@ it('shows a "Bloodied" chip as text when the sheet says bloodied, in the hit poi
   expect(chip.closest('[aria-live]')).toBeNull();
   expect(chip.getAttribute('role')).toBeNull();
   expect(dd('Hit points')).toBe('17 of 35'); // the Hit points text itself is unchanged
+});
+
+it('puts the Why? disclosure in the roll strip, outside the Last roll live region', () => {
+  const record: RollRecord = {
+    formula: '1d20+3',
+    mode: 'normal',
+    critical: false,
+    dice: [{ term: 0, sides: 20, value: 14, kept: true, fromCritical: false }],
+    diceTotal: 14,
+    expressionConstant: 0,
+    modifiers: [{ label: 'Strength modifier', amount: 3 }],
+    total: 17,
+  };
+  const { container } = render(
+    <SheetSummary view={fixtureView()} rollMode="normal" onRollMode={() => {}} lastRoll={record} rollLog={[]} act={() => {}} onRoll={() => {}} onRollDice={async () => {}} />,
+  );
+  const why = container.querySelector('details.roll-why') as HTMLElement;
+  expect(why).toBeTruthy();
+  expect(why.closest('.roll-strip')).toBeTruthy();
+  expect(screen.getByRole('region', { name: 'Last roll' }).contains(why)).toBe(false);
+  expect(why.closest('[aria-live]')).toBeNull();
+});
+
+it('puts a quickbar slot inside the summary, after the summary line and outside the roll strip (D73)', () => {
+  const { container } = render(
+    <SheetSummary
+      view={fixtureView()}
+      rollMode="normal"
+      onRollMode={() => {}}
+      rollLog={[]}
+      act={() => {}}
+      onRoll={() => {}}
+      onRollDice={async () => {}}
+      quickbar={
+        <section className="quickbar" aria-label="Quickbar">
+          <button type="button">Fixture</button>
+        </section>
+      }
+    />,
+  );
+  const bar = screen.getByRole('region', { name: 'Quickbar' });
+  expect(bar.closest('.sheet-summary')).toBeTruthy();
+  expect(bar.closest('.roll-strip')).toBeNull();
+  expect(bar.parentElement).toBe(container.querySelector('.sheet-summary')); // a direct child: the grid's `quick` row
+  expect(container.querySelector('.summary-line')!.nextElementSibling).toBe(bar);
 });

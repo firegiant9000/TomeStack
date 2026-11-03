@@ -1,0 +1,28 @@
+{
+  "contentId": "c1060000-0000-4000-8000-0000000000c1",
+  "revisionId": "c1060000-0000-4000-8000-0000000000e1",
+  "schemaVersion": 9,
+  "kind": "feature",
+  "name": "Compat Steady Hands",
+  "rulesFamilies": [
+    "srd-5.1"
+  ],
+  "provenance": {
+    "sourceId": "c1060000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 1
+    }
+  },
+  "status": "published",
+  "summary": "A test feature with a switch the player can turn on.",
+  "effects": [
+    {
+      "type": "toggle",
+      "id": "surge",
+      "toggleId": "surge",
+      "label": "Surge",
+      "automation": "automatic",
+      "timing": "always"
+    }
+  ]
+}

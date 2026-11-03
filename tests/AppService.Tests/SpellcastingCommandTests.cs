@@ -75,6 +75,21 @@ public class SpellcastingCommandTests
     }
 
     [Fact]
+    public void A_spell_attack_explains_itself_with_the_casters_attack_trace_and_dice_do_not()
+    {
+        var (temp, id) = Wizardly();
+        using var _ = temp;
+        var caster = temp.App.GetCharacter(id).Sheet.Spellcasting!.Single();
+
+        var attack = temp.App.Roll(new(id, Spell: Spark, SpellAttack: true));
+        var dice = temp.App.Roll(new(id, Spell: Spark));
+
+        Assert.Equal(TempApp.Json(caster.AttackTrace), TempApp.Json(attack.Explain));
+        Assert.Equal(attack.Modifiers.Sum(m => m.Amount), attack.Explain![^1].Result);
+        Assert.Null(dice.Explain);
+    }
+
+    [Fact]
     public void Spell_rolls_use_the_caster_attack_bonus_and_change_nothing()
     {
         var (temp, id) = Wizardly();

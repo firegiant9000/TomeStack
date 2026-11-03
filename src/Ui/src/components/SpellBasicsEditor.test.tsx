@@ -8,6 +8,7 @@ import { client } from '../api/client';
 import type { AppInfo, ContentRevision, Effect, SourceRecord } from '../api/types';
 import { spellOf } from '../entryBasics';
 import { SpellBasicsEditor } from './SpellBasicsEditor';
+import { fill } from '../test/fill';
 
 vi.mock('../api/client', () => ({ client: { spellListKeys: vi.fn() } }));
 
@@ -88,11 +89,11 @@ it('writes each field into the spell effect and leaves the other effects and fie
   render(<Harness initial={revisionOf([other, spell])} />);
   await user.selectOptions(await screen.findByRole('combobox', { name: 'Level' }), '3');
   await user.selectOptions(screen.getByRole('combobox', { name: 'School' }), 'illusion');
-  await user.type(screen.getByRole('textbox', { name: 'Casting time' }), '1 bonus action');
-  await user.type(screen.getByRole('textbox', { name: 'Range' }), 'Self');
+  await fill(user, screen.getByRole('textbox', { name: 'Casting time' }), '1 bonus action');
+  await fill(user, screen.getByRole('textbox', { name: 'Range' }), 'Self');
   await user.type(screen.getByRole('textbox', { name: 'Components' }), 'V');
-  await user.type(screen.getByRole('textbox', { name: 'Duration' }), 'Up to 1 minute');
-  await user.type(screen.getByRole('textbox', { name: 'Spell text' }), 'It glows.');
+  await fill(user, screen.getByRole('textbox', { name: 'Duration' }), 'Up to 1 minute');
+  await fill(user, screen.getByRole('textbox', { name: 'Spell text' }), 'It glows.');
   await user.click(screen.getByRole('checkbox', { name: 'Concentration' }));
   await user.click(screen.getByRole('checkbox', { name: 'Ritual' }));
 
@@ -174,4 +175,35 @@ it('has no inline style and no second status region', async () => {
   await screen.findByRole('combobox', { name: 'Level' });
   expect(container.querySelectorAll('[style]').length).toBe(0);
   expect(container.querySelectorAll('[role="status"]').length).toBe(0);
+});
+
+// MECH-X item 1 (T5, R39): spell tags use the strict tag reading; `all` is refused.
+it('tags: writes the typed keys as the spell tags and removes the key when emptied', async () => {
+  const user = userEvent.setup();
+  const spell: Effect = { type: 'spell', id: 'spell', level: 1, school: 'evocation', lists: [] };
+  render(<Harness initial={revisionOf([spell])} />);
+  const field = await screen.findByRole('textbox', { name: /^Tags/ });
+  await user.type(field, 'time, ritualLike');
+  expect(spellOf(latest.effects)).toMatchObject({ tags: ['time', 'ritualLike'], school: 'evocation' });
+  await user.clear(field);
+  expect('tags' in spellOf(latest.effects)!).toBe(false);
+});
+
+it('tags: an empty token or all blocks saving, never dropped, and the bad text is not written', async () => {
+  const user = userEvent.setup();
+  const problems: Record<string, string | undefined> = {};
+  const spell: Effect = { type: 'spell', id: 'spell', level: 1, lists: [], tags: ['time'] };
+  render(<Harness initial={revisionOf([spell])} onProblem={(field, problem) => { problems[field] = problem; }} />);
+  const field = await screen.findByRole('textbox', { name: /^Tags/ });
+  await user.clear(field);
+  await user.type(field, 'a,,b');
+  expect(problems['spell-tags']).toMatch(/empty/);
+  expect(field.getAttribute('aria-invalid')).toBe('true');
+  await user.clear(field);
+  await user.type(field, 'all');
+  expect(problems['spell-tags']).toMatch(/"all"/);
+  expect(spellOf(latest.effects)).not.toMatchObject({ tags: ['all'] });
+  await user.clear(field);
+  await user.type(field, 'time');
+  expect(problems['spell-tags']).toBeUndefined();
 });

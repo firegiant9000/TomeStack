@@ -66,6 +66,16 @@ public class ShellOptionsTests
         Assert.True(ShellOptions.Parse(["--smoke", "--simulate-missing-webview2"], null, debugBuild: false).SimulateMissingRuntime);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void The_simulated_unhandled_exception_needs_smoke_in_debug_and_release(bool debugBuild)
+    {
+        Assert.False(ShellOptions.Parse(["--simulate-unhandled-exception"], null, debugBuild).SimulateUnhandledException);
+        Assert.True(ShellOptions.Parse(["--smoke", "--simulate-unhandled-exception"], null, debugBuild).SimulateUnhandledException);
+        Assert.False(ShellOptions.Parse(["--smoke"], null, debugBuild).SimulateUnhandledException);
+    }
+
     [Fact]
     public void The_built_shell_uses_its_own_build_flavour()
     {

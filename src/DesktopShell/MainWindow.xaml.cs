@@ -18,10 +18,12 @@ public partial class MainWindow : Window
     private const string AppHost = "app.tomestack.localhost";
     private const string AppOrigin = $"https://{AppHost}/";
     private static readonly TimeSpan SmokeTimeout = TimeSpan.FromSeconds(30);
+    private static readonly string[] SmokeRulesFamilies = ["srd-5.1"];
 
     private readonly TomeStackApp _tomeStack;
     private readonly CommandDispatcher _dispatcher;
     private readonly ShellOptions _options;
+    private readonly CrashReporter _crashReporter;
     private readonly SemaphoreSlim _dispatchGate = new(1, 1);
     private readonly Stopwatch _sinceStart = Stopwatch.StartNew();
     private readonly List<string> _smokeCommands = [];
@@ -30,15 +32,19 @@ public partial class MainWindow : Window
     private const string AdditionalBrowserArguments = "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS";
     private bool _browserArgumentsSet;
 
-    public MainWindow(TomeStackApp tomeStack, ShellOptions options)
+    public MainWindow(TomeStackApp tomeStack, ShellOptions options, CrashReporter crashReporter)
     {
         _tomeStack = tomeStack;
+        _crashReporter = crashReporter;
         _dispatcher = new CommandDispatcher(tomeStack, host: new ShellHostServices(this));
         _options = options;
         _charactersAtStart = options.Smoke ? tomeStack.ListCharacters().Count : 0;
         InitializeComponent();
         Loaded += async (_, _) =>
         {
+            // The smoke's budget starts once the window shows, after the D77 daily copy (its time is reported on its own).
+            if (_options.Smoke)
+                _ = Task.Delay(SmokeTimeout).ContinueWith(_ => Dispatcher.Invoke(() => FinishSmoke(false, "timeout")), TaskScheduler.Default);
             try
             {
                 await InitializeWebViewAsync();
@@ -49,10 +55,16 @@ public partial class MainWindow : Window
                 FinishSmoke(false, $"startup-failed:{ex.GetType().Name}");
             }
         };
-        if (options.Smoke)
-        {
-            _ = Task.Delay(SmokeTimeout).ContinueWith(_ => Dispatcher.Invoke(() => FinishSmoke(false, "timeout")), TaskScheduler.Default);
-        }
+    }
+
+    private string? _dailyCopy;
+    private long? _dailyCopyMs;
+
+    /// <summary>Smoke report only: what the D77 daily copy did before the window showed, and how long it held it back.</summary>
+    public void RecordDailyCopy(DailyCopyOutcome outcome, long milliseconds)
+    {
+        _dailyCopy = outcome.ToString();
+        _dailyCopyMs = milliseconds;
     }
 
     private async Task InitializeWebViewAsync()
@@ -129,6 +141,23 @@ public partial class MainWindow : Window
                 FinishSmoke(false, $"navigation-failed:{e.WebErrorStatus}");
         };
         core.WebMessageReceived += OnWebMessageReceived;
+        core.ProcessFailed += (_, e) =>
+        {
+            switch (_crashReporter.ReportProcessFailure(CrashReporter.MainHost, e.ProcessFailedKind.ToString(), e.Reason.ToString(), e.ExitCode))
+            {
+                case ProcessFailureAction.Reload:
+                    core.Reload();
+                    break;
+                case ProcessFailureAction.Close:
+                    // Not inside the WebView2 callback: the dialog pumps messages and Shutdown disposes the control.
+                    Dispatcher.BeginInvoke(() =>
+                    {
+                        if (_crashReporter.ShowUnrecoverableDialog() != UnrecoverableResult.NotOwner)
+                            Application.Current.Shutdown(1);
+                    });
+                    break;
+            }
+        };
         core.Navigate($"{AppOrigin}index.html");
     }
 
@@ -202,6 +231,16 @@ public partial class MainWindow : Window
         _smokeCommands.Add(req.RootElement.GetProperty("command").GetString() ?? "");
         if (!_smokeFinished && _smokeCommands.Contains("app.info") && _smokeCommands.Contains("character.list"))
         {
+            // Test-only (smoke): the window is ready, so fault the UI thread and let the crash handler end the process.
+            if (_options.SimulateUnhandledException)
+            {
+                if (!_simulatedCrash)
+                {
+                    _simulatedCrash = true;
+                    Dispatcher.BeginInvoke(new Action(() => throw new InvalidOperationException("Simulated by --simulate-unhandled-exception.")));
+                }
+                return;
+            }
             try
             {
                 var (ok, detail) = RunSmokeDataCheck();
@@ -253,7 +292,7 @@ public partial class MainWindow : Window
 
         // M2 item 6 (ADR-005, SPEC S-04): a managed PDF opens at a cited page in the offline viewer. The smoke attaches a
         // generated two-page PDF to a throwaway homebrew source and opens page 2; the viewer's load finishes the smoke.
-        using var source = Command("source.createHomebrew", new { title = "Smoke PDF", rulesFamilies = new[] { "srd-5.1" } });
+        using var source = Command("source.createHomebrew", new { title = "Smoke PDF", rulesFamilies = SmokeRulesFamilies });
         if (!source.RootElement.GetProperty("ok").GetBoolean())
             return (false, "data-check-failed:source.createHomebrew");
         var sourceId = source.RootElement.GetProperty("result").GetProperty("id").GetString();
@@ -345,6 +384,7 @@ public partial class MainWindow : Window
     }
 
     private bool _awaitingViewer;
+    private bool _simulatedCrash;
 
     /// <summary>ADR-005, SPEC S-04: opens a PDF at a page in its own offline viewer window. Called on the UI thread.</summary>
     public bool OpenPdfViewer(string path, int page, string title)
@@ -361,7 +401,7 @@ public partial class MainWindow : Window
                 FinishSmoke(ok, ok ? "ok" : "pdf-viewer-failed");
             }
             : null;
-        var viewer = new PdfViewerWindow(environment, path, page, title, uri => _blockedRequests.Add(uri), navigated) { Owner = this };
+        var viewer = new PdfViewerWindow(environment, path, page, title, uri => _blockedRequests.Add(uri), _crashReporter, navigated) { Owner = this };
         viewer.Show();
         return true;
     }
@@ -384,6 +424,8 @@ public partial class MainWindow : Window
             detail,
             elapsedMs = _sinceStart.ElapsedMilliseconds,
             processStartToReadyMs = (long)(DateTime.Now - Process.GetCurrentProcess().StartTime).TotalMilliseconds,
+            dailyCopy = _dailyCopy,
+            dailyCopyMs = _dailyCopyMs,
             commands = _smokeCommands,
             charactersAtStart = _charactersAtStart,
             schemaVersion = _tomeStack.GetInfo().SchemaVersion,

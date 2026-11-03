@@ -1,0 +1,231 @@
+[
+  {
+    "entry": "characters/c1060000-0000-4000-8000-0000000000a1.json",
+    "kind": "character",
+    "id": "c1060000-0000-4000-8000-0000000000a1",
+    "name": "Compat Hero",
+    "action": "dropped",
+    "code": "package.target-drops",
+    "message": "'Compat Hero': the rounds left on 'Surge'."
+  },
+  {
+    "entry": "content/c1060000-0000-4000-8000-0000000000e2.json",
+    "kind": "content",
+    "id": "c1060000-0000-4000-8000-0000000000e2",
+    "name": "Compat Tide Stance",
+    "sourceTitle": "Compat Homebrew A",
+    "action": "dropped",
+    "code": "package.target-drops",
+    "message": "'Compat Tide Stance' (Compat Homebrew A): how long a toggle lasts; it stays on until turned off."
+  },
+  {
+    "entry": "content/c1060000-0000-4000-8000-0000000000e2.json",
+    "kind": "content",
+    "id": "c1060000-0000-4000-8000-0000000000e2",
+    "name": "Compat Tide Stance",
+    "sourceTitle": "Compat Homebrew A",
+    "action": "dropped",
+    "code": "package.target-drops",
+    "message": "'Compat Tide Stance' (Compat Homebrew A): its attack; the feature stays as text."
+  },
+  {
+    "entry": "content/c1060000-0000-4000-8000-0000000000e2.json",
+    "kind": "content",
+    "id": "c1060000-0000-4000-8000-0000000000e2",
+    "name": "Compat Tide Stance",
+    "sourceTitle": "Compat Homebrew A",
+    "action": "dropped",
+    "code": "package.target-drops",
+    "message": "'Compat Tide Stance' (Compat Homebrew A): its attack rider; the feature stays as text."
+  },
+  {
+    "entry": "content/c1060000-0000-4000-8000-0000000000e3.json",
+    "kind": "content",
+    "id": "c1060000-0000-4000-8000-0000000000e3",
+    "name": "Compat Calm Waters",
+    "sourceTitle": "Compat Homebrew A",
+    "action": "dropped",
+    "code": "package.target-drops",
+    "message": "'Compat Calm Waters' (Compat Homebrew A): the allowance of a resource."
+  },
+  {
+    "entry": "content/c1060000-0000-4000-8000-0000000000e3.json",
+    "kind": "content",
+    "id": "c1060000-0000-4000-8000-0000000000e3",
+    "name": "Compat Calm Waters",
+    "sourceTitle": "Compat Homebrew A",
+    "action": "dropped",
+    "code": "package.target-drops",
+    "message": "'Compat Calm Waters' (Compat Homebrew A): its upkeep that regains a resource."
+  },
+  {
+    "entry": "content/c1060000-0000-4000-8000-0000000000e3.json",
+    "kind": "content",
+    "id": "c1060000-0000-4000-8000-0000000000e3",
+    "name": "Compat Calm Waters",
+    "sourceTitle": "Compat Homebrew A",
+    "action": "dropped",
+    "code": "package.target-drops",
+    "message": "'Compat Calm Waters' (Compat Homebrew A): its response; the feature stays as text."
+  },
+  {
+    "entry": "content/c1060000-0000-4000-8000-0000000000e4.json",
+    "kind": "content",
+    "id": "c1060000-0000-4000-8000-0000000000e4",
+    "name": "Compat Rising Tide",
+    "sourceTitle": "Compat Homebrew A",
+    "action": "dropped",
+    "code": "package.target-drops",
+    "message": "'Compat Rising Tide' (Compat Homebrew A): its named value; the feature stays as text."
+  },
+  {
+    "entry": "content/c1060000-0000-4000-8000-0000000000e4.json",
+    "kind": "content",
+    "id": "c1060000-0000-4000-8000-0000000000e4",
+    "name": "Compat Rising Tide",
+    "sourceTitle": "Compat Homebrew A",
+    "action": "dropped",
+    "code": "package.target-drops",
+    "message": "'Compat Rising Tide' (Compat Homebrew A): a bonus that reads a named value, which the older version cannot calculate."
+  },
+  {
+    "entry": "content/c1060000-0000-4000-8000-0000000000e4.json",
+    "kind": "content",
+    "id": "c1060000-0000-4000-8000-0000000000e4",
+    "name": "Compat Rising Tide",
+    "sourceTitle": "Compat Homebrew A",
+    "action": "dropped",
+    "code": "package.target-drops",
+    "message": "'Compat Rising Tide' (Compat Homebrew A): the whileToggle of a roll."
+  },
+  {
+    "entry": "content/c1060000-0000-4000-8000-0000000000e4.json",
+    "kind": "content",
+    "id": "c1060000-0000-4000-8000-0000000000e4",
+    "name": "Compat Rising Tide",
+    "sourceTitle": "Compat Homebrew A",
+    "action": "dropped",
+    "code": "package.target-drops",
+    "message": "'Compat Rising Tide' (Compat Homebrew A): the save of a roll."
+  },
+  {
+    "entry": "content/c1060000-0000-4000-8000-0000000000e4.json",
+    "kind": "content",
+    "id": "c1060000-0000-4000-8000-0000000000e4",
+    "name": "Compat Rising Tide",
+    "sourceTitle": "Compat Homebrew A",
+    "action": "dropped",
+    "code": "package.target-drops",
+    "message": "'Compat Rising Tide' (Compat Homebrew A): the area of a roll."
+  },
+  {
+    "entry": "content/c1060000-0000-4000-8000-0000000000e4.json",
+    "kind": "content",
+    "id": "c1060000-0000-4000-8000-0000000000e4",
+    "name": "Compat Rising Tide",
+    "sourceTitle": "Compat Homebrew A",
+    "action": "dropped",
+    "code": "package.target-drops",
+    "message": "'Compat Rising Tide' (Compat Homebrew A): the range of a roll."
+  },
+  {
+    "entry": "content/c1060000-0000-4000-8000-0000000000e4.json",
+    "kind": "content",
+    "id": "c1060000-0000-4000-8000-0000000000e4",
+    "name": "Compat Rising Tide",
+    "sourceTitle": "Compat Homebrew A",
+    "action": "dropped",
+    "code": "package.target-drops",
+    "message": "'Compat Rising Tide' (Compat Homebrew A): the targets of a roll."
+  },
+  {
+    "entry": "content/c1060000-0000-4000-8000-0000000000e4.json",
+    "kind": "content",
+    "id": "c1060000-0000-4000-8000-0000000000e4",
+    "name": "Compat Rising Tide",
+    "sourceTitle": "Compat Homebrew A",
+    "action": "dropped",
+    "code": "package.target-drops",
+    "message": "'Compat Rising Tide' (Compat Homebrew A): the perUnit of a roll."
+  },
+  {
+    "entry": "content/c1060000-0000-4000-8000-0000000000e4.json",
+    "kind": "content",
+    "id": "c1060000-0000-4000-8000-0000000000e4",
+    "name": "Compat Rising Tide",
+    "sourceTitle": "Compat Homebrew A",
+    "action": "dropped",
+    "code": "package.target-drops",
+    "message": "'Compat Rising Tide' (Compat Homebrew A): a roll that also regains a resource."
+  },
+  {
+    "entry": "content/c1060000-0000-4000-8000-0000000000e4.json",
+    "kind": "content",
+    "id": "c1060000-0000-4000-8000-0000000000e4",
+    "name": "Compat Rising Tide",
+    "sourceTitle": "Compat Homebrew A",
+    "action": "dropped",
+    "code": "package.target-drops",
+    "message": "'Compat Rising Tide' (Compat Homebrew A): a roll with no dice; the feature stays as text."
+  },
+  {
+    "entry": "content/c1060000-0000-4000-8000-0000000000e5.json",
+    "kind": "content",
+    "id": "c1060000-0000-4000-8000-0000000000e5",
+    "name": "Compat Deep Currents",
+    "sourceTitle": "Compat Homebrew A",
+    "action": "dropped",
+    "code": "package.target-drops",
+    "message": "'Compat Deep Currents' (Compat Homebrew A): its bonus to 'resource.currents', which the older version has no field for."
+  },
+  {
+    "entry": "content/c1060000-0000-4000-8000-0000000000e5.json",
+    "kind": "content",
+    "id": "c1060000-0000-4000-8000-0000000000e5",
+    "name": "Compat Deep Currents",
+    "sourceTitle": "Compat Homebrew A",
+    "action": "dropped",
+    "code": "package.target-drops",
+    "message": "'Compat Deep Currents' (Compat Homebrew A): its bonus to 'speed.fly', which the older version has no field for."
+  },
+  {
+    "entry": "content/c1060000-0000-4000-8000-0000000000ea.json",
+    "kind": "content",
+    "id": "c1060000-0000-4000-8000-0000000000ea",
+    "name": "Compat Draw Down",
+    "sourceTitle": "Compat Homebrew A",
+    "action": "dropped",
+    "code": "package.target-drops",
+    "message": "'Compat Draw Down' (Compat Homebrew A): that a roll draws a resource down."
+  },
+  {
+    "entry": "content/c1060000-0000-4000-8000-0000000000e8.json",
+    "kind": "content",
+    "id": "c1060000-0000-4000-8000-0000000000e8",
+    "name": "Compat Tide Mark",
+    "sourceTitle": "Compat Homebrew A",
+    "action": "dropped",
+    "code": "package.target-drops",
+    "message": "'Compat Tide Mark' (Compat Homebrew A): its advantage on rolls; the feature stays as text."
+  },
+  {
+    "entry": "content/c1060000-0000-4000-8000-0000000000e6.json",
+    "kind": "content",
+    "id": "c1060000-0000-4000-8000-0000000000e6",
+    "name": "Compat Path of Tides",
+    "sourceTitle": "Compat Homebrew A",
+    "action": "copied",
+    "code": "package.target-copied",
+    "message": "'Compat Path of Tides' (Compat Homebrew A): copied because it grants a changed feature; nothing of its own is left out."
+  },
+  {
+    "entry": "content/c1060000-0000-4000-8000-0000000000e7.json",
+    "kind": "content",
+    "id": "c1060000-0000-4000-8000-0000000000e7",
+    "name": "Compat Tide Walker",
+    "sourceTitle": "Compat Homebrew A",
+    "action": "copied",
+    "code": "package.target-copied",
+    "message": "'Compat Tide Walker' (Compat Homebrew A): copied because it grants a changed feature; nothing of its own is left out."
+  }
+]

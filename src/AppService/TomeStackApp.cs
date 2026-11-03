@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using TomeStack.AppService.Packages;
 using TomeStack.AppService.Persistence;
@@ -16,6 +17,9 @@ public sealed partial class TomeStackApp : IDisposable
     private readonly SqliteStore _store;
     private readonly PackageService _packages;
     private readonly TimeProvider _time;
+
+    /// <summary>D43 S2: the one-level undo of a compound play change, in memory only (gone when the app closes).</summary>
+    private readonly PlayUndoSlots _undo = new();
 
     /// <summary>Startup warnings (<see cref="AppInfo.Warnings"/>): a sync-root data folder, and bundled revisions that could not be seeded.</summary>
     private readonly List<Diagnostic> _warnings;
@@ -50,6 +54,15 @@ public sealed partial class TomeStackApp : IDisposable
         // M2.2: armor before the Fighter, which is proficient with it; the Fighter after the classes it may multiclass with.
         "TomeStack.Content.srd-5.1-armor.json", "TomeStack.Content.srd-5.2.1-armor.json",
         "TomeStack.Content.srd-5.1-fighter.json", "TomeStack.Content.srd-5.2.1-fighter.json",
+        // Track 1 (D60): the feats before the species and backgrounds that grant or offer them.
+        "TomeStack.Content.srd-5.2.1-feats.json", "TomeStack.Content.srd-5.2.1-origins.json",
+        "TomeStack.Content.srd-5.1-origins.json", // the other eight SRD 5.1 races, with their subraces
+        // C2-1: the Barbarian after the fighter pair (new revisions of the M1 and classes-pack Barbarian, which load first).
+        "TomeStack.Content.srd-5.1-barbarian.json", "TomeStack.Content.srd-5.2.1-barbarian.json",
+        // C2-2: the Rogue after the Barbarian pair.
+        "TomeStack.Content.srd-5.1-rogue.json", "TomeStack.Content.srd-5.2.1-rogue.json",
+        // C2-3: the Monk after the Rogue pair.
+        "TomeStack.Content.srd-5.1-monk.json", "TomeStack.Content.srd-5.2.1-monk.json",
     ];
 
     /// <summary>
@@ -72,6 +85,23 @@ public sealed partial class TomeStackApp : IDisposable
         return ids;
     });
 
+    /// <summary>The revision ids of <see cref="BundledPacks"/>: what the release ladder's bundled sets must stay within (they are insert-only).</summary>
+    internal static IReadOnlySet<Guid> BundledRevisionIds => LazyBundledRevisionIds.Value;
+
+    private static readonly Lazy<IReadOnlySet<Guid>> LazyBundledRevisionIds = new(() =>
+    {
+        var ids = new HashSet<Guid>();
+        foreach (var pack in BundledPacks)
+        {
+            using var stream = typeof(TomeStackApp).Assembly.GetManifestResourceStream(pack)
+                ?? throw new InvalidOperationException($"Embedded content pack {pack} is missing.");
+            using var document = JsonDocument.Parse(stream);
+            foreach (var revision in document.RootElement.GetProperty("revisions").EnumerateArray())
+                ids.Add(revision.GetProperty("revisionId").GetGuid());
+        }
+        return ids;
+    });
+
     /// <param name="syncRoots">Cloud sync roots to warn about (ADR-005); discovered from this machine when null.</param>
     /// <param name="devFixtures">
     /// Also seed the original test fixture pack. Development only (DevHost, tests, <c>TOMESTACK_DEV_FIXTURES=1</c>): the
@@ -80,9 +110,10 @@ public sealed partial class TomeStackApp : IDisposable
     /// </param>
     /// <param name="extractor">PDF extraction for imports (ADR-009); by default the isolated worker next to the app.</param>
     /// <param name="formReader">Character-sheet import: reads a PDF's form fields; by default the isolated worker next to the app.</param>
+    /// <param name="markdownExtractor">Markdown imports (D67); by default the same isolated worker, asked for its <c>extractMarkdown</c> kind.</param>
     /// <param name="appVersion">The version to stamp the data folder with (R75); the running build's, unless a test says otherwise.</param>
     /// <exception cref="DataFolderInUseException">Another process has the folder open (M2.1); nothing was read or changed.</exception>
-    public static TomeStackApp Open(string dataDirectory, TimeProvider? time = null, IEnumerable<string>? syncRoots = null, bool devFixtures = false, ImportWorker.IDocumentExtractor? extractor = null, ImportWorker.Forms.IFormReader? formReader = null, string? appVersion = null)
+    public static TomeStackApp Open(string dataDirectory, TimeProvider? time = null, IEnumerable<string>? syncRoots = null, bool devFixtures = false, ImportWorker.IDocumentExtractor? extractor = null, ImportWorker.Forms.IFormReader? formReader = null, string? appVersion = null, ImportWorker.IDocumentExtractor? markdownExtractor = null)
     {
         // Before the database opens: migration, the leftover-import check and the file cleanup below all assume this
         // process is the only one using the folder.
@@ -94,8 +125,9 @@ public sealed partial class TomeStackApp : IDisposable
             var version = appVersion ?? AppVersionStamp.CurrentVersion;
             AppVersionStamp.CopyBeforeOpen(dataDirectory, Path.Combine(dataDirectory, DatabaseFileName), version, SqliteStore.LatestSchemaVersion);
             var warning = DataFolder.SyncRootWarning(dataDirectory, syncRoots ?? DataFolder.DiscoverSyncRoots());
-            app = new TomeStackApp(dataDirectory, time ?? TimeProvider.System, warning is null ? [] : [warning]) { _extractor = extractor, _sheetExtractor = extractor, _formReader = formReader, _folderLock = folderLock };
+            app = new TomeStackApp(dataDirectory, time ?? TimeProvider.System, warning is null ? [] : [warning]) { _extractor = extractor, _markdownExtractor = markdownExtractor, _sheetExtractor = extractor, _formReader = formReader, _folderLock = folderLock };
             app.DeleteLeftoverDdbFiles(); // a crash during ddb.readData can leave its temporary copy
+            DeleteLeftoverMarkdownCopies(); // and a crash during a Markdown import, its copy
             app.InterruptLeftoverImports();
             var bundled = new HashSet<Guid>();
             foreach (var pack in BundledPacks)
@@ -183,7 +215,7 @@ public sealed partial class TomeStackApp : IDisposable
         var published = _store.ListRevisionsInOrder().Where(r => r.Status == RevisionStatus.Published).ToList();
         // SPEC I-06: the newest published revision of each content is what new picks get; older ones stay listed (saved
         // characters still pin them and show their names) but are marked, so pickers offer only the newest.
-        var newest = published.GroupBy(r => r.ContentId).ToDictionary(g => g.Key, g => g.Last().RevisionId);
+        var newest = published.GroupBy(r => r.ContentId).ToDictionary(g => g.Key, g => Packages.DownConversion.Newest(g)!.RevisionId);
         // Content that another revision grants or offers in a choice (class features, skill options) arrives through it;
         // pickers for directly pinned content leave it out.
         var reachable = published
@@ -201,14 +233,19 @@ public sealed partial class TomeStackApp : IDisposable
                         r.Provenance.SourceId, source?.Title ?? "(unknown source)", r.Provenance.Page?.ToString(), Preview(r.Summary),
                         allowed?.Contains(r.Provenance.SourceId),
                         r.Effects.OfType<SpellEffect>().FirstOrDefault() is { } spell
-                            ? new SpellSummary(spell.Level, spell.Lists, spell.School, spell.Concentration, spell.Ritual)
+                            ? new SpellSummary(spell.Level, spell.Lists, spell.School, spell.Concentration, spell.Ritual, SpellTagsOf(r, spell))
                             : null,
                         Superseded: newest[r.ContentId] != r.RevisionId,
-                        Standalone: !reachable.Contains(r.ContentId));
+                        Standalone: !reachable.Contains(r.ContentId),
+                        ModOf: r.Kind == ContentKind.Item && r.SchemaVersion >= ContentRevision.ItemModSchemaVersion ? r.Effects.OfType<ItemModEffect>().FirstOrDefault()?.AppliesTo : null);
                 })
                 .OrderBy(o => o.Kind).ThenBy(o => o.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(o => o.SourceTitle, StringComparer.CurrentCultureIgnoreCase),
         ];
     }
+
+    /// <summary>MECH-X item 1 (R39): a spell's tags for the builder, only from a v12 revision (as the sheet does); null when it has none.</summary>
+    private static IReadOnlyList<string>? SpellTagsOf(ContentRevision revision, SpellEffect spell) =>
+        spell.Tags is { Count: > 0 } tags && revision.SchemaVersion >= ContentRevision.PaymentSchemaVersion ? tags : null;
 
     /// <summary>
     /// Item 1 (2026-10-14 plan): how many entries of each kind in <paramref name="rulesFamily"/> have no published revision,
@@ -249,7 +286,7 @@ public sealed partial class TomeStackApp : IDisposable
 
     public CharacterView GetCharacter(Guid id) =>
         _store.FindCharacter(id) is { } character
-            ? View(character)
+            ? View(character, stored: true)
             : throw new AppValidationException([new("character.not-found", $"Character {id} does not exist.")]);
 
     public CharacterView CreateCharacter(CreateCharacterRequest request)
@@ -288,16 +325,28 @@ public sealed partial class TomeStackApp : IDisposable
     /// match by construction. Both timestamps are the same stored 100 ns value (the <c>json</c> column round-trips it exactly), so
     /// they compare as instants. The message names no character and quotes no text.
     /// </para>
+    /// <para>
+    /// MECH-X item 2 (R43): the reply of a save of an existing character may carry the advisory
+    /// <c>choice.replaced-outside-window</c> notice in <see cref="CharacterView.Notices"/> when it swapped picks of a replaceable
+    /// choice outside its window. It is never stored and never blocks the save. R69: it may also carry
+    /// <c>companion.play-pruned</c> when the save reset the stored hit points of content companions whose content is no longer active.
+    /// </para>
     /// </summary>
     public CharacterView SaveCharacter(Character character)
     {
         ArgumentNullException.ThrowIfNull(character);
         if (_store.FindCharacter(character.Id) is not { } stored)
-            return SaveWithPlay(character with { ArchivedAt = null }); // a save never creates an archived character
+            return SaveWithPlay(character with { ArchivedAt = null }, checkMods: true); // a save never creates an archived character
         if (character.UpdatedAt != stored.UpdatedAt)
             throw new AppValidationException([new("character.stale", StaleMessage)], "character.stale");
-        return SaveWithPlay(character with { Play = WithoutOrphanedCompanionPlay(stored.Play, character), ArchivedAt = stored.ArchivedAt, Equipment = WithStoredCharges(stored.Equipment, character.Equipment) });
+        var view = SaveWithPlay(character with { Play = WithoutOrphanedCompanionPlay(stored.Play, character), ArchivedAt = stored.ArchivedAt, Equipment = WithStoredCharges(stored.Equipment, character.Equipment) }, checkMods: true);
+        // MECH-X item 2 (R42, R43, R47): advisory only, never stored and never blocking; it rides on this reply alone.
+        var notices = ChoiceReplacements.OutsideWindow(stored, view.Character, view.Sheet.Choices);
+        return notices.Count > 0 ? view with { Notices = [.. view.Notices ?? [], .. notices] } : view;
     }
+
+    /// <summary>MECH-X R69: the advisory notice of a save that reset content companions' hit points (R61's prune). Never stored.</summary>
+    public const string CompanionPlayPrunedCode = "companion.play-pruned";
 
     /// <summary>The words of the <c>character.stale</c> refusal (codes and plain words only; the page re-reads the current copy).</summary>
     public const string StaleMessage = "This character changed since you opened it. Your change wasn't saved; the current copy is shown.";
@@ -323,19 +372,44 @@ public sealed partial class TomeStackApp : IDisposable
     {
         if (play.Companions is not { } recorded)
             return play;
-        var remaining = recorded.Where(p => payload.Companions?.Any(c => c?.Id == p.Id) ?? false).ToList();
+        var remaining = recorded.Where(p => p?.ContentId is not null || payload.Companions?.Any(c => c?.Id == p?.Id) == true).ToList();
         return remaining.Count == recorded.Count ? play : play with { Companions = remaining };
     }
 
-    /// <summary>Saves the character with the play state it carries: for the confirmed play and rest commands only.</summary>
-    private CharacterView SaveWithPlay(Character character)
+    /// <summary>
+    /// Saves the character with the play state it carries: for the confirmed play and rest commands only. D43 S2: a compound play
+    /// change passes <paramref name="undo"/> (the play state it started from and the button's words) and gets a fresh slot for the
+    /// stamp it wrote, set after the single write; the returned view already carries its label. Any other write leaves an old slot
+    /// where it is: the stamp moved, so it can no longer match (the view offers nothing and the undo says <c>undo.stale</c>), and the
+    /// next compound change replaces it, or the undo removes it after its own write succeeds.
+    /// </summary>
+    private CharacterView SaveWithPlay(Character character, (PlayState Before, string Label)? undo = null, bool checkMods = false)
     {
-        var saved = Checked(character) with { UpdatedAt = _time.GetUtcNow() };
+        var saved = Checked(character, checkMods) with { UpdatedAt = _time.GetUtcNow() };
         // Calculate before writing: if the sheet cannot be calculated, nothing is stored (the store never holds a
         // character that cannot be opened).
         var view = View(saved);
+        // MECH-X item 4 (S1): an ordinary save forgets the hit points of a content companion whose content is no longer active. Only this
+        // path prunes; play actions, rests, charge changes and snapshot restores keep every row, so a stored character stays playable.
+        if (checkMods && saved.Play?.Companions is { } rows)
+        {
+            var kept = rows.Where(p => p.ContentId is null || view.Sheet.Companions?.Any(c => c.Content.ContentId == p.ContentId && c.CompanionId == p.Id) == true).ToList();
+            if (kept.Count != rows.Count)
+            {
+                saved = saved with { Play = saved.Play with { Companions = kept } };
+                // R69 (owner, 2026-10-30): the prune stays (R61), and the reply says so once. A count only: no name, no content id.
+                var pruned = rows.Count - kept.Count;
+                var message = pruned == 1
+                    ? "A companion's hit points were reset, because the content that gives it is no longer active."
+                    : $"{pruned} companions' hit points were reset, because the content that gives them is no longer active.";
+                view = view with { Character = saved, Notices = [new(CompanionPlayPrunedCode, message)] };
+            }
+        }
         _store.InTransaction(() => _store.SaveCharacter(saved));
-        return view;
+        if (undo is not { } slot)
+            return view;
+        _undo.Set(saved.Id, new(slot.Before, saved.UpdatedAt, slot.Label));
+        return view with { UndoLabel = slot.Label };
     }
 
     /// <summary>
@@ -397,40 +471,64 @@ public sealed partial class TomeStackApp : IDisposable
             : without with { Choices = [.. without.Choices, new ChoiceSelection(request.Source, request.ChoiceId, selected)] };
     }
 
-    public ExportResult ExportCharacters(IReadOnlyList<Guid> characterIds, ExportPurpose purpose = ExportPurpose.Backup) =>
-        _packages.Export(characterIds, purpose);
+    public ExportResult ExportCharacters(IReadOnlyList<Guid> characterIds, ExportPurpose purpose = ExportPurpose.Backup, LadderRow? target = null, string? changesHash = null) =>
+        _packages.Export(characterIds, purpose, target, changesHash);
 
-    public ExportPreview PreviewExport(IReadOnlyList<Guid> characterIds, ExportPurpose purpose) => _packages.PreviewExport(characterIds, purpose);
+    public ExportPreview PreviewExport(IReadOnlyList<Guid> characterIds, ExportPurpose purpose, LadderRow? target = null) => _packages.PreviewExport(characterIds, purpose, target);
+
+    /// <summary>Import Lab L5, <c>package.preflight</c>: what a share export (package, source pack, campaign pack, sheet) would carry, omit or refuse. Writes nothing.</summary>
+    public PreflightReport PackagePreflight(PreflightRequest request) => _packages.RunPreflight(request);
 
     /// <summary>M6 slice 1: what a source pack of these sources would hold (<c>package.sourcePackPreview</c>). Writes nothing.</summary>
-    public SourcePackPreview PreviewSourcePack(IReadOnlyList<Guid> sourceIds) => _packages.PreviewSourcePack(sourceIds);
+    public SourcePackPreview PreviewSourcePack(IReadOnlyList<Guid> sourceIds, LadderRow? target = null) => _packages.PreviewSourcePack(sourceIds, target);
 
     /// <summary>M6 slice 1: a source pack of sources their author marked as shareable (<c>package.sourcePackExport</c>).</summary>
-    public ExportResult ExportSourcePack(IReadOnlyList<Guid> sourceIds) => _packages.ExportSourcePack(sourceIds);
+    public ExportResult ExportSourcePack(IReadOnlyList<Guid> sourceIds, LadderRow? target = null, string? changesHash = null) => _packages.ExportSourcePack(sourceIds, target, changesHash);
 
     /// <summary>M6 slice 2: what a campaign pack of this campaign would hold (<c>package.campaignPackPreview</c>). Writes nothing.</summary>
-    public CampaignPackPreview PreviewCampaignPack(Guid campaignId) => _packages.PreviewCampaignPack(campaignId);
+    public CampaignPackPreview PreviewCampaignPack(Guid campaignId, LadderRow? target = null) => _packages.PreviewCampaignPack(campaignId, target);
 
     /// <summary>M6 slice 2: a campaign pack: the profile and the shareable content of its allowed sources (<c>package.campaignPackExport</c>).</summary>
-    public ExportResult ExportCampaignPack(Guid campaignId) => _packages.ExportCampaignPack(campaignId);
+    public ExportResult ExportCampaignPack(Guid campaignId, LadderRow? target = null, string? changesHash = null) => _packages.ExportCampaignPack(campaignId, target, changesHash);
 
     public PackagePreview PreviewImport(byte[] package) => _packages.Preview(package);
 
     /// <param name="campaignChoices">M6 slice 2: for a campaign pack whose campaign differs from the local one.</param>
-    public ImportResult ApplyImport(byte[] package, IReadOnlyDictionary<Guid, SourceChoice>? sourceChoices = null, IReadOnlyDictionary<Guid, SourceChoice>? campaignChoices = null) =>
-        _packages.Apply(package, sourceChoices, campaignChoices);
+    public ImportResult ApplyImport(byte[] package, IReadOnlyDictionary<Guid, SourceChoice>? sourceChoices = null, IReadOnlyDictionary<Guid, SourceChoice>? campaignChoices = null)
+    {
+        try
+        {
+            return _packages.Apply(package, sourceChoices, campaignChoices);
+        }
+        finally
+        {
+            _undo.ClearAll(); // D44: a replaced character can carry an older stamp that matches a slot again
+        }
+    }
 
     /// <summary>M2.1 "Back up everything": what it would contain (<c>library.backupPreview</c>).</summary>
-    public LibraryBackupPreview PreviewLibraryBackup() => _packages.PreviewLibraryBackup();
+    public LibraryBackupPreview PreviewLibraryBackup(LadderRow? target = null) => _packages.PreviewLibraryBackup(target);
 
-    /// <summary>M2.1: writes the whole library, managed PDFs included, to <paramref name="output"/>.</summary>
-    public LibraryBackupResult WriteLibraryBackup(Stream output) => _packages.WriteLibraryBackup(output);
+    /// <summary>M2.1: writes the whole library, managed PDFs included, to <paramref name="output"/>. D85: with a <paramref name="target"/>, lowered for that release and refused (nothing written) unless <paramref name="changesHash"/> confirms the previewed list.</summary>
+    public LibraryBackupResult WriteLibraryBackup(Stream output, LadderRow? target = null, string? changesHash = null) => _packages.WriteLibraryBackup(output, target, changesHash);
+
+    /// <summary>D85: refuses a library backup for <paramref name="target"/> that is blocked or not confirmed, so the Save dialog is not opened for it.</summary>
+    public void RequireLibraryBackupConfirmed(LadderRow target, string? changesHash) => _packages.RequireLibraryBackupConfirmed(target, changesHash);
 
     /// <summary>M2.1 "Restore full backup": checks the file completely; writes nothing.</summary>
     public PackagePreview PreviewLibraryRestore(string backupPath) => _packages.PreviewLibraryRestore(backupPath);
 
-    public LibraryRestoreResult ApplyLibraryRestore(string backupPath, IReadOnlyDictionary<Guid, SourceChoice>? sourceChoices = null) =>
-        _packages.ApplyLibraryRestore(backupPath, sourceChoices);
+    public LibraryRestoreResult ApplyLibraryRestore(string backupPath, IReadOnlyDictionary<Guid, SourceChoice>? sourceChoices = null)
+    {
+        try
+        {
+            return _packages.ApplyLibraryRestore(backupPath, sourceChoices);
+        }
+        finally
+        {
+            _undo.ClearAll(); // D44: the restored characters can carry an older stamp that matches a slot again
+        }
+    }
 
     public void Dispose()
     {
@@ -440,14 +538,27 @@ public sealed partial class TomeStackApp : IDisposable
         _folderLock?.Dispose(); // last: the folder is free only once the database is closed
     }
 
-    private CharacterView View(Character character)
+    /// <param name="stored">True only for a character read from the store: it alone can offer an undo. A builder draft (Preview) and the
+    /// sandbox's unsaved copy never do, whatever id and stamp they carry.</param>
+    private CharacterView View(Character character, bool stored = false)
     {
         var sheet = CharacterCalculator.Calculate(character, _store);
-        return new(character, sheet, CampaignOf(character, sheet));
+        return new(character, sheet, CampaignOf(character, sheet), UndoLabel: stored ? _undo.Matching(character.Id, character.UpdatedAt)?.Label : null);
     }
 
+    /// <summary>
+    /// Tests only: keep each parsed bundled pack for the life of the process, so the hundreds of data folders a test run opens
+    /// do not parse the same JSON each time. Off in the app, which opens one folder per process and need not keep the packs.
+    /// </summary>
+    internal static bool CacheBundledPacks { get; set; }
+
+    private static readonly ConcurrentDictionary<string, ContentPack> BundledPackCache = new();
+
     /// <summary>Loads an embedded content pack (bundled with this build, so trusted like code).</summary>
-    public static ContentPack LoadBundledPack(string resourceName)
+    public static ContentPack LoadBundledPack(string resourceName) =>
+        CacheBundledPacks ? BundledPackCache.GetOrAdd(resourceName, ParseBundledPack) : ParseBundledPack(resourceName);
+
+    private static ContentPack ParseBundledPack(string resourceName)
     {
         using var stream = typeof(TomeStackApp).Assembly.GetManifestResourceStream(resourceName)
             ?? throw new InvalidOperationException($"Embedded content pack {resourceName} is missing.");
@@ -509,17 +620,18 @@ public sealed record ContentOption(
     bool? AllowedInCampaign = null,
     SpellSummary? Spell = null,
     bool Superseded = false,
-    bool Standalone = true);
+    bool Standalone = true,
+    ModTarget? ModOf = null);
 
 /// <summary>What the builder's spell picker needs to filter and sort a spell option (content schema v5).</summary>
-public sealed record SpellSummary(int Level, IReadOnlyList<string> Lists, string? School, bool Concentration, bool Ritual);
+public sealed record SpellSummary(int Level, IReadOnlyList<string> Lists, string? School, bool Concentration, bool Ritual, IReadOnlyList<string>? Tags = null);
 
 /// <param name="ArchivedAt">SPEC C-08: set while the character is archived; the UI lists it apart, collapsed.</param>
 public sealed record CharacterSummary(Guid Id, string Name, string RulesFamily, DateTimeOffset UpdatedAt, DateTimeOffset? ArchivedAt = null, IReadOnlyList<Guid>? ExceptionContentIds = null, int Level = 1);
 
 /// <param name="Campaign">SPEC P-01: the character's campaign and its warnings (allowed sources, rules family), when it has one.</param>
 /// <param name="Damage">Wave 3 item 21: set only on the view a typed or untyped <see cref="PlayActionKind.Damage"/> command returns; never stored.</param>
-public sealed record CharacterView(Character Character, CharacterSheet Sheet, CampaignStatus? Campaign = null, DamageOutcome? Damage = null);
+public sealed record CharacterView(Character Character, CharacterSheet Sheet, CampaignStatus? Campaign = null, DamageOutcome? Damage = null, string? UndoLabel = null, IReadOnlyList<Diagnostic>? Notices = null);
 
 public sealed record ChooseRequest(Guid CharacterId, ContentReference Source, string ChoiceId, IReadOnlyList<ContentReference>? Selected);
 

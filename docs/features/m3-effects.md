@@ -50,10 +50,18 @@ Like `armor` (v4) and the v5 types, `toggle` is typed only in a v6 revision. In 
 - `charges`: `max` is the per-entry maximum; `chargesSpent` on the entry is the play state. `recovery.regain` omitted means all charges back on that rest; dice mean the player rolls them (see [rests.md](rests.md)).
 - `sheet.itemUses` lists each entry of an item with attunement or charges (carried or equipped): `entryKey`, `entryId`, `entryIndex`, `equipped`, `requiresAttunement`, `attuned`, `chargesMax`, `chargesSpent`, `chargesLeft`, `recovery`. See [equipment.md](equipment.md) for ids, second copies and the play and save paths. The mechanics inventory reports the `item` effect as automatic, since it is applied.
 
+## Capability registry (ADR-020, D66)
+
+`CapabilityRegistry` (RulesCore) lists every effect type the engine knows, with the most it does for each: a ceiling of `Automatic`, `Assisted` or `Reference`, the reason, and the test class that proves it. A field row narrows a type's ceiling when that member is present (today only `rollMode` with `against`, which the player applies, is `Assisted`). `text`, a feature with no effects, is `Reference`.
+
+- The engine sets the ceiling; the author's `automation` can only lower it, and a diagnostic on an effect lowers it to `Assisted`. `CapabilityRegistry.Effective` returns that, or **Unsupported** (a fourth state, outside `AutomationStatus`) for a type that has no row.
+- The mechanics inventory's "not understood" list is now the types without a row; the hand-kept list it replaces is gone. A new effect type without a row fails the completeness test.
+- The calculator still reads the author's value: nothing calculated, stored or hashed changes, and `AutomationStatus` and the content schema are unchanged.
+
 ## Not yet
 
 - A toggle that lasts a set time (rounds, minutes).
-- Toggles that turn each other off.
+- ~~Toggles that turn each other off.~~ Built as form groups with overlays and pool costs (content v11, D43): see [play-mechanics.md](play-mechanics.md).
 - Toggled effects other than modifiers, such as grants or proficiencies.
 - A cost paid in something other than a resource, such as hit points or spell slots.
 

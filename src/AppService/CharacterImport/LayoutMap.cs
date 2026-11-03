@@ -176,7 +176,7 @@ public static class LayoutMaps
 
     /// <summary>Compiles a map's pattern as the parser runs it.</summary>
     internal static Regex Compile(string pattern) =>
-        new(pattern, RegexOptions.NonBacktracking | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
+        new(pattern, RegexOptions.NonBacktracking | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(ImportRegex.TimeoutMs));
 
     /// <summary>Everything wrong with a map, as messages naming the map's own field names (never a sheet's values).</summary>
     public static IReadOnlyList<string> Problems(LayoutMap map)

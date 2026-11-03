@@ -97,6 +97,30 @@ const combatView: CharacterView = {
   sheet: combatSheet,
 };
 
+// D72: explanations never reach print, even when every field carries a trace.
+const traced = {
+  ...combatSheet,
+  fields: combatSheet.fields.map((f) => ({
+    ...f,
+    trace: [{ order: 1, operation: 'base', description: 'Fixture base', result: f.value, origin: { kind: 'base' } }],
+  })),
+} as unknown as CharacterSheet;
+const tracedView: CharacterView = { ...combatView, sheet: traced };
+
+it('never shows a "Why?" disclosure or explanation in the full sheet or the combat card', async () => {
+  const user = userEvent.setup();
+  const { container } = render(<PrintView view={tracedView} onError={() => {}} onClose={() => {}} />);
+  const preview = screen.getByRole('region', { name: 'Print preview' });
+  const check = () => {
+    expect(container.textContent).not.toContain('Why?');
+    expect(container.querySelector('.explain')).toBeNull();
+    expect(container.querySelector('.roll-why')).toBeNull();
+  };
+  check();
+  await user.click(within(preview).getByRole('radio', { name: 'Combat card' }));
+  check();
+});
+
 async function openCombat(user: ReturnType<typeof userEvent.setup>, v: CharacterView = combatView) {
   render(<PrintView view={v} onError={() => {}} onClose={() => {}} />);
   const preview = screen.getByRole('region', { name: 'Print preview' });
@@ -159,6 +183,54 @@ it('lists toggles as named check boxes and conditions as a blank list', async ()
   const conditions = within(preview).getByRole('heading', { name: 'Conditions' }).parentElement!;
   expect(conditions.querySelectorAll('.blank-line').length).toBeGreaterThanOrEqual(4);
   expect(preview.textContent).not.toContain('Continued on the full sheet');
+});
+
+// B10: a counting-up pool (D43) prints what has built up, not room left.
+const countUpView: CharacterView = {
+  ...combatView,
+  sheet: {
+    ...combatSheet,
+    resources: [
+      { content: { revisionId: 'u1' }, resourceId: 'fixture-charge', label: 'Fixture Charge', maximum: 5, spent: 3, current: 2, countsUp: true, recoveries: [] },
+      { content: { revisionId: 'r1' }, resourceId: 'fixture-surge', label: 'Fixture Surge', maximum: 3, spent: 1, current: 2, recoveries: [] },
+    ],
+  } as unknown as CharacterSheet,
+};
+
+it('full sheet prints a counting-up pool as built up and a normal pool as before', () => {
+  render(<PrintView view={countUpView} onError={() => {}} onClose={() => {}} />);
+  const preview = screen.getByRole('region', { name: 'Print preview' });
+  const row = (name: string) => within(preview).getByRole('rowheader', { name }).closest('tr')!;
+  expect(row('Fixture Charge').textContent).toContain('3 built up of 5');
+  expect(row('Fixture Charge').textContent).not.toContain('2 of 5');
+  expect(row('Fixture Surge').textContent).toContain('2 of 3');
+  expect(row('Fixture Surge').textContent).not.toContain('built up');
+});
+
+it('full sheet prints a counting-up pool with no maximum as built up, tracked by hand', () => {
+  const noMax = {
+    ...countUpView,
+    sheet: {
+      ...countUpView.sheet,
+      resources: [
+        { content: { revisionId: 'u2' }, resourceId: 'fixture-rage', label: 'Fixture Rage', spent: 4, current: 0, countsUp: true, recoveries: [] },
+        { content: { revisionId: 'u3' }, resourceId: 'fixture-pool', label: 'Fixture Pool', spent: 2, current: 0, recoveries: [] },
+      ],
+    } as unknown as CharacterSheet,
+  };
+  render(<PrintView view={noMax} onError={() => {}} onClose={() => {}} />);
+  const preview = screen.getByRole('region', { name: 'Print preview' });
+  const row = (name: string) => within(preview).getByRole('rowheader', { name }).closest('tr')!;
+  expect(row('Fixture Rage').textContent).toContain('4 built up (tracked by hand)');
+  expect(row('Fixture Pool').textContent).toContain('2 spent (tracked by hand)');
+});
+
+it('combat card labels the ticks of a counting-up pool "to build up" and a normal pool "uses"', async () => {
+  const preview = await openCombat(userEvent.setup(), countUpView);
+  const row = (name: string) => within(preview).getByRole('rowheader', { name }).closest('tr')!;
+  expect(row('Fixture Charge').querySelectorAll('.tick')).toHaveLength(5);
+  expect(row('Fixture Charge').textContent).toContain('5 to build up');
+  expect(row('Fixture Surge').textContent).toContain('3 uses');
 });
 
 const largeVar = () => document.documentElement.style.getPropertyValue('--print-font-size');

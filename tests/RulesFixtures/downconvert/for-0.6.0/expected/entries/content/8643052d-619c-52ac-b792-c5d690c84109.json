@@ -1,0 +1,23 @@
+{
+  "contentId": "c1060000-0000-4000-8000-0000000000c8",
+  "revisionId": "8643052d-619c-52ac-b792-c5d690c84109",
+  "schemaVersion": 10,
+  "kind": "feature",
+  "name": "Compat Tide Mark",
+  "rulesFamilies": [
+    "srd-5.1"
+  ],
+  "provenance": {
+    "sourceId": "c1060000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 9
+    }
+  },
+  "status": "published",
+  "summary": "A test feature with advantage on one saving throw.",
+  "effects": [],
+  "downConvertedFrom": {
+    "revisionId": "c1060000-0000-4000-8000-0000000000e8",
+    "schemaVersion": 11
+  }
+}

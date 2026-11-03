@@ -9,21 +9,21 @@ namespace TomeStack.Benchmarks;
 /// </summary>
 public class FormulaBenchmarks
 {
-    private (string Source, bool Scales)[] _sources = [];
+    private (string Source, FormulaFeatures Features)[] _sources = [];
     private Formula[] _parsed = [];
 
     private static readonly Dictionary<string, int?> Values =
         FormulaIdentifiers.All.ToDictionary(i => i, int? (_) => 3, StringComparer.Ordinal);
 
     private static int? Resolve(string identifier) =>
-        Values.TryGetValue(identifier, out var value) ? value : FormulaIdentifiers.IsScale(identifier) ? 2 : null;
+        Values.TryGetValue(identifier, out var value) ? value : FormulaIdentifiers.IsScale(identifier) || FormulaIdentifiers.IsValue(identifier) ? 2 : null;
 
     private static IEnumerable<string?> FormulasOf(Effect effect) => effect switch
     {
         ModifierEffect m => [m.Value],
         ResourceEffect r => [r.Maximum],
         RecoveryEffect r when r.Amount != "all" => [r.Amount],
-        RollEffect r => [r.Cost, r.Bonus],
+        RollEffect r => [r.Cost, r.Bonus, r.Save?.Dc],
         SpellcastingEffect s => [s.SpellsFormula],
         _ => [],
     };
@@ -31,8 +31,8 @@ public class FormulaBenchmarks
     [GlobalSetup]
     public void Setup()
     {
-        _sources = [.. Srd.Revisions.SelectMany(r => r.Effects.SelectMany(FormulasOf).OfType<string>().Select(f => (f, r.SchemaVersion >= ScaleEffect.SchemaVersion)))];
-        _parsed = [.. _sources.Select(s => Formula.TryParse(s.Source, s.Scales, out var f, out _) ? f! : throw new InvalidOperationException($"SRD formula '{s.Source}' does not parse."))];
+        _sources = [.. Srd.Revisions.SelectMany(r => r.Effects.SelectMany(FormulasOf).OfType<string>().Select(f => (f, Formula.FeaturesFor(r))))];
+        _parsed = [.. _sources.Select(s => Formula.TryParse(s.Source, s.Features, out var f, out _) ? f! : throw new InvalidOperationException($"SRD formula '{s.Source}' does not parse."))];
         Console.WriteLine($"// {_sources.Length} formulas ({_sources.Select(s => s.Source).Distinct().Count()} distinct) in {Srd.Revisions.Count()} SRD revisions");
     }
 
@@ -40,9 +40,9 @@ public class FormulaBenchmarks
     public int ParseAll()
     {
         var parsed = 0;
-        foreach (var (source, scales) in _sources)
+        foreach (var (source, features) in _sources)
         {
-            if (Formula.TryParse(source, scales, out _, out _))
+            if (Formula.TryParse(source, features, out _, out _))
                 parsed++;
         }
         return parsed;

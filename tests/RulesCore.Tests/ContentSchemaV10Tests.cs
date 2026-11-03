@@ -37,10 +37,10 @@ public class ContentSchemaV10Tests
     // ---- the version constant ---------------------------------------------------------------------------------------
 
     [Fact]
-    public void The_current_content_schema_is_v10_and_a_new_draft_is_written_as_v10()
+    public void The_Wave_3_content_schema_is_v10_and_a_new_draft_is_written_at_the_current_version()
     {
-        Assert.Equal(10, ContentRevision.CurrentSchemaVersion);
-        Assert.Equal(10, Draft(ContentKind.Feat).SchemaVersion);
+        Assert.Equal(10, ContentRevision.PlayDetailsSchemaVersion);
+        Assert.Equal(ContentRevision.CurrentSchemaVersion, Draft(ContentKind.Feat).SchemaVersion);
     }
 
     // ---- round trips ------------------------------------------------------------------------------------------------

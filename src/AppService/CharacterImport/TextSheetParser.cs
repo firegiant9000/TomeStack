@@ -110,10 +110,10 @@ public static class TextSheetParser
         return lines;
     }
 
-    // ---- the patterns: no backtracking, 100 ms each ----
+    // ---- the patterns: no backtracking, ImportRegex.TimeoutMs each ----
 
     private static Regex Rx(string pattern, bool ignoreCase = false) =>
-        new(pattern, RegexOptions.NonBacktracking | RegexOptions.CultureInvariant | (ignoreCase ? RegexOptions.IgnoreCase : RegexOptions.None), TimeSpan.FromMilliseconds(100));
+        new(pattern, RegexOptions.NonBacktracking | RegexOptions.CultureInvariant | (ignoreCase ? RegexOptions.IgnoreCase : RegexOptions.None), TimeSpan.FromMilliseconds(ImportRegex.TimeoutMs));
 
     private static readonly Regex Rule = Rx(@"^[-_*=]{3,}$");
     private static readonly Regex Marker = Rx(@"^(?:[-*•·]\s+|[0-9]{1,3}[.)]\s+)");
@@ -906,8 +906,8 @@ public static class TextSheetParser
             lines.AddRange(_notes);
 
             var abilities = Enum.GetValues<Ability>().ToDictionary(a => a, a => _abilities.TryGetValue(a, out var read) ? read : Read<int>.Missing);
-            var saves = Enum.GetValues<Ability>().ToDictionary(a => a, a => _saveListSeen ?Read<bool>.Ok(_saves.ContainsKey(a)) : Read<bool>.Missing);
-            var skills = CharacterCalculator.Skills.ToDictionary(s => s.Key, s => _skillListSeen ?Read<bool>.Ok(_skills.ContainsKey(s.Key)) : Read<bool>.Missing, StringComparer.Ordinal);
+            var saves = Enum.GetValues<Ability>().ToDictionary(a => a, a => _saveListSeen ? Read<bool>.Ok(_saves.ContainsKey(a)) : Read<bool>.Missing);
+            var skills = CharacterCalculator.Skills.ToDictionary(s => s.Key, s => _skillListSeen ? Read<bool>.Ok(_skills.ContainsKey(s.Key)) : Read<bool>.Missing, StringComparer.Ordinal);
 
             var proficiencies = new List<string>();
             if (_languages.Count > 0)

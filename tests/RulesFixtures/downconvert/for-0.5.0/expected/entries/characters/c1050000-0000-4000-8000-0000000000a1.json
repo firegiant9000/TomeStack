@@ -1,0 +1,64 @@
+{
+  "id": "c1050000-0000-4000-8000-0000000000a1",
+  "schemaVersion": 8,
+  "name": "Compat Hero",
+  "rulesFamily": "srd-5.1",
+  "level": 1,
+  "classes": [],
+  "choices": [],
+  "spells": [],
+  "crossFamilyExceptions": [],
+  "campaignExceptions": [],
+  "baseAbilities": {
+    "str": 10,
+    "dex": 14,
+    "con": 12,
+    "int": 10,
+    "wis": 13,
+    "cha": 8
+  },
+  "pins": [
+    {
+      "contentId": "c1050000-0000-4000-8000-0000000000c2",
+      "revisionId": "4eb921ed-4000-5612-a455-930b93d6404c"
+    },
+    {
+      "contentId": "c1050000-0000-4000-8000-0000000000c3",
+      "revisionId": "1aa60fdf-61f0-5505-adc1-62b62a03aba4"
+    },
+    {
+      "contentId": "c1050000-0000-4000-8000-0000000000c4",
+      "revisionId": "49ee9e13-9e93-5c26-ad4b-1d05cab4b5b2"
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000000001",
+      "revisionId": "51e00000-0000-4000-8000-000000000001"
+    }
+  ],
+  "overrides": [],
+  "play": {
+    "temporaryHitPoints": 0,
+    "resources": [],
+    "conditions": [],
+    "exhaustion": 0,
+    "hitDiceSpent": [],
+    "deathSaves": {
+      "successes": 0,
+      "failures": 0
+    },
+    "inspiration": false,
+    "spellSlotsSpent": [],
+    "pactSlotsSpent": 0,
+    "toggles": []
+  },
+  "equipment": [],
+  "currency": {
+    "cp": 0,
+    "sp": 0,
+    "ep": 0,
+    "gp": 0,
+    "pp": 0
+  },
+  "notes": [],
+  "updatedAt": "2026-09-24T12:00:00+00:00"
+}

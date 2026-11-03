@@ -1,0 +1,61 @@
+{
+  "id": "6f0dca00-0000-4000-8000-000000000570",
+  "schemaVersion": 9,
+  "name": "Testy Bulwark (responses fixture, schema v9)",
+  "rulesFamily": "srd-5.2.1",
+  "level": 8,
+  "classes": [
+    { "class": { "contentId": "6f0dc000-0000-4000-8000-000000000070", "revisionId": "6f0de000-0000-4000-8000-000000000070" }, "level": 8 }
+  ],
+  "choices": [],
+  "spells": [],
+  "crossFamilyExceptions": [],
+  "campaignExceptions": [],
+  "baseAbilities": {
+    "str": 14,
+    "dex": 12,
+    "con": 14,
+    "int": 10,
+    "wis": 12,
+    "cha": 8
+  },
+  "pins": [
+    { "contentId": "6f0dc000-0000-4000-8000-000000000070", "revisionId": "6f0de000-0000-4000-8000-000000000070" },
+    { "contentId": "6f0dc000-0000-4000-8000-000000000071", "revisionId": "6f0de000-0000-4000-8000-000000000071" },
+    { "contentId": "6f0dc000-0000-4000-8000-000000000072", "revisionId": "6f0de000-0000-4000-8000-000000000072" },
+    { "contentId": "6f0dc000-0000-4000-8000-000000000073", "revisionId": "6f0de000-0000-4000-8000-000000000073" },
+    { "contentId": "6f0dc000-0000-4000-8000-000000000074", "revisionId": "6f0de000-0000-4000-8000-000000000074" },
+    { "contentId": "6f0dc000-0000-4000-8000-000000000075", "revisionId": "6f0de000-0000-4000-8000-000000000075" },
+    { "contentId": "6f0dc000-0000-4000-8000-000000000076", "revisionId": "6f0de000-0000-4000-8000-000000000076" },
+    { "contentId": "6f0dc000-0000-4000-8000-000000000077", "revisionId": "6f0de000-0000-4000-8000-000000000077" }
+  ],
+  "overrides": [],
+  "damageDefences": [
+    { "type": "fire", "kind": "resistance" }
+  ],
+  "play": {
+    "temporaryHitPoints": 0,
+    "resources": [],
+    "conditions": [],
+    "exhaustion": 0,
+    "hitDiceSpent": [],
+    "deathSaves": {
+      "successes": 0,
+      "failures": 0
+    },
+    "inspiration": false,
+    "spellSlotsSpent": [],
+    "pactSlotsSpent": 0,
+    "toggles": []
+  },
+  "equipment": [],
+  "currency": {
+    "cp": 0,
+    "sp": 0,
+    "ep": 0,
+    "gp": 0,
+    "pp": 0
+  },
+  "notes": [],
+  "updatedAt": "2026-10-23T00:00:00+00:00"
+}

@@ -7,6 +7,7 @@ import { client } from '../api/client';
 import type { AppInfo, ContentKind, ContentRevision, SourceRecord, StudioEntry } from '../api/types';
 import { increaseOptions, isIncreaseChoice } from '../entryBasics';
 import { HomebrewStudio } from './HomebrewStudio';
+import { fill } from '../test/fill';
 
 vi.mock('../api/client', () => ({
   client: {
@@ -87,7 +88,7 @@ it('a new species: increases and skills are saved as effects, and the rule list 
   render_();
   await user.click(await screen.findByRole('button', { name: 'New species' }));
   expect(screen.getByRole('heading', { name: 'New species' })).toBeTruthy();
-  await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Fixture Folk');
+  await fill(user, screen.getByRole('textbox', { name: 'Name' }), 'Fixture Folk');
   await user.type(screen.getByRole('textbox', { name: 'Strength' }), '2');
   await user.click(screen.getByRole('checkbox', { name: 'Athletics' }));
   expect(screen.queryByRole('group', { name: /^Rule \d/ })).toBeNull(); // nothing listed as a loose rule
@@ -107,7 +108,7 @@ it('a new spell starts as a level 1 spell and saves trimmed text with its lists'
   render_();
   await user.click(await screen.findByRole('button', { name: 'New spell' }));
   expect(screen.getByRole('heading', { name: 'New spell' })).toBeTruthy();
-  await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Fixture Spark');
+  await fill(user, screen.getByRole('textbox', { name: 'Name' }), 'Fixture Spark');
   await user.selectOptions(screen.getByRole('combobox', { name: 'Level' }), '0');
   await user.type(screen.getByRole('textbox', { name: 'Range' }), '  30 feet ');
   await user.type(screen.getByRole('combobox', { name: 'Add a spell list' }), 'Fixture List');
@@ -155,7 +156,7 @@ async function newBackgroundWithIncreases(user: ReturnType<typeof userEvent.setu
   source = { ...source, rulesFamilies: ['srd-5.2.1'] };
   render_(onStatus);
   await user.click(await screen.findByRole('button', { name: 'New background' }));
-  await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Fixture Wanderer');
+  await fill(user, screen.getByRole('textbox', { name: 'Name' }), 'Fixture Wanderer');
   for (const name of ['Strength', 'Dexterity', 'Constitution']) await user.click(screen.getByRole('checkbox', { name }));
 }
 const onStatus = vi.fn();

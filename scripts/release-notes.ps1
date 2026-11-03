@@ -50,7 +50,7 @@ gh attestation verify TomeStack.App-win-Setup.exe --repo firegiant9000/TomeStack
 
 Without the GitHub CLI, compare ``(Get-FileHash TomeStack.App-win-Setup.exe).Hash`` in PowerShell with the installer's line in ``SHA256SUMS`` (the case of the letters doesn't matter). That check only shows the file arrived intact: ``SHA256SUMS`` comes from this same page and is not attested itself, so the ``gh attestation verify`` command is the one that shows where the file was built (it needs a GitHub CLI recent enough to have ``--source-ref`` and ``--source-digest``, signed in with ``gh auth login``). An attestation is not a code signature, so Windows still shows the SmartScreen prompt.
 
-This build is **unsigned**. See the note at the top about the SmartScreen prompt. Third-party notices are in ``ATTRIBUTION.md`` next to ``TomeStack.exe``. Two Microsoft Windows SDK files that ship with TomeStack (``Microsoft.Windows.SDK.NET.dll``, ``WinRT.Runtime.dll``) are covered by the Microsoft Windows SDK license terms. By installing TomeStack you agree to those terms for those files; see "Terms for the Microsoft Windows SDK files" in ``ATTRIBUTION.md``.
+This build is **unsigned**. See the note at the top about the SmartScreen prompt. Third-party notices are in ``ATTRIBUTION.md`` next to ``TomeStack.exe``.
 "@
 $parent = Split-Path $Output -Parent
 if ($parent) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }

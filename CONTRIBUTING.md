@@ -7,6 +7,7 @@ The specs in [`docs/`](docs/) are authoritative: [SPEC](docs/SPEC.md) is behavio
 ## The gate
 
 Every change passes all of these, in this order. The warning budget is 0 (`TreatWarningsAsErrors` is on).
+The .NET analyzers' settings, permanent exceptions and burn-down lists are in [docs/testing/analyzers.md](docs/testing/analyzers.md).
 
 ```
 npm ci --prefix src/Ui

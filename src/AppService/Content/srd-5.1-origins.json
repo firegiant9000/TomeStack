@@ -1,0 +1,1737 @@
+{
+  "packId": "srd-5.1-origins",
+  "formatVersion": 1,
+  "notice": "The races of the System Reference Document 5.1 (CC-BY-4.0) other than the Half-Orc (in srd-5.1.json), with their subraces, pp. 3-7. Taken from SRD_CC_v5.1.pdf (SHA-256 2504d2a0abb0a4d491a939be4f17910a2dde0312570ab8d208080225ccf0a1f0). See docs/licensing/srd-pack-review.md.",
+  "sources": [
+    {
+      "id": "51500000-0000-4000-8000-000000000001",
+      "title": "System Reference Document 5.1",
+      "publisher": "SRD 5.1 (CC-BY-4.0)",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "editionVersion": "5.1",
+      "license": "CC-BY-4.0",
+      "redistributable": true,
+      "attribution": "This work includes material taken from the System Reference Document 5.1 (\"SRD 5.1\") by Wizards of the Coast LLC and available at https://dnd.wizards.com/resources/systems-reference-document. The SRD 5.1 is licensed under the Creative Commons Attribution 4.0 International License available at https://creativecommons.org/licenses/by/4.0/legalcode.",
+      "modificationNotice": "Modified: TomeStack adapted this material into structured data. Selected passages are excerpted or shortened, with line breaks and hyphenation repaired, and rules are encoded as machine-readable effects.",
+      "sha256": "2504d2a0abb0a4d491a939be4f17910a2dde0312570ab8d208080225ccf0a1f0"
+    }
+  ],
+  "revisions": [
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000101",
+      "revisionId": "51e10000-0000-4000-8000-000000000101",
+      "schemaVersion": 10,
+      "kind": "species",
+      "name": "Dwarf",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 3,
+          "end": 4
+        }
+      },
+      "status": "published",
+      "summary": "Your dwarf character has an assortment of inborn abilities, part and parcel of dwarven nature. Size. Your size is Medium. Speed. Your base walking speed is 25 feet. Your speed is not reduced by wearing heavy armor. Darkvision. Accustomed to life underground, you have superior vision in dark and dim conditions. You can see in dim light within 60 feet of you as if it were bright light, and in darkness as if it were dim light. You can’t discern color in darkness, only shades of gray. Tool Proficiency. You gain proficiency with the artisan’s tools of your choice: smith’s tools, brewer’s supplies, or mason’s tools. Stonecunning. Whenever you make an Intelligence (History) check related to the origin of stonework, you are considered proficient in the History skill and add double your proficiency bonus to the check, instead of your normal proficiency bonus. Languages. You can speak, read, and write Common and Dwarvish.",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "dwarf-con",
+          "operation": "bonus",
+          "target": "ability.con.score",
+          "value": "2",
+          "text": "Ability Score Increase. Your Constitution score increases by 2."
+        },
+        {
+          "type": "modifier",
+          "id": "dwarf-speed",
+          "operation": "replace",
+          "target": "speed",
+          "value": "25",
+          "text": "Speed. Your base walking speed is 25 feet. Your speed is not reduced by wearing heavy armor."
+        },
+        {
+          "type": "grant",
+          "id": "dwarven-resilience",
+          "grant": "damageResistance",
+          "damageType": "poison",
+          "text": "Dwarven Resilience. You have advantage on saving throws against poison, and you have resistance against poison damage."
+        },
+        {
+          "type": "grant",
+          "id": "dwarven-combat-battleaxe",
+          "grant": "proficiency",
+          "target": "weapon.battleaxe",
+          "text": "Dwarven Combat Training. You have proficiency with the battleaxe, handaxe, light hammer, and warhammer."
+        },
+        {
+          "type": "grant",
+          "id": "dwarven-combat-handaxe",
+          "grant": "proficiency",
+          "target": "weapon.handaxe"
+        },
+        {
+          "type": "grant",
+          "id": "dwarven-combat-light-hammer",
+          "grant": "proficiency",
+          "target": "weapon.light-hammer"
+        },
+        {
+          "type": "grant",
+          "id": "dwarven-combat-warhammer",
+          "grant": "proficiency",
+          "target": "weapon.warhammer"
+        },
+        {
+          "type": "choice",
+          "id": "dwarf-subrace",
+          "choiceId": "dwarf-subrace",
+          "count": 1,
+          "text": "Some races have subraces. Members of a subrace have the traits of the parent race in addition to the traits specified for their subrace. (The SRD 5.1 includes the hill dwarf.)",
+          "options": [
+            {
+              "contentId": "51c10000-0000-4000-8000-000000000102",
+              "revisionId": "51e10000-0000-4000-8000-000000000102"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000102",
+      "revisionId": "51e10000-0000-4000-8000-000000000102",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Hill Dwarf",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 4
+        }
+      },
+      "status": "published",
+      "summary": "As a hill dwarf, you have keen senses, deep intuition, and remarkable resilience.",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "hill-dwarf-wis",
+          "operation": "bonus",
+          "target": "ability.wis.score",
+          "value": "1",
+          "text": "Ability Score Increase. Your Wisdom score increases by 1."
+        },
+        {
+          "type": "modifier",
+          "id": "dwarven-toughness",
+          "operation": "bonus",
+          "target": "hitPoints",
+          "value": "LEVEL",
+          "text": "Dwarven Toughness. Your hit point maximum increases by 1, and it increases by 1 every time you gain a level."
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000201",
+      "revisionId": "51e10000-0000-4000-8000-000000000201",
+      "schemaVersion": 10,
+      "kind": "species",
+      "name": "Elf",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 4
+        }
+      },
+      "status": "published",
+      "summary": "Your elf character has a variety of natural abilities, the result of thousands of years of elven refinement. Size. Your size is Medium. Speed. Your base walking speed is 30 feet. Darkvision. Accustomed to twilit forests and the night sky, you have superior vision in dark and dim conditions. You can see in dim light within 60 feet of you as if it were bright light, and in darkness as if it were dim light. You can’t discern color in darkness, only shades of gray. Fey Ancestry. You have advantage on saving throws against being charmed, and magic can’t put you to sleep. Trance. Elves don’t need to sleep. Instead, they meditate deeply, remaining semiconscious, for 4 hours a day. (The Common word for such meditation is “trance.”) While meditating, you can dream after a fashion; such dreams are actually mental exercises that have become reflexive through years of practice. After resting in this way, you gain the same benefit that a human does from 8 hours of sleep. Languages. You can speak, read, and write Common and Elvish.",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "elf-dex",
+          "operation": "bonus",
+          "target": "ability.dex.score",
+          "value": "2",
+          "text": "Ability Score Increase. Your Dexterity score increases by 2."
+        },
+        {
+          "type": "modifier",
+          "id": "elf-speed",
+          "operation": "replace",
+          "target": "speed",
+          "value": "30",
+          "text": "Speed. Your base walking speed is 30 feet."
+        },
+        {
+          "type": "grant",
+          "id": "keen-senses",
+          "grant": "proficiency",
+          "target": "skill.perception",
+          "text": "Keen Senses. You have proficiency in the Perception skill."
+        },
+        {
+          "type": "choice",
+          "id": "elf-subrace",
+          "choiceId": "elf-subrace",
+          "count": 1,
+          "text": "Some races have subraces. Members of a subrace have the traits of the parent race in addition to the traits specified for their subrace. (The SRD 5.1 includes the high elf.)",
+          "options": [
+            {
+              "contentId": "51c10000-0000-4000-8000-000000000202",
+              "revisionId": "51e10000-0000-4000-8000-000000000202"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000202",
+      "revisionId": "51e10000-0000-4000-8000-000000000202",
+      "schemaVersion": 5,
+      "kind": "feature",
+      "name": "High Elf",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 4
+        }
+      },
+      "status": "published",
+      "summary": "As a high elf, you have a keen mind and a mastery of at least the basics of magic. Cantrip. You know one cantrip of your choice from the wizard spell list. Intelligence is your spellcasting ability for it. Extra Language. You can speak, read, and write one extra language of your choice.",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "high-elf-int",
+          "operation": "bonus",
+          "target": "ability.int.score",
+          "value": "1",
+          "text": "Ability Score Increase. Your Intelligence score increases by 1."
+        },
+        {
+          "type": "grant",
+          "id": "elf-weapon-longsword",
+          "grant": "proficiency",
+          "target": "weapon.longsword",
+          "text": "Elf Weapon Training. You have proficiency with the longsword, shortsword, shortbow, and longbow."
+        },
+        {
+          "type": "grant",
+          "id": "elf-weapon-shortsword",
+          "grant": "proficiency",
+          "target": "weapon.shortsword"
+        },
+        {
+          "type": "grant",
+          "id": "elf-weapon-shortbow",
+          "grant": "proficiency",
+          "target": "weapon.shortbow"
+        },
+        {
+          "type": "grant",
+          "id": "elf-weapon-longbow",
+          "grant": "proficiency",
+          "target": "weapon.longbow"
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000301",
+      "revisionId": "51e10000-0000-4000-8000-000000000301",
+      "schemaVersion": 10,
+      "kind": "species",
+      "name": "Halfling",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 4,
+          "end": 5
+        }
+      },
+      "status": "published",
+      "summary": "Your halfling character has a number of traits in common with all other halflings. Size. Your size is Small. Speed. Your base walking speed is 25 feet. Lucky. When you roll a 1 on the d20 for an attack roll, ability check, or saving throw, you can reroll the die and must use the new roll. Brave. You have advantage on saving throws against being frightened. Halfling Nimbleness. You can move through the space of any creature that is of a size larger than yours. Languages. You can speak, read, and write Common and Halfling.",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "halfling-dex",
+          "operation": "bonus",
+          "target": "ability.dex.score",
+          "value": "2",
+          "text": "Ability Score Increase. Your Dexterity score increases by 2."
+        },
+        {
+          "type": "modifier",
+          "id": "halfling-speed",
+          "operation": "replace",
+          "target": "speed",
+          "value": "25",
+          "text": "Speed. Your base walking speed is 25 feet."
+        },
+        {
+          "type": "choice",
+          "id": "halfling-subrace",
+          "choiceId": "halfling-subrace",
+          "count": 1,
+          "text": "Some races have subraces. Members of a subrace have the traits of the parent race in addition to the traits specified for their subrace. (The SRD 5.1 includes the lightfoot halfling.)",
+          "options": [
+            {
+              "contentId": "51c10000-0000-4000-8000-000000000302",
+              "revisionId": "51e10000-0000-4000-8000-000000000302"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000302",
+      "revisionId": "51e10000-0000-4000-8000-000000000302",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Lightfoot",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 5
+        }
+      },
+      "status": "published",
+      "summary": "As a lightfoot halfling, you can easily hide from notice, even using other people as cover. You’re inclined to be affable and get along well with others. Naturally Stealthy. You can attempt to hide even when you are obscured only by a creature that is at least one size larger than you.",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "lightfoot-cha",
+          "operation": "bonus",
+          "target": "ability.cha.score",
+          "value": "1",
+          "text": "Ability Score Increase. Your Charisma score increases by 1."
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000401",
+      "revisionId": "51e10000-0000-4000-8000-000000000401",
+      "schemaVersion": 10,
+      "kind": "species",
+      "name": "Human",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 5
+        }
+      },
+      "status": "published",
+      "summary": "It’s hard to make generalizations about humans, but your human character has these traits. Size. Your size is Medium. Speed. Your base walking speed is 30 feet. Languages. You can speak, read, and write Common and one extra language of your choice.",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "human-str",
+          "operation": "bonus",
+          "target": "ability.str.score",
+          "value": "1",
+          "text": "Ability Score Increase. Your ability scores each increase by 1."
+        },
+        {
+          "type": "modifier",
+          "id": "human-dex",
+          "operation": "bonus",
+          "target": "ability.dex.score",
+          "value": "1"
+        },
+        {
+          "type": "modifier",
+          "id": "human-con",
+          "operation": "bonus",
+          "target": "ability.con.score",
+          "value": "1"
+        },
+        {
+          "type": "modifier",
+          "id": "human-int",
+          "operation": "bonus",
+          "target": "ability.int.score",
+          "value": "1"
+        },
+        {
+          "type": "modifier",
+          "id": "human-wis",
+          "operation": "bonus",
+          "target": "ability.wis.score",
+          "value": "1"
+        },
+        {
+          "type": "modifier",
+          "id": "human-cha",
+          "operation": "bonus",
+          "target": "ability.cha.score",
+          "value": "1"
+        },
+        {
+          "type": "modifier",
+          "id": "human-speed",
+          "operation": "replace",
+          "target": "speed",
+          "value": "30",
+          "text": "Speed. Your base walking speed is 30 feet."
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000501",
+      "revisionId": "51e10000-0000-4000-8000-000000000501",
+      "schemaVersion": 10,
+      "kind": "species",
+      "name": "Dragonborn",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 5,
+          "end": 6
+        }
+      },
+      "status": "published",
+      "summary": "Your draconic heritage manifests in a variety of traits you share with other dragonborn. Size. Your size is Medium. Speed. Your base walking speed is 30 feet. Languages. You can speak, read, and write Common and Draconic.",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "dragonborn-str",
+          "operation": "bonus",
+          "target": "ability.str.score",
+          "value": "2",
+          "text": "Ability Score Increase. Your Strength score increases by 2, and your Charisma score increases by 1."
+        },
+        {
+          "type": "modifier",
+          "id": "dragonborn-cha",
+          "operation": "bonus",
+          "target": "ability.cha.score",
+          "value": "1"
+        },
+        {
+          "type": "modifier",
+          "id": "dragonborn-speed",
+          "operation": "replace",
+          "target": "speed",
+          "value": "30",
+          "text": "Speed. Your base walking speed is 30 feet."
+        },
+        {
+          "type": "choice",
+          "id": "draconic-ancestry",
+          "choiceId": "draconic-ancestry",
+          "count": 1,
+          "text": "Draconic Ancestry. You have draconic ancestry. Choose one type of dragon from the Draconic Ancestry table. Your breath weapon and damage resistance are determined by the dragon type, as shown in the table.",
+          "options": [
+            {
+              "contentId": "51c10000-0000-4000-8000-000000000510",
+              "revisionId": "51e10000-0000-4000-8000-000000000510"
+            },
+            {
+              "contentId": "51c10000-0000-4000-8000-000000000511",
+              "revisionId": "51e10000-0000-4000-8000-000000000511"
+            },
+            {
+              "contentId": "51c10000-0000-4000-8000-000000000512",
+              "revisionId": "51e10000-0000-4000-8000-000000000512"
+            },
+            {
+              "contentId": "51c10000-0000-4000-8000-000000000513",
+              "revisionId": "51e10000-0000-4000-8000-000000000513"
+            },
+            {
+              "contentId": "51c10000-0000-4000-8000-000000000514",
+              "revisionId": "51e10000-0000-4000-8000-000000000514"
+            },
+            {
+              "contentId": "51c10000-0000-4000-8000-000000000515",
+              "revisionId": "51e10000-0000-4000-8000-000000000515"
+            },
+            {
+              "contentId": "51c10000-0000-4000-8000-000000000516",
+              "revisionId": "51e10000-0000-4000-8000-000000000516"
+            },
+            {
+              "contentId": "51c10000-0000-4000-8000-000000000517",
+              "revisionId": "51e10000-0000-4000-8000-000000000517"
+            },
+            {
+              "contentId": "51c10000-0000-4000-8000-000000000518",
+              "revisionId": "51e10000-0000-4000-8000-000000000518"
+            },
+            {
+              "contentId": "51c10000-0000-4000-8000-000000000519",
+              "revisionId": "51e10000-0000-4000-8000-000000000519"
+            }
+          ]
+        },
+        {
+          "type": "resource",
+          "id": "breath-weapon",
+          "automation": "assisted",
+          "resourceId": "breath-weapon",
+          "label": "Breath Weapon",
+          "maximum": "1",
+          "activation": "action",
+          "text": "Breath Weapon. You can use your action to exhale destructive energy. Your draconic ancestry determines the size, shape, and damage type of the exhalation. When you use your breath weapon, each creature in the area of the exhalation must make a saving throw, the type of which is determined by your draconic ancestry. The DC for this saving throw equals 8 + your Constitution modifier + your proficiency bonus. A creature takes 2d6 damage on a failed save, and half as much damage on a successful one. The damage increases to 3d6 at 6th level, 4d6 at 11th level, and 5d6 at 16th level. After you use your breath weapon, you can’t use it again until you complete a short or long rest."
+        },
+        {
+          "type": "recovery",
+          "id": "breath-weapon-short-rest",
+          "timing": "onShortRest",
+          "resourceId": "breath-weapon",
+          "on": "shortRest",
+          "amount": "all",
+          "text": "Once per short or long rest."
+        },
+        {
+          "type": "recovery",
+          "id": "breath-weapon-long-rest",
+          "timing": "onLongRest",
+          "resourceId": "breath-weapon",
+          "on": "longRest",
+          "amount": "all"
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000510",
+      "revisionId": "51e10000-0000-4000-8000-000000000510",
+      "schemaVersion": 10,
+      "kind": "feature",
+      "name": "Draconic Ancestry: Black",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 5
+        }
+      },
+      "status": "published",
+      "summary": "Dragon: Black. Damage Type: Acid. Breath Weapon: 5 by 30 ft. line (Dex. save).",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "damage-resistance",
+          "grant": "damageResistance",
+          "damageType": "acid",
+          "text": "Damage Resistance. You have resistance to the damage type associated with your draconic ancestry."
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000511",
+      "revisionId": "51e10000-0000-4000-8000-000000000511",
+      "schemaVersion": 10,
+      "kind": "feature",
+      "name": "Draconic Ancestry: Blue",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 5
+        }
+      },
+      "status": "published",
+      "summary": "Dragon: Blue. Damage Type: Lightning. Breath Weapon: 5 by 30 ft. line (Dex. save).",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "damage-resistance",
+          "grant": "damageResistance",
+          "damageType": "lightning",
+          "text": "Damage Resistance. You have resistance to the damage type associated with your draconic ancestry."
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000512",
+      "revisionId": "51e10000-0000-4000-8000-000000000512",
+      "schemaVersion": 10,
+      "kind": "feature",
+      "name": "Draconic Ancestry: Brass",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 5
+        }
+      },
+      "status": "published",
+      "summary": "Dragon: Brass. Damage Type: Fire. Breath Weapon: 5 by 30 ft. line (Dex. save).",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "damage-resistance",
+          "grant": "damageResistance",
+          "damageType": "fire",
+          "text": "Damage Resistance. You have resistance to the damage type associated with your draconic ancestry."
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000513",
+      "revisionId": "51e10000-0000-4000-8000-000000000513",
+      "schemaVersion": 10,
+      "kind": "feature",
+      "name": "Draconic Ancestry: Bronze",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 5
+        }
+      },
+      "status": "published",
+      "summary": "Dragon: Bronze. Damage Type: Lightning. Breath Weapon: 5 by 30 ft. line (Dex. save).",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "damage-resistance",
+          "grant": "damageResistance",
+          "damageType": "lightning",
+          "text": "Damage Resistance. You have resistance to the damage type associated with your draconic ancestry."
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000514",
+      "revisionId": "51e10000-0000-4000-8000-000000000514",
+      "schemaVersion": 10,
+      "kind": "feature",
+      "name": "Draconic Ancestry: Copper",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 5
+        }
+      },
+      "status": "published",
+      "summary": "Dragon: Copper. Damage Type: Acid. Breath Weapon: 5 by 30 ft. line (Dex. save).",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "damage-resistance",
+          "grant": "damageResistance",
+          "damageType": "acid",
+          "text": "Damage Resistance. You have resistance to the damage type associated with your draconic ancestry."
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000515",
+      "revisionId": "51e10000-0000-4000-8000-000000000515",
+      "schemaVersion": 10,
+      "kind": "feature",
+      "name": "Draconic Ancestry: Gold",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 5
+        }
+      },
+      "status": "published",
+      "summary": "Dragon: Gold. Damage Type: Fire. Breath Weapon: 15 ft. cone (Dex. save).",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "damage-resistance",
+          "grant": "damageResistance",
+          "damageType": "fire",
+          "text": "Damage Resistance. You have resistance to the damage type associated with your draconic ancestry."
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000516",
+      "revisionId": "51e10000-0000-4000-8000-000000000516",
+      "schemaVersion": 10,
+      "kind": "feature",
+      "name": "Draconic Ancestry: Green",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 5
+        }
+      },
+      "status": "published",
+      "summary": "Dragon: Green. Damage Type: Poison. Breath Weapon: 15 ft. cone (Con. save).",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "damage-resistance",
+          "grant": "damageResistance",
+          "damageType": "poison",
+          "text": "Damage Resistance. You have resistance to the damage type associated with your draconic ancestry."
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000517",
+      "revisionId": "51e10000-0000-4000-8000-000000000517",
+      "schemaVersion": 10,
+      "kind": "feature",
+      "name": "Draconic Ancestry: Red",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 5
+        }
+      },
+      "status": "published",
+      "summary": "Dragon: Red. Damage Type: Fire. Breath Weapon: 15 ft. cone (Dex. save).",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "damage-resistance",
+          "grant": "damageResistance",
+          "damageType": "fire",
+          "text": "Damage Resistance. You have resistance to the damage type associated with your draconic ancestry."
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000518",
+      "revisionId": "51e10000-0000-4000-8000-000000000518",
+      "schemaVersion": 10,
+      "kind": "feature",
+      "name": "Draconic Ancestry: Silver",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 5
+        }
+      },
+      "status": "published",
+      "summary": "Dragon: Silver. Damage Type: Cold. Breath Weapon: 15 ft. cone (Con. save).",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "damage-resistance",
+          "grant": "damageResistance",
+          "damageType": "cold",
+          "text": "Damage Resistance. You have resistance to the damage type associated with your draconic ancestry."
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000519",
+      "revisionId": "51e10000-0000-4000-8000-000000000519",
+      "schemaVersion": 10,
+      "kind": "feature",
+      "name": "Draconic Ancestry: White",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 5
+        }
+      },
+      "status": "published",
+      "summary": "Dragon: White. Damage Type: Cold. Breath Weapon: 15 ft. cone (Con. save).",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "damage-resistance",
+          "grant": "damageResistance",
+          "damageType": "cold",
+          "text": "Damage Resistance. You have resistance to the damage type associated with your draconic ancestry."
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000601",
+      "revisionId": "51e10000-0000-4000-8000-000000000601",
+      "schemaVersion": 10,
+      "kind": "species",
+      "name": "Gnome",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 6
+        }
+      },
+      "status": "published",
+      "summary": "Your gnome character has certain characteristics in common with all other gnomes. Size. Your size is Small. Speed. Your base walking speed is 25 feet. Darkvision. Accustomed to life underground, you have superior vision in dark and dim conditions. You can see in dim light within 60 feet of you as if it were bright light, and in darkness as if it were dim light. You can’t discern color in darkness, only shades of gray. Gnome Cunning. You have advantage on all Intelligence, Wisdom, and Charisma saving throws against magic. Languages. You can speak, read, and write Common and Gnomish.",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "gnome-int",
+          "operation": "bonus",
+          "target": "ability.int.score",
+          "value": "2",
+          "text": "Ability Score Increase. Your Intelligence score increases by 2."
+        },
+        {
+          "type": "modifier",
+          "id": "gnome-speed",
+          "operation": "replace",
+          "target": "speed",
+          "value": "25",
+          "text": "Speed. Your base walking speed is 25 feet."
+        },
+        {
+          "type": "choice",
+          "id": "gnome-subrace",
+          "choiceId": "gnome-subrace",
+          "count": 1,
+          "text": "Some races have subraces. Members of a subrace have the traits of the parent race in addition to the traits specified for their subrace. (The SRD 5.1 includes the rock gnome.)",
+          "options": [
+            {
+              "contentId": "51c10000-0000-4000-8000-000000000602",
+              "revisionId": "51e10000-0000-4000-8000-000000000602"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000602",
+      "revisionId": "51e10000-0000-4000-8000-000000000602",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Rock Gnome",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 6
+        }
+      },
+      "status": "published",
+      "summary": "As a rock gnome, you have a natural inventiveness and hardiness beyond that of other gnomes. Artificer’s Lore. Whenever you make an Intelligence (History) check related to magic items, alchemical objects, or technological devices, you can add twice your proficiency bonus, instead of any proficiency bonus you normally apply. Tinker. You have proficiency with artisan’s tools (tinker’s tools). Using those tools, you can spend 1 hour and 10 gp worth of materials to construct a Tiny clockwork device (AC 5, 1 hp). The device ceases to function after 24 hours (unless you spend 1 hour repairing it to keep the device functioning), or when you use your action to dismantle it; at that time, you can reclaim the materials used to create it. You can have up to three such devices active at a time. When you create a device, choose one of the following options: Clockwork Toy. This toy is a clockwork animal, monster, or person, such as a frog, mouse, bird, dragon, or soldier. When placed on the ground, the toy moves 5 feet across the ground on each of your turns in a random direction. It makes noises as appropriate to the creature it represents. Fire Starter. The device produces a miniature flame, which you can use to light a candle, torch, or campfire. Using the device requires your action. Music Box. When opened, this music box plays a single song at a moderate volume. The box stops playing when it reaches the song’s end or when it is closed.",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "rock-gnome-con",
+          "operation": "bonus",
+          "target": "ability.con.score",
+          "value": "1",
+          "text": "Ability Score Increase. Your Constitution score increases by 1."
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000701",
+      "revisionId": "51e10000-0000-4000-8000-000000000701",
+      "schemaVersion": 10,
+      "kind": "species",
+      "name": "Half-Elf",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 6,
+          "end": 7
+        }
+      },
+      "status": "published",
+      "summary": "Your half-elf character has some qualities in common with elves and some that are unique to half-elves. Size. Your size is Medium. Speed. Your base walking speed is 30 feet. Darkvision. Thanks to your elf blood, you have superior vision in dark and dim conditions. You can see in dim light within 60 feet of you as if it were bright light, and in darkness as if it were dim light. You can’t discern color in darkness, only shades of gray. Fey Ancestry. You have advantage on saving throws against being charmed, and magic can’t put you to sleep. Languages. You can speak, read, and write Common, Elvish, and one extra language of your choice.",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "half-elf-cha",
+          "operation": "bonus",
+          "target": "ability.cha.score",
+          "value": "2",
+          "text": "Ability Score Increase. Your Charisma score increases by 2, and two other ability scores of your choice increase by 1."
+        },
+        {
+          "type": "modifier",
+          "id": "half-elf-speed",
+          "operation": "replace",
+          "target": "speed",
+          "value": "30",
+          "text": "Speed. Your base walking speed is 30 feet."
+        },
+        {
+          "type": "choice",
+          "id": "half-elf-ability-scores",
+          "choiceId": "half-elf-ability-scores",
+          "count": 2,
+          "text": "Ability Score Increase. Your Charisma score increases by 2, and two other ability scores of your choice increase by 1.",
+          "options": [
+            {
+              "contentId": "51c10000-0000-4000-8000-000000000710",
+              "revisionId": "51e10000-0000-4000-8000-000000000710"
+            },
+            {
+              "contentId": "51c10000-0000-4000-8000-000000000711",
+              "revisionId": "51e10000-0000-4000-8000-000000000711"
+            },
+            {
+              "contentId": "51c10000-0000-4000-8000-000000000712",
+              "revisionId": "51e10000-0000-4000-8000-000000000712"
+            },
+            {
+              "contentId": "51c10000-0000-4000-8000-000000000713",
+              "revisionId": "51e10000-0000-4000-8000-000000000713"
+            },
+            {
+              "contentId": "51c10000-0000-4000-8000-000000000714",
+              "revisionId": "51e10000-0000-4000-8000-000000000714"
+            }
+          ]
+        },
+        {
+          "type": "choice",
+          "id": "skill-versatility",
+          "choiceId": "skill-versatility",
+          "count": 2,
+          "text": "Skill Versatility. You gain proficiency in two skills of your choice.",
+          "options": [
+            {
+              "contentId": "51c10000-0000-4000-8000-000000000730",
+              "revisionId": "51e10000-0000-4000-8000-000000000730"
+            },
+            {
+              "contentId": "51c10000-0000-4000-8000-000000000731",
+              "revisionId": "51e10000-0000-4000-8000-000000000731"
+            },
+            {
+              "contentId": "51c10000-0000-4000-8000-000000000732",
+              "revisionId": "51e10000-0000-4000-8000-000000000732"
+            },
+            {
+              "contentId": "51c10000-0000-4000-8000-000000000733",
+              "revisionId": "51e10000-0000-4000-8000-000000000733"
+            },
+            {
+              "contentId": "51c10000-0000-4000-8000-000000000734",
+              "revisionId": "51e10000-0000-4000-8000-000000000734"
+            },
+            {
+              "contentId": "51c10000-0000-4000-8000-000000000735",
+              "revisionId": "51e10000-0000-4000-8000-000000000735"
+            },
+            {
+              "contentId": "51c10000-0000-4000-8000-000000000736",
+              "revisionId": "51e10000-0000-4000-8000-000000000736"
+            },
+            {
+              "contentId": "51c10000-0000-4000-8000-000000000737",
+              "revisionId": "51e10000-0000-4000-8000-000000000737"
+            },
+            {
+              "contentId": "51c10000-0000-4000-8000-000000000738",
+              "revisionId": "51e10000-0000-4000-8000-000000000738"
+            },
+            {
+              "contentId": "51c10000-0000-4000-8000-000000000739",
+              "revisionId": "51e10000-0000-4000-8000-000000000739"
+            },
+            {
+              "contentId": "51c10000-0000-4000-8000-000000000740",
+              "revisionId": "51e10000-0000-4000-8000-000000000740"
+            },
+            {
+              "contentId": "51c10000-0000-4000-8000-000000000741",
+              "revisionId": "51e10000-0000-4000-8000-000000000741"
+            },
+            {
+              "contentId": "51c10000-0000-4000-8000-000000000742",
+              "revisionId": "51e10000-0000-4000-8000-000000000742"
+            },
+            {
+              "contentId": "51c10000-0000-4000-8000-000000000743",
+              "revisionId": "51e10000-0000-4000-8000-000000000743"
+            },
+            {
+              "contentId": "51c10000-0000-4000-8000-000000000744",
+              "revisionId": "51e10000-0000-4000-8000-000000000744"
+            },
+            {
+              "contentId": "51c10000-0000-4000-8000-000000000745",
+              "revisionId": "51e10000-0000-4000-8000-000000000745"
+            },
+            {
+              "contentId": "51c10000-0000-4000-8000-000000000746",
+              "revisionId": "51e10000-0000-4000-8000-000000000746"
+            },
+            {
+              "contentId": "51c10000-0000-4000-8000-000000000747",
+              "revisionId": "51e10000-0000-4000-8000-000000000747"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000710",
+      "revisionId": "51e10000-0000-4000-8000-000000000710",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Half-Elf Ability Score Increase: Strength +1",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 6
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "str",
+          "operation": "bonus",
+          "target": "ability.str.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000711",
+      "revisionId": "51e10000-0000-4000-8000-000000000711",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Half-Elf Ability Score Increase: Dexterity +1",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 6
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "dex",
+          "operation": "bonus",
+          "target": "ability.dex.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000712",
+      "revisionId": "51e10000-0000-4000-8000-000000000712",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Half-Elf Ability Score Increase: Constitution +1",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 6
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "con",
+          "operation": "bonus",
+          "target": "ability.con.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000713",
+      "revisionId": "51e10000-0000-4000-8000-000000000713",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Half-Elf Ability Score Increase: Intelligence +1",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 6
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "int",
+          "operation": "bonus",
+          "target": "ability.int.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000714",
+      "revisionId": "51e10000-0000-4000-8000-000000000714",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Half-Elf Ability Score Increase: Wisdom +1",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 6
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "wis",
+          "operation": "bonus",
+          "target": "ability.wis.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000730",
+      "revisionId": "51e10000-0000-4000-8000-000000000730",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Half-Elf Skill: Acrobatics",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 7
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.acrobatics"
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000731",
+      "revisionId": "51e10000-0000-4000-8000-000000000731",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Half-Elf Skill: Animal Handling",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 7
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.animalHandling"
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000732",
+      "revisionId": "51e10000-0000-4000-8000-000000000732",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Half-Elf Skill: Arcana",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 7
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.arcana"
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000733",
+      "revisionId": "51e10000-0000-4000-8000-000000000733",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Half-Elf Skill: Athletics",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 7
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.athletics"
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000734",
+      "revisionId": "51e10000-0000-4000-8000-000000000734",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Half-Elf Skill: Deception",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 7
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.deception"
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000735",
+      "revisionId": "51e10000-0000-4000-8000-000000000735",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Half-Elf Skill: History",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 7
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.history"
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000736",
+      "revisionId": "51e10000-0000-4000-8000-000000000736",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Half-Elf Skill: Insight",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 7
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.insight"
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000737",
+      "revisionId": "51e10000-0000-4000-8000-000000000737",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Half-Elf Skill: Intimidation",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 7
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.intimidation"
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000738",
+      "revisionId": "51e10000-0000-4000-8000-000000000738",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Half-Elf Skill: Investigation",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 7
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.investigation"
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000739",
+      "revisionId": "51e10000-0000-4000-8000-000000000739",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Half-Elf Skill: Medicine",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 7
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.medicine"
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000740",
+      "revisionId": "51e10000-0000-4000-8000-000000000740",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Half-Elf Skill: Nature",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 7
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.nature"
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000741",
+      "revisionId": "51e10000-0000-4000-8000-000000000741",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Half-Elf Skill: Perception",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 7
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.perception"
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000742",
+      "revisionId": "51e10000-0000-4000-8000-000000000742",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Half-Elf Skill: Performance",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 7
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.performance"
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000743",
+      "revisionId": "51e10000-0000-4000-8000-000000000743",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Half-Elf Skill: Persuasion",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 7
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.persuasion"
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000744",
+      "revisionId": "51e10000-0000-4000-8000-000000000744",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Half-Elf Skill: Religion",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 7
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.religion"
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000745",
+      "revisionId": "51e10000-0000-4000-8000-000000000745",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Half-Elf Skill: Sleight of Hand",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 7
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.sleightOfHand"
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000746",
+      "revisionId": "51e10000-0000-4000-8000-000000000746",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Half-Elf Skill: Stealth",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 7
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.stealth"
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000747",
+      "revisionId": "51e10000-0000-4000-8000-000000000747",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Half-Elf Skill: Survival",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 7
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.survival"
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000801",
+      "revisionId": "51e10000-0000-4000-8000-000000000801",
+      "schemaVersion": 10,
+      "kind": "species",
+      "name": "Tiefling",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 7
+        }
+      },
+      "status": "published",
+      "summary": "Tieflings share certain racial traits as a result of their infernal descent. Size. Your size is Medium. Speed. Your base walking speed is 30 feet. Darkvision. Thanks to your infernal heritage, you have superior vision in dark and dim conditions. You can see in dim light within 60 feet of you as if it were bright light, and in darkness as if it were dim light. You can’t discern color in darkness, only shades of gray. Infernal Legacy. You know the thaumaturgy cantrip. When you reach 3rd level, you can cast the hellish rebuke spell as a 2nd-level spell once with this trait and regain the ability to do so when you finish a long rest. When you reach 5th level, you can cast the darkness spell once with this trait and regain the ability to do so when you finish a long rest. Charisma is your spellcasting ability for these spells. Languages. You can speak, read, and write Common and Infernal.",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "tiefling-int",
+          "operation": "bonus",
+          "target": "ability.int.score",
+          "value": "1",
+          "text": "Ability Score Increase. Your Intelligence score increases by 1, and your Charisma score increases by 2."
+        },
+        {
+          "type": "modifier",
+          "id": "tiefling-cha",
+          "operation": "bonus",
+          "target": "ability.cha.score",
+          "value": "2"
+        },
+        {
+          "type": "modifier",
+          "id": "tiefling-speed",
+          "operation": "replace",
+          "target": "speed",
+          "value": "30",
+          "text": "Speed. Your base walking speed is 30 feet."
+        },
+        {
+          "type": "grant",
+          "id": "hellish-resistance",
+          "grant": "damageResistance",
+          "damageType": "fire",
+          "text": "Hellish Resistance. You have resistance to fire damage."
+        },
+        {
+          "type": "grant",
+          "id": "infernal-legacy-hellish-rebuke",
+          "grant": "content",
+          "level": 3,
+          "content": {
+            "contentId": "51c10000-0000-4000-8000-000000000802",
+            "revisionId": "51e10000-0000-4000-8000-000000000802"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "infernal-legacy-darkness",
+          "grant": "content",
+          "level": 5,
+          "content": {
+            "contentId": "51c10000-0000-4000-8000-000000000803",
+            "revisionId": "51e10000-0000-4000-8000-000000000803"
+          }
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000802",
+      "revisionId": "51e10000-0000-4000-8000-000000000802",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Infernal Legacy: Hellish Rebuke",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 7
+        }
+      },
+      "status": "published",
+      "summary": "When you reach 3rd level, you can cast the hellish rebuke spell as a 2nd-level spell once with this trait and regain the ability to do so when you finish a long rest. Charisma is your spellcasting ability for these spells.",
+      "effects": [
+        {
+          "type": "resource",
+          "id": "hellish-rebuke",
+          "automation": "assisted",
+          "resourceId": "infernal-legacy-hellish-rebuke",
+          "label": "Hellish Rebuke (Infernal Legacy)",
+          "maximum": "1",
+          "text": "Once per long rest, from 3rd level."
+        },
+        {
+          "type": "recovery",
+          "id": "hellish-rebuke-long-rest",
+          "timing": "onLongRest",
+          "resourceId": "infernal-legacy-hellish-rebuke",
+          "on": "longRest",
+          "amount": "all"
+        }
+      ]
+    },
+    {
+      "contentId": "51c10000-0000-4000-8000-000000000803",
+      "revisionId": "51e10000-0000-4000-8000-000000000803",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Infernal Legacy: Darkness",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 7
+        }
+      },
+      "status": "published",
+      "summary": "When you reach 5th level, you can cast the darkness spell once with this trait and regain the ability to do so when you finish a long rest. Charisma is your spellcasting ability for these spells.",
+      "effects": [
+        {
+          "type": "resource",
+          "id": "darkness",
+          "automation": "assisted",
+          "resourceId": "infernal-legacy-darkness",
+          "label": "Darkness (Infernal Legacy)",
+          "maximum": "1",
+          "text": "Once per long rest, from 5th level."
+        },
+        {
+          "type": "recovery",
+          "id": "darkness-long-rest",
+          "timing": "onLongRest",
+          "resourceId": "infernal-legacy-darkness",
+          "on": "longRest",
+          "amount": "all"
+        }
+      ]
+    }
+  ]
+}

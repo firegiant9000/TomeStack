@@ -5,7 +5,9 @@ namespace TomeStack.AppService.Tests;
 
 /// <summary>
 /// Wave 3 item 25 (Q13, Q19; R158 to R160, R171): per-entry charges and attunement through the play, save and rest paths. Fixture items
-/// only ("Fixture wand", "Fixture trinket", "Fixture plain cup"), the same in both rules families.
+/// only ("Fixture wand", "Fixture trinket", "Fixture plain cup"), the same in both rules families. Charges, attunement and rest
+/// recovery have no rules-family branch (the family only labels trace origins), so three smoke tests (spend and regain, a rest,
+/// the attunement gate) run in both families and the rest run in srd-5.1 only.
 /// </summary>
 public class ItemChargesTests
 {
@@ -74,7 +76,6 @@ public class ItemChargesTests
 
     [Theory]
     [InlineData(RulesFamilies.Srd51)]
-    [InlineData(RulesFamilies.Srd521)]
     public void R158_an_entry_gets_an_id_when_created_only_for_an_item_with_charges_or_attunement(string family)
     {
         var s = Start(family);
@@ -96,7 +97,6 @@ public class ItemChargesTests
 
     [Theory]
     [InlineData(RulesFamilies.Srd51)]
-    [InlineData(RulesFamilies.Srd521)]
     public void R158_an_id_once_given_is_kept_by_later_saves_and_a_supplied_id_is_honoured(string family)
     {
         var s = Start(family);
@@ -112,7 +112,6 @@ public class ItemChargesTests
 
     [Theory]
     [InlineData(RulesFamilies.Srd51)]
-    [InlineData(RulesFamilies.Srd521)]
     public void R159_a_second_copy_is_allowed_only_for_charges_or_attunement_items(string family)
     {
         var s = Start(family);
@@ -151,7 +150,6 @@ public class ItemChargesTests
 
     [Theory]
     [InlineData(RulesFamilies.Srd51)]
-    [InlineData(RulesFamilies.Srd521)]
     public void R160_a_save_carrying_an_older_charges_spent_keeps_the_stored_value(string family)
     {
         // R182: a save from before a spend is now refused outright (see the R182 tests); this is the current-copy case: the payload names
@@ -183,7 +181,6 @@ public class ItemChargesTests
 
     [Theory]
     [InlineData(RulesFamilies.Srd51)]
-    [InlineData(RulesFamilies.Srd521)]
     public void R160_a_save_may_add_and_remove_entries_and_a_new_entry_keeps_what_it_carries(string family)
     {
         var s = Start(family);
@@ -228,7 +225,6 @@ public class ItemChargesTests
 
     [Theory]
     [InlineData(RulesFamilies.Srd51)]
-    [InlineData(RulesFamilies.Srd521)]
     public void Spend_and_regain_are_refused_at_nothing_left_and_when_full_and_change_nothing(string family)
     {
         var s = Start(family);
@@ -251,7 +247,6 @@ public class ItemChargesTests
 
     [Theory]
     [InlineData(RulesFamilies.Srd51)]
-    [InlineData(RulesFamilies.Srd521)]
     public void An_unknown_entry_or_an_entry_without_charges_is_refused_and_nothing_is_written(string family)
     {
         var s = Start(family);
@@ -269,7 +264,6 @@ public class ItemChargesTests
 
     [Theory]
     [InlineData(RulesFamilies.Srd51)]
-    [InlineData(RulesFamilies.Srd521)]
     public void R158_an_id_less_charged_entry_gets_its_id_on_first_use_and_no_other_entry_changes(string family)
     {
         var s = Start(family);
@@ -293,7 +287,6 @@ public class ItemChargesTests
 
     [Theory]
     [InlineData(RulesFamilies.Srd51)]
-    [InlineData(RulesFamilies.Srd521)]
     public void R182_a_stale_id_less_copy_is_refused_where_pairing_used_to_hand_it_the_stored_id_and_spent_count(string family)
     {
         var clock = new MutableTime(TempApp.Now);
@@ -318,7 +311,6 @@ public class ItemChargesTests
 
     [Theory]
     [InlineData(RulesFamilies.Srd51)]
-    [InlineData(RulesFamilies.Srd521)]
     public void R182_a_stale_save_after_a_spend_is_refused_with_character_stale_and_the_spent_count_stays(string family)
     {
         var clock = new MutableTime(TempApp.Now);
@@ -343,7 +335,6 @@ public class ItemChargesTests
 
     [Theory]
     [InlineData(RulesFamilies.Srd51)]
-    [InlineData(RulesFamilies.Srd521)]
     public void R182_a_save_made_from_the_current_copy_is_accepted_and_still_cannot_change_the_spent_count(string family)
     {
         var clock = new MutableTime(TempApp.Now);
@@ -366,7 +357,6 @@ public class ItemChargesTests
 
     [Theory]
     [InlineData(RulesFamilies.Srd51)]
-    [InlineData(RulesFamilies.Srd521)]
     public void R182_a_stale_id_less_copy_shifted_out_of_its_stored_position_is_refused_not_reset(string family)
     {
         var clock = new MutableTime(TempApp.Now);
@@ -389,7 +379,6 @@ public class ItemChargesTests
 
     [Theory]
     [InlineData(RulesFamilies.Srd51)]
-    [InlineData(RulesFamilies.Srd521)]
     public void R182_a_delete_and_re_add_of_a_charged_item_at_the_same_position_is_a_new_entry_with_full_charges(string family)
     {
         var clock = new MutableTime(TempApp.Now);
@@ -410,7 +399,6 @@ public class ItemChargesTests
 
     [Theory]
     [InlineData(RulesFamilies.Srd51)]
-    [InlineData(RulesFamilies.Srd521)]
     public void R182_updatedAt_round_trips_at_100_ns_through_the_real_store_and_the_json_the_page_sends_back(string family)
     {
         var clock = new MutableTime(TempApp.Now.AddTicks(1234567)); // the finest precision the clock gives
@@ -432,7 +420,6 @@ public class ItemChargesTests
 
     [Theory]
     [InlineData(RulesFamilies.Srd51)]
-    [InlineData(RulesFamilies.Srd521)]
     public void R182_through_the_dispatcher_a_stale_save_is_a_character_stale_error_with_no_text_of_the_character(string family)
     {
         var clock = new MutableTime(TempApp.Now);
@@ -455,7 +442,6 @@ public class ItemChargesTests
 
     [Theory]
     [InlineData(RulesFamilies.Srd51)]
-    [InlineData(RulesFamilies.Srd521)]
     public void R182_a_new_character_is_not_compared_and_a_save_of_the_stored_copy_goes_through(string family)
     {
         var clock = new MutableTime(TempApp.Now);
@@ -472,7 +458,6 @@ public class ItemChargesTests
 
     [Theory]
     [InlineData(RulesFamilies.Srd51)]
-    [InlineData(RulesFamilies.Srd521)]
     public void R175_a_save_with_a_null_item_where_the_stored_entry_has_an_id_is_refused_with_its_code_and_writes_nothing(string family)
     {
         var s = Start(family);
@@ -488,7 +473,6 @@ public class ItemChargesTests
 
     [Theory]
     [InlineData(RulesFamilies.Srd51)]
-    [InlineData(RulesFamilies.Srd521)]
     public void R175_a_new_id_less_copy_at_another_position_gets_a_fresh_id_and_full_charges(string family)
     {
         var s = Start(family);
@@ -506,7 +490,6 @@ public class ItemChargesTests
 
     [Theory]
     [InlineData(RulesFamilies.Srd51)]
-    [InlineData(RulesFamilies.Srd521)]
     public void Refusal_messages_for_charges_never_quote_the_item_name_or_the_dice(string family)
     {
         var s = Start(family);
@@ -534,7 +517,6 @@ public class ItemChargesTests
 
     [Theory]
     [InlineData(RulesFamilies.Srd51)]
-    [InlineData(RulesFamilies.Srd521)]
     public void The_commands_reach_the_service_through_the_dispatcher_with_codes_only(string family)
     {
         var s = Start(family);
@@ -596,7 +578,6 @@ public class ItemChargesTests
 
     [Theory]
     [InlineData(RulesFamilies.Srd51)]
-    [InlineData(RulesFamilies.Srd521)]
     public void A_null_regain_brings_everything_back_and_a_null_recovery_nothing_and_an_unticked_change_is_skipped(string family)
     {
         var all = Start(family, regain: null);
@@ -623,7 +604,6 @@ public class ItemChargesTests
 
     [Theory]
     [InlineData(RulesFamilies.Srd51)]
-    [InlineData(RulesFamilies.Srd521)]
     public void A_short_rest_returns_charges_only_for_an_item_that_recovers_on_a_short_rest(string family)
     {
         var s = Start(family, regain: null, period: RestPeriod.ShortRest);
@@ -640,7 +620,6 @@ public class ItemChargesTests
 
     [Theory]
     [InlineData(RulesFamilies.Srd51)]
-    [InlineData(RulesFamilies.Srd521)]
     public void A_charge_roll_the_dice_cannot_show_or_for_no_such_entry_is_refused_with_a_code(string family)
     {
         var s = Start(family);
@@ -659,7 +638,6 @@ public class ItemChargesTests
 
     [Theory]
     [InlineData(RulesFamilies.Srd51)]
-    [InlineData(RulesFamilies.Srd521)]
     public void More_charge_rolls_than_the_character_has_items_with_uses_are_refused_with_one_code_and_nothing_is_written(string family)
     {
         var s = Start(family);
@@ -685,7 +663,6 @@ public class ItemChargesTests
 
     [Theory]
     [InlineData(RulesFamilies.Srd51)]
-    [InlineData(RulesFamilies.Srd521)]
     public void The_regain_dice_are_rolled_through_the_dice_roller_and_change_nothing(string family)
     {
         var s = Start(family);
@@ -714,7 +691,6 @@ public class ItemChargesTests
 
     [Theory]
     [InlineData(RulesFamilies.Srd51)]
-    [InlineData(RulesFamilies.Srd521)]
     public void A_v9_item_keeps_its_old_behaviour_through_the_service(string family)
     {
         var s = Start(family);
@@ -742,7 +718,6 @@ public class ItemChargesTests
 
     [Theory]
     [InlineData(RulesFamilies.Srd51)]
-    [InlineData(RulesFamilies.Srd521)]
     public void R184_a_stored_character_with_two_ided_copies_of_an_item_whose_revision_is_absent_can_still_play_and_save(string family)
     {
         var s = Start(family);
@@ -763,7 +738,6 @@ public class ItemChargesTests
 
     [Theory]
     [InlineData(RulesFamilies.Srd51)]
-    [InlineData(RulesFamilies.Srd521)]
     public void R184_a_new_second_copy_of_a_plain_item_is_still_refused_next_to_a_stored_one(string family)
     {
         var s = Start(family);
@@ -777,7 +751,6 @@ public class ItemChargesTests
 
     [Theory]
     [InlineData(RulesFamilies.Srd51)]
-    [InlineData(RulesFamilies.Srd521)]
     public void R184_an_update_to_a_revision_that_drops_the_item_effect_does_not_wedge_later_writes(string family)
     {
         var s = Start(family);

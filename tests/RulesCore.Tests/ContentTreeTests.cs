@@ -67,6 +67,21 @@ public class ContentTreeTests
     }
 
     [Fact]
+    public void A_toggle_that_spends_another_contents_pool_is_loose_here_and_names_where_it_spends()
+    {
+        var pool = Revision(2, ContentKind.Feature, "Tree Pool Owner", new ResourceEffect { Id = "pool", ResourceId = "pool", Label = "Pool", Maximum = "2" });
+        var cls = Revision(1, ContentKind.Class, "Tree Class",
+            new ResourceEffect { Id = "pool-local", ResourceId = "pool", Label = "Local pool", Maximum = "1" },
+            new ToggleEffect { Id = "shape", ToggleId = "shape", Label = "Shape", Cost = "1", ResourceId = "pool", ResourceContent = pool.ContentId });
+
+        var all = All(ContentTree.Build(ContentGraph.Build([pool, cls]), cls.ContentId).Root).ToList();
+
+        var shape = Assert.Single(all, n => n.EffectId == "shape");
+        Assert.Contains("of Tree Pool Owner", shape.Label, StringComparison.Ordinal);
+        Assert.DoesNotContain(all, n => n.Kind == TreeNodeKind.Resource && n.Children.Any(c => c.EffectId == "shape"));
+    }
+
+    [Fact]
     public void Grants_that_name_nothing_or_never_apply_loose_toggles_and_repeated_resources_are_shown_as_the_calculator_reads_them()
     {
         var gift = Revision(2, ContentKind.Feature, "Tree Gift");

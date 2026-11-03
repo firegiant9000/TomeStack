@@ -278,6 +278,66 @@ public class ExportAdapterTests
         Assert.NotEmpty(SheetJson.Validate(JsonNode.Parse("""{"format":"other"}""")!));
     }
 
+    // D43 S4 (Task 4.6): attacks a feature gives are not exported in v1; only equipped weapons are.
+    private static readonly Guid KindledContent = Guid.Parse("6f0dc000-0000-4000-8000-000000000042");
+    private static readonly Guid BlazingContent = Guid.Parse("6f0dc000-0000-4000-8000-000000000043");
+
+    [Fact]
+    public void Exports_skip_feature_attacks()
+    {
+        using var temp = new TempApp();
+        temp.AddPack("fixture-pack-feature-attacks.json");
+        var id = temp.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/pm-adept-l5.json")).Character.Id;
+        temp.App.Play(new(id, PlayActionKind.ToggleOn, Confirm: true, ContentId: KindledContent, ToggleId: "kindled"));
+
+        // The sheet does list both feature attacks, so the exports leave them out on purpose.
+        var attacks = temp.App.GetCharacter(id).Sheet.Attacks!;
+        Assert.Contains(attacks, a => a.Source == AttackSource.Feature && a.Name == "Open hand strike");
+        Assert.Contains(attacks, a => a.Source == AttackSource.Feature && a.Name == "Focus bolt");
+
+        foreach (var target in new[] { FoundryDnd5e.Target, SheetJson.Target })
+        {
+            foreach (var purpose in new[] { SheetPurpose.Share, SheetPurpose.Personal })
+            {
+                var text = Export(temp, id, target, purpose);
+                Assert.DoesNotContain("Open hand strike", text, StringComparison.Ordinal);
+                Assert.DoesNotContain("Focus bolt", text, StringComparison.Ordinal);
+            }
+        }
+        var actor = JsonNode.Parse(Export(temp, id, FoundryDnd5e.Target))!;
+        Assert.DoesNotContain(actor["items"]!.AsArray(), i => i!["type"]!.GetValue<string>() == "weapon");
+        Assert.Empty(temp.App.SheetExportFor(id, SheetPurpose.Share).Attacks);
+    }
+
+    [Fact]
+    public void A_weapon_with_a_dice_rider_exports_every_dice_term_and_the_preview_names_what_the_weapon_data_cannot_hold()
+    {
+        using var temp = new TempApp();
+        temp.AddPack("fixture-pack-m2-combat.json");
+        // Blazing mode's rider for every attack also adds a die, so the weapon's damage has two dice terms.
+        temp.AddPack("fixture-pack-feature-attacks.json", r => r.ContentId == BlazingContent
+            ? r with { Effects = [.. r.Effects.Select(e => e is AttackRiderEffect { Id: "blazing-bonus" } rider ? rider with { Dice = "1d6" } : e)] }
+            : r);
+        var longblade = Ref("5f6dc000-0000-4000-8000-000000000001", "5f6de000-0000-4000-8000-000000000001");
+        var adept = TempApp.LoadFixture<Character>("characters/pm-adept-l5.json");
+        var id = temp.App.SaveCharacter(adept with { Equipment = [new(longblade, Equipped: true)] }).Character.Id;
+        temp.App.Play(new(id, PlayActionKind.ToggleOn, Confirm: true, ContentId: BlazingContent, ToggleId: "blazing"));
+
+        var weapon = temp.App.GetCharacter(id).Sheet.Attacks!.Single(a => a.Source == AttackSource.Weapon);
+        Assert.Equal("1d8+1d6+4", weapon.Damage); // Str +2 and the flat +2 are one 4
+
+        var actor = JsonNode.Parse(Export(temp, id, FoundryDnd5e.Target))!;
+        var item = actor["items"]!.AsArray().Single(i => i!["type"]!.GetValue<string>() == "weapon")!;
+        Assert.Equal("Fixture Longblade", item["name"]!.GetValue<string>());
+        Assert.Contains("1d8+1d6+4", item["system"]!["description"]!["value"]!.GetValue<string>(), StringComparison.Ordinal); // every term, in the text
+        Assert.Equal((1, 8), (item["system"]!["damage"]!["base"]!["number"]!.GetValue<int>(), item["system"]!["damage"]!["base"]!["denomination"]!.GetValue<int>()));
+        Assert.Contains("1d8+1d6+4", Export(temp, id, SheetJson.Target), StringComparison.Ordinal);
+
+        // dnd5e's weapon holds one base damage part, so the preview says the later dice are in the description only.
+        var preview = temp.App.PreviewVttExport(id, FoundryDnd5e.Target, SheetPurpose.Share);
+        Assert.Contains(preview.Differences, d => d.StartsWith("Fixture Longblade: damage 1d8+1d6+4 has more than one dice term", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void The_dispatcher_previews_saves_and_downloads_an_export_once()
     {

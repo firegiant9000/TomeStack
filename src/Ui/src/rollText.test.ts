@@ -38,6 +38,22 @@ it('has no trailing separator without modifiers or a constant', () => {
   expect(plain).not.toContain('·');
 });
 
+it('a roll record names its automatic mode', () => {
+  const sources = ['Fixture Swift Instinct', 'Fixture Light Step'];
+  expect(rollHeadline(record({ automaticMode: 'advantage', modeSources: sources }))).toBe(
+    'Strength check: 17 (1d20+3, advantage from Fixture Swift Instinct, Fixture Light Step)',
+  );
+  expect(rollHeadline(record({ mode: 'normal', automaticMode: 'normal', modeSources: sources }))).toBe(
+    'Strength check: 17 (1d20+3, automatic mode normal: advantage and disadvantage cancel (Fixture Swift Instinct, Fixture Light Step))',
+  );
+  // the player asked for disadvantage, the sheet gave advantage: the roll is normal and both are named
+  expect(rollHeadline(record({ mode: 'normal', automaticMode: 'advantage', modeSources: ['Fixture Swift Instinct'] }))).toBe(
+    'Strength check: 17 (1d20+3, automatic advantage from Fixture Swift Instinct)',
+  );
+  // an old payload has neither field
+  expect(rollHeadline(record())).toBe('Strength check: 17 (1d20+3, advantage)');
+});
+
 it('names disadvantage in the headline', () => {
   expect(rollHeadline(record({ mode: 'disadvantage' }))).toBe('Strength check: 17 (1d20+3, disadvantage)');
 });

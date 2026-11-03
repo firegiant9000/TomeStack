@@ -52,6 +52,70 @@ public class RestPlannerTests
         return RestPlanner.LongRest(character, CharacterCalculator.Calculate(character, catalog));
     }
 
+    /// <summary>Capability evidence (ADR-020): a recovery is delivered automatically; the rest plan restores the resource.</summary>
+    [Fact]
+    public void The_capability_registry_ceiling_for_recovery_is_automatic()
+    {
+        var holder = MechanicsInventoryTests.Holder("Test Recovery Holder", 10,
+            new ResourceEffect { Id = "pool", ResourceId = "pool", Label = "Pool", Maximum = "3" },
+            new RecoveryEffect { Id = "back", ResourceId = "pool", On = RestPeriod.LongRest, Amount = "all", Timing = EffectTiming.OnLongRest });
+
+        var (report, sheet) = MechanicsInventoryTests.Pinned(holder);
+
+        CapabilityRegistryTests.AssertAutomaticallyDelivered(report, holder, RecoveryEffect.TypeName, "back");
+        var pool = Assert.Single(sheet.Resources!, r => r.ResourceId == "pool");
+        Assert.Contains(pool.Recoveries, r => r.On == RestPeriod.LongRest);
+    }
+
+    [Fact]
+    public void A_long_rest_that_ends_a_form_takes_the_overlay_that_needs_it_even_when_the_overlay_is_unticked()
+    {
+        var tide = new ActiveToggle(Fixtures.TideForm.ContentId, "tide");
+        var bound = new ActiveToggle(Fixtures.BoundOverlay.ContentId, "bound"); // allowed only with Tide
+        var character = ToggleGroupTests.Forms(tide, bound);
+        var sheet = ToggleGroupTests.Sheet(character);
+        Assert.True(sheet.Toggles!.Single(t => t.ToggleId == "bound").On);
+        var plan = RestPlanner.LongRest(character, sheet);
+        var boundChange = Assert.Single(plan.Changes, c => c.Kind == RestChangeKind.Toggle && c.ResourceId == "bound");
+
+        // The overlay's own switch-off is unticked and the form's is ticked: the overlay still goes with the form.
+        var play = RestPlanner.Apply(character.Play, plan, new HashSet<string> { boundChange.Id }, sheetToggles: sheet.Toggles);
+        Assert.Empty(play.Toggles);
+
+        // Without the sheet's toggles the form alone goes, as before (callers that do not know the groups).
+        Assert.Equal(["bound"], RestPlanner.Apply(character.Play, plan, new HashSet<string> { boundChange.Id }).Toggles.Select(t => t.ToggleId));
+
+        // Switching the form on again does not bring the overlay back.
+        var again = ToggleGroupTests.Sheet(character with { Play = play with { Toggles = [tide] } });
+        Assert.DoesNotContain(again.Toggles!, t => t.ToggleId == "bound" && t.On);
+
+        // Keeping the form (its change unticked) keeps it on; the overlay's own change still applies.
+        var tideChange = Assert.Single(plan.Changes, c => c.Kind == RestChangeKind.Toggle && c.ResourceId == "tide");
+        Assert.Equal(["tide"], RestPlanner.Apply(character.Play, plan, new HashSet<string> { tideChange.Id }, sheetToggles: sheet.Toggles).Toggles.Select(t => t.ToggleId));
+    }
+
+    [Fact]
+    public void Long_rest_proposes_ending_the_encounter_once()
+    {
+        var running = Tired() with { Encounter = new(3), Toggles = [new(Guid.Parse("5f3dc000-0000-4000-8000-0000000000aa"), "stance", RoundsLeft: 2)] };
+
+        var plan = Plan(RulesFamilies.Srd521, running);
+        var change = Assert.Single(plan.Changes, c => c.Kind == RestChangeKind.Encounter);
+        Assert.Equal(("encounter", "End the encounter"), (change.Id, change.Label));
+        Assert.Empty(plan.Changes.Where(c => c.Kind == RestChangeKind.Encounter).Skip(1));
+
+        var applied = RestPlanner.Apply(running, plan, new HashSet<string>());
+        Assert.Null(applied.Encounter);
+        Assert.All(applied.Toggles, t => Assert.Null(t.RoundsLeft));
+
+        var skipped = RestPlanner.Apply(running, plan, new HashSet<string> { "encounter" });
+        Assert.Equal(3, skipped.Encounter!.Round);
+        Assert.Equal(2, skipped.Toggles.Single().RoundsLeft);
+
+        Assert.DoesNotContain(Plan(RulesFamilies.Srd521, Tired()).Changes, c => c.Kind == RestChangeKind.Encounter);
+        Assert.DoesNotContain(Plan(RulesFamilies.Srd521, applied).Changes, c => c.Kind == RestChangeKind.Encounter);
+    }
+
     [Fact]
     public void A_long_rest_proposes_no_temporary_hit_points_and_long_rest_recoveries()
     {

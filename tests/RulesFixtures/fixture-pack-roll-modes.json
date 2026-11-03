@@ -1,0 +1,95 @@
+{
+  "packId": "tomestack-roll-modes-fixtures",
+  "formatVersion": 1,
+  "notice": "Original TomeStack test fixtures (play mechanics, content v11: roll modes, a fly speed and a damage defence that follows a toggle). Invented; no SRD or third-party rules text.",
+  "sources": [
+    {
+      "id": "6f0d5000-0000-4000-8000-000000000060",
+      "title": "TomeStack Fixtures: Roll Modes",
+      "publisher": "TomeStack project",
+      "rulesFamilies": ["srd-5.2.1"],
+      "editionVersion": "fixture-1",
+      "license": "Original test fixture",
+      "redistributable": true,
+      "attribution": "Written for TomeStack tests."
+    }
+  ],
+  "revisions": [
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000000060",
+      "revisionId": "6f0de000-0000-4000-8000-000000000060",
+      "schemaVersion": 11,
+      "kind": "feat",
+      "name": "Fixture Swift Instinct",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000000060", "page": { "start": 1 } },
+      "status": "published",
+      "summary": "A test feat: a Dexterity bonus, advantage on Dexterity saves, and advantage on Constitution saves against two conditions (assisted).",
+      "effects": [
+        { "type": "modifier", "id": "swift-dex", "operation": "bonus", "target": "ability.dex.score", "value": "1" },
+        { "type": "rollMode", "id": "swift-dex-save", "target": "save.dex", "mode": "advantage" },
+        { "type": "rollMode", "id": "swift-con-save", "target": "save.con", "mode": "advantage", "against": ["paralyzed", "stunned"] }
+      ]
+    },
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000000061",
+      "revisionId": "6f0de000-0000-4000-8000-000000000061",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Fixture Heavy Stance",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000000060", "page": { "start": 2 } },
+      "status": "published",
+      "summary": "A test stance: disadvantage on Stealth and advantage on Strength checks while it lasts.",
+      "effects": [
+        { "type": "toggle", "id": "heavy", "toggleId": "heavy", "label": "Heavy stance" },
+        { "type": "rollMode", "id": "heavy-stealth", "target": "skill.stealth", "mode": "disadvantage", "toggle": "heavy" },
+        { "type": "rollMode", "id": "heavy-str-check", "target": "ability.str.check", "mode": "advantage", "toggle": "heavy" }
+      ]
+    },
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000000062",
+      "revisionId": "6f0de000-0000-4000-8000-000000000062",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Fixture Sky Form",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000000060", "page": { "start": 3 } },
+      "status": "published",
+      "summary": "A test form: a fly speed and resistance to fire damage while it lasts.",
+      "effects": [
+        { "type": "toggle", "id": "sky", "toggleId": "sky", "label": "Sky form" },
+        { "type": "modifier", "id": "sky-fly", "timing": "whileActive", "toggle": "sky", "operation": "set", "target": "speed.fly", "value": "30" },
+        { "type": "grant", "id": "sky-ward", "grant": "damageResistance", "damageType": "Fire", "whileToggle": { "toggleId": "sky" } }
+      ]
+    },
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000000063",
+      "revisionId": "6f0de000-0000-4000-8000-000000000063",
+      "schemaVersion": 11,
+      "kind": "feat",
+      "name": "Fixture Light Step",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000000060", "page": { "start": 4 } },
+      "status": "published",
+      "summary": "A test feat: a second source of advantage on Dexterity saves.",
+      "effects": [
+        { "type": "rollMode", "id": "light-dex-save", "target": "save.dex", "mode": "advantage" }
+      ]
+    },
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000000064",
+      "revisionId": "6f0de000-0000-4000-8000-000000000064",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Fixture Weighted Gear",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000000060", "page": { "start": 5 } },
+      "status": "published",
+      "summary": "A test feature, not on the test character: disadvantage on Dexterity saves.",
+      "effects": [
+        { "type": "rollMode", "id": "weighted-dex-save", "target": "save.dex", "mode": "disadvantage" }
+      ]
+    }
+  ]
+}

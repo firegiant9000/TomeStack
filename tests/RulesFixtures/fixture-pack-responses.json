@@ -1,0 +1,162 @@
+{
+  "packId": "tomestack-responses-fixtures",
+  "formatVersion": 1,
+  "notice": "Original TomeStack test fixtures (play mechanics, content v11: damage-time responses). Invented; no SRD or third-party rules text.",
+  "sources": [
+    {
+      "id": "6f0d5000-0000-4000-8000-000000000070",
+      "title": "TomeStack Fixtures: Responses",
+      "publisher": "TomeStack project",
+      "rulesFamilies": ["srd-5.2.1"],
+      "editionVersion": "fixture-1",
+      "license": "Original test fixture",
+      "redistributable": true,
+      "attribution": "Written for TomeStack tests."
+    }
+  ],
+  "revisions": [
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000000070",
+      "revisionId": "6f0de000-0000-4000-8000-000000000070",
+      "schemaVersion": 11,
+      "kind": "class",
+      "name": "Fixture Bulwark",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000000070", "page": { "start": 1 } },
+      "status": "published",
+      "summary": "A test class with a d10 hit die, a grit pool that comes back on a short rest, and six granted features at level 1.",
+      "effects": [
+        { "type": "hitDie", "id": "bulwark-hit-die", "die": 10 },
+        { "type": "resource", "id": "grit", "resourceId": "grit", "label": "Grit", "maximum": "PB + 2" },
+        { "type": "recovery", "id": "grit-short", "timing": "onShortRest", "resourceId": "grit", "on": "shortRest", "amount": "all" },
+        { "type": "grant", "id": "grant-brace", "grant": "content", "level": 1, "content": { "contentId": "6f0dc000-0000-4000-8000-000000000071", "revisionId": "6f0de000-0000-4000-8000-000000000071" } },
+        { "type": "grant", "id": "grant-stand", "grant": "content", "level": 1, "content": { "contentId": "6f0dc000-0000-4000-8000-000000000072", "revisionId": "6f0de000-0000-4000-8000-000000000072" } },
+        { "type": "grant", "id": "grant-endure", "grant": "content", "level": 1, "content": { "contentId": "6f0dc000-0000-4000-8000-000000000073", "revisionId": "6f0de000-0000-4000-8000-000000000073" } },
+        { "type": "grant", "id": "grant-surge", "grant": "content", "level": 1, "content": { "contentId": "6f0dc000-0000-4000-8000-000000000074", "revisionId": "6f0de000-0000-4000-8000-000000000074" } },
+        { "type": "grant", "id": "grant-rally", "grant": "content", "level": 1, "content": { "contentId": "6f0dc000-0000-4000-8000-000000000075", "revisionId": "6f0de000-0000-4000-8000-000000000075" } },
+        { "type": "grant", "id": "grant-rebound", "grant": "content", "level": 1, "content": { "contentId": "6f0dc000-0000-4000-8000-000000000076", "revisionId": "6f0de000-0000-4000-8000-000000000076" } }
+      ]
+    },
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000000071",
+      "revisionId": "6f0de000-0000-4000-8000-000000000071",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Fixture Brace Response",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000000070", "page": { "start": 2 } },
+      "status": "published",
+      "summary": "A test response: spend 1 grit to take less from a hit (3 plus the Constitution modifier).",
+      "effects": [
+        { "type": "response", "id": "brace", "responseId": "brace", "label": "Brace", "phase": "damageReduction", "amount": "3 + CON.MOD", "resourceId": "grit", "resourceContent": "6f0dc000-0000-4000-8000-000000000070", "cost": "1" }
+      ]
+    },
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000000072",
+      "revisionId": "6f0de000-0000-4000-8000-000000000072",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Fixture Last Stand",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000000070", "page": { "start": 3 } },
+      "status": "published",
+      "summary": "A test response: once per long rest, a hit that would drop you to 0 leaves you at 1.",
+      "effects": [
+        { "type": "resource", "id": "stand-pool", "resourceId": "stand", "label": "Last stand", "maximum": "1" },
+        { "type": "recovery", "id": "stand-long", "timing": "onLongRest", "resourceId": "stand", "on": "longRest", "amount": "all" },
+        { "type": "response", "id": "stand", "responseId": "stand", "label": "Last stand", "phase": "hitPointOutcome", "amount": "1", "resourceId": "stand", "cost": "1" }
+      ]
+    },
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000000073",
+      "revisionId": "6f0de000-0000-4000-8000-000000000073",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Fixture Endure",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000000070", "page": { "start": 4 } },
+      "status": "published",
+      "summary": "A test response, usable only while the surge form is on: once per long rest, a hit that would drop you to 0 leaves you at 1.",
+      "effects": [
+        { "type": "resource", "id": "endure-pool", "resourceId": "endure", "label": "Endure", "maximum": "1" },
+        { "type": "recovery", "id": "endure-long", "timing": "onLongRest", "resourceId": "endure", "on": "longRest", "amount": "all" },
+        { "type": "response", "id": "endure", "responseId": "endure", "label": "Endure", "phase": "hitPointOutcome", "amount": "1", "resourceId": "endure", "cost": "1", "toggle": { "contentId": "6f0dc000-0000-4000-8000-000000000074", "toggleId": "surge" } }
+      ]
+    },
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000000074",
+      "revisionId": "6f0de000-0000-4000-8000-000000000074",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Fixture Surge Form",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000000070", "page": { "start": 5 } },
+      "status": "published",
+      "summary": "A test form that costs 1 grit and raises Constitution by 2 (so the hit point maximum) while it lasts.",
+      "effects": [
+        { "type": "toggleGroup", "id": "forms-group", "groupId": "forms", "label": "Forms" },
+        { "type": "toggle", "id": "surge", "toggleId": "surge", "label": "Surge form", "group": "forms", "cost": "1", "resourceId": "grit", "resourceContent": "6f0dc000-0000-4000-8000-000000000070" },
+        { "type": "modifier", "id": "surge-con", "timing": "whileActive", "toggle": "surge", "operation": "bonus", "target": "ability.con.score", "value": "2" }
+      ]
+    },
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000000075",
+      "revisionId": "6f0de000-0000-4000-8000-000000000075",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Fixture Rally",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000000070", "page": { "start": 6 } },
+      "status": "published",
+      "summary": "A test response: once per long rest, a hit that leaves you at a quarter of your maximum or less turns the surge form on and gives back 1 grit.",
+      "effects": [
+        { "type": "resource", "id": "rally-pool", "resourceId": "rally", "label": "Rally", "maximum": "1" },
+        { "type": "recovery", "id": "rally-long", "timing": "onLongRest", "resourceId": "rally", "on": "longRest", "amount": "all" },
+        {
+          "type": "response", "id": "rally", "responseId": "rally", "label": "Rally", "phase": "threshold",
+          "when": { "atOrBelow": "floor(HP.MAX / 4)" },
+          "resourceId": "rally", "cost": "1",
+          "outcomes": [
+            { "kind": "toggleOn", "toggle": { "contentId": "6f0dc000-0000-4000-8000-000000000074", "toggleId": "surge" } },
+            { "kind": "regain", "resourceId": "grit", "resourceContent": "6f0dc000-0000-4000-8000-000000000070", "amount": "1" }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000000076",
+      "revisionId": "6f0de000-0000-4000-8000-000000000076",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Fixture Rebound",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000000070", "page": { "start": 7 } },
+      "status": "published",
+      "summary": "A test response: after a hit you survive, offer a counter roll of 1d8.",
+      "effects": [
+        { "type": "roll", "id": "counter", "rollId": "counter", "label": "Counter", "dice": "1d8" },
+        {
+          "type": "response", "id": "rebound", "responseId": "rebound", "label": "Rebound", "phase": "threshold",
+          "when": { "survived": true },
+          "outcomes": [
+            { "kind": "offerRoll", "rollId": "counter" }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000000077",
+      "revisionId": "6f0de000-0000-4000-8000-000000000077",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Fixture Guard Form",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000000070", "page": { "start": 8 } },
+      "status": "published",
+      "summary": "A test form in the same group as the surge form, not granted by the class; tests pin it to check the exclusive switch.",
+      "effects": [
+        { "type": "toggle", "id": "guard", "toggleId": "guard", "label": "Guard form", "group": "forms", "groupContent": "6f0dc000-0000-4000-8000-000000000074" }
+      ]
+    }
+  ]
+}

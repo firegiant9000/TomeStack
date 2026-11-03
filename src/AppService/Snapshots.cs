@@ -148,16 +148,16 @@ public sealed partial class TomeStackApp
     }
 
     /// <summary>
-    /// Whether the v9 fields of the equipment (attuned, charges spent) differ. Quantity and equipped are older than v9 and are not
+    /// Whether the v9 and v11 fields of the equipment (attuned, charges spent, mods) differ. Quantity and equipped are older than v9 and are not
     /// part of this flag (R138). Entries are matched by entry id (two copies of one item are two entries, R159), and an entry with no
     /// id by its position among the id-less entries of that item. An entry on one side only counts as unattuned with no charges
     /// spent there.
     /// </summary>
     private static bool EquipmentV9Differs(IReadOnlyList<EquipmentEntry>? now, IReadOnlyList<EquipmentEntry>? then)
     {
-        static Dictionary<(ContentReference Item, string Key), (bool? Attuned, int? Charges)> Of(IReadOnlyList<EquipmentEntry>? list)
+        static Dictionary<(ContentReference Item, string Key), (bool? Attuned, int? Charges, string? Mods)> Of(IReadOnlyList<EquipmentEntry>? list)
         {
-            var found = new Dictionary<(ContentReference, string), (bool?, int?)>();
+            var found = new Dictionary<(ContentReference, string), (bool?, int?, string?)>();
             var idless = new Dictionary<ContentReference, int>();
             foreach (var entry in list ?? [])
             {
@@ -170,7 +170,7 @@ public sealed partial class TomeStackApp
                     idless[entry.Item] = position + 1;
                     key = $"#{position}";
                 }
-                found[(entry.Item, key)] = (entry.Attuned, entry.ChargesSpent);
+                found[(entry.Item, key)] = (entry.Attuned, entry.ChargesSpent, ModsKey(entry));
             }
             return found;
         }
@@ -178,6 +178,10 @@ public sealed partial class TomeStackApp
         var b = Of(then);
         return a.Keys.Union(b.Keys).Any(k => a.GetValueOrDefault(k) != b.GetValueOrDefault(k));
     }
+
+    /// <summary>A stable string of an entry's mods (ordinal-sorted <c>contentId:revisionId</c>), or null when it has none, so a missing entry equals a plain one.</summary>
+    private static string? ModsKey(EquipmentEntry entry) =>
+        entry.Mods is { Count: > 0 } mods ? string.Join(",", mods.Select(m => $"{m.ContentId:D}:{m.RevisionId:D}").Order(StringComparer.Ordinal)) : null;
 
     /// <summary>The names of the detail fields that differ between two details (a field name and nothing of the text), or null when none do.</summary>
     private static IReadOnlyList<string>? DifferingDetails(CharacterDetails? now, CharacterDetails? then)

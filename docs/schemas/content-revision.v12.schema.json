@@ -1,0 +1,1858 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tomestack.local/schemas/content-revision.v12.schema.json",
+  "title": "TomeStack content revision (schemaVersion 12)",
+  "description": "One immutable revision of a content entity (ADR-002) with typed declarative effects (ADR-003). v7 (M3 C3) adds spellcasting.multiclassCaster (full, half or third: how the caster's levels count toward the Multiclass Spellcaster table); v2 to v6 revisions keep their version. v6 (M3 B2) adds the toggle effect, modifier.toggle (whileActive modifiers that apply while a toggle is on), and roll resourceContent (a shared resource), cost and variableCost; v2 to v5 revisions keep their version. v5 (M2, D04) adds the spellcasting, spell and weapon effects, the spell fields (spellAttack, spellSaveDc, spellSlots.1-9, pactSlots), weapon proficiency grants (weapon.*), onlyAs on grants and choices, multiclass and group on restrictions, and activation on rolls; v2 to v4 revisions keep their version. v4 (M2 items 4 and 5) adds the armor effect and extendsChoice: the revision is an extra option of another content's choice. v3 added level-gated grants and choices, the hitDie effect, and the armorClass and hitPoints fields. v2 and v3 revisions keep their version (not upcast). Unknown properties round-trip. An effect whose type is not listed here is kept and is reference-only. v8 (M2.2, the Fighter): the attacks and criticalRange fields, armor training grants (armor.light, armor.medium, armor.heavy, armor.shield), armor strength and stealthDisadvantage, modifier whileArmored and roll bonus. v9 (M5, ADR-010): the scale effect (a named 20-row column of a class or subclass), the formula identifier SCALE.<scaleId> (read only in a v9 revision), and spellcasting.multiclassCasterTable (20 caster-level contributions, never with multiclassCaster or Pact Magic). v9 also allows a choice with no declared options (it offers only published content that extends it, such as a new class's subclass choice; v8 validation refused it). v10 (Wave 3, D42): content may target speed and passive.perception, passive.insight and passive.investigation (modifiers and restrictions); toggle.autoWhen (bloodied) and toggle.activation; resource.activation; the grant kinds damageResistance, damageImmunity and damageVulnerability with grant.damageType (a damage type in any case, stored as written; no target or content on these kinds, and damageType on no other kind); and the item effect (requiresAttunement and charges, on item content, at most one). Each is read only in a v10 revision: in an older revision a toggle, resource or grant key stays an unknown property and does nothing, and an item effect or a damage-defence grant stays an unknown effect, all kept byte for byte. v11 (play mechanics, D43): the toggleGroup effect (a form group a feature declares) and the toggle fields group, groupContent, layer (primary or overlay), allowedWith, allowedInBase, cost (a formula), resourceContent and level. Each is read only in a v11 revision: in an older revision a toggle key stays an unknown property and a toggleGroup stays an unknown effect, all kept byte for byte. v12 (MECH-X item 0): weapon.bonus (a whole number 0 to 10 added to the weapon's to-hit and damage), read only in a v12 revision: in an older revision the key stays an unknown property and does nothing, kept byte for byte.",
+  "type": "object",
+  "required": [
+    "contentId",
+    "revisionId",
+    "schemaVersion",
+    "kind",
+    "name",
+    "rulesFamilies",
+    "provenance",
+    "status"
+  ],
+  "properties": {
+    "contentId": {
+      "$ref": "#/$defs/uuid"
+    },
+    "revisionId": {
+      "$ref": "#/$defs/uuid"
+    },
+    "schemaVersion": {
+      "const": 12
+    },
+    "extendsChoice": {
+      "description": "This revision is also an option of the choice choiceId offered by any revision of contentId (for example a homebrew subclass for an SRD class).",
+      "type": "object",
+      "required": [
+        "contentId",
+        "choiceId"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "contentId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "choiceId": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "kind": {
+      "enum": [
+        "species",
+        "background",
+        "class",
+        "subclass",
+        "feature",
+        "feat",
+        "spell",
+        "item"
+      ]
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "rulesFamilies": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/rulesFamily"
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "required": [
+        "sourceId"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "sourceId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "page": {
+          "$ref": "#/$defs/pageRef"
+        }
+      }
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "published"
+      ]
+    },
+    "summary": {
+      "type": "string"
+    },
+    "effects": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/effect"
+      }
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "rulesFamily": {
+      "enum": [
+        "srd-5.1",
+        "srd-5.2.1"
+      ]
+    },
+    "level": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 20,
+      "description": "Applies from this class level (class content and content belonging to a class) or character level (anything else)."
+    },
+    "costPayment": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "resource",
+            "hitPoints",
+            "slot"
+          ]
+        },
+        "mayDropToZero": {
+          "type": "boolean",
+          "description": "Hit points only: the payment may leave 0 hit points."
+        },
+        "minSlotLevel": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9,
+          "description": "Slot only: the lowest slot level that can pay (default 1)."
+        }
+      },
+      "description": "Content v12 (MECH-X item 1): where a cost is paid from. resource (or absent) is the effect's pool, as before. hitPoints pays the effect's cost from current hit points and needs a cost, with no pool. slot spends one spell slot of minSlotLevel or higher and takes no cost or pool. The validator is authoritative (validate.payment-*)."
+    },
+    "pageRef": {
+      "type": "object",
+      "required": [
+        "start"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "start": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "end": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "contentReference": {
+      "type": "object",
+      "required": [
+        "contentId",
+        "revisionId"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "contentId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "revisionId": {
+          "$ref": "#/$defs/uuid"
+        }
+      }
+    },
+    "formula": {
+      "type": "string",
+      "maxLength": 200,
+      "description": "Bounded formula (ADR-003 grammar), e.g. \"2\", \"PB + CON.MOD\", \"floor(CLASS_LEVEL / 2)\"; since v9 also \"SCALE.ink\"."
+    },
+    "fieldId": {
+      "type": "string",
+      "pattern": "^(initiative|attacks|criticalRange|proficiencyBonus|armorClass|hitPoints|spellAttack|spellSaveDc|pactSlots|speed|speed\\.fly|passive\\.(perception|insight|investigation)|spellSlots\\.[1-9]|ability\\.(str|dex|con|int|wis|cha)\\.(score|mod)|save\\.(str|dex|con|int|wis|cha)|skill\\.[a-z][a-zA-Z]*|resource\\.[^\\s.]+)$",
+      "description": "Content v11 (D43): resource.<id> names a resource of the same revision; only a modifier uses it (the validator refuses it elsewhere). speed.fly is a fly speed in feet."
+    },
+    "grantFieldId": {
+      "type": "string",
+      "pattern": "^(initiative|attacks|criticalRange|proficiencyBonus|armorClass|hitPoints|spellAttack|spellSaveDc|pactSlots|spellSlots\\.[1-9]|ability\\.(str|dex|con|int|wis|cha)\\.(score|mod)|save\\.(str|dex|con|int|wis|cha)|skill\\.[a-z][a-zA-Z]*)$",
+      "description": "The fields a grant may name: the v9 list. speed and passive.* are modifier and restriction targets only; the validator refuses a grant on them."
+    },
+    "common": {
+      "type": "object",
+      "required": [
+        "type",
+        "id"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "automation": {
+          "enum": [
+            "automatic",
+            "assisted",
+            "reference"
+          ]
+        },
+        "timing": {
+          "enum": [
+            "always",
+            "whileActive",
+            "onRoll",
+            "onShortRest",
+            "onLongRest"
+          ]
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    },
+    "effect": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/common"
+        }
+      ],
+      "oneOf": [
+        {
+          "properties": {
+            "type": {
+              "const": "modifier"
+            },
+            "operation": {
+              "enum": [
+                "bonus",
+                "set",
+                "replace"
+              ]
+            },
+            "target": {
+              "$ref": "#/$defs/fieldId"
+            },
+            "value": {
+              "$ref": "#/$defs/formula"
+            },
+            "stacking": {
+              "enum": [
+                "stack",
+                "highestInGroup"
+              ]
+            },
+            "stackGroup": {
+              "type": "string",
+              "minLength": 1
+            },
+            "toggle": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Content v6: the toggle of this revision that switches this whileActive modifier on."
+            },
+            "toggleContent": {
+              "$ref": "#/$defs/uuid",
+              "description": "Content v11 (D43): the content entry that declares the toggle; absent means this revision."
+            },
+            "whileArmored": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "operation",
+            "target",
+            "value"
+          ]
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "grant"
+            },
+            "grant": {
+              "enum": [
+                "proficiency",
+                "expertise",
+                "content",
+                "damageResistance",
+                "damageImmunity",
+                "damageVulnerability"
+              ]
+            },
+            "damageType": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 20,
+              "description": "Content v10 (D42): with damageResistance, damageImmunity or damageVulnerability, one of acid, bludgeoning, cold, fire, force, lightning, necrotic, piercing, poison, psychic, radiant, slashing, thunder, in any case (stored as written). Refused on every other grant kind."
+            },
+            "target": {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/grantFieldId"
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^weapon\\.[a-z0-9][a-z0-9-]*$"
+                    }
+                  ]
+                },
+                {
+                  "type": "string",
+                  "pattern": "^armor\\.(light|medium|heavy|shield|none)$"
+                }
+              ]
+            },
+            "content": {
+              "$ref": "#/$defs/contentReference"
+            },
+            "level": {
+              "$ref": "#/$defs/level"
+            },
+            "onlyAs": {
+              "enum": [
+                "startingClass",
+                "multiclass"
+              ],
+              "description": "Content v5 (D04): only as the starting class, or only as a later class."
+            }
+          },
+          "required": [
+            "grant"
+          ],
+          "if": {
+            "properties": {
+              "grant": {
+                "enum": [
+                  "damageResistance",
+                  "damageImmunity",
+                  "damageVulnerability"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "damageType"
+            ],
+            "properties": {
+              "whileToggle": {
+                "type": "object",
+                "required": [
+                  "toggleId"
+                ],
+                "properties": {
+                  "contentId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "toggleId": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "description": "Content v11 (D43): the defence applies only while this toggle is on (it may be another content's). Damage defence kinds only."
+              }
+            },
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "target"
+                  ]
+                },
+                {
+                  "required": [
+                    "content"
+                  ]
+                }
+              ]
+            }
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "damageType"
+                  ]
+                },
+                {
+                  "required": [
+                    "whileToggle"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "resource"
+            },
+            "resourceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1
+            },
+            "maximum": {
+              "$ref": "#/$defs/formula"
+            },
+            "activation": {
+              "enum": [
+                "action",
+                "bonusAction",
+                "reaction",
+                "other"
+              ],
+              "description": "Content v10 (D42): the kind of action that spends this resource, for grouping on the sheet. Display only."
+            },
+            "counts": {
+              "enum": [
+                "up"
+              ],
+              "description": "Content v11 (D43): the pool counts up from zero to its maximum (built up) instead of down. Absent: counts down."
+            },
+            "resourceFull": {
+              "type": "object",
+              "required": [
+                "text"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "text": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "description": "Content v11 (D43): what the sheet says when a counting-up pool is full. Only with counts up."
+            },
+            "allowance": {
+              "type": "boolean",
+              "description": "Content v11 (D43): a per-turn allowance (for example one reaction) that an upkeep regain refreshes."
+            }
+          },
+          "required": [
+            "resourceId",
+            "label",
+            "maximum"
+          ]
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "choice"
+            },
+            "choiceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "count": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20
+            },
+            "options": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/contentReference"
+              }
+            },
+            "level": {
+              "$ref": "#/$defs/level"
+            },
+            "onlyAs": {
+              "enum": [
+                "startingClass",
+                "multiclass"
+              ],
+              "description": "Content v5 (D04): only as the starting class, or only as a later class."
+            },
+            "replaceable": {
+              "type": "object",
+              "properties": {
+                "when": {
+                  "enum": [
+                    "levelUp",
+                    "longRest"
+                  ],
+                  "description": "The window in which picks of this choice may be replaced."
+                },
+                "max": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 20,
+                  "description": "The most picks replaced at once (default 1); not more than the choice's count (validate.choice-replaceable)."
+                }
+              },
+              "required": [
+                "when"
+              ],
+              "description": "Content v12 (MECH-X item 2): when picks may be replaced. Advisory: the app only notes a replacement outside the window. Below v12 the key does nothing."
+            }
+          },
+          "required": [
+            "choiceId"
+          ]
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "restriction"
+            },
+            "field": {
+              "$ref": "#/$defs/fieldId"
+            },
+            "minimum": {
+              "type": "integer"
+            },
+            "multiclass": {
+              "type": "boolean",
+              "description": "Content v5 (D04): a multiclass prerequisite."
+            },
+            "group": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Content v5: restrictions with the same group are alternatives."
+            }
+          },
+          "required": [
+            "field",
+            "minimum"
+          ]
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "recovery"
+            },
+            "resourceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "on": {
+              "enum": [
+                "shortRest",
+                "longRest"
+              ]
+            },
+            "amount": {
+              "$ref": "#/$defs/formula"
+            }
+          },
+          "required": [
+            "resourceId",
+            "on",
+            "amount"
+          ]
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "roll"
+            },
+            "rollId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1
+            },
+            "dice": {
+              "type": "string",
+              "maxLength": 40,
+              "description": "Optional from v11 (D43): a roll with no dice is an action that only spends from its pool, and then needs a cost (validate.roll-dice-or-cost)."
+            },
+            "resourceId": {
+              "type": "string"
+            },
+            "activation": {
+              "enum": [
+                "action",
+                "bonusAction",
+                "reaction",
+                "other"
+              ]
+            },
+            "resourceContent": {
+              "$ref": "#/$defs/uuid",
+              "description": "Content v6: the content id that defines resourceId (a shared resource)."
+            },
+            "cost": {
+              "$ref": "#/$defs/formula",
+              "description": "Content v6: uses spent (default 1), or the most with variableCost. With perUnit, the base cost the extra dice count from."
+            },
+            "variableCost": {
+              "type": "boolean"
+            },
+            "bonus": {
+              "$ref": "#/$defs/formula"
+            },
+            "whileToggle": {
+              "type": "object",
+              "required": [
+                "toggleId"
+              ],
+              "properties": {
+                "contentId": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "toggleId": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "description": "Content v11 (D43): the roll is offered only while this toggle is on (it may be another content's)."
+            },
+            "save": {
+              "type": "object",
+              "required": [
+                "ability",
+                "dc"
+              ],
+              "properties": {
+                "ability": {
+                  "enum": [
+                    "str",
+                    "dex",
+                    "con",
+                    "int",
+                    "wis",
+                    "cha"
+                  ]
+                },
+                "dc": {
+                  "$ref": "#/$defs/formula"
+                }
+              },
+              "description": "Content v11 (D43): the saving throw the action asks of its targets, with its DC formula."
+            },
+            "area": {
+              "type": "object",
+              "required": [
+                "shape",
+                "size"
+              ],
+              "properties": {
+                "shape": {
+                  "enum": [
+                    "line",
+                    "cone",
+                    "sphere",
+                    "cube",
+                    "cylinder",
+                    "emanation"
+                  ]
+                },
+                "size": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 1000
+                },
+                "width": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 1000,
+                  "description": "A line only."
+                }
+              },
+              "description": "Content v11 (D43): the area the action covers, in feet."
+            },
+            "range": {
+              "type": "string",
+              "maxLength": 200,
+              "description": "Content v11 (D43): the range, as text."
+            },
+            "targets": {
+              "type": "string",
+              "maxLength": 200,
+              "description": "Content v11 (D43): who the action affects, as text."
+            },
+            "perUnit": {
+              "type": "object",
+              "required": [
+                "dice"
+              ],
+              "properties": {
+                "dice": {
+                  "type": "string",
+                  "pattern": "^0*([1-9][0-9]?|100)d0*(4|6|8|10|12)$"
+                },
+                "maxUnits": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                }
+              },
+              "description": "Content v11 (D43): extra dice for each unit spent beyond the base cost. Needs cost and resourceId; not with variableCost."
+            },
+            "alsoChange": {
+              "type": "array",
+              "maxItems": 4,
+              "items": {
+                "type": "object",
+                "required": [
+                  "resourceId",
+                  "change",
+                  "amount"
+                ],
+                "properties": {
+                  "resourceId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "resourceContent": {
+                    "$ref": "#/$defs/uuid",
+                    "description": "The content entry that defines the pool; absent means this revision."
+                  },
+                  "change": {
+                    "enum": [
+                      "spend",
+                      "regain"
+                    ]
+                  },
+                  "amount": {
+                    "$ref": "#/$defs/formula"
+                  }
+                }
+              },
+              "description": "Content v11 (D43): other pools the use also spends from or regains to, each by a formula. At most 4; none may be the roll's own pool. Needs the roll's own resourceId (Play uses the roll through it); not with variableCost."
+            },
+            "drawsDown": {
+              "type": "boolean",
+              "description": "Content v11 (D43): the cost and per-unit amount use up the built-up value of the counting-up resourceId pool instead of adding to it. True needs a counting-up pool and is not allowed with variableCost; false does nothing."
+            },
+            "payment": {
+              "$ref": "#/$defs/costPayment",
+              "description": "Content v12 (MECH-X item 1): pay the cost from hit points or a spell slot instead of a pool. Below v12 the key does nothing."
+            },
+            "castsSpell": {
+              "$ref": "#/$defs/uuid",
+              "description": "Content v12 (MECH-X item 1): the content id of a spell this roll casts without spending a slot; with no dice of its own the roll rolls the spell's dice. Must name spell content (validate.casts-spell), and not with a slot payment."
+            }
+          },
+          "required": [
+            "rollId",
+            "label"
+          ],
+          "dependentRequired": {
+            "alsoChange": [
+              "resourceId"
+            ]
+          }
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "hitDie"
+            },
+            "die": {
+              "enum": [
+                6,
+                8,
+                10,
+                12
+              ]
+            }
+          },
+          "required": [
+            "die"
+          ]
+        },
+        {
+          "description": "M2 item 4: body armor (light, medium, heavy) or a shield on an item. Content v4 only (ADR-003): in a v2 or v3 revision an armor effect is unknown and reference-only, kept byte for byte, so revisions stored by 0.2.0 keep their hash and meaning.",
+          "properties": {
+            "type": {
+              "const": "armor"
+            },
+            "category": {
+              "enum": [
+                "light",
+                "medium",
+                "heavy",
+                "shield"
+              ]
+            },
+            "armorClass": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 30
+            },
+            "dexterityCap": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10
+            },
+            "strength": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 30
+            },
+            "stealthDisadvantage": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "category",
+            "armorClass"
+          ]
+        },
+        {
+          "description": "Content v5: a class's (or subclass's) Spellcasting. Tables are indexed by the level in the class (row 0 = level 1). Spell attack = PB + the ability modifier; save DC = 8 + PB + the ability modifier.",
+          "properties": {
+            "type": {
+              "const": "spellcasting"
+            },
+            "ability": {
+              "enum": [
+                "str",
+                "dex",
+                "con",
+                "int",
+                "wis",
+                "cha"
+              ]
+            },
+            "preparation": {
+              "enum": [
+                "prepared",
+                "known"
+              ]
+            },
+            "spellList": {
+              "type": "string",
+              "minLength": 1
+            },
+            "slotKind": {
+              "enum": [
+                "spellSlots",
+                "pactMagic"
+              ]
+            },
+            "slots": {
+              "type": "array",
+              "minItems": 20,
+              "maxItems": 20,
+              "items": {
+                "type": "array",
+                "maxItems": 9,
+                "items": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 20
+                }
+              }
+            },
+            "cantrips": {
+              "type": "array",
+              "minItems": 20,
+              "maxItems": 20,
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              }
+            },
+            "spellsTable": {
+              "type": "array",
+              "minItems": 20,
+              "maxItems": 20,
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              }
+            },
+            "spellsFormula": {
+              "$ref": "#/$defs/formula"
+            },
+            "multiclassCaster": {
+              "enum": [
+                "full",
+                "half",
+                "third"
+              ],
+              "description": "Content v7 (M3 C3): how this caster's class levels count toward the Multiclass Spellcaster table (all, half or a third; the rounding is rules-family policy). Absent: not combined. Ordinary spell slots only."
+            },
+            "multiclassCasterTable": {
+              "type": "array",
+              "minItems": 20,
+              "maxItems": 20,
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 20
+              },
+              "description": "Content v9 (ADR-010): the caster levels this class adds to the Multiclass Spellcaster table at each class level (at most the class level, never decreasing). Exact numbers, no rules-family rounding. Not with multiclassCaster; ordinary spell slots only."
+            }
+          },
+          "required": [
+            "ability",
+            "spellList",
+            "slots"
+          ]
+        },
+        {
+          "description": "Content v5: the game data of a spell (on spell content). Never active content.",
+          "properties": {
+            "type": {
+              "const": "spell"
+            },
+            "level": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9
+            },
+            "school": {
+              "type": "string"
+            },
+            "castingTime": {
+              "type": "string"
+            },
+            "range": {
+              "type": "string"
+            },
+            "components": {
+              "type": "string"
+            },
+            "duration": {
+              "type": "string"
+            },
+            "concentration": {
+              "type": "boolean"
+            },
+            "ritual": {
+              "type": "boolean"
+            },
+            "lists": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "attack": {
+              "enum": [
+                "none",
+                "melee",
+                "ranged"
+              ]
+            },
+            "save": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "str",
+                    "dex",
+                    "con",
+                    "int",
+                    "wis",
+                    "cha"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "dice": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z][A-Za-z0-9]{0,31}$",
+                "not": {
+                  "const": "all"
+                }
+              },
+              "description": "Content v12 (MECH-X item 1): keys the Spells tab filters on, kept apart from school. all is reserved for attack riders."
+            }
+          },
+          "required": [
+            "level"
+          ]
+        },
+        {
+          "description": "Content v5: a weapon on an item; an equipped one gives an attack (SPEC C-02, C-04).",
+          "properties": {
+            "type": {
+              "const": "weapon"
+            },
+            "category": {
+              "enum": [
+                "simple",
+                "martial"
+              ]
+            },
+            "attack": {
+              "enum": [
+                "melee",
+                "ranged"
+              ]
+            },
+            "damage": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "damageType": {
+              "type": "string",
+              "minLength": 1
+            },
+            "properties": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "versatile": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "range": {
+              "type": "string"
+            },
+            "weaponKey": {
+              "type": "string",
+              "minLength": 1
+            },
+            "mastery": {
+              "type": "string"
+            },
+            "bonus": {
+              "description": "Content v12 (MECH-X item 0): the weapon's own bonus, added to its to-hit and to its damage (a flat bonus is not doubled on a critical hit). Read only in a v12 revision: in an older one the key stays an unknown property and does nothing. A present bonus, 0 included, needs v12. The type stays integer, but the service also reads a numeral string matching ^[+-]?\\d+$ and stores it as a number, like the other whole-number fields; such a string is not schema-valid.",
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10
+            }
+          },
+          "required": [
+            "category",
+            "attack",
+            "damage",
+            "damageType",
+            "weaponKey"
+          ]
+        },
+        {
+          "description": "Content v6 (M3 B2): something switched on and off at the table; modifiers naming it apply while it is on. Turning it on can spend one use of a resource of this revision.",
+          "properties": {
+            "type": {
+              "const": "toggle"
+            },
+            "toggleId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1
+            },
+            "resourceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "autoWhen": {
+              "enum": [
+                "bloodied"
+              ],
+              "description": "Content v10 (D42): the toggle switches itself from play state while the condition holds. Computed, never stored."
+            },
+            "activation": {
+              "enum": [
+                "action",
+                "bonusAction",
+                "reaction",
+                "other"
+              ],
+              "description": "Content v10 (D42): the kind of action that switches the toggle, for grouping on the sheet. Display only."
+            },
+            "group": {
+              "type": "string",
+              "pattern": "^[a-z][A-Za-z0-9]{0,31}$",
+              "description": "Content v11 (D43): the form group (a toggleGroup groupId) this toggle belongs to."
+            },
+            "groupContent": {
+              "$ref": "#/$defs/uuid",
+              "description": "Content v11 (D43): the content that declares the group; it may be another source's. Absent: this revision."
+            },
+            "layer": {
+              "enum": [
+                "primary",
+                "overlay"
+              ],
+              "description": "Content v11 (D43): a form (primary, the default) or an overlay on a form."
+            },
+            "allowedWith": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "toggleId"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "contentId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "toggleId": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              "description": "Content v11 (D43): the primaries an overlay may be on with."
+            },
+            "allowedInBase": {
+              "type": "boolean",
+              "description": "Content v11 (D43): an overlay may be on while no primary of its group is."
+            },
+            "cost": {
+              "$ref": "#/$defs/formula",
+              "description": "Content v11 (D43): the amount of the pool turning the toggle on spends."
+            },
+            "resourceContent": {
+              "$ref": "#/$defs/uuid",
+              "description": "Content v11 (D43): the content that declares resourceId, when it is not this revision."
+            },
+            "level": {
+              "$ref": "#/$defs/level"
+            },
+            "duration": {
+              "$ref": "#/$defs/formula",
+              "description": "Content v11 (D43): the rounds the toggle lasts once on. Absent: until switched off."
+            },
+            "payment": {
+              "$ref": "#/$defs/costPayment",
+              "description": "Content v12 (MECH-X item 1): pay the cost of turning the toggle on from hit points or a spell slot instead of a pool."
+            }
+          },
+          "required": [
+            "toggleId",
+            "label"
+          ]
+        },
+        {
+          "description": "Content v11 (D43): declares a form group that toggles of this or another revision join. Typed only in a v11 revision: in an older one it is an unknown effect, kept byte for byte.",
+          "properties": {
+            "type": {
+              "const": "toggleGroup"
+            },
+            "groupId": {
+              "type": "string",
+              "pattern": "^[a-z][A-Za-z0-9]{0,31}$"
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "groupId",
+            "label"
+          ]
+        },
+        {
+          "description": "Content v11 (D43): a pool change at the start or end of the turn, optionally while a toggle is on. Previewed and confirmed by a turn command, never applied by calculation. Typed only in a v11 revision: in an older one it is an unknown effect, kept byte for byte. At most 20 per revision.",
+          "properties": {
+            "type": {
+              "const": "upkeep"
+            },
+            "toggle": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The toggle this upkeep belongs to; it applies while that toggle is on. Absent: always."
+            },
+            "toggleContent": {
+              "$ref": "#/$defs/uuid",
+              "description": "The content that declares the toggle. Absent: this revision."
+            },
+            "at": {
+              "enum": [
+                "turnStart",
+                "turnEnd"
+              ]
+            },
+            "resourceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "resourceContent": {
+              "$ref": "#/$defs/uuid",
+              "description": "The content that declares resourceId. Absent: this revision."
+            },
+            "change": {
+              "enum": [
+                "spend",
+                "regain"
+              ]
+            },
+            "amount": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "A formula, or all (regain only)."
+            },
+            "ifShort": {
+              "enum": [
+                "ask",
+                "end"
+              ],
+              "description": "What a spend the pool cannot cover does; only with change spend and a toggle. Absent: ask."
+            }
+          },
+          "required": [
+            "at",
+            "resourceId",
+            "change",
+            "amount"
+          ]
+        },
+        {
+          "description": "Content v11 (D43): an attack a feature gives (an unarmed strike, a bolt), calculated like a weapon. Typed only in a v11 revision: in an older one it is an unknown effect, kept byte for byte.",
+          "properties": {
+            "type": {
+              "const": "attack"
+            },
+            "attackId": {
+              "type": "string",
+              "pattern": "^[a-z][A-Za-z0-9]{0,31}$"
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1
+            },
+            "kind": {
+              "enum": [
+                "melee",
+                "ranged"
+              ]
+            },
+            "abilities": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "enum": [
+                  "str",
+                  "dex",
+                  "con",
+                  "int",
+                  "wis",
+                  "cha"
+                ]
+              },
+              "description": "The abilities the attack may use; the best one counts."
+            },
+            "proficient": {
+              "type": "boolean",
+              "description": "Absent: true."
+            },
+            "damage": {
+              "type": "object",
+              "required": [
+                "count",
+                "die"
+              ],
+              "properties": {
+                "count": {
+                  "$ref": "#/$defs/formula"
+                },
+                "die": {
+                  "$ref": "#/$defs/formula",
+                  "description": "A die size, or SCALE.<id> for a per-level die."
+                }
+              }
+            },
+            "damageBonus": {
+              "$ref": "#/$defs/formula",
+              "description": "Absent: the chosen ability modifier."
+            },
+            "damageType": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 20,
+              "description": "One of acid, bludgeoning, cold, fire, force, lightning, necrotic, piercing, poison, psychic, radiant, slashing, thunder, in any case."
+            },
+            "range": {
+              "type": "string",
+              "minLength": 1
+            },
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": "Keys a rider matches. all is reserved for riders."
+            },
+            "replacesAttack": {
+              "type": "boolean"
+            },
+            "activation": {
+              "enum": [
+                "action",
+                "bonusAction",
+                "reaction",
+                "other"
+              ]
+            },
+            "resourceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "resourceContent": {
+              "$ref": "#/$defs/uuid"
+            },
+            "cost": {
+              "$ref": "#/$defs/formula"
+            },
+            "whileToggle": {
+              "type": "object",
+              "required": [
+                "toggleId"
+              ],
+              "properties": {
+                "contentId": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "toggleId": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "payment": {
+              "$ref": "#/$defs/costPayment",
+              "description": "Content v12 (MECH-X item 1): pay the cost from hit points or a spell slot instead of a pool."
+            }
+          },
+          "required": [
+            "attackId",
+            "label",
+            "kind",
+            "abilities",
+            "damage",
+            "damageType"
+          ]
+        },
+        {
+          "description": "Content v11 (D43): extra to-hit, damage dice or damage for the attacks carrying one of its tags, while its toggle is on. Typed only in a v11 revision: in an older one it is an unknown effect, kept byte for byte.",
+          "properties": {
+            "type": {
+              "const": "attackRider"
+            },
+            "tags": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": "all matches every attack."
+            },
+            "toHit": {
+              "$ref": "#/$defs/formula"
+            },
+            "dice": {
+              "type": "string",
+              "pattern": "^0*([1-9][0-9]?|100)d0*(4|6|8|10|12)$",
+              "description": "A count of 1 to 100 and a die of d4, d6, d8, d10 or d12, such as 3d8. The validator is authoritative."
+            },
+            "damageBonus": {
+              "$ref": "#/$defs/formula"
+            },
+            "damageType": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 20,
+              "description": "Absent: the attack's own type."
+            },
+            "toggle": {
+              "type": "string",
+              "minLength": 1
+            },
+            "toggleContent": {
+              "$ref": "#/$defs/uuid"
+            },
+            "stackGroup": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Riders of one group never add: the highest applies."
+            }
+          },
+          "required": [
+            "tags"
+          ]
+        },
+        {
+          "description": "Content v10 (Wave 3, R155): attunement and charges of an item. Item content only, at most one per revision. In a revision older than v10 an item effect is unknown and reference-only, kept byte for byte.",
+          "properties": {
+            "type": {
+              "const": "item"
+            },
+            "requiresAttunement": {
+              "type": "boolean"
+            },
+            "charges": {
+              "type": "object",
+              "required": [
+                "max"
+              ],
+              "properties": {
+                "max": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 99
+                },
+                "recovery": {
+                  "type": "object",
+                  "required": [
+                    "period"
+                  ],
+                  "properties": {
+                    "period": {
+                      "enum": [
+                        "shortRest",
+                        "longRest"
+                      ]
+                    },
+                    "regain": {
+                      "type": "string",
+                      "maxLength": 40,
+                      "description": "A dice expression such as 1d4+1. Absent: all charges come back on that rest."
+                    }
+                  }
+                }
+              },
+              "description": "Absent recovery: charges come back only through the play action."
+            }
+          }
+        },
+        {
+          "description": "Content v12 (MECH-X item 3): content that attaches to one carried copy of another item. Item content only, at most one per revision, and never on a weapon or armor. In a revision older than v12 an itemMod is unknown and reference-only, kept byte for byte.",
+          "properties": {
+            "type": {
+              "const": "itemMod"
+            },
+            "appliesTo": {
+              "enum": [
+                "weapon",
+                "armor",
+                "any"
+              ]
+            },
+            "bonus": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10,
+              "description": "To-hit and damage on a weapon host; Armor Class on an armor or shield host."
+            },
+            "modifiers": {
+              "type": "array",
+              "maxItems": 8,
+              "items": {
+                "type": "object",
+                "required": [
+                  "type",
+                  "operation",
+                  "target",
+                  "value"
+                ],
+                "properties": {
+                  "type": {
+                    "const": "modifier"
+                  },
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "operation": {
+                    "enum": [
+                      "bonus",
+                      "set",
+                      "replace"
+                    ]
+                  },
+                  "target": {
+                    "$ref": "#/$defs/fieldId"
+                  },
+                  "value": {
+                    "$ref": "#/$defs/formula"
+                  },
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "description": "Always on and automatic: a toggle, toggleContent, whileArmored, a timing other than always, a resource target or a non-automatic automation is refused (validate.item-mod-modifier)."
+              }
+            }
+          },
+          "required": [
+            "appliesTo"
+          ]
+        },
+        {
+          "description": "Content v12 (MECH-X item 4): a companion card on a feature, feat or other character content (never an item or a spell); at most 10 per revision. Armor class and hit point maximum are formulas on the owner's sheet. attacks holds ids of attack effects in this revision and resourceIds holds resourceId keys of resource effects in this revision; each may be listed by one companion only. In a revision older than v12 a companion is unknown and reference-only, kept byte for byte.",
+          "properties": {
+            "type": {
+              "const": "companion"
+            },
+            "companionId": {
+              "type": "string",
+              "pattern": "^(?!0{8}-0{4}-0{4}-0{4}-0{12}$)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "A lowercase GUID that is not empty; unique within the revision."
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "armorClass": {
+              "$ref": "#/$defs/formula"
+            },
+            "hitPointMaximum": {
+              "$ref": "#/$defs/formula"
+            },
+            "speed": {
+              "type": "string",
+              "maxLength": 80
+            },
+            "attacks": {
+              "type": "array",
+              "maxItems": 5,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": "Effect ids of attack effects in this revision."
+            },
+            "resourceIds": {
+              "type": "array",
+              "maxItems": 5,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": "resourceId keys of resource effects in this revision."
+            }
+          },
+          "required": [
+            "companionId",
+            "label",
+            "armorClass",
+            "hitPointMaximum"
+          ]
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "scale"
+            },
+            "scaleId": {
+              "type": "string",
+              "pattern": "^[a-z][A-Za-z0-9]{0,31}$"
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1
+            },
+            "values": {
+              "type": "array",
+              "minItems": 20,
+              "maxItems": 20,
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000
+              }
+            }
+          },
+          "required": [
+            "scaleId",
+            "label",
+            "values"
+          ],
+          "description": "Content v9 (ADR-010): a per-level column of a class or subclass, read as SCALE.<scaleId> at the level of the class the content belongs to."
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "value"
+            },
+            "valueId": {
+              "type": "string",
+              "pattern": "^[a-z][A-Za-z0-9]{0,31}$"
+            },
+            "formula": {
+              "$ref": "#/$defs/formula"
+            }
+          },
+          "required": [
+            "valueId",
+            "formula"
+          ],
+          "description": "Content v11 (D43): a named formula, read as VALUE.<valueId> by formulas of the content of the same class."
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "rollMode"
+            },
+            "target": {
+              "type": "string",
+              "pattern": "^(save\\.(str|dex|con|int|wis|cha)|skill\\.(acrobatics|animalHandling|arcana|athletics|deception|history|insight|intimidation|investigation|medicine|nature|perception|performance|persuasion|religion|sleightOfHand|stealth|survival)|ability\\.(str|dex|con|int|wis|cha)\\.check)$",
+              "description": "The roll that gets the mode: a saving throw, a skill check or an ability check. The ability check is a roll target only, not a field."
+            },
+            "mode": {
+              "enum": [
+                "advantage",
+                "disadvantage"
+              ]
+            },
+            "against": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "enum": [
+                  "blinded",
+                  "charmed",
+                  "deafened",
+                  "frightened",
+                  "grappled",
+                  "incapacitated",
+                  "invisible",
+                  "paralyzed",
+                  "petrified",
+                  "poisoned",
+                  "prone",
+                  "restrained",
+                  "stunned",
+                  "unconscious"
+                ]
+              },
+              "description": "Condition keys: the mode applies only against these conditions (for a save, the condition being imposed); the player applies it (assisted). Absent: always."
+            },
+            "toggle": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The toggle (of this revision, or of toggleContent) that must be on for the mode to apply."
+            },
+            "toggleContent": {
+              "$ref": "#/$defs/uuid",
+              "description": "The content entry that declares the toggle; absent means this revision. Needs a toggle."
+            }
+          },
+          "required": [
+            "target",
+            "mode"
+          ],
+          "dependentRequired": {
+            "toggleContent": [
+              "toggle"
+            ]
+          },
+          "description": "Content v11 (D43): advantage or disadvantage on a saving throw, skill check or ability check, optionally while a toggle is on or against some conditions. Typed only in a v11 revision: in an older one it is an unknown effect, kept byte for byte."
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "response"
+            },
+            "responseId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1
+            },
+            "phase": {
+              "enum": [
+                "damageReduction",
+                "hitPointOutcome",
+                "threshold"
+              ]
+            },
+            "amount": {
+              "$ref": "#/$defs/formula"
+            },
+            "when": {
+              "type": "object",
+              "properties": {
+                "atOrBelow": {
+                  "$ref": "#/$defs/formula",
+                  "description": "A formula that may also read HP.MAX (only here)."
+                },
+                "survived": {
+                  "const": true
+                }
+              },
+              "oneOf": [
+                {
+                  "required": [
+                    "atOrBelow"
+                  ]
+                },
+                {
+                  "required": [
+                    "survived"
+                  ]
+                }
+              ]
+            },
+            "resourceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "resourceContent": {
+              "$ref": "#/$defs/uuid"
+            },
+            "cost": {
+              "$ref": "#/$defs/formula"
+            },
+            "toggle": {
+              "type": "object",
+              "required": [
+                "toggleId"
+              ],
+              "properties": {
+                "contentId": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "toggleId": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "outcomes": {
+              "type": "array",
+              "maxItems": 8,
+              "items": {
+                "type": "object",
+                "required": [
+                  "kind"
+                ],
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "spend",
+                      "regain",
+                      "toggleOn",
+                      "offerRoll",
+                      "regainHitPoints",
+                      "temporaryHitPoints"
+                    ]
+                  },
+                  "resourceId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "resourceContent": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "amount": {
+                    "$ref": "#/$defs/formula"
+                  },
+                  "toggle": {
+                    "type": "object",
+                    "required": [
+                      "toggleId"
+                    ],
+                    "properties": {
+                      "contentId": {
+                        "$ref": "#/$defs/uuid"
+                      },
+                      "toggleId": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  },
+                  "rollId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "rollContent": {
+                    "$ref": "#/$defs/uuid"
+                  }
+                }
+              }
+            }
+          },
+          "required": [
+            "responseId",
+            "label",
+            "phase"
+          ],
+          "description": "Content v11 (D43): a reaction offered when the character takes damage (reduce it, survive at some hit points, or answer a threshold). Typed only in a v11 revision: in an older one it is an unknown effect, kept byte for byte. A reference without a content id names this revision's content."
+        },
+        {
+          "description": "Unknown effect type: kept, reference-only.",
+          "properties": {
+            "type": {
+              "not": {
+                "enum": [
+                  "modifier",
+                  "grant",
+                  "resource",
+                  "choice",
+                  "restriction",
+                  "recovery",
+                  "roll",
+                  "hitDie",
+                  "armor",
+                  "spellcasting",
+                  "spell",
+                  "weapon",
+                  "toggle",
+                  "scale",
+                  "item",
+                  "toggleGroup",
+                  "upkeep",
+                  "attack",
+                  "attackRider",
+                  "value",
+                  "rollMode",
+                  "response",
+                  "itemMod",
+                  "companion"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

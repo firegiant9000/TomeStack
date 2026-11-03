@@ -67,6 +67,13 @@ public sealed record ExtractionLimits
     /// <summary>The parent kills the child above this working set.</summary>
     public long MaxWorkingSet { get; init; } = 3L << 29;
 
+    /// <summary>Lab L7 (design 7.2): a Markdown file over any of these fails with <c>markdown.too-large</c> and yields nothing.</summary>
+    public const int MarkdownMaxBytes = 4 * 1024 * 1024;
+    public const int MarkdownMaxLines = 200_000;
+    public const int MarkdownMaxLineLength = 10_000;
+    public const int MarkdownMaxPages = 2_000;
+    public const int MarkdownMaxTableColumns = 40;
+
     public static ExtractionLimits Default { get; } = new();
 }
 
@@ -127,7 +134,32 @@ public sealed record DraftCandidate(
 
     /// <summary>The entry's text for the draft (the description), when it differs from the excerpt.</summary>
     public string? Summary { get; init; }
+
+    /// <summary>
+    /// D64: where each proposed effect was read, by effect id. Null when unknown (a candidate stored before spans existed, or an
+    /// effect the detector could not place). Review aid only: accepting a candidate never reads it.
+    /// </summary>
+    public IReadOnlyDictionary<string, CandidateSpan>? EffectSpans { get; init; }
+
+    /// <summary>D64: where the name was read; null when unknown.</summary>
+    public CandidateSpan? NameSpan { get; init; }
+
+    /// <summary>
+    /// Keys this build does not know (a newer build's additive fields) are kept as read and written back, so a candidate saved
+    /// here does not lose them. Null while there are none, so rows without any keep their bytes.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonExtensionData]
+    public Dictionary<string, JsonElement>? Extensions { get; init; }
 }
+
+/// <summary>
+/// D64: a place in a job's stored page text. <paramref name="BlockStart"/> and <paramref name="BlockEnd"/> index the page's stored
+/// blocks (<paramref name="BlockEnd"/> lies on <paramref name="PageEnd"/> when it is set, else on <paramref name="Page"/>);
+/// <paramref name="LineStart"/> and <paramref name="LineEnd"/> are null today, for Markdown as for a PDF: spans carry block indices only.
+/// <paramref name="PatternId"/> is a <see cref="Detection.DetectionPatterns"/> id; <paramref name="Confidence"/> is the detector's
+/// confidence in the read (a UI hint, never permission).
+/// </summary>
+public sealed record CandidateSpan(int Page, int? PageEnd, int BlockStart, int BlockEnd, int? LineStart, int? LineEnd, string PatternId, double Confidence);
 
 public static class CandidateQuarantine
 {

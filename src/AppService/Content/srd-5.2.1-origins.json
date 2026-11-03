@@ -1,0 +1,2820 @@
+{
+  "packId": "srd-5.2.1-origins",
+  "formatVersion": 1,
+  "notice": "The species and backgrounds of the System Reference Document 5.2.1 (CC-BY-4.0) not bundled before: Dragonborn, Elf, Gnome, Goliath, Halfling, Human, Orc and Tiefling, and Acolyte, Criminal and Sage, pp. 83-86. Taken from SRD_CC_v5.2.1.pdf (SHA-256 8974902d109d6e63672d7c490bde9ccf052410503d9cfa768237154fbc5e3d87). See docs/licensing/srd-pack-review.md.",
+  "sources": [
+    {
+      "id": "52500000-0000-4000-8000-000000000001",
+      "title": "System Reference Document 5.2.1",
+      "publisher": "SRD 5.2.1 (CC-BY-4.0)",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "editionVersion": "5.2.1",
+      "license": "CC-BY-4.0",
+      "redistributable": true,
+      "attribution": "This work includes material from the System Reference Document 5.2.1 (\"SRD 5.2.1\") by Wizards of the Coast LLC, available at https://www.dndbeyond.com/srd. The SRD 5.2.1 is licensed under the Creative Commons Attribution 4.0 International License, available at https://creativecommons.org/licenses/by/4.0/legalcode.",
+      "modificationNotice": "Modified: TomeStack adapted this material into structured data. Selected passages are excerpted or shortened, with line breaks and hyphenation repaired, and rules are encoded as machine-readable effects.",
+      "sha256": "8974902d109d6e63672d7c490bde9ccf052410503d9cfa768237154fbc5e3d87"
+    }
+  ],
+  "revisions": [
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500100",
+      "revisionId": "52e00000-0000-4000-8000-000000500100",
+      "schemaVersion": 3,
+      "kind": "species",
+      "name": "Dragonborn",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 84
+        }
+      },
+      "status": "published",
+      "summary": "Creature Type: Humanoid. Size: Medium (about 5–7 feet tall). Speed: 30 feet.\n\nDraconic Ancestry. Your lineage stems from a dragon progenitor. Choose the kind of dragon from the Draconic Ancestors table. Your choice affects your Breath Weapon and Damage Resistance traits as well as your appearance.\n\nBreath Weapon. When you take the Attack action on your turn, you can replace one of your attacks with an exhalation of magical energy in either a 15-foot Cone or a 30-foot Line that is 5 feet wide (choose the shape each time). Each creature in that area must make a Dexterity saving throw (DC 8 plus your Constitution modifier and Proficiency Bonus). On a failed save, a creature takes 1d10 damage of the type determined by your Draconic Ancestry trait. On a successful save, a creature takes half as much damage. This damage increases by 1d10 when you reach character levels 5 (2d10), 11 (3d10), and 17 (4d10).\n\nYou can use this Breath Weapon a number of times equal to your Proficiency Bonus, and you regain all expended uses when you finish a Long Rest.\n\nDamage Resistance. You have Resistance to the damage type determined by your Draconic Ancestry trait.\n\nDarkvision. You have Darkvision with a range of 60 feet.\n\nDraconic Flight. When you reach character level 5, you can channel draconic magic to give yourself temporary flight. As a Bonus Action, you sprout spectral wings on your back that last for 10 minutes or until you retract the wings (no action required) or have the Incapacitated condition. During that time, you have a Fly Speed equal to your Speed. Your wings appear to be made of the same energy as your Breath Weapon. Once you use this trait, you can’t use it again until you finish a Long Rest.",
+      "effects": [
+        {
+          "type": "choice",
+          "id": "draconic-ancestry",
+          "choiceId": "draconic-ancestry",
+          "count": 1,
+          "text": "Draconic Ancestry. Choose the kind of dragon from the Draconic Ancestors table. Your choice affects your Breath Weapon and Damage Resistance traits as well as your appearance.",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500101",
+              "revisionId": "52e00000-0000-4000-8000-000000500101"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500102",
+              "revisionId": "52e00000-0000-4000-8000-000000500102"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500103",
+              "revisionId": "52e00000-0000-4000-8000-000000500103"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500104",
+              "revisionId": "52e00000-0000-4000-8000-000000500104"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500105",
+              "revisionId": "52e00000-0000-4000-8000-000000500105"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500106",
+              "revisionId": "52e00000-0000-4000-8000-000000500106"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500107",
+              "revisionId": "52e00000-0000-4000-8000-000000500107"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500108",
+              "revisionId": "52e00000-0000-4000-8000-000000500108"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500109",
+              "revisionId": "52e00000-0000-4000-8000-000000500109"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500110",
+              "revisionId": "52e00000-0000-4000-8000-000000500110"
+            }
+          ]
+        },
+        {
+          "type": "resource",
+          "id": "breath-weapon",
+          "resourceId": "breath-weapon",
+          "label": "Breath Weapon",
+          "maximum": "PB",
+          "text": "You can use this Breath Weapon a number of times equal to your Proficiency Bonus, and you regain all expended uses when you finish a Long Rest."
+        },
+        {
+          "type": "recovery",
+          "id": "breath-weapon-long-rest",
+          "timing": "onLongRest",
+          "resourceId": "breath-weapon",
+          "on": "longRest",
+          "amount": "all"
+        },
+        {
+          "type": "roll",
+          "id": "breath-weapon-damage",
+          "automation": "assisted",
+          "timing": "onRoll",
+          "rollId": "breath-weapon-damage",
+          "label": "Breath Weapon damage (1d10 below character level 5)",
+          "dice": "1d10",
+          "resourceId": "breath-weapon",
+          "text": "On a failed save, a creature takes 1d10 damage of the type determined by your Draconic Ancestry trait. This damage increases by 1d10 when you reach character levels 5 (2d10), 11 (3d10), and 17 (4d10).\n\nTomeStack: from character level 5, roll the extra dice by hand."
+        },
+        {
+          "type": "grant",
+          "id": "draconic-flight",
+          "grant": "content",
+          "level": 5,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000500111",
+            "revisionId": "52e00000-0000-4000-8000-000000500111"
+          }
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500101",
+      "revisionId": "52e00000-0000-4000-8000-000000500101",
+      "schemaVersion": 10,
+      "kind": "feature",
+      "name": "Draconic Ancestry: Black (Acid)",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 84
+        }
+      },
+      "status": "published",
+      "summary": "Dragon: Black. Damage Type: Acid.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "damage-resistance",
+          "grant": "damageResistance",
+          "damageType": "acid",
+          "text": "Damage Resistance. You have Resistance to the damage type determined by your Draconic Ancestry trait."
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500102",
+      "revisionId": "52e00000-0000-4000-8000-000000500102",
+      "schemaVersion": 10,
+      "kind": "feature",
+      "name": "Draconic Ancestry: Blue (Lightning)",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 84
+        }
+      },
+      "status": "published",
+      "summary": "Dragon: Blue. Damage Type: Lightning.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "damage-resistance",
+          "grant": "damageResistance",
+          "damageType": "lightning",
+          "text": "Damage Resistance. You have Resistance to the damage type determined by your Draconic Ancestry trait."
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500103",
+      "revisionId": "52e00000-0000-4000-8000-000000500103",
+      "schemaVersion": 10,
+      "kind": "feature",
+      "name": "Draconic Ancestry: Brass (Fire)",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 84
+        }
+      },
+      "status": "published",
+      "summary": "Dragon: Brass. Damage Type: Fire.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "damage-resistance",
+          "grant": "damageResistance",
+          "damageType": "fire",
+          "text": "Damage Resistance. You have Resistance to the damage type determined by your Draconic Ancestry trait."
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500104",
+      "revisionId": "52e00000-0000-4000-8000-000000500104",
+      "schemaVersion": 10,
+      "kind": "feature",
+      "name": "Draconic Ancestry: Bronze (Lightning)",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 84
+        }
+      },
+      "status": "published",
+      "summary": "Dragon: Bronze. Damage Type: Lightning.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "damage-resistance",
+          "grant": "damageResistance",
+          "damageType": "lightning",
+          "text": "Damage Resistance. You have Resistance to the damage type determined by your Draconic Ancestry trait."
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500105",
+      "revisionId": "52e00000-0000-4000-8000-000000500105",
+      "schemaVersion": 10,
+      "kind": "feature",
+      "name": "Draconic Ancestry: Copper (Acid)",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 84
+        }
+      },
+      "status": "published",
+      "summary": "Dragon: Copper. Damage Type: Acid.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "damage-resistance",
+          "grant": "damageResistance",
+          "damageType": "acid",
+          "text": "Damage Resistance. You have Resistance to the damage type determined by your Draconic Ancestry trait."
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500106",
+      "revisionId": "52e00000-0000-4000-8000-000000500106",
+      "schemaVersion": 10,
+      "kind": "feature",
+      "name": "Draconic Ancestry: Gold (Fire)",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 84
+        }
+      },
+      "status": "published",
+      "summary": "Dragon: Gold. Damage Type: Fire.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "damage-resistance",
+          "grant": "damageResistance",
+          "damageType": "fire",
+          "text": "Damage Resistance. You have Resistance to the damage type determined by your Draconic Ancestry trait."
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500107",
+      "revisionId": "52e00000-0000-4000-8000-000000500107",
+      "schemaVersion": 10,
+      "kind": "feature",
+      "name": "Draconic Ancestry: Green (Poison)",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 84
+        }
+      },
+      "status": "published",
+      "summary": "Dragon: Green. Damage Type: Poison.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "damage-resistance",
+          "grant": "damageResistance",
+          "damageType": "poison",
+          "text": "Damage Resistance. You have Resistance to the damage type determined by your Draconic Ancestry trait."
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500108",
+      "revisionId": "52e00000-0000-4000-8000-000000500108",
+      "schemaVersion": 10,
+      "kind": "feature",
+      "name": "Draconic Ancestry: Red (Fire)",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 84
+        }
+      },
+      "status": "published",
+      "summary": "Dragon: Red. Damage Type: Fire.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "damage-resistance",
+          "grant": "damageResistance",
+          "damageType": "fire",
+          "text": "Damage Resistance. You have Resistance to the damage type determined by your Draconic Ancestry trait."
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500109",
+      "revisionId": "52e00000-0000-4000-8000-000000500109",
+      "schemaVersion": 10,
+      "kind": "feature",
+      "name": "Draconic Ancestry: Silver (Cold)",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 84
+        }
+      },
+      "status": "published",
+      "summary": "Dragon: Silver. Damage Type: Cold.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "damage-resistance",
+          "grant": "damageResistance",
+          "damageType": "cold",
+          "text": "Damage Resistance. You have Resistance to the damage type determined by your Draconic Ancestry trait."
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500110",
+      "revisionId": "52e00000-0000-4000-8000-000000500110",
+      "schemaVersion": 10,
+      "kind": "feature",
+      "name": "Draconic Ancestry: White (Cold)",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 84
+        }
+      },
+      "status": "published",
+      "summary": "Dragon: White. Damage Type: Cold.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "damage-resistance",
+          "grant": "damageResistance",
+          "damageType": "cold",
+          "text": "Damage Resistance. You have Resistance to the damage type determined by your Draconic Ancestry trait."
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500111",
+      "revisionId": "52e00000-0000-4000-8000-000000500111",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Draconic Flight",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 84
+        }
+      },
+      "status": "published",
+      "summary": "When you reach character level 5, you can channel draconic magic to give yourself temporary flight. As a Bonus Action, you sprout spectral wings on your back that last for 10 minutes or until you retract the wings (no action required) or have the Incapacitated condition. During that time, you have a Fly Speed equal to your Speed. Your wings appear to be made of the same energy as your Breath Weapon. Once you use this trait, you can’t use it again until you finish a Long Rest.",
+      "effects": [
+        {
+          "type": "resource",
+          "id": "draconic-flight",
+          "resourceId": "draconic-flight",
+          "label": "Draconic Flight",
+          "maximum": "1",
+          "text": "Once you use this trait, you can’t use it again until you finish a Long Rest."
+        },
+        {
+          "type": "recovery",
+          "id": "draconic-flight-long-rest",
+          "timing": "onLongRest",
+          "resourceId": "draconic-flight",
+          "on": "longRest",
+          "amount": "all"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500200",
+      "revisionId": "52e00000-0000-4000-8000-000000500200",
+      "schemaVersion": 3,
+      "kind": "species",
+      "name": "Elf",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 84,
+          "end": 85
+        }
+      },
+      "status": "published",
+      "summary": "Creature Type: Humanoid. Size: Medium (about 5–6 feet tall). Speed: 30 feet.\n\nDarkvision. You have Darkvision with a range of 60 feet.\n\nElven Lineage. You are part of a lineage that grants you supernatural abilities. Choose a lineage from the Elven Lineages table. You gain the level 1 benefit of that lineage.\n\nWhen you reach character levels 3 and 5, you learn a higher-level spell, as shown on the table. You always have that spell prepared. You can cast it once without a spell slot, and you regain the ability to cast it in that way when you finish a Long Rest. You can also cast the spell using any spell slots you have of the appropriate level.\n\nIntelligence, Wisdom, or Charisma is your spellcasting ability for the spells you cast with this trait (choose the ability when you select the lineage).\n\nFey Ancestry. You have Advantage on saving throws you make to avoid or end the Charmed condition.\n\nKeen Senses. You have proficiency in the Insight, Perception, or Survival skill.\n\nTrance. You don’t need to sleep, and magic can’t put you to sleep. You can finish a Long Rest in 4 hours if you spend those hours in a trancelike meditation, during which you retain consciousness.\n\nTomeStack: lineage spells are recorded by hand.",
+      "effects": [
+        {
+          "type": "choice",
+          "id": "elven-lineage",
+          "choiceId": "elven-lineage",
+          "count": 1,
+          "text": "Elven Lineage. Choose a lineage from the Elven Lineages table. You gain the level 1 benefit of that lineage.",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500201",
+              "revisionId": "52e00000-0000-4000-8000-000000500201"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500202",
+              "revisionId": "52e00000-0000-4000-8000-000000500202"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500203",
+              "revisionId": "52e00000-0000-4000-8000-000000500203"
+            }
+          ]
+        },
+        {
+          "type": "choice",
+          "id": "keen-senses",
+          "choiceId": "keen-senses",
+          "count": 1,
+          "text": "Keen Senses. You have proficiency in the Insight, Perception, or Survival skill.",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500211",
+              "revisionId": "52e00000-0000-4000-8000-000000500211"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500212",
+              "revisionId": "52e00000-0000-4000-8000-000000500212"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500213",
+              "revisionId": "52e00000-0000-4000-8000-000000500213"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500201",
+      "revisionId": "52e00000-0000-4000-8000-000000500201",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Elven Lineage: Drow",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 85
+        }
+      },
+      "status": "published",
+      "summary": "Level 1: The range of your Darkvision increases to 120 feet. You also know the Dancing Lights cantrip.\n\nLevel 3: Faerie Fire.\n\nLevel 5: Darkness."
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500202",
+      "revisionId": "52e00000-0000-4000-8000-000000500202",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Elven Lineage: High Elf",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 85
+        }
+      },
+      "status": "published",
+      "summary": "Level 1: You know the Prestidigitation cantrip. Whenever you finish a Long Rest, you can replace that cantrip with a different cantrip from the Wizard spell list.\n\nLevel 3: Detect Magic.\n\nLevel 5: Misty Step."
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500203",
+      "revisionId": "52e00000-0000-4000-8000-000000500203",
+      "schemaVersion": 10,
+      "kind": "feature",
+      "name": "Elven Lineage: Wood Elf",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 85
+        }
+      },
+      "status": "published",
+      "summary": "Level 1: Your Speed increases to 35 feet. You also know the Druidcraft cantrip.\n\nLevel 3: Longstrider.\n\nLevel 5: Pass without Trace.",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "speed",
+          "operation": "replace",
+          "target": "speed",
+          "value": "35",
+          "text": "Your Speed increases to 35 feet."
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500211",
+      "revisionId": "52e00000-0000-4000-8000-000000500211",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Keen Senses: Insight",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 85
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.insight"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500212",
+      "revisionId": "52e00000-0000-4000-8000-000000500212",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Keen Senses: Perception",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 85
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.perception"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500213",
+      "revisionId": "52e00000-0000-4000-8000-000000500213",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Keen Senses: Survival",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 85
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.survival"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500300",
+      "revisionId": "52e00000-0000-4000-8000-000000500300",
+      "schemaVersion": 3,
+      "kind": "species",
+      "name": "Gnome",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 85
+        }
+      },
+      "status": "published",
+      "summary": "Creature Type: Humanoid. Size: Small (about 3–4 feet tall). Speed: 30 feet.\n\nDarkvision. You have Darkvision with a range of 60 feet.\n\nGnomish Cunning. You have Advantage on Intelligence, Wisdom, and Charisma saving throws.\n\nGnomish Lineage. You are part of a lineage that grants you supernatural abilities. Choose one of the following options; whichever one you choose, Intelligence, Wisdom, or Charisma is your spellcasting ability for the spells you cast with this trait (choose the ability when you select the lineage).\n\nTomeStack: lineage spells are recorded by hand.",
+      "effects": [
+        {
+          "type": "choice",
+          "id": "gnomish-lineage",
+          "choiceId": "gnomish-lineage",
+          "count": 1,
+          "text": "Gnomish Lineage. Choose one of the following options.",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500301",
+              "revisionId": "52e00000-0000-4000-8000-000000500301"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500302",
+              "revisionId": "52e00000-0000-4000-8000-000000500302"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500301",
+      "revisionId": "52e00000-0000-4000-8000-000000500301",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Gnomish Lineage: Forest Gnome",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 85
+        }
+      },
+      "status": "published",
+      "summary": "Forest Gnome. You know the Minor Illusion cantrip. You also always have the Speak with Animals spell prepared. You can cast it without a spell slot a number of times equal to your Proficiency Bonus, and you regain all expended uses when you finish a Long Rest. You can also use any spell slots you have to cast the spell.",
+      "effects": [
+        {
+          "type": "resource",
+          "id": "speak-with-animals",
+          "resourceId": "speak-with-animals",
+          "label": "Speak with Animals without a slot",
+          "maximum": "PB",
+          "text": "You can cast it without a spell slot a number of times equal to your Proficiency Bonus, and you regain all expended uses when you finish a Long Rest."
+        },
+        {
+          "type": "recovery",
+          "id": "speak-with-animals-long-rest",
+          "timing": "onLongRest",
+          "resourceId": "speak-with-animals",
+          "on": "longRest",
+          "amount": "all"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500302",
+      "revisionId": "52e00000-0000-4000-8000-000000500302",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Gnomish Lineage: Rock Gnome",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 85
+        }
+      },
+      "status": "published",
+      "summary": "Rock Gnome. You know the Mending and Prestidigitation cantrips. In addition, you can spend 10 minutes casting Prestidigitation to create a Tiny clockwork device (AC 5, 1 HP), such as a toy, fire starter, or music box. When you create the device, you determine its function by choosing one effect from Prestidigitation; the device produces that effect whenever you or another creature takes a Bonus Action to activate it with a touch. If the chosen effect has options within it, you choose one of those options for the device when you create it. For example, if you choose the spell’s ignite-extinguish effect, you determine whether the device ignites or extinguishes fire; the device doesn’t do both. You can have three such devices in existence at a time, and each falls apart 8 hours after its creation or when you dismantle it with a touch as a Utilize action."
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500400",
+      "revisionId": "52e00000-0000-4000-8000-000000500400",
+      "schemaVersion": 10,
+      "kind": "species",
+      "name": "Goliath",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 85,
+          "end": 86
+        }
+      },
+      "status": "published",
+      "summary": "Creature Type: Humanoid. Size: Medium (about 7–8 feet tall). Speed: 35 feet.\n\nGiant Ancestry. You are descended from Giants. Choose one of the following benefits—a supernatural boon from your ancestry; you can use the chosen benefit a number of times equal to your Proficiency Bonus, and you regain all expended uses when you finish a Long Rest.\n\nLarge Form. Starting at character level 5, you can change your size to Large as a Bonus Action if you’re in a big enough space. This transformation lasts for 10 minutes or until you end it (no action required). For that duration, you have Advantage on Strength checks, and your Speed increases by 10 feet. Once you use this trait, you can’t use it again until you finish a Long Rest.\n\nPowerful Build. You have Advantage on any ability check you make to end the Grappled condition. You also count as one size larger when determining your carrying capacity.",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "speed",
+          "operation": "replace",
+          "target": "speed",
+          "value": "35",
+          "text": "Speed: 35 feet"
+        },
+        {
+          "type": "choice",
+          "id": "giant-ancestry",
+          "choiceId": "giant-ancestry",
+          "count": 1,
+          "text": "Giant Ancestry. Choose one of the following benefits—a supernatural boon from your ancestry.",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500401",
+              "revisionId": "52e00000-0000-4000-8000-000000500401"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500402",
+              "revisionId": "52e00000-0000-4000-8000-000000500402"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500403",
+              "revisionId": "52e00000-0000-4000-8000-000000500403"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500404",
+              "revisionId": "52e00000-0000-4000-8000-000000500404"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500405",
+              "revisionId": "52e00000-0000-4000-8000-000000500405"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500406",
+              "revisionId": "52e00000-0000-4000-8000-000000500406"
+            }
+          ]
+        },
+        {
+          "type": "grant",
+          "id": "large-form",
+          "grant": "content",
+          "level": 5,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000500407",
+            "revisionId": "52e00000-0000-4000-8000-000000500407"
+          }
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500401",
+      "revisionId": "52e00000-0000-4000-8000-000000500401",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Giant Ancestry: Cloud’s Jaunt",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 85
+        }
+      },
+      "status": "published",
+      "summary": "Cloud’s Jaunt (Cloud Giant). As a Bonus Action, you magically teleport up to 30 feet to an unoccupied space you can see.",
+      "effects": [
+        {
+          "type": "resource",
+          "id": "giant-ancestry",
+          "resourceId": "giant-ancestry",
+          "label": "Giant Ancestry",
+          "maximum": "PB",
+          "text": "Choose one of the following benefits—a supernatural boon from your ancestry; you can use the chosen benefit a number of times equal to your Proficiency Bonus, and you regain all expended uses when you finish a Long Rest."
+        },
+        {
+          "type": "recovery",
+          "id": "giant-ancestry-long-rest",
+          "timing": "onLongRest",
+          "resourceId": "giant-ancestry",
+          "on": "longRest",
+          "amount": "all"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500402",
+      "revisionId": "52e00000-0000-4000-8000-000000500402",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Giant Ancestry: Fire’s Burn",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 85
+        }
+      },
+      "status": "published",
+      "summary": "Fire’s Burn (Fire Giant). When you hit a target with an attack roll and deal damage to it, you can also deal 1d10 Fire damage to that target.",
+      "effects": [
+        {
+          "type": "resource",
+          "id": "giant-ancestry",
+          "resourceId": "giant-ancestry",
+          "label": "Giant Ancestry",
+          "maximum": "PB",
+          "text": "Choose one of the following benefits—a supernatural boon from your ancestry; you can use the chosen benefit a number of times equal to your Proficiency Bonus, and you regain all expended uses when you finish a Long Rest."
+        },
+        {
+          "type": "recovery",
+          "id": "giant-ancestry-long-rest",
+          "timing": "onLongRest",
+          "resourceId": "giant-ancestry",
+          "on": "longRest",
+          "amount": "all"
+        },
+        {
+          "type": "roll",
+          "id": "fires-burn",
+          "automation": "assisted",
+          "timing": "onRoll",
+          "rollId": "fires-burn",
+          "label": "Fire’s Burn (Fire damage)",
+          "dice": "1d10",
+          "resourceId": "giant-ancestry"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500403",
+      "revisionId": "52e00000-0000-4000-8000-000000500403",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Giant Ancestry: Frost’s Chill",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 85
+        }
+      },
+      "status": "published",
+      "summary": "Frost’s Chill (Frost Giant). When you hit a target with an attack roll and deal damage to it, you can also deal 1d6 Cold damage to that target and reduce its Speed by 10 feet until the start of your next turn.",
+      "effects": [
+        {
+          "type": "resource",
+          "id": "giant-ancestry",
+          "resourceId": "giant-ancestry",
+          "label": "Giant Ancestry",
+          "maximum": "PB",
+          "text": "Choose one of the following benefits—a supernatural boon from your ancestry; you can use the chosen benefit a number of times equal to your Proficiency Bonus, and you regain all expended uses when you finish a Long Rest."
+        },
+        {
+          "type": "recovery",
+          "id": "giant-ancestry-long-rest",
+          "timing": "onLongRest",
+          "resourceId": "giant-ancestry",
+          "on": "longRest",
+          "amount": "all"
+        },
+        {
+          "type": "roll",
+          "id": "frosts-chill",
+          "automation": "assisted",
+          "timing": "onRoll",
+          "rollId": "frosts-chill",
+          "label": "Frost’s Chill (Cold damage)",
+          "dice": "1d6",
+          "resourceId": "giant-ancestry"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500404",
+      "revisionId": "52e00000-0000-4000-8000-000000500404",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Giant Ancestry: Hill’s Tumble",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 85
+        }
+      },
+      "status": "published",
+      "summary": "Hill’s Tumble (Hill Giant). When you hit a Large or smaller creature with an attack roll and deal damage to it, you can give that target the Prone condition.",
+      "effects": [
+        {
+          "type": "resource",
+          "id": "giant-ancestry",
+          "resourceId": "giant-ancestry",
+          "label": "Giant Ancestry",
+          "maximum": "PB",
+          "text": "Choose one of the following benefits—a supernatural boon from your ancestry; you can use the chosen benefit a number of times equal to your Proficiency Bonus, and you regain all expended uses when you finish a Long Rest."
+        },
+        {
+          "type": "recovery",
+          "id": "giant-ancestry-long-rest",
+          "timing": "onLongRest",
+          "resourceId": "giant-ancestry",
+          "on": "longRest",
+          "amount": "all"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500405",
+      "revisionId": "52e00000-0000-4000-8000-000000500405",
+      "schemaVersion": 8,
+      "kind": "feature",
+      "name": "Giant Ancestry: Stone’s Endurance",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 85
+        }
+      },
+      "status": "published",
+      "summary": "Stone’s Endurance (Stone Giant). When you take damage, you can take a Reaction to roll 1d12. Add your Constitution modifier to the number rolled and reduce the damage by that total.",
+      "effects": [
+        {
+          "type": "resource",
+          "id": "giant-ancestry",
+          "resourceId": "giant-ancestry",
+          "label": "Giant Ancestry",
+          "maximum": "PB",
+          "text": "Choose one of the following benefits—a supernatural boon from your ancestry; you can use the chosen benefit a number of times equal to your Proficiency Bonus, and you regain all expended uses when you finish a Long Rest."
+        },
+        {
+          "type": "recovery",
+          "id": "giant-ancestry-long-rest",
+          "timing": "onLongRest",
+          "resourceId": "giant-ancestry",
+          "on": "longRest",
+          "amount": "all"
+        },
+        {
+          "type": "roll",
+          "id": "stones-endurance",
+          "automation": "assisted",
+          "timing": "onRoll",
+          "rollId": "stones-endurance",
+          "label": "Stone’s Endurance (damage reduced)",
+          "dice": "1d12",
+          "resourceId": "giant-ancestry",
+          "bonus": "CON.MOD"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500406",
+      "revisionId": "52e00000-0000-4000-8000-000000500406",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Giant Ancestry: Storm’s Thunder",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 86
+        }
+      },
+      "status": "published",
+      "summary": "Storm’s Thunder (Storm Giant). When you take damage from a creature within 60 feet of you, you can take a Reaction to deal 1d8 Thunder damage to that creature.",
+      "effects": [
+        {
+          "type": "resource",
+          "id": "giant-ancestry",
+          "resourceId": "giant-ancestry",
+          "label": "Giant Ancestry",
+          "maximum": "PB",
+          "text": "Choose one of the following benefits—a supernatural boon from your ancestry; you can use the chosen benefit a number of times equal to your Proficiency Bonus, and you regain all expended uses when you finish a Long Rest."
+        },
+        {
+          "type": "recovery",
+          "id": "giant-ancestry-long-rest",
+          "timing": "onLongRest",
+          "resourceId": "giant-ancestry",
+          "on": "longRest",
+          "amount": "all"
+        },
+        {
+          "type": "roll",
+          "id": "storms-thunder",
+          "automation": "assisted",
+          "timing": "onRoll",
+          "rollId": "storms-thunder",
+          "label": "Storm’s Thunder (Thunder damage)",
+          "dice": "1d8",
+          "resourceId": "giant-ancestry"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500407",
+      "revisionId": "52e00000-0000-4000-8000-000000500407",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Large Form",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 86
+        }
+      },
+      "status": "published",
+      "summary": "Starting at character level 5, you can change your size to Large as a Bonus Action if you’re in a big enough space. This transformation lasts for 10 minutes or until you end it (no action required). For that duration, you have Advantage on Strength checks, and your Speed increases by 10 feet. Once you use this trait, you can’t use it again until you finish a Long Rest.",
+      "effects": [
+        {
+          "type": "resource",
+          "id": "large-form",
+          "resourceId": "large-form",
+          "label": "Large Form",
+          "maximum": "1",
+          "text": "Once you use this trait, you can’t use it again until you finish a Long Rest."
+        },
+        {
+          "type": "recovery",
+          "id": "large-form-long-rest",
+          "timing": "onLongRest",
+          "resourceId": "large-form",
+          "on": "longRest",
+          "amount": "all"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500500",
+      "revisionId": "52e00000-0000-4000-8000-000000500500",
+      "schemaVersion": 3,
+      "kind": "species",
+      "name": "Halfling",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 86
+        }
+      },
+      "status": "published",
+      "summary": "Creature Type: Humanoid. Size: Small (about 2–3 feet tall). Speed: 30 feet.\n\nBrave. You have Advantage on saving throws you make to avoid or end the Frightened condition.\n\nHalfling Nimbleness. You can move through the space of any creature that is a size larger than you, but you can’t stop in the same space.\n\nLuck. When you roll a 1 on the d20 of a D20 Test, you can reroll the die, and you must use the new roll.\n\nNaturally Stealthy. You can take the Hide action even when you are obscured only by a creature that is at least one size larger than you."
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500600",
+      "revisionId": "52e00000-0000-4000-8000-000000500600",
+      "schemaVersion": 3,
+      "kind": "species",
+      "name": "Human",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 86
+        }
+      },
+      "status": "published",
+      "summary": "Creature Type: Humanoid. Size: Medium (about 4–7 feet tall) or Small (about 2–4 feet tall), chosen when you select this species. Speed: 30 feet.\n\nResourceful. You gain Heroic Inspiration whenever you finish a Long Rest.\n\nSkillful. You gain proficiency in one skill of your choice.\n\nVersatile. You gain an Origin feat of your choice (see “Feats”). Skilled is recommended.",
+      "effects": [
+        {
+          "type": "choice",
+          "id": "skillful",
+          "choiceId": "skillful",
+          "count": 1,
+          "text": "Skillful. You gain proficiency in one skill of your choice.",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500601",
+              "revisionId": "52e00000-0000-4000-8000-000000500601"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500602",
+              "revisionId": "52e00000-0000-4000-8000-000000500602"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500603",
+              "revisionId": "52e00000-0000-4000-8000-000000500603"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500604",
+              "revisionId": "52e00000-0000-4000-8000-000000500604"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500605",
+              "revisionId": "52e00000-0000-4000-8000-000000500605"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500606",
+              "revisionId": "52e00000-0000-4000-8000-000000500606"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500607",
+              "revisionId": "52e00000-0000-4000-8000-000000500607"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500608",
+              "revisionId": "52e00000-0000-4000-8000-000000500608"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500609",
+              "revisionId": "52e00000-0000-4000-8000-000000500609"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500610",
+              "revisionId": "52e00000-0000-4000-8000-000000500610"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500611",
+              "revisionId": "52e00000-0000-4000-8000-000000500611"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500612",
+              "revisionId": "52e00000-0000-4000-8000-000000500612"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500613",
+              "revisionId": "52e00000-0000-4000-8000-000000500613"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500614",
+              "revisionId": "52e00000-0000-4000-8000-000000500614"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500615",
+              "revisionId": "52e00000-0000-4000-8000-000000500615"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500616",
+              "revisionId": "52e00000-0000-4000-8000-000000500616"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500617",
+              "revisionId": "52e00000-0000-4000-8000-000000500617"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500618",
+              "revisionId": "52e00000-0000-4000-8000-000000500618"
+            }
+          ]
+        },
+        {
+          "type": "choice",
+          "id": "versatile",
+          "choiceId": "versatile",
+          "count": 1,
+          "text": "Versatile. You gain an Origin feat of your choice. Skilled is recommended.",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520100",
+              "revisionId": "52e00000-0000-4000-8000-000000520100"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520200",
+              "revisionId": "52e00000-0000-4000-8000-000000520200"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000000010",
+              "revisionId": "52e00000-0000-4000-8000-000000000010"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000520300",
+              "revisionId": "52e00000-0000-4000-8000-000000520300"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500601",
+      "revisionId": "52e00000-0000-4000-8000-000000500601",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Skillful: Acrobatics",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 86
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.acrobatics"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500602",
+      "revisionId": "52e00000-0000-4000-8000-000000500602",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Skillful: Animal Handling",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 86
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.animalHandling"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500603",
+      "revisionId": "52e00000-0000-4000-8000-000000500603",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Skillful: Arcana",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 86
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.arcana"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500604",
+      "revisionId": "52e00000-0000-4000-8000-000000500604",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Skillful: Athletics",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 86
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.athletics"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500605",
+      "revisionId": "52e00000-0000-4000-8000-000000500605",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Skillful: Deception",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 86
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.deception"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500606",
+      "revisionId": "52e00000-0000-4000-8000-000000500606",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Skillful: History",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 86
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.history"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500607",
+      "revisionId": "52e00000-0000-4000-8000-000000500607",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Skillful: Insight",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 86
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.insight"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500608",
+      "revisionId": "52e00000-0000-4000-8000-000000500608",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Skillful: Intimidation",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 86
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.intimidation"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500609",
+      "revisionId": "52e00000-0000-4000-8000-000000500609",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Skillful: Investigation",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 86
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.investigation"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500610",
+      "revisionId": "52e00000-0000-4000-8000-000000500610",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Skillful: Medicine",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 86
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.medicine"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500611",
+      "revisionId": "52e00000-0000-4000-8000-000000500611",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Skillful: Nature",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 86
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.nature"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500612",
+      "revisionId": "52e00000-0000-4000-8000-000000500612",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Skillful: Perception",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 86
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.perception"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500613",
+      "revisionId": "52e00000-0000-4000-8000-000000500613",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Skillful: Performance",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 86
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.performance"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500614",
+      "revisionId": "52e00000-0000-4000-8000-000000500614",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Skillful: Persuasion",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 86
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.persuasion"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500615",
+      "revisionId": "52e00000-0000-4000-8000-000000500615",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Skillful: Religion",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 86
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.religion"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500616",
+      "revisionId": "52e00000-0000-4000-8000-000000500616",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Skillful: Sleight of Hand",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 86
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.sleightOfHand"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500617",
+      "revisionId": "52e00000-0000-4000-8000-000000500617",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Skillful: Stealth",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 86
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.stealth"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500618",
+      "revisionId": "52e00000-0000-4000-8000-000000500618",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Skillful: Survival",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 86
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.survival"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500700",
+      "revisionId": "52e00000-0000-4000-8000-000000500700",
+      "schemaVersion": 3,
+      "kind": "species",
+      "name": "Orc",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 86
+        }
+      },
+      "status": "published",
+      "summary": "Creature Type: Humanoid. Size: Medium (about 6–7 feet tall). Speed: 30 feet.\n\nAdrenaline Rush. You can take the Dash action as a Bonus Action. When you do so, you gain a number of Temporary Hit Points equal to your Proficiency Bonus.\n\nYou can use this trait a number of times equal to your Proficiency Bonus, and you regain all expended uses when you finish a Short or Long Rest.\n\nDarkvision. You have Darkvision with a range of 120 feet.\n\nRelentless Endurance. When you are reduced to 0 Hit Points but not killed outright, you can drop to 1 Hit Point instead. Once you use this trait, you can’t do so again until you finish a Long Rest.",
+      "effects": [
+        {
+          "type": "resource",
+          "id": "adrenaline-rush",
+          "resourceId": "adrenaline-rush",
+          "label": "Adrenaline Rush",
+          "maximum": "PB",
+          "text": "You can use this trait a number of times equal to your Proficiency Bonus, and you regain all expended uses when you finish a Short or Long Rest."
+        },
+        {
+          "type": "recovery",
+          "id": "adrenaline-rush-short-rest",
+          "timing": "onShortRest",
+          "resourceId": "adrenaline-rush",
+          "on": "shortRest",
+          "amount": "all"
+        },
+        {
+          "type": "recovery",
+          "id": "adrenaline-rush-long-rest",
+          "timing": "onLongRest",
+          "resourceId": "adrenaline-rush",
+          "on": "longRest",
+          "amount": "all"
+        },
+        {
+          "type": "resource",
+          "id": "relentless-endurance",
+          "resourceId": "relentless-endurance",
+          "label": "Relentless Endurance",
+          "maximum": "1",
+          "text": "Once you use this trait, you can’t do so again until you finish a Long Rest."
+        },
+        {
+          "type": "recovery",
+          "id": "relentless-endurance-long-rest",
+          "timing": "onLongRest",
+          "resourceId": "relentless-endurance",
+          "on": "longRest",
+          "amount": "all"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500800",
+      "revisionId": "52e00000-0000-4000-8000-000000500800",
+      "schemaVersion": 3,
+      "kind": "species",
+      "name": "Tiefling",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 86
+        }
+      },
+      "status": "published",
+      "summary": "Creature Type: Humanoid. Size: Medium (about 4–7 feet tall) or Small (about 3–4 feet tall), chosen when you select this species. Speed: 30 feet.\n\nDarkvision. You have Darkvision with a range of 60 feet.\n\nFiendish Legacy. You are the recipient of a legacy that grants you supernatural abilities. Choose a legacy from the Fiendish Legacies table. You gain the level 1 benefit of the chosen legacy.\n\nWhen you reach character levels 3 and 5, you learn a higher-level spell, as shown on the table. You always have that spell prepared. You can cast it once without a spell slot, and you regain the ability to cast it in that way when you finish a Long Rest. You can also cast the spell using any spell slots you have of the appropriate level.\n\nIntelligence, Wisdom, or Charisma is your spellcasting ability for the spells you cast with this trait (choose the ability when you select the legacy).\n\nOtherworldly Presence. You know the Thaumaturgy cantrip. When you cast it with this trait, the spell uses the same spellcasting ability you use for your Fiendish Legacy trait.\n\nTomeStack: legacy spells are recorded by hand.",
+      "effects": [
+        {
+          "type": "choice",
+          "id": "fiendish-legacy",
+          "choiceId": "fiendish-legacy",
+          "count": 1,
+          "text": "Fiendish Legacy. Choose a legacy from the Fiendish Legacies table. You gain the level 1 benefit of the chosen legacy.",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500801",
+              "revisionId": "52e00000-0000-4000-8000-000000500801"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500802",
+              "revisionId": "52e00000-0000-4000-8000-000000500802"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000500803",
+              "revisionId": "52e00000-0000-4000-8000-000000500803"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500801",
+      "revisionId": "52e00000-0000-4000-8000-000000500801",
+      "schemaVersion": 10,
+      "kind": "feature",
+      "name": "Fiendish Legacy: Abyssal",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 86
+        }
+      },
+      "status": "published",
+      "summary": "Level 1: You have Resistance to Poison damage. You also know the Poison Spray cantrip.\n\nLevel 3: Ray of Sickness.\n\nLevel 5: Hold Person.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "damage-resistance",
+          "grant": "damageResistance",
+          "damageType": "poison",
+          "text": "You have Resistance to Poison damage."
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500802",
+      "revisionId": "52e00000-0000-4000-8000-000000500802",
+      "schemaVersion": 10,
+      "kind": "feature",
+      "name": "Fiendish Legacy: Chthonic",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 86
+        }
+      },
+      "status": "published",
+      "summary": "Level 1: You have Resistance to Necrotic damage. You also know the Chill Touch cantrip.\n\nLevel 3: False Life.\n\nLevel 5: Ray of Enfeeblement.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "damage-resistance",
+          "grant": "damageResistance",
+          "damageType": "necrotic",
+          "text": "You have Resistance to Necrotic damage."
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000500803",
+      "revisionId": "52e00000-0000-4000-8000-000000500803",
+      "schemaVersion": 10,
+      "kind": "feature",
+      "name": "Fiendish Legacy: Infernal",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 86
+        }
+      },
+      "status": "published",
+      "summary": "Level 1: You have Resistance to Fire damage. You also know the Fire Bolt cantrip.\n\nLevel 3: Hellish Rebuke.\n\nLevel 5: Darkness.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "damage-resistance",
+          "grant": "damageResistance",
+          "damageType": "fire",
+          "text": "You have Resistance to Fire damage."
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000510100",
+      "revisionId": "52e00000-0000-4000-8000-000000510100",
+      "schemaVersion": 3,
+      "kind": "background",
+      "name": "Acolyte",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 83
+        }
+      },
+      "status": "published",
+      "summary": "Ability Scores: Intelligence, Wisdom, Charisma. Feat: Magic Initiate (Cleric). Skill Proficiencies: Insight and Religion. Tool Proficiency: Calligrapher’s Supplies. Equipment: Choose A or B: (A) Calligrapher’s Supplies, Book (prayers), Holy Symbol, Parchment (10 sheets), Robe, 8 GP; or (B) 50 GP.",
+      "effects": [
+        {
+          "type": "choice",
+          "id": "acolyte-ability-scores",
+          "choiceId": "acolyte-ability-scores",
+          "count": 1,
+          "text": "A background lists three of your character’s ability scores. Increase one by 2 and another one by 1, or increase all three by 1. None of these increases can raise a score above 20.",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000510101",
+              "revisionId": "52e00000-0000-4000-8000-000000510101"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000510102",
+              "revisionId": "52e00000-0000-4000-8000-000000510102"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000510103",
+              "revisionId": "52e00000-0000-4000-8000-000000510103"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000510104",
+              "revisionId": "52e00000-0000-4000-8000-000000510104"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000510105",
+              "revisionId": "52e00000-0000-4000-8000-000000510105"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000510106",
+              "revisionId": "52e00000-0000-4000-8000-000000510106"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000510107",
+              "revisionId": "52e00000-0000-4000-8000-000000510107"
+            }
+          ]
+        },
+        {
+          "type": "grant",
+          "id": "acolyte-insight",
+          "grant": "proficiency",
+          "target": "skill.insight"
+        },
+        {
+          "type": "grant",
+          "id": "acolyte-religion",
+          "grant": "proficiency",
+          "target": "skill.religion"
+        },
+        {
+          "type": "grant",
+          "id": "acolyte-feat",
+          "grant": "content",
+          "text": "Feat: Magic Initiate (Cleric)",
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000520200",
+            "revisionId": "52e00000-0000-4000-8000-000000520200"
+          }
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000510101",
+      "revisionId": "52e00000-0000-4000-8000-000000510101",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Acolyte Ability Scores: Intelligence +2, Wisdom +1",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 83
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "int",
+          "operation": "bonus",
+          "target": "ability.int.score",
+          "value": "2"
+        },
+        {
+          "type": "modifier",
+          "id": "wis",
+          "operation": "bonus",
+          "target": "ability.wis.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000510102",
+      "revisionId": "52e00000-0000-4000-8000-000000510102",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Acolyte Ability Scores: Intelligence +2, Charisma +1",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 83
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "int",
+          "operation": "bonus",
+          "target": "ability.int.score",
+          "value": "2"
+        },
+        {
+          "type": "modifier",
+          "id": "cha",
+          "operation": "bonus",
+          "target": "ability.cha.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000510103",
+      "revisionId": "52e00000-0000-4000-8000-000000510103",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Acolyte Ability Scores: Wisdom +2, Intelligence +1",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 83
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "wis",
+          "operation": "bonus",
+          "target": "ability.wis.score",
+          "value": "2"
+        },
+        {
+          "type": "modifier",
+          "id": "int",
+          "operation": "bonus",
+          "target": "ability.int.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000510104",
+      "revisionId": "52e00000-0000-4000-8000-000000510104",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Acolyte Ability Scores: Wisdom +2, Charisma +1",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 83
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "wis",
+          "operation": "bonus",
+          "target": "ability.wis.score",
+          "value": "2"
+        },
+        {
+          "type": "modifier",
+          "id": "cha",
+          "operation": "bonus",
+          "target": "ability.cha.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000510105",
+      "revisionId": "52e00000-0000-4000-8000-000000510105",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Acolyte Ability Scores: Charisma +2, Intelligence +1",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 83
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "cha",
+          "operation": "bonus",
+          "target": "ability.cha.score",
+          "value": "2"
+        },
+        {
+          "type": "modifier",
+          "id": "int",
+          "operation": "bonus",
+          "target": "ability.int.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000510106",
+      "revisionId": "52e00000-0000-4000-8000-000000510106",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Acolyte Ability Scores: Charisma +2, Wisdom +1",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 83
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "cha",
+          "operation": "bonus",
+          "target": "ability.cha.score",
+          "value": "2"
+        },
+        {
+          "type": "modifier",
+          "id": "wis",
+          "operation": "bonus",
+          "target": "ability.wis.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000510107",
+      "revisionId": "52e00000-0000-4000-8000-000000510107",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Acolyte Ability Scores: Intelligence +1, Wisdom +1, Charisma +1",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 83
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "int",
+          "operation": "bonus",
+          "target": "ability.int.score",
+          "value": "1"
+        },
+        {
+          "type": "modifier",
+          "id": "wis",
+          "operation": "bonus",
+          "target": "ability.wis.score",
+          "value": "1"
+        },
+        {
+          "type": "modifier",
+          "id": "cha",
+          "operation": "bonus",
+          "target": "ability.cha.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000511100",
+      "revisionId": "52e00000-0000-4000-8000-000000511100",
+      "schemaVersion": 3,
+      "kind": "background",
+      "name": "Criminal",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 83
+        }
+      },
+      "status": "published",
+      "summary": "Ability Scores: Dexterity, Constitution, Intelligence. Feat: Alert. Skill Proficiencies: Sleight of Hand and Stealth. Tool Proficiency: Thieves’ Tools. Equipment: Choose A or B: (A) 2 Daggers, Thieves’ Tools, Crowbar, 2 Pouches, Traveler’s Clothes, 16 GP; or (B) 50 GP.",
+      "effects": [
+        {
+          "type": "choice",
+          "id": "criminal-ability-scores",
+          "choiceId": "criminal-ability-scores",
+          "count": 1,
+          "text": "A background lists three of your character’s ability scores. Increase one by 2 and another one by 1, or increase all three by 1. None of these increases can raise a score above 20.",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000511101",
+              "revisionId": "52e00000-0000-4000-8000-000000511101"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000511102",
+              "revisionId": "52e00000-0000-4000-8000-000000511102"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000511103",
+              "revisionId": "52e00000-0000-4000-8000-000000511103"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000511104",
+              "revisionId": "52e00000-0000-4000-8000-000000511104"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000511105",
+              "revisionId": "52e00000-0000-4000-8000-000000511105"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000511106",
+              "revisionId": "52e00000-0000-4000-8000-000000511106"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000511107",
+              "revisionId": "52e00000-0000-4000-8000-000000511107"
+            }
+          ]
+        },
+        {
+          "type": "grant",
+          "id": "criminal-sleight-of-hand",
+          "grant": "proficiency",
+          "target": "skill.sleightOfHand"
+        },
+        {
+          "type": "grant",
+          "id": "criminal-stealth",
+          "grant": "proficiency",
+          "target": "skill.stealth"
+        },
+        {
+          "type": "grant",
+          "id": "criminal-feat",
+          "grant": "content",
+          "text": "Feat: Alert",
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000520100",
+            "revisionId": "52e00000-0000-4000-8000-000000520100"
+          }
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000511101",
+      "revisionId": "52e00000-0000-4000-8000-000000511101",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Criminal Ability Scores: Dexterity +2, Constitution +1",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 83
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "dex",
+          "operation": "bonus",
+          "target": "ability.dex.score",
+          "value": "2"
+        },
+        {
+          "type": "modifier",
+          "id": "con",
+          "operation": "bonus",
+          "target": "ability.con.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000511102",
+      "revisionId": "52e00000-0000-4000-8000-000000511102",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Criminal Ability Scores: Dexterity +2, Intelligence +1",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 83
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "dex",
+          "operation": "bonus",
+          "target": "ability.dex.score",
+          "value": "2"
+        },
+        {
+          "type": "modifier",
+          "id": "int",
+          "operation": "bonus",
+          "target": "ability.int.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000511103",
+      "revisionId": "52e00000-0000-4000-8000-000000511103",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Criminal Ability Scores: Constitution +2, Dexterity +1",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 83
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "con",
+          "operation": "bonus",
+          "target": "ability.con.score",
+          "value": "2"
+        },
+        {
+          "type": "modifier",
+          "id": "dex",
+          "operation": "bonus",
+          "target": "ability.dex.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000511104",
+      "revisionId": "52e00000-0000-4000-8000-000000511104",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Criminal Ability Scores: Constitution +2, Intelligence +1",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 83
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "con",
+          "operation": "bonus",
+          "target": "ability.con.score",
+          "value": "2"
+        },
+        {
+          "type": "modifier",
+          "id": "int",
+          "operation": "bonus",
+          "target": "ability.int.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000511105",
+      "revisionId": "52e00000-0000-4000-8000-000000511105",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Criminal Ability Scores: Intelligence +2, Dexterity +1",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 83
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "int",
+          "operation": "bonus",
+          "target": "ability.int.score",
+          "value": "2"
+        },
+        {
+          "type": "modifier",
+          "id": "dex",
+          "operation": "bonus",
+          "target": "ability.dex.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000511106",
+      "revisionId": "52e00000-0000-4000-8000-000000511106",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Criminal Ability Scores: Intelligence +2, Constitution +1",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 83
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "int",
+          "operation": "bonus",
+          "target": "ability.int.score",
+          "value": "2"
+        },
+        {
+          "type": "modifier",
+          "id": "con",
+          "operation": "bonus",
+          "target": "ability.con.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000511107",
+      "revisionId": "52e00000-0000-4000-8000-000000511107",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Criminal Ability Scores: Dexterity +1, Constitution +1, Intelligence +1",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 83
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "dex",
+          "operation": "bonus",
+          "target": "ability.dex.score",
+          "value": "1"
+        },
+        {
+          "type": "modifier",
+          "id": "con",
+          "operation": "bonus",
+          "target": "ability.con.score",
+          "value": "1"
+        },
+        {
+          "type": "modifier",
+          "id": "int",
+          "operation": "bonus",
+          "target": "ability.int.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000512100",
+      "revisionId": "52e00000-0000-4000-8000-000000512100",
+      "schemaVersion": 3,
+      "kind": "background",
+      "name": "Sage",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 83
+        }
+      },
+      "status": "published",
+      "summary": "Ability Scores: Constitution, Intelligence, Wisdom. Feat: Magic Initiate (Wizard). Skill Proficiencies: Arcana and History. Tool Proficiency: Calligrapher’s Supplies. Equipment: Choose A or B: (A) Quarterstaff, Calligrapher’s Supplies, Book (history), Parchment (8 sheets), Robe, 8 GP; or (B) 50 GP.",
+      "effects": [
+        {
+          "type": "choice",
+          "id": "sage-ability-scores",
+          "choiceId": "sage-ability-scores",
+          "count": 1,
+          "text": "A background lists three of your character’s ability scores. Increase one by 2 and another one by 1, or increase all three by 1. None of these increases can raise a score above 20.",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000512101",
+              "revisionId": "52e00000-0000-4000-8000-000000512101"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000512102",
+              "revisionId": "52e00000-0000-4000-8000-000000512102"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000512103",
+              "revisionId": "52e00000-0000-4000-8000-000000512103"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000512104",
+              "revisionId": "52e00000-0000-4000-8000-000000512104"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000512105",
+              "revisionId": "52e00000-0000-4000-8000-000000512105"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000512106",
+              "revisionId": "52e00000-0000-4000-8000-000000512106"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000512107",
+              "revisionId": "52e00000-0000-4000-8000-000000512107"
+            }
+          ]
+        },
+        {
+          "type": "grant",
+          "id": "sage-arcana",
+          "grant": "proficiency",
+          "target": "skill.arcana"
+        },
+        {
+          "type": "grant",
+          "id": "sage-history",
+          "grant": "proficiency",
+          "target": "skill.history"
+        },
+        {
+          "type": "grant",
+          "id": "sage-feat",
+          "grant": "content",
+          "text": "Feat: Magic Initiate (Wizard)",
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000520200",
+            "revisionId": "52e00000-0000-4000-8000-000000520200"
+          }
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000512101",
+      "revisionId": "52e00000-0000-4000-8000-000000512101",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Sage Ability Scores: Constitution +2, Intelligence +1",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 83
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "con",
+          "operation": "bonus",
+          "target": "ability.con.score",
+          "value": "2"
+        },
+        {
+          "type": "modifier",
+          "id": "int",
+          "operation": "bonus",
+          "target": "ability.int.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000512102",
+      "revisionId": "52e00000-0000-4000-8000-000000512102",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Sage Ability Scores: Constitution +2, Wisdom +1",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 83
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "con",
+          "operation": "bonus",
+          "target": "ability.con.score",
+          "value": "2"
+        },
+        {
+          "type": "modifier",
+          "id": "wis",
+          "operation": "bonus",
+          "target": "ability.wis.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000512103",
+      "revisionId": "52e00000-0000-4000-8000-000000512103",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Sage Ability Scores: Intelligence +2, Constitution +1",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 83
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "int",
+          "operation": "bonus",
+          "target": "ability.int.score",
+          "value": "2"
+        },
+        {
+          "type": "modifier",
+          "id": "con",
+          "operation": "bonus",
+          "target": "ability.con.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000512104",
+      "revisionId": "52e00000-0000-4000-8000-000000512104",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Sage Ability Scores: Intelligence +2, Wisdom +1",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 83
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "int",
+          "operation": "bonus",
+          "target": "ability.int.score",
+          "value": "2"
+        },
+        {
+          "type": "modifier",
+          "id": "wis",
+          "operation": "bonus",
+          "target": "ability.wis.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000512105",
+      "revisionId": "52e00000-0000-4000-8000-000000512105",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Sage Ability Scores: Wisdom +2, Constitution +1",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 83
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "wis",
+          "operation": "bonus",
+          "target": "ability.wis.score",
+          "value": "2"
+        },
+        {
+          "type": "modifier",
+          "id": "con",
+          "operation": "bonus",
+          "target": "ability.con.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000512106",
+      "revisionId": "52e00000-0000-4000-8000-000000512106",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Sage Ability Scores: Wisdom +2, Intelligence +1",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 83
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "wis",
+          "operation": "bonus",
+          "target": "ability.wis.score",
+          "value": "2"
+        },
+        {
+          "type": "modifier",
+          "id": "int",
+          "operation": "bonus",
+          "target": "ability.int.score",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000512107",
+      "revisionId": "52e00000-0000-4000-8000-000000512107",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Sage Ability Scores: Constitution +1, Intelligence +1, Wisdom +1",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 83
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "con",
+          "operation": "bonus",
+          "target": "ability.con.score",
+          "value": "1"
+        },
+        {
+          "type": "modifier",
+          "id": "int",
+          "operation": "bonus",
+          "target": "ability.int.score",
+          "value": "1"
+        },
+        {
+          "type": "modifier",
+          "id": "wis",
+          "operation": "bonus",
+          "target": "ability.wis.score",
+          "value": "1"
+        }
+      ]
+    }
+  ]
+}

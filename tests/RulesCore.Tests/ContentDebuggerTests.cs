@@ -90,6 +90,24 @@ public class ContentDebuggerTests
     }
 
     [Fact]
+    public void A_resource_spent_by_another_contents_toggle_is_not_dead_and_a_toggle_spending_elsewhere_does_not_hide_a_dead_local_one()
+    {
+        var pool = Revision(Ref(1), ContentKind.Feature, "Debug Pool",
+            new ResourceEffect { Id = "pool", ResourceId = "pool", Label = "Pool", Maximum = "2" },
+            new RecoveryEffect { Id = "pool-rest", ResourceId = "pool", On = RestPeriod.LongRest, Amount = "all" });
+        var shapes = Revision(Ref(2), ContentKind.Feature, "Debug Shapes",
+            new ResourceEffect { Id = "pool-local", ResourceId = "pool", Label = "Local pool", Maximum = "2" },
+            new ToggleEffect { Id = "shape", ToggleId = "shape", Label = "Shape", Cost = "1", ResourceId = "pool", ResourceContent = pool.ContentId });
+        var recoveredOnly = Revision(Ref(3), ContentKind.Feature, "Debug Quiet",
+            new ResourceEffect { Id = "drip", ResourceId = "drip", Label = "Drip", Maximum = "1" });
+
+        var report = Diagnose([pool, shapes, recoveredOnly]);
+
+        Assert.DoesNotContain(report.Findings, f => f.Code == "debug.resource-dead" && f.Content == pool.Reference);
+        Assert.Contains(report.Findings, f => (f.Code, f.EffectId, f.Content) == ("debug.resource-dead", "pool-local", shapes.Reference));
+    }
+
+    [Fact]
     public void A_grant_from_granted_content_never_applies_and_what_it_grants_is_unreachable()
     {
         var deepPublished = Published(Revision(Ref(3, 1), ContentKind.Feature, "Debug Deep", Reads("deep-init", "CLASS_LEVEL")));
@@ -177,6 +195,90 @@ public class ContentDebuggerTests
         // Validation of the batch already names the clash; it is listed once, as an error.
         var clash = Assert.Single(report.Findings, f => f.EffectId == "sub-ink" && f.Code is "validate.scale-duplicate" or "debug.scale-collision");
         Assert.Equal((FindingSeverity.Error, subclass.Reference), (clash.Severity, clash.Content));
+    }
+
+    private static AttackEffect Attack(string count, string die, string? bonus = null, string? cost = null) => new()
+    {
+        Id = "strike",
+        AttackId = "strike",
+        Label = "Strike",
+        Kind = WeaponAttack.Melee,
+        Abilities = [Ability.Str],
+        Damage = new(count, die),
+        DamageBonus = bonus,
+        DamageType = "bludgeoning",
+        Cost = cost,
+    };
+
+    [Fact]
+    public void A_scale_read_only_by_an_attack_effect_is_not_unused()
+    {
+        var feature = Revision(Ref(2), ContentKind.Feature, "Debug Strike Feature", Attack("1", "SCALE.arts"));
+        var cls = Revision(Ref(1), ContentKind.Class, "Debug Class", D8, Scale("arts-column", "arts"), Grants("grant-strike", Ref(2), level: 1));
+
+        var report = Diagnose([cls, feature]);
+
+        Assert.DoesNotContain(report.Findings, f => f.Code == "debug.scale-unused");
+        Assert.DoesNotContain(report.Findings, f => f.Code == "debug.scale-undefined");
+    }
+
+    [Fact]
+    public void An_attack_effect_reading_a_scale_its_class_does_not_define_is_undefined()
+    {
+        var feature = Revision(Ref(2), ContentKind.Feature, "Debug Strike Feature", Attack("SCALE.nope", "6"));
+        var cls = Revision(Ref(1), ContentKind.Class, "Debug Class", D8, Grants("grant-strike", Ref(2), level: 1));
+
+        var report = Diagnose([cls, feature]);
+
+        Assert.Contains(report.Findings, f => (f.Code, f.EffectId) == ("debug.scale-undefined", "strike"));
+    }
+
+    [Fact]
+    public void A_scale_read_only_by_a_toggle_cost_is_not_unused()
+    {
+        var toggle = new ToggleEffect { Id = "stance", ToggleId = "stance", Label = "Stance", Cost = "SCALE.arts" };
+        var feature = Revision(Ref(2), ContentKind.Feature, "Debug Stance Feature", toggle);
+        var cls = Revision(Ref(1), ContentKind.Class, "Debug Class", D8, Scale("arts-column", "arts"), Grants("grant-stance", Ref(2), level: 1));
+
+        var report = Diagnose([cls, feature]);
+
+        Assert.DoesNotContain(report.Findings, f => f.Code == "debug.scale-unused");
+    }
+
+    [Fact]
+    public void A_scale_read_only_by_a_toggle_duration_is_not_unused()
+    {
+        var toggle = new ToggleEffect { Id = "stance", ToggleId = "stance", Label = "Stance", Duration = "SCALE.arts" };
+        var feature = Revision(Ref(2), ContentKind.Feature, "Debug Stance Feature", toggle);
+        var cls = Revision(Ref(1), ContentKind.Class, "Debug Class", D8, Scale("arts-column", "arts"), Grants("grant-stance", Ref(2), level: 1));
+
+        var report = Diagnose([cls, feature]);
+
+        Assert.DoesNotContain(report.Findings, f => f.Code == "debug.scale-unused");
+    }
+
+    [Fact]
+    public void An_attack_with_no_damage_is_reported_not_thrown()
+    {
+        var broken = Attack("1", "6") with { Damage = null! };
+        var feature = Revision(Ref(2), ContentKind.Feature, "Debug Broken Strike", broken);
+        var cls = Revision(Ref(1), ContentKind.Class, "Debug Class", D8, Grants("grant-strike", Ref(2), level: 1));
+
+        var report = Diagnose([cls, feature]);
+
+        Assert.Contains(report.Findings, f => f.Code == "validate.attack-incomplete");
+        Assert.Empty(ContentGraph.Formulas(feature));
+    }
+
+    [Fact]
+    public void Formulas_lists_the_attack_damage_bonus_and_cost_and_the_toggle_cost_and_duration()
+    {
+        var attack = Revision(Ref(1), ContentKind.Feature, "Debug Attack", Attack("A", "B", bonus: "C", cost: "D"));
+        var toggle = Revision(Ref(2), ContentKind.Feature, "Debug Toggle",
+            new ToggleEffect { Id = "stance", ToggleId = "stance", Label = "Stance", Cost = "E", Duration = "F" });
+
+        Assert.Equal(["A", "B", "C", "D"], ContentGraph.Formulas(attack).Select(f => f.Source).ToList());
+        Assert.Equal(["E", "F"], ContentGraph.Formulas(toggle).Select(f => f.Source).ToList());
     }
 
     [Fact]

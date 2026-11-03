@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { defineConfig, type Plugin } from 'vite';
+import type { Plugin } from 'vite';
+import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
 const devHostPort = process.env.TOMESTACK_DEV_PORT ?? '5178';
@@ -42,6 +43,7 @@ function contentSecurityPolicy(): Plugin {
 export default defineConfig({
   plugins: [react(), contentSecurityPolicy()],
   base: './',
+  test: { setupFiles: ['src/test/setup.ts'] },
   build: { outDir: 'dist', emptyOutDir: true, sourcemap: false },
   server: {
     host: '127.0.0.1',
