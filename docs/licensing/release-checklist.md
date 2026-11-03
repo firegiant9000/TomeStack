@@ -133,13 +133,35 @@ Velopack (MIT, Caelan Sayler) builds `Setup.exe` and `Update.exe` in Rust, with 
    - In a **minor** release PR, add the new `ReleaseLadder` row (`src/AppService/Packages/ReleaseLadder.cs`, its maxima from the schema constants) and generate its bundled set from the PR's own tree: `scripts/bundled-ids-at.ps1 -Tag HEAD -Out src/AppService/Packages/BundledAt/X.Y.0.txt` (`-Tag` takes any git revision; the tag does not exist yet).
    - A **patch** release must not change `src/AppService/Content/`: bundled SRD content ships only in a minor release (owner ruling, 2026-10-27), and there are no patch rows. Check that `git diff vX.Y.0 HEAD -- src/AppService/Content` is empty.
 2. Tag and push from an up-to-date `main`: `git tag -a v0.4.0 -m "TomeStack 0.4.0"`, then `git push origin v0.4.0`.
+   - Before tagging, check the **Weekly** workflow's (`.github/workflows/weekly.yml`) last run date and status: GitHub turns a schedule off after 60 days without repository activity, and the job never blocks a merge, so a red or stale run is only seen here.
 3. The **Release** workflow (`.github/workflows/release.yml`) runs:
    1. the full gate;
    2. the self-contained publish and `vpk pack`;
    3. an install, smoke and uninstall on the runner;
-   4. it creates a **draft** release with `Setup.exe`, the portable zip, the `.nupkg`, the Velopack feed files and notes from the changelog.
-4. Review the draft on GitHub (assets, notes, the unsigned note), then **Publish**. Nothing is public before that.
+   4. it writes `SHA256SUMS` over those files, attests each file it lists (build provenance) and creates a **draft** release with `Setup.exe`, the portable zip, the `.nupkg`, the Velopack feed files, `SHA256SUMS` and notes from the changelog.
+4. Review the draft on GitHub (assets, notes, the unsigned note), check that its tag's commit is on `main` (`git fetch origin --tags`, then `git merge-base --is-ancestor vX.Y.Z origin/main` must succeed; a draft from any other commit is rejected as below), then **Publish**. The release page is not public before that, but the workflow run's artifacts (`release-assets`, the same files; `release-notes`; `release-smoke-result`) can be downloaded from the public run page for one day.
 5. After publishing: run the upgrade test and the install checks on the published `Setup.exe` (`docs/features/release-0.4.0-verification.md`).
 
-Before tagging, check the **Weekly** workflow's (`.github/workflows/weekly.yml`) last run date and status: GitHub turns a schedule off after 60 days without repository activity, and the job never blocks a merge, so a red or stale run is only seen here.
-6. A GitHub ruleset protects `main` and `refs/tags/v*` from force-push and deletion (repository settings, the owner's; check with `gh api repos/firegiant9000/TomeStack/rulesets`).
+6. Two GitHub rulesets (repository settings, the owner's; check with `gh api repos/firegiant9000/TomeStack/rulesets`): `Default` protects `main` from force-push and deletion, and `Release Tags` (since 2026-11-03) lets only a repository admin create, move or delete a `refs/tags/v*` tag. The workflow runs as it stands at the tag, so the ruleset is what limits who can start a release; step 4's check that the tag's commit is on `main` stays as the second line.
+
+### Verify a release
+
+The **Release** workflow has three jobs, so no step that runs the repo's code or npm packages holds a write or OIDC token:
+
+- `build` (`contents: read`, checkout without a persisted token): the version check, the full gate, pack, installer smoke, then `SHA256SUMS` (`<sha256>  <file>` per asset, lower-case hex). Signing, when it lands, goes after the pack and before the hash file.
+- `attest` (`id-token: write`, `attestations: write`): checks the files against `SHA256SUMS`, then `actions/attest-build-provenance` with `subject-checksums: SHA256SUMS`.
+- `publish` (`contents: write`): checks the files again and creates the draft with the listed files and `SHA256SUMS`. It runs no repo code.
+
+Every action is pinned to a commit SHA. A manual run (**Run workflow**, `dry-run` ticked) runs `build` only, so the build can be rehearsed on a branch without a tag; it never attests or publishes.
+
+**Before publishing the draft** (owner, on a machine with the GitHub CLI): download `TomeStack.App-win-Setup.exe` and `SHA256SUMS` from the draft and run
+
+```
+gh attestation verify TomeStack.App-win-Setup.exe --repo firegiant9000/TomeStack --signer-workflow firegiant9000/TomeStack/.github/workflows/release.yml --source-ref refs/tags/vX.Y.Z --source-digest <commit>
+```
+
+with the release's tag and the full SHA of the commit it points to (`git rev-parse vX.Y.Z^{commit}`). It must report the attestation verified. `--signer-workflow` and `--source-ref` make it fail for a file attested by any other workflow or ref. Then check the installer's hash against its line in `SHA256SUMS` (`(Get-FileHash TomeStack.App-win-Setup.exe).Hash` in PowerShell; the case of the letters doesn't matter). The release notes print the same command for users. The command needs a GitHub CLI recent enough to have `--source-ref` and `--source-digest`, signed in (`gh auth login`); an "unknown flag" or sign-in error is not a failed attestation. The hash check alone shows only that the file arrived intact: `SHA256SUMS` is not itself attested.
+
+What an attestation does not prove: it says which workflow file at which tag built a file, not who published it. It is not a code signature, and the build is not bit-reproducible. Anyone who can push a `v*` tag can run the release workflow as it stands at that tag, so the attestation is only as strong as the rule on who may create `v*` tags (the tag ruleset); `--source-digest <commit>` pins the check to one commit.
+
+**Rejecting a draft:** the attestation is made before the draft is reviewed, so a rejected build stays attested for its tag. Never reuse a version tag: delete the draft, delete the run's artifacts, and release the fix as the next patch version with a new tag. The same applies when `publish` fails and cannot be re-run after the artifacts expire (one day): release the next patch version rather than uploading files by hand, which would skip the `SHA256SUMS` checks.
