@@ -45,6 +45,8 @@
     <None Include="..\RulesFixtures\lab\*.md" LinkBase="RulesFixtures\lab" CopyToOutputDirectory="PreserveNewest" />
     <!-- A data folder's database from a build of the v0.5.0 tag (UpgradeTests); named .sqlite because *.db is gitignored. -->
     <None Include="..\RulesFixtures\upgrade\**\*.sqlite" LinkBase="RulesFixtures\upgrade" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Packages, backups and data folders exported by each real release (OldReleaseImportTests). -->
+    <None Include="..\RulesFixtures\upgrade\**\*.tomestack.zip;..\RulesFixtures\upgrade\**\folder\**\*.pdf;..\RulesFixtures\upgrade\**\folder\tomestack.app-version" LinkBase="RulesFixtures\upgrade" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\docs\schemas\*.json" LinkBase="schemas" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\src\AppService\Content\*.json" LinkBase="Content" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\docs\licensing\*.md" LinkBase="licensing" CopyToOutputDirectory="PreserveNewest" />
