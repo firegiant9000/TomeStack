@@ -132,7 +132,7 @@ gh attestation verify .\TomeStack.App-win-Setup.exe --repo firegiant9000/TomeSta
 - Only published content revisions affect calculations. Imported candidates become drafts, and imported effects are reference-only until reviewed.
 - Package import is preview-then-apply, with size limits, a fixed path layout and SHA-256 verification. Character packages never include PDFs. Only a full library backup contains your managed PDF copies, and it is personal: do not share it.
 - One TomeStack per data folder: a second launch brings the open window forward.
-- Upgrading keeps your library in place, and a full backup moves it to a new PC; see [Moving your library to a new version or a new PC](docs/features/restore-drill-procedure.md#moving-your-library-to-a-new-version-or-a-new-pc).
+- Upgrading keeps your library in place, and a full backup moves it to a new PC; see [Moving your library to a new version or a new PC](docs/features/restore-drill-procedure.md#moving-your-library-to-a-new-version-or-a-new-pc). A file for someone on an older version can be saved for that version; the preview lists what the copy leaves out, and your library is unchanged.
 - 2014 and 2024 rules are separate rules-family IDs, and their differences are explicit policy fields.
 
 ## License
