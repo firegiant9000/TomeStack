@@ -142,7 +142,7 @@ Velopack (MIT, Caelan Sayler) builds `Setup.exe` and `Update.exe` in Rust, with 
 4. Review the draft on GitHub (assets, notes, the unsigned note), check that its tag's commit is on `main` (`git fetch origin --tags`, then `git merge-base --is-ancestor vX.Y.Z origin/main` must succeed; a draft from any other commit is rejected as below), then **Publish**. The release page is not public before that, but the workflow run's artifacts (`release-assets`, the same files; `release-notes`; `release-smoke-result`) can be downloaded from the public run page for one day.
 5. After publishing: run the upgrade test and the install checks on the published `Setup.exe` (`docs/features/release-0.4.0-verification.md`).
 
-6. A GitHub ruleset protects `main` from force-push and deletion (repository settings, the owner's; check with `gh api repos/firegiant9000/TomeStack/rulesets`). **No tag ruleset exists yet** (an open owner decision), so anyone who can push may create a `v*` tag, and the workflow runs as it stands at that tag; step 4's check that the tag's commit is on `main` stands in for the ruleset until one exists.
+6. Two GitHub rulesets (repository settings, the owner's; check with `gh api repos/firegiant9000/TomeStack/rulesets`): `Default` protects `main` from force-push and deletion, and `Release Tags` (since 2026-11-03) lets only a repository admin create, move or delete a `refs/tags/v*` tag. The workflow runs as it stands at the tag, so the ruleset is what limits who can start a release; step 4's check that the tag's commit is on `main` stays as the second line.
 
 ### Verify a release
 
