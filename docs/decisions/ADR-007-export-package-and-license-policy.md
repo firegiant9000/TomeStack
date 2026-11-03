@@ -47,7 +47,7 @@ SPEC S-01, P-02 and Q-03 require every source to carry license and redistributio
 
 **Accepted (LIVING_SPECS D85, owner, 2026-10-28):**
 
-12. **Save for an older TomeStack.** A package may be written for an older release; it is lossy, marked `madeFor`, carries copies with new ids, never lowers a bundled revision; the share rules of items 6 and 11 apply unchanged. The preview lists what the copy loses before anything is written, and the save presents the list it confirmed (`changesHash`). `madeFor` is an optional manifest field without a format bump, the one documented exception to "a new field is a new version". Evidence: `DownConversionExportTests`, `DownConversionGoldenTests`, `MadeForMarkerTests`, `SourcePackTests`, `LibraryBackupTests`.
+12. **Save for an older TomeStack.** A package may be written for an older release; it is lossy, marked `madeFor`, carries copies with new ids, never lowers a bundled revision; the share rules of items 6 and 11 apply unchanged. The preview lists what the copy loses before anything is written, and the save presents the list it confirmed (`changesHash`). `madeFor` is an optional manifest field without a format bump, the one documented exception to "a new field is a new version". The id scheme, the guarded way back and the alternatives rejected are in [ADR-023](ADR-023-down-conversion-export.md). Evidence: `DownConversionExportTests`, `DownConversionGoldenTests`, `MadeForMarkerTests`, `SourcePackTests`, `LibraryBackupTests`.
 
 **Accepted (D07, owner, 2026-09-26):**
 
