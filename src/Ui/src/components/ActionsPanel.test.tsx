@@ -5,7 +5,8 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { CharacterView, CustomAttack, RollTarget } from '../api/types';
-import { ActionsPanel, RollResult } from './PlayPanels';
+import { attackPin, customPin, rollPin, togglePin, type Pin } from '../quickbar';
+import { ActionsPanel, ResourcesPanel, RollResult } from './PlayPanels';
 
 afterEach(cleanup);
 
@@ -211,6 +212,7 @@ it('shows the riders in the attack trace', () => {
   const trace = screen.getByRole('list', { name: 'How the Testy strike attack is calculated' });
   expect(trace.textContent).toMatch(/Fixture Blazing Mode rider: 4d8 added to the damage/);
   expect(trace.textContent).not.toMatch(/\+0 = /); // a step with no amount does not claim one
+  expect(trace.textContent).toMatch(/Starts at 3: Dexterity modifier/); // D72: the shared sentence renderer
 });
 
 it('says a replacing attack replaces one attack of the Attack action', () => {
@@ -327,6 +329,26 @@ it('an action shows its save DC, area, range and targets as text', () => {
   cleanup();
   render(<ActionsPanel view={actionsView([{ id: 'plain', type: 'roll', label: 'Plain', dice: '1d4', available: true }])} roll={() => {}} act={() => {}} />);
   expect(screen.getByRole('button', { name: 'Roll Plain (1d4)' }).closest('li')!.textContent).not.toMatch(/Save|Range|undefined|\(\)/);
+});
+
+it('an action with a save trace offers "Why DC 13?", closed, ending with the DC; none without a trace (D72 X04)', () => {
+  const rules = { kind: 'rulesPolicy' };
+  const beam = {
+    id: 'beam', type: 'roll', label: 'Beam', dice: '4d6', activation: 'action', available: true, saveAbility: 'dex', saveDc: 13,
+    saveTrace: [
+      { order: 1, operation: 'base', description: 'Base DC', amount: 8, result: 8, origin: rules },
+      { order: 2, operation: 'add', description: 'Proficiency bonus', amount: 3, result: 11, origin: rules },
+      { order: 3, operation: 'derive', description: 'Save DC', result: 13, origin: rules },
+    ],
+  };
+  render(<ActionsPanel view={actionsView([beam])} roll={() => {}} act={() => {}} />);
+  const why = screen.getByText('Why DC 13?').closest('details')!;
+  expect(why.open).toBe(false);
+  const items = within(why).getAllByRole('listitem', { hidden: true });
+  expect(items[items.length - 1]!.textContent).toBe('Save DC: 13');
+  cleanup();
+  render(<ActionsPanel view={actionsView([{ ...beam, saveTrace: [] }])} roll={() => {}} act={() => {}} />);
+  expect(screen.queryByText(/^Why DC/)).toBeNull();
 });
 
 it("the per-unit amount box rolls with that amount and the record's Spend spends exactly it", async () => {
@@ -746,4 +768,404 @@ it('a drawsDown dice-less Use is disabled with its reason when less has built up
   cleanup();
   render(<ActionsPanel view={chargingView([draw], [chargePool(2)])} roll={() => {}} act={() => {}} />);
   expect((screen.getByRole('button', { name: 'Use Vent (2 Testy charge)' }) as HTMLButtonElement).disabled).toBe(false);
+});
+
+// D73: the "Usable now" filter, the reasons under rows and the Pin buttons.
+const usableNow = () => screen.getByRole('checkbox', { name: 'Usable now' });
+const wave = { id: 'wave', type: 'roll', label: 'Wave', dice: '2d6', activation: 'action', resourceId: 'focus', cost: 2, available: true };
+const rally = { id: 'rally', type: 'roll', label: 'Rally', activation: 'bonusAction', resourceId: 'focus', cost: 2, available: true };
+const waveFeature = { content: ref, name: 'Testy Source', kind: 'feature', effects: [wave] };
+const wavePin = () => rollPin(waveFeature as never, wave as never);
+
+it('Usable now is off by default and every row shows', () => {
+  render(<ActionsPanel view={actionsView([wave, rally], focusPool(1))} roll={() => {}} act={() => {}} />);
+  expect((usableNow() as HTMLInputElement).checked).toBe(false);
+  expect(screen.getByRole('button', { name: /^Roll Wave/ })).toBeTruthy();
+  expect(screen.getByRole('button', { name: /^Use Rally/ })).toBeTruthy();
+});
+
+it('a form-only roll shows its reason, the filter hides it, and it returns when the form is on (no remount)', async () => {
+  const formOnly = { id: 'flash', type: 'roll', label: 'Flash', dice: '1d6', activation: 'action', available: false, unavailableReason: 'Available in Fixture Tide Form' };
+  const other = { ...wave, id: 'other', label: 'Other', resourceId: undefined };
+  const props = { roll: () => {}, act: () => {} };
+  const { rerender } = render(<ActionsPanel view={actionsView([formOnly, other])} {...props} />);
+  expect(screen.getByRole('button', { name: /^Roll Flash/ }).closest('li')!.textContent).toMatch(/Available in Fixture Tide Form/);
+  await userEvent.click(usableNow());
+  expect(screen.queryByRole('button', { name: /^Roll Flash/ })).toBeNull();
+  expect(screen.getByRole('button', { name: /^Roll Other/ })).toBeTruthy();
+  rerender(<ActionsPanel view={actionsView([{ ...formOnly, available: true }, other])} {...props} />);
+  expect(screen.getByRole('button', { name: /^Roll Flash/ })).toBeTruthy();
+});
+
+it('a roll with dice the pool cannot pay stays enabled, says why, is described by it, and the filter hides it', async () => {
+  render(<ActionsPanel view={actionsView([wave], focusPool(1))} roll={() => {}} act={() => {}} />);
+  const button = screen.getByRole('button', { name: /^Roll Wave/ }) as HTMLButtonElement;
+  expect(button.disabled).toBe(false);
+  expect(button.closest('li')!.textContent).toMatch(/Needs 2 Testy focus \(1 left\)/);
+  expect(document.getElementById(button.getAttribute('aria-describedby')!)!.textContent).toMatch(/Needs 2 Testy focus \(1 left\)/);
+  await userEvent.click(usableNow());
+  expect(screen.queryByRole('button', { name: /^Roll Wave/ })).toBeNull();
+  expect(screen.getByText('Nothing is usable right now.')).toBeTruthy();
+});
+
+it('an allowance pool at 0 loses its group under the filter, and nothing else left says so', async () => {
+  const reaction = { id: 'guard', type: 'roll', label: 'Guard', resourceId: 'react', cost: 1, available: true };
+  const pool = { ...focusPool(0), resourceId: 'react', label: 'Reaction', maximum: 1, spent: 1, allowance: true };
+  render(<ActionsPanel view={actionsView([reaction], pool)} roll={() => {}} act={() => {}} />);
+  expect(screen.getByRole('region', { name: 'Reaction' })).toBeTruthy();
+  await userEvent.click(usableNow());
+  expect(screen.queryByRole('region', { name: 'Reaction' })).toBeNull();
+  expect(screen.getByText('Nothing is usable right now.')).toBeTruthy();
+});
+
+it('a dice-less Use of an untracked pool is by hand and stays under the filter', async () => {
+  render(<ActionsPanel view={actionsView([rally], { ...focusPool(), current: undefined })} roll={() => {}} act={() => {}} />);
+  await userEvent.click(usableNow());
+  expect(screen.getByRole('button', { name: /^Use Rally/ })).toBeTruthy();
+  expect(screen.queryByText('Nothing is usable right now.')).toBeNull();
+});
+
+it('a pinned row that is not usable stays listed under the filter so it can be unpinned', async () => {
+  const onPin = vi.fn();
+  render(<ActionsPanel view={actionsView([wave], focusPool(1))} roll={() => {}} act={() => {}} pins={[wavePin()]} onPin={onPin} />);
+  await userEvent.click(usableNow());
+  await userEvent.click(screen.getByRole('button', { name: 'Pin Wave to the quickbar' }));
+  expect(onPin).toHaveBeenCalledWith(wavePin());
+});
+
+it('Pin calls onPin with the row pin, a pinned row is aria-pressed Unpin, and no onPin means no Pin buttons', async () => {
+  const onPin = vi.fn();
+  const { rerender } = render(<ActionsPanel view={actionsView([wave])} roll={() => {}} act={() => {}} onPin={onPin} />);
+  const pin = screen.getByRole('button', { name: 'Pin Wave to the quickbar' });
+  expect(pin.getAttribute('aria-pressed')).toBe('false');
+  expect(pin.textContent).toBe('Pin');
+  await userEvent.click(pin);
+  expect(onPin).toHaveBeenCalledWith(wavePin());
+  rerender(<ActionsPanel view={actionsView([wave])} roll={() => {}} act={() => {}} onPin={onPin} pins={[wavePin()]} />);
+  const pinned = screen.getByRole('button', { name: 'Pin Wave to the quickbar' });
+  expect(pinned.getAttribute('aria-pressed')).toBe('true');
+  expect(pinned.textContent).toBe('Unpin');
+  rerender(<ActionsPanel view={actionsView([wave])} roll={() => {}} act={() => {}} />);
+  expect(screen.queryByRole('button', { name: /to the quickbar$/ })).toBeNull();
+});
+
+it('Pin buttons cover attacks, custom attacks and toggles, and an auto toggle gets none', async () => {
+  const onPin = vi.fn();
+  const v = {
+    character: { id: 'fixture', customAttacks: [sling] },
+    sheet: { attacks: [weaponRow], toggles: [toggle('stance'), toggle('grit', { auto: true, on: true })], features: [] },
+  } as unknown as CharacterView;
+  render(<ActionsPanel view={v} roll={() => {}} act={() => {}} onPin={onPin} />);
+  await userEvent.click(screen.getByRole('button', { name: 'Pin Fixture Needle to the quickbar' }));
+  expect(onPin).toHaveBeenLastCalledWith(attackPin(weaponRow as never));
+  await userEvent.click(screen.getByRole('button', { name: 'Pin Testy Sling to the quickbar' }));
+  expect(onPin).toHaveBeenLastCalledWith(customPin(sling));
+  await userEvent.click(screen.getByRole('button', { name: 'Pin Testy stance to the quickbar' }));
+  expect(onPin).toHaveBeenLastCalledWith(togglePin(toggle('stance') as never));
+  expect(screen.queryByRole('button', { name: 'Pin Testy grit to the quickbar' })).toBeNull();
+});
+
+it('a toggle that cannot be turned on shows its reason, stays enabled, and the filter hides it unless it is on', async () => {
+  const v = togglesView([toggle('stance', { available: false, unavailableReason: 'Available in Fixture Tide Form' })]);
+  render(<ActionsPanel view={v} roll={() => {}} act={() => {}} />);
+  const box = screen.getByRole('checkbox', { name: /Testy stance/ }) as HTMLInputElement;
+  expect(box.disabled).toBe(false);
+  expect(document.getElementById(box.getAttribute('aria-describedby')!)!.textContent).toMatch(/Available in Fixture Tide Form/);
+  await userEvent.click(usableNow());
+  expect(screen.queryByRole('checkbox', { name: /Testy stance/ })).toBeNull();
+});
+
+it('when Usable now hides the row just used, focus moves to the filter checkbox, not <body>', async () => {
+  const props = { roll: () => {}, act: () => {} };
+  const { rerender } = render(<ActionsPanel view={actionsView([rally], focusPool(2))} {...props} />);
+  await userEvent.click(usableNow());
+  await userEvent.click(screen.getByRole('button', { name: /^Use Rally/ })); // focuses the button, as the real click does
+  rerender(<ActionsPanel view={actionsView([rally], focusPool(0))} {...props} />);
+  expect(screen.queryByRole('button', { name: /^Use Rally/ })).toBeNull();
+  expect(document.activeElement).toBe(usableNow());
+  expect(document.querySelector('[aria-live="polite"]')!.textContent).toBe('Nothing is usable right now.');
+  expect(document.querySelector('[role="status"]')).toBeNull(); // the page has one status line
+});
+
+it('focus still returns to the filter when the reply comes after an intermediate render of the same view', async () => {
+  const props = { roll: () => {}, act: () => {} };
+  const { rerender } = render(<ActionsPanel view={actionsView([rally], focusPool(2))} {...props} />);
+  await userEvent.click(usableNow());
+  await userEvent.click(screen.getByRole('button', { name: /^Use Rally/ }));
+  rerender(<ActionsPanel view={actionsView([rally], focusPool(2))} {...props} />); // the sheet's in-flight render: nothing has changed yet
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: /^Use Rally/ }));
+  rerender(<ActionsPanel view={actionsView([rally], focusPool(0))} {...props} />);
+  expect(document.activeElement).toBe(usableNow());
+});
+
+it('a row that stays listed keeps focus through further renders', async () => {
+  const props = { roll: () => {}, act: () => {} };
+  const { rerender } = render(<ActionsPanel view={actionsView([rally], focusPool(4))} {...props} />);
+  await userEvent.click(usableNow());
+  await userEvent.click(screen.getByRole('button', { name: /^Use Rally/ }));
+  for (const pool of [4, 3, 2]) rerender(<ActionsPanel view={actionsView([rally], focusPool(pool))} {...props} />);
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: /^Use Rally/ }));
+});
+
+it('a later render with no action never moves focus, even after a row button was focused and then lost to <body>', async () => {
+  const props = { roll: () => {}, act: () => {} };
+  const { rerender } = render(<ActionsPanel view={actionsView([rally], focusPool(2))} {...props} />);
+  await userEvent.click(usableNow());
+  const use = screen.getByRole('button', { name: /^Use Rally/ });
+  use.focus();
+  use.blur();
+  expect(document.activeElement).toBe(document.body);
+  rerender(<ActionsPanel view={actionsView([rally], focusPool(0))} {...props} />);
+  expect(screen.queryByRole('button', { name: /^Use Rally/ })).toBeNull();
+  expect(document.activeElement).toBe(document.body);
+});
+
+it('a row that stayed listed does not pull focus later: a click elsewhere in the panel disarms the refocus', async () => {
+  const props = { roll: () => {}, act: () => {} };
+  const { rerender } = render(<ActionsPanel view={actionsView([rally], focusPool(4))} {...props} />);
+  await userEvent.click(usableNow());
+  await userEvent.click(screen.getByRole('button', { name: /^Use Rally/ })); // arms; the row stays listed
+  rerender(<ActionsPanel view={actionsView([rally], focusPool(3))} {...props} />);
+  await userEvent.click(screen.getByRole('heading', { name: 'Attacks and actions' })); // focus goes to <body>
+  expect(document.activeElement).toBe(document.body);
+  rerender(<ActionsPanel view={actionsView([rally], focusPool(0))} {...props} />); // another action empties the pool
+  expect(screen.queryByRole('button', { name: /^Use Rally/ })).toBeNull();
+  expect(document.activeElement).toBe(document.body);
+});
+
+it('a focus move to another control in the panel disarms the refocus as well', async () => {
+  const props = { roll: () => {}, act: () => {} };
+  const { rerender } = render(<ActionsPanel view={actionsView([rally], focusPool(4))} {...props} />);
+  await userEvent.click(usableNow());
+  await userEvent.click(screen.getByRole('button', { name: /^Use Rally/ }));
+  screen.getByRole('checkbox', { name: /^Critical hit/ }).focus(); // keyboard move, no pointer
+  screen.getByRole('checkbox', { name: /^Critical hit/ }).blur();
+  rerender(<ActionsPanel view={actionsView([rally], focusPool(0))} {...props} />);
+  expect(document.activeElement).toBe(document.body);
+});
+
+it('when the row drops while focus is outside the panel, focus stays there', async () => {
+  const props = { roll: () => {}, act: () => {} };
+  const ui = (pool: number) => (
+    <>
+      <ActionsPanel view={actionsView([rally], focusPool(pool))} {...props} />
+      <button type="button">Elsewhere</button>
+    </>
+  );
+  const { rerender } = render(ui(2));
+  await userEvent.click(usableNow());
+  await userEvent.click(screen.getByRole('button', { name: /^Use Rally/ }));
+  await userEvent.click(screen.getByRole('button', { name: 'Elsewhere' }));
+  rerender(ui(0));
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Elsewhere' }));
+});
+
+it('with 8 pins an unpinned row cannot be pinned (aria-disabled, no call, described) but a pinned one can be unpinned', async () => {
+  const eight: Pin[] = Array.from({ length: 8 }, (_, i) => ({ kind: 'custom', attackId: `k${i}` }));
+  const onPin = vi.fn();
+  render(<ActionsPanel view={actionsView([wave])} roll={() => {}} act={() => {}} onPin={onPin} pins={eight} />);
+  const blocked = screen.getByRole('button', { name: 'Pin Wave to the quickbar' });
+  expect(blocked.getAttribute('aria-disabled')).toBe('true');
+  expect(document.getElementById(blocked.getAttribute('aria-describedby')!)!.textContent?.trim()).toBe('The quickbar holds 8 actions.');
+  await userEvent.click(blocked);
+  expect(onPin).not.toHaveBeenCalled();
+  cleanup();
+  render(<ActionsPanel view={actionsView([wave])} roll={() => {}} act={() => {}} onPin={onPin} pins={[...eight.slice(0, 7), wavePin()]} />);
+  const own = screen.getByRole('button', { name: 'Pin Wave to the quickbar' });
+  expect(own.getAttribute('aria-disabled')).toBeNull();
+  await userEvent.click(own);
+  expect(onPin).toHaveBeenCalledTimes(1);
+});
+
+// MECH-X item 1 (R36, R37, R38, R40): hit-point and slot payments and cast-spell rows on the Actions panel.
+const payRef = { contentId: 'c-fury', revisionId: 'r-fury' };
+const payFeature = (effects: object[]) => ({ content: payRef, name: 'Fixture Fury', kind: 'feature', origin: {}, automation: 'automatic', diagnostics: [], effects });
+const payView = (sheet: object) => ({ character: { id: 'fixture' }, sheet: { attacks: [], toggles: [], features: [], resources: [], ...sheet } }) as unknown as CharacterView;
+const payToggle = (extra: object) => ({ content: payRef, contentName: 'Fixture Fury', effectId: 'e-rage', toggleId: 'rage', label: 'Fixture rage', on: false, available: true, cost: 3, ...extra });
+
+it('a toggle row says what it costs in hit points or a slot, and an off toggle that cannot pay has its switch held with the reason (R40)', () => {
+  const hp = payToggle({ payment: { kind: 'hitPoints', payable: true } });
+  const slot = payToggle({ toggleId: 'ward', effectId: 'e-ward', label: 'Fixture ward', cost: undefined, payment: { kind: 'slot', payable: false, reason: 'No spell slot is left.', minSlotLevel: 2 } });
+  render(<ActionsPanel view={payView({ toggles: [hp, slot] })} roll={() => {}} act={() => {}} />);
+  expect(screen.getByText(/Costs 3 hit points/)).toBeTruthy();
+  expect(screen.getByText(/Costs a level 2\+ spell slot/)).toBeTruthy();
+  expect(screen.getByRole<HTMLInputElement>('checkbox', { name: /Fixture rage/ }).disabled).toBe(false);
+  const ward = screen.getByRole<HTMLInputElement>('checkbox', { name: /Fixture ward/ });
+  expect(ward.disabled).toBe(true);
+  expect(screen.getByText('No spell slot is left.')).toBeTruthy();
+});
+
+it('an ON paying toggle stays switchable off even when it could not be paid now (B1)', async () => {
+  const user = userEvent.setup();
+  const act = vi.fn();
+  const on = payToggle({ on: true, payment: { kind: 'hitPoints', payable: false, reason: 'Needs more than 3 current hit points.' } });
+  render(<ActionsPanel view={payView({ toggles: [on] })} roll={() => {}} act={act} />);
+  const box = screen.getByRole<HTMLInputElement>('checkbox', { name: /Fixture rage/ });
+  expect(box.disabled).toBe(false);
+  await user.click(box);
+  expect(act).toHaveBeenCalledExactlyOnceWith({ action: 'toggleOff', contentId: 'c-fury', toggleId: 'rage' });
+});
+
+it('switching a payable paying toggle on sends toggleOn; a paying toggle cannot be pinned (S4)', async () => {
+  const user = userEvent.setup();
+  const act = vi.fn();
+  const pin = vi.fn();
+  render(<ActionsPanel view={payView({ toggles: [payToggle({ payment: { kind: 'hitPoints', payable: true } })] })} roll={() => {}} act={act} onPin={pin} />);
+  await user.click(screen.getByRole('checkbox', { name: /Fixture rage/ }));
+  expect(act).toHaveBeenCalledExactlyOnceWith({ action: 'toggleOn', contentId: 'c-fury', toggleId: 'rage' });
+  expect(screen.queryByRole('button', { name: /^Pin Fixture rage/ })).toBeNull();
+});
+
+it('a paying roll with dice that cannot be paid shows its reason, and Roll still rolls (rolling never pays)', async () => {
+  const user = userEvent.setup();
+  const roll = vi.fn();
+  const effect = { id: 'lash', rollId: 'lash-roll', type: 'roll', automation: 'automatic', label: 'Lash', dice: '2d6', cost: 5, available: true, payment: { kind: 'hitPoints', payable: false, reason: 'Needs more than 5 current hit points.' } };
+  render(<ActionsPanel view={payView({ features: [payFeature([effect])] })} roll={roll} act={() => {}} />);
+  expect(screen.getByText(/Needs more than 5 current hit points\./)).toBeTruthy();
+  expect(screen.getByText(/Costs 5 hit points/)).toBeTruthy();
+  await user.click(screen.getByRole('button', { name: 'Roll Lash (2d6)' }));
+  expect(roll).toHaveBeenCalledExactlyOnceWith({ content: payRef, effectId: 'lash', critical: false });
+});
+
+it('a dice-less paying roll is a Use button that sends useAction with its rollId; held with the reason when it cannot pay', async () => {
+  const user = userEvent.setup();
+  const act = vi.fn();
+  const ok = { id: 'surge', rollId: 'surge-roll', type: 'roll', automation: 'automatic', label: 'Surge', cost: 2, available: true, payment: { kind: 'hitPoints', payable: true } };
+  const broke = { id: 'drain', rollId: 'drain-roll', type: 'roll', automation: 'automatic', label: 'Drain', cost: 9, available: true, payment: { kind: 'hitPoints', payable: false, reason: 'Needs more than 9 current hit points.' } };
+  render(<ActionsPanel view={payView({ features: [payFeature([ok, broke])] })} roll={() => {}} act={act} />);
+  await user.click(screen.getByRole('button', { name: 'Use Surge (2 hit points)' }));
+  expect(act).toHaveBeenCalledExactlyOnceWith({ action: 'useAction', contentId: 'c-fury', rollId: 'surge-roll' });
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Use Drain (9 hit points)' }).disabled).toBe(true);
+  expect(screen.getByText(/Needs more than 9 current hit points\./)).toBeTruthy();
+});
+
+it('a hit-point per-unit roll asks how many points and rolls with that amount, even with no pool', async () => {
+  const user = userEvent.setup();
+  const roll = vi.fn();
+  const effect = { id: 'burn', rollId: 'burn-roll', type: 'roll', automation: 'automatic', label: 'Burn', dice: '1d6', cost: 2, available: true, perUnit: { dice: '1d6', maxUnits: 3 }, payment: { kind: 'hitPoints', payable: true } };
+  render(<ActionsPanel view={payView({ features: [payFeature([effect])] })} roll={roll} act={() => {}} />);
+  const box = screen.getByRole('spinbutton', { name: /Points to spend/ });
+  await user.clear(box);
+  await user.type(box, '4');
+  await user.click(screen.getByRole('button', { name: 'Roll Burn (1d6)' }));
+  expect(roll).toHaveBeenCalledExactlyOnceWith({ content: payRef, effectId: 'burn', critical: false, amount: 4 });
+});
+
+it('a paying feature attack says what it costs and shows its reason when it cannot pay', () => {
+  const lash = {
+    item: payRef, name: 'Fixture Lash', effectId: 'lash', source: 'feature', attack: 'melee', toHit: 4, damage: '1d8', damageType: 'fire', properties: [], trace: [], warnings: [],
+    automation: 'automatic', available: true, replacesAttack: false, cost: 4, payment: { kind: 'hitPoints', payable: false, reason: 'Needs more than 4 current hit points.' },
+  };
+  render(<ActionsPanel view={payView({ attacks: [lash] })} roll={() => {}} act={() => {}} />);
+  expect(screen.getByText(/Needs more than 4 current hit points\./)).toBeTruthy();
+  expect(screen.getByText(/Costs 4 hit points/)).toBeTruthy();
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Roll Fixture Lash attack' }).disabled).toBe(false);
+});
+
+it('a cast-spell roll says which spell it casts, its level and the numbers (R38)', () => {
+  const cast = (extra: object) => ({ spell: { contentId: 's1', revisionId: 'sr1' }, name: 'Fixture Spark', level: 2, attack: 'none', ...extra });
+  const row = (id: string, label: string, castsSpell: object) => ({ id, rollId: `${id}-roll`, type: 'roll', automation: 'automatic', label, available: true, castsSpell });
+  const withDc = row('spark', 'Spark', cast({ dice: '2d8', save: 'dex', saveDc: 14 }));
+  const byHand = row('glow', 'Glow', cast({ name: 'Fixture Glow', level: 1, dice: '1d6', attack: 'ranged' }));
+  const atk = row('bolt', 'Bolt', cast({ name: 'Fixture Bolt', dice: '1d10', attack: 'ranged', attackBonus: 6 }));
+  render(<ActionsPanel view={payView({ features: [payFeature([withDc, byHand, atk])] })} roll={() => {}} act={() => {}} />);
+  expect(screen.getByText(/Casts Fixture Spark \(level 2\) · DC 14/)).toBeTruthy();
+  expect(screen.getByText(/Casts Fixture Glow \(level 1\) · numbers by hand/)).toBeTruthy();
+  expect(screen.getByText(/Casts Fixture Bolt \(level 2\) · \+6 to hit/)).toBeTruthy();
+  // The spell's own dice are what rolls, so the row is a Roll button.
+  expect(screen.getByRole('button', { name: 'Roll Spark (2d8)' })).toBeTruthy();
+});
+
+
+// MECH-X item 3: a weapon carried as several copies gets one row per copy (the service sends `entryIndex`); the rows are told apart.
+it('labels attack rows of copies apart, and leaves a single weapon unlabelled', () => {
+  const item = { contentId: 'c-blade', revisionId: 'r-blade' };
+  const own = (equipped: boolean) => ({ item, equipped, quantity: 1 });
+  const row = (entryIndex?: number) => ({ item, effectId: 'e1', name: 'Fixture Blade', toHit: 5, damage: '1d8', damageType: 'slashing', automation: 'automatic', category: 'martial', attack: 'melee', properties: [], trace: [], warnings: [], source: 'weapon', ...(entryIndex === undefined ? {} : { entryIndex }) });
+  const copies = { character: { id: 'fixture', equipment: [own(true), own(true)] }, sheet: { attacks: [row(0), row(1)], toggles: [], features: [] } } as unknown as CharacterView;
+  render(<ActionsPanel view={copies} roll={() => {}} act={() => {}} />);
+  expect(screen.getByRole('button', { name: 'Roll Fixture Blade (copy 1 of 2) attack' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Roll Fixture Blade (copy 2 of 2) damage (1d8)' })).toBeTruthy();
+  cleanup();
+  const single = { character: { id: 'fixture', equipment: [own(true)] }, sheet: { attacks: [row()], toggles: [], features: [] } } as unknown as CharacterView;
+  render(<ActionsPanel view={single} roll={() => {}} act={() => {}} />);
+  expect(screen.getByRole('button', { name: 'Roll Fixture Blade attack' })).toBeTruthy();
+});
+
+it('numbers copies as the Inventory does, counting an unequipped copy between two equipped ones', () => {
+  const item = { contentId: 'c-blade', revisionId: 'r-blade' };
+  const own = (equipped: boolean) => ({ item, equipped, quantity: 1 });
+  const row = (entryIndex: number) => ({ item, effectId: 'e1', name: 'Fixture Blade', toHit: 5, damage: '1d8', damageType: 'slashing', automation: 'automatic', category: 'martial', attack: 'melee', properties: [], trace: [], warnings: [], source: 'weapon', entryIndex });
+  const v = { character: { id: 'fixture', equipment: [own(true), own(false), own(true)] }, sheet: { attacks: [row(0), row(2)], toggles: [], features: [] } } as unknown as CharacterView;
+  render(<ActionsPanel view={v} roll={() => {}} act={() => {}} />);
+  expect(screen.getByRole('button', { name: 'Roll Fixture Blade (copy 1 of 3) attack' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Roll Fixture Blade (copy 3 of 3) attack' })).toBeTruthy();
+});
+
+// MECH-X R68: a copy's buttons name the copy, so the service rolls that copy's numbers; a single weapon sends no index.
+it('rolls a copy of a weapon with its entry index, and a single weapon without one', async () => {
+  const user = userEvent.setup();
+  const item = { contentId: 'c-blade', revisionId: 'r-blade' };
+  const own = { item, equipped: true, quantity: 1 };
+  const row = (entryIndex?: number) => ({ item, effectId: 'e1', name: 'Fixture Blade', toHit: 5, damage: '1d8', versatileDamage: '1d10', damageType: 'slashing', automation: 'automatic', category: 'martial', attack: 'melee', properties: [], trace: [], warnings: [], source: 'weapon', ...(entryIndex === undefined ? {} : { entryIndex }) });
+  const roll = vi.fn();
+  const copies = { character: { id: 'fixture', equipment: [own, own] }, sheet: { attacks: [row(0), row(1)], toggles: [], features: [] } } as unknown as CharacterView;
+  render(<ActionsPanel view={copies} roll={roll} act={() => {}} />);
+  await user.click(screen.getByRole('button', { name: 'Roll Fixture Blade (copy 2 of 2) attack' }));
+  expect(roll).toHaveBeenLastCalledWith(expect.objectContaining({ weapon: item, entryIndex: 1 }));
+  await user.click(screen.getByRole('button', { name: 'Roll Fixture Blade (copy 2 of 2) damage (1d8)' }));
+  expect(roll).toHaveBeenLastCalledWith(expect.objectContaining({ weapon: item, entryIndex: 1, damage: true }));
+  await user.click(screen.getByRole('button', { name: 'Roll Fixture Blade (copy 1 of 2) two-handed damage (1d10)' }));
+  expect(roll).toHaveBeenLastCalledWith(expect.objectContaining({ weapon: item, entryIndex: 0, versatile: true }));
+  cleanup();
+  const single = { character: { id: 'fixture', equipment: [own] }, sheet: { attacks: [row()], toggles: [], features: [] } } as unknown as CharacterView;
+  render(<ActionsPanel view={single} roll={roll} act={() => {}} />);
+  await user.click(screen.getByRole('button', { name: 'Roll Fixture Blade attack' }));
+  expect(roll.mock.lastCall?.[0]).not.toHaveProperty('entryIndex');
+});
+
+// MECH-X item 4: a content companion's rows are on its card; the lists that show cards skip them, every lookup keeps them.
+it('Actions and Resources panels hide companion rows but a roll that spends a companion pool still finds it', () => {
+  const content = { contentId: 'c-charm', revisionId: 'r-charm' };
+  const attack = (name: string, extra: object = {}) => ({ item: content, name, effectId: name, source: 'feature', attack: 'melee', toHit: 4, damage: '1d6', damageType: 'piercing', properties: [], trace: [], warnings: [], automation: 'automatic', available: true, replacesAttack: false, ...extra });
+  const pool = (id: string, extra: object = {}) => ({ content, contentName: 'Testy Charm', effectId: `e-${id}`, resourceId: id, label: `Testy ${id}`, maximum: 2, spent: 0, current: 2, trace: [], warnings: [], automation: 'automatic', recoveries: [], ...extra });
+  const v = {
+    character: { id: 'fixture' },
+    sheet: {
+      // The plain attack spends a pool that belongs to a companion: it must still name it.
+      attacks: [attack('Pack Claw', { companionId: 'g1' }), attack('Plain Lash', { resourceId: 'howl', costResourceContent: 'c-charm', cost: 1 })],
+      resources: [pool('howl', { companionId: 'g1' }), pool('guard')],
+      toggles: [],
+      features: [],
+    },
+  } as unknown as CharacterView;
+  render(
+    <>
+      <ActionsPanel view={v} roll={() => {}} act={() => {}} />
+      <ResourcesPanel view={v} act={() => {}} />
+    </>,
+  );
+  const actions = screen.getByRole('region', { name: 'Attacks and actions' });
+  expect(within(actions).queryByRole('button', { name: 'Roll Pack Claw attack' })).toBeNull();
+  expect(within(actions).getByRole('button', { name: 'Roll Plain Lash attack' })).toBeTruthy();
+  expect(actions.textContent).toMatch(/uses 1 Testy howl \(spend it from the roll\)/);
+  const resources = screen.getByRole('region', { name: 'Resources' });
+  expect(within(resources).queryByRole('heading', { name: /Testy howl/ })).toBeNull();
+  expect(within(resources).getByRole('heading', { name: /Testy guard/ })).toBeTruthy();
+});
+
+it('does not make an allowance group of a companion allowance pool', () => {
+  const content = { contentId: 'c-charm', revisionId: 'r-charm' };
+  const pool = (id: string, extra: object = {}) => ({ content, contentName: 'Testy Charm', effectId: `e-${id}`, resourceId: id, label: `Testy ${id}`, maximum: 1, spent: 0, current: 1, trace: [], warnings: [], automation: 'automatic', recoveries: [], allowance: true, ...extra });
+  const rollFeature = (resourceId: string) => ({
+    content,
+    name: 'Testy Charm',
+    kind: 'feature',
+    diagnostics: [],
+    effects: [{ id: `r-${resourceId}`, type: 'roll', automation: 'automatic', label: `Roll ${resourceId}`, dice: '1d6', resourceId, cost: 1, activation: 'action', available: true }],
+  });
+  const v = { character: { id: 'fixture' }, sheet: { attacks: [], toggles: [], features: [rollFeature('mine'), rollFeature('pet')], resources: [pool('mine'), pool('pet', { companionId: 'g1' })] } } as unknown as CharacterView;
+  render(<ActionsPanel view={v} roll={() => {}} act={() => {}} />);
+  expect(screen.getByRole('region', { name: 'Testy mine' })).toBeTruthy();
+  expect(screen.queryByRole('region', { name: 'Testy pet' })).toBeNull();
 });

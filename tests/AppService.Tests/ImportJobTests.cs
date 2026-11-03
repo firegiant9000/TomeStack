@@ -136,6 +136,35 @@ public class ImportJobTests
         Assert.Equal("import.page-not-extracted", Assert.Single(Assert.Throws<AppValidationException>(() => temp.App.ImportedPage(new(sourceId, 4))).Problems).Code);
     }
 
+    private static string ImportCode(Action action) => Assert.Single(Assert.Throws<AppValidationException>(action).Problems).Code;
+
+    [Fact]
+    public void A_page_is_read_for_the_sha_of_the_sources_job_after_the_attachment_is_replaced()
+    {
+        // D64: a candidate's spans point into the PDF it was read from, not the one attached since.
+        using var temp = new TempApp();
+        var sourceId = SourceWithBook(temp);
+        var job = Settle(temp, temp.App.StartImport(new(sourceId, WholeDocument: true)).Id);
+        temp.App.AttachPdf(sourceId, "fixture-import-2.pdf", [.. FixtureBook, .. "\n% replaced\n"u8.ToArray()]);
+
+        Assert.Equal("import.page-not-extracted", ImportCode(() => temp.App.ImportedPage(new(sourceId, 2))));
+        Assert.Contains("Fixture Ember Lance", temp.App.ImportedPage(new(sourceId, 2, job.Sha256)).Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_sha_that_belongs_to_another_sources_job_or_to_no_job_is_refused_and_no_sha_is_unchanged()
+    {
+        using var temp = new TempApp();
+        var sourceId = SourceWithBook(temp);
+        var job = Settle(temp, temp.App.StartImport(new(sourceId, WholeDocument: true)).Id);
+        var other = temp.App.CreateHomebrewSource(new("Test Other Book", [RulesFamilies.Srd521])).Id;
+        temp.App.AttachPdf(other, "fixture-import.pdf", FixtureBook);
+
+        Assert.Equal("import.page-not-extracted", ImportCode(() => temp.App.ImportedPage(new(other, 2, job.Sha256))));
+        Assert.Equal("import.page-not-extracted", ImportCode(() => temp.App.ImportedPage(new(sourceId, 2, new string('0', 64)))));
+        Assert.Contains("Fixture Ember Lance", temp.App.ImportedPage(new(sourceId, 2)).Text, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Imports_are_refused_for_bundled_sources_missing_PDFs_bad_ranges_and_while_another_runs()
     {

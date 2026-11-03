@@ -40,6 +40,8 @@ internal sealed class TempApp : IDisposable
 
     private readonly ImportWorker.IDocumentExtractor _extractor;
 
+    private readonly ImportWorker.IDocumentExtractor _markdownExtractor;
+
     private readonly TimeProvider _time;
 
     private readonly ImportWorker.Forms.IFormReader? _formReader;
@@ -50,16 +52,18 @@ internal sealed class TempApp : IDisposable
     /// <param name="now">The app's clock (default <see cref="Now"/>); a later one shows a restore keeps the original times.</param>
     /// <param name="formReader">Character-sheet import: the form reader (a fake, so no worker runs).</param>
     /// <param name="time">A clock that can move (token expiry); overrides <paramref name="now"/>.</param>
+    /// <param name="markdownExtractor">Markdown imports (Import Lab Task 13) also extract in this process by default; the worker's kind is tested in ImportWorker.Tests.</param>
     /// <param name="fresh">Open an empty folder, as a first launch does, instead of a copy of the seeded <see cref="Template"/>.</param>
-    public TempApp(ImportWorker.IDocumentExtractor? extractor = null, string? folder = null, DateTimeOffset? now = null, ImportWorker.Forms.IFormReader? formReader = null, TimeProvider? time = null, bool fresh = false)
+    public TempApp(ImportWorker.IDocumentExtractor? extractor = null, string? folder = null, DateTimeOffset? now = null, ImportWorker.Forms.IFormReader? formReader = null, TimeProvider? time = null, ImportWorker.IDocumentExtractor? markdownExtractor = null, bool fresh = false)
     {
         _time = time ?? new FixedTime(now ?? Now);
         _formReader = formReader;
         _directory = Path.Combine(Path.GetTempPath(), "tomestack-tests", Guid.NewGuid().ToString("N"), folder ?? "data");
         _extractor = extractor ?? new ImportWorker.Extraction.PdfPigExtractor();
+        _markdownExtractor = markdownExtractor ?? new ImportWorker.Extraction.MarkdownExtractor();
         if (!fresh)
             CopyTemplate(_directory);
-        App = TomeStackApp.Open(_directory, _time, syncRoots: [], devFixtures: true, extractor: _extractor, formReader: _formReader);
+        App = TomeStackApp.Open(_directory, _time, syncRoots: [], devFixtures: true, extractor: _extractor, formReader: _formReader, markdownExtractor: _markdownExtractor);
     }
 
     static TempApp() => TomeStackApp.CacheBundledPacks = true;
@@ -151,7 +155,7 @@ internal sealed class TempApp : IDisposable
         if (!_closed)
             App.Dispose();
         _closed = false;
-        App = TomeStackApp.Open(_directory, _time, syncRoots: [], devFixtures: true, extractor: _extractor, formReader: _formReader);
+        App = TomeStackApp.Open(_directory, _time, syncRoots: [], devFixtures: true, extractor: _extractor, formReader: _formReader, markdownExtractor: _markdownExtractor);
     }
 
     /// <summary>Closes the app and releases the folder, keeping it for inspection until <see cref="Dispose"/> (T6 drill).</summary>

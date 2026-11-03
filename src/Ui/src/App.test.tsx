@@ -6,7 +6,21 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { client } from './api/client';
-import type { Character, CharacterSummary, CharacterView } from './api/types';
+import type { Character, CharacterSummary, CharacterView, ChoiceStatus } from './api/types';
+import { diffLevelUp, writeChecklist } from './levelUpChecklist';
+import { noticeText } from './replaceable';
+
+// The real module, except that diffLevelUp is a spy (it throws once in the A3 test).
+vi.mock('./levelUpChecklist', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./levelUpChecklist')>();
+  return { ...actual, diffLevelUp: vi.fn(actual.diffLevelUp) };
+});
+
+// The real module, except that noticeText is a spy (it throws once in the R39 notice test).
+vi.mock('./replaceable', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./replaceable')>();
+  return { ...actual, noticeText: vi.fn(actual.noticeText) };
+});
 
 vi.mock('./api/client', () => ({
   client: {
@@ -154,6 +168,86 @@ it('a level-up saved while the same character was opened again shows the saved s
   expect(await screen.findByRole('heading', { name: 'Fixture Avery Leveled' })).toBeTruthy();
 });
 
+/** A level-1 character (hit point maximum 10) and the level-2 view a save returns (maximum 17). */
+function levelUpViews() {
+  const before = viewOf('fixture-a', 'Fixture Avery');
+  before.character = { ...before.character, classes: [{ class: { contentId: 'fixture-class', revisionId: 'fixture-class-r1' }, level: 1 }] };
+  before.sheet = { ...before.sheet, hitPoints: { maximum: 10, current: 10, temporary: 0 } };
+  const saved = viewOf('fixture-a', 'Fixture Avery');
+  saved.character = { ...before.character, level: 2, classes: [{ class: { contentId: 'fixture-class', revisionId: 'fixture-class-r1' }, level: 2 }] };
+  saved.sheet = { ...saved.sheet, hitPoints: { maximum: 17, current: 17, temporary: 0 } };
+  return { before, saved };
+}
+async function toSaveLevelUp(user: ReturnType<typeof userEvent.setup>, before: CharacterView) {
+  vi.mocked(client.getCharacter).mockResolvedValue(before);
+  vi.mocked(client.preview).mockResolvedValue(before);
+  render(<App />);
+  const list = await screen.findByRole('navigation', { name: 'Characters' });
+  await user.click(within(list).getByRole('button', { name: /Fixture Avery/ }));
+  await user.click(await screen.findByRole('button', { name: 'Level up' }));
+  await user.click(await screen.findByRole('button', { name: 'Next: choices' }));
+  return { list, save: await screen.findByRole('button', { name: 'Save level-up' }) };
+}
+
+it('Save level-up opens the sheet on Features with the level-up panel focused, remembers no tab and keeps the list (D74)', async () => {
+  const user = userEvent.setup();
+  const { before, saved } = levelUpViews();
+  vi.mocked(client.saveCharacter).mockResolvedValue(saved);
+  const { save } = await toSaveLevelUp(user, before);
+  await user.click(save);
+  const region = await screen.findByRole('region', { name: 'What changed at level 2' });
+  expect(within(region).getByText('Hit point maximum: 10 → 17')).toBeTruthy();
+  expect(screen.getByRole('tab', { name: /Features/ }).getAttribute('aria-selected')).toBe('true');
+  expect(document.activeElement).toBe(document.getElementById('level-up-heading'));
+  expect(localStorage.getItem('tomestack.levelUpChecklist.fixture-a')).not.toBeNull();
+  expect(localStorage.getItem('tomestack.sheetTab.fixture-a')).toBeNull(); // the deep link is not the user's choice
+});
+
+it('a throwing diff never loses the save: the sheet still opens on Features with no error (D74 A3)', async () => {
+  const user = userEvent.setup();
+  const { before, saved } = levelUpViews();
+  vi.mocked(client.saveCharacter).mockResolvedValue(saved);
+  const { save } = await toSaveLevelUp(user, before);
+  writeChecklist('fixture-a', { level: 2, changes: [{ kind: 'hitPoints', before: 1, after: 2 }] }); // an older list for the same level
+  vi.mocked(diffLevelUp).mockImplementationOnce(() => {
+    throw new Error('fixture diff failure');
+  });
+  await user.click(save);
+  expect(await screen.findByRole('heading', { name: 'Fixture Avery' })).toBeTruthy();
+  expect(screen.getByRole('tab', { name: /Features/ }).getAttribute('aria-selected')).toBe('true');
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect(screen.queryByRole('region', { name: /What changed at level/ })).toBeNull();
+  expect(localStorage.getItem('tomestack.levelUpChecklist.fixture-a')).toBeNull();
+});
+
+it('a level-up that lands after the user left the builder writes the list but moves no tab or focus (D74, R38)', async () => {
+  const user = userEvent.setup();
+  const { before, saved } = levelUpViews();
+  let finish: (view: CharacterView) => void = () => {};
+  vi.mocked(client.saveCharacter).mockReturnValue(new Promise<CharacterView>((r) => (finish = r)));
+  const { list, save } = await toSaveLevelUp(user, before);
+  await user.click(save);
+  await user.click(within(list).getByRole('button', { name: /Fixture Avery/ })); // opens the sheet while the save is in flight
+  await screen.findByRole('heading', { name: 'Fixture Avery' });
+  const tabBefore = screen.getAllByRole('tab').find((t) => t.getAttribute('aria-selected') === 'true')?.textContent;
+  finish(saved);
+  await waitFor(() => expect(localStorage.getItem('tomestack.levelUpChecklist.fixture-a')).not.toBeNull());
+  expect(screen.getAllByRole('tab').find((t) => t.getAttribute('aria-selected') === 'true')?.textContent).toBe(tabBefore);
+  // The list is ready in the Features panel (hidden while another tab is selected) once the save lands.
+  expect(await screen.findByRole('region', { name: 'What changed at level 2', hidden: true })).toBeTruthy();
+  expect(screen.getByRole('tab', { name: /Play/ }).getAttribute('aria-selected')).toBe('true');
+  expect(document.activeElement).not.toBe(document.getElementById('level-up-heading'));
+});
+
+it('Cancel from a level-up writes no list (D74)', async () => {
+  const user = userEvent.setup();
+  const { before } = levelUpViews();
+  await toSaveLevelUp(user, before);
+  await user.click(screen.getByRole('button', { name: 'Cancel' }));
+  await screen.findByText('Draft discarded. Nothing was changed.');
+  expect(localStorage.getItem('tomestack.levelUpChecklist.fixture-a')).toBeNull();
+});
+
 it('pressing New character during a save mounts a fresh empty builder; the save still reports, and the old draft is gone (R40)', async () => {
   const user = userEvent.setup();
   const created = viewOf('fixture-new', 'Fixture New');
@@ -248,4 +342,101 @@ it('a code-split screen arrives after a plain Loading status, and focus stays on
   expect(await screen.findByRole('heading', { name: 'Campaigns' })).toBeTruthy();
   expect(screen.queryByText('Loading…')).toBeNull();
   expect(document.activeElement).toBe(campaigns);
+});
+
+// MECH-X item 2: the save's notice (picks replaced outside their window) is worded from the sheets and shown as the status.
+function replacedViews(saveLevel: number) {
+  const source = { contentId: 'fixture-src', revisionId: 'fixture-src-r1' };
+  const status = (picks: string[]): ChoiceStatus => ({
+    source,
+    sourceName: 'Fixture Repertoire',
+    choiceId: 'technique',
+    count: 2,
+    options: [],
+    selected: picks.map((p) => ({ contentId: p, revisionId: `${p}-r1` })),
+    resolved: picks.length === 2,
+    replaceable: { when: 'levelUp', max: 1 },
+  });
+  const stored = (picks: string[]) => [{ source, choiceId: 'technique', selected: picks.map((p) => ({ contentId: p, revisionId: `${p}-r1` })) }];
+  const before = viewOf('fixture-a', 'Fixture Avery');
+  before.character = { ...before.character, classes: [{ class: { contentId: 'fixture-class', revisionId: 'fixture-class-r1' }, level: 1 }], choices: stored(['one', 'two']) };
+  before.sheet = { ...before.sheet, choices: [status(['one', 'two'])] };
+  const saved = viewOf('fixture-a', 'Fixture Avery');
+  saved.character = { ...before.character, level: saveLevel, choices: stored(['three', 'four']) };
+  saved.sheet = { ...saved.sheet, choices: [status(['three', 'four'])] };
+  saved.notices = [{ code: 'choice.replaced-outside-window', message: "Choice 'technique' had 2 pick(s) replaced outside its window.", content: source }];
+  return { before, saved };
+}
+const moreThanMax = 'Fixture Repertoire: you replaced 2 picks, more than the 1 it allows at once.';
+
+it('a level-up save with the notice shows its words as the status (MECH-X item 2)', async () => {
+  const user = userEvent.setup();
+  const { before, saved } = replacedViews(2);
+  vi.mocked(client.saveCharacter).mockResolvedValue(saved);
+  const { save } = await toSaveLevelUp(user, before);
+  await user.click(save);
+  expect(await screen.findByText(moreThanMax)).toBeTruthy();
+});
+
+it('a level-up save that reset a companion adds that notice to the status (MECH-X R69)', async () => {
+  const user = userEvent.setup();
+  const { before, saved } = replacedViews(2);
+  const pruned = "A companion's hit points were reset, because the content that gives it is no longer active.";
+  saved.notices = [...(saved.notices ?? []), { code: 'companion.play-pruned', message: pruned }];
+  vi.mocked(client.saveCharacter).mockResolvedValue(saved);
+  const { save } = await toSaveLevelUp(user, before);
+  await user.click(save);
+  expect(await screen.findByText(`${moreThanMax} ${pruned}`)).toBeTruthy();
+});
+
+it('a choices-mode save with the notice shows its words as the status (MECH-X item 2)', async () => {
+  const user = userEvent.setup();
+  const { before, saved } = replacedViews(1);
+  before.sheet.choices![0]!.resolved = false; // so the sheet offers Make choices
+  vi.mocked(client.getCharacter).mockResolvedValue(before);
+  vi.mocked(client.saveCharacter).mockResolvedValue(saved);
+  render(<App />);
+  const list = await screen.findByRole('navigation', { name: 'Characters' });
+  await user.click(within(list).getByRole('button', { name: /Fixture Avery/ }));
+  await user.click(await screen.findByRole('button', { name: 'Make choices' }));
+  await user.click(await screen.findByRole('button', { name: 'Save choices' }));
+  expect(await screen.findByText(moreThanMax)).toBeTruthy();
+});
+
+it('a save that lands after the user left the builder adds the notice to the Saved status (MECH-X item 2)', async () => {
+  const user = userEvent.setup();
+  const { before, saved } = replacedViews(2);
+  let finish: (view: CharacterView) => void = () => {};
+  vi.mocked(client.saveCharacter).mockReturnValue(new Promise<CharacterView>((r) => (finish = r)));
+  const { list, save } = await toSaveLevelUp(user, before);
+  await user.click(save);
+  await user.click(within(list).getByRole('button', { name: /Fixture Avery/ }));
+  await screen.findByRole('heading', { name: 'Fixture Avery' });
+  finish(saved);
+  expect(await screen.findByText(`Saved Fixture Avery. ${moreThanMax}`)).toBeTruthy();
+});
+
+it('a save with no notice shows no notice text, and a create has none (MECH-X item 2)', async () => {
+  const user = userEvent.setup();
+  const { before, saved } = replacedViews(2);
+  saved.notices = undefined;
+  vi.mocked(client.saveCharacter).mockResolvedValue(saved);
+  const { save } = await toSaveLevelUp(user, before);
+  await user.click(save);
+  await screen.findByRole('region', { name: 'What changed at level 2' });
+  expect(screen.queryByText(/outside its window|more than the/)).toBeNull();
+});
+
+it('a throw while wording the notice never blocks the screen switch; the generic sentence stands in (MECH-X item 2, R39)', async () => {
+  const user = userEvent.setup();
+  const { before, saved } = replacedViews(2);
+  vi.mocked(client.saveCharacter).mockResolvedValue(saved);
+  const { save } = await toSaveLevelUp(user, before);
+  vi.mocked(noticeText).mockImplementationOnce(() => {
+    throw new Error('fixture wording failure');
+  });
+  await user.click(save);
+  expect(await screen.findByRole('region', { name: 'What changed at level 2' })).toBeTruthy();
+  expect(screen.getByText('A choice had picks replaced outside its window.')).toBeTruthy();
+  expect(screen.queryByRole('alert')).toBeNull();
 });

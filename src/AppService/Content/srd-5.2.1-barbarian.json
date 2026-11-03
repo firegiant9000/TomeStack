@@ -1,0 +1,1053 @@
+{
+  "packId": "srd-5.2.1-barbarian",
+  "formatVersion": 1,
+  "notice": "The Barbarian of the System Reference Document 5.2.1 (CC-BY-4.0), levels 1-20, with the Path of the Berserker, pp. 28-30; new revisions of the levels 1-3 slice. Taken from SRD_CC_v5.2.1.pdf (SHA-256 8974902d109d6e63672d7c490bde9ccf052410503d9cfa768237154fbc5e3d87). See docs/licensing/srd-pack-review.md.",
+  "sources": [
+    {
+      "id": "52500000-0000-4000-8000-000000000001",
+      "title": "System Reference Document 5.2.1",
+      "publisher": "SRD 5.2.1 (CC-BY-4.0)",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "editionVersion": "5.2.1",
+      "license": "CC-BY-4.0",
+      "redistributable": true,
+      "attribution": "This work includes material from the System Reference Document 5.2.1 (\"SRD 5.2.1\") by Wizards of the Coast LLC, available at https://www.dndbeyond.com/srd. The SRD 5.2.1 is licensed under the Creative Commons Attribution 4.0 International License, available at https://creativecommons.org/licenses/by/4.0/legalcode.",
+      "modificationNotice": "Modified: TomeStack adapted this material into structured data. Selected passages are excerpted or shortened, with line breaks and hyphenation repaired, and rules are encoded as machine-readable effects.",
+      "sha256": "8974902d109d6e63672d7c490bde9ccf052410503d9cfa768237154fbc5e3d87"
+    }
+  ],
+  "revisions": [
+    {
+      "contentId": "52c00000-0000-4000-8000-000000000011",
+      "revisionId": "52e00000-0000-4000-8000-000000409011",
+      "schemaVersion": 9,
+      "kind": "class",
+      "name": "Barbarian",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 28,
+          "end": 30
+        }
+      },
+      "status": "published",
+      "summary": "Primary Ability: Strength. Hit Point Die: D12 per Barbarian level. Saving Throw Proficiencies: Strength and Constitution. Skill Proficiencies: Choose 2: Animal Handling, Athletics, Intimidation, Nature, Perception, or Survival. Weapon Proficiencies: Simple and Martial weapons. Armor Training: Light and Medium armor and Shields. TomeStack: levels 1-20.",
+      "effects": [
+        {
+          "type": "hitDie",
+          "id": "barbarian-hit-die",
+          "die": 12
+        },
+        {
+          "type": "scale",
+          "id": "barbarian-rages",
+          "scaleId": "rages",
+          "label": "Rages",
+          "values": [
+            2,
+            2,
+            3,
+            3,
+            3,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            5,
+            5,
+            5,
+            5,
+            5,
+            6,
+            6,
+            6,
+            6
+          ]
+        },
+        {
+          "type": "scale",
+          "id": "barbarian-rage-damage",
+          "scaleId": "rageDamage",
+          "label": "Rage Damage",
+          "values": [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            4,
+            4,
+            4,
+            4,
+            4
+          ]
+        },
+        {
+          "type": "grant",
+          "id": "barbarian-save-str",
+          "grant": "proficiency",
+          "target": "save.str",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "barbarian-save-con",
+          "grant": "proficiency",
+          "target": "save.con",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "choice",
+          "id": "barbarian-skills",
+          "choiceId": "barbarian-skills",
+          "count": 2,
+          "text": "Skill Proficiencies: Choose 2: Animal Handling, Athletics, Intimidation, Nature, Perception, or Survival.",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000000017",
+              "revisionId": "52e00000-0000-4000-8000-000000000017"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000000018",
+              "revisionId": "52e00000-0000-4000-8000-000000000018"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000000019",
+              "revisionId": "52e00000-0000-4000-8000-000000000019"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000000020",
+              "revisionId": "52e00000-0000-4000-8000-000000000020"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000000021",
+              "revisionId": "52e00000-0000-4000-8000-000000000021"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000000022",
+              "revisionId": "52e00000-0000-4000-8000-000000000022"
+            }
+          ],
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "rage",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000000012",
+            "revisionId": "52e00000-0000-4000-8000-000000409012"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "unarmored-defense",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000000013",
+            "revisionId": "52e00000-0000-4000-8000-000000409013"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "weapon-mastery",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000000014",
+            "revisionId": "52e00000-0000-4000-8000-000000000014"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "danger-sense",
+          "grant": "content",
+          "level": 2,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000000015",
+            "revisionId": "52e00000-0000-4000-8000-000000409015"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "reckless-attack",
+          "grant": "content",
+          "level": 2,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000000016",
+            "revisionId": "52e00000-0000-4000-8000-000000000016"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "primal-knowledge",
+          "grant": "content",
+          "level": 3,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000000025",
+            "revisionId": "52e00000-0000-4000-8000-000000000025"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement",
+          "grant": "content",
+          "level": 4,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000409101",
+            "revisionId": "52e00000-0000-4000-8000-000000409101"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-extra-attack",
+          "grant": "content",
+          "level": 5,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000409102",
+            "revisionId": "52e00000-0000-4000-8000-000000409102"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-fast-movement",
+          "grant": "content",
+          "level": 5,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000409103",
+            "revisionId": "52e00000-0000-4000-8000-000000409103"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-feral-instinct",
+          "grant": "content",
+          "level": 7,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000409104",
+            "revisionId": "52e00000-0000-4000-8000-000000409104"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-instinctive-pounce",
+          "grant": "content",
+          "level": 7,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000409105",
+            "revisionId": "52e00000-0000-4000-8000-000000409105"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-brutal-strike",
+          "grant": "content",
+          "level": 9,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000409106",
+            "revisionId": "52e00000-0000-4000-8000-000000409106"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-relentless-rage",
+          "grant": "content",
+          "level": 11,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000409107",
+            "revisionId": "52e00000-0000-4000-8000-000000409107"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-improved-brutal-strike",
+          "grant": "content",
+          "level": 13,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000409108",
+            "revisionId": "52e00000-0000-4000-8000-000000409108"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-persistent-rage",
+          "grant": "content",
+          "level": 15,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000409109",
+            "revisionId": "52e00000-0000-4000-8000-000000409109"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-improved-brutal-strike-17",
+          "grant": "content",
+          "level": 17,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000409110",
+            "revisionId": "52e00000-0000-4000-8000-000000409110"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-indomitable-might",
+          "grant": "content",
+          "level": 18,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000409111",
+            "revisionId": "52e00000-0000-4000-8000-000000409111"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-epic-boon",
+          "grant": "content",
+          "level": 19,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000409112",
+            "revisionId": "52e00000-0000-4000-8000-000000409112"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-primal-champion",
+          "grant": "content",
+          "level": 20,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000409113",
+            "revisionId": "52e00000-0000-4000-8000-000000409113"
+          }
+        },
+        {
+          "type": "choice",
+          "id": "barbarian-subclass",
+          "choiceId": "barbarian-subclass",
+          "count": 1,
+          "level": 3,
+          "text": "Level 3: Barbarian Subclass. You gain a Barbarian subclass of your choice. (The SRD 5.2.1 includes the Path of the Berserker.)",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000000023",
+              "revisionId": "52e00000-0000-4000-8000-000000409023"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000000023",
+              "revisionId": "52e00000-0000-4000-8000-000000000023"
+            }
+          ]
+        },
+        {
+          "type": "grant",
+          "id": "barbarian-weapons-simple",
+          "grant": "proficiency",
+          "target": "weapon.simple",
+          "onlyAs": "startingClass",
+          "text": "Weapon Proficiencies: Simple and Martial weapons."
+        },
+        {
+          "type": "grant",
+          "id": "barbarian-weapons-martial",
+          "grant": "proficiency",
+          "target": "weapon.martial",
+          "text": "As a Multiclass Character: Gain the following traits from the Core Barbarian Traits table: Hit Point Die, proficiency with Martial weapons, and training with Shields."
+        },
+        {
+          "type": "restriction",
+          "id": "barbarian-multiclass-str",
+          "field": "ability.str.score",
+          "minimum": 13,
+          "multiclass": true,
+          "text": "To qualify for a new class, you must have a score of at least 13 in the primary ability of the new class and your current classes (SRD 5.2.1 pp. 24-25); the Barbarian's primary ability is Strength."
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000000012",
+      "revisionId": "52e00000-0000-4000-8000-000000409012",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Rage",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 28,
+          "end": 29
+        }
+      },
+      "status": "published",
+      "summary": "You can imbue yourself with a primal power called Rage, a force that grants you extraordinary might and resilience. You can enter it as a Bonus Action if you aren’t wearing Heavy armor.\n\nYou can enter your Rage the number of times shown for your Barbarian level in the Rages column of the Barbarian Features table. You regain one expended use when you finish a Short Rest, and you regain all expended uses when you finish a Long Rest.\n\nWhile active, your Rage follows the rules below.\n\nDamage Resistance. You have Resistance to Bludgeoning, Piercing, and Slashing damage.\n\nRage Damage. When you make an attack using Strength—with either a weapon or an Unarmed Strike—and deal damage to the target, you gain a bonus to the damage that increases as you gain levels as a Barbarian, as shown in the Rage Damage column of the Barbarian Features table.\n\nStrength Advantage. You have Advantage on Strength checks and Strength saving throws.\n\nNo Concentration or Spells. You can’t maintain Concentration, and you can’t cast spells.\n\nDuration. The Rage lasts until the end of your next turn, and it ends early if you don Heavy armor or have the Incapacitated condition. If your Rage is still active on your next turn, you can extend the Rage for another round by doing one of the following:\n• Make an attack roll against an enemy.\n• Force an enemy to make a saving throw.\n• Take a Bonus Action to extend your Rage.\n\nEach time the Rage is extended, it lasts until the end of your next turn. You can maintain a Rage for up to 10 minutes.\n\nTomeStack: turning Rage on spends a use and applies the Rage Damage bonus to your melee attacks, Resistance to Bludgeoning, Piercing, and Slashing damage, and Advantage on Strength checks and saving throws. Heavy armor, extending the Rage each round, its 10-minute limit, and the concentration and spell restrictions are not checked: turn Rage off yourself. The damage bonus is added to melee attacks whichever ability they use: a finesse weapon used with Dexterity gets it although the rule says Strength, and a thrown weapon used with Strength does not get it here. Adjust those by hand.",
+      "effects": [
+        {
+          "type": "resource",
+          "id": "rages",
+          "resourceId": "rage",
+          "label": "Rages",
+          "maximum": "SCALE.rages",
+          "text": "The number of times you can enter your Rage is the Rages column of the Barbarian Features table: 2 at levels 1-2, 3 at levels 3-5, 4 at levels 6-11, 5 at levels 12-16 and 6 at levels 17-20."
+        },
+        {
+          "type": "recovery",
+          "id": "rages-short-rest",
+          "timing": "onShortRest",
+          "resourceId": "rage",
+          "on": "shortRest",
+          "amount": "1",
+          "text": "You regain one expended use when you finish a Short Rest."
+        },
+        {
+          "type": "recovery",
+          "id": "rages-long-rest",
+          "timing": "onLongRest",
+          "resourceId": "rage",
+          "on": "longRest",
+          "amount": "all",
+          "text": "You regain all expended uses when you finish a Long Rest."
+        },
+        {
+          "type": "toggle",
+          "id": "rage",
+          "toggleId": "rage",
+          "label": "Rage",
+          "resourceId": "rage",
+          "activation": "bonusAction",
+          "duration": "100",
+          "text": "Entering the Rage spends one use. It lasts up to 10 minutes (100 rounds); extending it each round and the Heavy armor and Incapacitated conditions that end it early are by hand."
+        },
+        {
+          "type": "attackRider",
+          "id": "rage-damage",
+          "tags": [
+            "melee"
+          ],
+          "damageBonus": "SCALE.rageDamage",
+          "toggle": "rage",
+          "text": "Rage Damage: the bonus from the Rage Damage column, added to melee attacks while the Rage is on."
+        },
+        {
+          "type": "grant",
+          "id": "rage-resist-bludgeoning",
+          "grant": "damageResistance",
+          "damageType": "Bludgeoning",
+          "whileToggle": {
+            "toggleId": "rage"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "rage-resist-piercing",
+          "grant": "damageResistance",
+          "damageType": "Piercing",
+          "whileToggle": {
+            "toggleId": "rage"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "rage-resist-slashing",
+          "grant": "damageResistance",
+          "damageType": "Slashing",
+          "whileToggle": {
+            "toggleId": "rage"
+          }
+        },
+        {
+          "type": "rollMode",
+          "id": "rage-str-check",
+          "target": "ability.str.check",
+          "mode": "advantage",
+          "toggle": "rage"
+        },
+        {
+          "type": "rollMode",
+          "id": "rage-str-save",
+          "target": "save.str",
+          "mode": "advantage",
+          "toggle": "rage"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000000013",
+      "revisionId": "52e00000-0000-4000-8000-000000409013",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Unarmored Defense",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 29
+        }
+      },
+      "status": "published",
+      "summary": "While you aren’t wearing any armor, your base Armor Class equals 10 plus your Dexterity and Constitution modifiers. You can use a Shield and still gain this benefit.",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "unarmored-defense-ac",
+          "operation": "replace",
+          "target": "armorClass",
+          "value": "10 + DEX.MOD + CON.MOD",
+          "text": "Applies only while no armor is worn (the Armor Class breakdown shows it as not used otherwise); a Shield is allowed."
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000000015",
+      "revisionId": "52e00000-0000-4000-8000-000000409015",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Danger Sense",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 29
+        }
+      },
+      "status": "published",
+      "summary": "You gain an uncanny sense of when things aren’t as they should be, giving you an edge when you dodge perils. You have Advantage on Dexterity saving throws unless you have the Incapacitated condition.\n\nTomeStack: the Advantage on Dexterity saving throws is applied always; remember it does not apply while you have the Incapacitated condition.",
+      "effects": [
+        {
+          "type": "rollMode",
+          "id": "danger-sense-dex-save",
+          "target": "save.dex",
+          "mode": "advantage",
+          "text": "Not while you have the Incapacitated condition (by hand)."
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000409101",
+      "revisionId": "52e00000-0000-4000-8000-000000409101",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Ability Score Improvement",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 29
+        }
+      },
+      "status": "published",
+      "summary": "You gain the Ability Score Improvement feat (see “Feats”) or another feat of your choice for which you qualify. You gain this feature again at Barbarian levels 8, 12, and 16.",
+      "effects": []
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000409102",
+      "revisionId": "52e00000-0000-4000-8000-000000409102",
+      "schemaVersion": 8,
+      "kind": "feature",
+      "name": "Extra Attack",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 29
+        }
+      },
+      "status": "published",
+      "summary": "You can attack twice instead of once whenever you take the Attack action on your turn.",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "extra-attack",
+          "operation": "set",
+          "target": "attacks",
+          "value": "2"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000409103",
+      "revisionId": "52e00000-0000-4000-8000-000000409103",
+      "schemaVersion": 10,
+      "kind": "feature",
+      "name": "Fast Movement",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 29
+        }
+      },
+      "status": "published",
+      "summary": "Your speed increases by 10 feet while you aren’t wearing Heavy armor.\n\nTomeStack: the 10 feet are always added to your Speed; take them off by hand while you wear Heavy armor.",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "fast-movement-speed",
+          "operation": "bonus",
+          "target": "speed",
+          "value": "10",
+          "text": "Not while you wear Heavy armor (by hand)."
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000409104",
+      "revisionId": "52e00000-0000-4000-8000-000000409104",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Feral Instinct",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 29
+        }
+      },
+      "status": "published",
+      "summary": "Your instincts are so honed that you have Advantage on Initiative rolls.",
+      "effects": []
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000409105",
+      "revisionId": "52e00000-0000-4000-8000-000000409105",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Instinctive Pounce",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 29
+        }
+      },
+      "status": "published",
+      "summary": "As part of the Bonus Action you take to enter your Rage, you can move up to half your Speed.",
+      "effects": []
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000409106",
+      "revisionId": "52e00000-0000-4000-8000-000000409106",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Brutal Strike",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 29,
+          "end": 30
+        }
+      },
+      "status": "published",
+      "summary": "If you use Reckless Attack, you can forgo any Advantage on one Strength-based attack roll of your choice on your turn. The chosen attack roll mustn’t have Disadvantage. If the chosen attack roll hits, the target takes an extra 1d10 damage of the same type dealt by the weapon or Unarmed Strike, and you can cause one Brutal Strike effect of your choice. You have the following effect options.\n\nForceful Blow. The target is pushed 15 feet straight away from you. You can then move up to half your Speed straight toward the target without provoking Opportunity Attacks.\n\nHamstring Blow. The target’s Speed is reduced by 15 feet until the start of your next turn. A target can be affected by only one Hamstring Blow at a time—the most recent one.",
+      "effects": []
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000409107",
+      "revisionId": "52e00000-0000-4000-8000-000000409107",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Relentless Rage",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 30
+        }
+      },
+      "status": "published",
+      "summary": "Your Rage can keep you fighting despite grievous wounds. If you drop to 0 Hit Points while your Rage is active and don’t die outright, you can make a DC 10 Constitution saving throw. If you succeed, your Hit Points instead change to a number equal to twice your Barbarian level.\n\nEach time you use this feature after the first, the DC increases by 5. When you finish a Short or Long Rest, the DC resets to 10.\n\nTomeStack: the damage prompt offers this while your Rage is on and sets your Hit Points to twice your Barbarian level; the Constitution saving throw (DC 10, +5 for each use after the first, reset on a Short or Long Rest) is made and tracked by hand.",
+      "effects": [
+        {
+          "type": "response",
+          "id": "relentless-rage",
+          "responseId": "relentlessRage",
+          "label": "Relentless Rage",
+          "phase": "hitPointOutcome",
+          "amount": "2 * CLASS_LEVEL",
+          "toggle": {
+            "contentId": "52c00000-0000-4000-8000-000000000012",
+            "toggleId": "rage"
+          },
+          "text": "Make the DC 10 Constitution saving throw first (DC +5 for each use after the first; resets on a Short or Long Rest). On a success your Hit Points change to twice your Barbarian level."
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000409108",
+      "revisionId": "52e00000-0000-4000-8000-000000409108",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Improved Brutal Strike",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 30
+        }
+      },
+      "status": "published",
+      "summary": "You have honed new ways to attack furiously. The following effects are now among your Brutal Strike options.\n\nStaggering Blow. The target has Disadvantage on the next saving throw it makes, and it can’t make Opportunity Attacks until the start of your next turn.\n\nSundering Blow. Before the start of your next turn, the next attack roll made by another creature against the target gains a +5 bonus to the roll. An attack roll can gain only one Sundering Blow bonus.",
+      "effects": []
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000409109",
+      "revisionId": "52e00000-0000-4000-8000-000000409109",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Persistent Rage",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 30
+        }
+      },
+      "status": "published",
+      "summary": "When you roll Initiative, you can regain all expended uses of Rage. After you regain uses of Rage in this way, you can’t do so again until you finish a Long Rest.\n\nIn addition, your Rage is so fierce that it now lasts for 10 minutes without you needing to do anything to extend it from round to round. Your Rage ends early if you have the Unconscious condition (not just the Incapacitated condition) or don Heavy armor.",
+      "effects": []
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000409110",
+      "revisionId": "52e00000-0000-4000-8000-000000409110",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Improved Brutal Strike",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 30
+        }
+      },
+      "status": "published",
+      "summary": "The extra damage of your Brutal Strike increases to 2d10. In addition, you can use two different Brutal Strike effects whenever you use your Brutal Strike feature.",
+      "effects": []
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000409111",
+      "revisionId": "52e00000-0000-4000-8000-000000409111",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Indomitable Might",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 30
+        }
+      },
+      "status": "published",
+      "summary": "If your total for a Strength check or Strength saving throw is less than your Strength score, you can use that score in place of the total.",
+      "effects": []
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000409112",
+      "revisionId": "52e00000-0000-4000-8000-000000409112",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Epic Boon",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 30
+        }
+      },
+      "status": "published",
+      "summary": "You gain an Epic Boon feat (see “Feats”) or another feat of your choice for which you qualify. Boon of Irresistible Offense is recommended.",
+      "effects": []
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000409113",
+      "revisionId": "52e00000-0000-4000-8000-000000409113",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Primal Champion",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 30
+        }
+      },
+      "status": "published",
+      "summary": "You embody primal power. Your Strength and Constitution scores increase by 4, to a maximum of 25.\n\nTomeStack: this increase is not applied to the scores. Add 4 to your Strength and Constitution scores yourself (to a maximum of 25); the sheet then marks every value that reads them as assisted.",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "primal-champion-str",
+          "operation": "bonus",
+          "target": "ability.str.score",
+          "value": "4",
+          "automation": "reference",
+          "text": "Strength increases by 4, to a maximum of 25. Not applied: enter the new score by hand."
+        },
+        {
+          "type": "modifier",
+          "id": "primal-champion-con",
+          "operation": "bonus",
+          "target": "ability.con.score",
+          "value": "4",
+          "automation": "reference",
+          "text": "Constitution increases by 4, to a maximum of 25. Not applied: enter the new score by hand."
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000000023",
+      "revisionId": "52e00000-0000-4000-8000-000000409023",
+      "schemaVersion": 4,
+      "kind": "subclass",
+      "name": "Path of the Berserker",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 30
+        }
+      },
+      "status": "published",
+      "extendsChoice": {
+        "contentId": "52c00000-0000-4000-8000-000000000011",
+        "choiceId": "barbarian-subclass"
+      },
+      "summary": "Channel Rage into Violent Fury. Barbarians who walk the Path of the Berserker direct their Rage primarily toward violence. Their path is one of untrammeled fury, and they thrill in the chaos of battle as they allow their Rage to seize and empower them.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "frenzy",
+          "grant": "content",
+          "level": 3,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000000024",
+            "revisionId": "52e00000-0000-4000-8000-000000409024"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "mindless-rage",
+          "grant": "content",
+          "level": 6,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000409501",
+            "revisionId": "52e00000-0000-4000-8000-000000409501"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "retaliation",
+          "grant": "content",
+          "level": 10,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000409502",
+            "revisionId": "52e00000-0000-4000-8000-000000409502"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "intimidating-presence",
+          "grant": "content",
+          "level": 14,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000409503",
+            "revisionId": "52e00000-0000-4000-8000-000000409503"
+          }
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000000024",
+      "revisionId": "52e00000-0000-4000-8000-000000409024",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Frenzy",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 30
+        }
+      },
+      "status": "published",
+      "summary": "If you use Reckless Attack while your Rage is active, you deal extra damage to the first target you hit on your turn with a Strength-based attack. To determine the extra damage, roll a number of d6s equal to your Rage Damage bonus, and add them together. The damage has the same type as the weapon or Unarmed Strike used for the attack.\n\nTomeStack: roll the line for your Rage Damage bonus: 2d6 at Barbarian levels 1-8 (+2), 3d6 at levels 9-15 (+3), 4d6 at levels 16-20 (+4). All three lines are always listed.",
+      "effects": [
+        {
+          "type": "roll",
+          "id": "frenzy-damage",
+          "automation": "assisted",
+          "timing": "onRoll",
+          "rollId": "frenzy",
+          "label": "Frenzy extra damage (Rage Damage +2: 2d6)",
+          "dice": "2d6",
+          "text": "Roll a number of d6s equal to your Rage Damage bonus (+2 at Barbarian levels 1-8)."
+        },
+        {
+          "type": "roll",
+          "id": "frenzy-damage-3",
+          "automation": "assisted",
+          "timing": "onRoll",
+          "rollId": "frenzy-3",
+          "label": "Frenzy extra damage (Rage Damage +3: 3d6)",
+          "dice": "3d6",
+          "text": "Roll a number of d6s equal to your Rage Damage bonus (+3 at Barbarian levels 9-15)."
+        },
+        {
+          "type": "roll",
+          "id": "frenzy-damage-4",
+          "automation": "assisted",
+          "timing": "onRoll",
+          "rollId": "frenzy-4",
+          "label": "Frenzy extra damage (Rage Damage +4: 4d6)",
+          "dice": "4d6",
+          "text": "Roll a number of d6s equal to your Rage Damage bonus (+4 at Barbarian levels 16-20)."
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000409501",
+      "revisionId": "52e00000-0000-4000-8000-000000409501",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Mindless Rage",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 30
+        }
+      },
+      "status": "published",
+      "summary": "You have Immunity to the Charmed and Frightened conditions while your Rage is active. If you’re Charmed or Frightened when you enter your Rage, the condition ends on you.",
+      "effects": []
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000409502",
+      "revisionId": "52e00000-0000-4000-8000-000000409502",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Retaliation",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 30
+        }
+      },
+      "status": "published",
+      "summary": "When you take damage from a creature that is within 5 feet of you, you can take a Reaction to make one melee attack against that creature, using a weapon or an Unarmed Strike.",
+      "effects": []
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000409503",
+      "revisionId": "52e00000-0000-4000-8000-000000409503",
+      "schemaVersion": 11,
+      "kind": "feature",
+      "name": "Intimidating Presence",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 30
+        }
+      },
+      "status": "published",
+      "summary": "As a Bonus Action, you can strike terror into others with your menacing presence and primal power. When you do so, each creature of your choice in a 30-foot Emanation originating from you must make a Wisdom saving throw (DC 8 plus your Strength modifier and Proficiency Bonus). On a failed save, a creature has the Frightened condition for 1 minute. At the end of each of the Frightened creature’s turns, the creature repeats the save, ending the effect on itself on a success.\n\nOnce you use this feature, you can’t use it again until you finish a Long Rest unless you expend a use of your Rage (no action required) to restore your use of it.\n\nTomeStack: using it spends the one use and shows the save DC; restoring the use by expending a use of your Rage is done by hand.",
+      "effects": [
+        {
+          "type": "resource",
+          "id": "intimidating-presence-uses",
+          "resourceId": "intimidatingPresence",
+          "label": "Intimidating Presence",
+          "maximum": "1",
+          "activation": "bonusAction"
+        },
+        {
+          "type": "recovery",
+          "id": "intimidating-presence-long-rest",
+          "timing": "onLongRest",
+          "resourceId": "intimidatingPresence",
+          "on": "longRest",
+          "amount": "all"
+        },
+        {
+          "type": "roll",
+          "id": "intimidating-presence-use",
+          "rollId": "intimidatingPresence",
+          "label": "Intimidating Presence",
+          "resourceId": "intimidatingPresence",
+          "cost": "1",
+          "activation": "bonusAction",
+          "save": {
+            "ability": "wis",
+            "dc": "8 + STR.MOD + PB"
+          },
+          "area": {
+            "shape": "emanation",
+            "size": 30
+          },
+          "range": "Self",
+          "targets": "Each creature of your choice in the Emanation",
+          "text": "A creature that fails is Frightened for 1 minute and repeats the save at the end of each of its turns."
+        }
+      ]
+    }
+  ]
+}

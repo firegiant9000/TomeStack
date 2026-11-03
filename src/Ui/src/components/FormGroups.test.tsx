@@ -151,3 +151,37 @@ it('ignores a second choice while the first is still being confirmed', async () 
   expect(act).toHaveBeenCalledTimes(1);
   finish();
 });
+
+// MECH-X item 1 (R40, B1): a form that pays hit points or a slot says so; only switching one ON waits on being able to pay.
+const hpForm = (extra: Partial<ToggleValue> = {}) => ({ resourceId: undefined, costResourceContent: undefined, cost: 4, payment: { kind: 'hitPoints' as const, payable: true }, ...extra });
+
+it('names a hit-point or slot payment in place of a pool cost, and holds an OFF form that cannot be paid, with the reason', async () => {
+  const user = userEvent.setup();
+  const act = vi.fn();
+  const low = { kind: 'hitPoints' as const, payable: false, reason: 'Needs more than 4 current hit points.' };
+  render(
+    <FormGroups
+      toggles={toggles({ tide: hpForm({ payment: low }), ember: { resourceId: undefined, cost: undefined, payment: { kind: 'slot', payable: true, minSlotLevel: 2 } } })}
+      act={act}
+      busy={false}
+    />,
+  );
+  expect(screen.getByRole('radio', { name: /Fixture Tide Form.*4 hit points/ }).getAttribute('aria-disabled')).toBe('true');
+  expect(screen.getByText('Needs more than 4 current hit points.')).toBeTruthy();
+  expect(screen.getByRole('radio', { name: /Fixture Ember Form.*a level 2\+ spell slot/ })).toBeTruthy();
+  await user.click(screen.getByRole('radio', { name: /Fixture Tide Form/ }));
+  expect(act).not.toHaveBeenCalled();
+  await user.click(screen.getByRole('radio', { name: /Fixture Ember Form/ }));
+  expect(act).toHaveBeenCalledExactlyOnceWith({ action: 'toggleOn', contentId: 'c-ember', toggleId: 'ember' });
+});
+
+it('a form that is ON is never held by its payment, so Base and the other forms can still be chosen', async () => {
+  const user = userEvent.setup();
+  const act = vi.fn();
+  const low = { kind: 'hitPoints' as const, payable: false, reason: 'Needs more than 4 current hit points.' };
+  render(<FormGroups toggles={toggles({ tide: hpForm({ on: true, payment: low }) })} act={act} busy={false} />);
+  expect(screen.getByRole('radio', { name: /Fixture Tide Form/ }).getAttribute('aria-disabled')).toBeNull();
+  expect(screen.queryByText('Needs more than 4 current hit points.')).toBeNull();
+  await user.click(screen.getByRole('radio', { name: 'Base' }));
+  expect(act).toHaveBeenCalledExactlyOnceWith({ action: 'toggleOff', contentId: 'c-tide', toggleId: 'tide' });
+});

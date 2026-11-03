@@ -9,12 +9,14 @@ namespace TomeStack.ImportWorker.Extraction;
 /// ADR-009 (c): the one request line the worker reads from stdin. <paramref name="Path"/> is a file the app resolved, never one from the UI.
 /// <paramref name="ParentProcessId"/> is the app's process: the worker exits when it does, so a crashed app leaves no worker behind.
 /// <paramref name="Kind"/> is <c>extract</c> (page text, the default when null) or <c>formFields</c> (the form fields of a
-/// character sheet, read under <paramref name="Form"/>, or <see cref="FormLimits.Default"/> when null).
+/// character sheet, read under <paramref name="Form"/>, or <see cref="FormLimits.Default"/> when null) or <c>extractMarkdown</c>
+/// (the pages of a Markdown file, read by <see cref="MarkdownExtractor"/>; Import Lab Task 13).
 /// </summary>
 public sealed record WorkerRequest(string Path, int? FirstPage, int? LastPage, ExtractionLimits Limits, int? ParentProcessId = null, string? Kind = null, FormLimits? Form = null)
 {
     public const string ExtractKind = "extract";
     public const string FormFieldsKind = "formFields";
+    public const string MarkdownKind = "extractMarkdown";
 }
 
 /// <summary>
@@ -70,7 +72,7 @@ public static class WorkerMain
             request = null;
         }
         if (request is null || string.IsNullOrWhiteSpace(request.Path) || request.Limits is null
-            || request.Kind is not (null or WorkerRequest.ExtractKind or WorkerRequest.FormFieldsKind))
+            || request.Kind is not (null or WorkerRequest.ExtractKind or WorkerRequest.FormFieldsKind or WorkerRequest.MarkdownKind))
         {
             await WriteAsync(output, new("error", Code: "worker.bad-request", Message: "The worker received no valid request.")).ConfigureAwait(false);
             return 3;
@@ -92,7 +94,7 @@ public static class WorkerMain
                 await WriteAsync(output, new("done")).ConfigureAwait(false);
                 return 0;
             }
-            var extractor = new PdfPigExtractor(ocr, request.Limits);
+            IDocumentExtractor extractor = request.Kind == WorkerRequest.MarkdownKind ? new MarkdownExtractor() : new PdfPigExtractor(ocr, request.Limits);
             await foreach (var item in extractor.ExtractAsync(request.Path, new(request.FirstPage, request.LastPage), cancellationToken).ConfigureAwait(false))
             {
                 await WriteAsync(output, item switch

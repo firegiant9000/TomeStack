@@ -418,7 +418,15 @@ html[data-ability-order='score'] .sheet-summary dd.ability > .override-label { o
 .dice-box p.error { width: 0; min-width: 100%; margin: var(--space-1) 0 0; font-size: var(--text-sm); overflow-wrap: anywhere; }
 .dice-box p.error:empty { margin: 0; } /* the status stays mounted (so a refusal is announced) but takes no room while empty */
 .sheet-summary > .hint { grid-area: hint; }
-.sheet-summary > .roll-strip { grid-area: result; min-height: 9.5rem; } /* the Last roll (7.5rem) plus the closed Previous rolls line, so logging the first roll does not move the tabs */
+/* D73: the quickbar is its own row after the summary line, outside the roll strip (whose reserved height stays). rem only: it wraps at 200% and 400%. */
+.sheet-summary > .quickbar { grid-area: quick; min-width: 0; }
+.sheet-summary:has(> .quickbar) { grid-template-areas: 'abilities abilities' 'line line' 'quick quick' 'mode result' 'hint hint'; }
+.quickbar ol { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.quickbar button { display: inline-flex; align-items: center; gap: 0.35em; min-height: 1.5rem; max-width: 100%; overflow-wrap: anywhere; }
+.quickbar .quick-slot { font-family: var(--font-numbers); font-weight: 600; color: var(--muted); }
+.sheet-summary > .roll-strip { grid-area: result; min-height: 11rem; } /* the Last roll (7.5rem) plus the closed "Why?" line and the closed Previous rolls line, so the first roll does not move the tabs (an open "Why?" grows the strip by design) */
+.roll-why { margin-top: var(--space-2); }
+.roll-why ul { margin: var(--space-1) 0 0; padding-left: 1.5rem; font-size: var(--text-sm); }
 .roll-log { margin-top: var(--space-2); }
 .roll-log ol { margin: var(--space-1) 0 0; padding-left: 1.5rem; font-size: var(--text-sm); }
 .roll-time { color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -435,6 +443,7 @@ html[data-ability-order='score'] .sheet-summary dd.ability > .override-label { o
 .play-panel .inline-form select[aria-disabled='true'],
 .play-panel li button[aria-disabled='true'],
 .sheet-header button[aria-disabled='true'],
+.quickbar button[aria-disabled='true'],
 section[aria-labelledby='builder-heading'] button[aria-disabled='true'] { background: var(--bg); color: var(--muted); border-color: var(--line-strong); border-style: dashed; cursor: not-allowed; }
 /* The inactive look is a dimmed label on the page colour with a dashed border (a shape cue, not only a tone), not opacity: opacity would also dim the focus ring (3:1, WCAG 1.4.11 and
    the project's focus 3:1 constraint), and the browser's own button face (#6b6b6b in dark) left the dimmed label at about 2.35:1. */
@@ -485,6 +494,7 @@ button.roll:hover { background: var(--accent); color: var(--bg); }
   .app[data-sidebar='collapsed'] :is(.content > .messages, .content > :not(.messages, .sheet), article.sheet > .sheet-body, article.sheet > .print-sheet) { margin-left: 0; }
   article.sheet > .sheet-header, article.sheet > .sheet-summary, article.sheet > .rest-sheet { padding: 0; margin: 0 0 var(--space-3); }
   .sheet-summary { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'abilities' 'line' 'mode' 'result' 'hint'; }
+  .sheet-summary:has(> .quickbar) { grid-template-areas: 'abilities' 'line' 'quick' 'mode' 'result' 'hint'; }
 }
 
 /* At 150% text or more the content needs about 960px before it must stack; rem in a media query ignores the root font-size.
@@ -499,6 +509,16 @@ button.roll:hover { background: var(--accent); color: var(--bg); }
 
 /* M4 D5: import review. The excerpt keeps the PDF's line breaks. */
 pre.excerpt { white-space: pre-wrap; font: inherit; border-left: 3px solid var(--line); padding: 0.25rem 0.75rem; max-height: 20rem; overflow: auto; }
+/* D64: effects beside the page text at 1100px and wider; stacked below that and at 400% zoom. */
+.span-review { display: block; }
+@media (min-width: 1100px) { .span-review { display: grid; grid-template-columns: minmax(12rem, 1fr) minmax(0, 2fr); gap: var(--space-4); align-items: start; } }
+.span-effects { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-2); }
+@media (min-width: 1100px) { .span-effects { flex-direction: column; flex-wrap: nowrap; } }
+.span-effects button { text-align: left; white-space: normal; }
+.span-effects button[aria-pressed='true'] { font-weight: 600; text-decoration: underline; }
+.span-text { border-left: 3px solid var(--line); padding: 0.25rem 0.75rem; max-height: 20rem; overflow: auto; }
+.span-block { white-space: pre-wrap; margin: 0 0 0.5rem; overflow-wrap: anywhere; }
+.span-text mark { background: Mark; color: MarkText; }
 dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.2rem 0.75rem; }
 dt { font-weight: 600; }
 dd { margin: 0; }

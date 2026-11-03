@@ -673,4 +673,93 @@ public class RollCommandTests
         Assert.DoesNotContain("automaticMode", json);
         Assert.DoesNotContain("modeSources", json);
     }
+
+    // D72 (Task 1): a roll carries the sheet's trace for the number rolled.
+    [Fact]
+    public void A_field_roll_explains_its_modifier_with_the_fields_trace()
+    {
+        var (temp, id) = Instinct();
+        using var _ = temp;
+
+        var record = temp.App.Roll(new RollCommand(id, Field: FieldIds.Save(Ability.Dex)));
+
+        var field = temp.App.GetCharacter(id).Sheet.Field(FieldIds.Save(Ability.Dex));
+        Assert.Equal(TempApp.Json(field.Trace), TempApp.Json(record.Explain));
+        Assert.Equal(record.Modifiers.Sum(m => m.Amount), record.Explain![^1].Result);
+    }
+
+    [Fact]
+    public void An_overridden_field_roll_ends_its_explanation_with_the_override()
+    {
+        var (temp, id) = Instinct(c => c with { Overrides = [.. c.Overrides, new FieldOverride(FieldIds.Save(Ability.Dex), 9, "test")] });
+        using var _ = temp;
+
+        var record = temp.App.Roll(new RollCommand(id, Field: FieldIds.Save(Ability.Dex)));
+
+        Assert.Equal("override", record.Explain![^1].Operation);
+        Assert.Equal(9, record.Explain[^1].Result);
+        Assert.Equal(9, record.Modifiers.Sum(m => m.Amount));
+    }
+
+    [Fact]
+    public void Rolls_without_a_sheet_number_have_no_explanation()
+    {
+        var (temp, id) = Instinct();
+        using var _ = temp;
+
+        Assert.Null(temp.App.Roll(new RollCommand(id, DeathSave: true)).Explain);
+
+        // The roll-modes pack declares no hit dice, so the hit die is rolled on the action-details fixture.
+        var (wave, waveId) = WaveAdept();
+        using var __ = wave;
+        var die = wave.App.GetCharacter(waveId).Sheet.HitDice![0].Die;
+        Assert.Null(wave.App.Roll(new RollCommand(waveId, HitDie: die)).Explain);
+    }
+
+    private static bool IsAutomaticD20(DerivedValue f) =>
+        f.Automation == AutomationStatus.Automatic
+        && (f.Field == FieldIds.Initiative
+            || f.Field.StartsWith("save.", StringComparison.Ordinal)
+            || f.Field.StartsWith("skill.", StringComparison.Ordinal)
+            || (f.Field.StartsWith("ability.", StringComparison.Ordinal) && f.Field.EndsWith(".mod", StringComparison.Ordinal)));
+
+    private static void AssertEveryD20RollEndsAtItsModifierTotal(TempApp temp, Guid id)
+    {
+        var sheet = temp.App.GetCharacter(id).Sheet;
+        var records = new List<(string What, RollRecord Record)>();
+        foreach (var f in sheet.Fields.Where(IsAutomaticD20))
+            records.Add((f.Field, temp.App.Roll(new RollCommand(id, Field: f.Field))));
+        foreach (var a in sheet.Attacks ?? [])
+            records.Add(($"attack {a.Name}", a.Source == AttackSource.Weapon
+                ? temp.App.Roll(new RollCommand(id, Weapon: a.Item))
+                : temp.App.Roll(new RollCommand(id, Content: a.Item, EffectId: a.EffectId))));
+        Assert.NotEmpty(records);
+        foreach (var (what, record) in records)
+        {
+            Assert.True(record.Explain is { Count: > 0 }, $"{what} has no explanation");
+            Assert.True(record.Explain![^1].Result == record.Modifiers.Sum(m => m.Amount), $"{what}: explanation ends at {record.Explain[^1].Result}, modifiers total {record.Modifiers.Sum(m => m.Amount)}");
+        }
+    }
+
+    [Fact]
+    public void Every_automatic_d20_roll_in_the_play_fixtures_ends_its_explanation_at_the_modifier_total()
+    {
+        using (var temp = new TempApp())
+        {
+            temp.App.Random = new SeededRandomSource(5);
+            temp.AddPack("fixture-pack-feature-attacks.json");
+            var id = temp.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/pm-adept-l5.json")).Character.Id;
+            var kindled = new ContentReference(Guid.Parse("6f0dc000-0000-4000-8000-000000000042"), Guid.Parse("6f0de000-0000-4000-8000-000000000042"));
+            temp.App.Play(new(id, PlayActionKind.ToggleOn, Confirm: true, ContentId: kindled.ContentId, ToggleId: "kindled"));
+            AssertEveryD20RollEndsAtItsModifierTotal(temp, id);
+        }
+
+        var (wave, waveId) = WaveAdept();
+        using (wave)
+            AssertEveryD20RollEndsAtItsModifierTotal(wave, waveId);
+
+        var (instinct, instinctId) = Instinct();
+        using (instinct)
+            AssertEveryD20RollEndsAtItsModifierTotal(instinct, instinctId);
+    }
 }

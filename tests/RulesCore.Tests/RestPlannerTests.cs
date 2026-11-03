@@ -52,6 +52,21 @@ public class RestPlannerTests
         return RestPlanner.LongRest(character, CharacterCalculator.Calculate(character, catalog));
     }
 
+    /// <summary>Capability evidence (ADR-020): a recovery is delivered automatically; the rest plan restores the resource.</summary>
+    [Fact]
+    public void The_capability_registry_ceiling_for_recovery_is_automatic()
+    {
+        var holder = MechanicsInventoryTests.Holder("Test Recovery Holder", 10,
+            new ResourceEffect { Id = "pool", ResourceId = "pool", Label = "Pool", Maximum = "3" },
+            new RecoveryEffect { Id = "back", ResourceId = "pool", On = RestPeriod.LongRest, Amount = "all", Timing = EffectTiming.OnLongRest });
+
+        var (report, sheet) = MechanicsInventoryTests.Pinned(holder);
+
+        CapabilityRegistryTests.AssertAutomaticallyDelivered(report, holder, RecoveryEffect.TypeName, "back");
+        var pool = Assert.Single(sheet.Resources!, r => r.ResourceId == "pool");
+        Assert.Contains(pool.Recoveries, r => r.On == RestPeriod.LongRest);
+    }
+
     [Fact]
     public void A_long_rest_that_ends_a_form_takes_the_overlay_that_needs_it_even_when_the_overlay_is_unticked()
     {

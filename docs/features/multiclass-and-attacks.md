@@ -26,15 +26,19 @@ A choice that does not apply to this entry is not offered, so it is never "unres
 
 ## Weapons and attacks (SPEC C-02, C-04)
 
-An item carries `weapon { category: simple | martial, attack: melee | ranged, damage, damageType, properties[], versatile?, range?, weaponKey, mastery? }`. Proficiency is a `grant proficiency` in `weapon.simple`, `weapon.martial` or `weapon.<weaponKey>`, and it may be `onlyAs` like any grant.
+An item carries `weapon { category: simple | martial, attack: melee | ranged, damage, damageType, properties[], versatile?, range?, weaponKey, mastery?, bonus? }`. `bonus` (content v12) is a whole number from 0 to 10 that the weapon adds to its to-hit and to its damage; below v12 the key is ignored. Proficiency is a `grant proficiency` in `weapon.simple`, `weapon.martial` or `weapon.<weaponKey>`, and it may be `onlyAs` like any grant.
+
+The validator checks `bonus` with three codes: `validate.weapon-bonus` (a bonus outside 0 to 10), `validate.requires-v12` (a typed bonus in a revision that declares an older version, which only a revision built in code can have: read from JSON below v12, the key stays extension data and does nothing) and `validate.effect-malformed` (a v12 or later weapon that does not read and carries `bonus` in any spelling).
+
+An attack row shows the weapon's `mastery` only when the character's active content includes a feature named exactly "Weapon Mastery" (an interim name rule); otherwise the row's mastery is empty.
 
 Each **equipped** weapon gives an entry in `sheet.attacks`:
 
 | Value | Rule (both SRDs) |
 | --- | --- |
 | Ability | Strength for melee, Dexterity for ranged. With `finesse`, the better of the two |
-| To hit | The ability modifier + the proficiency bonus when proficient. The trace cites the proficiency's content |
-| Damage | The dice + the same ability modifier (`1d8+2`). `versatile` gives a two-handed alternative |
+| To hit | The ability modifier + the proficiency bonus when proficient + the weapon's `bonus`. The trace cites the proficiency's content, then adds "<item>: +N to hit (weapon)" |
+| Damage | The dice + the same ability modifier + the weapon's `bonus` (`1d8+3`), with the trace step "<item>: +N damage (weapon)". `versatile` gives a two-handed alternative with the same bonuses. A flat bonus is not doubled on a critical hit; only dice are |
 
 **Proficiency not recorded:** when no active content grants any weapon proficiency (for example a class published before weapons existed, such as the M1 SRD Barbarian revisions), the attack is **assisted**: no proficiency bonus, and `attack.proficiency-unknown` says to add it by hand. When some proficiencies are recorded but not this one, the attack is automatic with `attack.not-proficient`.
 
@@ -70,6 +74,6 @@ A feature can give an attack with an `attack` effect (an unarmed strike, a bolt)
 
 ## Not yet
 
-- The multiclass data of the non-caster classes that are not bundled (Monk, Rogue). The Fighter is bundled since M2.2. Bundled: the eight casters, the weapon tables (`srd-<family>-equipment.json`) and a content v5 revision of the SRD Barbarian (`srd-<family>-classes.json`). Characters that pin the M1 Barbarian revision keep it. Pickers offer the newest revision (`ContentOption.Superseded`), and moving a saved character to it is the reviewed update (SPEC I-06).
+- The multiclass data of the non-caster classes that are not bundled (none: the Rogue is bundled since C2-2 and the Monk since C2-3, each with its multiclass data). The Fighter is bundled since M2.2. Bundled: the eight casters, the weapon tables (`srd-<family>-equipment.json`) and a content v5 revision of the SRD Barbarian (`srd-<family>-classes.json`). Characters that pin the M1 Barbarian revision keep it. Pickers offer the newest revision (`ContentOption.Superseded`), and moving a saved character to it is the reviewed update (SPEC I-06).
 - The net and the blowgun: text only, because their damage is not a dice roll.
 - Ammunition tracking, Weapon Mastery effects (text only), fighting styles other than Defense (text only), two-weapon fighting and bonus damage from features. Armor training and its warnings are in `equipment.md` (M2.2).

@@ -1,0 +1,55 @@
+[
+  {
+    "contentId": "6a7e00f3-0000-4000-8000-000000000001", "revisionId": "6a7e00f3-0000-4000-8000-000000000101", "schemaVersion": 12, "kind": "item",
+    "name": "Fixture Keen Rune", "rulesFamilies": ["srd-5.2.1"], "provenance": { "sourceId": "6a7e0000-0000-4000-8000-000000000001" }, "status": "published",
+    "effects": [
+      { "type": "itemMod", "id": "keen-rune", "appliesTo": "weapon", "bonus": 1 }
+    ]
+  },
+  {
+    "contentId": "6a7e00f3-0000-4000-8000-000000000002", "revisionId": "6a7e00f3-0000-4000-8000-000000000102", "schemaVersion": 12, "kind": "item",
+    "name": "Fixture Warding Plating", "rulesFamilies": ["srd-5.2.1"], "provenance": { "sourceId": "6a7e0000-0000-4000-8000-000000000001" }, "status": "published",
+    "effects": [
+      {
+        "type": "itemMod", "id": "warding-plating", "appliesTo": "armor", "bonus": 1,
+        "modifiers": [
+          { "type": "modifier", "id": "warding-save", "operation": "bonus", "target": "save.dex", "value": "1" }
+        ]
+      }
+    ]
+  },
+  {
+    "contentId": "6a7e00f3-0000-4000-8000-000000000003", "revisionId": "6a7e00f3-0000-4000-8000-000000000103", "schemaVersion": 12, "kind": "item",
+    "name": "Fixture Steady Lining", "rulesFamilies": ["srd-5.2.1"], "provenance": { "sourceId": "6a7e0000-0000-4000-8000-000000000001" }, "status": "published",
+    "effects": [
+      {
+        "type": "itemMod", "id": "steady-lining", "appliesTo": "any",
+        "modifiers": [
+          { "type": "modifier", "id": "steady-initiative", "operation": "bonus", "target": "initiative", "value": "1" }
+        ]
+      }
+    ]
+  },
+  {
+    "contentId": "6a7e00f3-0000-4000-8000-000000000011", "revisionId": "6a7e00f3-0000-4000-8000-000000000111", "schemaVersion": 12, "kind": "item",
+    "name": "Fixture Longblade", "rulesFamilies": ["srd-5.2.1"], "provenance": { "sourceId": "6a7e0000-0000-4000-8000-000000000001" }, "status": "published",
+    "effects": [
+      { "type": "weapon", "id": "longblade-weapon", "category": "martial", "attack": "melee", "damage": "1d8", "damageType": "slashing", "weaponKey": "longblade" },
+      { "type": "modifier", "id": "longblade-initiative", "operation": "bonus", "target": "initiative", "value": "1" }
+    ]
+  },
+  {
+    "contentId": "6a7e00f3-0000-4000-8000-000000000012", "revisionId": "6a7e00f3-0000-4000-8000-000000000112", "schemaVersion": 12, "kind": "item",
+    "name": "Fixture Scale Coat", "rulesFamilies": ["srd-5.2.1"], "provenance": { "sourceId": "6a7e0000-0000-4000-8000-000000000001" }, "status": "published",
+    "effects": [
+      { "type": "armor", "id": "scale-coat-armor", "category": "medium", "armorClass": 14, "dexterityCap": 2 }
+    ]
+  },
+  {
+    "contentId": "6a7e00f3-0000-4000-8000-000000000013", "revisionId": "6a7e00f3-0000-4000-8000-000000000113", "schemaVersion": 12, "kind": "item",
+    "name": "Fixture Round Guard", "rulesFamilies": ["srd-5.2.1"], "provenance": { "sourceId": "6a7e0000-0000-4000-8000-000000000001" }, "status": "published",
+    "effects": [
+      { "type": "armor", "id": "round-guard-armor", "category": "shield", "armorClass": 2 }
+    ]
+  }
+]

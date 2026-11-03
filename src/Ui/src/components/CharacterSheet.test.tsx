@@ -2,14 +2,16 @@
 // The sheet's tabs (ADR-014): Spells only when there is something to show, a tab that is not offered falls back to Play,
 // "Report a gap" switches to Notes and focuses the note text every time it is pressed, and choosing Notes by hand keeps
 // focus on the tab. The client is mocked; values are invented.
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { client } from '../api/client';
 import type { Character, CharacterSheet as SheetModel, CharacterView, DerivedValue, FeatureEntry, RollRecord } from '../api/types';
 import { TomeStackError } from '../api/transport';
+import { blockedHint, confirmLabel, describedBy, exportChange, failedLine, firstRadio, packageTargetsFixture } from '../test/downConversion';
 import { CharacterSheet } from './CharacterSheet';
+import { writeChecklist } from '../levelUpChecklist';
 import { RollResult } from './PlayPanels';
 
 vi.mock('../api/client', () => ({
@@ -20,6 +22,10 @@ vi.mock('../api/client', () => ({
     listContent: vi.fn(),
     snapshots: vi.fn(),
     previewExport: vi.fn(),
+    packagePreflight: vi.fn(),
+    saveExportAs: vi.fn(),
+    exportCharacters: vi.fn(),
+    packageTargets: vi.fn(),
     info: vi.fn(),
     play: vi.fn(),
     undoPlay: vi.fn(),
@@ -37,6 +43,7 @@ vi.mock('../api/client', () => ({
 
 beforeEach(() => {
   vi.mocked(client.restPreview).mockResolvedValue({ kind: 'shortRest', changes: [], manual: [], basis: 'fixture' });
+  vi.mocked(client.packageTargets).mockRejectedValue(new Error('package.targets is not offered')); // today's service: no target control
   vi.mocked(client.rest).mockReset();
   vi.mocked(client.listGapNotes).mockResolvedValue([]);
   vi.mocked(client.availableUpdates).mockResolvedValue([]);
@@ -85,10 +92,10 @@ function view(sheetOver: Partial<SheetModel> = {}): CharacterView {
 }
 
 const noop = () => {};
-const sheetElement = (v: CharacterView, initialTab?: Parameters<typeof CharacterSheet>[0]['initialTab']) => (
-  <CharacterSheet view={v} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} initialTab={initialTab} />
+const sheetElement = (v: CharacterView, initialTab?: Parameters<typeof CharacterSheet>[0]['initialTab'], focusChecklist?: boolean) => (
+  <CharacterSheet view={v} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} initialTab={initialTab} focusChecklist={focusChecklist} />
 );
-const renderSheet = (v: CharacterView, initialTab?: Parameters<typeof CharacterSheet>[0]['initialTab']) => render(sheetElement(v, initialTab));
+const renderSheet = (v: CharacterView, initialTab?: Parameters<typeof CharacterSheet>[0]['initialTab'], focusChecklist?: boolean) => render(sheetElement(v, initialTab, focusChecklist));
 
 function undoHarness() {
   const v = view();
@@ -280,6 +287,52 @@ it('Use on an action with alsoChange sends useAction stamped with the view (D43 
   await user.click(screen.getByRole('button', { name: 'Use Gather (1 Fixture focus, +1 Fixture charge)' }));
   await waitFor(() => expect(client.play).toHaveBeenCalledTimes(1));
   expect(vi.mocked(client.play).mock.calls[0]?.[1]).toEqual({ action: 'useAction', contentId: 'c-gather', rollId: 'gather-roll', expectedUpdatedAt: '2026-10-03T00:00:00Z' });
+});
+
+it('a second press of a paying Use while the first is being saved is dropped; a later press goes through', async () => {
+  const user = userEvent.setup();
+  const ref = { contentId: 'c-gather', revisionId: 'r-gather' };
+  const pools = [{ content: ref, contentName: 'Fixture Gatherer', effectId: 'e-focus', resourceId: 'focus', label: 'Fixture focus', maximum: 5, spent: 0, current: 5, trace: [], warnings: [], automation: 'automatic', recoveries: [] }];
+  const gatherEffect = { id: 'gather', rollId: 'gather-roll', type: 'roll', automation: 'automatic', label: 'Gather', activation: 'action', resourceId: 'focus', cost: 1, available: true };
+  const shown = view({ resources: pools, features: [{ content: ref, name: 'Fixture Gatherer', kind: 'feature', origin: {}, automation: 'automatic', diagnostics: [], effects: [gatherEffect] }] } as never);
+  let release: (v: typeof shown) => void = () => undefined;
+  vi.mocked(client.play).mockReset();
+  vi.mocked(client.play).mockReturnValueOnce(new Promise((resolve) => { release = resolve as typeof release; }) as never);
+  vi.mocked(client.play).mockResolvedValue(shown);
+  const changed = vi.fn();
+  render(<CharacterSheet view={shown} onChanged={changed} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+  const use = screen.getByRole('button', { name: /^Use Gather/ });
+  await user.click(use);
+  await user.click(use);
+  expect(client.play).toHaveBeenCalledTimes(1);
+  release(shown);
+  await waitFor(() => expect(changed).toHaveBeenCalled());
+  const before = vi.mocked(client.play).mock.calls.length;
+  await user.click(screen.getByRole('button', { name: /^Use Gather/ }));
+  await waitFor(() => expect(client.play).toHaveBeenCalledTimes(before + 1));
+});
+
+it('Pay on the Last roll sends useAction stamped with the view, once (MECH-X item 1, S6)', async () => {
+  const user = userEvent.setup();
+  const ref = { contentId: 'c-fury', revisionId: 'r-fury' };
+  const lash = { id: 'lash', rollId: 'lash-roll', type: 'roll', automation: 'automatic', label: 'Lash', dice: '2d6', cost: 3, activation: 'action', available: true, payment: { kind: 'hitPoints', payable: true } };
+  const shown = view({ features: [{ content: ref, name: 'Fixture Fury', kind: 'feature', origin: {}, automation: 'automatic', diagnostics: [], effects: [lash] }] } as never);
+  const record = {
+    formula: '2d6', mode: 'normal', critical: false, dice: [], diceTotal: 7, expressionConstant: 0, modifiers: [], total: 7,
+    provenance: { rollId: 'lash-roll', label: 'Lash', content: ref, effectId: 'lash' }, payment: { contentId: 'c-fury', useId: 'lash-roll', kind: 'hitPoints', amount: 3, mayDropToZero: false },
+  } as unknown as RollRecord;
+  vi.mocked(client.roll).mockReset();
+  vi.mocked(client.roll).mockResolvedValue(record);
+  vi.mocked(client.play).mockReset();
+  vi.mocked(client.play).mockResolvedValue(shown);
+  render(<CharacterSheet view={shown} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+  await user.click(screen.getByRole('button', { name: 'Roll Lash (2d6)' }));
+  expect(client.play).not.toHaveBeenCalled(); // rolling never pays
+  const pay = await screen.findByRole('button', { name: 'Pay 3 hit points' });
+  await user.click(pay);
+  await user.click(pay);
+  await waitFor(() => expect(client.play).toHaveBeenCalledTimes(1));
+  expect(vi.mocked(client.play).mock.calls[0]?.[1]).toEqual({ action: 'useAction', contentId: 'c-fury', rollId: 'lash-roll', amount: 3, expectedUpdatedAt: '2026-10-03T00:00:00Z' });
 });
 
 it('says what the reply noticed after a play change (here, ending an encounter), in the status line (D43 S3)', async () => {
@@ -1036,11 +1089,12 @@ it('does not report a print preview lookup that fails after the preview was clos
 // G6: the export dialog shows the preview's warning, for a backup on opening and for a share once chosen.
 it('shows the needs-newer-build warning of the export preview, for a backup and for a share', async () => {
   const user = userEvent.setup();
-  const text = 'Opening this needs TomeStack 0.7.0 or later: it holds content or a character that older versions refuse.';
+  const text = "Opening this needs TomeStack 0.7.0 or newer (this is TomeStack 0.7.1): 'Compat Hero' is a character at schema 10. Older versions refuse the file.";
   vi.mocked(client.previewExport).mockResolvedValue({
     purpose: 'share', fileName: 'x.tomestack.zip', characters: [], included: [], omitted: [], gapNotes: 0,
     warnings: [{ code: 'package.needs-newer-build', message: text }],
   } as Awaited<ReturnType<typeof client.previewExport>>);
+  vi.mocked(client.packagePreflight).mockResolvedValue({ included: [], omitted: [], blocking: [], notices: [] });
   renderSheet(view());
   await user.click(screen.getByRole('tab', { name: 'Manage' }));
   expect(await screen.findByText(text)).toBeTruthy();
@@ -1087,6 +1141,179 @@ it('says so in plain text when the backup export preview cannot be read (G6)', a
   const line = await screen.findByText('Could not check whether this package needs a newer TomeStack.');
   expect(line.closest('[role="status"],[role="alert"]')).toBeNull();
   expect(onError).not.toHaveBeenCalled();
+});
+
+// "Save for an older TomeStack" (D85): the target control, the change region and the confirmation in the Export panel.
+describe('export for an older TomeStack', () => {
+  type Preview = Awaited<ReturnType<typeof client.previewExport>>;
+  const base = { purpose: 'backup', fileName: 'x.tomestack.zip', characters: [], included: [], omitted: [], gapNotes: 0 };
+  const changesFor: Record<string, ReturnType<typeof exportChange>[]> = {};
+  const previewOf = (target?: string | null): Preview =>
+    (target ? { ...base, target, changes: changesFor[target] ?? [], changesHash: `hash-${target}` } : base) as unknown as Preview;
+
+  beforeEach(() => {
+    for (const key of Object.keys(changesFor)) delete changesFor[key];
+    vi.mocked(client.packageTargets).mockReset();
+    vi.mocked(client.packageTargets).mockResolvedValue(packageTargetsFixture);
+    vi.mocked(client.previewExport).mockReset();
+    vi.mocked(client.previewExport).mockImplementation(async (_ids, _purpose, target) => previewOf(target));
+    vi.mocked(client.saveExportAs).mockReset();
+    vi.mocked(client.saveExportAs).mockResolvedValue({ saved: true, fileName: 'x.tomestack.zip' } as Awaited<ReturnType<typeof client.saveExportAs>>);
+  });
+
+  async function openManage() {
+    const user = userEvent.setup();
+    renderSheet(view());
+    await user.click(screen.getByRole('tab', { name: 'Manage' }));
+    return user;
+  }
+  const exportButton = () => screen.getByRole('button', { name: 'Export package' }) as HTMLButtonElement;
+
+  it('re-runs the preview for the chosen release and again without a target for the first choice', async () => {
+    const user = await openManage();
+    await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
+    await waitFor(() => expect(vi.mocked(client.previewExport).mock.lastCall).toEqual([['fixture-2'], 'backup', '0.6.0']));
+    await user.click(screen.getByRole('radio', { name: firstRadio }));
+    await waitFor(() => expect(vi.mocked(client.previewExport).mock.lastCall).toEqual([['fixture-2'], 'backup']));
+  });
+
+  it('keeps focus on the radio that was chosen while the preview reloads', async () => {
+    const user = await openManage();
+    const radio = await screen.findByRole('radio', { name: '0.6.0' });
+    await user.click(radio);
+    await screen.findByRole('region', { name: 'Changed for TomeStack 0.6.0' });
+    expect(screen.getByRole('radio', { name: '0.6.0' })).toBe(radio);
+    expect(document.activeElement).toBe(radio);
+  });
+
+  it('disables Export while something blocks, and describes why', async () => {
+    changesFor['0.6.0'] = [exportChange('blocks', 'Compat Hero needs 0.7.0.')];
+    const user = await openManage();
+    await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
+    await screen.findByText('Compat Hero needs 0.7.0.');
+    expect(exportButton().disabled).toBe(true);
+    expect(describedBy(exportButton())).toBe(blockedHint);
+  });
+
+  it('needs the tick for a dropped item, and a new preview clears it', async () => {
+    changesFor['0.6.0'] = [exportChange('dropped', 'Compat Tide Stance is left out.')];
+    changesFor['0.5.0'] = [exportChange('dropped', 'Compat Steady Hands is left out.')];
+    const user = await openManage();
+    await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
+    const box = (await screen.findByRole('checkbox', { name: confirmLabel })) as HTMLInputElement;
+    expect(exportButton().disabled).toBe(true);
+    await user.click(box);
+    expect(exportButton().disabled).toBe(false);
+    await user.click(screen.getByRole('radio', { name: '0.5.0' }));
+    await screen.findByText('Compat Steady Hands is left out.');
+    expect((screen.getByRole('checkbox', { name: confirmLabel }) as HTMLInputElement).checked).toBe(false);
+    expect(exportButton().disabled).toBe(true);
+  });
+
+  it('waits for the preview of a chosen release before Export is possible', async () => {
+    let settle: (p: Preview) => void = () => {};
+    const user = await openManage();
+    await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
+    await screen.findByRole('region', { name: 'Changed for TomeStack 0.6.0' });
+    vi.mocked(client.previewExport).mockReturnValueOnce(new Promise<Preview>((r) => (settle = r)));
+    await user.click(screen.getByRole('radio', { name: '0.5.0' }));
+    expect(exportButton().disabled).toBe(true);
+    settle(previewOf('0.5.0'));
+    await waitFor(() => expect(exportButton().disabled).toBe(false));
+  });
+
+  it('sends the release and the preview hash when a release is chosen, and neither for the first choice', async () => {
+    const user = await openManage();
+    await waitFor(() => expect(exportButton().disabled).toBe(false));
+    await user.click(exportButton());
+    expect(vi.mocked(client.saveExportAs).mock.lastCall).toEqual([['fixture-2'], 'backup']);
+    await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
+    await screen.findByRole('region', { name: 'Changed for TomeStack 0.6.0' });
+    await user.click(exportButton());
+    expect(vi.mocked(client.saveExportAs).mock.lastCall).toEqual([['fixture-2'], 'backup', '0.6.0', 'hash-0.6.0']);
+  });
+
+  it('offers the control for a share too', async () => {
+    const user = await openManage();
+    await user.click(screen.getByRole('radio', { name: /^Share with someone/ }));
+    await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
+    await waitFor(() => expect(vi.mocked(client.previewExport).mock.lastCall).toEqual([['fixture-2'], 'share', '0.6.0']));
+  });
+
+  it('says which TomeStack opens the default file, and shows nothing when the service does not say', async () => {
+    vi.mocked(client.previewExport).mockResolvedValue({ ...base, opensIn: '0.5.0' } as unknown as Preview);
+    await openManage();
+    expect(await screen.findByText('This file opens in TomeStack 0.5.0 or newer.')).toBeTruthy();
+    cleanup();
+    vi.mocked(client.previewExport).mockResolvedValue(previewOf());
+    await openManage();
+    await waitFor(() => expect(exportButton().disabled).toBe(false));
+    expect(screen.queryByRole('region', { name: 'Compatibility' })).toBeNull();
+  });
+
+  it('shows no target control, and reports nothing, when the targets cannot be read', async () => {
+    vi.mocked(client.packageTargets).mockRejectedValue(new Error('unsupported'));
+    const onError = vi.fn();
+    const user = userEvent.setup();
+    render(<CharacterSheet view={view()} onChanged={noop} onError={onError} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+    await user.click(screen.getByRole('tab', { name: 'Manage' }));
+    await waitFor(() => expect(client.packageTargets).toHaveBeenCalled());
+    await waitFor(() => expect(exportButton().disabled).toBe(false));
+    expect(screen.queryByText('Which TomeStack will open it?')).toBeNull();
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('says so plainly, and keeps Export off, when the preview for a chosen release fails', async () => {
+    vi.mocked(client.previewExport).mockImplementation(async (_ids, _purpose, target) => {
+      if (target) throw new Error('boom');
+      return previewOf();
+    });
+    const onError = vi.fn();
+    const user = userEvent.setup();
+    render(<CharacterSheet view={view()} onChanged={noop} onError={onError} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+    await user.click(screen.getByRole('tab', { name: 'Manage' }));
+    await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
+    expect(await screen.findByText(failedLine('0.6.0'))).toBeTruthy();
+    expect(exportButton().disabled).toBe(true);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('lets the last chosen release win when an earlier reply arrives late', async () => {
+    changesFor['0.5.0'] = [exportChange('dropped', 'Compat Steady Hands is left out.')];
+    const user = await openManage();
+    await waitFor(() => expect(exportButton().disabled).toBe(false));
+    let late: (p: Preview) => void = () => {};
+    vi.mocked(client.previewExport).mockReturnValueOnce(new Promise<Preview>((r) => (late = r)));
+    await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
+    await user.click(screen.getByRole('radio', { name: '0.5.0' }));
+    await screen.findByText('Compat Steady Hands is left out.');
+    late(previewOf('0.6.0'));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.getByRole('region', { name: 'Changed for TomeStack 0.5.0' })).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Changed for TomeStack 0.6.0' })).toBeNull();
+    await user.click(screen.getByRole('checkbox', { name: confirmLabel }));
+    await user.click(exportButton());
+    expect(vi.mocked(client.saveExportAs).mock.lastCall).toEqual([['fixture-2'], 'backup', '0.5.0', 'hash-0.5.0']);
+  });
+
+  it('drops the preview of a chosen release while the character reloads it, so an old hash is never sent', async () => {
+    changesFor['0.6.0'] = [exportChange('dropped', 'Compat Tide Stance is left out.')];
+    const user = userEvent.setup();
+    const v = view();
+    const { rerender } = renderSheet(v);
+    await user.click(screen.getByRole('tab', { name: 'Manage' }));
+    await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
+    await user.click(await screen.findByRole('checkbox', { name: confirmLabel }));
+    expect(exportButton().disabled).toBe(false);
+    let settle: (p: Preview) => void = () => {};
+    vi.mocked(client.previewExport).mockReturnValueOnce(new Promise<Preview>((r) => (settle = r)));
+    rerender(sheetElement({ ...v, character: { ...v.character, updatedAt: '2026-10-03T00:00:09Z' } }));
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Changed for TomeStack 0.6.0' })).toBeNull());
+    expect(exportButton().disabled).toBe(true);
+    settle(previewOf('0.6.0'));
+    await screen.findByRole('checkbox', { name: confirmLabel });
+    expect((screen.getByRole('checkbox', { name: confirmLabel }) as HTMLInputElement).checked).toBe(false);
+  });
 });
 
 const dieChange = [{ id: 'hitDie:0', kind: 'hitDie', label: 'Spend a d8', from: 3, to: 8, reason: 'Fixture', die: 8, amount: 5 }] as unknown as Changes;
@@ -1288,6 +1515,32 @@ it('a save with automatic advantage says so on its button and in its accessible 
   await user.click(button);
   expect(vi.mocked(client.roll)).toHaveBeenCalledWith('fixture-2', { field: 'save.wis', mode: 'normal' });
   expect(screen.getByRole('button', { name: 'Roll Initiative' })).toBeTruthy(); // a field with no reason is unchanged
+});
+
+it('a field card shows a closed "Why?" above its trace table, with the proficiency sentence (D72 X04)', async () => {
+  const user = userEvent.setup();
+  const rules = { kind: 'rulesPolicy', rulesFamily: 'srd-5.2.1' } as const;
+  const v = statsWith('save.wis', 'Wisdom save', 4, 'modifier');
+  const saved = v.sheet.fields.find((f) => f.field === 'save.wis')!;
+  saved.trace = [
+    { order: 1, operation: 'base', description: 'Wisdom modifier', amount: 1, result: 1, origin: rules },
+    { order: 2, operation: 'add', description: 'Proficiency bonus', amount: 3, result: 4, origin: rules },
+  ];
+  renderSheet(v, 'stats');
+  await user.click(screen.getByRole('heading', { name: 'Wisdom save: +4' }));
+  const why = screen.getByText('Why?').closest('details')!;
+  expect(why.open).toBe(false);
+  expect(why.compareDocumentPosition(screen.getByRole('table', { name: /How wisdom save is calculated/ })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  const list = within(why).getByRole('list', { hidden: true, name: 'Why Wisdom save' });
+  expect(list.textContent).toMatch(/\+3 Proficiency bonus/);
+  expect(why.closest('[aria-live]')).toBeNull();
+});
+
+it('a field with an empty trace shows no "Why?"', async () => {
+  const user = userEvent.setup();
+  renderSheet(statsWith('save.dex', 'Dexterity save', 1, 'modifier'), 'stats');
+  await user.click(screen.getByRole('heading', { name: 'Dexterity save: +1' }));
+  expect(screen.queryByText('Why?')).toBeNull();
 });
 
 it('advantage and disadvantage together read as normal with the reason', async () => {
@@ -1879,4 +2132,445 @@ it('the reply of a replaced damage panel does not close the new panel', async ()
   first.settle(respondingView());
   await waitFor(() => expect(onChanged).toHaveBeenCalled()); // the applied damage still reaches the sheet
   expect(await screen.findByRole('button', { name: 'Apply damage' })).toBeTruthy(); // and the new panel stays open
+});
+
+// D73: the quickbar spends once. A pin whose name says "and spend" rolls, then spends through the sheet's one spender (the one the Last roll's Spend uses); any other pin only rolls.
+describe('the quickbar', () => {
+  const tideRef = { contentId: 'c-tide', revisionId: 'r-tide' };
+  const focusPool = (current: number) => ({
+    content: tideRef, contentName: 'Fixture Tide', effectId: 'e-focus', resourceId: 'focus', label: 'Focus', maximum: 5, spent: 5 - current, current,
+    trace: [], warnings: [], automation: 'automatic', recoveries: [],
+  });
+  const waveEffect = (id: string, label: string) => ({ id, type: 'roll', automation: 'automatic', label, dice: '2d6', resourceId: 'focus', cost: 2, available: true });
+  const tideView = (current = 4, stamp = '2026-10-03T00:00:00Z'): CharacterView => {
+    const v = view({
+      resources: [focusPool(current)],
+      features: [{ content: tideRef, name: 'Fixture Tide', kind: 'feature', origin: {}, automation: 'automatic', diagnostics: [], effects: [waveEffect('wave', 'Tide Wave'), waveEffect('wave2', 'Tide Crest')] }],
+    } as never);
+    return { ...v, character: { ...v.character, updatedAt: stamp } };
+  };
+  const storeKey = 'tomestack.quickbar.fixture-2';
+  const wavePin = { kind: 'roll', contentId: 'c-tide', effectId: 'wave' };
+  const crestPin = { kind: 'roll', contentId: 'c-tide', effectId: 'wave2' };
+  const spendAction = { action: 'spend', amount: 2, contentId: 'c-tide', resourceId: 'focus' };
+  const waveRecord = (label = 'Tide Wave'): RollRecord => ({ ...rollRecord(label, 7), spend: { contentId: 'c-tide', resourceId: 'focus', amount: 2 } });
+  const bar = () => within(screen.getByRole('region', { name: 'Quickbar' }));
+  const barButton = (name: RegExp) => bar().getByRole<HTMLButtonElement>('button', { name });
+  const spendButton = () => screen.getByRole<HTMLButtonElement>('button', { name: 'Spend 2 Focus (4 left)' });
+  const pin = (...pins: object[]) => localStorage.setItem(storeKey, JSON.stringify(pins));
+  const key = (code: string) => new KeyboardEvent('keydown', { code, altKey: true, bubbles: true, cancelable: true });
+  const settle = async () => {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+  };
+
+  beforeEach(() => {
+    vi.mocked(client.roll).mockReset();
+    vi.mocked(client.play).mockReset();
+  });
+
+  it('a press rolls, then spends once through play, and the Last roll Spend is used', async () => {
+    const user = userEvent.setup();
+    pin(wavePin);
+    vi.mocked(client.roll).mockResolvedValue(waveRecord());
+    vi.mocked(client.play).mockResolvedValue(tideView(2));
+    renderSheet(tideView());
+    await user.click(barButton(/^Roll Tide Wave and spend 2 Focus$/));
+    await waitFor(() => expect(client.play).toHaveBeenCalledTimes(1));
+    expect(client.roll).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(client.roll).mock.calls[0]).toEqual(['fixture-2', { content: tideRef, effectId: 'wave' }]); // a roll effect takes no mode
+    expect(vi.mocked(client.play).mock.calls[0]?.[1]).toEqual(spendAction);
+    await waitFor(() => expect(spendButton().disabled).toBe(true));
+    await user.click(spendButton());
+    await settle();
+    expect(client.play).toHaveBeenCalledTimes(1);
+  });
+
+  const lashView = (current = 4): CharacterView => {
+    const v = tideView(current);
+    const lash = { item: tideRef, name: 'Tide Lash', effectId: 'lash', source: 'feature', automation: 'automatic', available: true, resourceId: 'focus', costResourceContent: 'c-tide', cost: 2, properties: [], trace: [], warnings: [], attack: 'melee', toHit: 5, damage: '1d6' };
+    return { ...v, sheet: { ...v.sheet, attacks: [lash] } } as unknown as CharacterView;
+  };
+  const lashPin = { kind: 'attack', contentId: 'c-tide', effectId: 'lash' };
+  const lashRecord = (): RollRecord => ({
+    ...rollRecord('Tide Lash', 14),
+    provenance: { rollId: 'fixture', label: 'Tide Lash', content: tideRef, effectId: 'lash' },
+    spend: { contentId: 'c-tide', resourceId: 'focus', amount: 2 },
+  } as RollRecord);
+
+  it('a pinned feature attack with a cost says "and spend" and spends once', async () => {
+    const user = userEvent.setup();
+    pin(lashPin);
+    vi.mocked(client.roll).mockResolvedValue(lashRecord());
+    vi.mocked(client.play).mockResolvedValue(tideView(2));
+    renderSheet(lashView());
+    await user.click(barButton(/^Roll Tide Lash attack and spend 2 Focus$/));
+    await waitFor(() => expect(client.play).toHaveBeenCalledTimes(1));
+    await settle();
+    expect(vi.mocked(client.play).mock.calls[0]?.[1]).toEqual(spendAction);
+    expect(client.play).toHaveBeenCalledTimes(1);
+  });
+
+  it('a pinned feature attack that costs nothing is named plainly and sends no spend', async () => {
+    const user = userEvent.setup();
+    pin(lashPin);
+    vi.mocked(client.roll).mockResolvedValue({ ...lashRecord(), spend: { contentId: 'c-tide', resourceId: 'focus', amount: 0 } });
+    const free = lashView();
+    renderSheet({ ...free, sheet: { ...free.sheet, attacks: [{ ...free.sheet.attacks![0]!, cost: 0 }] } } as CharacterView);
+    await user.click(barButton(/^Roll Tide Lash attack$/));
+    await waitFor(() => expect(client.roll).toHaveBeenCalledTimes(1));
+    await settle();
+    expect(client.play).not.toHaveBeenCalled();
+  });
+
+  it('a pinned roll whose name does not say "and spend" leaves the Spend on the Last roll', async () => {
+    const user = userEvent.setup();
+    pin(wavePin);
+    const v = tideView();
+    const plain = { ...v, sheet: { ...v.sheet, features: [{ ...v.sheet.features![0]!, effects: [{ ...waveEffect('wave', 'Tide Wave'), variableCost: true }] }] } } as unknown as CharacterView;
+    vi.mocked(client.roll).mockResolvedValue(waveRecord());
+    renderSheet(plain);
+    await user.click(barButton(/^Roll Tide Wave$/));
+    await waitFor(() => expect(client.roll).toHaveBeenCalledTimes(1));
+    await settle();
+    expect(client.play).not.toHaveBeenCalled();
+  });
+
+  it('a roll that resolves after the sheet is gone makes no spend', async () => {
+    pin(wavePin);
+    let resolveRoll!: (r: RollRecord) => void;
+    vi.mocked(client.roll).mockReturnValue(new Promise<RollRecord>((r) => (resolveRoll = r)));
+    const { unmount } = renderSheet(tideView());
+    fireEvent.click(barButton(/^Roll Tide Wave/));
+    unmount();
+    await act(async () => resolveRoll(waveRecord()));
+    await settle();
+    expect(client.play).not.toHaveBeenCalled();
+  });
+
+  it('a refused variable-cost Spend on the Last roll puts the typed amount back and gives the button back', async () => {
+    const user = userEvent.setup();
+    pin(wavePin);
+    const v = tideView();
+    const variable = { ...v, sheet: { ...v.sheet, features: [{ ...v.sheet.features![0]!, effects: [{ ...waveEffect('wave', 'Tide Wave'), variableCost: true }] }] } } as unknown as CharacterView;
+    vi.mocked(client.roll).mockResolvedValue({ ...waveRecord(), provenance: { rollId: 'fixture', label: 'Tide Wave', content: tideRef, effectId: 'wave' } });
+    vi.mocked(client.play).mockRejectedValue(new TomeStackError({ code: 'character.stale', message: 'The character changed.' }));
+    vi.mocked(client.getCharacter).mockResolvedValue(variable);
+    render(<CharacterSheet view={variable} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+    await user.click(barButton(/^Roll Tide Wave$/));
+    const box = await screen.findByLabelText<HTMLInputElement>(/^Focus to spend/);
+    await user.type(box, '2');
+    const spend = screen.getByRole<HTMLButtonElement>('button', { name: /^Spend 2 Focus/ });
+    await user.click(spend);
+    await waitFor(() => expect(client.play).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByLabelText<HTMLInputElement>(/^Focus to spend/).value).toBe('2'));
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: /^Spend 2 Focus/ }).disabled).toBe(false);
+  });
+
+  it('two presses before the roll resolves, and two Alt+1 in one tick, each give one roll and one spend', async () => {
+    pin(wavePin);
+    let resolveRoll!: (r: RollRecord) => void;
+    vi.mocked(client.roll).mockReturnValue(new Promise<RollRecord>((r) => (resolveRoll = r)));
+    vi.mocked(client.play).mockResolvedValue(tideView(2));
+    renderSheet(tideView());
+    const button = barButton(/^Roll Tide Wave/);
+    fireEvent.click(button);
+    fireEvent.click(button);
+    await act(async () => resolveRoll(waveRecord()));
+    await waitFor(() => expect(client.play).toHaveBeenCalledTimes(1));
+    await settle();
+    expect(client.roll).toHaveBeenCalledTimes(1);
+    expect(client.play).toHaveBeenCalledTimes(1);
+
+    // Two native keydowns before React renders in between: only the sheet's ref guard can stop the second.
+    vi.mocked(client.roll).mockReset();
+    vi.mocked(client.play).mockReset();
+    vi.mocked(client.roll).mockResolvedValue(waveRecord());
+    vi.mocked(client.play).mockResolvedValue(tideView(2));
+    await act(async () => {
+      document.dispatchEvent(key('Digit1'));
+      document.dispatchEvent(key('Digit1'));
+    });
+    await waitFor(() => expect(client.play).toHaveBeenCalledTimes(1));
+    await settle();
+    expect(client.roll).toHaveBeenCalledTimes(1);
+    expect(client.play).toHaveBeenCalledTimes(1);
+  });
+
+  it('Alt+2 while the first spend is still pending runs nothing', async () => {
+    pin(wavePin, crestPin);
+    vi.mocked(client.roll).mockResolvedValue(waveRecord());
+    let settlePlay!: (v: CharacterView) => void;
+    vi.mocked(client.play).mockReturnValue(new Promise<CharacterView>((r) => (settlePlay = r)));
+    renderSheet(tideView());
+    await act(async () => {
+      document.dispatchEvent(key('Digit1'));
+    });
+    await waitFor(() => expect(client.play).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      document.dispatchEvent(key('Digit2'));
+    });
+    await settle();
+    expect(client.roll).toHaveBeenCalledTimes(1);
+    const bar = screen.getByRole('region', { name: 'Quickbar' });
+    expect(bar.getAttribute('aria-busy')).toBe('true');
+    expect(barButton(/^Roll Tide Wave/).getAttribute('aria-disabled')).toBeNull(); // busy does not restyle the buttons
+    await act(async () => settlePlay(tideView(2)));
+    await waitFor(() => expect(bar.getAttribute('aria-busy')).toBeNull());
+  });
+
+  it('a refused spend shows the error, gives the Last roll Spend back and plays once', async () => {
+    const user = userEvent.setup();
+    pin(wavePin);
+    const refusal = new TomeStackError({ code: 'character.stale', message: 'The character changed.' });
+    vi.mocked(client.roll).mockResolvedValue(waveRecord());
+    vi.mocked(client.play).mockRejectedValue(refusal);
+    vi.mocked(client.getCharacter).mockResolvedValue(tideView());
+    const onError = vi.fn();
+    render(<CharacterSheet view={tideView()} onChanged={noop} onError={onError} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+    await user.click(barButton(/^Roll Tide Wave/));
+    await waitFor(() => expect(onError).toHaveBeenCalledWith(refusal));
+    await waitFor(() => expect(spendButton().disabled).toBe(false));
+    expect(client.play).toHaveBeenCalledTimes(1);
+  });
+
+  it('Undo last change after a quickbar spend sends the inverse (regain)', async () => {
+    const user = userEvent.setup();
+    pin(wavePin);
+    const before = tideView();
+    const after = tideView(2, '2026-10-03T00:00:05Z');
+    vi.mocked(client.roll).mockResolvedValue(waveRecord());
+    vi.mocked(client.play).mockResolvedValueOnce(after).mockResolvedValue(before);
+    const onChanged = vi.fn();
+    const element = (shown: CharacterView) => <CharacterSheet view={shown} onChanged={onChanged} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />;
+    const { rerender } = render(element(before));
+    await user.click(barButton(/^Roll Tide Wave/));
+    await waitFor(() => expect(onChanged).toHaveBeenCalledWith(after));
+    rerender(element(after)); // the app shows the returned view
+    await user.click(await screen.findByRole('button', { name: /^Undo last change:/ }));
+    await waitFor(() => expect(client.play).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(client.play).mock.calls[1]?.[1]).toEqual({ ...spendAction, action: 'regain' });
+  });
+
+  it('a pin whose content is not on the sheet shows no bar and no error; pinning another keeps it after the visible ones', async () => {
+    const user = userEvent.setup();
+    const ghost = { kind: 'custom', attackId: 'gone' };
+    pin(ghost);
+    const onError = vi.fn();
+    render(<CharacterSheet view={tideView()} onChanged={noop} onError={onError} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+    expect(screen.queryByRole('region', { name: 'Quickbar' })).toBeNull();
+    expect(onError).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: /^Pin Tide Wave/ }));
+    expect(JSON.parse(localStorage.getItem(storeKey)!)).toEqual([wavePin, ghost]);
+    expect(barButton(/^Roll Tide Wave/)).toBeTruthy();
+  });
+
+  it('pins stored for another character do not show', () => {
+    localStorage.setItem('tomestack.quickbar.fixture-1', JSON.stringify([wavePin]));
+    renderSheet(tideView());
+    expect(screen.queryByRole('region', { name: 'Quickbar' })).toBeNull();
+  });
+});
+
+describe('D74 level-up checklist', () => {
+  const storeKey = 'tomestack.levelUpChecklist.fixture-2';
+  const levelView = (level: number, sheetOver: Partial<SheetModel> = {}) => {
+    const v = view(sheetOver);
+    return { ...v, character: { ...v.character, level } };
+  };
+  const seed = (level = 1) => writeChecklist('fixture-2', { level, changes: [{ kind: 'hitPoints', before: 8, after: 12 }] });
+  const region = () => screen.queryByRole('region', { name: /^What changed at level/ });
+  const clientCalls = () => Object.values(client).reduce((n, fn) => n + vi.mocked(fn).mock.calls.length, 0);
+
+  it('focuses the panel heading, not the sheet heading, when asked on open', () => {
+    seed();
+    renderSheet(levelView(1), 'features', true);
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'What changed at level 1' }));
+    expect(document.activeElement).not.toBe(document.getElementById('sheet-heading'));
+  });
+
+  it('keeps the sheet heading focus when the panel is not asked to take it, and when focusChecklist has no list to show', () => {
+    seed();
+    renderSheet(levelView(1), 'features');
+    expect(document.activeElement).toBe(document.getElementById('sheet-heading'));
+    cleanup();
+    localStorage.clear();
+    renderSheet(levelView(1), 'features', true);
+    expect(document.activeElement).toBe(document.getElementById('sheet-heading'));
+  });
+
+  it('opens on Features when asked to focus the panel, whatever the deep link or memory says, and writes no memory', () => {
+    seed();
+    localStorage.setItem('tomestack.sheetTab.fixture-2', 'stats');
+    renderSheet(levelView(1), 'play', true);
+    expect(screen.getByRole('tab', { name: 'Features' }).getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'What changed at level 1' }));
+    expect(localStorage.getItem('tomestack.sheetTab.fixture-2')).toBe('stats');
+  });
+
+  it('focusChecklist with no stored list leaves the tab and the sheet heading focus as before', () => {
+    renderSheet(levelView(1), 'play', true);
+    expect(screen.getByRole('tab', { name: 'Play' }).getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(document.getElementById('sheet-heading'));
+  });
+
+  it('a Spells row has no button when the Spells tab is not offered', () => {
+    writeChecklist('fixture-2', { level: 1, changes: [{ kind: 'slots', level: 1, before: 0, after: 2 }] });
+    renderSheet(levelView(1), 'features');
+    expect(screen.getByText('Level 1 spell slots: 0 → 2')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Show on Spells/ })).toBeNull();
+  });
+
+  it('shows no region without a stored list, or when the stored list is for another level', () => {
+    renderSheet(levelView(1), 'features');
+    expect(region()).toBeNull();
+    cleanup();
+    seed(2);
+    renderSheet(levelView(1), 'features');
+    expect(region()).toBeNull();
+  });
+
+  it('Dismiss removes the key and the region, focuses the Features tab, calls no client method, and stays gone on remount', async () => {
+    const user = userEvent.setup();
+    seed();
+    renderSheet(levelView(1), 'features');
+    await act(async () => {}); // let the mount effects settle before counting calls
+    const before = clientCalls();
+    await user.click(screen.getByRole('button', { name: 'Dismiss' }));
+    expect(localStorage.getItem(storeKey)).toBeNull();
+    expect(region()).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Features' }));
+    expect(clientCalls()).toBe(before);
+    cleanup();
+    renderSheet(levelView(1), 'features');
+    expect(region()).toBeNull();
+  });
+
+  it('Show on Play selects and focuses the Play tab and remembers it', async () => {
+    const user = userEvent.setup();
+    seed();
+    renderSheet(levelView(1), 'features');
+    await user.click(screen.getByRole('button', { name: 'Show on Play' }));
+    const play = screen.getByRole('tab', { name: 'Play' });
+    expect(play.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(play);
+    expect(localStorage.getItem('tomestack.sheetTab.fixture-2')).toBe('play');
+  });
+
+  it('Show choices focuses the choices heading and changes no tab', async () => {
+    const user = userEvent.setup();
+    const choices = [{ source: { contentId: 'fixture.feature', revisionId: 'r1' }, sourceName: 'Fixture feature', choiceId: 'pick', count: 1, options: [], selected: [], resolved: false }] as unknown as SheetModel['choices'];
+    writeChecklist('fixture-2', { level: 1, changes: [{ kind: 'choice', contentId: 'fixture.feature', choiceId: 'pick' }] });
+    renderSheet(levelView(1, { choices }), 'features');
+    await user.click(screen.getByRole('button', { name: 'Show choices' }));
+    expect(document.activeElement).toBe(document.getElementById('choices-heading'));
+    expect(screen.getByRole('tab', { name: 'Features' }).getAttribute('aria-selected')).toBe('true');
+    expect(localStorage.getItem('tomestack.sheetTab.fixture-2')).toBeNull();
+  });
+
+  it('keeps the region when the view is replaced (a rest or spend)', () => {
+    seed();
+    const { rerender } = renderSheet(levelView(1), 'features');
+    rerender(sheetElement({ ...levelView(1), sheet: { ...view().sheet, hitPoints: { maximum: 8, current: 3, temporary: 0 } } }, 'features'));
+    expect(region()).not.toBeNull();
+  });
+
+  it('shows the list when a save lands on the open sheet and the level changes, without moving focus', () => {
+    seed(2);
+    const { rerender } = renderSheet(levelView(1), 'features');
+    expect(region()).toBeNull();
+    const focused = document.activeElement;
+    rerender(sheetElement(levelView(2), 'features', true));
+    expect(region()).not.toBeNull();
+    expect(document.activeElement).toBe(focused);
+  });
+});
+
+// MECH-X item 2: after a long rest the sheet names the choices whose picks may be replaced (page state only).
+describe('after your long rest', () => {
+  const picked = (when: 'levelUp' | 'longRest', selected: number) => ({
+    source: { contentId: 'fixture-src', revisionId: 'fixture-src-r1' },
+    sourceName: 'Fixture Repertoire',
+    choiceId: 'technique',
+    count: 2,
+    options: [],
+    selected: Array.from({ length: selected }, (_, i) => ({ contentId: `p${i}`, revisionId: `p${i}-r1` })),
+    resolved: selected === 2,
+    replaceable: { when, max: 1 },
+  });
+  async function finishRest(user: ReturnType<typeof userEvent.setup>, kind: 'Short' | 'Long', rested: CharacterView, onMakeChoices = noop) {
+    vi.mocked(client.restPreview).mockResolvedValue({ kind: kind === 'Long' ? 'longRest' : 'shortRest', changes: [], manual: [], basis: 'fixture' });
+    vi.mocked(client.rest).mockResolvedValue(rested);
+    render(<CharacterSheet view={view({ choices: [picked('longRest', 1)] })} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={onMakeChoices} onArchiveChanged={noop} />);
+    await user.click(screen.getByRole('button', { name: `${kind} rest…` }));
+    const finish = await screen.findByRole('button', { name: `Finish ${kind.toLowerCase()} rest` });
+    await waitFor(() => expect(finish.getAttribute('aria-disabled')).not.toBe('true'));
+    await user.click(finish);
+  }
+
+  it('shows a labelled region with Make choices and Dismiss; Dismiss removes it and focuses the sheet heading', async () => {
+    const user = userEvent.setup();
+    const onMakeChoices = vi.fn();
+    await finishRest(user, 'Long', view({ choices: [picked('longRest', 1)] }), onMakeChoices);
+    const region = await screen.findByRole('region', { name: 'After your long rest' });
+    expect(within(region).getByText('You may replace one pick of: Fixture Repertoire.')).toBeTruthy();
+    await user.click(within(region).getByRole('button', { name: 'Make choices' }));
+    expect(onMakeChoices).toHaveBeenCalledTimes(1);
+    await user.click(within(region).getByRole('button', { name: 'Dismiss' }));
+    expect(screen.queryByRole('region', { name: 'After your long rest' })).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Fixture Quill' }));
+  });
+
+  it('shows nothing after a short rest, or when no longRest choice has picks', async () => {
+    const user = userEvent.setup();
+    await finishRest(user, 'Short', view({ choices: [picked('longRest', 1)] }));
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Short rest' })).toBeNull());
+    expect(screen.queryByRole('region', { name: 'After your long rest' })).toBeNull();
+    cleanup();
+    await finishRest(user, 'Long', view({ choices: [picked('longRest', 0), picked('levelUp', 1)] }));
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Long rest' })).toBeNull());
+    expect(screen.queryByRole('region', { name: 'After your long rest' })).toBeNull();
+  });
+
+  // Owner 2026-10-28: a permanent way to change picks, even when every choice is resolved.
+  it('offers Change picks in the header while every choice is resolved, and none without choices', async () => {
+    const user = userEvent.setup();
+    const onMakeChoices = vi.fn();
+    render(<CharacterSheet view={view({ choices: [picked('levelUp', 2)] })} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={onMakeChoices} onArchiveChanged={noop} />);
+    expect(screen.queryByRole('button', { name: 'Make choices' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Change picks' }));
+    expect(onMakeChoices).toHaveBeenCalledTimes(1);
+    cleanup();
+    render(<CharacterSheet view={view({ choices: [] })} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+    expect(screen.queryByRole('button', { name: 'Change picks' })).toBeNull();
+  });
+});
+
+it('does not echo the save notice through the status line when a play reply carries it (MECH-X item 2)', async () => {
+  const user = userEvent.setup();
+  const onStatus = vi.fn();
+  const v = view();
+  const reply: CharacterView = { ...v, notices: [{ code: 'choice.replaced-outside-window', message: "Choice 'technique' had 2 pick(s) replaced outside its window." }, { code: 'resource.full', message: 'Fixture pool is full.' }] };
+  vi.mocked(client.play).mockResolvedValue(reply);
+  render(<CharacterSheet view={v} onChanged={noop} onError={noop} onStatus={onStatus} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' }));
+  await waitFor(() => expect(onStatus).toHaveBeenCalled());
+  expect(onStatus).toHaveBeenCalledWith('Fixture pool is full.'); // other notices still say
+});
+
+it('says once when a saved view reset a companion, and leaves the view it opened with to the opener (MECH-X R69)', () => {
+  const pruned = "A companion's hit points were reset, because the content that gives it is no longer active.";
+  const withNotice = (): CharacterView => ({ ...view(), notices: [{ code: 'companion.play-pruned', message: pruned }] });
+  const onStatus = vi.fn<(text: string) => void>();
+  const props = { onChanged: noop, onError: noop, onStatus, onLevelUp: noop, onMakeChoices: noop, onArchiveChanged: noop };
+  const opened = withNotice();
+  const { rerender } = render(<CharacterSheet view={opened} {...props} />);
+  expect(onStatus).not.toHaveBeenCalledWith(pruned); // the builder's save reports its own reply
+  const saved = withNotice();
+  rerender(<CharacterSheet view={saved} {...props} />);
+  expect(onStatus).toHaveBeenCalledWith(pruned);
+  rerender(<CharacterSheet view={saved} {...props} onStatus={onStatus} />);
+  rerender(<CharacterSheet view={view()} {...props} />);
+  expect(onStatus.mock.calls.filter(([text]) => text === pruned)).toHaveLength(1);
 });

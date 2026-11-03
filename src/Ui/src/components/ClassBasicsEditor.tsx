@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { client } from '../api/client';
 import type { AppInfo, ContentReference, ContentRevision, Effect, SourceRecord, StudioEntry } from '../api/types';
+import { ClassGrid } from './ClassGrid';
 import { abilities, anyOne, isPrerequisite, isSave, setAnyOne, setChoice, setHitDie, setPrerequisite, toggleSave } from '../classBasics';
 
 export { isClassBasic } from '../classBasics';
@@ -39,6 +40,8 @@ export function ClassBasicsEditor(props: {
   /** The skill-choice helper published option features: the caller reloads its entries. */
   onOptionsPublished: () => void;
   onError: (error: unknown) => void;
+  /** The class grid's "Edit {feature}": the studio opens that content for editing. */
+  onEditFeature: (contentId: string) => void;
 }) {
   const { revision, onEffects } = props;
   const effects = revision.effects;
@@ -47,6 +50,10 @@ export function ClassBasicsEditor(props: {
   const skills = effects.find((e): e is Extract<Effect, { type: 'choice' }> => e.type === 'choice' && e.choiceId === 'skills');
   const subclass = effects.find((e): e is Extract<Effect, { type: 'choice' }> => e.type === 'choice' && e.choiceId === 'subclass');
   const any = anyOne(effects);
+  // The grid shows the stored class: this revision once saved, otherwise the newest stored revision of the same content
+  // (a new draft opened from a stored class has no revision id until its first save). Unsaved edits are not in it.
+  const gridRevision =
+    revision.revisionId !== emptyId ? revision : props.entries.find((e) => e.contentId === revision.contentId)?.latest;
 
   return (
     <section aria-labelledby="class-basics-heading" className="effect-editor">
@@ -155,6 +162,12 @@ export function ClassBasicsEditor(props: {
           </label>
         )}
       </fieldset>
+
+      {gridRevision ? (
+        <ClassGrid revisionId={gridRevision.revisionId} draft={gridRevision.status === 'draft'} onEditFeature={props.onEditFeature} />
+      ) : (
+        <p className="hint">Save a draft of this class to see its progression.</p>
+      )}
     </section>
   );
 }
@@ -256,6 +269,7 @@ function SkillChoice(props: {
           props.onOptionsPublished();
         }
       }
+      // `setChoice` keeps the stored choice's other keys (`replaceable`, MECH-X item 2 S2) and clamps its `max` to this count.
       props.onChoice({ type: 'choice', id: 'skills', choiceId: 'skills', count, options, onlyAs: 'startingClass', text: `Choose ${count} skill${count === 1 ? '' : 's'}` });
       setSelected([]);
       done(`Skill choice added: choose ${count} of ${options.length}. ${created} new option feature${created === 1 ? '' : 's'} published, ${options.length - created} reused.`);

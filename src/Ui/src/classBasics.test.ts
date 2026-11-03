@@ -98,6 +98,15 @@ describe('class editor edits', () => {
     expect(effects.filter((e) => e.type === 'choice' && e.choiceId === 'skills')).toEqual([{ ...skills, count: 2 }]);
     expect(setChoice(effects, 'skills', null)).toEqual(existing);
   });
+
+  it('keeps a stored replaceable when the skills choice is rebuilt, and clamps its max to a lower count (MECH-X item 2, S2)', () => {
+    const stored: Effect = { type: 'choice', id: 'skills', choiceId: 'skills', count: 4, options: [], replaceable: { when: 'longRest', max: 3 } };
+    const rebuilt: Extract<Effect, { type: 'choice' }> = { type: 'choice', id: 'skills', choiceId: 'skills', count: 4, options: [], text: 'Choose 4 skills' };
+    expect(setChoice([stored], 'skills', rebuilt)).toEqual([{ ...rebuilt, replaceable: { when: 'longRest', max: 3 } }]);
+    expect(setChoice([stored], 'skills', { ...rebuilt, count: 2 })).toEqual([{ ...rebuilt, count: 2, replaceable: { when: 'longRest', max: 2 } }]);
+    const noMax: Effect = { ...stored, replaceable: { when: 'levelUp' } } as Effect;
+    expect(setChoice([noMax], 'skills', { ...rebuilt, count: 1 })).toEqual([{ ...rebuilt, count: 1, replaceable: { when: 'levelUp' } }]);
+  });
 });
 
 describe('nextScaleKey', () => {

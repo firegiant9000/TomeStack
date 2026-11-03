@@ -34,6 +34,12 @@ if (Test-Path $release) { Remove-Item $release -Recurse -Force }
 dotnet publish $Project -c Release -r win-x64 --self-contained true -p:Version=$Version -o $publish
 if ($LASTEXITCODE -ne 0) { throw 'dotnet publish failed' }
 
+# Release checklist §2 option (b): the worker embeds its C#/WinRT projection, so no Windows SDK DLL may ship.
+$sdkFiles = Get-ChildItem $publish -Recurse -File -Include 'Microsoft.Windows.SDK.NET.dll', 'WinRT.Runtime.dll'
+if ($sdkFiles) { throw "The publish folder carries Windows SDK files: $($sdkFiles.Name -join ', ')" }
+# The worker resolves its assemblies from its own deps file; a PrivateAssets package without Publish="true" drops it.
+if (-not (Test-Path (Join-Path $publish 'TomeStack.ImportWorker.Host.deps.json'))) { throw 'The publish folder has no TomeStack.ImportWorker.Host.deps.json' }
+
 Push-Location $root   # the tool manifest resolves from the repo
 try {
   dotnet tool run vpk -- pack --skip-updates --yes --runtime win-x64 --packId TomeStack.App --packVersion $Version --packTitle TomeStack `

@@ -3,6 +3,7 @@ import { abilities } from '../classBasics';
 import { parseRiderDice, parseStackGroup, parseTags, toggleValue, type ToggleChoice } from '../attackAuthoring';
 import type { Activation, ContentRevision, Effect } from '../api/types';
 import { FormulaPreview } from './FormulaPreview';
+import { PaymentFields } from './PaymentFields';
 import { damageTypeLabel, damageTypes } from './customModel';
 
 type Attack = Extract<Effect, { type: 'attack' }>;
@@ -261,6 +262,21 @@ export function AttackFields(props: {
         Can replace one attack of the Attack action
       </label>
       <ActivationSelect value={effect.activation} unset="action" onPick={(activation) => onChange({ ...effect, activation })} />
+      <PaymentFields effect={effect} onChange={onChange} onProblem={onProblem} />
+      {effect.payment?.kind === 'hitPoints' && (
+        <FormulaField
+          effectId={effect.id}
+          part="cost"
+          label="Hit points paid (a number or a formula)"
+          value={effect.cost ?? ''}
+          previewRevision={props.previewRevision}
+          floorAtZero
+          onChange={(value) => onChange({ ...effect, cost: value || undefined })}
+        />
+      )}
+      {/* Hit points and a slot take no pool (R33), so the pool choice is hidden while either is chosen. */}
+      {(effect.payment === undefined || effect.payment.kind === 'resource') && (
+      <>
       <label className="field">
         Spends from
         <select
@@ -289,6 +305,8 @@ export function AttackFields(props: {
           floorAtZero
           onChange={(value) => onChange({ ...effect, cost: value || undefined })}
         />
+      )}
+      </>
       )}
       <ToggleSelect
         label="Available"

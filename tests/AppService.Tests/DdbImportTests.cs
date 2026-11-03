@@ -294,7 +294,8 @@ public class DdbImportTests
     {
         using var h = new DdbHarness();
         var preview = h.Preview(new SheetBuilder($"{h.Name(Barbarian)} 3"), RulesFamilies.Srd521,
-            resolutions: [new Resolution("class:0:subclass", Berserker, LeaveOut: false)]);
+            // C2-1: the matched class is the newest Barbarian, whose subclass choice offers the newest Berserker first; that is what a user picks.
+            resolutions: [new Resolution("class:0:subclass", new(Berserker.ContentId, Guid.Parse("52e00000-0000-4000-8000-000000409023")), LeaveOut: false)]);
 
         var row = Row(preview, "class:0:subclass");
         Assert.Equal(MatchStatus.Matched, row.Status);
@@ -597,7 +598,7 @@ public class DdbImportTests
         var preview = h.Preview(new SheetBuilder($"{h.Name(Barbarian)} 1").Item("Fixture Rope Coil", 6_000).Item("fixture rope coil", 5_000, equipped: true), RulesFamilies.Srd521);
 
         // The 2014 layout has no equipped mark (S0), so the asked-for mark is not on the sheet and the entry is not equipped.
-        Assert.Equal([new EquipmentEntry(item, Equipped: false, Quantity: EquipmentEntry.MaxQuantity)], preview.Character.Equipment);
+        Assert.Equal(TempApp.Json(new[] { new EquipmentEntry(item, Equipped: false, Quantity: EquipmentEntry.MaxQuantity) }), TempApp.Json(preview.Character.Equipment));
         Assert.All(preview.Matches.Where(r => r.Kind == MatchKind.Item), r => Assert.Equal(PlacementKind.Equipment, r.Chosen!.Placement.Kind));
     }
 
@@ -763,7 +764,7 @@ public class DdbImportTests
 
         // The 2014 layout has no death-save or spent-hit-dice fields (S0): those stay rested even when play state is asked for.
         var play = h.Preview(sheet, RulesFamilies.Srd521, play: true).Character.Play;
-        Assert.Equal((7, 3, 0, true, 0),(play.CurrentHitPoints, play.TemporaryHitPoints, play.DeathSaves.Failures, play.Inspiration, play.HitDiceSpentOf(12)));
+        Assert.Equal((7, 3, 0, true, 0), (play.CurrentHitPoints, play.TemporaryHitPoints, play.DeathSaves.Failures, play.Inspiration, play.HitDiceSpentOf(12)));
     }
 
     [Fact]

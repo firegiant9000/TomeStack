@@ -1,0 +1,33 @@
+{
+  "contentId": "c1060000-0000-4000-8000-0000000000c5",
+  "revisionId": "1a75a53e-3b63-5bec-8c06-5e4e3f2d55ca",
+  "schemaVersion": 10,
+  "kind": "feature",
+  "name": "Compat Deep Currents",
+  "rulesFamilies": [
+    "srd-5.1"
+  ],
+  "provenance": {
+    "sourceId": "c1060000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 6
+    }
+  },
+  "status": "published",
+  "summary": "A test feature with bonuses to a pool maximum and to a flying speed.",
+  "effects": [
+    {
+      "type": "resource",
+      "id": "currents",
+      "resourceId": "currents",
+      "label": "Currents",
+      "maximum": "2",
+      "automation": "automatic",
+      "timing": "always"
+    }
+  ],
+  "downConvertedFrom": {
+    "revisionId": "c1060000-0000-4000-8000-0000000000e5",
+    "schemaVersion": 11
+  }
+}

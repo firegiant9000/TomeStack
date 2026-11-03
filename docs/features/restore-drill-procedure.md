@@ -77,6 +77,7 @@ The machine has never had TomeStack, uses a standard user, and has the network o
 2. **Restore, timed:**
    1. Start TomeStack and choose **Restore full backup** with the backup file. Start the stopwatch when you confirm the restore.
    2. Stop it when the character list shows the restored characters. Record the time, and every warning or error **code** the preview and the restore show.
+   3. `restore.needs-newer-build` means the backup was written by a newer TomeStack than the one installed, and its characters pick content that is neither in the backup nor installed: most likely bundled SRD content this version does not have (a backup leaves the bundled packs out; a damaged backup looks the same). The restore is refused and nothing changes; install the version the message names, or a later one, and restore again. In the drill, install the same version on both machines.
 3. Open **every** character, and look at each sheet: it must open with no new "missing content" diagnostics. Close TomeStack.
 4. **Count and compare:**
    `TomeStack.DevHost.exe --drill-report "$env:LOCALAPPDATA\TomeStack" --out restored.json`
@@ -105,6 +106,19 @@ The machine has never had TomeStack, uses a standard user, and has the network o
 - A **bug** gets its own PR with a regression test, before the repeat.
 - Then repeat the clean-machine part once, from a fresh VM snapshot or a new Windows user. Use a new backup if the fix changes what a backup writes.
 - Record the repeat as a second run.
+
+## Daily copies (LIVING_SPECS D77)
+
+TomeStack also keeps automatic copies. They live in `backups\daily\` in the data folder, for example `%LOCALAPPDATA%\TomeStack\backups\daily\library-2026-10-26.tomestack.zip`.
+- **When:** the first time the app opens on a local calendar day, but only if the library differs from the newest daily copy. "Differs" means the entry list a full backup would have now (the path and SHA-256 of every entry) does not match that copy's manifest. A day with no change takes no copy; a later open the same day can still take one if something changed in between. It is at most one per day. The copy is taken before the window appears: on a day with a change, opening takes as long as **Back up everything** would.
+- **What:** each copy is an ordinary full backup, the file **Back up everything** writes, **PDF copies included**. The newest 7 are kept and older ones are deleted, so the folder normally holds up to 7 times your PDF copies (8 while a new copy is written, and more while a PDF is damaged, below). The Backups screen shows the total. Each copy is written to a `.partial` file first, so a crash never leaves half a copy under the real name.
+- **A damaged PDF:** if a PDF copy is missing, cut short or no longer matches its hash, the new copy leaves it out (`backup.pdf-unreadable`, in the error log). For each file left out (a PDF or an extension file), rotation also keeps the newest older copy that still holds it, because it may be the only good one: the newest 7 plus at most one more per file left out. A damaged PDF on its own does not count as a change. One that kept its size but changed its content is found only by a full hash, so until it is fixed (attach the PDF again) each launch hashes every PDF copy.
+- **The clock:** copies are named by the local date. A copy dated after today, left by a clock that was once ahead, is never compared with and never deleted; remove it by hand.
+- **Skipped:** when the drive would have less than 2 GB free afterwards (logged). A failure goes to `logs\errors.log` (command `library.dailyCopy`) and never stops TomeStack from opening. A library too large for a full backup fails before any PDF is read.
+- **The setting:** "Keep 7 daily copies" on the Backups screen, on by default. It is stored as the file `tomestack.daily-copies` in the data folder: no file means on, the line `off` means off. Turning it off keeps the copies you already have.
+- **To restore one:** choose **Backups → Choose a full backup…**. The dialog starts in Documents: type the folder (for example `%LOCALAPPDATA%\TomeStack\backups\daily`) in its address bar and pick the copy. The preview and the restore are the usual ones.
+- **Not a substitute for an offsite backup:** the copies sit on the same drive as the library. They help when something goes wrong inside TomeStack; they do not help when the computer fails.
+- `RestoreDrillTests.Daily_copy_restores_in_the_drill` restores a daily copy into a clean folder. The drill finds the same expected differences as for a backup you save by hand.
 
 ## The record
 

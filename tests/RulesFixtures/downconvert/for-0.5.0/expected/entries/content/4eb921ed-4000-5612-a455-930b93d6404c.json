@@ -1,0 +1,23 @@
+{
+  "contentId": "c1050000-0000-4000-8000-0000000000c2",
+  "revisionId": "4eb921ed-4000-5612-a455-930b93d6404c",
+  "schemaVersion": 9,
+  "kind": "feature",
+  "name": "Compat Warm Skin",
+  "rulesFamilies": [
+    "srd-5.1"
+  ],
+  "provenance": {
+    "sourceId": "c1050000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 3
+    }
+  },
+  "status": "published",
+  "summary": "A test feature that gives a resistance and a flat speed bonus.",
+  "effects": [],
+  "downConvertedFrom": {
+    "revisionId": "c1050000-0000-4000-8000-0000000000e2",
+    "schemaVersion": 10
+  }
+}

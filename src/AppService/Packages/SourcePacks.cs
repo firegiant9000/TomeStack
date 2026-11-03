@@ -14,7 +14,7 @@ namespace TomeStack.AppService.Packages;
 public sealed partial class PackageService
 {
     /// <summary>At most this many sources in one pack: a pack is a deliberate share, not a library dump.</summary>
-    public const int MaxPackSources = 50;
+    public const int MaxPackSources = Preflight.MaxPackSources;
 
     public const string SourceAttachmentPolicy = "A source pack never includes PDFs, drafts, characters, gap notes or text read from PDFs.";
 
@@ -24,19 +24,57 @@ public sealed partial class PackageService
     internal void SetBundledSources(IReadOnlySet<Guid> sourceIds) => _bundledSources = sourceIds;
 
     private sealed record SourcePackPlan(
-        List<SourceRecord> Sources, List<ContentRevision> Revisions, int Drafts, List<Diagnostic> Warnings, string FileName);
+        List<SourceRecord> Sources, List<ContentRevision> Revisions, int Drafts, List<Diagnostic> Warnings, string FileName,
+        Func<IEnumerable<ContentRevision>, List<Diagnostic>> WarningsFor);
 
     /// <summary><c>package.sourcePackPreview</c>: what a source pack of <paramref name="sourceIds"/> would hold. Writes nothing.</summary>
-    public SourcePackPreview PreviewSourcePack(IReadOnlyList<Guid> sourceIds)
+    public SourcePackPreview PreviewSourcePack(IReadOnlyList<Guid> sourceIds, LadderRow? target = null)
     {
         var plan = PlanSourcePack(sourceIds);
-        return new(plan.FileName, [.. plan.Sources.Select(Notice)], plan.Revisions.Count, plan.Drafts, [.. plan.Warnings, .. NewerBuild.For(plan.Revisions, [])]);
+        var lowered = LowerPack(plan.Revisions, plan.FileName, target);
+        var (revisions, fileName) = lowered is null ? (plan.Revisions, plan.FileName) : (lowered.Plan.Revisions, lowered.Plan.FileName);
+        var opens = NewerBuild.Evaluate(revisions, [], 0, [], BundledPackTitle(revisions));
+        var warnings = lowered is null ? plan.Warnings : plan.WarningsFor(revisions); // D85: over what the lowered pack writes
+        var preview = new SourcePackPreview(fileName, [.. plan.Sources.Select(Notice)], revisions.Count, plan.Drafts, [.. warnings, .. opens.Warnings], opens.OpensIn, opens.Causes);
+        return lowered is null
+            ? preview
+            : preview with { Target = lowered.Target.Release.ToString(3), Changes = lowered.Changes, ChangesHash = lowered.ChangesHash };
+    }
+
+    /// <summary>
+    /// D85: a pack's revisions lowered for <paramref name="target"/>, or null without one. A pack carries no characters, so a
+    /// superseded revision whose blocker nothing written needs is left out (<see cref="DownConversion.Superseded"/>); the newest never is.
+    /// </summary>
+    private LoweredPlan? LowerPack(List<ContentRevision> revisions, string fileName, LadderRow? target)
+    {
+        if (target is null)
+            return null;
+        // Spec Q9: a bundled revision that a written revision grants or offers must be in the target's set; it is checked, never written.
+        var bundled = BundledReferencedBy(revisions);
+        var superseded = DownConversion.Superseded(revisions);
+        var lowered = DownConversion.Lower(new ExportPlan([], [.. revisions, .. bundled], [], [], fileName), target, _bundledSources.Contains,
+            id => store.FindSource(id)?.Title ?? "", store, r => _bundledRevisions.Contains(r.RevisionId) || superseded(r));
+        return lowered with { Plan = lowered.Plan with { Revisions = [.. lowered.Plan.Revisions.Where(r => !_bundledRevisions.Contains(r.RevisionId))] } };
+    }
+
+    /// <summary>A blocked plan, or a save whose <paramref name="changesHash"/> is not the list that was previewed, writes nothing (spec section 7).</summary>
+    internal static void RequireConfirmed(LoweredPlan lowered, string? changesHash)
+    {
+        if (lowered.Blocked)
+            throw new AppValidationException([.. lowered.Changes.Where(c => c.Action == "blocks").Select(c => new Diagnostic(DownConversion.BlockedCode, c.Message))], DownConversion.BlockedCode);
+        if (changesHash is null || !string.Equals(changesHash, lowered.ChangesHash, StringComparison.Ordinal))
+            throw new AppValidationException([new(DownConversion.ChangedCode, "The preview changed since you confirmed it. Review the list and try again.")], DownConversion.ChangedCode);
     }
 
     /// <summary><c>package.sourcePackExport</c> / <c>package.sourcePackSaveAs</c>: the pack's bytes.</summary>
-    public ExportResult ExportSourcePack(IReadOnlyList<Guid> sourceIds)
+    public ExportResult ExportSourcePack(IReadOnlyList<Guid> sourceIds, LadderRow? target = null, string? changesHash = null)
     {
         var plan = PlanSourcePack(sourceIds);
+        if (LowerPack(plan.Revisions, plan.FileName, target) is { } lowered)
+        {
+            RequireConfirmed(lowered, changesHash);
+            plan = plan with { Revisions = lowered.Plan.Revisions, FileName = lowered.Plan.FileName };
+        }
         var files = new SortedDictionary<string, (string Kind, byte[] Bytes)>(StringComparer.Ordinal);
         foreach (var source in plan.Sources)
             files[$"sources/{source.Id:D}.json"] = ("source", Json(ForSourcePack(source)));
@@ -52,6 +90,7 @@ public sealed partial class PackageService
             Purpose = ExportPurpose.Share,
             CreatedAt = createdAt,
             AppVersion = typeof(PackageService).Assembly.GetName().Version?.ToString(3) ?? "0.0.0",
+            MadeFor = target?.Release.ToString(3),
             Entries = [.. files.Select(f => new PackageEntry(f.Key, f.Value.Kind, Hash(f.Value.Bytes), f.Value.Bytes.LongLength))],
             Notices = [.. plan.Sources.Select(Notice)],
             RevisionOrder = [.. plan.Revisions.Select(r => r.RevisionId)],
@@ -89,32 +128,20 @@ public sealed partial class PackageService
     /// </summary>
     private SourcePackPlan PlanSourcePack(IReadOnlyList<Guid> sourceIds)
     {
-        ArgumentNullException.ThrowIfNull(sourceIds);
-        var ids = sourceIds.Distinct().ToList();
-        if (ids.Count is 0 or > MaxPackSources)
-            throw new PackageException([new("pack.sources-required", $"Choose 1 to {MaxPackSources} sources to share.")]);
-
-        var errors = new List<Diagnostic>();
-        var sources = new List<SourceRecord>();
-        foreach (var id in ids)
-        {
-            var source = store.FindSource(id);
-            if (ShareProblem(id, source) is { } problem)
-                errors.Add(problem);
-            else
-                sources.Add(source!);
-        }
+        var ids = Preflight.RequirePackSources(sourceIds);
+        var (sources, problems) = Preflight.SplitPackSources(store, ids, _bundledSources);
+        var errors = new List<Diagnostic>([.. problems.Select(p => p.Problem)]);
         if (errors.Count > 0)
             throw new PackageException(errors);
 
-        var (revisions, drafts, warnings) = PackContent(sources, errors);
+        var (revisions, drafts, warningsFor) = PackContent(sources, errors);
         foreach (var empty in sources.Where(s => !revisions.Any(r => r.Provenance.SourceId == s.Id)))
             errors.Add(new("pack.source-empty", $"'{empty.Title}' has no published content to share yet."));
         if (errors.Count > 0)
             throw new PackageException(errors);
 
         var name = sources.Count == 1 ? SafeFileName(sources[0].Title) : "homebrew-sources";
-        return new SourcePackPlan(sources, revisions, drafts, warnings, $"{name}-source-pack.tomestack.zip");
+        return new SourcePackPlan(sources, revisions, drafts, warningsFor(revisions), $"{name}-source-pack.tomestack.zip", warningsFor);
     }
 
     /// <summary>
@@ -122,52 +149,41 @@ public sealed partial class PackageService
     /// stored order. A content that another source also holds is added to <paramref name="errors"/>; content they refer to
     /// in a source the pack does not carry (and that is not bundled) is a warning.
     /// </summary>
-    private (List<ContentRevision> Revisions, int Drafts, List<Diagnostic> Warnings) PackContent(IReadOnlyCollection<SourceRecord> sources, List<Diagnostic> errors)
+    private (List<ContentRevision> Revisions, int Drafts, Func<IEnumerable<ContentRevision>, List<Diagnostic>> WarningsFor) PackContent(IReadOnlyCollection<SourceRecord> sources, List<Diagnostic> errors)
     {
         var inPack = sources.Select(s => s.Id).ToHashSet();
-        var all = store.ListRevisionsInOrder();
-        var revisions = all.Where(r => inPack.Contains(r.Provenance.SourceId) && r.Status == RevisionStatus.Published).ToList();
-        var drafts = all.Count(r => inPack.Contains(r.Provenance.SourceId) && r.Status != RevisionStatus.Published);
-        // A content's revisions belong to one source. One that another source also holds cannot leave with this one, or
-        // the receiver would get part of its history under the wrong license.
-        var contentIds = revisions.Select(r => r.ContentId).ToHashSet();
-        foreach (var spanning in all.Where(r => contentIds.Contains(r.ContentId) && !inPack.Contains(r.Provenance.SourceId)).DistinctBy(r => r.ContentId))
+        var content = Preflight.PackContentOf(store, sources);
+        var (all, revisions, drafts) = (content.All, content.Published, content.Drafts.Count);
+        foreach (var spanning in content.Spanning)
             errors.Add(new("pack.content-spans-sources", $"'{spanning.Name}' has revisions in another source too, so it cannot be shared from this one.", spanning.Reference));
 
-        var warnings = new List<Diagnostic>();
         var bySource = all.GroupBy(r => r.ContentId).ToDictionary(g => g.Key, g => g.Last().Provenance.SourceId);
-        var outside = revisions.SelectMany(References)
-            .Select(contentId => bySource.TryGetValue(contentId, out var sourceId) ? sourceId : (Guid?)null)
-            .OfType<Guid>()
-            .Where(sourceId => !inPack.Contains(sourceId) && !_bundledSources.Contains(sourceId))
-            .Distinct();
-        foreach (var sourceId in outside)
+        // D85: asked again over the revisions a lowered pack writes, so a reference only a left-out revision held is not warned about.
+        List<Diagnostic> WarningsFor(IEnumerable<ContentRevision> written)
         {
-            var title = store.FindSource(sourceId)?.Title ?? sourceId.ToString();
-            warnings.Add(new("pack.reference-outside", $"Content in this pack refers to content from '{title}', which the pack does not carry. Whoever imports it needs that source too."));
+            var warnings = new List<Diagnostic>();
+            var outside = written.SelectMany(References)
+                .Select(contentId => bySource.TryGetValue(contentId, out var sourceId) ? sourceId : (Guid?)null)
+                .OfType<Guid>()
+                .Where(sourceId => !inPack.Contains(sourceId) && !_bundledSources.Contains(sourceId))
+                .Distinct();
+            foreach (var sourceId in outside)
+            {
+                var title = store.FindSource(sourceId)?.Title ?? sourceId.ToString();
+                warnings.Add(new("pack.reference-outside", $"Content in this pack refers to content from '{title}', which the pack does not carry. Whoever imports it needs that source too."));
+            }
+            return warnings;
         }
-        return (revisions, drafts, warnings);
+        return (revisions, drafts, WarningsFor);
     }
 
-    /// <summary>
-    /// The guard (D14 item 6), shared by source packs and campaign packs (M6 slice 2): why a source may not leave in a pack,
-    /// or null when it is homebrew made on this machine, not import-derived, and marked as shareable by its author.
-    /// </summary>
-    private Diagnostic? ShareProblem(Guid id, SourceRecord? source) => source switch
-    {
-        null => new Diagnostic("pack.source-missing", $"Source {id} is not installed."),
-        _ when _bundledSources.Contains(id) => new Diagnostic("pack.source-bundled", $"'{source.Title}' is bundled with TomeStack; everyone has it already, so a pack never carries it."),
-        { ImportDerived: true } => new Diagnostic("pack.source-import-derived", $"'{source.Title}' holds material imported from a PDF, so it is never shared."),
-        { Origin: SourceOrigin.Received } => new Diagnostic("pack.source-received", $"'{source.Title}' came from someone else's package, so you cannot share it as your own work."),
-        { Redistributable: false } or { ShareConfirmedAt: null } => new Diagnostic("pack.source-not-shareable", $"'{source.Title}' is not marked as shareable. Mark it as shareable (you confirm it is your own work) first."),
-        _ => null,
-    };
+    // The guard (D14 item 6) lives in Preflight.ShareProblem, the one sharing rule (Import Lab L5).
 
     /// <summary>The other content a v11 toggle names: its group's content, its pool's content and the primaries an overlay is allowed with.</summary>
     private static IEnumerable<Guid> ToggleReferences(ToggleEffect toggle) =>
         new[] { toggle.GroupContent, toggle.ResourceContent }.Concat((toggle.AllowedWith ?? []).Select(a => a.ContentId)).OfType<Guid>();
 
-    /// <summary>The content ids a revision refers to: granted content, choice options, the choice it extends, a roll's or toggle's resource, a toggle's group, an upkeep's toggle and pool, an attack's pool and while-toggle, a rider's or modifier's toggle content, a roll's while-toggle, a roll's also-change pools, a roll mode's toggle content, a defence grant's while-toggle, a response's pool, toggle and each outcome's pool, toggle and roll content.</summary>
+    /// <summary>The content ids a revision refers to: granted content, choice options, the choice it extends, a roll's or toggle's resource, a toggle's group, an upkeep's toggle and pool, an attack's pool and while-toggle, a rider's or modifier's toggle content, a roll's while-toggle, a roll's also-change pools, a roll's cast spell (v12), a roll mode's toggle content, a defence grant's while-toggle, a response's pool, toggle and each outcome's pool, toggle and roll content.</summary>
     private static IEnumerable<Guid> References(ContentRevision revision) =>
         revision.Effects.OfType<GrantEffect>().Where(g => g.Content is not null).Select(g => g.Content!.ContentId)
             .Concat(revision.Effects.OfType<ChoiceEffect>().SelectMany(c => c.Options).Select(o => o.ContentId))
@@ -179,6 +195,7 @@ public sealed partial class PackageService
             .Concat(revision.Effects.OfType<ModifierEffect>().Select(m => m.ToggleContent).OfType<Guid>())
             .Concat(revision.Effects.OfType<RollEffect>().Select(r => r.WhileToggle?.ContentId).OfType<Guid>())
             .Concat(revision.Effects.OfType<RollEffect>().SelectMany(r => (r.AlsoChange ?? []).Select(a => a?.ResourceContent).OfType<Guid>()))
+            .Concat(revision.Effects.OfType<RollEffect>().Select(r => r.CastsSpell).OfType<Guid>())
             .Concat(revision.Effects.OfType<RollModeEffect>().Select(m => m.ToggleContent).OfType<Guid>())
             .Concat(revision.Effects.OfType<GrantEffect>().Select(g => g.WhileToggle?.ContentId).OfType<Guid>())
             .Concat(revision.Effects.OfType<ResponseEffect>().SelectMany(r => r.ReferencedContent()))
@@ -207,7 +224,7 @@ public sealed partial class PackageService
     /// existing source's redistributable flag. A source that ends up with a PDF is import-derived, which also covers a
     /// v6 backup written before the flag existed.
     /// </summary>
-    private SourceRecord Merged(SourceRecord imported, SourceRecord? local, PackageScope scope, Guid? attachmentId)
+    private static SourceRecord Merged(SourceRecord imported, SourceRecord? local, PackageScope scope, Guid? attachmentId)
     {
         var library = scope == PackageScope.Library;
         // A backup whose source had a PDF is evidence even when the PDF does not come back (an unsafe linked path).
@@ -238,10 +255,13 @@ public sealed partial class PackageService
     {
         // Newest means last stored. A revision this machine already has keeps its place, so when the sender's newest is
         // already here and the pack adds older ones, one of those becomes the newest here. Say so (review fix).
+        // Q14: a copy never counts as the newest while an unmarked revision exists, so neither side of this check is a copy then.
         foreach (var content in parsed.Revisions.GroupBy(r => r.ContentId))
         {
-            if (store.RevisionHash(content.Last().RevisionId) is not null && content.Any(r => store.RevisionHash(r.RevisionId) is null))
-                warnings.Add(new("pack.newest-changes", $"'{content.Last().Name}': the pack's newest revision is already here, and the pack adds older ones. Afterwards an older one counts as the newest: new picks and update offers use it. Characters keep the revision they pin.", content.Last().Reference));
+            var newest = DownConversion.Newest(content)!;
+            var unmarked = content.Any(r => !DownConversion.IsCopy(r));
+            if (store.RevisionHash(newest.RevisionId) is not null && content.Any(r => store.RevisionHash(r.RevisionId) is null && (!unmarked || !DownConversion.IsCopy(r))))
+                warnings.Add(new("pack.newest-changes", $"'{newest.Name}': the pack's newest revision is already here, and the pack adds older ones. Afterwards an older one counts as the newest: new picks and update offers use it. Characters keep the revision they pin.", newest.Reference));
         }
         var packSources = parsed.Sources.ToDictionary(s => s.Id);
         var attested = (parsed.Manifest.Attestations ?? []).Where(a => a is not null).Select(a => a.SourceId).ToHashSet();

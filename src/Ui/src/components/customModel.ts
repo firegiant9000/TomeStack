@@ -1,4 +1,5 @@
-import type { CharacterView, Companion, CustomAttack, CustomItem } from '../api/types';
+import type { ReactNode } from 'react';
+import type { CharacterView, Companion, CompanionValue, CustomAttack, CustomItem, TraceEntry } from '../api/types';
 
 /**
  * Tester feedback item 18 (character schema v9, D42): the drafts behind "Your own items" and "Your own attacks" on Inventory.
@@ -192,6 +193,39 @@ export function buildCompanion(id: string, draft: CompanionDraft): Companion {
 export function companionHitPoints(view: CharacterView, companion: Companion): { current: number; temporary: number } {
   const recorded = view.character.play?.companions?.find((p) => p.id === companion.id);
   return { current: Math.min(recorded?.current ?? companion.hitPointMaximum, companion.hitPointMaximum), temporary: recorded?.temporary ?? 0 };
+}
+
+/** What one companion card shows, whether the companion is the player's own (W3) or given by content (MECH-X item 4). */
+export interface CardModel {
+  /** `companion-${id}` for a hand companion, `companion-${contentId}-${companionId}` for a content one; every DOM id of the card derives from it. */
+  key: string;
+  name: string;
+  subtitle?: string;
+  armorClass?: number | null;
+  speed?: string;
+  /** Null: the server could not calculate it, so the hit point controls are held. */
+  hitPointMaximum: number | null;
+  current: number;
+  temporary: number;
+  target: { companionId: string; contentId?: string };
+  explain?: { armorClass: TraceEntry[]; hitPoints: TraceEntry[] };
+  extra?: ReactNode;
+}
+
+/** A content companion as a card, without its attacks and pools (the panel adds those as `extra`). */
+export function contentCompanionModel(value: CompanionValue): CardModel {
+  return {
+    key: `companion-${value.content.contentId}-${value.companionId}`,
+    name: value.label,
+    subtitle: `From ${value.contentName}`,
+    armorClass: value.armorClass,
+    speed: value.speed,
+    hitPointMaximum: value.hitPointMaximum ?? null,
+    current: value.current,
+    temporary: value.temporary,
+    target: { companionId: value.companionId, contentId: value.content.contentId },
+    explain: { armorClass: value.armorClassTrace, hitPoints: value.hitPointTrace },
+  };
 }
 
 export const signedBonus =(n: number) => `${n >= 0 ? '+' : ''}${n}`;

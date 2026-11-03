@@ -213,6 +213,8 @@ public sealed record DieResult(int Term, int Sides, int Value, bool Kept, bool F
 /// <summary>
 /// SPEC C-04: formula, component dice, modifiers and provenance of one roll. A record is data only. Producing one
 /// never changes a character, resource or any other state (ARCHITECTURE "commands vs calculation").
+/// <paramref name="Explain"/> (D72) is the sheet's trace for the number rolled (a field, an attack, a caster's spell attack):
+/// the roll command copies it, the record is never stored. Null when the roll has no such number.
 /// </summary>
 public sealed record RollRecord(
     string Formula,
@@ -226,7 +228,17 @@ public sealed record RollRecord(
     RollProvenance? Provenance,
     RollSpend? Spend = null,
     RollMode? AutomaticMode = null,
-    IReadOnlyList<string>? ModeSources = null);
+    IReadOnlyList<string>? ModeSources = null,
+    IReadOnlyList<TraceEntry>? Explain = null,
+    RollPayment? Payment = null);
+
+/// <summary>
+/// MECH-X item 1: the hit-point or slot payment a roll or a feature attack's to-hit roll implies (informational: rolling never pays;
+/// the Pay button sends <c>useAction</c> with <see cref="UseId"/>). <see cref="ContentId"/> is the content that declares the roll.
+/// <see cref="Amount"/> is the evaluated hit-point cost (the per-unit amount when one was rolled); null for a slot payment or a cost
+/// that could not be calculated. A paying roll has no <see cref="RollSpend"/>.
+/// </summary>
+public sealed record RollPayment(Guid ContentId, string UseId, PaymentKind Kind, int? Amount, int? MinSlotLevel, bool MayDropToZero);
 
 /// <summary>
 /// D43 S5: the uses a roll implies spending from a pool (informational: rolling never spends; the Spend button sends

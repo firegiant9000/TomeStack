@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { hueName } from '../accentClamp';
+import { client } from '../api/client';
 import type { AppInfo } from '../api/types';
 import {
   abilityOrder,
@@ -67,7 +68,7 @@ function Choice<Id extends string>({ legend, ids, labels, value, onPick }: { leg
  * an `html[data-*]` attribute the CSS keys on (investigation 2026-10-06: Appearance, Text size, Ability boxes; the
  * Accessibility section; a static list of the keyboard shortcuts so they can be found).
  */
-export function SettingsPanel({ info }: { info?: AppInfo }) {
+export function SettingsPanel({ info, onError }: { info?: AppInfo; onError?: (error: unknown) => void }) {
   const [current, setCurrent] = useState<ThemeId>(theme());
   const [hue, setHue] = useState(accentHue());
   const [scheme, setScheme] = useState<AppearanceId>(appearance());
@@ -80,10 +81,34 @@ export function SettingsPanel({ info }: { info?: AppInfo }) {
   const [big, setBig] = useState<TargetsId>(targets());
   const [lines, setLines] = useState<UnderlineId>(underline());
   const [announce, setAnnounce] = useState(announceRollsOn());
+  // The count re-runs the selection when a second click brings back the same text.
+  const [diagnostics, setDiagnostics] = useState<{ text: string; shown: number }>();
   const heading = useRef<HTMLHeadingElement>(null);
+  const diagnosticsBox = useRef<HTMLTextAreaElement>(null);
 
   // WCAG 2.4.3: like the other screens, opening Settings moves focus to its heading.
   useEffect(() => heading.current?.focus(), []);
+
+  // The app has no clipboard route, so the text is shown selected and the user presses Ctrl+C.
+  useEffect(() => {
+    if (diagnostics === undefined) return;
+    diagnosticsBox.current?.focus();
+    diagnosticsBox.current?.select();
+  }, [diagnostics]);
+
+  function selectDiagnostics() {
+    diagnosticsBox.current?.focus();
+    diagnosticsBox.current?.select();
+  }
+
+  async function showDiagnostics() {
+    try {
+      const { text } = await client.copyDiagnostics();
+      setDiagnostics((previous) => ({ text, shown: (previous?.shown ?? 0) + 1 }));
+    } catch (error) {
+      onError?.(error);
+    }
+  }
 
   function pick<T>(store: (value: T) => void, set: (value: T) => void) {
     return (value: T) => {
@@ -181,6 +206,27 @@ export function SettingsPanel({ info }: { info?: AppInfo }) {
         <p className="hint">
           TomeStack {info.version}, data schema {info.schemaVersion}. Offline: your library stays in this computer's data folder.
         </p>
+      )}
+
+      <h3>Diagnostics</h3>
+      <p className="hint">
+        For a bug report: the app and Windows versions and the newest entries of the error log. Error messages and folder paths are left out, and your user name
+        and source titles are replaced. Nothing is sent anywhere; you paste it where you choose.
+      </p>
+      <button type="button" onClick={() => void showDiagnostics()}>
+        Copy diagnostics
+      </button>
+      {diagnostics !== undefined && (
+        <div className="diagnostics-copy">
+          <label className="field">
+            Diagnostics text
+            <textarea ref={diagnosticsBox} readOnly rows={12} value={diagnostics.text} />
+          </label>
+          <p className="hint">The text is selected: press Ctrl+C to copy it.</p>
+          <button type="button" onClick={selectDiagnostics}>
+            Select all
+          </button>
+        </div>
       )}
     </section>
   );

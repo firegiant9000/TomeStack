@@ -22,7 +22,7 @@ param(
   [string] $Report = (Join-Path ([IO.Path]::GetTempPath()) "tomestack-smoke-$([guid]::NewGuid().ToString('N')).json"),
   [int] $ExpectCharactersAtStart = -1,
   [string] $ExpectDetail = 'ok',
-  [int] $TimeoutSeconds = 60,
+  [int] $TimeoutSeconds = 90,
   [hashtable] $Environment = @{},
   [string[]] $ExtraArguments = @(),
   [switch] $SkipCrashCheck

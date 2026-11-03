@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using TomeStack.AppService;
@@ -81,6 +82,11 @@ public partial class App : Application
         var window = new MainWindow(_tomeStack, options, crashReporter);
         MainWindow = window;
         _activation = SingleInstance.ListenForActivation(dataDirectory, () => Dispatcher.BeginInvoke(window.BringToFront));
+        // D77: the day's automatic full backup, before the window can send any command; listening first means a second
+        // launch during a long copy brings this window forward once it shows. It never throws; a failure is logged.
+        var copyTime = Stopwatch.StartNew();
+        var dailyCopy = _tomeStack.TakeDailyCopy();
+        window.RecordDailyCopy(dailyCopy.Outcome, copyTime.ElapsedMilliseconds);
         window.Show();
     }
 

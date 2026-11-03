@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { client } from '../api/client';
 import type { CharacterSummary, ContentRevision, RulesFamilyId, SandboxView } from '../api/types';
 
-const shown = ['hitPoints', 'armorClass', 'initiative', 'proficiencyBonus', 'attacks', 'spellSaveDc'];
+/** The calculated fields a read-only preview lists: here and in the builder's "Preview at level" (D82). */
+export const shown = ['hitPoints', 'armorClass', 'initiative', 'proficiencyBonus', 'attacks', 'spellSaveDc'];
 
 /**
  * M5 slice 3 (B03; owner decision LIVING_SPECS D14): "Try it". The unsaved revision on screen is calculated as if
