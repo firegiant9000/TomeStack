@@ -902,7 +902,7 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
             version = Convert.ToInt32(command.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture);
         }
         if (version > latestVersion)
-            throw new NewerDatabaseException(version, latestVersion);
+            throw new NewerDatabaseException(version, latestVersion, AppVersionStamp.Stamped(Path.GetDirectoryName(Path.GetFullPath(databasePath))!));
         if (version is > 0 && version < latestVersion)
         {
             var backupPath = BackupPath(databasePath, version);
@@ -1134,8 +1134,9 @@ public sealed record ImportCandidateFilter(
     int? FirstPage = null, int? LastPage = null, ContentKind? Kind = null, double? MinConfidence = null, double? MaxConfidence = null, CandidateStatus? Status = null);
 
 /// <summary>The data folder was written by a newer TomeStack. Nothing is changed; the user must update the app.</summary>
-public sealed class NewerDatabaseException(int version, int supported)
-    : InvalidOperationException($"This data folder was created by a newer version of TomeStack (database schema v{version}; this version supports up to v{supported}). Update TomeStack to open it. Nothing was changed.")
+/// <param name="lastOpenedBy">The data folder's version stamp (0.6.0 and later write it), named only when it is newer than this build.</param>
+public sealed class NewerDatabaseException(int version, int supported, string? lastOpenedBy = null)
+    : InvalidOperationException($"This data folder was created by a newer version of TomeStack (database schema v{version}; this version supports up to v{supported}). {NewerVersionAdvice.ForDataFolder(lastOpenedBy)} Nothing was changed.")
 {
     public int Version { get; } = version;
 }
