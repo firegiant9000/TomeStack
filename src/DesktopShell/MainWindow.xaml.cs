@@ -42,6 +42,9 @@ public partial class MainWindow : Window
         InitializeComponent();
         Loaded += async (_, _) =>
         {
+            // The smoke's budget starts once the window shows, after the D77 daily copy (its time is reported on its own).
+            if (_options.Smoke)
+                _ = Task.Delay(SmokeTimeout).ContinueWith(_ => Dispatcher.Invoke(() => FinishSmoke(false, "timeout")), TaskScheduler.Default);
             try
             {
                 await InitializeWebViewAsync();
@@ -52,10 +55,16 @@ public partial class MainWindow : Window
                 FinishSmoke(false, $"startup-failed:{ex.GetType().Name}");
             }
         };
-        if (options.Smoke)
-        {
-            _ = Task.Delay(SmokeTimeout).ContinueWith(_ => Dispatcher.Invoke(() => FinishSmoke(false, "timeout")), TaskScheduler.Default);
-        }
+    }
+
+    private string? _dailyCopy;
+    private long? _dailyCopyMs;
+
+    /// <summary>Smoke report only: what the D77 daily copy did before the window showed, and how long it held it back.</summary>
+    public void RecordDailyCopy(DailyCopyOutcome outcome, long milliseconds)
+    {
+        _dailyCopy = outcome.ToString();
+        _dailyCopyMs = milliseconds;
     }
 
     private async Task InitializeWebViewAsync()
@@ -415,6 +424,8 @@ public partial class MainWindow : Window
             detail,
             elapsedMs = _sinceStart.ElapsedMilliseconds,
             processStartToReadyMs = (long)(DateTime.Now - Process.GetCurrentProcess().StartTime).TotalMilliseconds,
+            dailyCopy = _dailyCopy,
+            dailyCopyMs = _dailyCopyMs,
             commands = _smokeCommands,
             charactersAtStart = _charactersAtStart,
             schemaVersion = _tomeStack.GetInfo().SchemaVersion,
