@@ -30,8 +30,7 @@ public sealed class OldReleaseOutcomeTests : IDisposable
         if (root is null) return false;
         var folder = Path.Combine(root, "tests", "RulesFixtures", "downconvert");
         return Directory.Exists(folder)
-            && Directory.GetDirectories(folder, "for-*").Any(d => Directory.Exists(Path.Combine(d, "expected"))
-                && Directory.GetFiles(Path.Combine(d, "expected"), "*.tomestack.zip").Length > 0);
+            && Directory.GetDirectories(folder, "for-*").Any(d => Directory.GetFiles(d, "*.tomestack.zip").Length > 0);
     }
 
     /// <summary>xUnit 2 has no runtime skip, so the skip is decided when the test is discovered.</summary>
@@ -40,7 +39,7 @@ public sealed class OldReleaseOutcomeTests : IDisposable
         public GoldensFactAttribute()
         {
             if (!HasGoldens())
-                Skip = "No down-conversion goldens yet (tests/RulesFixtures/downconvert/for-*/expected/ is empty; lane C2 adds them).";
+                Skip = "No down-conversion goldens yet (no *.tomestack.zip directly in tests/RulesFixtures/downconvert/for-*/; lane C2 adds them).";
         }
     }
 
@@ -55,10 +54,8 @@ public sealed class OldReleaseOutcomeTests : IDisposable
         foreach (var forDir in Directory.GetDirectories(folder, "for-*").Order(StringComparer.Ordinal))
         {
             var target = Path.GetFileName(forDir)["for-".Length..];
-            var expectedDir = Path.Combine(forDir, "expected");
-            var packages = Directory.Exists(expectedDir)
-                ? Directory.GetFiles(expectedDir, "*.tomestack.zip").Select(Path.GetFileName).OfType<string>().Order(StringComparer.Ordinal).ToList()
-                : [];
+            // The goldens sit directly in for-<target>/; for-<target>/expected/ holds their unpacked entries, not packages (R-C20).
+            var packages = Directory.GetFiles(forDir, "*.tomestack.zip").Select(Path.GetFileName).OfType<string>().Order(StringComparer.Ordinal).ToList();
             if (packages.Count == 0) continue;
 
             var outcomePath = Path.Combine(folder, "outcomes", target + ".json");
@@ -153,7 +150,7 @@ public sealed class OldReleaseOutcomeTests : IDisposable
 
             foreach (var package in packages)
             {
-                if (!listed.Contains($"{Downconvert}/for-{target}/expected/{package}"))
+                if (!listed.Contains($"{Downconvert}/for-{target}/{package}"))
                     problems.Add($"{label}: golden {package} is not listed in inputs.");
                 if (!results.ContainsKey(package))
                     problems.Add($"{label}: golden {package} has no result.");
@@ -184,16 +181,15 @@ public sealed class OldReleaseOutcomeTests : IDisposable
     private string Build(string status = "pass", bool writeOutcome = true, bool listGolden = true)
     {
         var forDir = Path.Combine(_root, "tests", "RulesFixtures", "downconvert", "for-0.6.0");
-        var expectedDir = Path.Combine(forDir, "expected");
-        Directory.CreateDirectory(expectedDir);
-        var golden = Path.Combine(expectedDir, "compat-hero.tomestack.zip");
+        Directory.CreateDirectory(forDir);
+        var golden = Path.Combine(forDir, "compat-hero.tomestack.zip");
         File.WriteAllBytes(golden, [1, 2, 3, 4]);
         var expectedJson = Path.Combine(forDir, "expected.json");
         File.WriteAllText(expectedJson, "{\"characters\":{}}");
         if (writeOutcome)
         {
             var entries = new List<object>();
-            if (listGolden) entries.Add(new { path = $"{Downconvert}/for-0.6.0/expected/compat-hero.tomestack.zip", sha256 = Sha(golden) });
+            if (listGolden) entries.Add(new { path = $"{Downconvert}/for-0.6.0/compat-hero.tomestack.zip", sha256 = Sha(golden) });
             entries.Add(new { path = $"{Downconvert}/for-0.6.0/expected.json", sha256 = Sha(expectedJson) });
             var outcome = new
             {
@@ -220,7 +216,7 @@ public sealed class OldReleaseOutcomeTests : IDisposable
     public void A_changed_byte_in_a_golden_is_a_hash_problem()
     {
         Build();
-        File.WriteAllBytes(Path.Combine(_root, "tests", "RulesFixtures", "downconvert", "for-0.6.0", "expected", "compat-hero.tomestack.zip"), [1, 2, 3, 5]);
+        File.WriteAllBytes(Path.Combine(_root, "tests", "RulesFixtures", "downconvert", "for-0.6.0", "compat-hero.tomestack.zip"), [1, 2, 3, 5]);
         var problems = FindProblems(_root);
         Assert.Contains(problems, p => p.Contains("compat-hero.tomestack.zip") && p.Contains("SHA-256"));
     }
@@ -321,7 +317,17 @@ public sealed class OldReleaseOutcomeTests : IDisposable
     [Fact]
     public void A_target_without_goldens_needs_no_outcome()
     {
-        Directory.CreateDirectory(Path.Combine(_root, "tests", "RulesFixtures", "downconvert", "for-0.5.0", "expected"));
+        Directory.CreateDirectory(Path.Combine(_root, "tests", "RulesFixtures", "downconvert", "for-0.5.0"));
+        Assert.Empty(FindProblems(_root));
+    }
+
+    [Fact]
+    public void A_package_under_expected_is_not_a_golden()
+    {
+        // for-<target>/expected/ holds unpacked entries; a zip there is not one of the packages the old release opens (R-C20).
+        var expectedDir = Path.Combine(_root, "tests", "RulesFixtures", "downconvert", "for-0.5.0", "expected");
+        Directory.CreateDirectory(expectedDir);
+        File.WriteAllBytes(Path.Combine(expectedDir, "stray.tomestack.zip"), [1]);
         Assert.Empty(FindProblems(_root));
     }
 }

@@ -198,7 +198,7 @@ jobs:
       - name: Open the goldens with the old releases
         shell: pwsh
         run: |
-          ./scripts/old-release-check.ps1 -Tags v0.6.0,v0.5.0 -Inputs 'tests/RulesFixtures/downconvert/for-{target}/expected' -Expected 'tests/RulesFixtures/downconvert/for-{target}' -Out "$env:RUNNER_TEMP/old-release/opened-by-{target}.json" -Work "$env:RUNNER_TEMP/old-release-work"
+          ./scripts/old-release-check.ps1 -Tags v0.6.0,v0.5.0 -Inputs 'tests/RulesFixtures/downconvert/for-{target}' -Expected 'tests/RulesFixtures/downconvert/for-{target}' -Out "$env:RUNNER_TEMP/old-release/opened-by-{target}.json" -Work "$env:RUNNER_TEMP/old-release-work"
 
       - name: Upload the outcomes
         if: always()
