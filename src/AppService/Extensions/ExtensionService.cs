@@ -571,6 +571,8 @@ namespace TomeStack.AppService
             public IEnumerable<ContentRevision> ChoiceExtensions(Guid contentId, string choiceId) => store.ChoiceExtensions(contentId, choiceId);
 
             public IEnumerable<ContentRevision> RevisionsOf(Guid contentId) => store.RevisionsOf(contentId);
+
+            public ContentRevision? NewestPublished(Guid contentId) => store.NewestPublished(contentId);
         }
     }
 }

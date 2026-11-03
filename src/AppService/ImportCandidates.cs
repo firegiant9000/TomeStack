@@ -523,11 +523,11 @@ public sealed partial class TomeStackApp
             .ToHashSet(StringComparer.Ordinal);
     }
 
-    /// <summary>The newest published revision of a content, or its newest draft when none is published (insertion order).</summary>
+    /// <summary>The newest published revision of a content, or its newest draft when none is published (insertion order; never a copy while an unmarked revision exists, Q14).</summary>
     private ContentReference? NewestOf(Guid contentId)
     {
         var revisions = _store.RevisionsOf(contentId).ToList();
-        return (revisions.LastOrDefault(r => r.Status == RevisionStatus.Published) ?? revisions.LastOrDefault())?.Reference;
+        return (Packages.DownConversion.Newest([.. revisions.Where(r => r.Status == RevisionStatus.Published)]) ?? Packages.DownConversion.Newest(revisions))?.Reference;
     }
 
     /// <summary>
@@ -537,7 +537,7 @@ public sealed partial class TomeStackApp
     private Dictionary<string, List<ContentRevision>> InstalledFeaturesByName(IReadOnlyList<string> families, Guid exceptSource) =>
         _store.ListRevisionsInOrder()
             .Where(r => r.Kind == ContentKind.Feature && r.Status == RevisionStatus.Published && r.Provenance.SourceId != exceptSource && r.RulesFamilies.Any(families.Contains))
-            .GroupBy(r => r.ContentId).Select(g => g.Last())
+            .GroupBy(r => r.ContentId).Select(g => Packages.DownConversion.Newest(g)!)
             .GroupBy(r => CandidateDetector.Key(r.Name))
             .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
 
@@ -827,7 +827,7 @@ public sealed partial class TomeStackApp
             .Where(id => id != draft.ContentId); // a toggle or upkeep naming its own content is no dependency
         foreach (var contentId in draft.Effects.OfType<RollEffect>().Select(r => r.ResourceContent).OfType<Guid>().Concat(toggleContent).Distinct())
         {
-            var revision = _store.ListRevisions(contentId).LastOrDefault();
+            var revision = Packages.DownConversion.Newest(_store.ListRevisions(contentId));
             dependencies.Add(revision is null ? new("missing-content", contentId.ToString()) : new("content", revision.Name, revision.Reference));
         }
         dependencies.AddRange(candidate.UnresolvedReferences.Select(n => new CandidateDependency("unresolved-name", n)));

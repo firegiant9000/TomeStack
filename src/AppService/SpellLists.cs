@@ -116,8 +116,8 @@ public sealed partial class TomeStackApp
         {
             foreach (var id in ids)
             {
-                var revisions = _store.ListRevisions(id); // insertion order: the last one is the newest
-                var newest = revisions.LastOrDefault();
+                var revisions = _store.ListRevisions(id); // insertion order: the last one is the newest, but never a copy while an unmarked one exists (Q14)
+                var newest = Packages.DownConversion.Newest(revisions);
                 if (newest is null)
                 {
                     skipped.Add(new(id, ["content.not-found"]));

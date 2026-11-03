@@ -467,6 +467,23 @@ public class CandidateReviewTests
     }
 
     [Fact]
+    public void Copy_never_counts_as_newest_in_the_dependencies()
+    {
+        var (temp, _, jobId) = Imported();
+        using var _t = temp;
+        var feat = Named(temp, jobId, "Fixture Keen Watcher");
+        var installed = temp.App.Store.ListRevisions().First(r => r.Status == RevisionStatus.Published && r.Kind == ContentKind.Feature && r.RulesFamilies.Contains(RulesFamilies.Srd521));
+        var copy = NewestCopyTests.StoreCopy(temp, installed.Reference, r => r with { Name = r.Name + " (copy)" });
+
+        temp.App.EditCandidate(new(feat.Id, Expected: temp.EtagOf(feat.Id), Effects: [.. feat.Current.ProposedEffects,
+            new RollEffect { Id = "cast", RollId = "cast", Label = "Cast", CastsSpell = installed.ContentId }]));
+        var dependencies = temp.App.CheckCandidate(feat.Id).Dependencies;
+
+        Assert.Contains(dependencies, d => d.Kind == "content" && d.Reference == installed.Reference && d.Name == installed.Name);
+        Assert.DoesNotContain(dependencies, d => d.Reference == copy.Reference);
+    }
+
+    [Fact]
     public void Dependencies_list_the_content_a_response_names()
     {
         var (temp, _, jobId) = Imported();

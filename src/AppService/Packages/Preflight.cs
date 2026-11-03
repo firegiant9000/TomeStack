@@ -163,7 +163,7 @@ public static class Preflight
             var spellId = roll.CastsSpell!.Value;
             if (revisions.Values.Any(r => r.ContentId == spellId))
                 continue; // a pinned (or granted) revision of it is already in
-            if (store.ListRevisions(spellId).LastOrDefault(r => r.Status == RevisionStatus.Published) is { } newest)
+            if (store.NewestPublished(spellId) is { } newest)
                 revisions[newest.RevisionId] = newest;
         }
 

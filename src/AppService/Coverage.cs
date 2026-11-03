@@ -114,6 +114,7 @@ public static class Coverage
     /// <summary>
     /// The latest published revision of each content by store order (rowid), and, with drafts included, each content's newest revision
     /// when that is a draft. A published revision keeps its draft behind it in the store, so a draft only shows while it is newer.
+    /// A stored copy never counts as either while an unmarked revision of its content exists (owner answer Q14).
     /// </summary>
     internal static (Dictionary<Guid, ContentRevision> Published, Dictionary<Guid, ContentRevision> Drafts) Choose(IReadOnlyList<ContentRevision> all, bool includeDrafts)
     {
@@ -124,6 +125,12 @@ public static class Coverage
             newest[revision.ContentId] = revision;
             if (revision.Status == RevisionStatus.Published)
                 published[revision.ContentId] = revision;
+        }
+        // Only contents whose last revision is a copy are looked at again.
+        foreach (var (map, publishedOnly) in new[] { (published, true), (newest, false) })
+        {
+            foreach (var id in map.Where(p => Packages.DownConversion.IsCopy(p.Value)).Select(p => p.Key).ToList())
+                map[id] = Packages.DownConversion.Newest([.. all.Where(r => r.ContentId == id && (!publishedOnly || r.Status == RevisionStatus.Published))])!;
         }
         var drafts = includeDrafts
             ? newest.Where(n => n.Value.Status == RevisionStatus.Draft).ToDictionary(n => n.Key, n => n.Value)

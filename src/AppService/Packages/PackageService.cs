@@ -1067,6 +1067,8 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         /// </summary>
         public IEnumerable<ContentRevision> RevisionsOf(Guid contentId) =>
             local.RevisionsOf(contentId).Concat(revisions.Values.Where(r => r.ContentId == contentId)).DistinctBy(r => r.Reference);
+
+        public ContentRevision? NewestPublished(Guid contentId) => DownConversion.Newest([.. RevisionsOf(contentId).Where(r => r.Status == RevisionStatus.Published)]);
     }
 
     private sealed class EntryTooLargeException(string path)

@@ -284,6 +284,8 @@ public static class DownConversion
         public IEnumerable<ContentRevision> ChoiceExtensions(Guid contentId, string choiceId) => inner.ChoiceExtensions(contentId, choiceId);
 
         public IEnumerable<ContentRevision> RevisionsOf(Guid contentId) => inner.RevisionsOf(contentId);
+
+        public ContentRevision? NewestPublished(Guid contentId) => inner.NewestPublished(contentId);
     }
 
     /// <summary>The revision ids a revision refers to through <c>grant.content</c> and <c>choice.options</c>, the only two fields that hold them.</summary>
@@ -556,6 +558,7 @@ public static class DownConversion
         var moved = new Dictionary<Guid, Guid>();
         // Revisions the file keeps (not copies) are never rewritten, so a closure one of them grants or offers stays as it is.
         var heldByKept = revisions.Where(r => !markers.ContainsKey(r.RevisionId)).SelectMany(ReferencesOf).Select(x => x.RevisionId).ToHashSet();
+        var asTheyAre = new List<ContentRevision>();
         foreach (var closure in copies.GroupBy(c => Find(c.RevisionId)))
         {
             var members = closure.ToList();
@@ -564,8 +567,7 @@ public static class DownConversion
             {
                 if (originals is null)
                 {
-                    var by = madeFor is null ? "an older TomeStack" : $"TomeStack {madeFor}";
-                    warnings.Add(new("package.down-converted", $"'{member.Name}': made for {by} by {manifest.AppVersion}; the original has more.", member.Reference));
+                    asTheyAre.Add(member);
                     continue;
                 }
                 var original = originals[member.RevisionId];
@@ -574,6 +576,14 @@ public static class DownConversion
                 warnings.Add(new("package.down-converted-repinned",
                     $"'{member.Name}': re-pinned to your original revision (the file held a copy made for {madeFor ?? "an older TomeStack"}).", original.Reference));
             }
+        }
+        // C2-Q5: one line for the file, not one per copy.
+        if (asTheyAre.Count > 0)
+        {
+            var by = PackageManifest.IsValidMadeFor(madeFor) ? $"TomeStack {madeFor}" : "an older TomeStack";
+            warnings.Add(asTheyAre.Count == 1
+                ? new("package.down-converted", $"'{asTheyAre[0].Name}' in this file was made for {by} by {manifest.AppVersion} and imports as it is (no original here matches it); the original has more.", asTheyAre[0].Reference)
+                : new("package.down-converted", $"{asTheyAre.Count} revisions in this file were made for {by} by {manifest.AppVersion} and import as they are (no original here matches them); the originals have more."));
         }
         if (moved.Count == 0)
             return new(revisions, characters, [], warnings);

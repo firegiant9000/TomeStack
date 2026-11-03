@@ -203,5 +203,6 @@ The smoke script's `processStartToReadyMs` is not first paint: it is taken when 
 | P-3 | Where time goes inside `Calculation.cs` is unknown | Case 1: 0.74–0.92 ms, 1.2 MB | A profiler trace (dotnet-trace or BenchmarkDotNet's EventPipe profiler) of case 1, only if a real sheet ever feels slow |
 | P-4 | Run-to-run time spread up to 39 % with equal allocations | Both runs above | Repeat with the process pinned to the performance cores and a high-performance plan, and record whether the spread drops |
 | P-5 | Previewing a 376 KB pack allocates 67 MB (about 180× its size) | Case 2, `Preview` | Low priority: 33–39 ms is fast enough; note for packs much larger than this |
+| P-6 | The "newest" rule for down-converted copies (D85, Q14) checks each copy at the end of a content's revisions with one serialise and one SHA-256, uncached. Revisions without a marker cost one dictionary lookup | Not measured yet (owner, C2-Q6: measure before caching) | Measure content lists and `character.updates` on a large library holding many stored copies; cache the check only if it shows |
 
 None of these is visible at today's library sizes: a library of a few characters stays well under a second everywhere. They matter only if a library grows to tens of high-level characters.

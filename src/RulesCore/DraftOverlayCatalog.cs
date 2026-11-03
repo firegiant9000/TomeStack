@@ -42,4 +42,6 @@ public sealed class DraftOverlayCatalog : IContentCatalog
         contentId == Draft.ContentId
             ? _inner.RevisionsOf(contentId).Where(r => r.Reference != Draft.Reference).Append(Draft)
             : _inner.RevisionsOf(contentId);
+
+    public ContentRevision? NewestPublished(Guid contentId) => contentId == Draft.ContentId ? Draft : _inner.NewestPublished(contentId);
 }

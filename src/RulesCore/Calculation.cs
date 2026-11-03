@@ -11,6 +11,13 @@ public interface IContentCatalog
 
     /// <summary>Every stored revision of one content id, any status (validation of <see cref="ContentRevision.ExtendsChoice"/>).</summary>
     IEnumerable<ContentRevision> RevisionsOf(Guid contentId) => [];
+
+    /// <summary>
+    /// The newest published revision of one content id (SPEC I-06), or null. By default the last stored one; the app's store
+    /// overrides it so that a stored down-converted copy never counts while an unmarked revision exists (owner answer Q14), which
+    /// this library cannot check.
+    /// </summary>
+    ContentRevision? NewestPublished(Guid contentId) => RevisionsOf(contentId).LastOrDefault(r => r.Status == RevisionStatus.Published);
 }
 
 public sealed record Diagnostic(string Code, string Message, ContentReference? Content = null, string? EffectId = null);

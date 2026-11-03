@@ -982,7 +982,8 @@ public static class ContentValidator
             if (revision.Kind == ContentKind.Subclass && revision.ExtendsChoice is { } parent)
             {
                 seen.AddRange(local.OfContent(parent.ContentId).Where(r => r.Kind == ContentKind.Class));
-                seen.AddRange(catalog.RevisionsOf(parent.ContentId).Where(r => r.Status == RevisionStatus.Published && r.Kind == ContentKind.Class).TakeLast(1));
+                if (catalog.NewestPublished(parent.ContentId) is { Kind: ContentKind.Class } parentClass)
+                    seen.Add(parentClass);
             }
             var references = revision.Effects.OfType<GrantEffect>().Select(g => g.Content).OfType<ContentReference>()
                 .Concat(revision.Effects.OfType<ChoiceEffect>().SelectMany(c => c.Options));
@@ -993,7 +994,7 @@ public static class ContentValidator
                 if (pinned is not null)
                     seen.Add(pinned);
                 else
-                    seen.AddRange(local.OfContent(reference.ContentId).Concat(catalog.RevisionsOf(reference.ContentId).Where(r => r.Status == RevisionStatus.Published).TakeLast(1)));
+                    seen.AddRange(local.OfContent(reference.ContentId).Concat(new[] { catalog.NewestPublished(reference.ContentId) }.OfType<ContentRevision>()));
             }
             var declared = seen.SelectMany(r => r.Effects.OfType<ValueEffect>().Select(v => v.ValueId)).ToHashSet(StringComparer.Ordinal);
             foreach (var missing in usedValues.Where(u => !declared.Contains(u)).Order(StringComparer.Ordinal))
@@ -1015,13 +1016,15 @@ public static class ContentValidator
             var publishedParents = revision.Kind == ContentKind.Subclass && revision.ExtendsChoice is { } parent
                 ? catalog.RevisionsOf(parent.ContentId).Where(r => r.Status == RevisionStatus.Published && r.Kind == ContentKind.Class).ToList()
                 : [];
+            // Newest as the catalog says (owner answer Q14: never a stored copy while an unmarked revision exists).
+            var newestParent = publishedParents.Count > 0 && catalog.NewestPublished(publishedParents[0].ContentId) is { Kind: ContentKind.Class } found ? found : null;
             var parentClass = revision.Kind == ContentKind.Subclass && revision.ExtendsChoice is { } extended
-                ? [.. local.OfContent(extended.ContentId).Where(r => r.Kind == ContentKind.Class), .. publishedParents.TakeLast(1)]
+                ? [.. local.OfContent(extended.ContentId).Where(r => r.Kind == ContentKind.Class), .. new[] { newestParent }.OfType<ContentRevision>()]
                 : new List<ContentRevision>();
             related.AddRange(parentClass);
             // Older published class revisions still calculate for the characters that pin them, so a clash with one is a
             // warning (they get scale.duplicate, and the class's column wins); it never blocks the subclass for good.
-            var olderScales = publishedParents.SkipLast(1).SelectMany(r => r.Effects.OfType<ScaleEffect>().Select(s => (s.ScaleId, r.Name))).ToList();
+            var olderScales = publishedParents.Where(r => r.Reference != newestParent?.Reference).SelectMany(r => r.Effects.OfType<ScaleEffect>().Select(s => (s.ScaleId, r.Name))).ToList();
             if (revision.Kind == ContentKind.Class)
             {
                 foreach (var choice in revision.Effects.OfType<ChoiceEffect>())
@@ -1061,7 +1064,7 @@ public static class ContentValidator
                 ? new List<ContentRevision> { revision }
                 : [.. local.OfContent(holder).Where(r => r.ContentId == holder),
                     .. catalog.RevisionsOf(holder).Where(r => r.ContentId == holder && r.Status != RevisionStatus.Published),
-                    .. catalog.RevisionsOf(holder).Where(r => r.ContentId == holder && r.Status == RevisionStatus.Published).TakeLast(1)];
+                    .. new[] { catalog.NewestPublished(holder) }.OfType<ContentRevision>().Where(r => r.ContentId == holder)];
             return definers.SelectMany(r => r.Effects.OfType<ResourceEffect>()).FirstOrDefault(r => r.ResourceId == resourceId);
         }
 

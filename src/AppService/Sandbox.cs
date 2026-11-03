@@ -149,7 +149,7 @@ public sealed partial class TomeStackApp
         }
         var classRevision = classEntry is not null
             ? _store.FindRevision(classEntry.Class)
-            : _store.ListRevisions(extends.ContentId).LastOrDefault(r => r.Status == RevisionStatus.Published && r.RulesFamilies.Contains(copy.RulesFamily));
+            : Packages.DownConversion.Newest([.. _store.ListRevisions(extends.ContentId).Where(r => r.Status == RevisionStatus.Published && r.RulesFamilies.Contains(copy.RulesFamily))]);
         if (classRevision is not { Kind: ContentKind.Class })
             throw new AppValidationException([new("sandbox.subclass-class", $"'{draft.Name}' joins a choice of content that is not a published class for {copy.RulesFamily} (for example a feature's choice). Try it on a saved character who has that choice.", draft.Reference)]);
         var needed = level ?? classRevision.Effects.OfType<ChoiceEffect>().FirstOrDefault(c => c.ChoiceId == extends.ChoiceId)?.Level ?? Character.MinLevel;

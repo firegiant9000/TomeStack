@@ -530,6 +530,20 @@ public sealed partial class PackageService
                 warnings.Add(new("restore.newest-changes", $"'{newest.Name}' has a newer published revision here that is not in this file. Afterwards, the file's revision counts as the newest: new picks and update offers use it. Characters keep the revision they pin.", newest.Reference));
             }
         }
+        // C2-Q3 (R-C21): a lowered draft is never re-pinned (that needs a published original), so restoring it next to the draft it
+        // was lowered from keeps both. Say so once for the file; nothing is changed.
+        var lowered = parsed.Revisions
+            .Where(r => r.Status == RevisionStatus.Draft && store.RevisionHash(r.RevisionId) is null)
+            .Where(r => DownConversion.VerifiedRoot(r).RevisionId is var root && root != r.RevisionId
+                && store.FindRevision(new(r.ContentId, root)) is { Status: RevisionStatus.Draft })
+            .ToList();
+        if (lowered.Count > 0)
+        {
+            var made = PackageManifest.IsValidMadeFor(parsed.Manifest.MadeFor) ? $"TomeStack {parsed.Manifest.MadeFor}" : "an older TomeStack";
+            warnings.Add(lowered.Count == 1
+                ? new("restore.down-converted-draft", $"'{lowered[0].Name}': this file holds a copy of your draft here, made for {made}. Restoring keeps both drafts side by side; discard the one you do not need in the studio.", lowered[0].Reference)
+                : new("restore.down-converted-draft", $"{lowered.Count} drafts in this file are copies of drafts here, made for {made}. Restoring keeps both of each side by side; discard the ones you do not need in the studio."));
+        }
         return warnings;
     }
 
