@@ -60,6 +60,14 @@ straight to v9) and `hitPoints` 9 (a level-1 class with a d8 hit die: 0.6.0 "Com
 The owner's first `scripts/old-release-check.ps1` run is the real validation of the library backup, which is post-processed
 (above) and was only checked against the current build.
 
+The run writes one outcome per release; commit it as `outcomes/<T>.json`. `OldReleaseOutcomeTests` fails while a `for-<T>/`
+with packages has no outcome, or when an outcome no longer hashes to the committed packages and `expected.json`, so rerun and
+recommit after regenerating. From the repository root:
+
+```
+./scripts/old-release-check.ps1 -Tags v0.6.0,v0.5.0 -Inputs 'tests/RulesFixtures/downconvert/for-{target}' -Expected 'tests/RulesFixtures/downconvert/for-{target}' -Out 'tests/RulesFixtures/downconvert/outcomes/{target}.json' -Work "$env:TEMP/old-release-work"
+```
+
 The test produces every zip again and compares entry by entry (names and bytes; the manifest's `appVersion` is neutral, so a
 release bump does not stale the files), and compares `expected.json` as text. A stale input fails. Entry bytes are as the writer
 makes them on Windows (CRLF), like the entry goldens. Regenerating also rewrites these files.

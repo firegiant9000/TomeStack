@@ -174,3 +174,37 @@ jobs:
           fi
           gh issue edit "$number" --repo "$GITHUB_REPOSITORY" --body-file "$BODY"
           echo "Updated issue #$number" >> "$GITHUB_STEP_SUMMARY"
+
+  # Opens the down-conversion goldens with real 0.6.0 and 0.5.0 builds (scripts/old-release-check.ps1; spec section 8, real
+  # older build) and fails on any package that is not a pass. The outcome files are uploaded; the committed ones are
+  # checked against the goldens by OldReleaseOutcomeTests on every PR.
+  old-release-check:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The old release tags must exist.
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Each old tag pins 10.0.100 with rollForward latestFeature, so the SDK main pins satisfies them.
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - name: Open the goldens with the old releases
+        shell: pwsh
+        run: |
+          ./scripts/old-release-check.ps1 -Tags v0.6.0,v0.5.0 -Inputs 'tests/RulesFixtures/downconvert/for-{target}' -Expected 'tests/RulesFixtures/downconvert/for-{target}' -Out "$env:RUNNER_TEMP/old-release/opened-by-{target}.json" -Work "$env:RUNNER_TEMP/old-release-work"
+
+      - name: Upload the outcomes
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: old-release-outcomes
+          path: ${{ runner.temp }}/old-release/*.json
+          if-no-files-found: warn
+          retention-days: 30
