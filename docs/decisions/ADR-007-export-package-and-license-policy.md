@@ -45,6 +45,10 @@ SPEC S-01, P-02 and Q-03 require every source to carry license and redistributio
     - **Never, under any purpose:** local paths, attachment ids, gap notes, override reasons, traces or extracted PDF text. The model's schema is an allowlist with no field a path could go in; an output scan (ADR-011) is the second line.
     - Evidence: `ExtensionTests` (M6 slice 3; the sheet export model is `SheetExport.cs`) and `ExportAdapterTests` (M6 slice 4).
 
+**Accepted (LIVING_SPECS D85, owner, 2026-10-28):**
+
+12. **Save for an older TomeStack.** A package may be written for an older release; it is lossy, marked `madeFor`, carries copies with new ids, never lowers a bundled revision; the share rules of items 6 and 11 apply unchanged. The preview lists what the copy loses before anything is written, and the save presents the list it confirmed (`changesHash`). `madeFor` is an optional manifest field without a format bump, the one documented exception to "a new field is a new version". Evidence: `DownConversionExportTests`, `DownConversionGoldenTests`, `MadeForMarkerTests`, `SourcePackTests`, `LibraryBackupTests`.
+
 **Accepted (D07, owner, 2026-09-26):**
 
 9. The project's own code is Apache-2.0 (`LICENSE`, `NOTICE`). `ATTRIBUTION.md` lists the third-party components that ship.
