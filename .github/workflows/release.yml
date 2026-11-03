@@ -147,9 +147,11 @@ jobs:
           $out = Join-Path $env:RUNNER_TEMP 'release-assets'
           New-Item -ItemType Directory -Path $out -Force | Out-Null
           $files = Get-ChildItem $src -File | Sort-Object Name
-          if (-not ($files | Where-Object { $_.Name -like '*TomeStack.App-win-Setup.exe' })) { throw 'Setup.exe is missing' }
+          # publish looks the installer up by this exact name, so check the same name here.
+          if (-not ($files | Where-Object { $_.Name -ceq 'TomeStack.App-win-Setup.exe' })) { throw 'TomeStack.App-win-Setup.exe is missing' }
           $lines = foreach ($f in $files) {
-            if ($f.Name -notmatch '^[A-Za-z0-9._-]+$') { throw "Unexpected asset name '$($f.Name)'" }
+            # No leading '-': publish passes each name to gh release create, which would read it as a flag.
+            if ($f.Name -cnotmatch '^[A-Za-z0-9._][A-Za-z0-9._-]*$') { throw "Unexpected asset name '$($f.Name)'" }
             Copy-Item $f.FullName $out
             '{0}  {1}' -f (Get-FileHash (Join-Path $out $f.Name) -Algorithm SHA256).Hash.ToLowerInvariant(), $f.Name
           }

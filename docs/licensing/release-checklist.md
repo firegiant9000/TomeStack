@@ -133,6 +133,7 @@ Velopack (MIT, Caelan Sayler) builds `Setup.exe` and `Update.exe` in Rust, with 
    - In a **minor** release PR, add the new `ReleaseLadder` row (`src/AppService/Packages/ReleaseLadder.cs`, its maxima from the schema constants) and generate its bundled set from the PR's own tree: `scripts/bundled-ids-at.ps1 -Tag HEAD -Out src/AppService/Packages/BundledAt/X.Y.0.txt` (`-Tag` takes any git revision; the tag does not exist yet).
    - A **patch** release must not change `src/AppService/Content/`: bundled SRD content ships only in a minor release (owner ruling, 2026-10-27), and there are no patch rows. Check that `git diff vX.Y.0 HEAD -- src/AppService/Content` is empty.
 2. Tag and push from an up-to-date `main`: `git tag -a v0.4.0 -m "TomeStack 0.4.0"`, then `git push origin v0.4.0`.
+   - Before tagging, check the **Weekly** workflow's (`.github/workflows/weekly.yml`) last run date and status: GitHub turns a schedule off after 60 days without repository activity, and the job never blocks a merge, so a red or stale run is only seen here.
 3. The **Release** workflow (`.github/workflows/release.yml`) runs:
    1. the full gate;
    2. the self-contained publish and `vpk pack`;
@@ -141,8 +142,7 @@ Velopack (MIT, Caelan Sayler) builds `Setup.exe` and `Update.exe` in Rust, with 
 4. Review the draft on GitHub (assets, notes, the unsigned note), then **Publish**. The release page is not public before that, but the workflow run's artifacts (`release-assets`, the same files; `release-notes`; `release-smoke-result`) can be downloaded from the public run page for one day.
 5. After publishing: run the upgrade test and the install checks on the published `Setup.exe` (`docs/features/release-0.4.0-verification.md`).
 
-Before tagging, check the **Weekly** workflow's (`.github/workflows/weekly.yml`) last run date and status: GitHub turns a schedule off after 60 days without repository activity, and the job never blocks a merge, so a red or stale run is only seen here.
-6. A GitHub ruleset protects `main` and `refs/tags/v*` from force-push and deletion (repository settings, the owner's; check with `gh api repos/firegiant9000/TomeStack/rulesets`).
+6. A GitHub ruleset protects `main` from force-push and deletion (repository settings, the owner's; check with `gh api repos/firegiant9000/TomeStack/rulesets`). **No tag ruleset exists yet** (owner decision O6): until one limits who may create `v*` tags, confirm before publishing that the tag's commit is on `main` (`git merge-base --is-ancestor vX.Y.Z origin/main` succeeds), because the workflow runs as it stands at the tag.
 
 ### Verify a release
 
