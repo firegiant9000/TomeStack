@@ -5,6 +5,7 @@
 //   restore <backup>  --data-dir <dir>      library.restoreChoose, then library.restoreApply
 //   sheet   <characterId> --data-dir <dir>  character.get, printed as { id, name, fields }
 // stdout carries one compact JSON document. Exit 0 = ok, 1 = the dispatcher refused, 2 = usage error or exception.
+using System.Globalization;
 using System.Text.Json.Nodes;
 using TomeStack.AppService;
 
@@ -85,7 +86,7 @@ static class Program
     // Returns the dispatcher result, or null with the error filled in.
     static JsonNode? Try(CommandDispatcher dispatcher, string command, JsonNode? payload, out JsonNode? error)
     {
-        var request = new JsonObject { ["id"] = (++_requestId).ToString(), ["command"] = command };
+        var request = new JsonObject { ["id"] = (++_requestId).ToString(CultureInfo.InvariantCulture), ["command"] = command };
         if (payload is not null) request["payload"] = payload;
         var response = JsonNode.Parse(dispatcher.Dispatch(request.ToJsonString()))!;
         if (response["ok"]!.GetValue<bool>())
