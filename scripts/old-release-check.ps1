@@ -7,7 +7,8 @@
   2. Builds tests/OldReleaseHarness against that tag's own src/AppService with the tag's pinned SDK (its global.json).
   3. For every *.tomestack.zip directly in -Inputs: opens it in a fresh data folder (restore for files named library-backup*,
      import otherwise), then reads each character's sheet and compares it with expected.json in -Expected
-     (characters[id].fields; every expected field must be present and equal, extra fields are fine).
+     (characters[id].fields; every expected field must be present and equal, extra fields are fine). A package that is not a
+     source or campaign pack (*-source-pack-*, *-campaign-pack-*) must import every character expected.json lists.
   4. Writes an outcome file (JSON, UTF-8 without BOM) to -Out.
   -Inputs, -Expected and -Out may contain {target}, replaced per tag by the tag without its leading v. Quote any argument
   holding {target}: unquoted, PowerShell reads the braces as a script block.
@@ -257,6 +258,13 @@ foreach ($tag in $tagList) {
               $got = $sheet.fields.PSObject.Properties[$prop.Name]
               if ($null -eq $got) { $diffs += "$($prop.Name): expected $(Json-Text $prop.Value), got <missing>" }
               elseif (-not (Values-Equal $prop.Value $got.Value)) { $diffs += "$($prop.Name): expected $(Json-Text $prop.Value), got $(Json-Text $got.Value)" }
+            }
+          }
+          # A character package or backup that opens but drops its character must not pass: check expected.json the other way too.
+          if ($status -eq 'pass' -and $n -notmatch '-(source|campaign)-pack-' -and $expectedDoc.characters) {
+            $seen = @(@($doc.characters) | Where-Object { $null -ne $_ } | ForEach-Object { [string] $_ })
+            foreach ($want in $expectedDoc.characters.PSObject.Properties.Name) {
+              if ($seen -notcontains $want) { $diffs += "${want}: expected in expected.json, not imported" }
             }
           }
           if ($status -eq 'pass' -and $diffs.Count -gt 0) {
