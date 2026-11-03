@@ -888,7 +888,10 @@ it('a replaceable choice offers a swap at level-up and notes one made outside it
   await user.click(screen.getByRole('button', { name: 'Long rest…' }));
   const rest = await screen.findByRole('region', { name: 'Long rest' });
   await waitFor(() => expect(rest.textContent).toMatch(/you may replace one pick of: E2E Swap Feature/));
-  await user.click(within(rest).getByRole('button', { name: 'Finish long rest' }));
+  // That line comes from the sheet, not the proposal; Finish does nothing until the proposal arrives.
+  const finish = within(rest).getByRole('button', { name: 'Finish long rest' });
+  await waitFor(() => expect(finish.getAttribute('aria-disabled')).toBe('false'));
+  await user.click(finish);
   const after = await screen.findByRole('region', { name: 'After your long rest' }, { timeout: 5000 });
   expect(after.textContent).toMatch(/You may replace one pick of: E2E Swap Feature\./);
   await user.click(within(after).getByRole('button', { name: 'Make choices' }));

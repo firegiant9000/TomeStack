@@ -178,7 +178,7 @@ Not measured yet. Method, so the result can be compared later:
 |---|---|---|---|---|
 | — | — | owed | owed | — |
 
-The smoke script's `processStartToReadyMs` is not first paint: it is taken when the whole smoke script finishes (`MainWindow.xaml.cs`).
+The smoke script's `processStartToReadyMs` is not first paint: it is taken when the whole smoke script finishes (`MainWindow.xaml.cs`). `dailyCopyMs` is how long the D77 daily copy held the window back before it showed (`dailyCopy` says what it did; a fresh smoke folder normally writes one). The smoke's 30 s budget starts once the window has shown, so it does not include that copy; the script's 90 s exit limit does (raised from 60 s, so a copy of up to about 55 s still leaves the app time to write its own report).
 
 ## What the numbers say (the roadmap's questions)
 
