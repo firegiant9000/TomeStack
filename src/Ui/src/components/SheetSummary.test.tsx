@@ -325,6 +325,64 @@ it('an assisted mode leaves the summary button as it was', () => {
   expect(screen.getByRole('button', { name: 'Roll Dexterity check (+2)' })).toBeTruthy();
 });
 
+// Content v12 (G7): attacks other creatures make against the character, shown beside Armor Class.
+const against = (attacksAgainst?: NonNullable<CharacterSheet['attacksAgainst']>): CharacterView => {
+  const v = fixtureView();
+  return { ...v, sheet: { ...v.sheet, attacksAgainst } };
+};
+
+it('shows attacks against you with prevent wording', () => {
+  const mode = {
+    automatic: 'advantage' as const,
+    reasons: [
+      reason('advantage', 'Fixture Open Guard'),
+      reason('advantage', 'Fixture Soft Spot'),
+      { ...reason('disadvantage', 'Fixture Steady Ward'), prevent: true },
+    ],
+  };
+  render(<SheetSummary view={against(mode)} {...plain} />);
+  expect(dd('Attacks against you')).toBe("have advantage (Fixture Open Guard, Fixture Soft Spot); can't have disadvantage (Fixture Steady Ward)");
+  expect(dd('Armor Class')).toBe('16 (overridden)'); // the Armor Class value is untouched
+});
+
+it('says have disadvantage, and can not have advantage, with their sources', () => {
+  const mode = {
+    automatic: 'disadvantage' as const,
+    reasons: [reason('disadvantage', 'Fixture Blur'), { ...reason('advantage', 'Fixture Steady Ward'), prevent: true }],
+  };
+  render(<SheetSummary view={against(mode)} {...plain} />);
+  expect(dd('Attacks against you')).toBe("have disadvantage (Fixture Blur); can't have advantage (Fixture Steady Ward)");
+});
+
+it('shows only the prevent part when the automatic mode is normal', () => {
+  const mode = { automatic: 'normal' as const, reasons: [{ ...reason('advantage', 'Fixture Steady Ward'), prevent: true }] };
+  render(<SheetSummary view={against(mode)} {...plain} />);
+  expect(dd('Attacks against you')).toBe("can't have advantage (Fixture Steady Ward)");
+});
+
+it('shows the cancel when automatic advantage and disadvantage against you cancel', () => {
+  const mode = { automatic: 'normal' as const, reasons: [reason('advantage', 'Fixture Open Guard'), reason('disadvantage', 'Fixture Blur')] };
+  render(<SheetSummary view={against(mode)} {...plain} />);
+  expect(dd('Attacks against you')).toBe('normal (advantage and disadvantage cancel: Fixture Open Guard, Fixture Blur)');
+});
+
+it('shows an assisted reason against you with its note (it used to hide the line)', () => {
+  const mode = { automatic: 'normal' as const, reasons: [{ ...reason('advantage', 'Fixture Open Guard'), automatic: false }] };
+  render(<SheetSummary view={against(mode)} {...plain} />);
+  expect(dd('Attacks against you')).toBe('advantage (Fixture Open Guard), not applied automatically');
+});
+
+it('shows an assisted prevent reason against you with its note', () => {
+  const mode = { automatic: 'normal' as const, reasons: [{ ...reason('advantage', 'Fixture Steady Ward'), automatic: false, prevent: true }] };
+  render(<SheetSummary view={against(mode)} {...plain} />);
+  expect(dd('Attacks against you')).toBe("can't have advantage (Fixture Steady Ward), not applied automatically");
+});
+
+it('no attacks-against line without reasons', () => {
+  render(<SheetSummary view={against(undefined)} {...plain} />);
+  expect(screen.queryByText('Attacks against you')).toBeNull();
+});
+
 it('fly speed shows only when above 0', () => {
   const base = fixtureView();
   const flying = (n: number): CharacterView => ({ ...base, sheet: { ...base.sheet, fields: [...base.sheet.fields, field('speed.fly', 'Fly speed', n, 'feet')] } });

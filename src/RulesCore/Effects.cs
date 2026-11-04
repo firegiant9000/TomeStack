@@ -800,7 +800,9 @@ public sealed record ValueEffect : Effect
 
 /// <summary>
 /// Content schema v11 (D43): advantage or disadvantage on a saving throw, skill check or ability check. Typed only in a v11
-/// revision: in an older revision a <c>rollMode</c> stays an <see cref="UnknownEffect"/>, byte for byte. A mode that names no
+/// revision: in an older revision a <c>rollMode</c> stays an <see cref="UnknownEffect"/>, byte for byte. Targets: <c>save.&lt;ability&gt;</c>,
+/// <c>skill.&lt;skill&gt;</c>, <c>ability.&lt;ability&gt;.check</c>, and from v12 (G7) <c>attack</c>, <c>initiative</c> and <c>attacksAgainst</c>; the four
+/// G7 members are typed only from v12, and a v12 target below v12 stays untyped. A mode that names no
 /// <see cref="RollMode"/> member stays untyped here too, and the validator reports it.
 /// </summary>
 public sealed record RollModeEffect : Effect
@@ -811,7 +813,7 @@ public sealed record RollModeEffect : Effect
 
     public override string Type => TypeName;
 
-    /// <summary><c>save.&lt;ability&gt;</c>, <c>skill.&lt;skill&gt;</c> or <c>ability.&lt;ability&gt;.check</c> (the last is a roll target only, not a field); validated in the content validator.</summary>
+    /// <summary><c>save.&lt;ability&gt;</c>, <c>skill.&lt;skill&gt;</c> or <c>ability.&lt;ability&gt;.check</c> (the last is a roll target only, not a field); from v12 also <c>attack</c>, <c>initiative</c> and <c>attacksAgainst</c>; validated in the content validator.</summary>
     public required string Target { get; init; }
 
     /// <summary>Advantage or disadvantage. <see cref="RollMode.Normal"/> reads but is refused by the validator.</summary>
@@ -826,8 +828,56 @@ public sealed record RollModeEffect : Effect
     /// <summary>The content that declares <see cref="Toggle"/>, when it is not this revision's. Null: this revision.</summary>
     public Guid? ToggleContent { get; init; }
 
-    internal static Effect FromUnknown(UnknownEffect unknown) =>
-        VersionedEffects.NamesMember<RollMode>(unknown.Raw, "mode") ? VersionedEffects.Typed<RollModeEffect>(unknown) : unknown;
+    /// <summary>Content schema v12 (G7) targets: the character's own attack rolls, initiative, and the attack rolls other creatures make against the character.</summary>
+    public const string AttackTarget = "attack", InitiativeTarget = "initiative", AttacksAgainstTarget = "attacksAgainst";
+
+    /// <summary>Content schema v12 (G7): with target <c>attack</c>, the attack tags the mode applies to (<c>all</c> or any tag of the attack). Non-empty, distinct.</summary>
+    public IReadOnlyList<string>? Tags { get; init; }
+
+    /// <summary>Content schema v12 (G7): with target <c>attack</c>, the ability the attack must use.</summary>
+    public Ability? Ability { get; init; }
+
+    /// <summary>Content schema v12 (G7): a condition key that, while the character has it, leaves the effect out.</summary>
+    public string? UnlessCondition { get; init; }
+
+    /// <summary>Content schema v12 (G7): with target <c>attacksAgainst</c>, true means attacks against the character can't have <see cref="Mode"/>.</summary>
+    public bool? Prevent { get; init; }
+
+    /// <summary>The keys content schema v12 adds to this effect; below v12 they stay extension data.</summary>
+    internal static readonly string[] V12Keys = ["tags", "ability", "unlessCondition", "prevent"];
+
+    /// <summary>Whether <paramref name="target"/> is one of the targets content schema v12 adds (matched exactly, as the validator does).</summary>
+    internal static bool IsV12Target(string? target) =>
+        target is AttackTarget or InitiativeTarget or AttacksAgainstTarget;
+
+    /// <summary>
+    /// Typed when the mode names a member. Below v12 a v12 target stays untyped, byte for byte, and the four v12 keys stay extension
+    /// data. From v12 an <c>ability</c> must be a lower-case ability key exactly.
+    /// </summary>
+    internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion)
+    {
+        if (!VersionedEffects.NamesMember<RollMode>(unknown.Raw, "mode"))
+            return unknown;
+        if (revisionSchemaVersion < ContentRevision.RollModeTargetsSchemaVersion)
+        {
+            foreach (var p in unknown.Raw.EnumerateObject())
+            {
+                if (string.Equals(p.Name, "target", StringComparison.OrdinalIgnoreCase)
+                    && p.Value.ValueKind == JsonValueKind.String && IsV12Target(p.Value.GetString()))
+                    return unknown;
+            }
+            return VersionedEffects.TypedWithout<RollModeEffect>(unknown, V12Keys);
+        }
+        foreach (var p in unknown.Raw.EnumerateObject())
+        {
+            if (string.Equals(p.Name, "ability", StringComparison.OrdinalIgnoreCase)
+                && p.Value.ValueKind != JsonValueKind.Null
+                && !(p.Value.ValueKind == JsonValueKind.String
+                    && Enum.GetNames<Ability>().Any(n => string.Equals(p.Value.GetString(), n.ToLowerInvariant(), StringComparison.Ordinal))))
+                return unknown;
+        }
+        return VersionedEffects.Typed<RollModeEffect>(unknown);
+    }
 }
 
 /// <summary>Content schema v11 (D43): where in a damage event a response is offered.</summary>
@@ -1657,7 +1707,7 @@ internal static class VersionedEffects
             [ResourceEffect.TypeName] = (1, ResourceEffect.FromUnknown),
             [RollEffect.TypeName] = (1, RollEffect.FromUnknown),
             [ValueEffect.TypeName] = (ValueEffect.SchemaVersion, (u, _) => ValueEffect.FromUnknown(u)),
-            [RollModeEffect.TypeName] = (RollModeEffect.SchemaVersion, (u, _) => RollModeEffect.FromUnknown(u)),
+            [RollModeEffect.TypeName] = (RollModeEffect.SchemaVersion, (u, v) => RollModeEffect.FromUnknown(u, v)),
             [ResponseEffect.TypeName] = (ResponseEffect.SchemaVersion, (u, v) => ResponseEffect.FromUnknown(u, v)),
             [ItemModEffect.TypeName] = (ItemModEffect.SchemaVersion, (u, _) => ItemModEffect.FromUnknown(u)),
             [CompanionEffect.TypeName] = (CompanionEffect.SchemaVersion, (u, _) => CompanionEffect.FromUnknown(u)),

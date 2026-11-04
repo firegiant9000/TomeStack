@@ -546,6 +546,28 @@ public static class DownConvert
                         }
                         RemoveKey(effect, "automatic", path, BelowAction.Dropped, BelowCodes.V12Key, $"'{name}': that the response applies itself.", changes);
                         break;
+                    case RollModeEffect.TypeName:
+                        var rollTarget = StringOf(Property(effect, "target"));
+                        var v12Keys = RollModeEffect.V12Keys.Where(k => Member(effect, k) is not null).ToList();
+                        var v12Target = RollModeEffect.IsV12Target(rollTarget);
+                        if (!v12Target && v12Keys is ["prevent"] && Member(effect, "prevent") is JsonValue { } lone
+                            && lone.TryGetValue<bool>(out var lonePrevent) && !lonePrevent)
+                        {
+                            RemoveKey(effect, "prevent", path, BelowAction.Dropped, BelowCodes.V12Key, $"'{name}': that the mode prevents nothing, which says no more than leaving it out.", changes);
+                            break;
+                        }
+                        if (!v12Target && v12Keys.Count == 0)
+                            break;
+                        // Never silently stronger: a mode that helps is dropped (weaker); one that hinders would be left out by the older
+                        // version, which makes the copy stronger, so it blocks.
+                        var advantage = string.Equals(StringOf(Property(effect, "mode")), "advantage", StringComparison.OrdinalIgnoreCase);
+                        var preventTrue = Member(effect, "prevent") is JsonValue pv && pv.TryGetValue<bool>(out var pb) && pb;
+                        // Against the character, a prevent turns the mode around: preventing disadvantage hinders, preventing advantage helps.
+                        var helps = rollTarget == RollModeEffect.AttacksAgainstTarget ? advantage == preventTrue : advantage;
+                        changes.Add(helps
+                            ? new(path, BelowAction.Dropped, BelowCodes.EffectUnsupported, $"'{name}': a roll mode the older version cannot hold (a v12 target or member); the feature stays as text.")
+                            : new(path, BelowAction.Blocks, BelowCodes.RollModeDisadvantage, $"'{name}': a mode that hinders the character; the older version would leave it out."));
+                        continue;
                     case WeaponEffect.TypeName:
                         RemoveKey(effect, "bonus", path, BelowAction.Dropped, BelowCodes.WeaponBonus, $"'{name}': the weapon's bonus to hit and damage.", changes);
                         break;

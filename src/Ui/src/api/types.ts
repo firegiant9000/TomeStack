@@ -266,12 +266,21 @@ export interface RollModeReason {
   against?: string[];
   /** True when the service applies this reason by itself (an automatic effect with no `against`). */
   automatic: boolean;
+  /** Content v12 (G7): on an `attacksAgainst` reason, attacks against the character can't have `mode`. */
+  prevent?: boolean;
 }
 
 /** The mode the sheet calculates for a field, and every reason listed for it. */
 export interface RollModeSummary {
   automatic: RollMode;
   reasons: RollModeReason[];
+}
+
+/** Content v12 (G7): one attack-mode effect in play, with the tags (and ability) it matches. */
+export interface AttackModeValue {
+  reason: RollModeReason;
+  tags: string[];
+  ability?: Ability;
 }
 
 export type RestPeriod = 'shortRest' | 'longRest';
@@ -499,6 +508,8 @@ export interface AttackEntry {
   /** MECH-X item 3: the position of the equipment entry, set only when the weapon is carried as several copies (one row per copy). */
   entryIndex?: number;
   tags?: string[] | null;
+  /** Content v12 (G7): the automatic roll mode of this attack; absent when none, and on a companion attack. */
+  mode?: RollModeSummary;
   /** The attack can stand in for one attack of the Attack action. */
   replacesAttack: boolean;
   riders?: RiderValue[] | null;
@@ -602,6 +613,10 @@ export interface CharacterSheet {
   spellSlots?: SlotValue[];
   pactSlots?: SlotValue;
   attacks?: AttackEntry[];
+  /** Content v12 (G7): the attack-mode effects in play, with the tags (and ability) each matches; absent when none. */
+  attackModes?: AttackModeValue[];
+  /** Content v12 (G7): how attacks against the character roll (`automatic` already applies a prevent); absent when no reason. */
+  attacksAgainst?: RollModeSummary;
   toggles?: ToggleValue[];
   /** Content v11 (D43): the upkeeps the active content declares, for the turn panel and the combat strip; absent when there are none. */
   upkeeps?: UpkeepValue[];
@@ -1934,6 +1949,13 @@ export type Effect =
       against?: string[];
       toggle?: string;
       toggleContent?: string;
+      /** Content v12 (G7): `attack` only: the attack's tags ('all' or any tag) and, optionally, the ability it must use. */
+      tags?: string[];
+      ability?: Ability;
+      /** Content v12 (G7): any target: left out while the character has this condition. */
+      unlessCondition?: string;
+      /** Content v12 (G7): `attacksAgainst` only: attacks against the character can't have `mode`. */
+      prevent?: boolean;
     })
   // Content v11 (D43 S7): a damage-time response. `amount` belongs to a damageReduction or hitPointOutcome response, `when` to a threshold one.
   | (EffectBase & {

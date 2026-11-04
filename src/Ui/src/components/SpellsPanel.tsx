@@ -6,6 +6,7 @@ import { Pips } from './Pips';
 import { SpellSearch } from './sheet/SpellSearch';
 import { SpellFilters, filtersActive, noFilters, toSpellFilter, type SpellFilterState } from './sheet/SpellFilters';
 import { filterSpells, foldName } from '../spellSearch';
+import { assistedNotes, attackModeFor, rollButtonSuffix } from '../rollModes';
 import { ExplainList } from './ExplainList';
 import { TraceTable } from './TraceTable';
 
@@ -174,9 +175,24 @@ export function SpellsPanel({
                     </label>
                   )}
                   {spell.attack !== 'none' && (
-                    <button type="button" onClick={() => roll({ spell: spell.spell, spellAttack: true, mode: rollMode })}>
-                      Roll {spell.name} attack
-                    </button>
+                    <>
+                      {(() => {
+                        const attackMode = attackModeFor(view.sheet.attackModes, ['spell', spell.attack], entry.ability);
+                        return (
+                          <>
+                            <button type="button" onClick={() => roll({ spell: spell.spell, spellAttack: true, mode: rollMode })}>
+                              Roll{rollButtonSuffix({ mode: attackMode })} {spell.name} attack
+                            </button>
+                            {assistedNotes({ mode: attackMode }).map((note) => (
+                              <span key={note} className="hint">
+                                {' '}
+                                {note}
+                              </span>
+                            ))}
+                          </>
+                        );
+                      })()}
+                    </>
                   )}
                   {spell.dice && (
                     <button type="button" onClick={() => roll({ spell: spell.spell })}>

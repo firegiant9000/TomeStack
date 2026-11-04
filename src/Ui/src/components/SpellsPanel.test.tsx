@@ -70,6 +70,23 @@ it('sends the chosen mode with a spell attack roll and none with its dice (R93)'
   expect(roll).toHaveBeenLastCalledWith({ spell: ref(20) });
 });
 
+it('spell attack button shows the automatic attack mode', () => {
+  const v = view();
+  const caster = v.sheet.spellcasting![0]!;
+  caster.spells = [
+    { ...spell(20, 'Fixture Bolt', 0, false), attack: 'ranged' },
+    { ...spell(21, 'Fixture Touch', 0, false), attack: 'melee' },
+  ];
+  v.sheet.attackModes = [
+    { reason: { mode: 'advantage', source: 'Fixture Eye', automatic: true } as never, tags: ['ranged'], ability: 'int' },
+    { reason: { mode: 'disadvantage', source: 'Fixture Hush', automatic: false } as never, tags: ['melee'] },
+  ];
+  render(<SpellsPanel view={v} act={() => {}} roll={() => {}} onSave={() => {}} />);
+  expect(screen.getByRole('button', { name: 'Roll (advantage: Fixture Eye) Fixture Bolt attack' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Roll Fixture Touch attack' })).toBeTruthy();
+  expect(screen.getByText('Disadvantage (Fixture Hush), not applied automatically')).toBeTruthy();
+});
+
 it('a secondary caster shows a "Why?" for its spell attack bonus and one for its save DC (D72 X04)', () => {
   const v = view();
   const second = {

@@ -207,19 +207,28 @@ public static partial class CharacterCalculator
     /// <c>ability.&lt;x&gt;.check</c> reaches <c>ability.&lt;x&gt;.mod</c> and every skill of that ability, and Dexterity also initiative).
     /// Toggled entries are gated like modifiers. A rollMode has no timing, so only its toggle gates it. Order is sheet content order.
     /// </summary>
-    private static Dictionary<string, RollModeSummary> CollectRollModes(
-        List<ActiveContent> active, EffectiveToggles effective, bool autoOn, List<Diagnostic> diagnostics)
+    private static RollModeCollection CollectRollModes(
+        List<ActiveContent> active, Character character, EffectiveToggles effective, bool autoOn, List<Diagnostic> diagnostics)
     {
         var byField = new Dictionary<string, List<RollModeReason>>(StringComparer.Ordinal);
+        var attackModes = new List<AttackModeValue>();
+        var against = new List<RollModeReason>();
         foreach (var item in active)
         {
             var revision = item.Revision;
             foreach (var effect in revision.Effects.OfType<RollModeEffect>())
             {
+                // Content v12 (G7): while the character has the condition the effect is left out, like a toggle that is off.
+                if (effect.UnlessCondition is { } unless && ConditionKeys.Holds(character.Play.Conditions, unless))
+                    continue;
                 if (effect.Toggle is { } toggle
                     && GateOnToggle(active, revision, effect.Id, toggle, effect.ToggleContent, effective, autoOn, diagnostics, out _) != ToggleGate.Applies)
                     continue;
-                var reason = new RollModeReason(effect.Mode, revision.Name, revision.Reference, effect.Against, effect.Automation);
+                var reason = new RollModeReason(effect.Mode, revision.Name, revision.Reference, effect.Against, effect.Automation, effect.Prevent == true);
+                if (effect.Target == RollModeEffect.AttackTarget)
+                    attackModes.Add(new AttackModeValue(reason, effect.Tags ?? [], effect.Ability));
+                else if (effect.Target == RollModeEffect.AttacksAgainstTarget)
+                    against.Add(reason);
                 foreach (var field in RollModeFields(effect.Target))
                 {
                     if (!byField.TryGetValue(field, out var reasons))
@@ -229,16 +238,31 @@ public static partial class CharacterCalculator
             }
         }
         // Automatic combines only the reasons that need no confirmation (no against) from an automatic effect; the rest are listed notes.
-        return byField.ToDictionary(
+        var fields = byField.ToDictionary(
             p => p.Key,
             p => new RollModeSummary(
                 RollModes.Combine(p.Value.Where(r => r.IsAutomatic).Select(r => r.Mode)),
                 [.. p.Value]),
             StringComparer.Ordinal);
+        return new(
+            fields,
+            attackModes.Count > 0 ? attackModes : null,
+            against.Count > 0 ? new RollModeSummary(RollModes.CombineAgainst(against), against) : null);
     }
+
+    /// <summary>The roll modes of the active content: by sheet field, the <c>attack</c> modes (v12), and the summary of attacks against the character (v12).</summary>
+    private sealed record RollModeCollection(
+        Dictionary<string, RollModeSummary> ByField, IReadOnlyList<AttackModeValue>? AttackModes, RollModeSummary? AttacksAgainst);
 
     private static IEnumerable<string> RollModeFields(string target)
     {
+        if (target == RollModeEffect.InitiativeTarget)
+        {
+            yield return FieldIds.Initiative;
+            yield break;
+        }
+        if (target is RollModeEffect.AttackTarget or RollModeEffect.AttacksAgainstTarget)
+            yield break;
         if (target.StartsWith("save.", StringComparison.Ordinal) || target.StartsWith("skill.", StringComparison.Ordinal))
         {
             if (SpecIndex.ContainsKey(target))

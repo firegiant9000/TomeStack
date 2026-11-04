@@ -106,14 +106,34 @@ public static class ContentValidator
         effect.Raw.ValueKind == System.Text.Json.JsonValueKind.Object
         && effect.Raw.EnumerateObject().Any(p => keys.Contains(p.Name, StringComparer.OrdinalIgnoreCase));
 
+    /// <summary>What a content v12 (G7) rollMode target is called in <c>validate.requires-v12</c>; null for a v11 target.</summary>
+    private static string? RollModeTargetPhrase(string? target) => target switch
+    {
+        RollModeEffect.AttackTarget => "a rollMode on attack rolls",
+        RollModeEffect.InitiativeTarget => "a rollMode on initiative",
+        RollModeEffect.AttacksAgainstTarget => "a rollMode on attacks against you",
+        _ => null,
+    };
+
+    private static string? RollModeKeyPhrase(string key) => key.ToLowerInvariant() switch
+    {
+        "tags" => "rollMode tags",
+        "ability" => "a rollMode ability",
+        "unlesscondition" => "a rollMode unlessCondition",
+        "prevent" => "a rollMode prevent",
+        _ => null,
+    };
+
     /// <summary>
-    /// Content v11 (D43): the targets of a <c>rollMode</c>, exactly <c>save.&lt;ability&gt;</c>, <c>skill.&lt;skill&gt;</c> or
+    /// Content v11 (D43): the targets of a <c>rollMode</c>, from v12 (G7) also <c>attack</c>, <c>initiative</c> and <c>attacksAgainst</c>; otherwise exactly <c>save.&lt;ability&gt;</c>, <c>skill.&lt;skill&gt;</c> or
     /// <c>ability.&lt;ability&gt;.check</c> (the ability check is a roll target only, not a sheet field).
     /// </summary>
     internal static bool IsRollModeTarget(string? target)
     {
         if (target is null)
             return false;
+        if (RollModeEffect.IsV12Target(target))
+            return true;
         var abilities = Enum.GetValues<Ability>().Select(FieldIds.Key).ToList();
         if (target.StartsWith("save.", StringComparison.Ordinal))
             return abilities.Contains(target["save.".Length..], StringComparer.Ordinal);
@@ -319,7 +339,27 @@ public static class ContentValidator
                 // would be an unsupported effect, so it blocks.
                 case UnknownEffect { DeclaredType: RollModeEffect.TypeName } unknownMode when revision.SchemaVersion >= RollModeEffect.SchemaVersion:
                     needsV11 = true;
-                    Error("validate.effect-malformed", $"Effect '{unknownMode.Id}' has type '{unknownMode.DeclaredType}' but a value or field that does not read (its mode must be advantage or disadvantage; it needs a target; against is a list of condition keys; toggleContent is an id); fix it before publishing.", unknownMode.Id);
+                    var v12TargetBelow = false;
+                    if (unknownMode.Raw.ValueKind == System.Text.Json.JsonValueKind.Object)
+                    {
+                        foreach (var p in unknownMode.Raw.EnumerateObject())
+                        {
+                            // Below v12 a v12 target stays untyped (it needs v12); from v12 an unreadable one carrying a v12 key mirrors the response rung.
+                            if (revision.SchemaVersion < ContentRevision.RollModeTargetsSchemaVersion
+                                && string.Equals(p.Name, "target", StringComparison.OrdinalIgnoreCase)
+                                && p.Value.ValueKind == System.Text.Json.JsonValueKind.String
+                                && RollModeTargetPhrase(p.Value.GetString()) is { } phrase)
+                            {
+                                NeedV12(phrase);
+                                v12TargetBelow = true;
+                                break;
+                            }
+                            if (revision.SchemaVersion >= ContentRevision.RollModeTargetsSchemaVersion && RollModeKeyPhrase(p.Name) is { } keyPhrase)
+                                NeedV12(keyPhrase);
+                        }
+                    }
+                    if (!v12TargetBelow)
+                        Error("validate.effect-malformed", $"Effect '{unknownMode.Id}' has type '{unknownMode.DeclaredType}' but a value or field that does not read (its mode must be advantage or disadvantage; it needs a target; against is a list of condition keys; toggleContent is an id); fix it before publishing.", unknownMode.Id);
                     break;
                 // Content v11 (D43): from v11 a response is typed; one that stays unknown did not match the shape (a phase or an outcome
                 // kind that names no member, no responseId, label or phase, a toggle or content that is not an id), so the response would
@@ -587,9 +627,44 @@ public static class ContentValidator
                 case RollModeEffect rollMode:
                     needsV11 = true;
                     if (!IsRollModeTarget(rollMode.Target))
-                        Error("validate.roll-mode-target", $"Roll mode '{rollMode.Id}' targets '{rollMode.Target}'; use save.<ability> (such as save.dex), skill.<skill> (such as skill.stealth) or ability.<ability>.check (such as ability.str.check).", rollMode.Id);
+                        Error("validate.roll-mode-target", $"Roll mode '{rollMode.Id}' targets '{rollMode.Target}'; use save.<ability> (such as save.dex), skill.<skill> (such as skill.stealth), ability.<ability>.check (such as ability.str.check), attack, initiative or attacksAgainst.", rollMode.Id);
+                    if (RollModeTargetPhrase(rollMode.Target) is { } targetPhrase)
+                        NeedV12(targetPhrase);
                     if (rollMode.Mode == RollMode.Normal)
                         Error("validate.roll-mode-mode", $"Roll mode '{rollMode.Id}' has mode normal, which changes nothing; use advantage or disadvantage.", rollMode.Id);
+                    // Content v12 (G7): tags, ability, unlessCondition and prevent.
+                    if (rollMode.Tags is { } modeTags)
+                    {
+                        NeedV12("rollMode tags");
+                        if (rollMode.Target != RollModeEffect.AttackTarget)
+                            Error("validate.roll-mode-tags", $"Roll mode '{rollMode.Id}' has tags but targets '{rollMode.Target}'; tags go only with the attack target.", rollMode.Id);
+                        else if (modeTags.Count == 0 || modeTags.Any(string.IsNullOrWhiteSpace) || modeTags.Distinct(StringComparer.Ordinal).Count() != modeTags.Count)
+                            Error("validate.roll-mode-tags", $"Roll mode '{rollMode.Id}' needs at least one tag, each non-empty and listed once.", rollMode.Id);
+                    }
+                    else if (rollMode.Target == RollModeEffect.AttackTarget)
+                    {
+                        Error("validate.roll-mode-tags", $"Roll mode '{rollMode.Id}' targets attack and needs tags (use all for every attack).", rollMode.Id);
+                    }
+                    if (rollMode.Ability is not null)
+                    {
+                        NeedV12("a rollMode ability");
+                        if (rollMode.Target != RollModeEffect.AttackTarget)
+                            Error("validate.roll-mode-ability", $"Roll mode '{rollMode.Id}' has an ability but targets '{rollMode.Target}'; an ability goes only with the attack target.", rollMode.Id);
+                    }
+                    if (rollMode.UnlessCondition is { } unlessCondition)
+                    {
+                        NeedV12("a rollMode unlessCondition");
+                        if (!ConditionKeys.All.Contains(unlessCondition))
+                            Error("validate.roll-mode-condition", $"Roll mode '{rollMode.Id}' has unlessCondition '{unlessCondition}', which is not a condition key ({string.Join(", ", ConditionKeys.All)}).", rollMode.Id);
+                    }
+                    if (rollMode.Prevent is not null)
+                    {
+                        NeedV12("a rollMode prevent");
+                        if (rollMode.Target != RollModeEffect.AttacksAgainstTarget)
+                            Error("validate.roll-mode-prevent", $"Roll mode '{rollMode.Id}' has prevent but targets '{rollMode.Target}'; prevent goes only with the attacksAgainst target.", rollMode.Id);
+                    }
+                    if (rollMode.Against is not null && rollMode.Target is RollModeEffect.InitiativeTarget or RollModeEffect.AttacksAgainstTarget)
+                        Error("validate.roll-mode-against", $"Roll mode '{rollMode.Id}' targets '{rollMode.Target}', which takes no against list; remove it.", rollMode.Id);
                     if (rollMode.Against is { } against)
                     {
                         if (against.Count == 0)
