@@ -253,7 +253,63 @@ public class ResponseV12ValidationTests
     {
         var report = Validate(Reduction(r => r with { Supersedes = new(Guid.Parse("6a7e0200-0000-4000-8000-0000000000ff"), "other") }));
         Assert.Empty(report.Errors);
-        Assert.Contains(report.Warnings, w => w.Code == "validate.toggle-content-missing");
+        Assert.Contains(report.Warnings, w => w.Code == "validate.response-supersedes");
+        Assert.DoesNotContain(report.Warnings, w => w.Code == "validate.toggle-content-missing");
+    }
+
+    private static ResponseEffect Link(string id, string target, Guid? content = null) =>
+        new() { Id = id, ResponseId = id, Label = id, Phase = ResponsePhase.DamageReduction, Amount = "1", Supersedes = new(content, target) };
+
+    [Fact]
+    public void Two_responses_that_supersede_each_other_are_refused()
+    {
+        var report = ContentValidator.Validate(Built(12, Link("a", "b"), Link("b", "a")), Catalog);
+
+        Assert.Equal(2, report.Errors.Count(e => e.Code == "validate.response-supersedes"));
+    }
+
+    [Fact]
+    public void A_three_response_loop_is_refused()
+    {
+        var report = ContentValidator.Validate(Built(12, Link("a", "b"), Link("b", "c"), Link("c", "a")), Catalog);
+
+        Assert.Equal(3, report.Errors.Count(e => e.Code == "validate.response-supersedes"));
+    }
+
+    [Fact]
+    public void A_chain_that_does_not_loop_is_valid()
+    {
+        var plain = new ResponseEffect { Id = "c", ResponseId = "c", Label = "c", Phase = ResponsePhase.DamageReduction, Amount = "1" };
+
+        AssertClean(ContentValidator.Validate(Built(12, Link("a", "b"), Link("b", "c"), plain), Catalog));
+    }
+
+    [Fact]
+    public void A_loop_through_content_already_installed_is_refused()
+    {
+        var other = Built(12, Link("far", "ward", ContentId)) with
+        {
+            ContentId = Guid.Parse("6a7e0200-0000-4000-8000-000000000002"), RevisionId = Guid.Parse("6a7e0200-0000-4000-8000-000000000102"),
+        };
+        var catalog = new InMemoryContentCatalog([Catalog.FindSource(Fixtures.Source2024)!], [other]);
+        var mine = Built(12, Reduction(r => r with { Supersedes = new(other.ContentId, "far") }));
+
+        AssertError(ContentValidator.Validate(mine, catalog), "validate.response-supersedes");
+    }
+
+    [Theory]
+    [InlineData("1d4-5")]
+    [InlineData("-1d6")]
+    public void Dice_that_can_total_below_zero_are_refused(string dice)
+    {
+        AssertError(Validate(Reduction(r => r with { Dice = dice })), "validate.response-dice");
+    }
+
+    [Fact]
+    public void Dice_with_a_constant_and_a_zero_minimum_are_valid()
+    {
+        AssertClean(Validate(Reduction(r => r with { Dice = "1d4-1" })));
+        AssertClean(Validate(Reduction(r => r with { Dice = "2d6+3" })));
     }
 
     [Fact]

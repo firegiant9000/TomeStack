@@ -100,7 +100,7 @@
       "status": "published",
       "summary": "A test response: a fall hurts 5 points less for each character level.",
       "effects": [
-        { "type": "response", "id": "landing", "responseId": "landing", "label": "Soft landing", "phase": "damageReduction", "trigger": { "from": "fall" }, "amount": "5 * LEVEL" }
+        { "type": "response", "id": "landing", "responseId": "landing", "label": "Soft landing", "phase": "damageReduction", "trigger": { "from": "fall" }, "amount": "5 * CLASS_LEVEL" }
       ]
     },
     {

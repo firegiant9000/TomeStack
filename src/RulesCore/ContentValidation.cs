@@ -1091,6 +1091,30 @@ public static class ContentValidator
                 Error(errorCode, $"Effect '{effectId}' follows toggle '{toggleId}', which content {holder} does not define.", effectId);
         }
 
+        // Content v12 (G6): walks the responses a response replaces (this revision's, then the drafts and catalog entries of the content it
+        // names) and says whether the walk returns to the response being validated. Bounded by MaxResponses.
+        bool SupersedesReturnsTo(Guid startContent, string startResponse, Guid ownContent, string ownResponse)
+        {
+            var seen = new HashSet<(Guid, string)>();
+            var queue = new Queue<(Guid, string)>();
+            queue.Enqueue((startContent, startResponse));
+            while (queue.Count > 0 && seen.Count < CharacterCalculator.MaxResponses)
+            {
+                var (content, responseId) = queue.Dequeue();
+                if (content == ownContent && responseId == ownResponse)
+                    return true;
+                if (!seen.Add((content, responseId)))
+                    continue;
+                var revisions = content == revision.ContentId
+                    ? new List<ContentRevision> { revision }
+                    : local.OfContent(content).Concat(catalog.RevisionsOf(content)).Where(r => r.ContentId == content).ToList();
+                foreach (var next in revisions.SelectMany(r => r.Effects.OfType<ResponseEffect>())
+                    .Where(r => r.ResponseId == responseId && r.Supersedes is { } s && !string.IsNullOrWhiteSpace(s.ResponseId)))
+                    queue.Enqueue((next.Supersedes!.Content ?? content, next.Supersedes.ResponseId));
+            }
+            return false;
+        }
+
         // Content v12 (G6): a response's trigger, share, dice, automatic, unlessCondition and supersedes. Each present member needs v12.
         void CheckResponseV12Members(ResponseEffect response)
         {
@@ -1126,8 +1150,10 @@ public static class ContentValidator
                 NeedV12("response dice");
                 if (!reduction || string.IsNullOrWhiteSpace(response.Amount))
                     Error("validate.response-dice", $"Response '{rid}' has dice, which only a damage reduction with an amount takes.", id);
-                if (!DiceExpression.TryParse(dice, out _, out var diceError))
+                if (!DiceExpression.TryParse(dice, out var diceExpression, out var diceError))
                     Error("validate.response-dice", $"Response '{rid}' dice do not read: {diceError}", id);
+                else if (diceExpression!.Minimum < 0)
+                    Error("validate.response-dice", $"Response '{rid}' dice can total less than 0; a response only takes damage off.", id);
             }
             if (response.Automatic is { } automatic)
             {
@@ -1157,9 +1183,11 @@ public static class ContentValidator
                         ? new List<ContentRevision> { revision }
                         : local.OfContent(holder).Concat(catalog.RevisionsOf(holder)).Where(r => r.ContentId == holder).ToList();
                     if (declarers.Count == 0)
-                        Warn("validate.toggle-content-missing", $"Response '{rid}' supersedes '{supersedes.ResponseId}' of content {holder}, which is not installed; it is unchecked until that content is.", id);
+                        Warn("validate.response-supersedes", $"Response '{rid}' supersedes '{supersedes.ResponseId}' of content {holder}, which is not installed; it is unchecked until that content is.", id);
                     else if (!declarers.SelectMany(r => r.Effects.OfType<ResponseEffect>()).Any(r => r.ResponseId == supersedes.ResponseId))
                         Error("validate.response-supersedes", $"Response '{rid}' supersedes '{supersedes.ResponseId}', which content {holder} does not define.", id);
+                    else if (SupersedesReturnsTo(holder, supersedes.ResponseId, revision.ContentId, rid))
+                        Error("validate.response-supersedes", $"Response '{rid}' supersedes '{supersedes.ResponseId}', whose own replacements lead back to '{rid}'; responses cannot replace each other in a loop.", id);
                 }
             }
         }

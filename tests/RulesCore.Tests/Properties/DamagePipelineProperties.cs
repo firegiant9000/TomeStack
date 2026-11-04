@@ -129,19 +129,28 @@ public class DamagePipelineProperties
 
     // ---- content v12 G6 task 4 ------------------------------------------------------------------------------------------------
 
+    // The pre-G6 oracle (6b602847): the chosen, available reductions come off the amount as a flat sum, never below 0, and the rest is
+    // Resolve. Checked where no hit point outcome is chosen (a survival amends the result) and the plan has no note.
     [Property(MaxTest = 300)]
     public Property Event_without_source_or_save_plans_as_before() =>
         Prop.ForAll(ResponseCases.ToArbitrary(), c =>
         {
             var (character, sheet) = ResponseSheets[c.Sheet];
-            sheet = sheet with { HitPoints = new HitPointState(sheet.HitPoints!.Maximum, Math.Min(c.Current, sheet.HitPoints.Maximum), c.Temporary) };
+            var hp = new HitPointState(sheet.HitPoints!.Maximum, Math.Min(c.Current, sheet.HitPoints.Maximum), c.Temporary);
+            sheet = sheet with { HitPoints = hp };
             character = character with { Play = character.Play with { Concentration = c.Concentrating ? new Concentration(Fixtures.Bulwark, "Held") : null } };
-            var chosen = sheet.Responses!.Where((_, i) => (c.Mask & (1 << i)) != 0).Select(r => new ResponseChoice(r.ContentId, r.ResponseId)).ToList();
+            var picked = sheet.Responses!.Where((_, i) => (c.Mask & (1 << i)) != 0).ToList();
+            var chosen = picked.Select(r => new ResponseChoice(r.ContentId, r.ResponseId)).ToList();
             var policy = RulesFamilies.Get(RulesFamilies.Srd521);
-            var plain = DamagePipeline.Plan(new(c.Amount, c.Type), character, sheet, chosen, policy);
-            var explicitDefaults = DamagePipeline.Plan(new(c.Amount, c.Type, null, null), character, sheet, [.. chosen.Select(x => x with { Rolled = null })], policy);
-            // A v11 hit (no source, no save, no roll) halves nothing.
-            return JsonSerializer.Serialize(plain) == JsonSerializer.Serialize(explicitDefaults) && !plain.Result.Outcome.SaveHalved;
+            var plan = DamagePipeline.Plan(new(c.Amount, c.Type), character, sheet, chosen, policy);
+            if (plan.Notes.Count > 0 || picked.Any(r => r.Phase == ResponsePhase.HitPointOutcome))
+                return true;
+            var taken = picked.Where(r => r.Phase == ResponsePhase.DamageReduction && r.Available).Sum(r => r.Amount ?? 0);
+            var defences = sheet.DamageDefences?.Select(d => new DamageDefence(d.Type, d.Kind)).ToList() ?? [];
+            var legacy = DamagePipeline.Resolve(new(Math.Max(c.Amount - taken, 0), c.Type), hp, defences, c.Concentrating, policy);
+            return plan.Reduction == taken
+                && JsonSerializer.Serialize(plan.Result) == JsonSerializer.Serialize(legacy)
+                && !plan.Result.Outcome.SaveHalved;
         });
 
     [Property(MaxTest = 300)]

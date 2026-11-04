@@ -624,10 +624,10 @@ Decided in [ADR-022](../decisions/ADR-022-content-v12.md) (LIVING_SPECS D86). Si
 | --- | --- |
 | `trigger` | `{ from: attack \| fall \| save, ability?, result?, damageTypes? }`. `ability` and `result` (`success` or `failure`) go with `from: save` and only there. A save trigger matches only a save that halves on a success. |
 | `share` | `half` or `all`, damage reduction only, instead of `amount`. Half leaves `floor(d / 2)`; all leaves 0. |
-| `dice` | A dice expression such as `1d10`, damage reduction with `amount` only. The reduction is the rolled total plus `amount`. |
+| `dice` | A dice expression such as `1d10`, damage reduction with `amount` only. The reduction is the rolled total plus `amount`. It cannot total below 0 (`1d4-5` is refused). |
 | `automatic` | `true` pre-ticks the response. Damage reduction only, no cost. Only what is chosen applies. |
 | `unlessCondition` | A condition key. The response is on the sheet but unavailable while the character has the condition. |
-| `supersedes` | `{ content?, responseId }`. While this response is on the sheet, the named one is left off it. |
+| `supersedes` | `{ content?, responseId }`. While this response is available and not part of a loop, the named one is left off the sheet; an upgrade you cannot use (pool empty, form off, condition held) leaves it in place. A loop is refused by validation; one that still reaches a sheet hides nothing and shows `response.supersedes-cycle`. |
 
 **The hit.** The damage request can say how the hit came (`from`: attack, fall or save, and for a save `save`: the ability, whether it succeeded and whether it halves). It is never stored. The hit points panel asks "How did it hit?"; the play command carries `damageFrom` and `damageSave`, the preview `from` and `save`. A save without `from: save` is refused with `damage.invalid-source`.
 
@@ -641,7 +641,7 @@ Decided in [ADR-022](../decisions/ADR-022-content-v12.md) (LIVING_SPECS D86). Si
 
 **Homebrew Studio.** The response editor can author all six members.
 
-**Older versions.** For an older TomeStack ([package-format.md](package-format.md#save-for-an-older-tomestack-d85)) a response that uses `trigger`, `share`, `dice`, `unlessCondition` or `supersedes` is dropped whole and listed (`below.effect-unsupported`); `automatic` alone drops just the key (`below.v12-key`). This judgement is a proposal that awaits the owner (ADR-022 decision 6).
+**Older versions.** For an older TomeStack ([package-format.md](package-format.md#save-for-an-older-tomestack-d85)) a response that uses `trigger`, `share`, `dice`, `unlessCondition` or `supersedes` is dropped whole and listed (`below.effect-unsupported`), and so is any response of the same revision it replaced; `automatic` alone drops just the key (`below.v12-key`). This judgement is a proposal that awaits the owner (ADR-022 decision 6).
 
 **Stays by hand:** a hit-time formula variable (a name that reads the hit's damage), a redirect damage roll, and rolling the target's or your own save.
 

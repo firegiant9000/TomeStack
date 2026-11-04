@@ -161,9 +161,10 @@ public static class DamagePipeline
             return false;
         if (trigger.From == ResponseSource.Save)
         {
-            return damage.From == ResponseSource.Save && damage.Save is { Half: true } save
-                && (trigger.Ability is null || trigger.Ability == save.Ability)
-                && (trigger.Result is null || (trigger.Result == SaveResult.Success) == save.Succeeded);
+            // Fail closed: validation requires both, so a save trigger missing either (hand-edited or older data) matches nothing.
+            return trigger.Ability is { } ability && trigger.Result is { } result
+                && damage.From == ResponseSource.Save && damage.Save is { Half: true } save
+                && ability == save.Ability && (result == SaveResult.Success) == save.Succeeded;
         }
         return damage.From is null || damage.From == trigger.From;
     }
@@ -282,7 +283,7 @@ public static class DamagePipeline
         foreach (var response in reducing.Where(r => r.Share is not null))
             running = response.Share == ResponseShare.All ? 0 : running / 2;
         foreach (var response in reducing.Where(r => r.Share is null))
-            running = Math.Max(running - ((response.Amount ?? 0) + (response.Dice is null ? 0 : rolls.GetValueOrDefault((response.ContentId, response.ResponseId)) ?? 0)), 0);
+            running = Math.Max(running - Math.Max(0, (response.Amount ?? 0) + (response.Dice is null ? 0 : rolls.GetValueOrDefault((response.ContentId, response.ResponseId)) ?? 0)), 0);
         var reduction = afterSave - running;
 
         // 2 to 4. Defences, the concentration DC, temporary hit points, hit points: one implementation.

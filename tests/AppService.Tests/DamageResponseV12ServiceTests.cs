@@ -28,7 +28,7 @@ public class DamageResponseV12ServiceTests
             character = character with
             {
                 Classes = [character.Classes[0] with { Class = new ContentReference(PlusClass, PlusRevision) }],
-                Pins = [.. character.Pins.Where(p => p.ContentId != Guid.Parse("6f0dc000-0000-4000-8000-000000001201")), new(PlusClass, PlusRevision), new(CatchAny, Guid.Parse("6f0de000-0000-4000-8000-000000001206"))],
+                Pins = [new(PlusClass, PlusRevision)],
             };
         return (temp, temp.App.SaveCharacter(character).Character.Id);
     }
@@ -128,6 +128,40 @@ public class DamageResponseV12ServiceTests
 
         Assert.Equal(11, view.Damage!.Adjusted); // 20 less the roll 6 and the Dexterity modifier 3
         Assert.Equal(max - 11, view.Sheet.HitPoints!.Current);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(11)]
+    public void Dice_response_confirm_refuses_a_roll_outside_the_dice(int rolled)
+    {
+        var (temp, id) = Sidestepper();
+        using var _ = temp;
+        var stamp = View(temp, id).Character.UpdatedAt;
+        var before = Stored(temp, id);
+
+        var refused = Refused(() => temp.App.Play(new(
+            id, PlayActionKind.Damage, Confirm: true, Amount: 20, DamageType: "slashing", ExpectedUpdatedAt: stamp,
+            Responses: [new(Catch, "catch-narrow", Rolled: rolled)], DamageFrom: ResponseSource.Attack)));
+
+        Assert.Equal("damage.response-roll", refused.Code);
+        Assert.Equal(before, Stored(temp, id));
+    }
+
+    [Fact]
+    public void Confirm_refuses_a_roll_on_a_response_without_dice()
+    {
+        var (temp, id) = Sidestepper();
+        using var _ = temp;
+        var stamp = View(temp, id).Character.UpdatedAt;
+        var before = Stored(temp, id);
+
+        var refused = Refused(() => temp.App.Play(new(
+            id, PlayActionKind.Damage, Confirm: true, Amount: 20, DamageType: "slashing", ExpectedUpdatedAt: stamp,
+            Responses: [new(Turn, "turn", Rolled: 4)], DamageFrom: ResponseSource.Attack)));
+
+        Assert.Equal("damage.response-roll", refused.Code);
+        Assert.Equal(before, Stored(temp, id));
     }
 
     [Fact]

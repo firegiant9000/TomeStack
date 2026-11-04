@@ -170,6 +170,42 @@ public class DamagePipelineV12Tests
     }
 
     [Fact]
+    public void Save_trigger_missing_its_ability_or_result_matches_nothing()
+    {
+        var c = Sheet(68, R("noAbility", trigger: new(ResponseSource.Save, null, SaveResult.Success)), R("noResult", trigger: new(ResponseSource.Save, "dex", null)));
+
+        Assert.Empty(OfferedIds(Run(c, SaveHit(7, true))));
+        Assert.Empty(OfferedIds(Run(c, SaveHit(7, false))));
+    }
+
+    [Fact]
+    public void A_flat_reduction_never_adds_damage()
+    {
+        var c = Sheet(68, R("neg", amount: 2, dice: "1d6"));
+
+        // a roll that would drive the total below zero (outside the dice range, so it is a note) cannot be applied
+        var plan = Run(c, new(20, null), Pick("neg", 1));
+        Assert.Equal(3, plan.Reduction);
+
+        var negative = Sheet(68, R("odd", amount: -4));
+        Assert.Equal(20, Run(negative, new(20, null), Pick("odd")).Result.Outcome.Lost);
+    }
+
+    [Theory]
+    [InlineData(5, true)]
+    [InlineData(15, true)]
+    [InlineData(4, false)]
+    [InlineData(16, false)]
+    public void Dice_with_a_constant_accept_the_whole_range(int rolled, bool accepted)
+    {
+        var c = Sheet(68, R("dice", amount: 1, dice: "2d6+3"));
+
+        var plan = Run(c, new(30, null), Pick("dice", rolled));
+
+        Assert.Equal(accepted, plan.Notes.Count == 0);
+    }
+
+    [Fact]
     public void Rolled_on_a_non_dice_response_is_a_note()
     {
         var c = Sheet(68, R("flat", amount: 3));

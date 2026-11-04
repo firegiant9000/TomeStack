@@ -104,6 +104,75 @@ public class ResponseV12SheetTests
         Assert.Contains(all, r => r.ResponseId == "over");
     }
 
+    private const string Base = """{"type":"response","id":"a","responseId":"base","label":"Base","phase":"damageReduction","amount":"1"}""";
+
+    [Fact]
+    public void An_unavailable_superseder_leaves_its_target_on_the_sheet()
+    {
+        // the pool does not exist, so the upgrade cannot be paid for
+        var holder = Holder(1, Base + "," + """{"type":"response","id":"o","responseId":"over","label":"Over","phase":"damageReduction","amount":"2","resourceId":"nothing","cost":"1","supersedes":{"responseId":"base"}}""");
+
+        var all = Responses([holder]).Where(r => r.ContentId == holder.ContentId).ToList();
+
+        Assert.False(all.Single(r => r.ResponseId == "over").Available);
+        Assert.True(all.Single(r => r.ResponseId == "base").Available);
+    }
+
+    [Fact]
+    public void A_superseder_whose_toggle_is_off_leaves_its_target_on_the_sheet()
+    {
+        var holder = Holder(1, Base + "," + $$$"""{"type":"response","id":"o","responseId":"over","label":"Over","phase":"damageReduction","amount":"2","toggle":{"contentId":"{{{Fixtures.SurgeForm.ContentId}}}","toggleId":"surge"},"supersedes":{"responseId":"base"}}""");
+
+        var all = Responses([holder]).Where(r => r.ContentId == holder.ContentId).ToList();
+
+        Assert.False(all.Single(r => r.ResponseId == "over").Available);
+        Assert.Contains(all, r => r.ResponseId == "base");
+    }
+
+    [Fact]
+    public void An_available_superseder_hides_its_target()
+    {
+        var holder = Holder(1, Base + "," + """{"type":"response","id":"o","responseId":"over","label":"Over","phase":"damageReduction","amount":"2","supersedes":{"responseId":"base"}}""");
+
+        var all = Responses([holder]).Where(r => r.ContentId == holder.ContentId).ToList();
+
+        Assert.Equal(["over"], all.Select(r => r.ResponseId));
+    }
+
+    [Fact]
+    public void A_reference_superseder_hides_nothing()
+    {
+        var holder = Holder(1, Base + "," + """{"type":"response","id":"o","responseId":"over","label":"Over","phase":"damageReduction","amount":"2","automation":"reference","supersedes":{"responseId":"base"}}""");
+
+        var all = Responses([holder]).Where(r => r.ContentId == holder.ContentId).ToList();
+
+        Assert.Equal(["base"], all.Select(r => r.ResponseId));
+    }
+
+    private static string Link(string id, string target) =>
+        $$$"""{"type":"response","id":"{{{id}}}","responseId":"{{{id}}}","label":"{{{id}}}","phase":"damageReduction","amount":"1","supersedes":{"responseId":"{{{target}}}"}}""";
+
+    [Fact]
+    public void Two_responses_that_supersede_each_other_both_stay_with_one_diagnostic()
+    {
+        var holder = Holder(1, Link("a", "b") + "," + Link("b", "a"));
+        var (_, sheet) = DamageResponseTests.Stand(hp: 68, extra: [holder]);
+
+        Assert.Equal(["a", "b"], sheet.Responses!.Where(r => r.ContentId == holder.ContentId).Select(r => r.ResponseId).Order());
+        var diagnostic = Assert.Single(sheet.Diagnostics, d => d.Code == "response.supersedes-cycle");
+        Assert.Contains(holder.ContentId.ToString(), diagnostic.Message);
+    }
+
+    [Fact]
+    public void A_three_response_loop_keeps_all_three()
+    {
+        var holder = Holder(1, Link("a", "b") + "," + Link("b", "c") + "," + Link("c", "a"));
+        var (_, sheet) = DamageResponseTests.Stand(hp: 68, extra: [holder]);
+
+        Assert.Equal(["a", "b", "c"], sheet.Responses!.Where(r => r.ContentId == holder.ContentId).Select(r => r.ResponseId).Order());
+        Assert.Single(sheet.Diagnostics, d => d.Code == "response.supersedes-cycle");
+    }
+
     [Fact]
     public void V11_response_value_is_unchanged()
     {

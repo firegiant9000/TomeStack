@@ -1997,6 +1997,54 @@
                   "cost": false
                 }
               }
+            },
+            {
+              "if": {
+                "properties": {
+                  "phase": {
+                    "const": "damageReduction"
+                  }
+                },
+                "required": [
+                  "phase"
+                ]
+              },
+              "then": {
+                "oneOf": [
+                  {
+                    "required": [
+                      "amount"
+                    ],
+                    "not": {
+                      "required": [
+                        "share"
+                      ]
+                    }
+                  },
+                  {
+                    "required": [
+                      "share"
+                    ],
+                    "not": {
+                      "required": [
+                        "amount"
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "if": {
+                "required": [
+                  "dice"
+                ]
+              },
+              "then": {
+                "required": [
+                  "amount"
+                ]
+              }
             }
           ],
           "description": "Content v11 (D43): a reaction offered when the character takes damage (reduce it, survive at some hit points, or answer a threshold). Typed only in a v11 revision: in an older one it is an unknown effect, kept byte for byte. A reference without a content id names this revision's content."

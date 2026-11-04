@@ -148,7 +148,21 @@ public class DownConvertV12Tests
         Assert.Equal(BelowCodes.EffectUnsupported, change.Code);
         Assert.Equal(BelowAction.Dropped, change.Action);
         Assert.Equal("effects[1]", change.Path);
-        Assert.DoesNotContain(member, Written(result), StringComparison.Ordinal);
+        Assert.DoesNotContain($"\"{member}\":", Written(result), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_response_the_dropped_one_replaced_is_dropped_too()
+    {
+        const string upgrade = """{"type":"response","id":"two","responseId":"two","label":"Two","phase":"damageReduction","amount":"2","supersedes":{"responseId":"soak"}}""";
+        var unrelated = ResponseWith("").Replace("\"soak\"", "\"keep\"", StringComparison.Ordinal);
+        var result = DownConvert.Below(Rev($"{PlainResponse},{upgrade},{unrelated}"), 11);
+
+        Assert.False(result.Blocked);
+        var kept = Assert.IsType<ResponseEffect>(Assert.Single(result.Revision.Effects));
+        Assert.Equal("keep", kept.ResponseId);
+        Assert.Equal(["effects[0]", "effects[1]"], result.Changes.Select(c => c.Path).OrderBy(p => p, StringComparer.Ordinal));
+        Assert.All(result.Changes, c => { Assert.Equal(BelowCodes.EffectUnsupported, c.Code); Assert.Equal(BelowAction.Dropped, c.Action); });
     }
 
     [Fact]
