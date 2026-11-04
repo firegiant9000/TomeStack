@@ -127,6 +127,64 @@ public class DownConvertV12Tests
         Assert.All(ContentValidator.Validate(result.Revision, Fixtures.M1Catalog()).Errors, e => Assert.Equal("validate.source-missing", e.Code));
     }
 
+    private const string PlainResponse = """{"type":"response","id":"soak","responseId":"soak","label":"Soak","phase":"damageReduction","amount":"1"}""";
+
+    private static string ResponseWith(string extra) =>
+        $$"""{"type":"response","id":"soak","responseId":"soak","label":"Soak","phase":"damageReduction","amount":"1"{{extra}}}""";
+
+    [Theory]
+    [InlineData("trigger", ",\"trigger\":{\"source\":\"attack\"}")]
+    [InlineData("share", ",\"share\":\"ally\"")]
+    [InlineData("dice", ",\"dice\":\"1d6\"")]
+    [InlineData("unlessCondition", ",\"unlessCondition\":\"alpha\"")]
+    [InlineData("supersedes", ",\"supersedes\":\"other\"")]
+    public void Response_with_member_is_dropped_below_12(string member, string extra)
+    {
+        var result = DownConvert.Below(Rev($"{PlainResponse},{ResponseWith(extra).Replace("\"soak\"", "\"two\"", StringComparison.Ordinal)}"), 11);
+
+        Assert.False(result.Blocked);
+        Assert.Single(result.Revision.Effects);
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(BelowCodes.EffectUnsupported, change.Code);
+        Assert.Equal(BelowAction.Dropped, change.Action);
+        Assert.Equal("effects[1]", change.Path);
+        Assert.DoesNotContain(member, Written(result), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Automatic_alone_drops_only_the_key_below_12()
+    {
+        var result = DownConvert.Below(Rev(ResponseWith(""","automatic":true""")), 11);
+
+        Assert.False(result.Blocked);
+        Assert.IsType<ResponseEffect>(Assert.Single(result.Revision.Effects));
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(BelowCodes.V12Key, change.Code);
+        Assert.Equal(BelowAction.Dropped, change.Action);
+        Assert.Equal("effects[0].automatic", change.Path);
+        Assert.DoesNotContain("\"automatic\":true", Written(result), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Removing_a_response_after_an_earlier_removal_reports_the_original_index()
+    {
+        var mod = """{"type":"itemMod","id":"m","appliesTo":"weapon","bonus":1}""";
+        var result = DownConvert.Below(Item($"{mod},{ResponseWith(",\"share\":\"ally\"")}"), 11);
+
+        Assert.Equal(["effects[0]", "effects[1]"], result.Changes.Select(c => c.Path).OrderBy(p => p, StringComparer.Ordinal));
+        Assert.Empty(result.Revision.Effects);
+    }
+
+    [Fact]
+    public void Lowered_copy_validates_at_11()
+    {
+        var result = DownConvert.Below(Rev($"{ResponseWith(""","dice":"1d6","automatic":true""")}"), 11);
+
+        Assert.Equal(11, result.Revision.SchemaVersion);
+        Assert.DoesNotContain(BelowCodes.ValidationError, result.Changes.Select(c => c.Code));
+        Assert.All(ContentValidator.Validate(result.Revision, Fixtures.M1Catalog()).Errors, e => Assert.Equal("validate.source-missing", e.Code));
+    }
+
     [Fact]
     public void A_v12_revision_with_no_v12_feature_lowers_silently()
     {

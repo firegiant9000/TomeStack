@@ -72,7 +72,13 @@
       { "feature": "roll.castsSpell", "rule": "below.casts-spell" },
       { "feature": "roll.payment.kind:resource", "rule": "below.v12-key" },
       { "feature": "attack.payment.kind:resource", "rule": "below.v12-key" },
-      { "feature": "toggle.payment.kind:resource", "rule": "below.v12-key" }
+      { "feature": "toggle.payment.kind:resource", "rule": "below.v12-key" },
+      { "feature": "response.trigger", "rule": "below.effect-unsupported" },
+      { "feature": "response.share", "rule": "below.effect-unsupported" },
+      { "feature": "response.dice", "rule": "below.effect-unsupported" },
+      { "feature": "response.unlessCondition", "rule": "below.effect-unsupported" },
+      { "feature": "response.supersedes", "rule": "below.effect-unsupported" },
+      { "feature": "response.automatic", "rule": "below.v12-key" }
     ]
   },
   "character": {

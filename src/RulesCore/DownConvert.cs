@@ -518,6 +518,15 @@ public static class DownConvert
                     case CompanionEffect.TypeName:
                         changes.Add(new(path, BelowAction.Dropped, BelowCodes.EffectUnsupported, $"'{name}': a companion card; its attacks and pools remain as the character's own."));
                         continue;
+                    case ResponseEffect.TypeName:
+                        // Only "automatic" is harmless to lose; the rest would make an older build offer a wider, stronger response.
+                        if (ResponseEffect.V12Keys.Any(k => k != "automatic" && effect.Any(p => string.Equals(p.Key, k, StringComparison.OrdinalIgnoreCase))))
+                        {
+                            changes.Add(new(path, BelowAction.Dropped, BelowCodes.EffectUnsupported, $"'{name}': a response with a trigger, share, dice, condition or replacement, which the older version would offer without them."));
+                            continue;
+                        }
+                        RemoveKey(effect, "automatic", path, BelowAction.Dropped, BelowCodes.V12Key, $"'{name}': that the response applies itself.", changes);
+                        break;
                     case WeaponEffect.TypeName:
                         RemoveKey(effect, "bonus", path, BelowAction.Dropped, BelowCodes.WeaponBonus, $"'{name}': the weapon's bonus to hit and damage.", changes);
                         break;
