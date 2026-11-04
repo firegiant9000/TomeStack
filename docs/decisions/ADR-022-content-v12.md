@@ -22,7 +22,7 @@ The first gap (G6) is in the damage panel. A `response` effect (v11, ADR-018 and
    - `share`: `half` or `all`, damage reduction only, instead of `amount`. Half leaves `floor(d / 2)`; all leaves 0.
    - `dice`: a dice expression such as `1d10`, damage reduction with `amount` only. The reduction is the player's rolled total plus `amount`.
    - `automatic`: `true` pre-ticks the response in the damage panel. Damage reduction only, no cost. The engine still applies only what the player chose.
-   - `unlessCondition`: a condition key. The response is on the sheet but not available while the character has that condition.
+   - `unlessCondition`: a condition key. The response is on the sheet but not available while the character has that condition. A condition that includes incapacitated (paralyzed, petrified, stunned, unconscious) counts as incapacitated.
    - `supersedes`: `{ content?, responseId }`. While this response is available (its cost, pool, toggle, formulas and `unlessCondition` all allow it) and the link is not part of a loop, the named one is left off the sheet; an upgrade the character cannot use leaves what it replaces in place. Validation refuses a loop (`validate.response-supersedes`, including one through installed content). A loop that still reaches a sheet (older catalog, content installed later) is ignored: every response in it stays, with the sheet diagnostic `response.supersedes-cycle`.
    - `dice` must not be able to total below 0 (`1d4-5`, `-1d6`): `validate.response-dice`. The engine also never lets one response add damage.
 2. **The hit is described on the request only, and never stored.** `DamageEvent` gains `From` (attack, fall or save, or unknown) and `Save` (`DamageSave`: the ability, whether it succeeded, whether it halves). `Save` is allowed only with `From == Save`. The service refuses an inconsistent pair with `damage.invalid-source`. Nothing about the hit is written to the character.
@@ -88,7 +88,7 @@ The second gap is in the roll modes of D43 (`rollMode`, v11). A v11 `rollMode` r
 2. **Four optional members on `rollMode`, all v12** (`RollModeEffect.V12Keys`: `tags`, `ability`, `unlessCondition`, `prevent`).
    - `tags`: required with, and only allowed with, target `attack`; non-empty, each tag listed once. It matches as attack riders match: `all`, or any tag in the attack's tag list.
    - `ability`: target `attack` only. The attack must use that ability.
-   - `unlessCondition`: any target, a condition key. While the character has the condition, the effect is left out (not listed, like a toggle that is off).
+   - `unlessCondition`: any target, a condition key. While the character has the condition, the effect is left out (not listed, like a toggle that is off). A condition that includes incapacitated (paralyzed, petrified, stunned, unconscious) counts as incapacitated.
    - `prevent`: target `attacksAgainst` only. `true`: attacks against the character can't have `mode`, and the sources of that mode are ignored. `false` is allowed and still needs v12.
    - `against` (v11) stays allowed with `attack` and is refused with `initiative` and `attacksAgainst` (`validate.roll-mode-against`).
 3. **Attack tags.** A weapon attack carries `weapon` and `melee` or `ranged`; a feature attack carries its own tags plus `melee` or `ranged`; a spell attack roll carries `spell` and `melee` or `ranged`. Companion attacks and custom rolls get no automatic mode: they are not the character's own rolls.

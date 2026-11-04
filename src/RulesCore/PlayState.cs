@@ -259,4 +259,14 @@ public static class ConditionKeys
         "blinded", "charmed", "deafened", "frightened", "grappled", "incapacitated", "invisible", "paralyzed",
         "petrified", "poisoned", "prone", "restrained", "stunned", "unconscious",
     ];
+
+    private static readonly string[] IncludingIncapacitated = ["paralyzed", "petrified", "stunned", "unconscious"];
+
+    /// <summary>True when <paramref name="key"/> is held. Incapacitated is also held by a condition that includes it
+    /// (paralyzed, petrified, stunned, unconscious); the stored play state never gains the implied condition.</summary>
+    public static bool Holds(IEnumerable<string> held, string key)
+    {
+        var list = held as ICollection<string> ?? held.ToList();
+        return list.Contains(key) || (key == "incapacitated" && IncludingIncapacitated.Any(list.Contains));
+    }
 }

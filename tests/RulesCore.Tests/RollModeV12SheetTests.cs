@@ -195,6 +195,22 @@ public class RollModeV12SheetTests
         Assert.Equal(["Fixture Reckless"], down.Reasons.Select(r => r.Source));
     }
 
+    [Theory]
+    [InlineData("paralyzed")]
+    [InlineData("petrified")]
+    [InlineData("stunned")]
+    [InlineData("unconscious")]
+    public void Unconscious_counts_as_incapacitated_for_unless(string condition)
+    {
+        var stance = Feature("Fixture Reckless", 11, Stance(), Mode("in", "attacksAgainst", toggle: "stance"));
+        var ward = Feature("Fixture Ward", 12, Mode("ward", "attacksAgainst", prevent: true, unless: "incapacitated"));
+
+        var down = Sheet(WithCondition(StanceOn(stance), condition), stance, ward).AttacksAgainst!;
+
+        Assert.Equal(RollMode.Advantage, down.Automatic);
+        Assert.Equal(["Fixture Reckless"], down.Reasons.Select(r => r.Source));
+    }
+
     [Fact]
     public void V11_sheet_is_unchanged()
     {

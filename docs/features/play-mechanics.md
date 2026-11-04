@@ -626,7 +626,7 @@ Decided in [ADR-022](../decisions/ADR-022-content-v12.md) (LIVING_SPECS D86). Si
 | `share` | `half` or `all`, damage reduction only, instead of `amount`. Half leaves `floor(d / 2)`; all leaves 0. |
 | `dice` | A dice expression such as `1d10`, damage reduction with `amount` only. The reduction is the rolled total plus `amount`. It cannot total below 0 (`1d4-5` is refused). |
 | `automatic` | `true` pre-ticks the response. Damage reduction only, no cost. Only what is chosen applies. |
-| `unlessCondition` | A condition key. The response is on the sheet but unavailable while the character has the condition. |
+| `unlessCondition` | A condition key. The response is on the sheet but unavailable while the character has the condition. A condition that includes incapacitated (paralyzed, petrified, stunned, unconscious) counts as incapacitated. |
 | `supersedes` | `{ content?, responseId }`. While this response is available and not part of a loop, the named one is left off the sheet; an upgrade you cannot use (pool empty, form off, condition held) leaves it in place. A loop is refused by validation; one that still reaches a sheet hides nothing and shows `response.supersedes-cycle`. |
 
 **The hit.** The damage request can say how the hit came (`from`: attack, fall or save, and for a save `save`: the ability, whether it succeeded and whether it halves). It is never stored. The hit points panel asks "How did it hit?"; the play command carries `damageFrom` and `damageSave`, the preview `from` and `save`. A save without `from: save` is refused with `damage.invalid-source`.
@@ -659,7 +659,7 @@ Decided in [ADR-022](../decisions/ADR-022-content-v12.md#slice-g7-roll-modes-on-
 | --- | --- |
 | `tags` | Target `attack` only, and required with it: a non-empty list of distinct tags. Matches as attack riders match: `all`, or any tag in the attack's tag list. A weapon attack has `weapon` and `melee` or `ranged`; a feature attack its own tags plus `melee` or `ranged`; a spell attack roll `spell` and `melee` or `ranged`. |
 | `ability` | Target `attack` only: the attack must use that ability. A finesse weapon used with the other ability does not get the mode. |
-| `unlessCondition` | Any target, a condition key. While the character has the condition the effect is left out, as a toggle that is off. |
+| `unlessCondition` | Any target, a condition key. While the character has the condition the effect is left out, as a toggle that is off. A condition that includes incapacitated (paralyzed, petrified, stunned, unconscious) counts as incapacitated. |
 | `prevent` | Target `attacksAgainst` only. `true`: attacks against the character can't have `mode`, and the sources of that mode are ignored. `false` is allowed and still needs v12. |
 
 `against` (v11) stays allowed with `attack` and is refused with `initiative` and `attacksAgainst`.
