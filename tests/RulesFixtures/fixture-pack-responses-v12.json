@@ -1,0 +1,144 @@
+{
+  "packId": "tomestack-responses-v12-fixtures",
+  "formatVersion": 1,
+  "notice": "Original TomeStack test fixtures (content v12 G6: how the hit came, shares, dice, supersession). Invented; no SRD or third-party rules text.",
+  "sources": [
+    {
+      "id": "6f0d5000-0000-4000-8000-000000001201",
+      "title": "TomeStack Fixtures: Responses v12",
+      "publisher": "TomeStack project",
+      "rulesFamilies": ["srd-5.2.1"],
+      "editionVersion": "fixture-1",
+      "license": "Original test fixture",
+      "redistributable": true,
+      "attribution": "Written for TomeStack tests."
+    }
+  ],
+  "revisions": [
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000001201",
+      "revisionId": "6f0de000-0000-4000-8000-000000001201",
+      "schemaVersion": 12,
+      "kind": "class",
+      "name": "Fixture Sidestepper",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000001201", "page": { "start": 1 } },
+      "status": "published",
+      "summary": "A test class with a d10 hit die and five granted features at level 1, each with a damage response.",
+      "effects": [
+        { "type": "hitDie", "id": "sidestepper-hit-die", "die": 10 },
+        { "type": "grant", "id": "grant-duck", "grant": "content", "level": 1, "content": { "contentId": "6f0dc000-0000-4000-8000-000000001202", "revisionId": "6f0de000-0000-4000-8000-000000001202" } },
+        { "type": "grant", "id": "grant-turn", "grant": "content", "level": 1, "content": { "contentId": "6f0dc000-0000-4000-8000-000000001203", "revisionId": "6f0de000-0000-4000-8000-000000001203" } },
+        { "type": "grant", "id": "grant-landing", "grant": "content", "level": 1, "content": { "contentId": "6f0dc000-0000-4000-8000-000000001204", "revisionId": "6f0de000-0000-4000-8000-000000001204" } },
+        { "type": "grant", "id": "grant-catch", "grant": "content", "level": 1, "content": { "contentId": "6f0dc000-0000-4000-8000-000000001205", "revisionId": "6f0de000-0000-4000-8000-000000001205" } }
+      ]
+    },
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000001207",
+      "revisionId": "6f0de000-0000-4000-8000-000000001207",
+      "schemaVersion": 12,
+      "kind": "class",
+      "name": "Fixture Sidestepper Plus",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000001201", "page": { "start": 2 } },
+      "status": "published",
+      "summary": "The same test class, which also grants the catch-anything feature that supersedes the narrow catch response.",
+      "effects": [
+        { "type": "hitDie", "id": "plus-hit-die", "die": 10 },
+        { "type": "grant", "id": "grant-duck", "grant": "content", "level": 1, "content": { "contentId": "6f0dc000-0000-4000-8000-000000001202", "revisionId": "6f0de000-0000-4000-8000-000000001202" } },
+        { "type": "grant", "id": "grant-turn", "grant": "content", "level": 1, "content": { "contentId": "6f0dc000-0000-4000-8000-000000001203", "revisionId": "6f0de000-0000-4000-8000-000000001203" } },
+        { "type": "grant", "id": "grant-landing", "grant": "content", "level": 1, "content": { "contentId": "6f0dc000-0000-4000-8000-000000001204", "revisionId": "6f0de000-0000-4000-8000-000000001204" } },
+        { "type": "grant", "id": "grant-catch", "grant": "content", "level": 1, "content": { "contentId": "6f0dc000-0000-4000-8000-000000001205", "revisionId": "6f0de000-0000-4000-8000-000000001205" } },
+        { "type": "grant", "id": "grant-catch-any", "grant": "content", "level": 1, "content": { "contentId": "6f0dc000-0000-4000-8000-000000001206", "revisionId": "6f0de000-0000-4000-8000-000000001206" } }
+      ]
+    },
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000001202",
+      "revisionId": "6f0de000-0000-4000-8000-000000001202",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Fixture: Duck and Weave",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000001201", "page": { "start": 3 } },
+      "status": "published",
+      "summary": "A test response: a Dexterity save that halves a hit takes it all on a success and half on a failure; not while incapacitated.",
+      "effects": [
+        {
+          "type": "response", "id": "duck-success", "responseId": "duck-success", "label": "Duck", "phase": "damageReduction",
+          "trigger": { "from": "save", "ability": "dex", "result": "success" },
+          "share": "all", "automatic": true, "unlessCondition": "incapacitated"
+        },
+        {
+          "type": "response", "id": "duck-failure", "responseId": "duck-failure", "label": "Weave", "phase": "damageReduction",
+          "trigger": { "from": "save", "ability": "dex", "result": "failure" },
+          "share": "half", "unlessCondition": "incapacitated"
+        }
+      ]
+    },
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000001203",
+      "revisionId": "6f0de000-0000-4000-8000-000000001203",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Fixture: Turn the Blow",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000001201", "page": { "start": 4 } },
+      "status": "published",
+      "summary": "A test response: halve a hit that came from an attack.",
+      "effects": [
+        { "type": "response", "id": "turn", "responseId": "turn", "label": "Turn the blow", "phase": "damageReduction", "trigger": { "from": "attack" }, "share": "half" }
+      ]
+    },
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000001204",
+      "revisionId": "6f0de000-0000-4000-8000-000000001204",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Fixture: Soft Landing",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000001201", "page": { "start": 5 } },
+      "status": "published",
+      "summary": "A test response: a fall hurts 5 points less for each character level.",
+      "effects": [
+        { "type": "response", "id": "landing", "responseId": "landing", "label": "Soft landing", "phase": "damageReduction", "trigger": { "from": "fall" }, "amount": "5 * LEVEL" }
+      ]
+    },
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000001205",
+      "revisionId": "6f0de000-0000-4000-8000-000000001205",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Fixture: Catch and Return",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000001201", "page": { "start": 6 } },
+      "status": "published",
+      "summary": "A test response: an attack that deals bludgeoning, piercing or slashing damage is reduced by a d10 (rolled by the player) plus the Dexterity modifier.",
+      "effects": [
+        {
+          "type": "response", "id": "catch-narrow", "responseId": "catch-narrow", "label": "Catch", "phase": "damageReduction",
+          "trigger": { "from": "attack", "damageTypes": ["bludgeoning", "piercing", "slashing"] },
+          "dice": "1d10", "amount": "DEX.MOD"
+        }
+      ]
+    },
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000001206",
+      "revisionId": "6f0de000-0000-4000-8000-000000001206",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Fixture: Catch Anything",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000001201", "page": { "start": 7 } },
+      "status": "published",
+      "summary": "A test response: the catch response for an attack of any damage type; it replaces the narrow one.",
+      "effects": [
+        {
+          "type": "response", "id": "catch-any", "responseId": "catch-any", "label": "Catch anything", "phase": "damageReduction",
+          "trigger": { "from": "attack" },
+          "dice": "1d10", "amount": "DEX.MOD",
+          "supersedes": { "content": "6f0dc000-0000-4000-8000-000000001205", "responseId": "catch-narrow" }
+        }
+      ]
+    }
+  ]
+}
