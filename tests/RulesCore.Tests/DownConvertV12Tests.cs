@@ -199,6 +199,95 @@ public class DownConvertV12Tests
         Assert.All(ContentValidator.Validate(result.Revision, Fixtures.M1Catalog()).Errors, e => Assert.Equal("validate.source-missing", e.Code));
     }
 
+    private static string Mode(string target, string mode, string extra = "") =>
+        $$"""{"type":"rollMode","id":"m","target":"{{target}}","mode":"{{mode}}"{{extra}}}""";
+
+    private static void AssertDroppedWhole(ContentBelow result, string code = "below.effect-unsupported")
+    {
+        Assert.False(result.Blocked);
+        Assert.Empty(result.Revision.Effects);
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(code, change.Code);
+        Assert.Equal(BelowAction.Dropped, change.Action);
+        Assert.Equal("effects[0]", change.Path);
+    }
+
+    private static void AssertBlocked(ContentBelow result)
+    {
+        Assert.True(result.Blocked);
+        // A kept v12 target also fails the lowered copy's own validation (below.validation-error); the rule's change is the one that matters.
+        var change = Assert.Single(result.Changes, c => c.Code == BelowCodes.RollModeDisadvantage);
+        Assert.Equal(BelowAction.Blocks, change.Action);
+        Assert.Equal("effects[0]", change.Path);
+    }
+
+    [Fact]
+    public void Helping_attack_mode_is_dropped_below_12() =>
+        AssertDroppedWhole(DownConvert.Below(Rev(Mode("attack", "advantage", ",\"tags\":[\"all\"]")), 11));
+
+    [Fact]
+    public void Hindering_attack_mode_blocks_below_12() =>
+        AssertBlocked(DownConvert.Below(Rev(Mode("attack", "disadvantage", ",\"tags\":[\"all\"]")), 11));
+
+    [Fact]
+    public void Initiative_advantage_is_dropped_below_12() =>
+        AssertDroppedWhole(DownConvert.Below(Rev(Mode("initiative", "advantage")), 11));
+
+    [Fact]
+    public void Advantage_against_you_blocks_below_12() =>
+        AssertBlocked(DownConvert.Below(Rev(Mode("attacksAgainst", "advantage")), 11));
+
+    [Fact]
+    public void Prevent_against_you_is_dropped_below_12() =>
+        AssertDroppedWhole(DownConvert.Below(Rev(Mode("attacksAgainst", "advantage", ",\"prevent\":true")), 11));
+
+    [Fact]
+    public void Disadvantage_against_you_is_dropped_below_12() =>
+        AssertDroppedWhole(DownConvert.Below(Rev(Mode("attacksAgainst", "disadvantage")), 11));
+
+    [Fact]
+    public void Save_advantage_with_unlessCondition_is_dropped_whole_below_12() =>
+        AssertDroppedWhole(DownConvert.Below(Rev(Mode("save.wis", "advantage", ",\"unlessCondition\":\"alpha\"")), 11));
+
+    [Fact]
+    public void Save_disadvantage_with_unlessCondition_blocks_below_12() =>
+        AssertBlocked(DownConvert.Below(Rev(Mode("save.wis", "disadvantage", ",\"unlessCondition\":\"alpha\"")), 11));
+
+    [Fact]
+    public void Prevent_false_alone_drops_only_the_key()
+    {
+        var result = DownConvert.Below(Rev(Mode("save.wis", "advantage", ",\"prevent\":false")), 11);
+
+        Assert.False(result.Blocked);
+        Assert.IsType<RollModeEffect>(Assert.Single(result.Revision.Effects));
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(BelowCodes.V12Key, change.Code);
+        Assert.Equal(BelowAction.Dropped, change.Action);
+        Assert.Equal("effects[0].prevent", change.Path);
+        Assert.DoesNotContain("\"prevent\"", Written(result), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_plain_v11_rollMode_is_untouched_at_this_rung()
+    {
+        var result = DownConvert.Below(Rev(Mode("save.wis", "disadvantage")), 11);
+
+        Assert.Empty(result.Changes);
+        Assert.IsType<RollModeEffect>(Assert.Single(result.Revision.Effects));
+    }
+
+    [Fact]
+    public void Lowered_roll_mode_copy_validates_at_11()
+    {
+        var kept = Mode("save.dex", "advantage").Replace("\"m\"", "\"keep\"", StringComparison.Ordinal);
+        var result = DownConvert.Below(Rev($"{Mode("attack", "advantage", ",\"tags\":[\"all\"]")},{kept}"), 11);
+
+        Assert.Equal(11, result.Revision.SchemaVersion);
+        Assert.DoesNotContain(BelowCodes.ValidationError, result.Changes.Select(c => c.Code));
+        Assert.Single(result.Revision.Effects);
+        Assert.All(ContentValidator.Validate(result.Revision, Fixtures.M1Catalog()).Errors, e => Assert.Equal("validate.source-missing", e.Code));
+    }
+
     [Fact]
     public void A_v12_revision_with_no_v12_feature_lowers_silently()
     {
