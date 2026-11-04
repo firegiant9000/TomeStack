@@ -360,10 +360,22 @@ it('shows only the prevent part when the automatic mode is normal', () => {
   expect(dd('Attacks against you')).toBe("can't have advantage (Fixture Steady Ward)");
 });
 
-it('hides the attacks-against line when it holds only non-automatic prevent reasons', () => {
+it('shows the cancel when automatic advantage and disadvantage against you cancel', () => {
+  const mode = { automatic: 'normal' as const, reasons: [reason('advantage', 'Fixture Open Guard'), reason('disadvantage', 'Fixture Blur')] };
+  render(<SheetSummary view={against(mode)} {...plain} />);
+  expect(dd('Attacks against you')).toBe('normal (advantage and disadvantage cancel: Fixture Open Guard, Fixture Blur)');
+});
+
+it('shows an assisted reason against you with its note (it used to hide the line)', () => {
+  const mode = { automatic: 'normal' as const, reasons: [{ ...reason('advantage', 'Fixture Open Guard'), automatic: false }] };
+  render(<SheetSummary view={against(mode)} {...plain} />);
+  expect(dd('Attacks against you')).toBe('advantage (Fixture Open Guard), not applied automatically');
+});
+
+it('shows an assisted prevent reason against you with its note', () => {
   const mode = { automatic: 'normal' as const, reasons: [{ ...reason('advantage', 'Fixture Steady Ward'), automatic: false, prevent: true }] };
   render(<SheetSummary view={against(mode)} {...plain} />);
-  expect(screen.queryByText('Attacks against you')).toBeNull();
+  expect(dd('Attacks against you')).toBe("can't have advantage (Fixture Steady Ward), not applied automatically");
 });
 
 it('no attacks-against line without reasons', () => {

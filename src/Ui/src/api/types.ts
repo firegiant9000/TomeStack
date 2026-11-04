@@ -276,6 +276,13 @@ export interface RollModeSummary {
   reasons: RollModeReason[];
 }
 
+/** Content v12 (G7): one attack-mode effect in play, with the tags (and ability) it matches. */
+export interface AttackModeValue {
+  reason: RollModeReason;
+  tags: string[];
+  ability?: Ability;
+}
+
 export type RestPeriod = 'shortRest' | 'longRest';
 
 export interface RecoveryInfo {
@@ -607,7 +614,7 @@ export interface CharacterSheet {
   pactSlots?: SlotValue;
   attacks?: AttackEntry[];
   /** Content v12 (G7): the attack-mode effects in play, with the tags (and ability) each matches; absent when none. */
-  attackModes?: { reason: RollModeReason; tags: string[]; ability?: Ability }[];
+  attackModes?: AttackModeValue[];
   /** Content v12 (G7): how attacks against the character roll (`automatic` already applies a prevent); absent when no reason. */
   attacksAgainst?: RollModeSummary;
   toggles?: ToggleValue[];
