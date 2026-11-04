@@ -326,6 +326,8 @@ public static class ContentValidator
                 // silently not exist. Published at a lower version it would be an unsupported effect, so it blocks.
                 case UnknownEffect { DeclaredType: ResponseEffect.TypeName } unknownResponse when revision.SchemaVersion >= ResponseEffect.SchemaVersion:
                     needsV11 = true;
+                    if (revision.SchemaVersion >= ContentRevision.ResponseTriggerSchemaVersion && CarriesV11Key(unknownResponse, ResponseEffect.V12Keys))
+                        NeedV12("a response trigger");
                     Error("validate.effect-malformed", $"Effect '{unknownResponse.Id}' has type '{unknownResponse.DeclaredType}' but a value or field that does not read (it needs a responseId, a label and a phase of damageReduction, hitPointOutcome or threshold; each outcome needs a kind of spend, regain, toggleOn, offerRoll, regainHitPoints or temporaryHitPoints; a content is an id); fix it before publishing.", unknownResponse.Id);
                     break;
                 // Content v12 (MECH-X item 0): from v12 a weapon that carries a bonus key is read with it; one that stays unknown did
@@ -1089,6 +1091,79 @@ public static class ContentValidator
                 Error(errorCode, $"Effect '{effectId}' follows toggle '{toggleId}', which content {holder} does not define.", effectId);
         }
 
+        // Content v12 (G6): a response's trigger, share, dice, automatic, unlessCondition and supersedes. Each present member needs v12.
+        void CheckResponseV12Members(ResponseEffect response)
+        {
+            var id = response.Id;
+            var rid = response.ResponseId;
+            var reduction = response.Phase == ResponsePhase.DamageReduction;
+            if (response.Trigger is { } trigger)
+            {
+                NeedV12("a response trigger");
+                var isSave = trigger.From == ResponseSource.Save;
+                if (isSave ? trigger.Ability is null || trigger.Result is null : trigger.Ability is not null || trigger.Result is not null)
+                    Error("validate.response-trigger", $"Response '{rid}' trigger: an ability and a result go with a from of save, and only with it.", id);
+                if (trigger.Ability is { } ability && !Enum.GetNames<Ability>().Any(n => string.Equals(n.ToLowerInvariant(), ability, StringComparison.Ordinal)))
+                    Error("validate.response-trigger", $"Response '{rid}' trigger names the ability '{ability}', which is not one of {string.Join(", ", Enum.GetNames<Ability>().Select(n => n.ToLowerInvariant()))}.", id);
+                if (trigger.DamageTypes is { } types)
+                {
+                    if (types.Count == 0)
+                        Error("validate.response-trigger", $"Response '{rid}' trigger has an empty damageTypes list; leave it out to take any damage type.", id);
+                    if (types.Distinct(StringComparer.Ordinal).Count() != types.Count)
+                        Error("validate.response-trigger", $"Response '{rid}' trigger lists a damage type more than once.", id);
+                    foreach (var type in types.Where(t => !DamageTypes.All.Contains(t)).Distinct(StringComparer.Ordinal))
+                        Error("validate.response-trigger", $"Response '{rid}' trigger has the damage type '{type}'; use one of {string.Join(", ", DamageTypes.All)}.", id);
+                }
+            }
+            if (response.Share is not null)
+            {
+                NeedV12("a response share");
+                if (!reduction)
+                    Error("validate.response-share", $"Response '{rid}' has a share, which only a damage reduction takes.", id);
+            }
+            if (response.Dice is { } dice)
+            {
+                NeedV12("response dice");
+                if (!reduction || string.IsNullOrWhiteSpace(response.Amount))
+                    Error("validate.response-dice", $"Response '{rid}' has dice, which only a damage reduction with an amount takes.", id);
+                if (!DiceExpression.TryParse(dice, out _, out var diceError))
+                    Error("validate.response-dice", $"Response '{rid}' dice do not read: {diceError}", id);
+            }
+            if (response.Automatic is { } automatic)
+            {
+                NeedV12("an automatic response");
+                if (automatic && !reduction)
+                    Error("validate.response-automatic", $"Response '{rid}' is automatic, which only a damage reduction can be.", id);
+                if (automatic && (!string.IsNullOrWhiteSpace(response.ResourceId) || response.Cost is not null))
+                    Error("validate.response-automatic", $"Response '{rid}' is automatic and so cannot spend a pool; leave out its resourceId and cost.", id);
+            }
+            if (response.UnlessCondition is { } condition)
+            {
+                NeedV12("a response unlessCondition");
+                if (!ConditionKeys.All.Contains(condition))
+                    Error("validate.response-condition", $"Response '{rid}' unlessCondition '{condition}' is not a condition key ({string.Join(", ", ConditionKeys.All)}).", id);
+            }
+            if (response.Supersedes is { } supersedes)
+            {
+                NeedV12("a superseding response");
+                var holder = supersedes.Content ?? revision.ContentId;
+                if (string.IsNullOrWhiteSpace(supersedes.ResponseId))
+                    Error("validate.response-supersedes", $"Response '{rid}' supersedes a response but names no responseId.", id);
+                else if (holder == revision.ContentId && supersedes.ResponseId == rid)
+                    Error("validate.response-supersedes", $"Response '{rid}' supersedes itself.", id);
+                else
+                {
+                    var declarers = holder == revision.ContentId
+                        ? new List<ContentRevision> { revision }
+                        : local.OfContent(holder).Concat(catalog.RevisionsOf(holder)).Where(r => r.ContentId == holder).ToList();
+                    if (declarers.Count == 0)
+                        Warn("validate.toggle-content-missing", $"Response '{rid}' supersedes '{supersedes.ResponseId}' of content {holder}, which is not installed; it is unchecked until that content is.", id);
+                    else if (!declarers.SelectMany(r => r.Effects.OfType<ResponseEffect>()).Any(r => r.ResponseId == supersedes.ResponseId))
+                        Error("validate.response-supersedes", $"Response '{rid}' supersedes '{supersedes.ResponseId}', which content {holder} does not define.", id);
+                }
+            }
+        }
+
         // Content v11 (D43): a damage-time response. Messages name ids and counts, never the label. A reference with no content
         // names this revision's; a pool or roll in content that is not installed is an error (unlike a toggle, which warns).
         void CheckResponse(ResponseEffect response)
@@ -1123,13 +1198,22 @@ public static class ContentValidator
             }
             else
             {
-                if (string.IsNullOrWhiteSpace(response.Amount))
+                var hasAmount = !string.IsNullOrWhiteSpace(response.Amount);
+                if (response.Phase == ResponsePhase.DamageReduction)
+                {
+                    // Content v12 (G6): a damage reduction takes off an amount or a share of the damage, exactly one of them.
+                    if (hasAmount == (response.Share is not null))
+                        Error("validate.response-amount", $"Response '{rid}' (damagereduction) needs exactly one of an amount and a share.", id);
+                }
+                else if (!hasAmount)
                     Error("validate.response-amount", $"Response '{rid}' ({response.Phase.ToString().ToLowerInvariant()}) needs an amount.", id);
-                else
-                    CheckFormula(response.Amount, id, "amount");
+                if (hasAmount)
+                    CheckFormula(response.Amount!, id, "amount");
                 if (response.When is not null)
                     Error("validate.response-when", $"Response '{rid}' has a when, which only a threshold response takes.", id);
             }
+
+            CheckResponseV12Members(response);
 
             if (response.Toggle is { } toggle)
                 CheckToggleReference(toggle.ContentId, toggle.ToggleId, id, "validate.while-toggle-unknown");

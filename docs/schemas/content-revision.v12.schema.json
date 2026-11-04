@@ -1755,6 +1755,133 @@
                 }
               }
             },
+            "trigger": {
+              "type": "object",
+              "required": [
+                "from"
+              ],
+              "properties": {
+                "from": {
+                  "enum": [
+                    "attack",
+                    "fall",
+                    "save"
+                  ]
+                },
+                "ability": {
+                  "enum": [
+                    "str",
+                    "dex",
+                    "con",
+                    "int",
+                    "wis",
+                    "cha"
+                  ]
+                },
+                "result": {
+                  "enum": [
+                    "success",
+                    "failure"
+                  ]
+                },
+                "damageTypes": {
+                  "type": "array",
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "items": {
+                    "enum": [
+                      "acid",
+                      "bludgeoning",
+                      "cold",
+                      "fire",
+                      "force",
+                      "lightning",
+                      "necrotic",
+                      "piercing",
+                      "poison",
+                      "psychic",
+                      "radiant",
+                      "slashing",
+                      "thunder"
+                    ]
+                  }
+                }
+              },
+              "if": {
+                "properties": {
+                  "from": {
+                    "const": "save"
+                  }
+                },
+                "required": [
+                  "from"
+                ]
+              },
+              "then": {
+                "required": [
+                  "ability",
+                  "result"
+                ]
+              },
+              "else": {
+                "properties": {
+                  "ability": false,
+                  "result": false
+                }
+              },
+              "description": "Content v12 (G6): when the response is offered beyond the damage event: what the damage came from; for a save, which ability and which result (both, and only then); optionally the damage types. Absent: any damage event."
+            },
+            "share": {
+              "enum": [
+                "half",
+                "all"
+              ],
+              "description": "Content v12 (G6): how much of the damage a damage reduction takes off. A damage reduction has exactly one of amount and share (validate.response-amount)."
+            },
+            "dice": {
+              "type": "string",
+              "maxLength": 40,
+              "description": "Content v12 (G6): a dice expression a damage reduction with an amount rolls and adds (validate.response-dice)."
+            },
+            "automatic": {
+              "type": "boolean",
+              "description": "Content v12 (G6): true when a damage reduction applies on its own, without the player choosing it; it takes no resourceId or cost (validate.response-automatic)."
+            },
+            "unlessCondition": {
+              "enum": [
+                "blinded",
+                "charmed",
+                "deafened",
+                "frightened",
+                "grappled",
+                "incapacitated",
+                "invisible",
+                "paralyzed",
+                "petrified",
+                "poisoned",
+                "prone",
+                "restrained",
+                "stunned",
+                "unconscious"
+              ],
+              "description": "Content v12 (G6): a condition key that, while the character has it, stops the response being offered (validate.response-condition)."
+            },
+            "supersedes": {
+              "type": "object",
+              "required": [
+                "responseId"
+              ],
+              "properties": {
+                "content": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "responseId": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "description": "Content v12 (G6): another response this one replaces while it is offered; without a content id, one of this revision's content (validate.response-supersedes)."
+            },
             "outcomes": {
               "type": "array",
               "maxItems": 8,
@@ -1814,6 +1941,63 @@
             "responseId",
             "label",
             "phase"
+          ],
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "phase": {
+                    "enum": [
+                      "hitPointOutcome",
+                      "threshold"
+                    ]
+                  }
+                },
+                "required": [
+                  "phase"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "share": false,
+                  "dice": false,
+                  "automatic": {
+                    "const": false
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "required": [
+                  "share"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "amount": false,
+                  "dice": false
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "automatic": {
+                    "const": true
+                  }
+                },
+                "required": [
+                  "automatic"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "resourceId": false,
+                  "cost": false
+                }
+              }
+            }
           ],
           "description": "Content v11 (D43): a reaction offered when the character takes damage (reduce it, survive at some hit points, or answer a threshold). Typed only in a v11 revision: in an older one it is an unknown effect, kept byte for byte. A reference without a content id names this revision's content."
         },
