@@ -165,8 +165,9 @@ export function HitPointsPanel({
     event.preventDefault();
   }
 
-  function reset() {
+  function reset(action: PlayAction['action']) {
     setAmount('');
+    if (action !== 'damage') return; // only applying damage resets how it hit
     setFrom('');
     setSaveAbility('dex');
     setSaveSucceeded(false);
@@ -178,7 +179,7 @@ export function HitPointsPanel({
     if (action === 'damage' && onDamage && (view.sheet.responses ?? []).length > 0) {
       if (how) onDamage(n, type, how);
       else onDamage(n, type);
-      reset();
+      reset(action);
       return;
     }
     act({
@@ -187,7 +188,7 @@ export function HitPointsPanel({
       ...(action === 'damage' && type ? { damageType: type } : {}),
       ...(action === 'damage' && how ? { damageFrom: how.from, ...(how.save ? { damageSave: how.save } : {}) } : {}),
     });
-    reset();
+    reset(action);
   }
 
   return (

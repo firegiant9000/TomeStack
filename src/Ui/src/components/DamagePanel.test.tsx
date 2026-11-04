@@ -407,6 +407,23 @@ it('skipped responses after a plain damage are named', () => {
 });
 
 // Content v12 G6 (Task 7): how the hit came, automatic and dice responses.
+it('Heal and Set temporary hit points keep how the hit came; only damage resets it', async () => {
+  const user = userEvent.setup();
+  const act = vi.fn();
+  render(<HitPointsPanel view={viewWith([])} act={act} onDamage={vi.fn()} />);
+  const how = () => screen.getByRole('combobox', { name: 'How did it hit?' }) as HTMLSelectElement;
+  await user.selectOptions(how(), 'A fall');
+  await user.type(screen.getByRole('spinbutton', { name: 'Amount' }), '3');
+  await user.click(screen.getByRole('button', { name: 'Heal' }));
+  expect(how().value).toBe('fall');
+  await user.type(screen.getByRole('spinbutton', { name: 'Amount' }), '3');
+  await user.click(screen.getByRole('button', { name: 'Set temporary hit points' }));
+  expect(how().value).toBe('fall');
+  await user.type(screen.getByRole('spinbutton', { name: 'Amount' }), '3');
+  await user.click(screen.getByRole('button', { name: 'Take damage' }));
+  expect(how().value).toBe('');
+});
+
 it('sends how the hit came on preview and plain damage', async () => {
   const user = userEvent.setup();
   const act = vi.fn();
@@ -485,6 +502,23 @@ it('needs a roll in range before confirming a dice response', async () => {
   await user.click(apply);
   await waitFor(() => expect(client.play).toHaveBeenCalled());
   expect(vi.mocked(client.play).mock.calls[0]![1].responses).toEqual([{ contentId: C1, responseId: 'ward', rolled: 7 }]);
+});
+
+it('shows the response-roll note only once a roll is typed and out of range', async () => {
+  const user = userEvent.setup();
+  const die = response({ responseId: 'ward', label: 'Ward', dice: '1d10', amount: 2 });
+  const note = { code: 'damage.response-roll', message: "Response 'ward' of content c1 needs a roll between 1 and 10." };
+  vi.mocked(client.damagePreview).mockImplementation(async (_id, _a, _t, sent) =>
+    preview({ offers: [offer(die)], notes: (sent as { rolled?: number }[]).some((c) => c.rolled === undefined) && sent.length > 0 ? [note] : [] }),
+  );
+  panel({ view: viewWith([die]) });
+  await user.click(await screen.findByRole('checkbox', { name: /Ward/ }));
+  const rolled = await screen.findByRole('spinbutton', { name: 'Rolled (1–10)' });
+  await waitFor(() => expect(vi.mocked(client.damagePreview).mock.calls.at(-1)![3]).toEqual([{ contentId: C1, responseId: 'ward' }]));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Apply damage' }).getAttribute('aria-disabled')).toBe('true'));
+  expect(screen.queryByText(note.message)).toBeNull();
+  await user.type(rolled, '11');
+  expect(await screen.findByText(note.message)).toBeTruthy();
 });
 
 it('describes half, all and dice reductions', async () => {

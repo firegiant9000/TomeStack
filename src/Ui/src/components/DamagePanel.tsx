@@ -139,8 +139,14 @@ export function DamagePanel({ view, amount, type, how, onDone, onCancel, onError
   // The preview must also have been planned from the stamp this sheet shows: a newer stored stamp means the sheet is behind.
   const ready =
     fetched !== undefined && fetched.version === version && fetched.refresh === refresh && fetched.selKey === selKey && fetched.preview.updatedAt === version;
-  const notes = preview?.notes ?? [];
-  const canApply = ready && diceReady && !busy && !failed && notes.length === 0 && !applied;
+  const allNotes = preview?.notes ?? [];
+  // A ticked dice response whose roll field is still empty is not an error yet (Apply stays off through diceReady): its note shows once a roll is typed.
+  const notes = allNotes.filter(
+    (n) =>
+      n.code !== 'damage.response-roll' ||
+      !selection.some((c) => responseOf(c)?.dice && (typedRolls[keyOf(c)] ?? '').trim() === '' && n.message.includes(`'${c.responseId}'`)),
+  );
+  const canApply = ready && diceReady && !busy && !failed && allNotes.length === 0 && !applied;
   const phaseOf = (c: ResponseChoice) => responses.find((r) => r.contentId === c.contentId && r.responseId === c.responseId)?.phase;
   const chosen = (r: ResponseValue) => selection.some((c) => keyOf(c) === keyOf(r));
   const poolLabel = (r: ResponseValue) =>

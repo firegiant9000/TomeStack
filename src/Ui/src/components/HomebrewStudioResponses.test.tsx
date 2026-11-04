@@ -302,6 +302,21 @@ it('edits trigger, share, dice, automatic and condition', async () => {
   expect(sent.unlessCondition).toBeUndefined();
 });
 
+it('clearing the amount clears the dice, and a loaded automatic effect with a pool can be unticked', async () => {
+  const user = userEvent.setup();
+  const a: Raw = { type: 'response', id: 'response-1', responseId: 'response-1', label: 'Brace', phase: 'damageReduction', amount: '2', dice: '1d10', automatic: true, resourceId: 'grit' };
+  const { rule, checked } = await openDraft(user, [grit, a]);
+  const r = rule(/^Rule 2: Damage response/);
+  const auto = r.getByRole('checkbox', { name: /^Ticked when first offered/ }) as HTMLInputElement;
+  expect(auto.disabled).toBe(false);
+  await user.click(auto);
+  expect((await checked()).effect('response-1').automatic).toBeUndefined();
+  expect((r.getByRole('checkbox', { name: /^Ticked when first offered/ }) as HTMLInputElement).disabled).toBe(true);
+  await user.clear(r.getByRole('textbox', { name: /^Damage taken off/ }));
+  const sent = (await checked()).effect('response-1');
+  expect(sent.dice).toBeUndefined();
+});
+
 it('keeps supersedes and unknown members across an edit', async () => {
   const user = userEvent.setup();
   const response: Raw = {

@@ -326,7 +326,7 @@ export function ResponseFields(props: {
           </label>
           {!effect.share && (
             <>
-              <FormulaField effectId={effect.id} part="amount" label="Damage taken off (a number or a formula)" value={effect.amount ?? ''} previewRevision={props.previewRevision} floorAtZero onChange={(amount) => onChange({ ...effect, amount })} />
+              <FormulaField effectId={effect.id} part="amount" label="Damage taken off (a number or a formula)" value={effect.amount ?? ''} previewRevision={props.previewRevision} floorAtZero onChange={(amount) => onChange(amount.trim() === '' ? { ...effect, amount, dice: undefined } : { ...effect, amount })} />
               <label className="field">
                 Dice to roll (for example 1d10; leave empty for none)
                 <input value={effect.dice ?? ''} onChange={(e) => onChange({ ...effect, dice: e.target.value || undefined })} />
@@ -334,7 +334,7 @@ export function ResponseFields(props: {
             </>
           )}
           <label className="choice">
-            <input type="checkbox" checked={effect.automatic === true} disabled={!!effect.resourceId} onChange={(e) => onChange({ ...effect, automatic: e.target.checked ? true : undefined })} />
+            <input type="checkbox" checked={effect.automatic === true} disabled={effect.automatic !== true && !!effect.resourceId} onChange={(e) => onChange({ ...effect, automatic: e.target.checked ? true : undefined })} />
             Ticked when first offered (only with no pool to spend from)
           </label>
         </>
