@@ -190,6 +190,35 @@ it('keeps unknown members across an edit', async () => {
   expect((await checked()).effect('rollMode-1')).toMatchObject({ mode: 'disadvantage', tags: ['melee'], ability: 'testyAbility', unlessCondition: 'testyCondition', futureMember: { keep: true } });
 });
 
+it('reports and clears a member that doesn\'t apply to the target', async () => {
+  const user = userEvent.setup();
+  const a: Raw = { type: 'rollMode', id: 'rollMode-1', target: 'initiative', mode: 'advantage', against: ['charmed'] };
+  const b: Raw = { type: 'rollMode', id: 'rollMode-2', target: 'save.dex', mode: 'advantage', ability: 'dex' };
+  const c: Raw = { type: 'rollMode', id: 'rollMode-3', target: 'attack', mode: 'advantage', tags: ['all'], prevent: true };
+  const { rule, checked } = await openDraft(user, [a, b, c]);
+  expect(blocked('Publish')).toBe(true);
+  await user.click(rule(/^Rule 1: Roll mode/).getByRole('button', { name: 'Remove against' }));
+  expect(blocked('Publish')).toBe(true);
+  await user.click(rule(/^Rule 2: Roll mode/).getByRole('button', { name: 'Remove ability' }));
+  expect(blocked('Publish')).toBe(true);
+  await user.click(rule(/^Rule 3: Roll mode/).getByRole('button', { name: 'Remove prevent' }));
+  expect(blocked('Publish')).toBe(false);
+  const done = await checked();
+  expect(done.effect('rollMode-1').against).toBeUndefined();
+  expect(done.effect('rollMode-2').ability).toBeUndefined();
+  expect(done.effect('rollMode-3').prevent).toBeUndefined();
+});
+
+it('reports stored tags that are blank or repeated', async () => {
+  const user = userEvent.setup();
+  const mode: Raw = { type: 'rollMode', id: 'rollMode-1', target: 'attack', mode: 'advantage', tags: ['melee', 'melee', ' '] };
+  const { rule, checked } = await openDraft(user, [mode]);
+  expect(blocked('Publish')).toBe(true);
+  await user.type(rule(/^Rule 1: Roll mode/).getByRole('textbox', { name: 'Attack tags' }), 'x');
+  expect(blocked('Publish')).toBe(false);
+  expect((await checked()).effect('rollMode-1').tags).toEqual(['melee', 'x']);
+});
+
 it('a damage defence grant can apply only while a form is on', async () => {
   const user = userEvent.setup();
   const { rule, checked } = await openDraft(user, [heavy]);

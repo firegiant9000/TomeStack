@@ -105,8 +105,17 @@ export function RollModeFields(props: { effect: RollModeEffect; toggles: ToggleC
   const noConditions = effect.target === 'initiative' || isAgainstYou; // the service refuses `against` with these
   const abilityKnown = !effect.ability || abilities.some(([k]) => k === effect.ability);
   const unlessKnown = !effect.unlessCondition || conditionKeys.includes(effect.unlessCondition);
-  useReportedProblem(`${effect.id}-tags`, isAttack && (effect.tags ?? []).length === 0 ? 'Attack tags: name at least one tag, or all.' : undefined, onProblem);
-  useReportedProblem(`${effect.id}-ability`, abilityKnown ? undefined : `Ability: "${effect.ability}" is not an ability.`, onProblem);
+  const storedTags = effect.tags ?? [];
+  const tagsClean = storedTags.length === parseTags(storedTags.join(',')).length && storedTags.every((t) => t === t.trim() && !t.includes(','));
+  useReportedProblem(`${effect.id}-tags`, !isAttack ? undefined : storedTags.length === 0 ? 'Attack tags: name at least one tag, or all.' : tagsClean ? undefined : 'Attack tags: tags must not be blank or repeated; edit the box to tidy them.', onProblem);
+  useReportedProblem(`${effect.id}-ability`, isAttack && !abilityKnown ? `Ability: "${effect.ability}" is not an ability.` : undefined, onProblem);
+  // Members this target does not allow (hand-edited or imported JSON): the service would refuse them, so they block until removed.
+  const strays: { name: string; clear: () => void }[] = [];
+  if (!isAttack && effect.tags !== undefined) strays.push({ name: 'tags', clear: () => onChange({ ...effect, tags: undefined }) });
+  if (!isAttack && effect.ability !== undefined) strays.push({ name: 'ability', clear: () => onChange({ ...effect, ability: undefined }) });
+  if (!isAgainstYou && effect.prevent !== undefined) strays.push({ name: 'prevent', clear: () => onChange({ ...effect, prevent: undefined }) });
+  if (noConditions && effect.against !== undefined) strays.push({ name: 'against', clear: () => onChange({ ...effect, against: undefined }) });
+  useReportedProblem(`${effect.id}-stray`, strays.length === 0 ? undefined : `Not allowed for this target: ${strays.map((s) => s.name).join(', ')}. Remove ${strays.length === 1 ? 'it' : 'them'}.`, onProblem);
   useReportedProblem(`${effect.id}-unless`, unlessKnown ? undefined : `Unless: "${effect.unlessCondition}" is not a known condition.`, onProblem);
 
   const setAgainst = (next: string[]) => {
@@ -170,7 +179,13 @@ export function RollModeFields(props: { effect: RollModeEffect; toggles: ToggleC
           <option value="disadvantage">Disadvantage</option>
         </select>
       </label>
-      {isAttack && <TagsInput tags={effect.tags} onTags={(tags) => onChange({ ...effect, tags })} />}
+      {strays.map((s) => (
+        <p key={s.name} className="hint">
+          {`${s.name} doesn't apply to this target. `}
+          <button type="button" onClick={s.clear}>{`Remove ${s.name}`}</button>
+        </p>
+      ))}
+      {isAttack && <TagsInput key={effect.id} tags={effect.tags} onTags={(tags) => onChange({ ...effect, tags })} />}
       {isAttack && (
         <label className="field">
           Ability
@@ -191,7 +206,7 @@ export function RollModeFields(props: { effect: RollModeEffect; toggles: ToggleC
           Can't have this
         </label>
       )}
-      {(!noConditions || against.length > 0) && (
+      {!noConditions && (
         <fieldset className="field">
           <legend>Only against conditions (none checked: always)</legend>
           {[...conditionKeys, ...unknownKeys].map((key) => (
