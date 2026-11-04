@@ -51,6 +51,9 @@ public class RevisionHashProperties
     /// <summary>The spell key content v12 adds (MECH-X item 1). Written out here on purpose, like <see cref="ToggleV11Keys"/>.</summary>
     internal static readonly string[] SpellV12Keys = ["tags"];
 
+    /// <summary>The response keys content v12 adds (G6). Written out here on purpose, like <see cref="ToggleV11Keys"/>.</summary>
+    internal static readonly string[] ResponseV12Keys = ["trigger", "share", "dice", "automatic", "unlessCondition", "supersedes"];
+
     /// <summary>The choice key content v12 adds (MECH-X item 2). Written out here on purpose, like <see cref="ToggleV11Keys"/>.</summary>
     internal static readonly string[] ChoiceV12Keys = ["replaceable"];
 
@@ -141,6 +144,7 @@ public class RevisionHashProperties
                     ToggleEffect.TypeName => ToggleV12Keys,
                     SpellEffect.TypeName => SpellV12Keys,
                     ChoiceEffect.TypeName => ChoiceV12Keys,
+                    ResponseEffect.TypeName => ResponseV12Keys,
                     _ => [],
                 };
                 foreach (var (name, kept) in inputEffects[i]!.AsObject().Where(p => v12Keys.Contains(p.Key, StringComparer.OrdinalIgnoreCase)))
@@ -264,6 +268,7 @@ public class RevisionHashProperties
                     ToggleEffect.TypeName => [.. members ?? [], .. ToggleV12Keys],
                     SpellEffect.TypeName => [.. members ?? [], .. SpellV12Keys],
                     ChoiceEffect.TypeName => [.. members ?? [], .. ChoiceV12Keys],
+                    ResponseEffect.TypeName => [.. members ?? [], .. ResponseV12Keys],
                     _ => members,
                 };
             }
