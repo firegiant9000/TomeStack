@@ -689,6 +689,8 @@ export interface DamageOutcome {
   adjusted: number;
   absorbed: number;
   lost: number;
+  /** Content v12: the hit was halved by a successful save. */
+  saveHalved?: boolean;
   warnings: Diagnostic[];
 }
 
@@ -725,6 +727,16 @@ export interface ResponseValue {
   atOrBelow?: number;
   survived: boolean;
   outcomes?: ResponseOutcomeValue[];
+  /** Content v12 (G6): when the response applies (where the hit came from, the save and the damage types). */
+  trigger?: { from: string; ability?: string; result?: string; damageTypes?: string[] };
+  /** Content v12: takes half or all of the damage instead of an amount (`amount` is then absent or null). */
+  share?: 'half' | 'all';
+  /** Content v12: a dice expression the player rolls (for example "1d10"); the roll goes in `ResponseChoice.rolled`. */
+  dice?: string;
+  /** Content v12: ticked for the player when first offered. Absent is false. */
+  automatic?: boolean;
+  /** Content v12: a condition that stops the response applying. */
+  unlessCondition?: string;
 }
 
 /** One outcome of a `response` effect as authored (content v11); which members apply depends on `kind`. */
@@ -742,7 +754,12 @@ export interface ResponseOutcomeDef {
 export interface ResponseChoice {
   contentId: string;
   responseId: string;
+  /** The player's roll for a response with `dice`, within its range; only a dice response carries it. */
+  rolled?: number;
 }
+
+/** Content v12 (G6): how a hit came. `save` is only with `from: 'save'`; `ability` is lower-case (`str` to `cha`). */
+export type DamageHow = { from: 'attack' | 'fall' | 'save'; save?: { ability: string; succeeded: boolean; half: boolean } };
 
 /** A response eligible for a hit; `offered` is false (with `reason`) when it cannot be chosen now. */
 export interface ResponseOffer {
@@ -864,7 +881,11 @@ export interface PlayAction {
   /** With `damage`: one of the thirteen damage types (any case). Absent: untyped, so no defence applies. */
   damageType?: string;
   /** With `damage` (D43 S7): the damage responses chosen for this hit. A non-empty list makes the change compound (it needs `expectedUpdatedAt`). */
-  responses?: { contentId: string; responseId: string }[];
+  responses?: ResponseChoice[];
+  /** With `damage` (content v12): how the hit came. */
+  damageFrom?: DamageHow['from'];
+  /** With `damage` and `damageFrom: 'save'` only. */
+  damageSave?: NonNullable<DamageHow['save']>;
   /** With `useAction` (D43 S8, with `contentId`): the roll to use, by its `rollId`. Compound (needs `expectedUpdatedAt`); `amount` is the units of a per-unit roll. */
   rollId?: string;
   /** With `endEncounter` (D43 S8): counting-up pools to reset to 0 in the same change, as `{contentId}/{resourceId}` (at most 64). Any other action, or a pool that does not count up, is `play.clear-invalid`. */

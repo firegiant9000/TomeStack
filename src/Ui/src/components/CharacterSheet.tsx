@@ -14,6 +14,7 @@ import type {
   RollRecord,
   RollTarget,
   TurnMoment,
+  DamageHow,
 } from '../api/types';
 import { companionPrunedText } from '../companionNotice';
 import { downloadBase64 } from '../files';
@@ -433,7 +434,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   }, [turning]);
   const [undo, setUndo] = useState<UndoEntry>();
   // D43 S7: the open damage panel (the hit as entered), when the sheet has damage responses. It sits above the tabs: the summary opens it too.
-  const [damaging, setDamaging] = useState<{ amount: number; type: string; n: number }>();
+  const [damaging, setDamaging] = useState<{ amount: number; type: string; n: number; how?: DamageHow }>();
   const hasResponses = (sheet.responses ?? []).length > 0;
   // The sheet lost its responses (a different build of the character): the panel's choices mean nothing now (adjusting state during render, guarded).
   if (damaging && !hasResponses) setDamaging(undefined);
@@ -442,10 +443,10 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   // Each press reopens the panel fresh (the counter is in its key), also while it shows "Damage applied".
   const damageCount = useRef(0);
   const openDamageN = useRef<number | undefined>(undefined); // the open panel's counter; a replaced panel's callbacks compare against it
-  const openDamage = (amount: number, type: string) => {
+  const openDamage = (amount: number, type: string, how?: DamageHow) => {
     const n = ++damageCount.current;
     openDamageN.current = n;
-    setDamaging({ amount, type, n });
+    setDamaging({ amount, type, n, ...(how ? { how } : {}) });
   };
   const compactToggle = useRef<HTMLInputElement>(null);
   const [gapAbout, setGapAbout] = useState('');
@@ -997,6 +998,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
           view={view}
           amount={damaging.amount}
           type={damaging.type}
+          how={damaging.how}
           onError={onError}
           onTimeout={() => damageTimedOut(damaging.n)}
           act={act}

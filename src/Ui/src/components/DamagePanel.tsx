@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { client } from '../api/client';
 import { TomeStackError } from '../api/transport';
-import type { CharacterView, DamagePreview, ResponseChoice, ResponseOffer, PlayAction, ResponseValue, RollTarget } from '../api/types';
+import type { CharacterView, DamageHow, DamagePreview, ResponseChoice, ResponseOffer, PlayAction, ResponseValue, RollTarget } from '../api/types';
 import { damageTypeLabel } from './customModel';
 import { effectWords, skippedLabelsOf } from './PlayPanels';
 
@@ -11,6 +11,8 @@ interface Props {
   amount: number;
   /** One of the thirteen damage types; '' is untyped. */
   type: string;
+  /** Content v12: how the hit came (from the Hit points panel); absent is not said. */
+  how?: DamageHow;
   /** The reply of the applied damage. The panel stays open (Close) while the reply carries prompts, and closes itself otherwise. */
   onDone: (view: CharacterView) => void;
   onCancel: () => void;
@@ -26,10 +28,14 @@ interface Props {
 }
 
 const keyOf = (c: ResponseChoice) => `${c.contentId}|${c.responseId}`;
-const choiceFromKey = (key: string): ResponseChoice => {
-  const at = key.indexOf('|');
-  return { contentId: key.slice(0, at), responseId: key.slice(at + 1) };
-};
+
+/** The range of a dice expression such as 1d10 or 2d6+3; undefined when it is not that simple (the service then judges the roll). */
+function diceRange(dice: string | undefined): { min: number; max: number } | undefined {
+  const m = /^\s*(\d+)\s*d\s*(\d+)\s*(?:([+-])\s*(\d+))?\s*$/i.exec(dice ?? '');
+  if (!m) return undefined;
+  const bonus = m[3] ? (m[3] === '-' ? -1 : 1) * Number(m[4]) : 0;
+  return { min: Number(m[1]) + bonus, max: Number(m[1]) * Number(m[2]) + bonus };
+}
 
 /** A preview with the selection (and the sheet stamp and refresh round) it was asked for. */
 interface Fetched {
@@ -48,11 +54,13 @@ interface Fetched {
  * the confirm. When the preview carries notes the choices cannot be applied: `after` is then the current state, so Apply is off.
  * Every number is the server's.
  */
-export function DamagePanel({ view, amount, type, onDone, onCancel, onError, onTimeout, onRoll, act, run }: Props) {
+export function DamagePanel({ view, amount, type, how, onDone, onCancel, onError, onTimeout, onRoll, act, run }: Props) {
   const characterId = view.character.id;
   const version = view.character.updatedAt ?? '';
   const responses = view.sheet.responses ?? [];
   const [selection, setSelection] = useState<ResponseChoice[]>([]);
+  const [typedRolls, setTypedRolls] = useState<Record<string, string>>({}); // what the player typed for a dice response, by key
+  const seenAutomatic = useRef<Set<string>>(new Set()); // automatic responses already pre-ticked once
   const [fetched, setFetched] = useState<Fetched>();
   const [refresh, setRefresh] = useState(0); // bumped after a refused or timed-out confirm, to preview again
   const [busy, setBusy] = useState(false);
@@ -67,20 +75,46 @@ export function DamagePanel({ view, amount, type, onDone, onCancel, onError, onT
   // WCAG 2.4.3: the panel opens with focus on its heading.
   useEffect(() => heading.current?.focus(), []);
 
-  const selKey = JSON.stringify(selection.map(keyOf).sort());
+  const responseOf = (c: ResponseChoice) =>
+    responses.find((r) => keyOf(r) === keyOf(c)) ?? fetched?.preview.offers.find((o) => keyOf(o.response) === keyOf(c))?.response;
+  /** The typed roll when it is a whole number within the dice range. */
+  const rolledOf = (r: ResponseValue | undefined, typed: string | undefined) => {
+    if (!r?.dice || typed === undefined || typed.trim() === '') return undefined;
+    const value = Number(typed);
+    const range = diceRange(r.dice);
+    return Number.isInteger(value) && (!range || (value >= range.min && value <= range.max)) ? value : undefined;
+  };
+  // The selection as sent: a dice response carries its roll once it is in range.
+  const choices = selection
+    .map((c) => {
+      const rolled = rolledOf(responseOf(c), typedRolls[keyOf(c)]);
+      return rolled === undefined ? c : { ...c, rolled };
+    })
+    .sort((a, b) => keyOf(a).localeCompare(keyOf(b)));
+  const selKey = JSON.stringify(choices);
+  const diceReady = selection.every((c) => !responseOf(c)?.dice || rolledOf(responseOf(c), typedRolls[keyOf(c)]) !== undefined);
 
   useEffect(() => {
     if (applied) return;
     let current = true;
-    const choices = (JSON.parse(selKey) as string[]).map(choiceFromKey);
+    const sent = JSON.parse(selKey) as ResponseChoice[];
     client
-      .damagePreview(characterId, amount, type || undefined, choices)
+      .damagePreview(characterId, amount, type || undefined, sent, ...(how ? [how] : []))
       .then((next) => {
         if (!current) return;
         const now = next.offers.filter((o) => o.offered && o.response.phase === 'threshold');
         const before = offeredThresholds.current;
         setAvailable(before ? now.filter((o) => !before.has(keyOf(o.response))).map((o) => o.response.label) : []);
         offeredThresholds.current = new Set(now.map((o) => keyOf(o.response)));
+        // An automatic response is ticked when it first appears; after that the choice is the player's.
+        const fresh = next.offers.filter((o) => o.offered && o.response.automatic && !seenAutomatic.current.has(keyOf(o.response)));
+        if (fresh.length > 0) {
+          fresh.forEach((o) => seenAutomatic.current.add(keyOf(o.response)));
+          setSelection((s) => [
+            ...s,
+            ...fresh.filter((o) => !s.some((c) => keyOf(c) === keyOf(o.response))).map((o) => ({ contentId: o.response.contentId, responseId: o.response.responseId })),
+          ]);
+        }
         setFailed(false);
         setFetched({ preview: next, version, refresh, selKey });
       })
@@ -92,7 +126,7 @@ export function DamagePanel({ view, amount, type, onDone, onCancel, onError, onT
     return () => {
       current = false;
     };
-  }, [characterId, amount, type, version, refresh, selKey, applied, onError]);
+  }, [characterId, amount, type, how, version, refresh, selKey, applied, onError]);
 
   // A choice the preview for exactly this selection does not offer is dropped, so it is neither shown as chosen nor sent.
   if (fetched && fetched.selKey === selKey && !applied) {
@@ -106,7 +140,7 @@ export function DamagePanel({ view, amount, type, onDone, onCancel, onError, onT
   const ready =
     fetched !== undefined && fetched.version === version && fetched.refresh === refresh && fetched.selKey === selKey && fetched.preview.updatedAt === version;
   const notes = preview?.notes ?? [];
-  const canApply = ready && !busy && !failed && notes.length === 0 && !applied;
+  const canApply = ready && diceReady && !busy && !failed && notes.length === 0 && !applied;
   const phaseOf = (c: ResponseChoice) => responses.find((r) => r.contentId === c.contentId && r.responseId === c.responseId)?.phase;
   const chosen = (r: ResponseValue) => selection.some((c) => keyOf(c) === keyOf(r));
   const poolLabel = (r: ResponseValue) =>
@@ -123,6 +157,8 @@ export function DamagePanel({ view, amount, type, onDone, onCancel, onError, onT
     setSelection((s) => [...s.filter((c) => phaseOf(c) !== 'hitPointOutcome'), ...(r ? [{ contentId: r.contentId, responseId: r.responseId }] : [])]);
   }
 
+  const howFields = how ? { damageFrom: how.from, ...(how.save ? { damageSave: how.save } : {}) } : {};
+
   async function apply() {
     if (!fetched || !canApply) return;
     const { preview: shown, selKey: shownKey } = fetched;
@@ -130,7 +166,7 @@ export function DamagePanel({ view, amount, type, onDone, onCancel, onError, onT
     try {
       if (shownKey === '[]') {
         // Nothing chosen: the one-step damage, so the sheet's client Undo works as it always did. A refusal (act reports it) previews again.
-        const ok = await act({ action: 'damage', amount, ...(type ? { damageType: type } : {}) });
+        const ok = await act({ action: 'damage', amount, ...(type ? { damageType: type } : {}), ...howFields });
         if (ok === false) setRefresh((n) => n + 1);
         else onCancel();
         return;
@@ -141,7 +177,8 @@ export function DamagePanel({ view, amount, type, onDone, onCancel, onError, onT
           action: 'damage',
           amount,
           ...(type ? { damageType: type } : {}),
-          responses: (JSON.parse(shownKey) as string[]).map(choiceFromKey),
+          ...howFields,
+          responses: JSON.parse(shownKey) as ResponseChoice[],
           expectedUpdatedAt: shown.updatedAt,
         });
       const reply = await (run ? run(applying) : applying());
@@ -171,8 +208,11 @@ export function DamagePanel({ view, amount, type, onDone, onCancel, onError, onT
   const reasonId = (r: ResponseValue) => `${groupName}-${r.contentId}-${r.responseId}-reason`.replace(/[^\w-]/g, '_');
   const detail = (r: ResponseValue) =>
     [
-      r.phase === 'damageReduction' && r.amount !== undefined ? `reduces the damage by ${r.amount}` : '',
-      r.phase === 'hitPointOutcome' && r.amount !== undefined ? `leaves you at ${r.amount} hit points` : '',
+      r.share === 'half' ? 'halves the damage' : '',
+      r.share === 'all' ? 'takes all the damage' : '',
+      r.dice ? `reduces the damage by ${r.dice}${typeof r.amount === 'number' ? ` + ${r.amount}` : ''}` : '',
+      r.phase === 'damageReduction' && !r.dice && !r.share && typeof r.amount === 'number' ? `reduces the damage by ${r.amount}` : '',
+      r.phase === 'hitPointOutcome' && typeof r.amount === 'number' ? `leaves you at ${r.amount} hit points` : '',
       r.cost !== undefined ? `costs ${r.cost} ${poolLabel(r)}` : '',
       r.text ?? '',
     ]
@@ -256,6 +296,19 @@ export function DamagePanel({ view, amount, type, onDone, onCancel, onError, onT
                     />,
                   )}
                   {reasonNote(o)}
+                  {o.offered && o.response.dice && chosen(o.response) && (
+                    <label className="field">
+                      {(() => {
+                        const range = diceRange(o.response.dice);
+                        return range ? `Rolled (${range.min}–${range.max})` : 'Rolled';
+                      })()}
+                      <input
+                        type="number"
+                        value={typedRolls[keyOf(o.response)] ?? ''}
+                        onChange={(e) => setTypedRolls((r) => ({ ...r, [keyOf(o.response)]: e.target.value }))}
+                      />
+                    </label>
+                  )}
                 </div>
               ))}
             </fieldset>
