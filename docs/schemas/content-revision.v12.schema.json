@@ -1630,8 +1630,8 @@
             },
             "target": {
               "type": "string",
-              "pattern": "^(save\\.(str|dex|con|int|wis|cha)|skill\\.(acrobatics|animalHandling|arcana|athletics|deception|history|insight|intimidation|investigation|medicine|nature|perception|performance|persuasion|religion|sleightOfHand|stealth|survival)|ability\\.(str|dex|con|int|wis|cha)\\.check)$",
-              "description": "The roll that gets the mode: a saving throw, a skill check or an ability check. The ability check is a roll target only, not a field."
+              "pattern": "^(save\\.(str|dex|con|int|wis|cha)|skill\\.(acrobatics|animalHandling|arcana|athletics|deception|history|insight|intimidation|investigation|medicine|nature|perception|performance|persuasion|religion|sleightOfHand|stealth|survival)|ability\\.(str|dex|con|int|wis|cha)\\.check|attack|initiative|attacksAgainst)$",
+              "description": "The roll that gets the mode: a saving throw, a skill check or an ability check (the ability check is a roll target only, not a field); from v12 (G7) also attack (the character's own attack rolls), initiative, or attacksAgainst (attack rolls other creatures make against the character)."
             },
             "mode": {
               "enum": [
@@ -1670,6 +1670,50 @@
             "toggleContent": {
               "$ref": "#/$defs/uuid",
               "description": "The content entry that declares the toggle; absent means this revision. Needs a toggle."
+            },
+            "tags": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": "Content v12 (G7): with target attack only, required there: the attack tags the mode applies to (all, or any tag of the attack). Needs v12."
+            },
+            "ability": {
+              "enum": [
+                "str",
+                "dex",
+                "con",
+                "int",
+                "wis",
+                "cha"
+              ],
+              "description": "Content v12 (G7): with target attack only: the attack must use this ability. Needs v12."
+            },
+            "unlessCondition": {
+              "enum": [
+                "blinded",
+                "charmed",
+                "deafened",
+                "frightened",
+                "grappled",
+                "incapacitated",
+                "invisible",
+                "paralyzed",
+                "petrified",
+                "poisoned",
+                "prone",
+                "restrained",
+                "stunned",
+                "unconscious"
+              ],
+              "description": "Content v12 (G7): a condition key; while the character has it, the effect is left out. Needs v12."
+            },
+            "prevent": {
+              "type": "boolean",
+              "description": "Content v12 (G7): with target attacksAgainst only: true means attacks against the character can't have this mode. Needs v12."
             }
           },
           "required": [
@@ -1681,7 +1725,69 @@
               "toggle"
             ]
           },
-          "description": "Content v11 (D43): advantage or disadvantage on a saving throw, skill check or ability check, optionally while a toggle is on or against some conditions. Typed only in a v11 revision: in an older one it is an unknown effect, kept byte for byte."
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "target": {
+                    "const": "attack"
+                  }
+                },
+                "required": [
+                  "target"
+                ]
+              },
+              "then": {
+                "required": [
+                  "tags"
+                ]
+              },
+              "else": {
+                "properties": {
+                  "tags": false,
+                  "ability": false
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "target": {
+                    "const": "attacksAgainst"
+                  }
+                },
+                "required": [
+                  "target"
+                ]
+              },
+              "else": {
+                "properties": {
+                  "prevent": false
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "target": {
+                    "enum": [
+                      "initiative",
+                      "attacksAgainst"
+                    ]
+                  }
+                },
+                "required": [
+                  "target"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "against": false
+                }
+              }
+            }
+          ],
+          "description": "Content v11 (D43): advantage or disadvantage on a saving throw, skill check or ability check, optionally while a toggle is on or against some conditions; from v12 (G7) also on the character's attack rolls, initiative, or attack rolls against the character. Typed only in a v11 revision: in an older one it is an unknown effect, kept byte for byte."
         },
         {
           "properties": {

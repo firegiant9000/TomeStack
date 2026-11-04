@@ -34,6 +34,27 @@ public class RollModeV12SchemaTests
             Doc(12, Mode("attacksAgainst", ",\"prevent\":true"))).Effects.Single());
         Assert.Equal("attacksAgainst", against.Target);
         Assert.True(against.Prevent);
+
+        var initiative = Assert.IsType<RollModeEffect>(RevisionHashProperties.Read(Doc(12, Mode("initiative"))).Effects.Single());
+        Assert.Equal("initiative", initiative.Target);
+        Assert.Null(initiative.Tags);
+        Assert.Null(initiative.Ability);
+        Assert.Null(initiative.UnlessCondition);
+        Assert.Null(initiative.Prevent);
+    }
+
+    [Theory]
+    [InlineData("str", Ability.Str)]
+    [InlineData("dex", Ability.Dex)]
+    [InlineData("con", Ability.Con)]
+    [InlineData("int", Ability.Int)]
+    [InlineData("wis", Ability.Wis)]
+    [InlineData("cha", Ability.Cha)]
+    public void V12_rollMode_ability_types_each_ability(string key, Ability expected)
+    {
+        var mode = Assert.IsType<RollModeEffect>(RevisionHashProperties.Read(
+            Doc(12, Mode("attack", ",\"tags\":[\"melee\"],\"ability\":\"" + key + "\""))).Effects.Single());
+        Assert.Equal(expected, mode.Ability);
     }
 
     [Fact]
