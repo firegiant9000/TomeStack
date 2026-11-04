@@ -45,7 +45,8 @@ public sealed record ResponseValue(
     int? Amount, Guid? CostResourceContent, string? ResourceId, int? Cost,
     bool Available, string? UnavailableReason, string? Text,
     int? AtOrBelow = null, bool Survived = false,
-    IReadOnlyList<ResponseOutcomeValue>? Outcomes = null);
+    IReadOnlyList<ResponseOutcomeValue>? Outcomes = null,
+    ResponseTrigger? Trigger = null, ResponseShare? Share = null, string? Dice = null, bool Automatic = false, string? UnlessCondition = null);
 
 /// <summary>A response the player chose for a hit.</summary>
 public sealed record ResponseChoice(Guid ContentId, string ResponseId);

@@ -948,6 +948,16 @@ public static partial class CharacterCalculator
                 .Where(r => r.Automation != AutomationStatus.Reference && r.Timing == EffectTiming.Always)
                 .Select(r => (Item: item, Effect: r)))
             .ToList();
+        // Content v12 (G6): a response named by another collected response's `supersedes` is left off (one pass, no chains to walk:
+        // a superseded response's own supersession still counts), before the cap is counted.
+        var superseded = candidates
+            .Where(c => c.Effect.Supersedes is not null)
+            .Select(c => (Content: c.Effect.Supersedes!.Content ?? c.Item.Revision.ContentId, Id: c.Effect.Supersedes.ResponseId, Owner: c))
+            .Where(s => !(s.Content == s.Owner.Item.Revision.ContentId && s.Id == s.Owner.Effect.ResponseId))
+            .Select(s => (s.Content, s.Id))
+            .ToHashSet();
+        if (superseded.Count > 0)
+            candidates = candidates.Where(c => !superseded.Contains((c.Item.Revision.ContentId, c.Effect.ResponseId))).ToList();
         if (candidates.Count > MaxResponses)
         {
             AddOnce(diagnostics, new("response.too-many", $"The character has {candidates.Count} damage responses; only the first {MaxResponses} are listed."));
@@ -1032,9 +1042,15 @@ public static partial class CharacterCalculator
                 else if (left < needed)
                     reason = $"Needs {needed} {pool.Label} ({left} left)";
             }
+            if (reason is null && response.UnlessCondition is { } unless && character.Play.Conditions.Contains(unless))
+                reason = $"Not while {unless}";
+            var trigger = response.Trigger is { DamageTypes: { } types } t
+                ? t with { DamageTypes = [.. types.Select(x => DamageTypes.TryNormalize(x, out var canonical) ? canonical : x)] }
+                : response.Trigger;
             return new(
                 own, revision.Name, response.ResponseId, response.Label, response.Phase, amount, poolContent, response.ResourceId, cost,
-                reason is null, reason, response.Text, atOrBelow, response.When?.Survived == true, outcomes.Count > 0 ? outcomes : null);
+                reason is null, reason, response.Text, atOrBelow, response.When?.Survived == true, outcomes.Count > 0 ? outcomes : null,
+                trigger, response.Share, response.Dice, response.Automatic == true, response.UnlessCondition);
         }
 
         return [.. candidates.Select(c => ResponseOf(c.Item, c.Effect))];
