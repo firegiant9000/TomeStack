@@ -360,6 +360,12 @@ it('shows only the prevent part when the automatic mode is normal', () => {
   expect(dd('Attacks against you')).toBe("can't have advantage (Fixture Steady Ward)");
 });
 
+it('hides the attacks-against line when it holds only non-automatic prevent reasons', () => {
+  const mode = { automatic: 'normal' as const, reasons: [{ ...reason('advantage', 'Fixture Steady Ward'), automatic: false, prevent: true }] };
+  render(<SheetSummary view={against(mode)} {...plain} />);
+  expect(screen.queryByText('Attacks against you')).toBeNull();
+});
+
 it('no attacks-against line without reasons', () => {
   render(<SheetSummary view={against(undefined)} {...plain} />);
   expect(screen.queryByText('Attacks against you')).toBeNull();
