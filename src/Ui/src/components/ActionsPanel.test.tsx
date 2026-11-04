@@ -55,6 +55,33 @@ it('sends the chosen mode with a weapon attack roll and none with its damage (R9
   expect(roll).toHaveBeenLastCalledWith({ weapon: item, damage: true, critical: false });
 });
 
+it('attack button shows the automatic attack mode', async () => {
+  const roll = vi.fn();
+  const item = { contentId: 'c-needle', revisionId: 'r-needle' };
+  const reason = (source: string) => ({ mode: 'advantage', source, content: item, automatic: true });
+  const mode = { automatic: 'advantage', reasons: [reason('Fixture Open Guard'), reason('Fixture Soft Spot')] };
+  const weapon = { item, name: 'Fixture Needle', toHit: 5, damage: '1d4+3', damageType: 'piercing', automation: 'automatic', category: 'martial', attack: 'melee', properties: [], trace: [], warnings: [], mode };
+  const plainWeapon = { ...weapon, item: { contentId: 'c-other', revisionId: 'r-other' }, name: 'Fixture Awl', mode: undefined };
+  const v = { character: { id: 'fixture' }, sheet: { attacks: [weapon, plainWeapon], toggles: [], features: [] } } as unknown as CharacterView;
+  render(<ActionsPanel view={v} roll={roll} act={() => {}} rollMode="normal" />);
+  const name = 'Roll (advantage: Fixture Open Guard, Fixture Soft Spot) Fixture Needle attack';
+  const button = screen.getByRole('button', { name });
+  expect(button.textContent!.replace(/\s+/g, ' ').trim()).toBe(name);
+  await userEvent.click(button);
+  expect(roll).toHaveBeenLastCalledWith({ weapon: item, mode: 'normal' });
+  expect(screen.getByRole('button', { name: 'Roll Fixture Awl attack' })).toBeTruthy(); // no reason, unchanged
+});
+
+it('an assisted attack mode is a note and the button stays as it was', () => {
+  const item = { contentId: 'c-needle', revisionId: 'r-needle' };
+  const mode = { automatic: 'normal', reasons: [{ mode: 'advantage', source: 'Fixture Open Guard', content: item, against: ['prone'], automatic: false }] };
+  const weapon = { item, name: 'Fixture Needle', toHit: 5, damage: '1d4+3', damageType: 'piercing', automation: 'automatic', category: 'martial', attack: 'melee', properties: [], trace: [], warnings: [], mode };
+  const v = { character: { id: 'fixture' }, sheet: { attacks: [weapon], toggles: [], features: [] } } as unknown as CharacterView;
+  render(<ActionsPanel view={v} roll={() => {}} act={() => {}} rollMode="normal" />);
+  expect(screen.getByRole('button', { name: 'Roll Fixture Needle attack' })).toBeTruthy();
+  expect(screen.getByText('Advantage against prone (Fixture Open Guard)')).toBeTruthy();
+});
+
 it('offers a damage button only for an attack that has damage, and each Roll name matches one button', () => {
   render_([sling, poke]);
   expect(screen.queryByRole('button', { name: 'Roll Testy Poke damage' })).toBeNull();
