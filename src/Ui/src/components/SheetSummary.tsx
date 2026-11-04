@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import type { CharacterView, DerivedValue, PlayAction, RollMode, RollRecord } from '../api/types';
 import { hitDiceText } from '../format';
 import { DiceBox } from './DiceBox';
-import { rollButtonSuffix } from '../rollModes';
+import { attacksAgainstText, rollButtonSuffix } from '../rollModes';
 import { inspirationLabel, RollModePicker, RollResult, type RecordSpent } from './PlayPanels';
 import { RollLog, type LoggedRoll } from './RollLog';
 import { RollWhy } from './RollWhy';
@@ -58,6 +58,7 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, ac
     const text = f.units === 'modifier' || f.units === 'bonus' ? signed(f.value) : f.units === 'feet' ? `${f.value} ft.` : `${f.value}`;
     return f.override ? `${text} (overridden)` : text;
   };
+  const attacksAgainst = attacksAgainstText(sheet.attacksAgainst);
   const hp = sheet.hitPoints;
   const play = character.play;
   const conditions = play?.conditions ?? [];
@@ -104,6 +105,12 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, ac
           <dt>Armor Class</dt>
           <dd>{show('armorClass')}</dd>
         </div>
+        {attacksAgainst && (
+          <div>
+            <dt>Attacks against you</dt>
+            <dd>{attacksAgainst}</dd>
+          </div>
+        )}
         <div>
           <dt>Initiative</dt>
           <dd>{show('initiative')}</dd>

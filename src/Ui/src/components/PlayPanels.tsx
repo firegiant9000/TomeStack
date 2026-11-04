@@ -26,7 +26,7 @@ import { castsText, paying, paymentText } from '../payment';
 import { explainSteps } from '../explain';
 import { hitDiceText, rollBonus } from '../format';
 import { attackPin, customPin, maxPins, pinKey, rollPin, togglePin, weaponTarget, type Pin } from '../quickbar';
-import { rollButtonSuffix } from '../rollModes';
+import { assistedNotes, rollButtonSuffix } from '../rollModes';
 import { diceLine, rollKey, rollModeText } from '../rollText';
 import { announceRollsOn, diceAnimationOn } from '../settings';
 import { damageTypeLabel, damageTypes, normalizeDamageType } from './customModel';
@@ -1130,8 +1130,14 @@ export function AttackItem({
       </details>
       {feature && attack.replacesAttack && <p className="hint">replaces one attack of the Attack action</p>}
       <button type="button" disabled={locked} aria-describedby={described} onClick={() => roll({ ...target, mode: rollMode })}>
-        Roll {label} attack
+        Roll{rollButtonSuffix(attack)} {label} attack
       </button>
+      {assistedNotes(attack).map((note) => (
+        <span key={note} className="hint">
+          {' '}
+          {note}
+        </span>
+      ))}
       <button type="button" disabled={locked} aria-describedby={described} onClick={() => rollDamage({ ...target, damage: true, critical }, attack.damageType)}>
         Roll {label} damage{attack.damage ? ` (${attack.damage})` : ''}
       </button>
