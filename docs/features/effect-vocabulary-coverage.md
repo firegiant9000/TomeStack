@@ -20,7 +20,7 @@ Coverage words are the Lab's registry words: **Automatic** (the sheet works it o
 | Avrae node | v11 effect(s) | Coverage | Gap | Note |
 | --- | --- | --- | --- | --- |
 | `target` | `roll.targets` (text) | Reference | — | Not covered: other creatures are out of scope (ADR-018). Everything TomeStack applies is to the character itself |
-| `attack` | `attack` (with `abilities`, `damage`, `damageBonus`, `tags`, `whileToggle`), `attackRider` (`toHit`, `dice`, `damageBonus`, `stackGroup`), `weapon` | Automatic | G1, G2, G7, G8 | To-hit and damage are calculated and rolled. Hit and miss branches are table play. A spell's attack is spell data, not an applied effect. Missing: a rider dice count as a formula (G1), dice on a critical hit only (G2), a mode on the character's own attack rolls (G7), a rider that matches the ability used (G8) |
+| `attack` | `attack` (with `abilities`, `damage`, `damageBonus`, `tags`, `whileToggle`), `attackRider` (`toHit`, `dice`, `damageBonus`, `stackGroup`), `weapon` | Automatic | G1, G2, G8 | To-hit and damage are calculated and rolled. Hit and miss branches are table play. A spell's attack is spell data, not an applied effect. A mode on the character's own attack rolls is a `rollMode` on `attack` (content v12, G7 built). Missing: a rider dice count as a formula (G1), dice on a critical hit only (G2), a rider that matches the ability used (G8) |
 | `save` | `roll.save` (`ability`, `dc` formula); `value` for a shared DC | Assisted | — | The DC is evaluated and traced; nothing rolls a target's save or applies its result (ADR-018). `roll.area`, `roll.range` and `roll.targets` are text only (Reference). A save the character makes is the `save.<ability>` field, Automatic |
 | `damage` | `attack.damage`, `attackRider.dice`, `roll.dice`, `roll.perUnit`; taking damage: the D45 order and `response` | Assisted | G1, G2 | Attack and rider damage carry a type; a `roll` has no damage-type field. Dealing damage to a target is table play. Damage the character takes is applied with defences, reductions and survivals. Healing is the `heal` play action ([sheet-play.md](sheet-play.md)) |
 | `temphp` | `response` outcome `temporaryHitPoints`; the `setTemporaryHitPoints` play action | Assisted | — | Only as a damage-response outcome or by hand; no effect grants temporary hit points on use |
@@ -30,7 +30,7 @@ Coverage words are the Lab's registry words: **Automatic** (the sheet works it o
 | `ieffect2` `stacking`, `parent`, `save_as`, `target_self` | `stackGroup` (strongest applies) | Reference | — | Not covered: effects do not own other effects (no scripting). Everything is on the character, so `target_self` is the only case |
 | passive `to_hit_bonus` | `attackRider.toHit` (tag `all`) with `toggle` | Automatic | — | |
 | passive `damage_bonus` | `attackRider.damageBonus` or `dice` with `toggle` | Automatic | G1, G8 | Literal `NdM` dice only (G1); no match on the ability used (G8) |
-| passive `attack_advantage` | — | Reference | G7 | `rollMode` has no attack-roll target |
+| passive `attack_advantage` | `rollMode` on `attack` (with `tags`, optionally `ability`, `toggle`, `unlessCondition`; content v12, G7 built) | Automatic | — | "Next attack roll only" stays by hand: switch the toggle off |
 | passive `magical_damage`, `silvered_damage` | — | Reference | — | Not covered: damage has a type but no magical or silvered property; text |
 | passive `resistances`, `immunities`, `vulnerabilities` | `grant` `damageResistance` / `damageImmunity` / `damageVulnerability` with `whileToggle` | Automatic | — | |
 | passive `ignored_resistances` | — | Reference | — | Not covered: a target's defences are out of scope (ADR-018) |
@@ -40,7 +40,7 @@ Coverage words are the Lab's registry words: **Automatic** (the sheet works it o
 | passive `save_adv`, `save_dis` | `rollMode` on `save.<ability>`, always or with `toggle` | Automatic | — | |
 | passive `save_adv`, `save_dis` against a condition | `rollMode` on `save.<ability>` with `against` | Assisted | — | The mode is a note the player confirms |
 | passive `check_bonus` | `modifier` on `skill.<skill>` | Automatic | — | Skills only: there is no modifier target for a plain ability check |
-| passive `check_adv`, `check_dis` | `rollMode` on `skill.<skill>` or `ability.<ability>.check` | Automatic | G7 | No target for initiative alone (G7) |
+| passive `check_adv`, `check_dis` | `rollMode` on `skill.<skill>` or `ability.<ability>.check` | Automatic | — | Initiative alone is a `rollMode` on `initiative` (content v12, G7 built) |
 | passive `dc_bonus` | `modifier` `bonus` on `spellSaveDc`; `value` for a feature DC | Assisted | — | A spell DC bonus is Automatic; a feature's `roll.save.dc` is a formula and cannot follow a toggle |
 | `ieffect2` attack interaction | `attack` with `whileToggle` | Automatic | — | An attack that exists only in a form |
 | `ieffect2` button interaction | `roll` with `whileToggle`, `alsoChange`, `drawsDown` | Assisted | — | An action that exists only in a form; "Use" spends from its pools |
@@ -57,7 +57,7 @@ Coverage words are the Lab's registry words: **Automatic** (the sheet works it o
 
 | Foundry activity | v11 effect(s) | Coverage | Gap | Note |
 | --- | --- | --- | --- | --- |
-| Attack | `attack`, `attackRider`, `weapon` | Automatic | G1, G2, G7, G8 | As the Avrae `attack` row |
+| Attack | `attack`, `attackRider`, `weapon`; `rollMode` on `attack` | Automatic | G1, G2, G8 | As the Avrae `attack` row |
 | Cast | `resource` plus a spend-only `roll` | Reference | — | As the Avrae `spell` row |
 | Check | `skill.<skill>` fields; `rollMode` on `skill.<skill>` and `ability.<ability>.check` | Assisted | G10 | As the Avrae `check` row |
 | Damage | `roll.dice`, `roll.perUnit`, `attackRider.dice` | Assisted | G1, G2 | A roll effect's damage has no typed field; the type is in its label or text |
@@ -75,7 +75,7 @@ Coverage words are the Lab's registry words: **Automatic** (the sheet works it o
 Both vocabularies' everyday verbs (attack, damage, a saving-throw DC, a pool spent, a timed form, a bonus or a mode on own rolls) map onto v11. The rows that stop at Reference are the evaluation's gaps, and they fall on Barbarian, Rogue and Monk. Ranked by how many Reference rows each would remove (evaluation §3):
 
 - **Remove the most:** G1 (dice count as a formula on riders and rolls), G4 (no armour, no shield, no heavy armour gates), G5 (per-effect ability-score cap), G6 (responses with dice or halving, and save-result or trigger conditions).
-- **Cheap:** G7 (modes on own attack rolls, attacks against the character, initiative alone), G9 (roll floor).
+- **Cheap:** G9 (roll floor). G7 (modes on own attack rolls, attacks against the character, initiative alone) is built, content v12, D87.
 - **Reminders that may stay Reference:** G8 (rider match on the ability used; Dex for tagged non-finesse weapons), G10 (skill ability substitution; climb and swim speeds), G11 (condition immunity), G12 (reroll).
 - G2 (crit-only dice) and G3 (once per turn, consumed automatically) are on the plan's original shortlist; the evaluation does not rank them, and each is needed by few features (G2 by one 5.1 feature).
 
@@ -91,7 +91,7 @@ The v12 scope is decided once, from the Lab's coverage report after authoring Ba
 | G4 | Equipment gates: no armour, no shield, no heavy armour |
 | G5 | Per-effect ability-score cap |
 | G6 | Responses with dice or halving amounts, and save-result or trigger conditions |
-| G7 | `rollMode` on own attack rolls, attacks against the character, initiative alone |
+| G7 | `rollMode` on own attack rolls, attacks against the character, initiative alone (built, content v12, D87) |
 | G8 | Rider match on the ability used; Dex substitution for tagged non-finesse weapons |
 | G9 | Roll floor |
 | G10 | Skill-check ability substitution; climb and swim speeds |
