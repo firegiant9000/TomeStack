@@ -1092,7 +1092,9 @@ public static class ContentValidator
         }
 
         // Content v12 (G6): walks the responses a response replaces (this revision's, then the drafts and catalog entries of the content it
-        // names) and says whether the walk returns to the response being validated. Bounded by MaxResponses.
+        // names) and says whether the walk returns to the response being validated. Bounded by MaxResponses. Like FindResource, another
+        // content counts by its drafts and its newest published revision only: an older published one is insert-only and would refuse
+        // this publish for an edge its author has already removed.
         bool SupersedesReturnsTo(Guid startContent, string startResponse, Guid ownContent, string ownResponse)
         {
             var seen = new HashSet<(Guid, string)>();
@@ -1107,7 +1109,9 @@ public static class ContentValidator
                     continue;
                 var revisions = content == revision.ContentId
                     ? new List<ContentRevision> { revision }
-                    : local.OfContent(content).Concat(catalog.RevisionsOf(content)).Where(r => r.ContentId == content).ToList();
+                    : [.. local.OfContent(content).Where(r => r.ContentId == content),
+                        .. catalog.RevisionsOf(content).Where(r => r.ContentId == content && r.Status != RevisionStatus.Published),
+                        .. new[] { catalog.NewestPublished(content) }.OfType<ContentRevision>().Where(r => r.ContentId == content)];
                 foreach (var next in revisions.SelectMany(r => r.Effects.OfType<ResponseEffect>())
                     .Where(r => r.ResponseId == responseId && r.Supersedes is { } s && !string.IsNullOrWhiteSpace(s.ResponseId)))
                     queue.Enqueue((next.Supersedes!.Content ?? content, next.Supersedes.ResponseId));

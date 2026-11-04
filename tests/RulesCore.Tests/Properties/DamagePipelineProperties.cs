@@ -148,7 +148,8 @@ public class DamagePipelineProperties
             var taken = picked.Where(r => r.Phase == ResponsePhase.DamageReduction && r.Available).Sum(r => r.Amount ?? 0);
             var defences = sheet.DamageDefences?.Select(d => new DamageDefence(d.Type, d.Kind)).ToList() ?? [];
             var legacy = DamagePipeline.Resolve(new(Math.Max(c.Amount - taken, 0), c.Type), hp, defences, c.Concentrating, policy);
-            return plan.Reduction == taken
+            // Reduction is capped at the damage (Task 4 ruling); the pre-G6 figure was the uncapped sum.
+            return plan.Reduction == Math.Min(taken, c.Amount)
                 && JsonSerializer.Serialize(plan.Result) == JsonSerializer.Serialize(legacy)
                 && !plan.Result.Outcome.SaveHalved;
         });

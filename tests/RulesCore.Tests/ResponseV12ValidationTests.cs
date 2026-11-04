@@ -297,6 +297,26 @@ public class ResponseV12ValidationTests
         AssertError(ContentValidator.Validate(mine, catalog), "validate.response-supersedes");
     }
 
+    [Fact]
+    public void A_loop_only_through_an_older_published_revision_is_valid()
+    {
+        var otherContent = Guid.Parse("6a7e0200-0000-4000-8000-000000000002");
+        var older = Built(12, Link("far", "ward", ContentId)) with
+        {
+            ContentId = otherContent, RevisionId = Guid.Parse("6a7e0200-0000-4000-8000-000000000102"), Status = RevisionStatus.Published,
+        };
+        var far = new ResponseEffect { Id = "far", ResponseId = "far", Label = "far", Phase = ResponsePhase.DamageReduction, Amount = "1" };
+        var newest = Built(12, far) with
+        {
+            ContentId = otherContent, RevisionId = Guid.Parse("6a7e0200-0000-4000-8000-000000000103"), Status = RevisionStatus.Published,
+        };
+        var catalog = new InMemoryContentCatalog([Catalog.FindSource(Fixtures.Source2024)!], [older, newest]);
+        var mine = Built(12, Reduction(r => r with { Supersedes = new(otherContent, "far") }));
+
+        // The older revision is insert-only, so the edge its author has since removed must not refuse this publish.
+        Assert.DoesNotContain(ContentValidator.Validate(mine, catalog).Errors, e => e.Code == "validate.response-supersedes");
+    }
+
     [Theory]
     [InlineData("1d4-5")]
     [InlineData("-1d6")]
