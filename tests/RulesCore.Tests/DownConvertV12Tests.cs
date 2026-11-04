@@ -215,8 +215,8 @@ public class DownConvertV12Tests
     private static void AssertBlocked(ContentBelow result)
     {
         Assert.True(result.Blocked);
-        // A kept v12 target also fails the lowered copy's own validation (below.validation-error); the rule's change is the one that matters.
-        var change = Assert.Single(result.Changes, c => c.Code == BelowCodes.RollModeDisadvantage);
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(BelowCodes.RollModeDisadvantage, change.Code);
         Assert.Equal(BelowAction.Blocks, change.Action);
         Assert.Equal("effects[0]", change.Path);
     }
@@ -240,6 +240,20 @@ public class DownConvertV12Tests
     [Fact]
     public void Prevent_against_you_is_dropped_below_12() =>
         AssertDroppedWhole(DownConvert.Below(Rev(Mode("attacksAgainst", "advantage", ",\"prevent\":true")), 11));
+
+    [Fact]
+    public void Prevent_disadvantage_against_you_blocks_below_12() =>
+        AssertBlocked(DownConvert.Below(Rev(Mode("attacksAgainst", "disadvantage", ",\"prevent\":true")), 11));
+
+    [Fact]
+    public void Roll_mode_change_after_an_earlier_removal_reports_the_original_index()
+    {
+        var mod = """{"type":"itemMod","id":"m2","appliesTo":"weapon","bonus":1}""";
+        var result = DownConvert.Below(Item($"{mod},{Mode("initiative", "advantage")}"), 11);
+
+        Assert.Empty(result.Revision.Effects);
+        Assert.Equal(["effects[0]", "effects[1]"], result.Changes.Select(c => c.Path).OrderBy(p => p, StringComparer.Ordinal));
+    }
 
     [Fact]
     public void Disadvantage_against_you_is_dropped_below_12() =>

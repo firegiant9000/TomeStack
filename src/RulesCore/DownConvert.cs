@@ -562,13 +562,12 @@ public static class DownConvert
                         // version, which makes the copy stronger, so it blocks.
                         var advantage = string.Equals(StringOf(Property(effect, "mode")), "advantage", StringComparison.OrdinalIgnoreCase);
                         var preventTrue = Member(effect, "prevent") is JsonValue pv && pv.TryGetValue<bool>(out var pb) && pb;
-                        var helps = rollTarget == RollModeEffect.AttacksAgainstTarget ? !advantage || preventTrue : advantage;
+                        // Against the character, a prevent turns the mode around: preventing disadvantage hinders, preventing advantage helps.
+                        var helps = rollTarget == RollModeEffect.AttacksAgainstTarget ? advantage == preventTrue : advantage;
                         changes.Add(helps
-                            ? new(path, BelowAction.Dropped, BelowCodes.EffectUnsupported, $"'{name}': a mode on attack rolls, initiative, attacks against the character, or one with tags, an ability, an exception or a prevent, which the older version would not apply; the feature stays as text.")
+                            ? new(path, BelowAction.Dropped, BelowCodes.EffectUnsupported, $"'{name}': a roll mode the older version cannot hold (a v12 target or member); the feature stays as text.")
                             : new(path, BelowAction.Blocks, BelowCodes.RollModeDisadvantage, $"'{name}': a mode that hinders the character; the older version would leave it out."));
-                        if (helps)
-                            continue;
-                        break;
+                        continue;
                     case WeaponEffect.TypeName:
                         RemoveKey(effect, "bonus", path, BelowAction.Dropped, BelowCodes.WeaponBonus, $"'{name}': the weapon's bonus to hit and damage.", changes);
                         break;
