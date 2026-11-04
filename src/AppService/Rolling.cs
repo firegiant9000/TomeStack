@@ -108,6 +108,7 @@ public sealed partial class TomeStackApp
                 if (critical < 20)
                     provenance = provenance with { Label = $"{provenance.Label} (critical hit on {critical}–20)" };
                 request = new RollRequest("1d20", command.Mode, false, [new RollModifier($"{attack.Name} to hit", attack.ToHit, attack.Origin)], provenance);
+                modeNote = TakeAutomatic(ref request, attack.Mode);
             }
             else
             {
@@ -131,6 +132,8 @@ public sealed partial class TomeStackApp
                     throw new AppValidationException([new("roll.spell-no-attack", $"'{spell.Name}' makes no attack roll.", spellReference)]);
                 explain = caster!.AttackTrace;
                 request = new RollRequest("1d20", command.Mode, false, [new RollModifier($"{caster.Name} spell attack", caster.AttackBonus, caster.Origin)], provenance);
+                // G7: a spell attack carries the tags "spell" and melee or ranged, and the casting ability of its entry.
+                modeNote = TakeAutomatic(ref request, RollModes.ForAttack(sheet.AttackModes, ["spell", spell.Attack == SpellAttackKind.Melee ? "melee" : "ranged"], caster.Ability));
             }
             else
             {
@@ -164,6 +167,8 @@ public sealed partial class TomeStackApp
             // D43 S4: an attack a feature gives, rolled like a weapon. Rider dice are in the formula, so a critical doubles them; the flat total does not double.
             request = FeatureAttackRequest(featureAttack, sheet.Diagnostics, command);
             explain = featureAttack.Trace;
+            if (!command.Damage)
+                modeNote = TakeAutomatic(ref request, featureAttack.Mode);
             // B4: the payment is named on the to-hit record only (the damage roll has none), so Pay is offered once per attack.
             if (!command.Damage && featureAttack.Payment is { } attackPayment)
                 payment = new(featureAttack.Item.ContentId, featureAttack.EffectId, attackPayment.Kind, attackPayment.Kind == PaymentKind.HitPoints ? featureAttack.Cost : null, attackPayment.MinSlotLevel, attackPayment.MayDropToZero);
@@ -298,6 +303,19 @@ public sealed partial class TomeStackApp
             return null;
         var spent = command.Amount ?? cost ?? (effect.Cost is null ? 1 : null);
         return spent is { } uses ? new RollSpend(poolContent, effect.ResourceId, uses, effect.DrawsDown == true) : null;
+    }
+
+    /// <summary>
+    /// D43 S6, content v12 (G7): the player's choice and the sheet's automatic mode combine (advantage and disadvantage cancel). Returns
+    /// what the record says about the automatic mode, or null when no automatic reason applies (the request is then left as it is).
+    /// </summary>
+    private static (RollMode Automatic, IReadOnlyList<string> Sources)? TakeAutomatic(ref RollRequest request, RollModeSummary? summary)
+    {
+        var automatic = summary?.Reasons.Where(r => r.IsAutomatic).ToList();
+        if (automatic is not { Count: > 0 })
+            return null;
+        request = request with { Mode = RollModes.Combine([request.Mode, .. automatic.Select(r => r.Mode)]) };
+        return (summary!.Automatic, [.. automatic.Select(r => r.Source)]);
     }
 
     /// <summary>
