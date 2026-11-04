@@ -1948,6 +1948,18 @@ export type Effect =
       cost?: string;
       toggle?: { contentId?: string; toggleId: string };
       outcomes?: ResponseOutcomeDef[];
+      /** Content v12 (G6): when the response applies; `ability` and `result` go with, and only with, `from: 'save'`. */
+      trigger?: { from: DamageHow['from']; ability?: string; result?: 'success' | 'failure'; damageTypes?: string[] };
+      /** Content v12: damage reduction only, exclusive with `amount`. */
+      share?: NonNullable<ResponseValue['share']>;
+      /** Content v12: damage reduction with an `amount` only. */
+      dice?: string;
+      /** Content v12: damage reduction with no pool only. */
+      automatic?: boolean;
+      /** Content v12: a condition key that stops the response applying. */
+      unlessCondition?: string;
+      /** Content v12: the response this one replaces. No field edits it; it is kept as it is. */
+      supersedes?: { content?: string; responseId: string };
     })
   | (EffectBase & {
       type: 'resource';

@@ -1,8 +1,11 @@
 import { useEffect, useRef } from 'react';
 import type { ContentRevision, Diagnostic, Effect, ResponseOutcomeDef, ResponseOutcomeKind, ResponsePhase } from '../api/types';
 import { toggleValue } from '../attackAuthoring';
+import { abilities } from '../classBasics';
 import { poolValue, type PoolChoice } from '../rollAuthoring';
 import { FormulaField, ToggleSelect, type ToggleChoices } from './AttackFields';
+import { damageTypeLabel, damageTypes } from './customModel';
+import { conditionKeys } from './RollModeFields';
 
 type ResponseEffect = Extract<Effect, { type: 'response' }>;
 type Resource = Extract<Effect, { type: 'resource' }>;
@@ -29,9 +32,24 @@ const kinds: { value: ResponseOutcomeKind; label: string }[] = [
 /** Drops the members a phase does not take and gives it the ones it needs (a valid start). */
 function withPhase(effect: ResponseEffect, phase: ResponsePhase): ResponseEffect {
   const { amount, when, ...rest } = effect;
-  if (phase === 'threshold') return { ...rest, phase, when: when ?? { survived: true } };
-  return { ...rest, phase, amount: amount ?? '1' };
+  // Content v12: share, dice and automatic belong to a damage reduction only.
+  const kept: ResponseEffect = { ...rest };
+  if (phase !== 'damageReduction') {
+    delete kept.share;
+    delete kept.dice;
+    delete kept.automatic;
+  }
+  if (phase === 'threshold') return { ...kept, phase, when: when ?? { survived: true } };
+  return { ...kept, phase, amount: amount ?? '1' };
 }
+
+const sources: { value: NonNullable<ResponseEffect['trigger']>['from']; label: string }[] = [
+  { value: 'attack', label: 'An attack' },
+  { value: 'fall', label: 'A fall' },
+  { value: 'save', label: 'A saving throw' },
+];
+
+const capitalised = (key: string) => key.charAt(0).toUpperCase() + key.slice(1);
 
 /** A new outcome of a kind with only that kind's members. */
 function startOutcome(kind: ResponseOutcomeKind, resources: Resource[], rolls: Roll[], previous?: ResponseOutcomeDef): ResponseOutcomeDef {
@@ -259,6 +277,27 @@ export function ResponseFields(props: {
     const kind: ResponseOutcomeKind = props.resources.length > 0 ? 'spend' : 'regainHitPoints';
     setOutcomes([...outcomes, startOutcome(kind, props.resources, props.rolls)]);
   };
+  const trigger = effect.trigger;
+  const pickedTypes = trigger?.damageTypes ?? [];
+  const setTrigger = (next: NonNullable<ResponseEffect['trigger']>) => onChange({ ...effect, trigger: next });
+  const setFrom = (from: string) => {
+    if (!from) return onChange({ ...effect, trigger: undefined });
+    const { ability, result, ...rest } = trigger ?? { from: 'attack' as const };
+    const next = from as NonNullable<ResponseEffect['trigger']>['from'];
+    setTrigger(next === 'save' ? { ...rest, from: next, ability: ability ?? 'str', result: result ?? 'failure' } : { ...rest, from: next });
+  };
+  const setTypes = (types: string[]) => {
+    const next = { ...(trigger ?? { from: 'attack' as const }) };
+    delete next.damageTypes;
+    setTrigger(types.length === 0 ? next : { ...next, damageTypes: types });
+  };
+  const setShare = (value: string) => {
+    const next = { ...effect };
+    delete next.amount;
+    delete next.dice;
+    delete next.share;
+    onChange(value === 'amount' ? { ...next, amount: '1' } : { ...next, share: value as NonNullable<ResponseEffect['share']> });
+  };
   return (
     <>
       <label className="field">
@@ -276,7 +315,29 @@ export function ResponseFields(props: {
         </select>
       </label>
       {effect.phase === 'damageReduction' && (
-        <FormulaField effectId={effect.id} part="amount" label="Damage taken off (a number or a formula)" value={effect.amount ?? ''} previewRevision={props.previewRevision} floorAtZero onChange={(amount) => onChange({ ...effect, amount })} />
+        <>
+          <label className="field">
+            Damage reduced by
+            <select value={effect.share ?? 'amount'} onChange={(e) => setShare(e.target.value)}>
+              <option value="amount">An amount</option>
+              <option value="half">Half of it</option>
+              <option value="all">All of it</option>
+            </select>
+          </label>
+          {!effect.share && (
+            <>
+              <FormulaField effectId={effect.id} part="amount" label="Damage taken off (a number or a formula)" value={effect.amount ?? ''} previewRevision={props.previewRevision} floorAtZero onChange={(amount) => onChange({ ...effect, amount })} />
+              <label className="field">
+                Dice to roll (for example 1d10; leave empty for none)
+                <input value={effect.dice ?? ''} onChange={(e) => onChange({ ...effect, dice: e.target.value || undefined })} />
+              </label>
+            </>
+          )}
+          <label className="choice">
+            <input type="checkbox" checked={effect.automatic === true} disabled={!!effect.resourceId} onChange={(e) => onChange({ ...effect, automatic: e.target.checked ? true : undefined })} />
+            Ticked when first offered (only with no pool to spend from)
+          </label>
+        </>
       )}
       {effect.phase === 'hitPointOutcome' && (
         <FormulaField effectId={effect.id} part="amount" label="Hit points left (a number or a formula)" value={effect.amount ?? ''} previewRevision={props.previewRevision} floorAtZero onChange={(amount) => onChange({ ...effect, amount })} />
@@ -315,7 +376,7 @@ export function ResponseFields(props: {
         onPick={(pool) =>
           onChange(
             pool
-              ? { ...effect, resourceId: pool.resourceId, resourceContent: pool.contentId, cost: effect.cost ?? '1' }
+              ? { ...effect, resourceId: pool.resourceId, resourceContent: pool.contentId, cost: effect.cost ?? '1', automatic: undefined }
               : { ...effect, resourceId: undefined, resourceContent: undefined, cost: undefined },
           )
         }
@@ -326,6 +387,62 @@ export function ResponseFields(props: {
       {(effect.toggle || props.toggles.own.length > 0 || props.toggles.others.length > 0) && (
         <ToggleSelect label="Offered" alwaysLabel="Always" choices={props.toggles} current={effect.toggle} onPick={(toggle) => onChange({ ...effect, toggle })} />
       )}
+      <label className="field">
+        Only when the hit comes from
+        <select value={trigger?.from ?? ''} onChange={(e) => setFrom(e.target.value)}>
+          <option value="">Not limited</option>
+          {sources.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      {trigger?.from === 'save' && (
+        <>
+          <label className="field">
+            Saving throw ability
+            <select value={trigger.ability ?? ''} onChange={(e) => setTrigger({ ...trigger, ability: e.target.value })}>
+              {abilities.map(([k, name]) => (
+                <option key={k} value={k}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            Saving throw result
+            <select value={trigger.result ?? ''} onChange={(e) => setTrigger({ ...trigger, result: e.target.value as 'success' | 'failure' })}>
+              <option value="failure">Failed</option>
+              <option value="success">Succeeded</option>
+            </select>
+          </label>
+        </>
+      )}
+      {trigger && (
+        <fieldset className="field">
+          <legend>Only for these damage types (none checked: any)</legend>
+          {[...damageTypes, ...pickedTypes.filter((t) => !damageTypes.some((k) => k === t))].map((t) => (
+            <label key={t} className="choice">
+              <input type="checkbox" checked={pickedTypes.includes(t)} onChange={(e) => setTypes(e.target.checked ? [...pickedTypes, t] : pickedTypes.filter((k) => k !== t))} />
+              {damageTypes.some((k) => k === t) ? damageTypeLabel(t) : `${t} (removed)`}
+            </label>
+          ))}
+        </fieldset>
+      )}
+      <label className="field">
+        Does not apply while I am
+        <select value={effect.unlessCondition ?? ''} onChange={(e) => onChange({ ...effect, unlessCondition: e.target.value || undefined })}>
+          <option value="">Never blocked</option>
+          {conditionKeys.map((k) => (
+            <option key={k} value={k}>
+              {capitalised(k)}
+            </option>
+          ))}
+          {effect.unlessCondition && !conditionKeys.includes(effect.unlessCondition) && <option value={effect.unlessCondition}>{effect.unlessCondition} (removed)</option>}
+        </select>
+      </label>
+      {effect.supersedes && <p className="hint">{`Supersedes ${effect.supersedes.responseId}`}</p>}
       <fieldset className="bare-fieldset" ref={outcomesBox}>
         <legend>{`Outcomes (at most ${maxOutcomes})`}</legend>
         {outcomes.length > 0 && (
