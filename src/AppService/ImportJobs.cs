@@ -378,7 +378,7 @@ public sealed partial class TomeStackApp
 
     /// <summary>
     /// <c>import.search</c> (SPEC I-03: a searchable reference source): pages of the source's PDF whose extracted text
-    /// contains the query, with a short snippet around the first match. Search across sources is M7 (BACKLOG B10).
+    /// contains the query, with a short snippet around the first match. Search across sources is BACKLOG B10 (unscheduled).
     /// </summary>
     public IReadOnlyList<ImportSearchHit> SearchImportedText(ImportSearchRequest request)
     {
