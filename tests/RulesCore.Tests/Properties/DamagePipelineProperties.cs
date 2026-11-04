@@ -127,6 +127,48 @@ public class DamagePipelineProperties
             return chosen.Count(IsHitPointOutcome) <= 1 && healOrTemporary <= 1;
         });
 
+    // ---- content v12 G6 task 4 ------------------------------------------------------------------------------------------------
+
+    [Property(MaxTest = 300)]
+    public Property Event_without_source_or_save_plans_as_before() =>
+        Prop.ForAll(ResponseCases.ToArbitrary(), c =>
+        {
+            var (character, sheet) = ResponseSheets[c.Sheet];
+            sheet = sheet with { HitPoints = new HitPointState(sheet.HitPoints!.Maximum, Math.Min(c.Current, sheet.HitPoints.Maximum), c.Temporary) };
+            character = character with { Play = character.Play with { Concentration = c.Concentrating ? new Concentration(Fixtures.Bulwark, "Held") : null } };
+            var chosen = sheet.Responses!.Where((_, i) => (c.Mask & (1 << i)) != 0).Select(r => new ResponseChoice(r.ContentId, r.ResponseId)).ToList();
+            var policy = RulesFamilies.Get(RulesFamilies.Srd521);
+            var plain = DamagePipeline.Plan(new(c.Amount, c.Type), character, sheet, chosen, policy);
+            var explicitDefaults = DamagePipeline.Plan(new(c.Amount, c.Type, null, null), character, sheet, [.. chosen.Select(x => x with { Rolled = null })], policy);
+            // A v11 hit (no source, no save, no roll) halves nothing.
+            return JsonSerializer.Serialize(plain) == JsonSerializer.Serialize(explicitDefaults) && !plain.Result.Outcome.SaveHalved;
+        });
+
+    [Property(MaxTest = 300)]
+    public Property AfterSave_never_exceeds_the_amount() =>
+        Prop.ForAll(
+            (from amount in Gen.Choose(0, PlayState.MaxHitPoints)
+             from from_ in Gen.Elements<ResponseSource?>(null, ResponseSource.Attack, ResponseSource.Fall, ResponseSource.Save)
+             from ok in Gen.Elements(true, false)
+             from half in Gen.Elements(true, false)
+             select new DamageEvent(amount, null, from_, new DamageSave("dex", ok, half))).ToArbitrary(),
+            e => DamagePipeline.AfterSave(e) <= e.Amount && DamagePipeline.AfterSave(e) >= 0);
+
+    [Property(MaxTest = 300)]
+    public Property Reduction_is_never_negative_and_never_exceeds_the_amount_after_the_save() =>
+        Prop.ForAll(
+            (from c in ResponseCases
+             from save in Gen.Elements(true, false)
+             select (c, save)).ToArbitrary(),
+            x =>
+            {
+                var (character, sheet) = ResponseSheets[x.c.Sheet];
+                var chosen = sheet.Responses!.Where((_, i) => (x.c.Mask & (1 << i)) != 0).Select(r => new ResponseChoice(r.ContentId, r.ResponseId)).ToList();
+                var e = new DamageEvent(x.c.Amount, x.c.Type, ResponseSource.Save, new DamageSave("dex", x.save));
+                var plan = DamagePipeline.Plan(e, character, sheet, chosen, RulesFamilies.Get(RulesFamilies.Srd521));
+                return plan.Reduction >= 0 && plan.Reduction <= DamagePipeline.AfterSave(e);
+            });
+
     [Property(MaxTest = 300)]
     public Property Planning_is_deterministic() =>
         Prop.ForAll(ResponseCases.ToArbitrary(), c => JsonSerializer.Serialize(PlanOf(c)) == JsonSerializer.Serialize(PlanOf(c)));

@@ -10,10 +10,17 @@ public enum DamageEffect { None, Immune, Halved, Doubled, HalvedThenDoubled }
 /// <paramref name="Absorbed"/> what temporary hit points took, <paramref name="Lost"/> what hit points lost.
 /// <paramref name="Warnings"/> carries codes and numbers only (<c>play.massive-damage</c>).
 /// </summary>
-public sealed record DamageOutcome(int Amount, string? Type, DamageEffect Effect, int Adjusted, int Absorbed, int Lost, IReadOnlyList<Diagnostic> Warnings);
+public sealed record DamageOutcome(int Amount, string? Type, DamageEffect Effect, int Adjusted, int Absorbed, int Lost, IReadOnlyList<Diagnostic> Warnings, bool SaveHalved = false);
 
-/// <summary>One hit: <paramref name="Type"/> is already canonical (null: untyped, so no defence applies).</summary>
-public sealed record DamageEvent(int Amount, string? Type);
+/// <summary>The saving throw a hit allowed (content v12): the lower-case <paramref name="Ability"/> key, whether it <paramref name="Succeeded"/>, and whether success <paramref name="Half"/>s the damage.</summary>
+public sealed record DamageSave(string Ability, bool Succeeded, bool Half = true);
+
+/// <summary>
+/// One hit: <paramref name="Type"/> is already canonical (null: untyped, so no defence applies). <paramref name="From"/> is where the
+/// hit came from (null: not said, so attack and fall triggers are offered but never a save trigger); <paramref name="Save"/> is the
+/// saving throw it allowed (only read when <paramref name="From"/> is <see cref="ResponseSource.Save"/>).
+/// </summary>
+public sealed record DamageEvent(int Amount, string? Type, ResponseSource? From = null, DamageSave? Save = null);
 
 /// <summary>
 /// The hit points after a hit, what happened (<paramref name="Outcome"/>), the Constitution save DC when a concentrating
@@ -48,8 +55,8 @@ public sealed record ResponseValue(
     IReadOnlyList<ResponseOutcomeValue>? Outcomes = null,
     ResponseTrigger? Trigger = null, ResponseShare? Share = null, string? Dice = null, bool Automatic = false, string? UnlessCondition = null);
 
-/// <summary>A response the player chose for a hit.</summary>
-public sealed record ResponseChoice(Guid ContentId, string ResponseId);
+/// <summary>A response the player chose for a hit. <paramref name="Rolled"/> is the player's roll for a dice response (and only for one).</summary>
+public sealed record ResponseChoice(Guid ContentId, string ResponseId, int? Rolled = null);
 
 /// <summary>A response eligible for a hit: <paramref name="Offered"/> is false (with <paramref name="Reason"/>) when it cannot be chosen now.</summary>
 public sealed record ResponseOffer(ResponseValue Response, bool Offered, string? Reason);
@@ -87,6 +94,8 @@ public static class DamagePipeline
         ArgumentNullException.ThrowIfNull(defences);
         ArgumentNullException.ThrowIfNull(policy);
         var type = damage.Type;
+        var start = AfterSave(damage);
+        var saveHalved = SaveHalves(damage);
         var kinds = type is null
             ? new HashSet<DamageDefenceKind>()
             : defences.Where(d => d.Type == type).Select(d => d.Kind).ToHashSet();
@@ -100,13 +109,13 @@ public static class DamagePipeline
         var amount = effect switch
         {
             DamageEffect.Immune => 0,
-            DamageEffect.Halved => damage.Amount / 2,
-            DamageEffect.Doubled => damage.Amount * 2,
-            DamageEffect.HalvedThenDoubled => damage.Amount / 2 * 2,
-            _ => damage.Amount,
+            DamageEffect.Halved => start / 2,
+            DamageEffect.Doubled => start * 2,
+            DamageEffect.HalvedThenDoubled => start / 2 * 2,
+            _ => start,
         };
         if (amount == 0)
-            return new(hp, new(damage.Amount, type, effect, 0, 0, 0, []), null, false, false);
+            return new(hp, new(damage.Amount, type, effect, 0, 0, 0, [], saveHalved), null, false, false);
 
         var absorbed = Math.Min(hp.Temporary, amount);
         var current = Math.Max(hp.Current - (amount - absorbed), 0);
@@ -116,7 +125,7 @@ public static class DamagePipeline
         var warnings = massive
             ? new List<Diagnostic> { new("play.massive-damage", $"{leftOver} damage was left over after reaching 0 hit points, which equals or exceeds the hit point maximum of {hp.Maximum}.") }
             : [];
-        var outcome = new DamageOutcome(damage.Amount, type, effect, amount, absorbed, hp.Current - current, warnings);
+        var outcome = new DamageOutcome(damage.Amount, type, effect, amount, absorbed, hp.Current - current, warnings, saveHalved);
         // D19 (SRD 5.1 p. 101, SRD 5.2.1 p. 11), amended: damage while concentrating asks for a Constitution save, DC 10 or half the
         // damage after resistance, immunity and vulnerability (before temporary hit points), whichever is higher; at 0 hit points the
         // spell simply ends. The family may cap the DC (SRD 5.2.1: 30); every DC stays within what PlayState validation accepts, so a
@@ -126,6 +135,39 @@ public static class DamagePipeline
         return new(new(hp.Maximum, current, hp.Temporary - absorbed), outcome, dc, ends, massive);
     }
 
+    private static bool SaveHalves(DamageEvent damage) =>
+        damage.From == ResponseSource.Save && damage.Save is { Succeeded: true, Half: true };
+
+    /// <summary>Content v12: the hit's amount once a successful saving throw that halves has halved it (rounding down); otherwise the amount as entered.</summary>
+    public static int AfterSave(DamageEvent damage)
+    {
+        ArgumentNullException.ThrowIfNull(damage);
+        return SaveHalves(damage) ? damage.Amount / 2 : damage.Amount;
+    }
+
+    /// <summary>
+    /// Content v12 (Decision 3): whether <paramref name="response"/>'s trigger matches <paramref name="damage"/>. No trigger matches
+    /// every hit. An unsaid source offers attack and fall triggers (the player judges) but never a save trigger; a known source offers
+    /// only its own kind. A save trigger needs a halving save of its ability with the stated result. <c>damageTypes</c> needs the
+    /// hit's type in the list (an untyped hit never matches).
+    /// </summary>
+    public static bool Matches(ResponseValue response, DamageEvent damage)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+        ArgumentNullException.ThrowIfNull(damage);
+        if (response.Trigger is not { } trigger)
+            return true;
+        if (trigger.DamageTypes is { } types && (damage.Type is null || !types.Contains(damage.Type)))
+            return false;
+        if (trigger.From == ResponseSource.Save)
+        {
+            return damage.From == ResponseSource.Save && damage.Save is { Half: true } save
+                && (trigger.Ability is null || trigger.Ability == save.Ability)
+                && (trigger.Result is null || (trigger.Result == SaveResult.Success) == save.Succeeded);
+        }
+        return damage.From is null || damage.From == trigger.From;
+    }
+
     /// <summary>The Constitution save DC for <paramref name="adjusted"/> damage (after defences, before temporary hit points): 10 or half, whichever is higher, within the family cap and what play state accepts.</summary>
     private static int ConcentrationDc(int adjusted, RulesFamilyPolicy policy) =>
         Math.Min(Math.Max(10, adjusted / 2), Math.Min(policy.ConcentrationSaveMaximumDc ?? int.MaxValue, PlayState.MaxConcentrationSaveDc));
@@ -133,7 +175,11 @@ public static class DamagePipeline
     /// <summary>
     /// D45 (amends D19): one damage event with the player's chosen responses; it writes nothing. The order:
     /// <list type="number">
-    /// <item>the chosen damage reductions come off the amount;</item>
+    /// <item>a successful halving saving throw halves the amount (<see cref="AfterSave"/>); then the chosen <c>share</c> reductions in
+    /// sheet order on the running amount (<c>half</c> halves it, rounding down; <c>all</c> takes it all); then the chosen flat
+    /// reductions (<c>amount</c>, plus the player's roll for a dice response) come off. <see cref="DamagePlan.Reduction"/> counts
+    /// what the responses took off, not the save. A response whose trigger does not match the hit (<see cref="Matches"/>) is not
+    /// eligible in any phase;</item>
     /// <item>defences, the concentration DC and temporary hit points then hit points are <see cref="Resolve"/>, unchanged;</item>
     /// <item>if the hit drops a character who was up to 0, the hit point outcome responses are eligible and one chosen leaves
     /// <see cref="DamagePlan.Final"/> at its amount (1 to the maximum): concentration is kept and its DC still applies
@@ -146,7 +192,8 @@ public static class DamagePipeline
     /// </list>
     /// A chosen response that is not on the sheet, not eligible for this hit, not available or listed twice is a
     /// <c>damage.response-unavailable</c> note; more than one hit point outcome (a survival, a heal or temporary hit points) is a
-    /// <c>damage.one-outcome</c> note. With any note, <see cref="DamagePlan.Outcomes"/> is empty.
+    /// <c>damage.one-outcome</c> note; a chosen dice response without a roll within its expression's range, or any other chosen
+    /// response with one, is a <c>damage.response-roll</c> note and applies nothing. With any note, <see cref="DamagePlan.Outcomes"/> is empty.
     /// </summary>
     public static DamagePlan Plan(DamageEvent damage, Character character, CharacterSheet sheet, IReadOnlyList<ResponseChoice> chosen, RulesFamilyPolicy policy)
     {
@@ -176,7 +223,31 @@ public static class DamagePipeline
                 Refuse(choice.ContentId, choice.ResponseId);
         }
         var pickedResponses = responses.Where(r => picked.Contains((r.ContentId, r.ResponseId))).ToList();
-        var usable = pickedResponses.Where(r => r.Available).ToList();
+        // Decision 5: a dice response needs a roll within its range, and only a dice response carries one. The first choice of a response speaks for it.
+        var rolls = new Dictionary<(Guid, string), int?>();
+        foreach (var choice in chosen)
+            rolls.TryAdd((choice.ContentId, choice.ResponseId), choice.Rolled);
+        var badRoll = new HashSet<ResponseValue>();
+        foreach (var response in pickedResponses.Where(r => r.Available && Matches(r, damage)))
+        {
+            var rolled = rolls.GetValueOrDefault((response.ContentId, response.ResponseId));
+            if (response.Dice is null)
+            {
+                if (rolled is null)
+                    continue;
+                RefuseRoll(response);
+            }
+            else if (!DiceExpression.TryParse(response.Dice, out var expression, out _) || expression is null)
+                RefuseRoll(response);
+            else if (rolled is not { } value || value < expression.Minimum || value > expression.Maximum)
+                notes.Add(new("damage.response-roll", $"Response '{response.ResponseId}' of content {response.ContentId} needs a roll between {expression.Minimum} and {expression.Maximum}."));
+            else
+                continue;
+            badRoll.Add(response);
+        }
+        void RefuseRoll(ResponseValue response) =>
+            notes.Add(new("damage.response-roll", $"Response '{response.ResponseId}' of content {response.ContentId} cannot use the roll given."));
+        var usable = pickedResponses.Where(r => r.Available && Matches(r, damage) && !badRoll.Contains(r)).ToList();
 
         // The chosen costs together must fit each pool. Eligibility depends on the hit points, which depend on the reductions and
         // the survival, so the pass runs in phases, each in sheet order: reductions, then survivals, then the eligible thresholds.
@@ -204,10 +275,20 @@ public static class DamagePipeline
         // 1. Reductions: every damage reduction is eligible.
         foreach (var response in usable.Where(r => r.Phase == ResponsePhase.DamageReduction))
             Fit(response);
-        var reduction = fitted.Where(r => r.Phase == ResponsePhase.DamageReduction).Sum(r => r.Amount ?? 0);
+        // The save's half first, then the chosen shares in sheet order on the running amount, then the flat amounts (and rolls).
+        var afterSave = AfterSave(damage);
+        var reducing = responses.Where(r => r.Phase == ResponsePhase.DamageReduction && fitted.Contains(r)).ToList();
+        var running = afterSave;
+        foreach (var response in reducing.Where(r => r.Share is not null))
+            running = response.Share == ResponseShare.All ? 0 : running / 2;
+        foreach (var response in reducing.Where(r => r.Share is null))
+            running = Math.Max(running - ((response.Amount ?? 0) + (response.Dice is null ? 0 : rolls.GetValueOrDefault((response.ContentId, response.ResponseId)) ?? 0)), 0);
+        var reduction = afterSave - running;
 
         // 2 to 4. Defences, the concentration DC, temporary hit points, hit points: one implementation.
-        var result = Resolve(new(Math.Max(damage.Amount - reduction, 0), damage.Type), hp, defences, character.Play.Concentration is not null, policy);
+        var result = Resolve(new(running, damage.Type), hp, defences, character.Play.Concentration is not null, policy);
+        if (SaveHalves(damage))
+            result = result with { Outcome = result.Outcome with { SaveHalved = true } };
 
         // 5. A hit that would drop a character who was up to 0: the survival responses are eligible; one chosen leaves them standing.
         var drops = hp.Current > 0 && result.After.Current == 0;
@@ -240,7 +321,7 @@ public static class DamagePipeline
             // A survival means the hit did take the hit points to 0, even when the survival leaves as many as before.
             _ => (dropped && r.AtOrBelow is { } limit && final.Current <= limit) || (r.Survived && survival is not null),
         };
-        var eligible = responses.Where(Eligible).ToList();
+        var eligible = responses.Where(r => Matches(r, damage) && Eligible(r)).ToList();
         var offers = eligible.Select(r => new ResponseOffer(r, r.Available, r.Available ? null : r.UnavailableReason)).ToList();
 
         // The eligible chosen thresholds are cost-fitted against what the reductions and the survival left.
