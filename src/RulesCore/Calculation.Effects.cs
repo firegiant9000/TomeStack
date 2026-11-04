@@ -219,7 +219,7 @@ public static partial class CharacterCalculator
             foreach (var effect in revision.Effects.OfType<RollModeEffect>())
             {
                 // Content v12 (G7): while the character has the condition the effect is left out, like a toggle that is off.
-                if (effect.UnlessCondition is { } unless && character.Play.Conditions.Contains(unless))
+                if (effect.UnlessCondition is { } unless && ConditionKeys.Holds(character.Play.Conditions, unless))
                     continue;
                 if (effect.Toggle is { } toggle
                     && GateOnToggle(active, revision, effect.Id, toggle, effect.ToggleContent, effective, autoOn, diagnostics, out _) != ToggleGate.Applies)

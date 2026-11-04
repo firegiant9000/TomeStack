@@ -1040,7 +1040,7 @@ public static partial class CharacterCalculator
                 else if (left < needed)
                     reason = $"Needs {needed} {pool.Label} ({left} left)";
             }
-            if (reason is null && response.UnlessCondition is { } unless && character.Play.Conditions.Contains(unless))
+            if (reason is null && response.UnlessCondition is { } unless && ConditionKeys.Holds(character.Play.Conditions, unless))
                 reason = $"Not while {unless}";
             var trigger = response.Trigger is { DamageTypes: { } types } t
                 ? t with { DamageTypes = [.. types.Select(x => DamageTypes.TryNormalize(x, out var canonical) ? canonical : x)] }
