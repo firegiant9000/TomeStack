@@ -171,6 +171,37 @@ public class NewestCopyTests
     }
 
     [Fact]
+    public void Copy_never_counts_as_newest_in_coverage_validation()
+    {
+        using var app = new TempApp();
+        var source = Source(app);
+        var path = new ChoiceEffect { Id = "path", ChoiceId = "path", Level = 3 };
+        var scale = new ScaleEffect { Id = "ink-scale", ScaleId = "ink", Label = "Ink", Values = [.. Enumerable.Repeat(2, 20)] };
+        var cls = Publish(app, new ContentRevision
+        {
+            ContentId = Guid.NewGuid(), RevisionId = Guid.Empty, Kind = ContentKind.Class, Name = "Newest Ink Class", RulesFamilies = [RulesFamilies.Srd51],
+            Provenance = new(source.Id), Status = RevisionStatus.Draft, Effects = [new HitDieEffect { Id = "hd", Die = 8 }, path, scale],
+        });
+        StoreCopy(app, cls, r => Renamed(r) with { Effects = [.. r.Effects.Where(e => e is not ScaleEffect)] }); // stored last, declares no scale
+        ContentRevision Path(string name, string scaleId) => new()
+        {
+            ContentId = Guid.NewGuid(), RevisionId = Guid.Empty, Kind = ContentKind.Subclass, Name = name, RulesFamilies = [RulesFamilies.Srd51],
+            Provenance = new(source.Id), Status = RevisionStatus.Draft, ExtendsChoice = new(cls.ContentId, "path"), Effects = [scale with { ScaleId = scaleId }],
+        };
+        app.App.SaveDraft(Path("Newest Clashing Path", "ink"));
+        app.App.SaveDraft(Path("Newest Clear Path", "dye"));
+
+        var report = app.App.Coverage(new CoverageRequest(source.Id, IncludeDrafts: true));
+
+        var rows = report.Sources.SelectMany(s => s.Classes.SelectMany(c => c.Levels.SelectMany(l => l.Features)).Concat(s.Other))
+            .Where(f => f.Kind == ContentKind.Subclass && f.Status == RevisionStatus.Draft).ToList();
+        var clashing = Assert.Single(rows, f => f.Name == "Newest Clashing Path").Effects.Single(e => e.EffectId == "ink-scale");
+        var clear = Assert.Single(rows, f => f.Name == "Newest Clear Path").Effects.Single(e => e.EffectId == "ink-scale");
+        // The clash with the original class's "ink" is a validation error, so that effect is not applied as written; the other is.
+        Assert.NotEqual(clear.Effective, clashing.Effective);
+    }
+
+    [Fact]
     public void Copy_never_counts_as_newest_when_publishing_many()
     {
         using var app = new TempApp();

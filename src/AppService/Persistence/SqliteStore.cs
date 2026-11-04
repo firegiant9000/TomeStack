@@ -809,8 +809,8 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
     /// <paramref name="effectTypes"/>. The newest-per-content choice and the status are made in SQL (the status column), and only
     /// the matching rows are deserialized, in insertion order; the compact JSON writes an effect's type as <c>"type":"name"</c>.
     /// Owner answer Q14 (C2-Q1): where the last published row is a verified copy, the newest unmarked published revision of its
-    /// content counts instead, and is listed (in the copy's place, or after the rest) only when it holds one of the effects. Only
-    /// contents whose last row mentions the marker pay for that check.
+    /// content counts instead, and is listed (in the copy's place, or after the rest) only when it holds one of the effects. That
+    /// costs one more scan of the last published rows for the marker key; only rows that hold it are deserialized and checked.
     /// </summary>
     public IReadOnlyList<ContentRevision> ListNewestPublishedWithEffects(IReadOnlyList<string> effectTypes)
     {

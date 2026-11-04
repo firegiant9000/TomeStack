@@ -533,8 +533,8 @@ public sealed partial class PackageService
         // C2-Q3 (R-C21): a lowered draft is never re-pinned (that needs a published original), so restoring it next to the draft it
         // was lowered from keeps both. Say so once for the file; nothing is changed.
         var lowered = parsed.Revisions
-            .Where(r => r.Status == RevisionStatus.Draft && store.RevisionHash(r.RevisionId) is null)
-            .Where(r => DownConversion.VerifiedRoot(r).RevisionId is var root && root != r.RevisionId
+            .Where(r => r.Status == RevisionStatus.Draft && r.Extensions?.ContainsKey(DownConversion.MarkerKey) == true) // cheap checks first
+            .Where(r => DownConversion.VerifiedRoot(r).RevisionId is var root && root != r.RevisionId && store.RevisionHash(r.RevisionId) is null
                 && store.FindRevision(new(r.ContentId, root)) is { Status: RevisionStatus.Draft })
             .ToList();
         if (lowered.Count > 0)
