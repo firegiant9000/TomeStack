@@ -1,4 +1,4 @@
-import type { DerivedValue, RollModeReason, RollModeSummary } from './api/types';
+import type { Ability, AttackModeValue, DerivedValue, RollModeReason, RollModeSummary } from './api/types';
 
 const word = (mode: string) => mode.charAt(0).toUpperCase() + mode.slice(1);
 
@@ -31,18 +31,39 @@ export function assistedNotes(value: DerivedValue | { mode?: RollModeSummary }):
 /**
  * Content v12 (G7): what the sheet says about attacks other creatures make against the character, e.g.
  * "have advantage (A, B); can't have disadvantage (C)". `automatic` already applies a prevent; a prevent reason names the mode
- * attackers can't have. Empty when nothing is to be said.
+ * attackers can't have. Reasons that are not automatic are listed with a note, and reasons that cancel say so. Empty only when
+ * there is no reason at all.
  */
 export function attacksAgainstText(summary: RollModeSummary | undefined): string {
-  if (!summary) return '';
+  if (!summary || summary.reasons.length === 0) return '';
   const parts: string[] = [];
+  const auto = summary.reasons.filter((r) => r.automatic);
+  const prevented = new Set(auto.filter((r) => r.prevent).map((r) => r.mode));
+  const applying = auto.filter((r) => !r.prevent && !prevented.has(r.mode));
   if (summary.automatic !== 'normal') {
-    const sources = summary.reasons.filter((r) => r.automatic && !r.prevent && r.mode === summary.automatic).map((r) => r.source);
+    const sources = applying.filter((r) => r.mode === summary.automatic).map((r) => r.source);
     parts.push(`have ${summary.automatic}${sources.length > 0 ? ` (${sources.join(', ')})` : ''}`);
+  } else if (applying.length > 0) {
+    parts.push(`normal (advantage and disadvantage cancel: ${applying.map((r) => r.source).join(', ')})`);
   }
   for (const mode of ['advantage', 'disadvantage'] as const) {
-    const sources = summary.reasons.filter((r) => r.automatic && r.prevent && r.mode === mode).map((r) => r.source);
+    const sources = auto.filter((r) => r.prevent && r.mode === mode).map((r) => r.source);
     if (sources.length > 0) parts.push(`can't have ${mode} (${sources.join(', ')})`);
   }
+  for (const r of summary.reasons.filter((x) => !x.automatic)) {
+    parts.push(`${r.prevent ? "can't have " : ''}${r.mode} (${r.source}), not applied automatically`);
+  }
   return parts.join('; ');
+}
+
+/** Mirrors `RollModes.ForAttack` (RulesCore): the attack modes that apply to an attack with these tags and this ability, or undefined when none. */
+export function attackModeFor(modes: AttackModeValue[] | undefined, tags: string[], ability: Ability): RollModeSummary | undefined {
+  const matching = (modes ?? [])
+    .filter((m) => (m.ability === undefined || m.ability === ability) && (m.tags.includes('all') || m.tags.some((t) => tags.includes(t))))
+    .map((m) => m.reason);
+  if (matching.length === 0) return undefined;
+  const modesOf = matching.filter((r) => r.automatic).map((r) => r.mode);
+  const adv = modesOf.includes('advantage');
+  const dis = modesOf.includes('disadvantage');
+  return { automatic: adv === dis ? 'normal' : adv ? 'advantage' : 'disadvantage', reasons: matching };
 }
