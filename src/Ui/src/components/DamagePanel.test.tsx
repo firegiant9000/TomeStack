@@ -405,3 +405,134 @@ it('skipped responses after a plain damage are named', () => {
   rerender(<HitPointsPanel view={view} act={() => {}} panelOpen />);
   expect(screen.queryByText(/Available and not chosen/)).toBeNull();
 });
+
+// Content v12 G6 (Task 7): how the hit came, automatic and dice responses.
+it('Heal and Set temporary hit points keep how the hit came; only damage resets it', async () => {
+  const user = userEvent.setup();
+  const act = vi.fn();
+  render(<HitPointsPanel view={viewWith([])} act={act} onDamage={vi.fn()} />);
+  const how = () => screen.getByRole('combobox', { name: 'How did it hit?' }) as HTMLSelectElement;
+  await user.selectOptions(how(), 'A fall');
+  await user.type(screen.getByRole('spinbutton', { name: 'Amount' }), '3');
+  await user.click(screen.getByRole('button', { name: 'Heal' }));
+  expect(how().value).toBe('fall');
+  await user.type(screen.getByRole('spinbutton', { name: 'Amount' }), '3');
+  await user.click(screen.getByRole('button', { name: 'Set temporary hit points' }));
+  expect(how().value).toBe('fall');
+  await user.type(screen.getByRole('spinbutton', { name: 'Amount' }), '3');
+  await user.click(screen.getByRole('button', { name: 'Take damage' }));
+  expect(how().value).toBe('');
+});
+
+it('sends how the hit came on preview and plain damage', async () => {
+  const user = userEvent.setup();
+  const act = vi.fn();
+  const onDamage = vi.fn();
+  // No responses: the plain one-step damage carries it.
+  const { unmount } = render(<HitPointsPanel view={viewWith([])} act={act} onDamage={onDamage} />);
+  await user.type(screen.getByRole('spinbutton', { name: 'Amount' }), '9');
+  await user.selectOptions(screen.getByRole('combobox', { name: 'How did it hit?' }), 'A saving throw');
+  await user.selectOptions(screen.getByRole('combobox', { name: 'Ability' }), 'dex');
+  await user.click(screen.getByRole('checkbox', { name: 'Succeeded' }));
+  expect((screen.getByRole('checkbox', { name: 'Half damage on a success' }) as HTMLInputElement).checked).toBe(true);
+  await user.click(screen.getByRole('button', { name: 'Take damage' }));
+  expect(act).toHaveBeenCalledWith({ action: 'damage', amount: 9, damageFrom: 'save', damageSave: { ability: 'dex', succeeded: true, half: true } });
+  // Reset with the amount.
+  expect((screen.getByRole('combobox', { name: 'How did it hit?' }) as HTMLSelectElement).value).toBe('');
+  unmount();
+
+  // With responses the panel is opened with it, and it goes on the preview and the confirm.
+  const how = { from: 'save' as const, save: { ability: 'dex', succeeded: false, half: true } };
+  render(<HitPointsPanel view={viewWith([brace])} act={act} onDamage={onDamage} />);
+  await user.type(screen.getByRole('spinbutton', { name: 'Amount' }), '13');
+  await user.selectOptions(screen.getByRole('combobox', { name: 'How did it hit?' }), 'A saving throw');
+  await user.selectOptions(screen.getByRole('combobox', { name: 'Ability' }), 'dex');
+  await user.click(screen.getByRole('button', { name: 'Take damage' }));
+  expect(onDamage).toHaveBeenCalledWith(13, '', how);
+  cleanup();
+
+  vi.mocked(client.damagePreview).mockResolvedValue(preview({ offers: [offer(brace)] }));
+  vi.mocked(client.play).mockResolvedValue({ character: { updatedAt: 'stamp-3' }, notices: [] } as unknown as CharacterView);
+  panel({ how });
+  await user.click(await screen.findByRole('checkbox', { name: /Brace/ }));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Apply damage' }).getAttribute('aria-disabled')).toBe('false'));
+  expect(vi.mocked(client.damagePreview).mock.calls.at(-1)![4]).toEqual(how);
+  await user.click(screen.getByRole('button', { name: 'Apply damage' }));
+  await waitFor(() => expect(client.play).toHaveBeenCalled());
+  expect(vi.mocked(client.play).mock.calls[0]![1]).toMatchObject({ damageFrom: 'save', damageSave: how.save });
+});
+
+it('pre-ticks an automatic response and lets the player untick it', async () => {
+  const user = userEvent.setup();
+  const auto = response({ responseId: 'dodge', label: 'Dodge aside', share: 'half', automatic: true });
+  vi.mocked(client.damagePreview).mockResolvedValue(preview({ offers: [offer(auto), offer(brace)] }));
+  panel({ view: viewWith([auto, brace]) });
+  const box = await screen.findByRole('checkbox', { name: /Dodge aside/ });
+  await waitFor(() => expect((box as HTMLInputElement).checked).toBe(true));
+  await waitFor(() => expect(lastChoices()).toEqual([{ contentId: C1, responseId: 'dodge' }]));
+  expect((screen.getByRole('checkbox', { name: /Brace/ }) as HTMLInputElement).checked).toBe(false);
+  await user.click(box);
+  await waitFor(() => expect((screen.getByRole('checkbox', { name: /Dodge aside/ }) as HTMLInputElement).checked).toBe(false));
+  await waitFor(() => expect(lastChoices()).toEqual([]));
+  // The refetch keeps the player's choice.
+  await user.click(screen.getByRole('checkbox', { name: /Brace/ }));
+  await waitFor(() => expect(lastChoices()).toEqual([{ contentId: C1, responseId: 'brace' }]));
+  expect((screen.getByRole('checkbox', { name: /Dodge aside/ }) as HTMLInputElement).checked).toBe(false);
+});
+
+it('needs a roll in range before confirming a dice response', async () => {
+  const user = userEvent.setup();
+  const die = response({ responseId: 'ward', label: 'Ward', dice: '1d10', amount: 2 });
+  vi.mocked(client.damagePreview).mockResolvedValue(preview({ offers: [offer(die)] }));
+  vi.mocked(client.play).mockResolvedValue({ character: { updatedAt: 'stamp-3' }, notices: [] } as unknown as CharacterView);
+  panel({ view: viewWith([die]) });
+  await user.click(await screen.findByRole('checkbox', { name: /Ward/ }));
+  const rolled = await screen.findByRole('spinbutton', { name: 'Rolled (1–10)' });
+  const apply = screen.getByRole('button', { name: 'Apply damage' });
+  await waitFor(() => expect(apply.getAttribute('aria-disabled')).toBe('true'));
+  await user.type(rolled, '11');
+  expect(apply.getAttribute('aria-disabled')).toBe('true');
+  await user.clear(rolled);
+  await user.type(rolled, '4.5');
+  expect(apply.getAttribute('aria-disabled')).toBe('true');
+  await user.clear(rolled);
+  await user.type(rolled, '7');
+  await waitFor(() => expect(apply.getAttribute('aria-disabled')).toBe('false'));
+  expect(lastChoices()).toEqual([{ contentId: C1, responseId: 'ward', rolled: 7 }]);
+  await user.click(apply);
+  await waitFor(() => expect(client.play).toHaveBeenCalled());
+  expect(vi.mocked(client.play).mock.calls[0]![1].responses).toEqual([{ contentId: C1, responseId: 'ward', rolled: 7 }]);
+});
+
+it('shows the response-roll note only once a roll is typed and out of range', async () => {
+  const user = userEvent.setup();
+  const die = response({ responseId: 'ward', label: 'Ward', dice: '1d10', amount: 2 });
+  const note = { code: 'damage.response-roll', message: "Response 'ward' of content c1 needs a roll between 1 and 10." };
+  vi.mocked(client.damagePreview).mockImplementation(async (_id, _a, _t, sent) =>
+    preview({ offers: [offer(die)], notes: (sent as { rolled?: number }[]).some((c) => c.rolled === undefined) && sent.length > 0 ? [note] : [] }),
+  );
+  panel({ view: viewWith([die]) });
+  await user.click(await screen.findByRole('checkbox', { name: /Ward/ }));
+  const rolled = await screen.findByRole('spinbutton', { name: 'Rolled (1–10)' });
+  await waitFor(() => expect(vi.mocked(client.damagePreview).mock.calls.at(-1)![3]).toEqual([{ contentId: C1, responseId: 'ward' }]));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Apply damage' }).getAttribute('aria-disabled')).toBe('true'));
+  expect(screen.queryByText(note.message)).toBeNull();
+  await user.type(rolled, '11');
+  expect(await screen.findByText(note.message)).toBeTruthy();
+});
+
+it('describes half, all and dice reductions', async () => {
+  vi.mocked(client.damagePreview).mockResolvedValue(
+    preview({
+      offers: [
+        offer(response({ responseId: 'h', label: 'Evade', share: 'half' })),
+        offer(response({ responseId: 'a', label: 'Brace fully', share: 'all' })),
+        offer(response({ responseId: 'd', label: 'Ward', dice: '1d10', amount: 2 })),
+      ],
+    }),
+  );
+  panel({ view: viewWith([]) });
+  expect((await screen.findByRole('checkbox', { name: /Evade/ })).closest('label')!.textContent).toContain('halves the damage');
+  expect(screen.getByRole('checkbox', { name: /Brace fully/ }).closest('label')!.textContent).toContain('takes all the damage');
+  expect(screen.getByRole('checkbox', { name: /Ward/ }).closest('label')!.textContent).toContain('reduces the damage by 1d10 + 2');
+});

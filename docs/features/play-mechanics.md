@@ -450,6 +450,8 @@ Validation codes (errors, except where marked): `validate.response-incomplete` (
 
 ### The order (D45, amends D19 as amended 2026-10-20)
 
+Content v12 (G6, [ADR-022](../decisions/ADR-022-content-v12.md)) adds a save's half and the `share` reductions before step 1, and a rolled `dice` amount to the reduction; see [Content v12 (G6)](#content-v12-g6-response-triggers-and-amounts).
+
 1. **Reduction:** the sum of the chosen reductions comes off the amount.
 2. **Immunity, resistance and vulnerability** apply to what is left.
 3. **Concentration:** the save DC is worked out from that amount, before temporary hit points (the family's cap is unchanged).
@@ -613,6 +615,35 @@ The card and the studio editor are described in [sheet-play.md](sheet-play.md) a
 TomeStack 0.6.0 refuses a package that holds a content revision at schema v11 or a character at schema v10 (`package.schema-unsupported`). The previews of an export, a source pack and a campaign pack (`package.exportPreview`, `package.sourcePackPreview`, `package.campaignPackPreview`) warn with `package.needs-newer-build` (once per preview) when the package they describe would hold either. Since D83 the warning comes from the release ladder: it names the release and this build and lists the entries that cause it ("Opening this needs TomeStack 0.7.0 or newer (this is TomeStack 0.7.1): 'Compat Hero' is a character at schema 10. Older versions refuse the file."). A package holding a content revision at schema v12 (MECH-X), which no released version reads, gets "a TomeStack version that reads content schema 12 or later", with no release number ([package-format.md](package-format.md#export)).
 
 **Saving for an older TomeStack (D85).** The sender can instead save a copy for 0.6.0 or 0.5.0 ([package-format.md](package-format.md#save-for-an-older-tomestack-d85)). The v11 fields are lowered by "never silently stronger": what only makes the sheet weaker or by hand (for example a toggle's `duration`, a roll's `whileToggle`, an upkeep that only regains) is dropped and listed, and what would lift a cost, an exclusive form group, a level gate or a penalty (a toggle `cost` or `group`, `counts: up`, an `alsoChange` that spends, a disadvantage roll mode) blocks the copy. A v11 revision that changes becomes a copy with a new id; a running encounter blocks, and a toggle's `roundsLeft` is dropped.
+
+## Content v12 (G6): response triggers and amounts
+
+Decided in [ADR-022](../decisions/ADR-022-content-v12.md) (LIVING_SPECS D86). Six optional members on a `response`, all content schema v12; a revision without them keeps its version.
+
+| Member | Meaning |
+| --- | --- |
+| `trigger` | `{ from: attack \| fall \| save, ability?, result?, damageTypes? }`. `ability` and `result` (`success` or `failure`) go with `from: save` and only there. A save trigger matches only a save that halves on a success. |
+| `share` | `half` or `all`, damage reduction only, instead of `amount`. Half leaves `floor(d / 2)`; all leaves 0. |
+| `dice` | A dice expression such as `1d10`, damage reduction with `amount` only. The reduction is the rolled total plus `amount`. It cannot total below 0 (`1d4-5` is refused). |
+| `automatic` | `true` pre-ticks the response. Damage reduction only, no cost. Only what is chosen applies. |
+| `unlessCondition` | A condition key. The response is on the sheet but unavailable while the character has the condition. |
+| `supersedes` | `{ content?, responseId }`. While this response is available and not part of a loop, the named one is left off the sheet; an upgrade you cannot use (pool empty, form off, condition held) leaves it in place. A loop is refused by validation; one that still reaches a sheet hides nothing and shows `response.supersedes-cycle`. |
+
+**The hit.** The damage request can say how the hit came (`from`: attack, fall or save, and for a save `save`: the ability, whether it succeeded and whether it halves). It is never stored. The hit points panel asks "How did it hit?"; the play command carries `damageFrom` and `damageSave`, the preview `from` and `save`. A save without `from: save` is refused with `damage.invalid-source`.
+
+**Matching.** No trigger matches every hit. An unknown source offers attack and fall triggers (you judge, as before) and never a save trigger. A known source offers only its own kind. `damageTypes` needs the hit's type in the list (an untyped hit never matches). A trigger gates every phase.
+
+**The order, with v12.** The save's half (`floor(d / 2)` on a success that halves), then the chosen `share` reductions in sheet order on the running amount, then flat `amount` reductions plus any rolled `dice`, then immunity, resistance and vulnerability, temporary hit points and hit points as in the order above, then survivals and thresholds. "Reduced by N" counts what responses took off, never more than the damage that reached them and never the save's half.
+
+**Rolls.** A chosen dice response carries `Rolled`, within the expression's minimum and maximum; only a dice response may. Otherwise `damage.response-roll` (one note per response) and nothing applies. The panel shows a roll box for each chosen dice response; you roll the dice yourself.
+
+**Validation** (errors): `validate.response-trigger`, `validate.response-share`, `validate.response-dice`, `validate.response-automatic`, `validate.response-condition`, `validate.response-supersedes`; below v12 `validate.requires-v12` applies as for every v12 field.
+
+**Homebrew Studio.** The response editor can author all six members.
+
+**Older versions.** For an older TomeStack ([package-format.md](package-format.md#save-for-an-older-tomestack-d85)) a response that uses `trigger`, `share`, `dice`, `unlessCondition` or `supersedes` is dropped whole and listed (`below.effect-unsupported`), and so is any response of the same revision it replaced; `automatic` alone drops just the key (`below.v12-key`). This judgement is a proposal that awaits the owner (ADR-022 decision 6).
+
+**Stays by hand:** a hit-time formula variable (a name that reads the hit's damage), a redirect damage roll, and rolling the target's or your own save.
 
 ## Not yet
 

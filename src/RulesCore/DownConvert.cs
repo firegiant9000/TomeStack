@@ -505,6 +505,21 @@ public static class DownConvert
         var kept = new List<JsonNode?>(effects.Count);
         var keptOrigin = new List<int>(effects.Count);
 
+        JsonNode? Member(JsonObject o, string key) => o.FirstOrDefault(p => string.Equals(p.Key, key, StringComparison.OrdinalIgnoreCase)).Value;
+        bool DroppedWhole(JsonObject o) =>
+            ResponseEffect.V12Keys.Any(k => k != "automatic" && o.Any(p => string.Equals(p.Key, k, StringComparison.OrdinalIgnoreCase)));
+        // A response dropped whole that replaced another response of this revision: the replaced one goes too, or the copy would offer
+        // the weaker response the original hid (never stronger, never wider).
+        var replaced = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var node2 in effects)
+        {
+            if (node2 is JsonObject o && TypeOf(o) == ResponseEffect.TypeName && DroppedWhole(o)
+                && Member(o, "supersedes") is JsonObject sup
+                && (Member(sup, "content") is not JsonValue content || string.Equals(content.ToString(), scope.Revision.ContentId.ToString(), StringComparison.OrdinalIgnoreCase))
+                && Member(sup, "responseId") is JsonValue target && target.TryGetValue<string>(out var targetId))
+                replaced.Add(targetId);
+        }
+
         for (var i = 0; i < effects.Count; i++)
         {
             var path = $"effects[{scope.Origin[i]}]";
@@ -512,12 +527,25 @@ public static class DownConvert
             {
                 switch (TypeOf(effect))
                 {
+                    case ResponseEffect.TypeName when !DroppedWhole(effect) && Member(effect, "responseId") is JsonValue own
+                        && own.TryGetValue<string>(out var ownId) && replaced.Contains(ownId):
+                        changes.Add(new(path, BelowAction.Dropped, BelowCodes.EffectUnsupported, $"'{name}': a response that another response, dropped for the older version, replaced; the older version would offer it alone."));
+                        continue;
                     case ItemModEffect.TypeName:
                         changes.Add(new(path, BelowAction.Dropped, BelowCodes.EffectUnsupported, $"'{name}': an item modification, which the older version cannot hold."));
                         continue;
                     case CompanionEffect.TypeName:
                         changes.Add(new(path, BelowAction.Dropped, BelowCodes.EffectUnsupported, $"'{name}': a companion card; its attacks and pools remain as the character's own."));
                         continue;
+                    case ResponseEffect.TypeName:
+                        // Only "automatic" is harmless to lose; the rest would make an older build offer a wider, stronger response.
+                        if (ResponseEffect.V12Keys.Any(k => k != "automatic" && effect.Any(p => string.Equals(p.Key, k, StringComparison.OrdinalIgnoreCase))))
+                        {
+                            changes.Add(new(path, BelowAction.Dropped, BelowCodes.EffectUnsupported, $"'{name}': a response with a trigger, share, dice, condition or replacement, which the older version would offer without them."));
+                            continue;
+                        }
+                        RemoveKey(effect, "automatic", path, BelowAction.Dropped, BelowCodes.V12Key, $"'{name}': that the response applies itself.", changes);
+                        break;
                     case WeaponEffect.TypeName:
                         RemoveKey(effect, "bonus", path, BelowAction.Dropped, BelowCodes.WeaponBonus, $"'{name}': the weapon's bonus to hit and damage.", changes);
                         break;

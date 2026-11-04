@@ -948,11 +948,6 @@ public static partial class CharacterCalculator
                 .Where(r => r.Automation != AutomationStatus.Reference && r.Timing == EffectTiming.Always)
                 .Select(r => (Item: item, Effect: r)))
             .ToList();
-        if (candidates.Count > MaxResponses)
-        {
-            AddOnce(diagnostics, new("response.too-many", $"The character has {candidates.Count} damage responses; only the first {MaxResponses} are listed."));
-            candidates = candidates.GetRange(0, MaxResponses);
-        }
 
         ResponseValue ResponseOf(ActiveContent item, ResponseEffect response)
         {
@@ -1032,12 +1027,65 @@ public static partial class CharacterCalculator
                 else if (left < needed)
                     reason = $"Needs {needed} {pool.Label} ({left} left)";
             }
+            if (reason is null && response.UnlessCondition is { } unless && character.Play.Conditions.Contains(unless))
+                reason = $"Not while {unless}";
+            var trigger = response.Trigger is { DamageTypes: { } types } t
+                ? t with { DamageTypes = [.. types.Select(x => DamageTypes.TryNormalize(x, out var canonical) ? canonical : x)] }
+                : response.Trigger;
             return new(
                 own, revision.Name, response.ResponseId, response.Label, response.Phase, amount, poolContent, response.ResourceId, cost,
-                reason is null, reason, response.Text, atOrBelow, response.When?.Survived == true, outcomes.Count > 0 ? outcomes : null);
+                reason is null, reason, response.Text, atOrBelow, response.When?.Survived == true, outcomes.Count > 0 ? outcomes : null,
+                trigger, response.Share, response.Dice, response.Automatic == true, response.UnlessCondition);
         }
 
-        return [.. candidates.Select(c => ResponseOf(c.Item, c.Effect))];
+        var all = candidates.Select(c => (c.Item, c.Effect, Value: ResponseOf(c.Item, c.Effect))).ToList();
+
+        // Content v12 (G6): a response named by another collected response's `supersedes` is left off only while the superseder is
+        // available (after cost, pool, toggle, formula and condition), and only when that edge is not on a cycle. A cycle that reaches
+        // the sheet (older catalog, cross-content) ignores every edge on it, so all its responses stay, with one diagnostic.
+        // Each response names at most one target, so an edge is on a cycle exactly when following targets from it returns to its owner.
+        var byKey = new Dictionary<(Guid, string), ResponseSupersedes>();
+        foreach (var c in all)
+            if (c.Effect.Supersedes is { } s)
+            {
+                var key = (c.Item.Revision.ContentId, c.Effect.ResponseId);
+                var target = (s.Content ?? key.ContentId, s.ResponseId);
+                if (target != key)
+                    byKey.TryAdd(key, s with { Content = target.Item1 });
+            }
+        var onCycle = new HashSet<(Guid, string)>();
+        foreach (var start in byKey.Keys)
+        {
+            var at = start;
+            for (var steps = 0; steps <= byKey.Count; steps++)
+            {
+                if (!byKey.TryGetValue(at, out var next))
+                    break;
+                at = (next.Content!.Value, next.ResponseId);
+                if (at == start)
+                {
+                    onCycle.Add(start);
+                    break;
+                }
+            }
+        }
+        if (onCycle.Count > 0)
+            AddOnce(diagnostics, new("response.supersedes-cycle",
+                "Damage responses replace each other in a loop, so none of them is hidden: "
+                + string.Join(", ", onCycle.Select(k => $"{k.Item1}/{k.Item2}").Order(StringComparer.Ordinal)) + "."));
+        var superseded = all
+            .Where(c => c.Value.Available && c.Effect.Supersedes is not null && !onCycle.Contains((c.Item.Revision.ContentId, c.Effect.ResponseId)))
+            .Select(c => (c.Effect.Supersedes!.Content ?? c.Item.Revision.ContentId, c.Effect.Supersedes.ResponseId, Owner: (c.Item.Revision.ContentId, c.Effect.ResponseId)))
+            .Where(s => (s.Item1, s.ResponseId) != s.Owner)
+            .Select(s => (s.Item1, s.ResponseId))
+            .ToHashSet();
+        var kept = all.Where(c => !superseded.Contains((c.Item.Revision.ContentId, c.Effect.ResponseId))).Select(c => c.Value).ToList();
+        if (kept.Count > MaxResponses)
+        {
+            AddOnce(diagnostics, new("response.too-many", $"The character has {kept.Count} damage responses; only the first {MaxResponses} are listed."));
+            kept = kept.GetRange(0, MaxResponses);
+        }
+        return kept;
     }
 
     /// <summary>

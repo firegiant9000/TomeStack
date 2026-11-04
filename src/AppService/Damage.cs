@@ -4,9 +4,12 @@ namespace TomeStack.AppService;
 
 /// <summary>
 /// <c>character.damagePreview</c> (D43 slice 7): one hit, with the responses the player has chosen so far. <paramref name="Type"/> is any
-/// case of one of the thirteen damage types; absent means untyped.
+/// case of one of the thirteen damage types; absent means untyped. Content v12 (G6): <paramref name="From"/> is how the hit came
+/// (<c>attack</c>, <c>fall</c> or <c>save</c>; absent: unsaid) and <paramref name="Save"/> the saving throw it allowed, which needs
+/// <c>from: save</c> and a lower-case ability key (else <c>damage.invalid-source</c>).
 /// </summary>
-public sealed record DamagePreviewRequest(Guid CharacterId, int Amount, string? Type, IReadOnlyList<ResponseChoice>? Responses = null);
+public sealed record DamagePreviewRequest(
+    Guid CharacterId, int Amount, string? Type, IReadOnlyList<ResponseChoice>? Responses = null, ResponseSource? From = null, DamageSave? Save = null);
 
 /// <summary>
 /// What a hit would do with the chosen responses, from a plan and an apply on an in-memory copy (nothing is written). <paramref name="Type"/>
@@ -36,8 +39,9 @@ public sealed partial class TomeStackApp
             ?? throw new AppValidationException([new("character.not-found", $"Character {request.CharacterId} does not exist.")]);
         if (request.Amount is < 0 or > PlayState.MaxHitPoints)
             throw new AppValidationException([new("play.amount-out-of-range", $"The amount must be between 0 and {PlayState.MaxHitPoints}.")]);
+        var damage = DamageEventOf(request.Amount, request.Type, request.From, request.Save);
         var sheet = CharacterCalculator.Calculate(character, _store);
-        var (plan, type) = PlanDamage(character, sheet, request.Amount, request.Type, request.Responses ?? []);
+        var (plan, type) = PlanDamage(character, sheet, damage, request.Responses ?? []);
         var (play, rolls, errors) = DamagePipeline.Apply(character.Play, plan, sheet);
         var notes = (IReadOnlyList<Diagnostic>)[.. plan.Notes, .. errors.Where(e => !plan.Notes.Contains(e))];
         // The state the confirm would write, as the sheet will show it (a toggle outcome can change the maximum).
@@ -58,16 +62,34 @@ public sealed partial class TomeStackApp
     }
 
     /// <summary>The one planning step of the preview and the confirm: the type is normalised and the choice list bounded before the plan runs.</summary>
-    private static (DamagePlan Plan, string? Type) PlanDamage(Character character, CharacterSheet sheet, int amount, string? written, IReadOnlyList<ResponseChoice> chosen)
+    private static (DamagePlan Plan, string? Type) PlanDamage(Character character, CharacterSheet sheet, DamageEvent damage, IReadOnlyList<ResponseChoice> chosen)
     {
         if (chosen.Any(c => c is null))
             throw new AppValidationException([new("damage.response-unavailable", "A chosen response is empty.")], "damage.response-unavailable");
-        var type = NormalizedDamageType(written);
         if (chosen.Count > CharacterCalculator.MaxResponses)
             throw new AppValidationException(
                 [new("damage.response-unavailable", $"At most {CharacterCalculator.MaxResponses} responses can be chosen for one hit.")], "damage.response-unavailable");
-        var plan = DamagePipeline.Plan(new(amount, type), character, sheet, chosen, RulesFamilies.Get(character.RulesFamily));
-        return (plan, type);
+        var plan = DamagePipeline.Plan(damage, character, sheet, chosen, RulesFamilies.Get(character.RulesFamily));
+        return (plan, damage.Type);
+    }
+
+    /// <summary>
+    /// The hit as the commands give it: the type normalised (<c>play.damage-type-unknown</c>) and, with content v12, how it came. A save
+    /// without <c>from: save</c>, or one whose ability is not a lower-case ability key, is refused <c>damage.invalid-source</c> before
+    /// anything is planned. The message names no user text.
+    /// </summary>
+    internal static DamageEvent DamageEventOf(int amount, string? writtenType, ResponseSource? from, DamageSave? save)
+    {
+        if (from is { } source && !Enum.IsDefined(source))
+            throw new AppValidationException([new("damage.invalid-source", "The damage source is not one of attack, fall or save.")], "damage.invalid-source");
+        if (save is not null)
+        {
+            if (from != ResponseSource.Save)
+                throw new AppValidationException([new("damage.invalid-source", "A saving throw goes with a damage source of save.")], "damage.invalid-source");
+            if (!Enum.GetNames<Ability>().Any(n => string.Equals(n.ToLowerInvariant(), save.Ability, StringComparison.Ordinal)))
+                throw new AppValidationException([new("damage.invalid-source", "The saving throw's ability is not one of str, dex, con, int, wis or cha.")], "damage.invalid-source");
+        }
+        return new(amount, NormalizedDamageType(writtenType), from, save);
     }
 
     /// <summary>
@@ -78,7 +100,7 @@ public sealed partial class TomeStackApp
     private static PlayState DamageWithResponses(
         Character character, PlayState play, CharacterSheet sheet, PlayCommand command, out DamageOutcome outcome, out IReadOnlyList<Diagnostic>? notices)
     {
-        var (plan, _) = PlanDamage(character, sheet, command.Amount, command.DamageType, command.Responses!);
+        var (plan, _) = PlanDamage(character, sheet, DamageEventOf(command.Amount, command.DamageType, command.DamageFrom, command.DamageSave), command.Responses!);
         var (applied, rolls, errors) = DamagePipeline.Apply(play, plan, sheet); // returns the plan's notes when it has any
         if (errors.Count > 0)
             throw new AppValidationException(errors, errors[0].Code);
@@ -98,7 +120,7 @@ public sealed partial class TomeStackApp
     {
         if (sheet.Responses is not { Count: > 0 })
             return null;
-        var plan = DamagePipeline.Plan(new(command.Amount, NormalizedDamageType(command.DamageType)), character, sheet, [], RulesFamilies.Get(character.RulesFamily));
+        var plan = DamagePipeline.Plan(DamageEventOf(command.Amount, command.DamageType, command.DamageFrom, command.DamageSave), character, sheet, [], RulesFamilies.Get(character.RulesFamily));
         if (plan.Result.Outcome.Adjusted == 0)
             return null; // a hit that does nothing after defences offers nothing to pass over
         var skipped = plan.Offers.Where(o => o.Offered).Select(o => o.Response).ToList();
