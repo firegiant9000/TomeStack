@@ -10,7 +10,8 @@ public sealed record RollModeReason(
     string Source,
     ContentReference Content,
     IReadOnlyList<string>? Against,
-    [property: System.Text.Json.Serialization.JsonIgnore] AutomationStatus Automation = AutomationStatus.Automatic)
+    [property: System.Text.Json.Serialization.JsonIgnore] AutomationStatus Automation = AutomationStatus.Automatic,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)] bool Prevent = false)
 {
     /// <summary>True when the reason feeds <see cref="RollModeSummary.Automatic"/>: an automatic effect that needs no confirmation (no <c>against</c>).</summary>
     [System.Text.Json.Serialization.JsonPropertyName("automatic")]
@@ -19,6 +20,9 @@ public sealed record RollModeReason(
 
 /// <summary>The roll mode the sheet calculates for a field, and every reason listed for it (sheet content order).</summary>
 public sealed record RollModeSummary(RollMode Automatic, IReadOnlyList<RollModeReason> Reasons);
+
+/// <summary>Content v12 (G7): an <c>attack</c> roll mode with the attack tags it reaches and the ability the attack must use (null: any).</summary>
+public sealed record AttackModeValue(RollModeReason Reason, IReadOnlyList<string> Tags, Ability? Ability);
 
 public static class RollModes
 {
@@ -36,5 +40,29 @@ public static class RollModes
             disadvantage |= mode == RollMode.Disadvantage;
         }
         return advantage == disadvantage ? RollMode.Normal : advantage ? RollMode.Advantage : RollMode.Disadvantage;
+    }
+
+    /// <summary>
+    /// Content v12 (G7): the mode of attack rolls against the character. An automatic <c>prevent</c> reason removes every mode it names
+    /// (it contributes no mode itself); the rest combine as <see cref="Combine"/>.
+    /// </summary>
+    public static RollMode CombineAgainst(IEnumerable<RollModeReason> reasons)
+    {
+        var list = reasons.Where(r => r.IsAutomatic).ToList();
+        var prevented = list.Where(r => r.Prevent).Select(r => r.Mode).ToHashSet();
+        return Combine(list.Where(r => !r.Prevent && !prevented.Contains(r.Mode)).Select(r => r.Mode));
+    }
+
+    /// <summary>
+    /// Content v12 (G7): the attack-roll modes that reach one attack. A mode matches when its tags hold <c>all</c> or any of
+    /// <paramref name="attackTags"/>, and it names no ability or the attack's. Null when none match.
+    /// </summary>
+    public static RollModeSummary? ForAttack(IReadOnlyList<AttackModeValue>? modes, IReadOnlyList<string> attackTags, Ability ability)
+    {
+        var matching = (modes ?? [])
+            .Where(m => (m.Ability is null || m.Ability == ability) && (m.Tags.Contains(AttackRiderEffect.AllTag) || m.Tags.Any(attackTags.Contains)))
+            .Select(m => m.Reason)
+            .ToList();
+        return matching.Count == 0 ? null : new RollModeSummary(Combine(matching.Where(r => r.IsAutomatic).Select(r => r.Mode)), matching);
     }
 }

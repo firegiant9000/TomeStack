@@ -116,7 +116,9 @@ public sealed record CharacterSheet(
     int? XpForNextLevel = null,
     IReadOnlyList<UpkeepValue>? Upkeeps = null,
     IReadOnlyList<ResponseValue>? Responses = null,
-    IReadOnlyList<CompanionValue>? Companions = null)
+    IReadOnlyList<CompanionValue>? Companions = null,
+    IReadOnlyList<AttackModeValue>? AttackModes = null,
+    RollModeSummary? AttacksAgainst = null)
 {
     public DerivedValue Field(string field) => Fields.Single(f => f.Field == field);
 }
@@ -417,7 +419,8 @@ public sealed record AttackEntry(
     int? Cost = null,
     PaymentValue? Payment = null,
     int? EntryIndex = null,
-    Guid? CompanionId = null);
+    Guid? CompanionId = null,
+    RollModeSummary? Mode = null);
 
 /// <summary>Content v11 (D43): where an attack on the sheet comes from. Custom attacks are not on the sheet's list.</summary>
 public enum AttackSource { Weapon, Feature }
@@ -716,7 +719,7 @@ public static partial class CharacterCalculator
         var effective = ToggleGroups.Resolve(character.Play, declaredToggles, diagnostics, active.Select(a => a.Revision.ContentId).ToHashSet());
         var resourceBonuses = new List<ResourceBonus>();
         var modifiers = CollectModifiers(active, character, policy, diagnostics, warnings, manual, effective, autoOn, resourceBonuses, resolved.ClassLevels, resolved.ModdedEntries);
-        var rollModes = CollectRollModes(active, effective, autoOn, diagnostics);
+        var rollModes = CollectRollModes(active, character, effective, autoOn, diagnostics);
         var weaponProficiencies = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         var armorTraining = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         var unseenArmor = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
@@ -779,7 +782,7 @@ public static partial class CharacterCalculator
                 results[spec.Id].Override,
                 spec.Units,
                 MarkOf(spec.Id, proficiencies),
-                rollModes.GetValueOrDefault(spec.Id));
+                rollModes.ByField.GetValueOrDefault(spec.Id));
         }).ToList();
 
         // Before the feature list: an attack whose die is invalid reports on its feature (attack.die-invalid).
@@ -879,6 +882,9 @@ public static partial class CharacterCalculator
         // S2/R40: the payment rows were built before hit points and slots existed; settle whether each can be made now. Available is untouched.
         toggles = [.. toggles.Select(t => t.Payment is { } p ? t with { Payment = Affordability(p, t.Cost, hitPoints, spellSlots, pactSlots) } : t)];
         attacks = [.. attacks.Select(a => a.Payment is { } p ? a with { Payment = Affordability(p, a.Cost, hitPoints, spellSlots, pactSlots) } : a)];
+        // Content v12 (G7): the character's own attacks get the attack modes that reach them. After the companion tagging: a companion's attack is not the character's roll.
+        if (rollModes.AttackModes is not null)
+            attacks = [.. attacks.Select(a => a.CompanionId is null && RollModes.ForAttack(rollModes.AttackModes, AttackTagsOf(a), a.Ability) is { } mode ? a with { Mode = mode } : a)];
         features = [.. features.Select(f => f.Effects.Any(e => e.Payment is not null)
             ? f with { Effects = [.. f.Effects.Select(e => e.Payment is { } p ? e with { Payment = Affordability(p, e.Cost, hitPoints, spellSlots, pactSlots) } : e)] }
             : f)];
@@ -899,8 +905,15 @@ public static partial class CharacterCalculator
             spellcasting, spellSlots, pactSlots, attacks, toggles, scales.Count > 0 ? scales : null, bloodied ? true : null,
             damageDefences.Count > 0 ? damageDefences : null, null, // the item uses are added once by Calculate (WithItemUses)
             xpForNextLevel is { } next && character.Xp >= next ? true : null, xpForNextLevel, upkeeps.Count > 0 ? upkeeps : null,
-            responses.Count > 0 ? responses : null, companions.Count > 0 ? companions : null), active);
+            responses.Count > 0 ? responses : null, companions.Count > 0 ? companions : null, rollModes.AttackModes, rollModes.AttacksAgainst), active);
     }
+
+    /// <summary>The tags an attack roll mode matches: a weapon's <c>weapon</c>, then its own tags (a feature attack), then <c>melee</c> or <c>ranged</c>.</summary>
+    private static IReadOnlyList<string> AttackTagsOf(AttackEntry attack) =>
+    [
+        .. attack.Source == AttackSource.Weapon ? new[] { "weapon" } : attack.Tags ?? [],
+        attack.Attack == WeaponAttack.Ranged ? "ranged" : "melee",
+    ];
 
     /// <summary>
     /// A response whose toggleOn outcome names a form that is missing, automatic or unavailable, or whose spend or regain outcome names a pool
