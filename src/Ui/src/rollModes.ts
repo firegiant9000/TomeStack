@@ -41,7 +41,7 @@ export function attacksAgainstText(summary: RollModeSummary | undefined): string
     parts.push(`have ${summary.automatic}${sources.length > 0 ? ` (${sources.join(', ')})` : ''}`);
   }
   for (const mode of ['advantage', 'disadvantage'] as const) {
-    const sources = summary.reasons.filter((r) => r.prevent && r.mode === mode).map((r) => r.source);
+    const sources = summary.reasons.filter((r) => r.automatic && r.prevent && r.mode === mode).map((r) => r.source);
     if (sources.length > 0) parts.push(`can't have ${mode} (${sources.join(', ')})`);
   }
   return parts.join('; ');
