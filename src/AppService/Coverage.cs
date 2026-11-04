@@ -89,7 +89,8 @@ public static class Coverage
         // Drafts are listed beside the published rows and never counted: the walk sees the published revisions only (the latest of
         // each content, so a subclass that dropped its extendsChoice no longer joins the class); validation sees everything.
         var walkCatalog = new InMemoryContentCatalog([], chosen.Values);
-        var validationCatalog = new InMemoryContentCatalog([], all);
+        // Newest as chosen above (Q14: never a stored copy while an unmarked revision exists), not the in-memory catalog's stored order.
+        var validationCatalog = new ChosenNewestCatalog(new InMemoryContentCatalog([], all), chosen);
         var validated = new Dictionary<Guid, HashSet<string>>(); // draft revision id -> effect ids with a validation error
         var rows = inScope.ToDictionary(r => r.ContentId, r => Row(r, validationCatalog, validated));
         var draftRows = draftScope.ToDictionary(r => r.ContentId, r => Row(r, validationCatalog, validated));
@@ -114,6 +115,7 @@ public static class Coverage
     /// <summary>
     /// The latest published revision of each content by store order (rowid), and, with drafts included, each content's newest revision
     /// when that is a draft. A published revision keeps its draft behind it in the store, so a draft only shows while it is newer.
+    /// A stored copy never counts as either while an unmarked revision of its content exists (owner answer Q14).
     /// </summary>
     internal static (Dictionary<Guid, ContentRevision> Published, Dictionary<Guid, ContentRevision> Drafts) Choose(IReadOnlyList<ContentRevision> all, bool includeDrafts)
     {
@@ -125,10 +127,30 @@ public static class Coverage
             if (revision.Status == RevisionStatus.Published)
                 published[revision.ContentId] = revision;
         }
+        // Only contents whose last revision is a copy are looked at again.
+        foreach (var (map, publishedOnly) in new[] { (published, true), (newest, false) })
+        {
+            foreach (var id in map.Where(p => Packages.DownConversion.IsCopy(p.Value)).Select(p => p.Key).ToList())
+                map[id] = Packages.DownConversion.Newest([.. all.Where(r => r.ContentId == id && (!publishedOnly || r.Status == RevisionStatus.Published))])!;
+        }
         var drafts = includeDrafts
             ? newest.Where(n => n.Value.Status == RevisionStatus.Draft).ToDictionary(n => n.Key, n => n.Value)
             : [];
         return (published, drafts);
+    }
+
+    /// <summary>A catalog whose newest published revision of each content is the one <see cref="Choose"/> picked.</summary>
+    private sealed class ChosenNewestCatalog(IContentCatalog inner, Dictionary<Guid, ContentRevision> newest) : IContentCatalog
+    {
+        public ContentRevision? FindRevision(ContentReference reference) => inner.FindRevision(reference);
+
+        public SourceRecord? FindSource(Guid sourceId) => inner.FindSource(sourceId);
+
+        public IEnumerable<ContentRevision> ChoiceExtensions(Guid contentId, string choiceId) => inner.ChoiceExtensions(contentId, choiceId);
+
+        public IEnumerable<ContentRevision> RevisionsOf(Guid contentId) => inner.RevisionsOf(contentId);
+
+        public ContentRevision? NewestPublished(Guid contentId) => newest.GetValueOrDefault(contentId);
     }
 
     private static IEnumerable<FeatureCoverage> InOrder(IEnumerable<FeatureCoverage> rows) =>
@@ -206,7 +228,7 @@ public static class Coverage
         return byName != 0 ? byName : aId.CompareTo(bId);
     }
 
-    private static FeatureCoverage Row(ContentRevision revision, InMemoryContentCatalog catalog, Dictionary<Guid, HashSet<string>> validated)
+    private static FeatureCoverage Row(ContentRevision revision, IContentCatalog catalog, Dictionary<Guid, HashSet<string>> validated)
     {
         // A class's level-gated content grants and choices are its structure, shown as the features they place, not counted as effects.
         var effects = revision.Kind == ContentKind.Class
@@ -242,7 +264,7 @@ public static class Coverage
     }
 
     /// <summary>The ids of the effects of a draft that fail validation (a formula that does not parse, a bad reference); empty for a published revision.</summary>
-    private static HashSet<string> Failing(ContentRevision revision, InMemoryContentCatalog catalog, Dictionary<Guid, HashSet<string>> validated)
+    private static HashSet<string> Failing(ContentRevision revision, IContentCatalog catalog, Dictionary<Guid, HashSet<string>> validated)
     {
         if (revision.Status != RevisionStatus.Draft)
             return [];

@@ -787,6 +787,10 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
 
     public IEnumerable<ContentRevision> RevisionsOf(Guid contentId) => ListRevisions(contentId);
 
+    /// <summary>The newest published revision of one content (<see cref="Packages.DownConversion.Newest"/>: never a copy while an unmarked one exists).</summary>
+    public ContentRevision? NewestPublished(Guid contentId) =>
+        Packages.DownConversion.Newest([.. ListRevisions(contentId).Where(r => r.Status == RevisionStatus.Published)]);
+
     /// <summary>Every stored revision in the order it was added (the homebrew studio's history).</summary>
     public IReadOnlyList<ContentRevision> ListRevisionsInOrder()
     {
@@ -804,18 +808,36 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
     /// The newest published revision (insertion order) of each content, but only those whose stored JSON holds an effect of one of
     /// <paramref name="effectTypes"/>. The newest-per-content choice and the status are made in SQL (the status column), and only
     /// the matching rows are deserialized, in insertion order; the compact JSON writes an effect's type as <c>"type":"name"</c>.
+    /// Owner answer Q14 (C2-Q1): where the last published row is a verified copy, the newest unmarked published revision of its
+    /// content counts instead, and is listed (in the copy's place, or after the rest) only when it holds one of the effects. That
+    /// costs one more scan of the last published rows for the marker key; only rows that hold it are deserialized and checked.
     /// </summary>
     public IReadOnlyList<ContentRevision> ListNewestPublishedWithEffects(IReadOnlyList<string> effectTypes)
     {
         ArgumentNullException.ThrowIfNull(effectTypes);
         if (effectTypes.Count == 0)
             return [];
+        const string last = "rowid IN (SELECT MAX(rowid) FROM content_revisions WHERE status = 'Published' GROUP BY content_id)";
         var clause = string.Join(" OR ", effectTypes.Select((_, i) => $"json LIKE $t{i}"));
         var parameters = effectTypes.Select((t, i) => ($"$t{i}", (object)$"%\"type\":\"{t}\"%")).ToArray();
-        return Query<ContentRevision>(
-            "SELECT json FROM content_revisions WHERE rowid IN (SELECT MAX(rowid) FROM content_revisions WHERE status = 'Published' GROUP BY content_id) " +
-            $"AND ({clause}) ORDER BY rowid;",
-            parameters);
+        var rows = Query<ContentRevision>($"SELECT json FROM content_revisions WHERE {last} AND ({clause}) ORDER BY rowid;", parameters);
+        var copies = Query<ContentRevision>($"SELECT json FROM content_revisions WHERE {last} AND json LIKE $m ORDER BY rowid;", ("$m", $"%\"{Packages.DownConversion.MarkerKey}\"%"))
+            .Where(Packages.DownConversion.IsCopy).ToList();
+        if (copies.Count == 0)
+            return rows;
+        // The revision that counts for each copy's content, when it is not the copy, and only if it holds one of the effects.
+        var instead = new Dictionary<Guid, ContentRevision?>();
+        foreach (var copy in copies)
+        {
+            if (NewestPublished(copy.ContentId) is { } original && original.RevisionId != copy.RevisionId)
+            {
+                instead[copy.ContentId] = Query<ContentRevision>($"SELECT json FROM content_revisions WHERE revision_id = $rid AND ({clause});", [("$rid", Key(original.RevisionId)), .. parameters])
+                    .SingleOrDefault();
+            }
+        }
+        var listed = rows.Select(r => instead.TryGetValue(r.ContentId, out var other) ? other : r).OfType<ContentRevision>().ToList();
+        listed.AddRange(instead.Where(p => p.Value is not null && rows.All(r => r.ContentId != p.Key)).Select(p => p.Value!));
+        return listed;
     }
 
     public IReadOnlyList<ContentRevision> ListRevisions()

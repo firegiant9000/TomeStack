@@ -231,6 +231,44 @@ public class ClassAcceptTests
     }
 
     [Fact]
+    public void Copy_never_counts_as_newest_for_an_accepted_linked_feature()
+    {
+        var (temp, _, jobId) = Imported();
+        using var _t = temp;
+        var lamplighter = Reviewed(temp, jobId, "Fixture Lamplighter");
+        var glow = temp.Accept(new(Named(temp, jobId, "Fixture Glow").Id, Confirm: true));
+        var published = temp.App.Publish(glow.Draft!).Published;
+        var copy = NewestCopyTests.StoreCopy(temp, published, r => r with { Name = r.Name + " (copy)" });
+
+        var accepted = temp.Accept(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: Both));
+
+        var grants = temp.App.Store.FindRevision(accepted.Draft!)!.Effects.OfType<GrantEffect>().Where(g => g.Grant == GrantKind.Content).ToList();
+        Assert.Contains(grants, g => g.Content == published);
+        Assert.DoesNotContain(grants, g => g.Content == copy.Reference);
+    }
+
+    [Fact]
+    public void Copy_never_counts_as_newest_for_the_installed_features_by_name()
+    {
+        var temp = new TempApp();
+        using var _t = temp;
+        var installed = PublishedFeature(temp, "Test Installed Book", "Fixture Beacon");
+        // Stored after the original and renamed: by stored order the copy would be the installed "newest" and take the name away.
+        var copy = NewestCopyTests.StoreCopy(temp, installed.Reference, r => r with { Name = r.Name + " (copy)" });
+        var (_, jobId) = ImportedInto(temp);
+        Assert.DoesNotContain(temp.App.ListCandidates(new(jobId)), c => c.Candidate.ProposedName == "Fixture Beacon"); // linked to the one installed feature, no stub
+        var lamplighter = Reviewed(temp, jobId, "Fixture Lamplighter");
+
+        var link = Assert.Single(temp.App.CheckCandidate(lamplighter.Id).Linked, l => l.Name == "Fixture Beacon");
+        Assert.True(link.Installed);
+        var accepted = temp.Accept(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: Both));
+
+        var grants = temp.App.Store.FindRevision(accepted.Draft!)!.Effects.OfType<GrantEffect>().Where(g => g.Grant == GrantKind.Content).ToList();
+        Assert.Contains(grants, g => g.Content == installed.Reference);
+        Assert.DoesNotContain(grants, g => g.Content == copy.Reference);
+    }
+
+    [Fact]
     public void A_linked_feature_re_drafted_after_its_accept_is_pinned_at_its_newest_draft()
     {
         var (temp, _, jobId) = Imported();

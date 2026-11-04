@@ -121,6 +121,90 @@ public class LibraryBackupTests
         }
     }
 
+    private static ContentRevision Steady(SourceRecord source, string name) => new()
+    {
+        ContentId = Guid.NewGuid(), RevisionId = Guid.Empty, Kind = ContentKind.Feature, Name = name, RulesFamilies = [RulesFamilies.Srd51],
+        Provenance = new(source.Id), Status = RevisionStatus.Draft,
+        Effects = [new ModifierEffect { Id = "fly", Operation = ModifierOperation.Bonus, Target = FieldIds.FlySpeed, Value = "10" }],
+    };
+
+    /// <summary>A backup made for 0.6.0 of the library as it is now, in a temp file the caller deletes.</summary>
+    private static string LoweredBackup(TomeStackApp app)
+    {
+        var row = ReleaseLadder.Target("0.6.0")!;
+        var hash = app.PreviewLibraryBackup(row).ChangesHash;
+        var path = TempFile();
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        using var file = File.Create(path);
+        app.WriteLibraryBackup(file, row, hash);
+        return path;
+    }
+
+    [Fact]
+    public void Restore_preview_warns_once_per_file_about_lowered_drafts_it_would_keep_beside_the_originals()
+    {
+        // C2-Q3 (R-C21): a lowered draft is never re-pinned, so restoring it next to the draft it came from keeps both. A warning only.
+        using var app = new TempApp();
+        var source = app.App.CreateHomebrewSource(new("Compat Homebrew A", [RulesFamilies.Srd51], Redistributable: true, ConfirmOwnWork: true));
+        var first = app.App.SaveDraft(Steady(source, "Compat Steady Hands"));
+        var path = LoweredBackup(app.App);
+        try
+        {
+            var before = Snapshot(app.App);
+
+            var preview = app.App.PreviewLibraryRestore(path);
+
+            Assert.True(preview.CanApply, string.Join("; ", preview.Errors.Select(e => e.Message)));
+            var warning = Assert.Single(preview.Warnings, w => w.Code == "restore.down-converted-draft");
+            Assert.StartsWith("'Compat Steady Hands': this file holds a copy of your draft here, made for TomeStack 0.6.0.", warning.Message, StringComparison.Ordinal);
+            Assert.Equal(first.ContentId, warning.Content!.ContentId);
+            Assert.NotEqual(first.RevisionId, warning.Content.RevisionId); // it names the copy in the file
+            Assert.Equal(before, Snapshot(app.App)); // a warning only: the preview changes nothing
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+
+        // Several drafts: one message with a count.
+        app.App.SaveDraft(Steady(source, "Compat Second Hands"));
+        var several = LoweredBackup(app.App);
+        try
+        {
+            var warning = Assert.Single(app.App.PreviewLibraryRestore(several).Warnings, w => w.Code == "restore.down-converted-draft");
+            Assert.StartsWith("2 drafts in this file are copies of drafts here, made for TomeStack 0.6.0.", warning.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            File.Delete(several);
+        }
+    }
+
+    [Fact]
+    public void Restore_preview_has_no_lowered_draft_warning_without_a_draft_here()
+    {
+        // A published revision is re-pinned to its original instead, so only a draft that is still here earns the warning.
+        using var app = new TempApp();
+        var source = app.App.CreateHomebrewSource(new("Compat Homebrew A", [RulesFamilies.Srd51], Redistributable: true, ConfirmOwnWork: true));
+        // Stored published directly: publishing through the app leaves the draft it came from, which would earn the warning itself.
+        var published = Steady(source, "Compat Steady Hands") with { RevisionId = Guid.NewGuid(), Status = RevisionStatus.Published };
+        app.App.Store.AddRevision(published);
+        var fixture = TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json");
+        app.App.SaveCharacter(fixture with { Pins = [.. fixture.Pins, published.Reference] });
+        var path = LoweredBackup(app.App);
+        try
+        {
+            var preview = app.App.PreviewLibraryRestore(path);
+
+            Assert.DoesNotContain(preview.Warnings, w => w.Code == "restore.down-converted-draft");
+            Assert.Contains(preview.Warnings, w => w.Code == "package.down-converted-repinned");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     [Theory]
     [InlineData("\"x\"")]
     [InlineData("[]")]

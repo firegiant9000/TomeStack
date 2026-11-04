@@ -1166,7 +1166,7 @@ public class DownConversionExportTests
         Assert.True(preview.CanApply, string.Join("; ", preview.Errors.Select(e => e.Message)));
         Assert.Empty(preview.Repinned ?? []);
         var warning = Assert.Single(preview.Warnings, w => w.Code == "package.down-converted");
-        Assert.Equal($"'Compat Steady Hands': made for TomeStack 0.6.0 by {preview.Manifest!.AppVersion}; the original has more.", warning.Message);
+        Assert.Equal($"'Compat Steady Hands' in this file was made for TomeStack 0.6.0 by {preview.Manifest!.AppVersion} and imports as it is (no original here matches it); the original has more.", warning.Message);
         var item = Assert.Single(preview.Items, i => i.Kind == "contentRevision" && i.Name == "Compat Steady Hands");
         Assert.Equal(PackageItemAction.Add, item.Action);
         fresh.App.ApplyImport(bytes);
@@ -1281,7 +1281,10 @@ public class DownConversionExportTests
         var preview = app.App.PreviewImport(forged);
 
         Assert.Empty(preview.Repinned ?? []);
-        Assert.Equal(2, preview.Warnings.Count(w => w.Code == "package.down-converted"));
+        // C2-Q5: one line for the file, with the count, not one per copy.
+        var warning = Assert.Single(preview.Warnings, w => w.Code == "package.down-converted");
+        Assert.Equal($"2 revisions in this file were made for TomeStack 0.6.0 by {preview.Manifest!.AppVersion} and import as they are (no original here matches them); the originals have more.", warning.Message);
+        Assert.Null(warning.Content);
         Assert.Equal(2, preview.Items.Count(i => i.Kind == "contentRevision" && i.Action == PackageItemAction.Add));
         Assert.DoesNotContain(preview.Errors, e => e.Code is "validate.reference-missing" or "package.pin-missing");
     }

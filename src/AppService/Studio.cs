@@ -18,12 +18,16 @@ public sealed record ShareableRequest(Guid SourceId, bool Shareable, bool Confir
 /// <summary><c>content.diagnose</c>: exactly one of a source, a stored revision or an unsaved revision.</summary>
 public sealed record DiagnoseRequest(Guid? SourceId = null, ContentReference? Reference = null, ContentRevision? Revision = null);
 
-/// <summary>One content entity from a source, as the studio lists it: every revision in the order it was added.</summary>
+/// <summary>
+/// One content entity from a source, as the studio lists it: every revision in the order it was added. Latest and latest
+/// published are the last ones, but never a stored copy while an unmarked revision exists (owner answer Q14), so a new draft
+/// starts from the original.
+/// </summary>
 public sealed record StudioEntry(Guid ContentId, string Name, ContentKind Kind, IReadOnlyList<ContentRevision> Revisions)
 {
-    public ContentRevision Latest => Revisions[^1];
+    public ContentRevision Latest => Packages.DownConversion.Newest(Revisions)!;
 
-    public ContentRevision? LatestPublished => Revisions.LastOrDefault(r => r.Status == RevisionStatus.Published);
+    public ContentRevision? LatestPublished => Packages.DownConversion.Newest([.. Revisions.Where(r => r.Status == RevisionStatus.Published)]);
 }
 
 /// <summary>
@@ -212,7 +216,7 @@ public sealed partial class TomeStackApp
         .. _store.ListRevisionsInOrder()
             .Where(r => r.Provenance.SourceId == sourceId)
             .GroupBy(r => r.ContentId)
-            .Select(g => new StudioEntry(g.Key, g.Last().Name, g.Last().Kind, [.. g]))
+            .Select(g => new StudioEntry(g.Key, Packages.DownConversion.Newest(g)!.Name, g.Last().Kind, [.. g]))
             .OrderBy(e => e.Kind).ThenBy(e => e.Name, StringComparer.CurrentCultureIgnoreCase),
     ];
 }

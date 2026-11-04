@@ -217,7 +217,7 @@ public static partial class CharacterCalculator
                 var spellId = roll.CastsSpell!.Value;
                 var revision = pinned.FirstOrDefault(r => r.ContentId == spellId) is { } pin
                     ? catalog.FindRevision(pin)
-                    : catalog.RevisionsOf(spellId).Where(r => r.Status == RevisionStatus.Published).TakeLast(1).FirstOrDefault();
+                    : catalog.NewestPublished(spellId);
                 if (SpellRefusal(revision, character.RulesFamily) is { } refused)
                 {
                     AddOnce(diagnostics, new("spells.unusable", $"Spell {revision?.Name ?? spellId.ToString()} {refused}; '{roll.Label}' does not cast it.", item.Revision.Reference, roll.Id));

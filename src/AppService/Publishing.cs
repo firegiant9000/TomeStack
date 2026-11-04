@@ -239,6 +239,9 @@ public sealed partial class TomeStackApp
             if (revision.Status == RevisionStatus.Published)
                 hasPublished.Add(revision.ContentId);
         }
+        // Q14: but never a stored copy while an unmarked revision exists (only contents whose last revision is a copy are looked at again).
+        foreach (var id in newest.Where(p => Packages.DownConversion.IsCopy(p.Value)).Select(p => p.Key).ToList())
+            newest[id] = Packages.DownConversion.Newest([.. all.Where(r => r.ContentId == id)])!;
         var drafts = new List<ContentRevision>();
         foreach (var id in requested)
         {

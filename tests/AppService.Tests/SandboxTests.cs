@@ -75,6 +75,24 @@ public class SandboxTests
     }
 
     [Fact]
+    public void Copy_never_counts_as_newest_in_the_sandbox_class_lookup()
+    {
+        using var temp = new TempApp();
+        var app = temp.App;
+        var source = app.CreateHomebrewSource(new("Test Sandbox Source", [RulesFamilies.Srd521]));
+        var cls = Publish(app, Draft(source, Guid.NewGuid(), ContentKind.Class, "Test Sandbox Class", D8, PathChoice()));
+        var copy = NewestCopyTests.StoreCopy(temp, cls, r => r with { Name = r.Name + " (copy)" });
+        var draft = Draft(source, Guid.NewGuid(), ContentKind.Subclass, "Test Sandbox Path", Initiative("3")) with { ExtendsChoice = new(cls.ContentId, "path") };
+
+        var result = app.Sandbox(new(Revision: draft)); // a blank character has no such class: the lookup finds it
+
+        var joined = Assert.Single(result.View.Character.Classes);
+        Assert.Equal(cls, joined.Class);
+        Assert.NotEqual(copy.Reference, joined.Class);
+        Assert.Equal(cls, Assert.Single(result.View.Character.Choices).Source);
+    }
+
+    [Fact]
     public void A_subclass_offered_only_as_a_declared_option_cannot_be_tried_as_a_draft()
     {
         using var temp = new TempApp();
