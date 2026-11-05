@@ -426,7 +426,16 @@ public sealed record AttackEntry(
 public enum AttackSource { Weapon, Feature }
 
 /// <summary>Content v11 (D43): an attack rider that applies to an attack now, with its numbers (formulas evaluated).</summary>
-public sealed record RiderValue(ContentReference Content, string EffectId, string? Dice, int ToHit, int DamageBonus, string? DamageType);
+/// <remarks>
+/// Content v12 (G1): <paramref name="Critical"/> riders add their dice only to a critical damage roll and <paramref name="OncePerTurn"/>
+/// riders only when the player adds them; neither is in the entry's damage. <paramref name="VersatileDice"/> is the dice against the versatile
+/// die (set only when it differs from <paramref name="Dice"/>). All three are omitted when default, so a v11 sheet is unchanged.
+/// </remarks>
+public sealed record RiderValue(
+    ContentReference Content, string EffectId, string? Dice, int ToHit, int DamageBonus, string? DamageType,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)] bool Critical = false,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)] bool OncePerTurn = false,
+    string? VersatileDice = null);
 
 /// <summary>A known or prepared spell with its game data, for the sheet (a spell is never active content).</summary>
 public sealed record SpellEntry(
@@ -791,6 +800,7 @@ public static partial class CharacterCalculator
         // MECH-X item 4: tag the attacks and pools a companion lists (same rows, never moved) before responses and the feature list read them.
         var companions = CollectCompanions(active, values, character, resolved.ClassLevels, family, attacks, resources, diagnostics);
         var rollBonuses = RollBonuses(active, character, resolved.ClassLevels, values, diagnostics);
+        var scaledRollDice = RollScaledDice(active, character, resolved.ClassLevels, values, diagnostics);
         var rollDetails = RollDetailsOf(active, family, character, resolved.ClassLevels, values, diagnostics);
         // Before the feature list: a spell that cannot be cast reports on its feature (spells.unusable), like a recorded spell that cannot be listed.
         var castSpells = CastSpellsOf(active, catalog, character, casters.Count > 0, values, diagnostics);
@@ -800,7 +810,7 @@ public static partial class CharacterCalculator
         var damageDefences = CollectDamageDefences(active, character, resolved.ClassLevels, effective, autoOn, diagnostics);
         var scoped = diagnostics.Concat(warnings.Values.SelectMany(w => w)).Concat(resources.SelectMany(r => r.Warnings)).Where(d => d.Content is not null).Distinct().ToList();
         var features = active.Select(item => Feature(
-            item, family, [.. scoped.Where(d => d.Content == item.Revision.Reference)], rollDetails, rollBonuses, form => OutOfForm(active, item, form, effective, autoOn), resources, castSpells)).ToList();
+            item, family, [.. scoped.Where(d => d.Content == item.Revision.Reference)], rollDetails, rollBonuses, scaledRollDice, form => OutOfForm(active, item, form, effective, autoOn), resources, castSpells)).ToList();
         var toggles = active
             .SelectMany(item => item.Revision.Effects.OfType<ToggleEffect>()
                 .Where(t => t.Automation != AutomationStatus.Reference && LevelReached(item, t, character, resolved.ClassLevels))

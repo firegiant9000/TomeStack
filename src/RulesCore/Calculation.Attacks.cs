@@ -101,11 +101,11 @@ public static partial class CharacterCalculator
                         trace.Add(new(trace.Count + 1, "add", $"{modContent.Revision.Name}: +{mb} damage (mod)", mb, toHit, modOrigin));
                     }
                     // Riders that match (the tags weapon and melee or ranged) add to the numbers; none matching leaves them as they were.
-                    var applied = ApplyRiders(family, riders, ["weapon", weapon.Attack == WeaponAttack.Ranged ? "ranged" : "melee"], trace, ref toHit, out var riderBonus);
+                    var applied = ApplyRiders(family, riders, ["weapon", weapon.Attack == WeaponAttack.Ranged ? "ranged" : "melee"], trace, ref toHit, out var riderBonus, weapon.Damage, weapon.Versatile, diagnostics);
                     var damageBonus = mod + weaponBonus + modBonus + riderBonus;
                     attacks.Add(new(
                         item.Revision.Reference, item.Revision.Name, weapon.Id, weapon.Attack, weapon.Category, ability, toHit,
-                        DamageWith(weapon.Damage, applied, damageBonus), weapon.Versatile is { } versatile ? DamageWith(versatile, applied, damageBonus) : null,
+                        DamageWith(weapon.Damage, applied, damageBonus), weapon.Versatile is { } versatile ? DamageWith(versatile, applied, damageBonus, versatile: true) : null,
                         weapon.DamageType, weapon.Properties, weapon.Range, hasWeaponMastery ? weapon.Mastery : null, proficiency is not null, automation, trace, warnings,
                         ContentOrigin(family, item, weapon),
                         Riders: applied.Count == 0 ? null : [.. applied.Select(r => r.Value)],
@@ -117,7 +117,42 @@ public static partial class CharacterCalculator
     }
 
     /// <summary>An attack rider that is on now: its numbers are evaluated in its own content's context.</summary>
-    private sealed record ActiveRider(ActiveContent Item, AttackRiderEffect Effect, RiderValue Value, double Expected);
+    /// <remarks><paramref name="DielessCount"/>: a scaled count whose die is the attack's own, resolved per entry. <paramref name="NoDice"/>: the count came to 0.</remarks>
+    private sealed record ActiveRider(ActiveContent Item, AttackRiderEffect Effect, RiderValue Value, double Expected, int? DielessCount = null, bool NoDice = false);
+
+    private enum ScaledDiceStatus { Ok, Formula, Range }
+
+    /// <summary>
+    /// Evaluates a v12 <c>scaledDice</c> in the declaring content's context: the count, and the die when the effect names one (or
+    /// <paramref name="dieRequired"/>). A blank or missing formula is a formula failure; formulas are checked before the range
+    /// (count 0 to <see cref="DiceLimits.MaxDice"/>, an allowed die). Never throws.
+    /// </summary>
+    private static ScaledDiceStatus EvaluateScaledDice(
+        ScaledDice scaled, bool dieRequired, ActiveContent item, Character character, ClassLevelMap classLevels, Dictionary<string, int> values,
+        out int count, out int die, out FormulaError? failure)
+    {
+        count = die = 0;
+        failure = null;
+        if (string.IsNullOrWhiteSpace(scaled.Count))
+        {
+            failure = new("formula.empty", "The dice count formula is missing.");
+            return ScaledDiceStatus.Formula;
+        }
+        if (!TryEvaluate(scaled.Count, item, character, classLevels, values, [], out count, out failure))
+            return ScaledDiceStatus.Formula;
+        var hasDie = dieRequired || scaled.Die is not null;
+        if (hasDie)
+        {
+            if (string.IsNullOrWhiteSpace(scaled.Die))
+            {
+                failure = new("formula.empty", "The die formula is missing.");
+                return ScaledDiceStatus.Formula;
+            }
+            if (!TryEvaluate(scaled.Die, item, character, classLevels, values, [], out die, out failure))
+                return ScaledDiceStatus.Formula;
+        }
+        return count < 0 || count > DiceLimits.MaxDice || (hasDie && !AttackRiderEffect.AllowedDice.Contains(die)) ? ScaledDiceStatus.Range : ScaledDiceStatus.Ok;
+    }
 
     /// <summary>
     /// The riders of the active content whose toggle is on (no toggle: always), in sheet content order. A rider's toggle may be another
@@ -153,13 +188,37 @@ public static partial class CharacterCalculator
                     continue;
                 }
                 var average = (double)toHit + bonus;
-                if (rider.Dice is not null)
+                var dice = rider.Dice;
+                int? dielessCount = null;
+                var noDice = false;
+                // Content v12 (G1): the flags and scaledDice count only on a v12 revision, even one built in code with them set.
+                var v12 = item.Revision.SchemaVersion >= ContentRevision.ScaledDiceSchemaVersion;
+                if (v12 && rider.ScaledDice is { } scaled)
                 {
-                    if (!AttackRiderEffect.TryParseDice(rider.Dice, out var count, out var sides))
+                    // Never assumes the content was validated: a missing count or die is an invalid formula, a bad range leaves the rider out.
+                    if (EvaluateScaledDice(scaled, false, item, character, classLevels, values, out var scaledCount, out var scaledDie, out _) != ScaledDiceStatus.Ok)
+                    {
+                        diagnostics.Add(new("rider.dice-invalid", $"'{item.Revision.Name}' attack rider '{rider.Id}' is left out: its dice count or die is not valid.", item.Revision.Reference, rider.Id));
+                        continue;
+                    }
+                    dice = null;
+                    if (scaledCount == 0)
+                        noDice = true;
+                    else if (scaled.Die is null)
+                        dielessCount = scaledCount;
+                    else
+                        dice = $"{scaledCount}d{scaledDie}";
+                }
+                if (dice is not null)
+                {
+                    if (!AttackRiderEffect.TryParseDice(dice, out var count, out var sides))
                         continue;
                     average += count * (sides + 1) / 2.0;
                 }
-                riders.Add(new(item, rider, new(item.Revision.Reference, rider.Id, rider.Dice, toHit, bonus, rider.DamageType), average));
+                riders.Add(new(
+                    item, rider,
+                    new(item.Revision.Reference, rider.Id, dice, toHit, bonus, rider.DamageType, v12 && rider.Critical == true, v12 && rider.OncePerTurn == true),
+                    average, dielessCount, noDice));
             }
         }
         return riders;
@@ -171,7 +230,8 @@ public static partial class CharacterCalculator
     /// sheet content order on a tie; a rider that loses adds a <c>rider.not-applied</c> trace note. Riders without a group all stack.
     /// </summary>
     private static List<ActiveRider> ApplyRiders(
-        string family, List<ActiveRider> riders, IReadOnlyCollection<string> tags, List<TraceEntry> trace, ref int toHit, out int bonus)
+        string family, List<ActiveRider> riders, IReadOnlyCollection<string> tags, List<TraceEntry> trace, ref int toHit, out int bonus,
+        string baseDamage, string? versatileDamage, List<Diagnostic> diagnostics)
     {
         var matching = riders.Where(r => r.Effect.Tags.Contains(AttackRiderEffect.AllTag) || r.Effect.Tags.Any(tags.Contains)).ToList();
         var winners = matching
@@ -189,14 +249,41 @@ public static partial class CharacterCalculator
                 trace.Add(new(trace.Count + 1, "rider.not-applied", $"{name}: attack rider not applied; '{winners[group].Item.Revision.Name}' is stronger in stack group '{group}'", null, toHit, origin));
                 continue;
             }
-            applied.Add(rider);
             var value = rider.Value;
+            var entry = rider;
+            if (rider.DielessCount is { } dielessCount)
+            {
+                // The die is the entry's own: the weapon's, the versatile die for a two-handed roll, a feature attack's evaluated die.
+                if (!AttackRiderEffect.TryParseDice(baseDamage, out _, out var sides)
+                    || (versatileDamage is not null && !AttackRiderEffect.TryParseDice(versatileDamage, out _, out _)))
+                {
+                    AddOnce(diagnostics, new("rider.dice-invalid", $"'{name}' attack rider '{rider.Effect.Id}' is left out of an attack: the attack's own die could not be read.", rider.Item.Revision.Reference, rider.Effect.Id));
+                    continue;
+                }
+                var dice = $"{dielessCount}d{sides}";
+                string? versatileDice = null;
+                if (versatileDamage is not null && AttackRiderEffect.TryParseDice(versatileDamage, out _, out var versatileSides) && versatileSides != sides)
+                    versatileDice = $"{dielessCount}d{versatileSides}";
+                value = value with { Dice = dice, VersatileDice = versatileDice };
+                entry = rider with { Value = value };
+            }
+            if (rider.NoDice)
+            {
+                trace.Add(new(trace.Count + 1, "rider.no-dice", $"{name}: attack rider adds no dice (its dice count is 0)", null, toHit, origin));
+                if (value.ToHit == 0 && value.DamageBonus == 0)
+                    continue;
+            }
+            applied.Add(entry);
             if (value.ToHit != 0)
             {
                 toHit += value.ToHit;
                 trace.Add(new(trace.Count + 1, "add", $"{name}: {value.ToHit:+0;-0} to hit (attack rider)", value.ToHit, toHit, origin));
             }
-            if (value.Dice is not null)
+            if (value.Dice is not null && value.Critical)
+                trace.Add(new(trace.Count + 1, "add", $"{name}: +{value.Dice} on a critical hit (attack rider)", null, toHit, origin));
+            else if (value.Dice is not null && value.OncePerTurn)
+                trace.Add(new(trace.Count + 1, "add", $"{name}: +{value.Dice} once per turn, when you add it (attack rider)", null, toHit, origin));
+            else if (value.Dice is not null)
                 trace.Add(new(trace.Count + 1, "add", $"{name}: +{value.Dice}{(value.DamageType is null ? "" : $" {value.DamageType}")} damage (attack rider)", null, toHit, origin));
             if (value.DamageBonus != 0)
             {
@@ -208,8 +295,12 @@ public static partial class CharacterCalculator
     }
 
     /// <summary>The dice, each applied rider's dice, then the flat total: <c>1d8+3d8+3</c> (the same format <see cref="WithBonus"/> gives a weapon).</summary>
-    private static string DamageWith(string dice, List<ActiveRider> applied, int flat) =>
-        WithBonus(dice + string.Concat(applied.Where(r => r.Value.Dice is not null).Select(r => "+" + r.Value.Dice)), flat);
+    private static string DamageWith(string dice, List<ActiveRider> applied, int flat, bool versatile = false) =>
+        WithBonus(
+            dice + string.Concat(applied
+                .Where(r => r.Value.Dice is not null && r.Value is { Critical: false, OncePerTurn: false })
+                .Select(r => "+" + (versatile ? r.Value.VersatileDice ?? r.Value.Dice : r.Value.Dice))),
+            flat);
 
     private static bool TryEvaluate(
         string source, ActiveContent item, Character character, ClassLevelMap classLevels, Dictionary<string, int> values, List<TraceInput> inputs,
@@ -300,7 +391,7 @@ public static partial class CharacterCalculator
             var from = scales.Count == 0 ? "" : $", the die from {string.Join(" and ", scales)}";
             var plus = attack.DamageBonus is null ? $"{AbilityNames[ability]} modifier" : "its damage bonus";
             trace.Add(new(trace.Count + 1, "set", $"Damage {count}d{die}{from}, plus {plus}", null, toHit, origin, null, inputs));
-            var applied = ApplyRiders(family, riders, tags, trace, ref toHit, out var riderBonus);
+            var applied = ApplyRiders(family, riders, tags, trace, ref toHit, out var riderBonus, $"{count}d{die}", null, diagnostics);
             damage = DamageWith($"{count}d{die}", applied, damageBonus + riderBonus);
             appliedRiders = applied.Count == 0 ? null : [.. applied.Select(r => r.Value)];
         }
