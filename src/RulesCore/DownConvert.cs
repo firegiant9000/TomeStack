@@ -577,7 +577,16 @@ public static class DownConvert
                     case ChoiceEffect.TypeName:
                         RemoveKey(effect, "replaceable", path, BelowAction.Dropped, BelowCodes.V12Key, $"'{name}': when a choice may be replaced.", changes);
                         break;
+                    case AttackRiderEffect.TypeName:
+                        // A rider kept without the flag would be stronger (always on, every attack, no scaling), so it is dropped whole.
+                        if (AttackRiderEffect.V12Keys.Any(k => Member(effect, k) is not null))
+                        {
+                            changes.Add(new(path, BelowAction.Dropped, BelowCodes.EffectUnsupported, $"'{name}': a rider with scaled dice, a critical-only or a once-per-turn flag, which the older version would apply without them."));
+                            continue;
+                        }
+                        break;
                     case RollEffect.TypeName:
+                        RemoveKey(effect, "scaledDice", path, BelowAction.Dropped, BelowCodes.V12Key, $"'{name}': the roll's dice count, which the older version cannot compute; the roll keeps its other parts.", changes);
                         PaymentBelow(effect, path, name, "a roll", changes);
                         RemoveKey(effect, "castsSpell", path, BelowAction.Blocks, BelowCodes.CastsSpell, $"'{name}': the spell a roll casts; the older version would leave the spell out.", changes);
                         break;
