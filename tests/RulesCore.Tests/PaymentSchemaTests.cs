@@ -342,7 +342,8 @@ public class PaymentSchemaTests
 
     /// <summary>The gotcha of 2026-10-20: the production key lists are internal and this project cannot see them, so reflection compares them with the lists written out here.</summary>
     [Theory]
-    [InlineData(typeof(RollEffect), new[] { "payment", "castsSpell" })]
+    [InlineData(typeof(RollEffect), new[] { "payment", "castsSpell", "scaledDice" })]
+    [InlineData(typeof(AttackRiderEffect), new[] { "scaledDice", "critical", "oncePerTurn" })]
     [InlineData(typeof(AttackEffect), new[] { "payment" })]
     [InlineData(typeof(ToggleEffect), new[] { "payment" })]
     [InlineData(typeof(SpellEffect), new[] { "tags" })]
