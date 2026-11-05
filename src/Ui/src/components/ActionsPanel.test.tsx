@@ -270,7 +270,7 @@ const critRider = { content: gladeRef, effectId: 'glade-crit', dice: '1d8', toHi
 it('offers once-per-turn riders on the damage roll and sends the picks', async () => {
   const roll = vi.fn();
   render(<ActionsPanel view={attacksView([featureAttack({ riders: [onceRider] })], [gladeFeature])} roll={roll} act={() => {}} />);
-  const box = screen.getByRole('checkbox', { name: 'Add Fixture Glade Mark (2d6, once per turn)' }) as HTMLInputElement;
+  const box = screen.getByRole('checkbox', { name: 'Add Fixture Glade Mark (2d6, once per turn) to Testy strike damage' }) as HTMLInputElement;
   expect(box.checked).toBe(false);
   await userEvent.click(screen.getByRole('button', { name: /^Roll Testy strike damage/ }));
   expect(roll).toHaveBeenLastCalledWith({ content: ref, effectId: 'strike', damage: true, critical: false });
@@ -300,6 +300,40 @@ it('lists crit-only rider dice', () => {
 it('shows no rider checkboxes without once-per-turn riders', () => {
   render(<ActionsPanel view={attacksView([featureAttack()], [gladeFeature])} roll={() => {}} act={() => {}} />);
   expect(screen.queryByRole('checkbox', { name: /^Add / })).toBeNull();
+});
+
+it('names the attack in each rider checkbox so two attacks with the same rider stay distinct', () => {
+  const jab = featureAttack({ name: 'Testy jab', effectId: 'jab', riders: [onceRider] });
+  render(<ActionsPanel view={attacksView([featureAttack({ riders: [onceRider] }), jab], [gladeFeature])} roll={() => {}} act={() => {}} />);
+  expect(screen.getByRole('checkbox', { name: 'Add Fixture Glade Mark (2d6, once per turn) to Testy strike damage' })).toBeTruthy();
+  expect(screen.getByRole('checkbox', { name: 'Add Fixture Glade Mark (2d6, once per turn) to Testy jab damage' })).toBeTruthy();
+});
+
+it('offers and lists only riders that add dice at this level', () => {
+  const none = { content: gladeRef, effectId: 'none', toHit: 0, damageBonus: 0, oncePerTurn: true };
+  const noneCrit = { content: gladeRef, effectId: 'none-crit', toHit: 0, damageBonus: 0, critical: true };
+  render(<ActionsPanel view={attacksView([featureAttack({ riders: [none, noneCrit] })], [gladeFeature])} roll={() => {}} act={() => {}} />);
+  expect(screen.queryByRole('checkbox', { name: /^Add / })).toBeNull();
+  expect(screen.getByRole('button', { name: 'Roll Testy strike attack' }).closest('li')!.textContent).not.toMatch(/critical hit|attack die/);
+});
+
+it('sends the picks on the two-handed damage roll of a weapon and shows the two-handed die hint', async () => {
+  const roll = vi.fn();
+  const rider = { ...onceRider, versatileDice: '2d8' };
+  const weapon = { ...weaponRow, versatileDamage: '1d6+3', riders: [rider] };
+  render(<ActionsPanel view={attacksView([weapon], [gladeFeature])} roll={roll} act={() => {}} />);
+  const box = screen.getByRole('checkbox', { name: 'Add Fixture Glade Mark (2d6, once per turn) to Fixture Needle damage' });
+  expect(box.closest('label')!.textContent).toMatch(/2d8 two-handed/);
+  await userEvent.click(box);
+  await userEvent.click(screen.getByRole('button', { name: /^Roll Fixture Needle two-handed damage/ }));
+  expect(roll).toHaveBeenLastCalledWith({
+    weapon: weaponRow.item, damage: true, versatile: true, critical: false, withRiders: [{ content: gladeRef, effectId: 'glade-once' }],
+  });
+});
+
+it('disables the rider checkboxes when the attack is locked', () => {
+  render(<ActionsPanel view={attacksView([featureAttack({ riders: [onceRider], available: false, unavailableReason: 'Not now' })], [gladeFeature])} roll={() => {}} act={() => {}} />);
+  expect((screen.getByRole('checkbox', { name: /^Add Fixture Glade Mark/ }) as HTMLInputElement).disabled).toBe(true);
 });
 
 it('shows the shown two-handed die of a rider when it differs', () => {
