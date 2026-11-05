@@ -728,6 +728,12 @@ public sealed record RollEffect : Effect
     internal static readonly string[] V12Keys = ["payment", "castsSpell", "scaledDice"];
 
     /// <summary>
+    /// Whether a roll with these parts does something in content v11 (the rule <c>validate.roll-dice-or-cost</c> enforces): literal dice, a cost,
+    /// or a spell it casts. One place, so the validator and the lowering to v11 agree.
+    /// </summary>
+    internal static bool DoesSomethingInV11(bool hasDice, bool hasCost, bool castsSpell) => hasDice || hasCost || castsSpell;
+
+    /// <summary>
     /// Typed by the revision when the converter hands it over (see <see cref="EffectJsonConverter"/>): v11 keys, and a roll with
     /// no <c>dice</c>, only from v11. Below v11 a dice-less roll stays untyped, as it did when dice were required.
     /// </summary>

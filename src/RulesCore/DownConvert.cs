@@ -586,6 +586,13 @@ public static class DownConvert
                         }
                         break;
                     case RollEffect.TypeName:
+                        // A roll whose only payload is the scaled dice would do nothing (v11 refuses it): drop it whole, as weaker.
+                        if (Member(effect, "scaledDice") is not null
+                            && !RollEffect.DoesSomethingInV11(Member(effect, "dice") is not null, Member(effect, "cost") is not null, Member(effect, "castsSpell") is not null))
+                        {
+                            changes.Add(new(path, BelowAction.Dropped, BelowCodes.EffectUnsupported, $"'{name}': a roll whose only dice were scaled, which the older version cannot compute and would refuse as a roll that does nothing."));
+                            continue;
+                        }
                         RemoveKey(effect, "scaledDice", path, BelowAction.Dropped, BelowCodes.V12Key, $"'{name}': the roll's dice count, which the older version cannot compute; the roll keeps its other parts.", changes);
                         PaymentBelow(effect, path, name, "a roll", changes);
                         RemoveKey(effect, "castsSpell", path, BelowAction.Blocks, BelowCodes.CastsSpell, $"'{name}': the spell a roll casts; the older version would leave the spell out.", changes);

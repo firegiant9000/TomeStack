@@ -723,7 +723,7 @@ public static class ContentValidator
                     {
                         needsV11 = true;
                         // A roll that casts a spell needs no dice or cost of its own: its dice come from the spell (content v12).
-                        if (roll.Cost is null && roll.CastsSpell is null)
+                        if (!RollEffect.DoesSomethingInV11(false, roll.Cost is not null, roll.CastsSpell is not null))
                             Error("validate.roll-dice-or-cost", $"Roll '{roll.Id}' has neither dice nor a cost, so it does nothing; add dice or a cost.", roll.Id);
                     }
                     else if (!DiceExpression.TryParse(roll.Dice, out _, out var diceError))
