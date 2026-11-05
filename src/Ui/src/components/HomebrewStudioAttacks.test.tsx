@@ -164,6 +164,87 @@ it('rider dice, tags and stack group are read strictly', async () => {
   expect((await checked()).effect('rider-4')).toMatchObject({ tags: ['unarmed'], dice: '3d8', stackGroup: 'modeRider', toggle: 'stance' });
 });
 
+const plainRider: Raw = { type: 'attackRider', id: 'rider-4', tags: ['all'], dice: '1d6', toHit: '1', damageBonus: '2', stackGroup: 'grp' };
+
+it('edits rider dice by formula', async () => {
+  const user = userEvent.setup();
+  const { rule, checked } = await openDraft(user, [plainRider]);
+  const r = rule(/^Rule 1: Attack rider/);
+  await user.selectOptions(r.getByRole('combobox', { name: 'Dice' }), 'By formula');
+  expect(r.queryByRole('textbox', { name: /^Extra damage dice/ })).toBeNull();
+  // A count is needed first.
+  expect(saveBlocked()).toBe(true);
+  await user.type(r.getByRole('textbox', { name: /^Number of dice/ }), 'floor(CLASS_LEVEL / 2)');
+  await user.type(r.getByRole('textbox', { name: /^Die/ }), '8');
+  expect(saveBlocked()).toBe(false);
+  const sent = (await checked()).effect('rider-4') as Raw;
+  expect(sent.scaledDice).toEqual({ count: 'floor(CLASS_LEVEL / 2)', die: '8' });
+  expect(sent.dice).toBeUndefined();
+  await user.selectOptions(r.getByRole('combobox', { name: 'Dice' }), 'Fixed');
+  const back = (await checked()).effect('rider-4') as Raw;
+  expect(back.scaledDice).toBeUndefined();
+  expect('scaledDice' in back).toBe(false);
+});
+
+it("rider die blank means the attack's die: no die key, and no stack group", async () => {
+  const user = userEvent.setup();
+  const { rule, checked } = await openDraft(user, [plainRider]);
+  const r = rule(/^Rule 1: Attack rider/);
+  await user.selectOptions(r.getByRole('combobox', { name: 'Dice' }), 'By formula');
+  await user.type(r.getByRole('textbox', { name: /^Number of dice/ }), '2');
+  const sent = (await checked()).effect('rider-4') as Raw;
+  expect(sent.scaledDice).toEqual({ count: '2' });
+  expect('die' in (sent.scaledDice as Raw)).toBe(false);
+  expect(sent.stackGroup).toBeUndefined();
+  expect((r.getByRole('textbox', { name: /^Stack group/ }) as HTMLInputElement).disabled).toBe(true);
+  expect(r.getByText(/the attack's own die/i)).toBeTruthy();
+});
+
+it('critical and once-per-turn exclude each other and clear to-hit and bonus', async () => {
+  const user = userEvent.setup();
+  const { rule, checked } = await openDraft(user, [plainRider]);
+  const r = rule(/^Rule 1: Attack rider/);
+  const crit = r.getByRole('checkbox', { name: 'Only on a critical hit' }) as HTMLInputElement;
+  const once = r.getByRole('checkbox', { name: 'Once per turn, added when you choose' }) as HTMLInputElement;
+  await user.click(crit);
+  const sent = (await checked()).effect('rider-4') as Raw;
+  expect(sent.critical).toBe(true);
+  for (const key of ['toHit', 'damageBonus', 'stackGroup']) expect(key in sent).toBe(false);
+  for (const name of [/^To hit/, /^Damage bonus/, /^Stack group/]) expect((r.getByRole('textbox', { name }) as HTMLInputElement).disabled).toBe(true);
+  expect(once.disabled).toBe(true);
+  await user.click(crit);
+  expect(once.disabled).toBe(false);
+  await user.click(once);
+  expect(crit.disabled).toBe(true);
+  expect(((await checked()).effect('rider-4') as Raw).oncePerTurn).toBe(true);
+  await user.click(once);
+  const off = (await checked()).effect('rider-4') as Raw;
+  expect('oncePerTurn' in off).toBe(false);
+  expect('critical' in off).toBe(false);
+});
+
+it('a critical or once-per-turn rider needs dice, and keeps members the editor does not show', async () => {
+  const user = userEvent.setup();
+  const { rule, checked } = await openDraft(user, [{ type: 'attackRider', id: 'rider-4', tags: ['all'], futureMember: { n: 1 } }]);
+  const r = rule(/^Rule 1: Attack rider/);
+  await user.click(r.getByRole('checkbox', { name: 'Only on a critical hit' }));
+  expect(saveBlocked()).toBe(true);
+  await user.type(r.getByRole('textbox', { name: /^Extra damage dice/ }), '2d6');
+  expect(saveBlocked()).toBe(false);
+  expect(((await checked()).effect('rider-4') as Raw).futureMember).toEqual({ n: 1 });
+});
+
+it('keeps unknown members across an edit of scaled dice', async () => {
+  const user = userEvent.setup();
+  const { rule, checked } = await openDraft(user, [{ type: 'attackRider', id: 'rider-4', tags: ['all'], scaledDice: { count: '1', die: '6', futureInner: true }, oncePerTurn: true, futureMember: 'x' }]);
+  const r = rule(/^Rule 1: Attack rider/);
+  await user.type(r.getByRole('textbox', { name: /^Number of dice/ }), '0');
+  const sent = (await checked()).effect('rider-4') as Raw;
+  expect(sent.scaledDice).toEqual({ count: '10', die: '6', futureInner: true });
+  expect(sent.futureMember).toBe('x');
+  expect(sent.oncePerTurn).toBe(true);
+});
+
 it('removing a rule with a problem lifts its block', async () => {
   const user = userEvent.setup();
   const { rule } = await openDraft(user, [attack]);

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { abilities } from '../classBasics';
 import type { Ability, ContentRevision, Effect } from '../api/types';
 import { parseAreaSize, parseAreaWidth, parseMaxUnits, parsePerUnitDice, parseRollText, poolValue, type PoolChoice } from '../rollAuthoring';
-import { ActivationSelect, FormulaField, StrictField } from './AttackFields';
+import { ActivationSelect, DiceSource, FormulaField, StrictField, omit } from './AttackFields';
 import { PaymentFields } from './PaymentFields';
 import { PoolSelect } from './ResponseFields';
 
@@ -281,11 +281,21 @@ export function RollFields(props: {
   const onCharging = (next: Effect) => onChange(isCompound(next as Roll) ? { ...(next as Roll), variableCost: undefined } : next);
   return (
     <>
-      <label className="field">
-        Dice (such as 1d8 + 2; empty for an action that rolls nothing)
-        <input value={effect.dice ?? ''} onChange={(e) => onChange(e.target.value ? { ...effect, dice: e.target.value } : { ...effect, dice: undefined, perUnit: undefined })}
-        />
-      </label>
+      <DiceSource
+        effect={effect}
+        dieRequired
+        previewRevision={props.previewRevision}
+        onMode={(mode) => onChange(mode === 'formula' ? { ...omit(effect, 'dice', 'perUnit'), scaledDice: { count: '', die: '' } } : omit(effect, 'scaledDice'))}
+        onScaled={(scaled) => onChange({ ...effect, scaledDice: { ...scaled, die: scaled.die ?? '' } })}
+        onProblem={onProblem}
+        fixed={
+          <label className="field">
+            Dice (such as 1d8 + 2; empty for an action that rolls nothing)
+            <input value={effect.dice ?? ''} onChange={(e) => onChange(e.target.value ? { ...effect, dice: e.target.value } : { ...effect, dice: undefined, perUnit: undefined })}
+            />
+          </label>
+        }
+      />
       <FormulaField
         effectId={effect.id}
         part="bonus"
