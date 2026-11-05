@@ -348,14 +348,13 @@ public class DownConvertV12Tests
     }
 
     [Fact]
-    public void Roll_with_only_scaledDice_blocks_below_12_because_v11_would_hold_a_do_nothing_roll()
+    public void Roll_with_only_scaledDice_is_dropped_whole_below_12_because_v11_refuses_a_do_nothing_roll()
     {
         var roll = """{"type":"roll","id":"r","rollId":"r","label":"R","scaledDice":{"count":"1","die":"6"}}""";
         var result = DownConvert.Below(Rev(roll), 11);
 
-        Assert.True(result.Blocked);
-        Assert.Contains(result.Changes, c => c.Code == BelowCodes.V12Key && c.Path == "effects[0].scaledDice");
-        Assert.Contains(result.Changes, c => c.Code == BelowCodes.ValidationError && c.Action == BelowAction.Blocks);
+        AssertDroppedWhole(result);
+        Assert.All(ContentValidator.Validate(result.Revision, Fixtures.M1Catalog()).Errors, e => Assert.Equal("validate.source-missing", e.Code));
     }
 
     [Fact]
