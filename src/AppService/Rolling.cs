@@ -202,7 +202,7 @@ public sealed partial class TomeStackApp
             // A count out of range or a failing formula is refused with the diagnostic's own code, like a failing bonus, even when the roll
             // casts a spell (the cast must not hide it); a count of 0 has no diagnostic and, with a cast, rolls the spell's dice.
             var scaledProblem = effect.ScaledDice is null || rollDice is not null ? null
-                : sheet.Diagnostics.FirstOrDefault(d => d.Code is "effect.invalid-formula" or "roll.dice-invalid" && d.Content == reference && d.EffectId == effect.Id);
+                : sheet.Diagnostics.FirstOrDefault(d => d.Code == "roll.dice-invalid" && d.Content == reference && d.EffectId == effect.Id);
             if (scaledProblem is not null)
                 throw new AppValidationException([new(scaledProblem.Code, $"Roll '{effect.Id}' cannot be rolled: its scaled dice could not be calculated ({scaledProblem.Code}).", reference, effect.Id)], scaledProblem.Code);
             if (rollDice is null && cast?.Dice is null)

@@ -210,16 +210,36 @@ public class ScaledDiceV12ServiceTests
         var (temp, id) = Start(Fighter(EmberBurst), Scaled("1/0"));
         using var _ = temp;
 
-        Assert.Equal("effect.invalid-formula", Code(temp, new(id, Content: EmberBurst, EffectId: "burst")));
+        Assert.Equal("roll.dice-invalid", Code(temp, new(id, Content: EmberBurst, EffectId: "burst")));
     }
 
     private const string SparkId = "6f0dc000-0000-4000-8000-000000001499";
 
-    private static (TempApp Temp, Guid Id) StartCasting(string count)
+    [Fact]
+    public void A_failing_save_dc_does_not_stop_a_zero_count_cast()
+    {
+        var (temp, id) = StartCasting("0", r => r with { Save = new RollSave(Ability.Dex, "1/0") });
+        using var _ = temp;
+
+        Assert.Equal("2d6", temp.App.Roll(new RollCommand(id, Content: EmberBurst, EffectId: "burst")).Formula);
+    }
+
+    [Fact]
+    public void A_failing_bonus_on_a_zero_count_roll_never_reports_the_scaled_dice()
+    {
+        var (temp, id) = Start(Fighter(EmberBurst), revision => Scaled("0")(revision) is var scaled && scaled.Name == "Fixture: Ember Burst"
+            ? scaled with { Effects = [.. scaled.Effects.Select(e => e is RollEffect roll ? roll with { Bonus = "1/0" } : e)] }
+            : scaled);
+        using var _ = temp;
+
+        Assert.Equal("roll.no-dice", Code(temp, new(id, Content: EmberBurst, EffectId: "burst")));
+    }
+
+    private static (TempApp Temp, Guid Id) StartCasting(string count, Func<RollEffect, RollEffect>? more = null)
     {
         var sparkId = Guid.Parse(SparkId);
         var (temp, id) = Start(Fighter(EmberBurst), revision => Scaled(count)(revision) is var scaled && scaled.Name == "Fixture: Ember Burst"
-            ? scaled with { Effects = [.. scaled.Effects.Select(e => e is RollEffect roll ? roll with { CastsSpell = sparkId } : e)] }
+            ? scaled with { Effects = [.. scaled.Effects.Select(e => e is RollEffect roll ? (more ?? (x => x))(roll with { CastsSpell = sparkId }) : e)] }
             : scaled);
         temp.App.Store.AddRevision(System.Text.Json.JsonSerializer.Deserialize<ContentRevision>(
             "{\"contentId\":\"" + SparkId + "\",\"revisionId\":\"6f0de000-0000-4000-8000-000000001499\",\"schemaVersion\":12,\"kind\":\"spell\",\"name\":\"Fixture Cast Spark\","
