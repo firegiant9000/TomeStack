@@ -833,11 +833,13 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
     setRollLog((log) => [entry, ...log].slice(0, rollLogLimit));
   }
 
-  async function roll(target: RollTarget) {
+  async function roll(target: RollTarget): Promise<boolean> {
     try {
       showRoll(await client.roll(character.id, target));
+      return true;
     } catch (error) {
       onError(error);
+      return false;
     }
   }
 

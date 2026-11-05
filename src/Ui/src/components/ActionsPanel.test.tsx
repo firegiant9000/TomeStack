@@ -290,6 +290,18 @@ it('clears the picks after a damage roll', async () => {
   expect(box.checked).toBe(false);
 });
 
+it('keeps the picks when the damage roll is refused and clears them when it goes through', async () => {
+  const roll = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+  render(<ActionsPanel view={attacksView([featureAttack({ riders: [onceRider] })], [gladeFeature])} roll={roll} act={() => {}} />);
+  const box = screen.getByRole('checkbox', { name: /^Add Fixture Glade Mark/ }) as HTMLInputElement;
+  await userEvent.click(box);
+  await userEvent.click(screen.getByRole('button', { name: /^Roll Testy strike damage/ }));
+  await waitFor(() => expect(roll).toHaveBeenCalledTimes(1));
+  expect(box.checked).toBe(true);
+  await userEvent.click(screen.getByRole('button', { name: /^Roll Testy strike damage/ }));
+  await waitFor(() => expect(box.checked).toBe(false));
+});
+
 it('lists crit-only rider dice', () => {
   render(<ActionsPanel view={attacksView([featureAttack({ riders: [critRider] })], [gladeFeature])} roll={() => {}} act={() => {}} />);
   const item = screen.getByRole('button', { name: 'Roll Testy strike attack' }).closest('li')!;
