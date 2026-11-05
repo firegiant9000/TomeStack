@@ -32,7 +32,14 @@ public sealed record RollCommand(
     string? ChargeEntry = null,
     CompanionAttackTarget? CompanionAttack = null,
     int? Amount = null,
-    int? EntryIndex = null);
+    int? EntryIndex = null,
+    IReadOnlyList<RiderPick>? WithRiders = null);
+
+/// <summary>
+/// Content v12 (G1): a once-per-turn attack rider the player adds to a weapon or feature-attack damage roll
+/// (<see cref="RollCommand.WithRiders"/>): the content that declares it and its effect id.
+/// </summary>
+public sealed record RiderPick(ContentReference Content, string EffectId);
 
 /// <summary>Wave 3 item 23: one attack line of one of the character's companions (<see cref="Companion.Attacks"/>).</summary>
 public sealed record CompanionAttackTarget(Guid CompanionId, Guid AttackId);
@@ -63,6 +70,8 @@ public sealed partial class TomeStackApp
         (RollMode Automatic, IReadOnlyList<string> Sources)? modeNote = null;
         // An amount means something only on a content roll effect (a per-unit amount); on any other roll it is refused, not ignored.
         var amountMeansSomething = false;
+        // G1: picked riders mean something only on a weapon or feature-attack damage roll; elsewhere they are refused, not ignored.
+        var ridersAllowed = false;
         var targets = (command.Content is not null ? 1 : 0) + (command.Field is not null ? 1 : 0) + (command.HitDie is not null ? 1 : 0)
             + (command.DeathSave ? 1 : 0) + (command.Spell is not null ? 1 : 0) + (command.Weapon is not null ? 1 : 0)
             + (command.CustomAttack is not null ? 1 : 0) + (command.ChargeEntry is not null ? 1 : 0) + (command.CompanionAttack is not null ? 1 : 0);
@@ -115,7 +124,8 @@ public sealed partial class TomeStackApp
                 var dice = command.Versatile
                     ? attack.VersatileDamage ?? throw new AppValidationException([new("roll.weapon-not-versatile", $"'{attack.Name}' is not versatile.", weaponReference)])
                     : attack.Damage;
-                request = new RollRequest(dice, RollMode.Normal, command.Critical, [], provenance);
+                request = DamageRequest(dice, attack.Riders, command, command.Versatile, provenance);
+                ridersAllowed = true;
             }
         }
         else if (command.Spell is { } spellReference)
@@ -166,6 +176,7 @@ public sealed partial class TomeStackApp
         {
             // D43 S4: an attack a feature gives, rolled like a weapon. Rider dice are in the formula, so a critical doubles them; the flat total does not double.
             request = FeatureAttackRequest(featureAttack, sheet.Diagnostics, command);
+            ridersAllowed = command.Damage;
             explain = featureAttack.Trace;
             if (!command.Damage)
                 modeNote = TakeAutomatic(ref request, featureAttack.Mode);
@@ -185,9 +196,19 @@ public sealed partial class TomeStackApp
             var calculated = sheet.Features?.FirstOrDefault(f => f.Content == reference)?.Effects.FirstOrDefault(e => e.Id == effect.Id);
             // D43 S5: a roll with no dice has nothing to roll, with or without an amount. MECH-X item 1 (R38): a roll that casts a spell
             // without a slot and has no dice of its own rolls the spell's dice.
-            var cast = effect.Dice is null ? calculated?.CastsSpell : null;
-            if (effect.Dice is null && cast?.Dice is null)
+            // Content v12 (G1): a roll with scaledDice rolls the dice the sheet calculated (null when the count is 0 or invalid).
+            var rollDice = effect.ScaledDice is null ? effect.Dice : calculated?.Dice;
+            var cast = rollDice is null ? calculated?.CastsSpell : null;
+            // A count out of range or a failing formula is refused with the diagnostic's own code, like a failing bonus, even when the roll
+            // casts a spell (the cast must not hide it); a count of 0 has no diagnostic and, with a cast, rolls the spell's dice.
+            var scaledProblem = effect.ScaledDice is null || rollDice is not null ? null
+                : sheet.Diagnostics.FirstOrDefault(d => d.Code == "roll.dice-invalid" && d.Content == reference && d.EffectId == effect.Id);
+            if (scaledProblem is not null)
+                throw new AppValidationException([new(scaledProblem.Code, $"Roll '{effect.Id}' cannot be rolled: its scaled dice could not be calculated ({scaledProblem.Code}).", reference, effect.Id)], scaledProblem.Code);
+            if (rollDice is null && cast?.Dice is null)
+            {
                 throw new AppValidationException([new("roll.no-dice", $"'{effect.Label}' has no dice to roll.", reference, effect.Id)], "roll.no-dice");
+            }
             // The calculation reports a roll's bonus before its cost and save DC, so the first diagnostic is the bonus's own when the bonus fails.
             var failure = sheet.Diagnostics.FirstOrDefault(d => d.Code == "effect.invalid-formula" && d.Content == reference && d.EffectId == effect.Id);
             // A failing cost (calculation leaves Cost null while the effect declares one) or save DC is not a bonus problem: a failing
@@ -200,6 +221,8 @@ public sealed partial class TomeStackApp
                 ? [new RollModifier($"{effect.Label} bonus", amount, new TraceOrigin(TraceOriginKind.Content, character.RulesFamily, reference, revision.Name, effect.Id, revision.Provenance.SourceId, null, revision.Provenance.Page))]
                 : null;
             request = DiceRoller.FromEffect(effect, revision, _store.FindSource(revision.Provenance.SourceId), command.Mode, command.Critical, modifiers);
+            if (effect.ScaledDice is not null && rollDice is not null)
+                request = request with { Formula = rollDice };
             if (cast is { Dice: { } spellDice })
                 request = request with { Formula = spellDice, Provenance = request.Provenance! with { Label = $"{effect.Label} ({cast.Name})" } };
             amountMeansSomething = true;
@@ -220,11 +243,8 @@ public sealed partial class TomeStackApp
                 ? $"{(value.Label.EndsWith(" modifier", StringComparison.Ordinal) ? value.Label[..^" modifier".Length] : value.Label)} check"
                 : $"{value.Label} (d20 test)";
             // D43 S6: the player's choice and the sheet's automatic mode combine (advantage and disadvantage cancel); the record says which.
-            var automatic = value.Mode?.Reasons.Where(r => r.IsAutomatic).ToList();
-            var mode = automatic is { Count: > 0 } ? RollModes.Combine([command.Mode, .. automatic.Select(r => r.Mode)]) : command.Mode;
-            request = new RollRequest("1d20", mode, command.Critical, [new RollModifier(value.Label, value.Value, origin)], new RollProvenance(field, label));
-            if (automatic is { Count: > 0 })
-                modeNote = (value.Mode!.Automatic, [.. automatic.Select(r => r.Source)]);
+            request = new RollRequest("1d20", command.Mode, command.Critical, [new RollModifier(value.Label, value.Value, origin)], new RollProvenance(field, label));
+            modeNote = TakeAutomatic(ref request, value.Mode);
             explain = value.Trace;
         }
         else
@@ -232,6 +252,8 @@ public sealed partial class TomeStackApp
             throw new AppValidationException([new("roll.target-required", "Name a content roll effect or a field to roll.")]);
         }
 
+        if (command.WithRiders is { Count: > 0 } && !ridersAllowed)
+            throw new AppValidationException([new("roll.riders-not-allowed", "Riders can be added only to a weapon or attack damage roll.", command.Content, command.EffectId)], "roll.riders-not-allowed");
         if (command.Amount is not null && !amountMeansSomething)
             throw new AppValidationException([new("roll.amount-not-allowed", "An amount applies only to a roll effect with per-unit dice.", command.Content, command.EffectId)], "roll.amount-not-allowed");
         if (!DiceRoller.TryRoll(request, Random, out var record, out var error))
@@ -336,8 +358,38 @@ public sealed partial class TomeStackApp
         if (!command.Damage && attack.ResourceId is not null)
             provenance = provenance with { LinkedResourceId = attack.ResourceId, LinkedResourceContent = attack.CostResourceContent };
         return command.Damage
-            ? new RollRequest(attack.Damage, RollMode.Normal, command.Critical, [], provenance)
+            ? DamageRequest(attack.Damage, attack.Riders, command, false, provenance)
             : new RollRequest("1d20", command.Mode, false, [new RollModifier($"{attack.Name} to hit", attack.ToHit, attack.Origin)], provenance);
+    }
+
+    /// <summary>
+    /// Content v12 (G1): a weapon or feature-attack damage roll. The picked once-per-turn riders (each must be one of the entry's) add
+    /// their dice to the formula, so a critical doubles them; on a critical, the entry's critical-only riders' dice are rolled once, not
+    /// doubled. <paramref name="versatile"/> picks a rider's versatile dice where it has them. Picks are refused (<c>roll.rider-unknown</c>)
+    /// before any die is rolled; messages name ids only.
+    /// </summary>
+    private static RollRequest DamageRequest(string damage, IReadOnlyList<RiderValue>? riders, RollCommand command, bool versatile, RollProvenance provenance)
+    {
+        string? DiceOf(RiderValue rider) => versatile ? rider.VersatileDice ?? rider.Dice : rider.Dice;
+        var formula = damage;
+        // An untrusted payload can carry a null pick or a pick missing its parts; refuse it by code, naming nothing of the pick.
+        if ((command.WithRiders ?? []).Any(p => p is not { Content: not null, EffectId: not null }))
+            throw new AppValidationException([new("roll.rider-unknown", "A rider pick does not name a rider of this attack.")], "roll.rider-unknown");
+        foreach (var pick in (command.WithRiders ?? []).Distinct())
+        {
+            var rider = riders?.FirstOrDefault(r => r.OncePerTurn && r.Content == pick.Content && r.EffectId == pick.EffectId);
+            if (rider is null || DiceOf(rider) is not { } dice)
+                throw new AppValidationException([new("roll.rider-unknown", $"'{pick.EffectId}' is not a once-per-turn rider of this attack.", pick.Content, pick.EffectId)], "roll.rider-unknown");
+            formula = $"{formula}+{dice}";
+        }
+        string? undoubled = null;
+        if (command.Critical && riders is not null)
+        {
+            var critical = riders.Where(r => r.Critical).Select(DiceOf).Where(d => d is not null).ToList();
+            if (critical.Count > 0)
+                undoubled = string.Join('+', critical);
+        }
+        return new RollRequest(formula, RollMode.Normal, command.Critical, [], provenance, Undoubled: undoubled);
     }
 
     /// <summary>

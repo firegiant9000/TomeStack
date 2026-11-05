@@ -3,6 +3,8 @@ import type {
   Ability,
   Activation,
   AttackEntry,
+  ContentReference,
+  RiderValue,
   EquipmentEntry,
   AutomationStatus,
   CharacterView,
@@ -679,7 +681,8 @@ export function ActionsPanel({
   onPin,
 }: {
   view: CharacterView;
-  roll: (target: RollTarget) => void;
+  /** Resolves to false when the roll was refused (the sheet then shows the error); a caller that returns nothing counts as rolled. */
+  roll: (target: RollTarget) => void | Promise<boolean>;
   act: Act;
   /** D73: the visible, resolved quickbar pins; a row whose pin is among them shows "Unpin". */
   pins?: Pin[];
@@ -716,7 +719,7 @@ export function ActionsPanel({
   };
   const rollDamage = (target: RollTarget, type?: string) => {
     onDamageType?.(normalizeDamageType(type));
-    roll(target);
+    return roll(target);
   };
   // MECH-X item 4: a content companion's attacks and pools are shown on its card, so this display list skips them. Lookups keep every pool.
   const attacks = (view.sheet.attacks ?? []).filter((a) => !a.companionId);
@@ -830,6 +833,7 @@ export function ActionsPanel({
                   key={`${attack.item.revisionId}-${attack.effectId}-${attack.entryIndex ?? ''}`}
                   attack={attack}
                   label={attackLabel(attack, view.character.equipment ?? [])}
+                  contentName={(c) => (view.sheet.features ?? []).find((f) => f.content.revisionId === c.revisionId)?.name}
                   critical={critical}
                   rollMode={rollMode}
                   roll={roll}
@@ -1076,14 +1080,17 @@ export function AttackItem({
   pool,
   availability,
   pinning,
+  contentName,
 }: {
   attack: AttackEntry;
   /** The name shown and used in control names: the attack's, with its copy number when the weapon is carried several times. */
   label: string;
+  /** G1: names the content a rider comes from (the sheet's feature list); falls back to the attack's own name. */
+  contentName?: (content: ContentReference) => string | undefined;
   critical: boolean;
   rollMode: RollMode;
   roll: (target: RollTarget) => void;
-  rollDamage: (target: RollTarget, type?: string) => void;
+  rollDamage: (target: RollTarget, type?: string) => void | Promise<boolean>;
   /** The pool a feature attack spends from, to name it in the cost line. */
   pool?: ResourceValue;
   /** D73: a feature attack the pool can't pay stays enabled and says so. */
@@ -1099,6 +1106,17 @@ export function AttackItem({
   const locked = attack.available === false;
   const needs = locked ? '' : availability.reasons.join(' ');
   const described = locked ? reasonId : needs ? needsId : undefined;
+  // Content v12 (G1): once-per-turn riders are picked per damage roll and cleared after it (in the handler, not an effect); crit-only dice are listed.
+  const [picks, setPicks] = useState<string[]>([]);
+  const pickKey = (r: RiderValue) => `${r.content.revisionId}|${r.effectId}`;
+  const onceRiders = (attack.riders ?? []).filter((r) => r.oncePerTurn && r.dice);
+  const critRiders = (attack.riders ?? []).filter((r) => r.critical && r.dice);
+  const riderName = (r: RiderValue) => contentName?.(r.content) ?? attack.name;
+  const damageRoll = async (t: RollTarget) => {
+    const withRiders = onceRiders.filter((r) => picks.includes(pickKey(r))).map((r) => ({ content: r.content, effectId: r.effectId }));
+    // A refused roll keeps the picks so the player can retry; only a roll that went through clears them.
+    if ((await rollDamage(withRiders.length > 0 ? { ...t, withRiders } : t, attack.damageType)) !== false) setPicks([]);
+  };
   return (
     <li className="feature">
       <details>
@@ -1120,6 +1138,15 @@ export function AttackItem({
             <li key={i}>{sentence}</li>
           ))}
         </ul>
+        {critRiders.length > 0 && (
+          <ul aria-label={`${label} critical hit dice`}>
+            {critRiders.map((r) => (
+              <li key={pickKey(r)}>
+                {riderName(r)}: +{r.dice} on a critical hit{r.versatileDice ? ` (${r.versatileDice} two-handed)` : ''}
+              </li>
+            ))}
+          </ul>
+        )}
         {attack.warnings.length > 0 && (
           <ul className="warnings" aria-label={`${label} warnings`}>
             {attack.warnings.map((w) => (
@@ -1138,7 +1165,20 @@ export function AttackItem({
           {note}
         </span>
       ))}
-      <button type="button" disabled={locked} aria-describedby={described} onClick={() => rollDamage({ ...target, damage: true, critical }, attack.damageType)}>
+      {onceRiders.map((r) => (
+        <label key={pickKey(r)} className="choice">
+          <input
+            type="checkbox"
+            disabled={locked}
+            aria-label={`Add ${riderName(r)} (${r.dice}, once per turn) to ${label} damage`}
+            checked={picks.includes(pickKey(r))}
+            onChange={(e) => setPicks((p) => (e.target.checked ? [...p, pickKey(r)] : p.filter((k) => k !== pickKey(r))))}
+          />
+          Add {riderName(r)} ({r.dice}, once per turn)
+          {r.versatileDice ? <span className="hint"> {r.versatileDice} two-handed</span> : null}
+        </label>
+      ))}
+      <button type="button" disabled={locked} aria-describedby={described} onClick={() => damageRoll({ ...target, damage: true, critical })}>
         Roll {label} damage{attack.damage ? ` (${attack.damage})` : ''}
       </button>
       {locked && (
@@ -1154,7 +1194,7 @@ export function AttackItem({
         </span>
       )}
       {attack.versatileDamage && (
-        <button type="button" onClick={() => rollDamage({ ...weaponTarget(attack), damage: true, versatile: true, critical }, attack.damageType)}>
+        <button type="button" onClick={() => damageRoll({ ...weaponTarget(attack), damage: true, versatile: true, critical })}>
           Roll {label} two-handed damage ({attack.versatileDamage})
         </button>
       )}

@@ -577,7 +577,31 @@ public static class DownConvert
                     case ChoiceEffect.TypeName:
                         RemoveKey(effect, "replaceable", path, BelowAction.Dropped, BelowCodes.V12Key, $"'{name}': when a choice may be replaced.", changes);
                         break;
+                    case AttackRiderEffect.TypeName:
+                        // A rider kept without the flag would be stronger (always on, every attack, no scaling), so it is dropped whole.
+                        if (AttackRiderEffect.V12Keys.Any(k => Member(effect, k) is not null))
+                        {
+                            // Dropping a rider that also lowers the attack (a toHit or damageBonus that can be negative) would make the copy stronger.
+                            if (CanLowerAttack("toHit") || CanLowerAttack("damageBonus"))
+                            {
+                                changes.Add(new(path, BelowAction.Blocks, BelowCodes.EffectUnsupported, $"'{name}': a rider with scaled dice, a critical-only or a once-per-turn flag that also lowers the attack; leaving it out would make the older version stronger."));
+                                continue;
+                            }
+                            changes.Add(new(path, BelowAction.Dropped, BelowCodes.EffectUnsupported, $"'{name}': a rider with scaled dice, a critical-only or a once-per-turn flag, which the older version would apply without them."));
+                            continue;
+
+                            bool CanLowerAttack(string key) => Member(effect, key) is not null && !StaticallyNonNegative(StringOf(Member(effect, key)), scope);
+                        }
+                        break;
                     case RollEffect.TypeName:
+                        // A roll whose only payload is the scaled dice would do nothing (v11 refuses it): drop it whole, as weaker.
+                        if (Member(effect, "scaledDice") is not null
+                            && !RollEffect.DoesSomethingInV11(Member(effect, "dice") is not null, Member(effect, "cost") is not null, Member(effect, "castsSpell") is not null))
+                        {
+                            changes.Add(new(path, BelowAction.Dropped, BelowCodes.EffectUnsupported, $"'{name}': a roll whose only dice were scaled, which the older version cannot compute and would refuse as a roll that does nothing."));
+                            continue;
+                        }
+                        RemoveKey(effect, "scaledDice", path, BelowAction.Dropped, BelowCodes.V12Key, $"'{name}': the roll's dice count, which the older version cannot compute; the roll keeps its other parts.", changes);
                         PaymentBelow(effect, path, name, "a roll", changes);
                         RemoveKey(effect, "castsSpell", path, BelowAction.Blocks, BelowCodes.CastsSpell, $"'{name}': the spell a roll casts; the older version would leave the spell out.", changes);
                         break;

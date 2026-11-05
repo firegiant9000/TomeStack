@@ -1,6 +1,6 @@
-# ADR-022: Content schema v12, one slice at a time (G6 first: response triggers and amounts; G7: roll modes on attacks and initiative)
+# ADR-022: Content schema v12, one slice at a time (G6 first: response triggers and amounts; G7: roll modes on attacks and initiative; G1: scaled dice, critical-only and once-per-turn riders)
 
-Status: **accepted** for the slice list and for slices G6 and G7 (owner, 2026-10-28: LIVING_SPECS D76 and B4; D86, D87). Slice G6 is built on branch `v12-g6`, slice G7 on `v12-g7` (stacked on G6). The warn-or-block judgement for G6's down-conversion (decision 6) and the one for G7's (G7 decision 6) are proposals that await the owner.
+Status: **accepted** for the slice list and for slices G6, G7 and G1 (owner, 2026-10-28: LIVING_SPECS D76 and B4; D86, D87, D88). Slice G6 is built on branch `v12-g6`, slice G7 on `v12-g7` (stacked on G6), slice G1 on `v12-g1` (stacked on G7). The warn-or-block judgement for G6's down-conversion (decision 6), the one for G7's (G7 decision 6) and the one for G1's (G1 decision 6), and "once per turn is offered, not tracked" (G1 decision 4), are proposals that await the owner.
 Date: 2026-11-04
 
 ## Context
@@ -34,7 +34,7 @@ The first gap (G6) is in the damage panel. A `response` effect (v11, ADR-018 and
 
 ### The slice list
 
-G6 was built first, G7 second (below). The remaining slices follow in the order G1 with G2 and G3, then G9, G10, G11, G5 and G4 (the gap ids are in [effect-vocabulary-coverage.md](../features/effect-vocabulary-coverage.md)). Each extends this ADR with its own decisions and evidence, keeps every new member optional, and adds its own lowering rule.
+G6 was built first, G7 second, G1 (with G2 and G3) third (below). The remaining slices follow in the order G9, G10, G11, G5 and G4 (the gap ids are in [effect-vocabulary-coverage.md](../features/effect-vocabulary-coverage.md)). Each extends this ADR with its own decisions and evidence, keeps every new member optional, and adds its own lowering rule.
 
 **0.8.0 waits for every slice** (owner ruling, 2026-11-04): the bundled classes get new v12 revisions only when v12 is complete, and no release is cut while v12 is open. Until then G6 and G7 sit on their branches and, once merged, in `main`.
 
@@ -121,4 +121,45 @@ The second gap is in the roll modes of D43 (`rollMode`, v11). A v11 `rollMode` r
 - UI: `src/Ui/src/components/HomebrewStudioRollModes.test.tsx` (authoring), `SheetSummary.test.tsx` (the "Attacks against you" line) and `ActionsPanel.test.tsx` (the attack buttons' automatic mode).
 - The original fixture pack `tests/RulesFixtures/fixture-pack-roll-modes-v12.json`.
 
-Related: [ADR-018](ADR-018-play-mechanics.md), [ADR-021](ADR-021-mechanics-beyond-d43.md), [ADR-023](ADR-023-down-conversion-export.md), [play-mechanics.md](../features/play-mechanics.md#content-v12-g6-response-triggers-and-amounts) and [its G7 section](../features/play-mechanics.md#content-v12-g7-roll-modes-on-attacks-and-initiative), LIVING_SPECS D76, D86 and D87. Supersedes: none.
+## Slice G1: scaled dice, critical-only and once-per-turn riders
+
+The third gap is in the dice of D43 (`attackRider.dice`, `roll.dice`, v11), which are literal `NdM`. Features that matter here:
+
+- Extra damage dice whose count follows a class level (a count that rises every few levels).
+- Extra dice added only when the hit is a critical hit.
+- Extra dice on one hit a turn, which the player chooses to add.
+
+### Decision (G1)
+
+1. **`scaledDice` (v12, `attackRider` and `roll`):** `{ "count": <formula>, "die": <formula>? }`, evaluated in the declaring content's context (a `SCALE.` reference needs v9, a `VALUE.` reference v11). It is exclusive with `dice` on the same effect (`validate.scaled-dice`). `die` is required on a roll; on a rider, no `die` means the attack's own damage die (the weapon's, the versatile die for a two-handed roll, a feature attack's evaluated die), and such a rider may not have a `stackGroup`.
+2. **Evaluated range.** A count of 0 adds no dice: a rider adds the trace note `rider.no-dice` and is not listed when it has no other part; a roll has no dice, so the roll command gives `roll.no-dice` (or rolls the spell's dice when the roll casts a spell). A count below 0 or above 100, a die that is not a d4 to d12, or a failing formula is reported as `rider.dice-invalid` on a rider (the rider is left out of that attack, the attack stays listed and rollable) and as `roll.dice-invalid` on a roll (the roll command refuses with that code). Nothing throws.
+3. **`critical: true` (v12, rider):** its dice are added only to a damage roll the player marks as critical, and are rolled once, never doubled. It needs `dice` or `scaledDice` and refuses `toHit`, `damageBonus`, `stackGroup` and `oncePerTurn` (`validate.rider-critical`).
+4. **`oncePerTurn: true` (v12, rider):** its dice are not in the attack's damage. Each weapon or feature-attack damage roll offers it and the player adds it; added dice are part of the formula, so a critical hit doubles them. **TomeStack does not track turns; the player decides when it applies.** It needs `dice` or `scaledDice` and refuses `toHit`, `damageBonus` and `stackGroup` (`validate.rider-once-per-turn`); a rider with both flags is reported as `validate.rider-critical`. **This judgement is proposed; the owner decides.** `false` is allowed for both flags, still needs v12, and counts as absent.
+5. **Rolling.** `RollCommand` gains `WithRiders` (a list of content and effect id picks). It is allowed only on a weapon or feature-attack damage roll (`roll.riders-not-allowed`); each pick must be a once-per-turn rider on that entry (`roll.rider-unknown`); duplicates collapse. Picked dice are appended to the damage formula. On a critical roll the entry's critical riders' dice are added undoubled. The field roll branch takes automatic reasons as the other branches do (a G7 leftover).
+6. **Down-conversion** (ADR-023, "never silently stronger"). At the 12 to 11 rung a rider with any of `scaledDice`, `critical` or `oncePerTurn` is **dropped whole** and listed (`below.effect-unsupported`): keeping it without the flag would make it stronger, and a v11 rider cannot scale; a rider that also lowers the attack (a `toHit` or `damageBonus` that can be negative) blocks the export instead (`below.effect-unsupported`), since dropping it would remove the penalty. A roll with `scaledDice` loses only that key (`below.v12-key`) when it still has a cost; when nothing a v11 roll accepts would remain (a v11 roll needs dice, a cost or a spell) it is dropped whole (`below.effect-unsupported`). A roll that casts a spell still blocks the export, as in G6. Both are weaker, not stronger. No new code: the down-conversion coverage count stays 40. **This judgement is proposed; the owner decides** (ADR-023, consequences).
+7. **Numbers.** No new ADR. The decision row is D88.
+
+### Consequences (G1)
+
+- Content can scale extra dice with a level, add dice on a critical hit only, and offer dice once per turn. Existing riders and rolls behave as before, and a revision without the new members keeps its version, bytes and hash. A v11 revision whose rider carries one of them keeps it as unknown data and applies with its v11 `dice`.
+- Attack buttons offer once-per-turn riders on damage rolls. The Homebrew Studio authors all three: a rider's dice can be "By formula" (count and optional die), with "Only on a critical hit" and "Once per turn, added when you choose" boxes (each disables the other). Switching a rider to "By formula" clears its stack group.
+- A revision that uses any of the members needs content schema 12 (`validate.requires-v12`). A package that holds one warns `package.needs-newer-build`.
+- New codes: `validate.scaled-dice`, `validate.rider-critical`, `validate.rider-once-per-turn`, `rider.dice-invalid`, `rider.no-dice` (a trace note), `roll.dice-invalid`, `roll.riders-not-allowed`, `roll.rider-unknown`.
+- The capability registry gains rows for `scaledDice` and `critical` on riders and `scaledDice` on rolls (Automatic) and `oncePerTurn` (Assisted).
+
+### Not doing (G1)
+
+- **A tracked "used this turn" state:** it needs character data past schema 11. The player decides.
+- **Dice that depend on a roll's result,** and a name for the attack's die inside formulas.
+- **Folding `scaledDice` to a literal when lowering,** and crit-only `roll` effects.
+- **Detecting a critical hit from the d20:** the player still marks a critical damage roll.
+
+### Evidence (G1)
+
+- `tests/RulesCore.Tests/ScaledDiceV12SchemaTests.cs` and `ScaledDiceV12ValidationTests.cs` (the members, the version rung, the validator codes, a v11 revision keeping them as unknown data), and the JSON schema in `docs/schemas/content-revision.v12.schema.json`.
+- `tests/RulesCore.Tests/ScaledDiceV12SheetTests.cs` (count 0, out-of-range, die-less riders on a versatile roll, stack groups).
+- `tests/AppService.Tests/ScaledDiceV12ServiceTests.cs` (critical-only and once-per-turn rolling, picks refused, `roll.dice-invalid`, `roll.no-dice`).
+- `tests/RulesCore.Tests/DownConvertV12Tests.cs` (rider dropped whole; roll key dropped or roll dropped) with `DownConvertCoverageTests` unchanged at 40, and `CapabilityRegistryTests.cs` (the registry rows).
+- UI: `src/Ui/src/components/HomebrewStudioAttacks.test.tsx` and `HomebrewStudioRolls.test.tsx` (authoring), `ActionsPanel.test.tsx` (the once-per-turn offer on damage rolls).
+
+Related: [ADR-018](ADR-018-play-mechanics.md), [ADR-021](ADR-021-mechanics-beyond-d43.md), [ADR-023](ADR-023-down-conversion-export.md), [play-mechanics.md](../features/play-mechanics.md#content-v12-g6-response-triggers-and-amounts), [its G7 section](../features/play-mechanics.md#content-v12-g7-roll-modes-on-attacks-and-initiative) and [its G1 section](../features/play-mechanics.md#content-v12-g1-scaled-dice-critical-only-and-once-per-turn-riders), LIVING_SPECS D76, D86, D87 and D88. Supersedes: none.

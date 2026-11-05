@@ -194,7 +194,7 @@ Rules core: `AttackEffect`, `AttackRiderEffect` and the new `ModifierEffect.Togg
 | `attackRider` | `toHit`, `dice`, `damageBonus` | formula, `NdM`, formula | Added to the attack roll, extra damage dice, added to the damage. At least one is needed. `dice` is a count of 1 to 100 and a d4, d6, d8, d10 or d12 |
 | `attackRider` | `damageType` | damage type | The type of the extra dice. Absent: the attack's own |
 | `attackRider` | `toggle`, `toggleContent` | toggle id, content id | The rider applies only while this toggle is on (`toggleContent`: the content that declares it, when it is not this revision). Absent: always |
-| `attackRider` | `stackGroup` | key | Riders of one group never add: the strongest applies |
+| `attackRider` | `stackGroup` | key | Riders of one group never add: the strongest applies. In v11 a rider's `dice` and a roll's `dice` are literal; content v12 adds `scaledDice`, `critical` and `oncePerTurn` ([Content v12 (G1)](#content-v12-g1-scaled-dice-critical-only-and-once-per-turn-riders)) |
 | `modifier` | `toggleContent` | content id | With `toggle`: the modifier follows that content's toggle, not one of its own revision |
 | `roll` | `whileToggle` | `{ contentId?, toggleId }` | The action is available only while this toggle is on |
 | `modifier` | `target: resource.<id>` | a pool of this revision | A `bonus` raises that pool's maximum (see below) |
@@ -675,6 +675,32 @@ Decided in [ADR-022](../decisions/ADR-022-content-v12.md#slice-g7-roll-modes-on-
 **Older versions.** For an older TomeStack ([package-format.md](package-format.md#save-for-an-older-tomestack-d85)) a rollMode with a v12 target or member is dropped whole and listed (`below.effect-unsupported`) when it helps the character: a target of your own (attack, initiative or a v11 target) with advantage, or attacks against you with disadvantage and no `prevent`, or with advantage and `prevent: true`. Any other one blocks the copy (`below.roll-mode-disadvantage`), and the blocked copy leaves it out as its one change. `prevent: false` alone on an otherwise v11 effect drops just the key (`below.v12-key`). This judgement is a proposal that awaits the owner (ADR-022, G7 decision 6).
 
 **Stays by hand:** "the next attack roll only" (switch the toggle off yourself), conditions such as "if you haven't moved" (the toggle is yours to judge), a prevent on your own rolls, and a mode on damage or non-d20 rolls.
+
+## Content v12 (G1): scaled dice, critical-only and once-per-turn riders
+
+Decided in [ADR-022](../decisions/ADR-022-content-v12.md#slice-g1-scaled-dice-critical-only-and-once-per-turn-riders) (LIVING_SPECS D88). New optional members on an `attackRider` and a `roll`, all content schema v12; a revision without them keeps its version and bytes. A v11 revision whose rider carries one stays unknown data and applies with its v11 `dice`.
+
+| Member | On | Meaning |
+| --- | --- | --- |
+| `scaledDice` | rider, roll | `{ "count": <formula>, "die": <formula>? }` in place of `dice` (the two are exclusive, `validate.scaled-dice`). The formula is evaluated for the character (a `SCALE.` reference needs v9, a `VALUE.` reference v11). `die` is required on a roll. On a rider, no `die` means the attack's own damage die (the weapon's, the versatile die on a two-handed roll, a feature attack's die); such a rider may not have a `stackGroup`. |
+| `critical` | rider | The dice are added only to a damage roll marked critical, rolled once and never doubled. Needs `dice` or `scaledDice`; refuses `toHit`, `damageBonus`, `stackGroup`, `oncePerTurn` (`validate.rider-critical`). |
+| `oncePerTurn` | rider | The dice are not in the attack's damage. Each weapon or feature damage roll offers the rider; the player adds it, and a critical hit doubles the added dice. Needs `dice` or `scaledDice`; refuses `toHit`, `damageBonus`, `stackGroup` (`validate.rider-once-per-turn`). Both flags on one rider is `validate.rider-critical`. |
+
+An explicit `false` for `critical` or `oncePerTurn` is allowed, still needs v12 and counts as absent.
+
+**Evaluated range.** A count of 0 adds no dice: a rider adds the trace note `rider.no-dice` (and is not listed when it has no other part); a roll has no dice, so the roll command gives `roll.no-dice`, or rolls the spell's dice when the roll casts a spell. A count below 0 or above 100, a die outside d4 to d12 or a failing formula is `rider.dice-invalid` on a rider (the rider is left out of that attack; the attack stays listed and rollable) and `roll.dice-invalid` on a roll (the roll command refuses with that code). Nothing throws.
+
+**Rolling.** `RollCommand.WithRiders` lists once-per-turn riders (content and effect id) to add. It is allowed only on a weapon or feature-attack damage roll (`roll.riders-not-allowed`), each pick must be a once-per-turn rider on that entry (`roll.rider-unknown`), and duplicates collapse. On a critical roll the entry's critical riders' dice are added once, undoubled; the picked dice are doubled like any dice in the formula; flat parts are never doubled.
+
+**Once per turn is offered, not tracked.** TomeStack does not track turns. The player decides when the rider applies and adds it to the roll; there is no "used this turn" state and no character field. This judgement is proposed; the owner decides.
+
+**Play and the studio.** Attack buttons offer each once-per-turn rider as "Add <rider> (dice, once per turn)" on a damage roll. The Homebrew studio's rider and roll dice can be "By formula" (count and, for a rider, an optional die), and a rider has "Only on a critical hit" and "Once per turn, added when you choose" boxes (each disables the other). Switching a rider to "By formula" clears its stack group, since a die-less rider can't have one; switching a roll to "By formula" drops its per-unit cost and hides those fields.
+
+**Validation** (errors): `validate.scaled-dice`, `validate.rider-critical`, `validate.rider-once-per-turn`; below v12 `validate.requires-v12` applies as for every v12 field. The capability registry lists `scaledDice` and `critical` as Automatic and `oncePerTurn` as Assisted.
+
+**Older versions.** For an older TomeStack ([package-format.md](package-format.md#save-for-an-older-tomestack-d85)) a rider with any of `scaledDice`, `critical` or `oncePerTurn` is dropped whole and listed (`below.effect-unsupported`), because keeping it without the flag would make it stronger; a rider that also lowers the attack (a `toHit` or `damageBonus` that can be negative) blocks the export instead. A roll with `scaledDice` loses only that key (`below.v12-key`) when it still has a cost, and is dropped whole (`below.effect-unsupported`) when nothing a v11 roll accepts would remain; a roll that casts a spell still blocks the export, as in G6. This judgement is a proposal that awaits the owner (ADR-022, G1 decision 6).
+
+**Stays by hand:** tracking whether the once-per-turn rider was already used this turn, dice that depend on a roll's result, and marking a damage roll critical (the player still does it).
 
 ## Not yet
 

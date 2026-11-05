@@ -302,6 +302,102 @@ public class DownConvertV12Tests
         Assert.All(ContentValidator.Validate(result.Revision, Fixtures.M1Catalog()).Errors, e => Assert.Equal("validate.source-missing", e.Code));
     }
 
+    private const string Scaled = """{"type":"attackRider","id":"rider","tags":["all"],"scaledDice":{"count":"1"}}""";
+    private const string Plain = """{"type":"attackRider","id":"plain","tags":["all"],"dice":"1d4"}""";
+
+    [Fact]
+    public void Scaled_rider_is_dropped_whole_below_12() =>
+        AssertDroppedWhole(DownConvert.Below(Rev(Scaled), 11));
+
+    [Fact]
+    public void Critical_rider_is_dropped_whole_below_12() =>
+        AssertDroppedWhole(DownConvert.Below(Rev("""{"type":"attackRider","id":"rider","tags":["all"],"dice":"1d6","critical":true}"""), 11));
+
+    [Fact]
+    public void Once_per_turn_false_rider_is_dropped_whole_below_12()
+    {
+        // Not at index 0: the earlier effect is removed, so the reported origin index (2) differs from the working index (1).
+        var mod = """{"type":"itemMod","id":"m2","appliesTo":"weapon","bonus":1}""";
+        var rider = """{"type":"attackRider","id":"rider","tags":["all"],"dice":"1d6","oncePerTurn":false}""";
+        var result = DownConvert.Below(Item($"{mod},{Plain},{rider}"), 11);
+
+        Assert.False(result.Blocked);
+        Assert.IsType<AttackRiderEffect>(Assert.Single(result.Revision.Effects));
+        Assert.Equal(
+            [("effects[0]", BelowCodes.EffectUnsupported), ("effects[2]", BelowCodes.EffectUnsupported)],
+            result.Changes.OrderBy(c => c.Path, StringComparer.Ordinal).Select(c => (c.Path, c.Code)));
+        Assert.All(result.Changes, c => Assert.Equal(BelowAction.Dropped, c.Action));
+    }
+
+    [Theory]
+    [InlineData("toHit", "-2")]
+    [InlineData("damageBonus", "-1")]
+    public void Scaled_rider_that_also_lowers_the_attack_blocks_below_12(string key, string value)
+    {
+        var rider = $$"""{"type":"attackRider","id":"rider","tags":["weapon"],"scaledDice":{"count":"1","die":"6"},"{{key}}":"{{value}}"}""";
+        var result = DownConvert.Below(Rev(rider), 11);
+
+        Assert.True(result.Blocked);
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(BelowAction.Blocks, change.Action);
+        Assert.Equal(BelowCodes.EffectUnsupported, change.Code);
+    }
+
+    [Fact]
+    public void Scaled_rider_with_a_positive_to_hit_is_still_dropped_below_12()
+    {
+        var rider = """{"type":"attackRider","id":"rider","tags":["weapon"],"scaledDice":{"count":"1","die":"6"},"toHit":"1"}""";
+        AssertDroppedWhole(DownConvert.Below(Rev(rider), 11));
+    }
+
+    [Fact]
+    public void Roll_loses_scaledDice_below_12()
+    {
+        var roll = """{"type":"roll","id":"r","rollId":"r","label":"R","scaledDice":{"count":"1","die":"6"},"resourceId":"p","cost":"1"}""";
+        var result = DownConvert.Below(Rev(roll), 11);
+
+        Assert.False(result.Blocked, string.Join("|", result.Changes.Select(c => $"{c.Code} {c.Path} {c.Message}")));
+        var kept = Assert.IsType<RollEffect>(Assert.Single(result.Revision.Effects));
+        Assert.Equal("R", kept.Label);
+        Assert.Equal("1", kept.Cost);
+        Assert.Null(kept.Dice);
+        Assert.DoesNotContain("scaledDice", Written(result), StringComparison.OrdinalIgnoreCase);
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(BelowCodes.V12Key, change.Code);
+        Assert.Equal(BelowAction.Dropped, change.Action);
+        Assert.Equal("effects[0].scaledDice", change.Path);
+    }
+
+    [Fact]
+    public void Roll_with_only_scaledDice_is_dropped_whole_below_12_because_v11_refuses_a_do_nothing_roll()
+    {
+        var roll = """{"type":"roll","id":"r","rollId":"r","label":"R","scaledDice":{"count":"1","die":"6"}}""";
+        var result = DownConvert.Below(Rev(roll), 11);
+
+        AssertDroppedWhole(result);
+        Assert.All(ContentValidator.Validate(result.Revision, Fixtures.M1Catalog()).Errors, e => Assert.Equal("validate.source-missing", e.Code));
+    }
+
+    [Fact]
+    public void V11_rider_is_untouched_at_the_12_rung()
+    {
+        var result = DownConvert.Below(Rev(Plain), 11);
+
+        Assert.Empty(result.Changes);
+        Assert.IsType<AttackRiderEffect>(Assert.Single(result.Revision.Effects));
+    }
+
+    [Fact]
+    public void Lowered_rider_copy_validates_at_11()
+    {
+        var result = DownConvert.Below(Rev($"{Scaled},{Plain}"), 11);
+
+        Assert.Equal(11, result.Revision.SchemaVersion);
+        Assert.DoesNotContain(BelowCodes.ValidationError, result.Changes.Select(c => c.Code));
+        Assert.Single(result.Revision.Effects);
+        Assert.All(ContentValidator.Validate(result.Revision, Fixtures.M1Catalog()).Errors, e => Assert.Equal("validate.source-missing", e.Code));
+    }
+
     [Fact]
     public void A_v12_revision_with_no_v12_feature_lowers_silently()
     {

@@ -118,6 +118,15 @@ it('the variable-cost box clears per-unit dice, and leaving the area or save rem
   expect((sent.area as Raw).width).toBeUndefined();
 });
 
+it('a roll with dice by formula offers no per-unit dice', async () => {
+  const user = userEvent.setup();
+  const { rule } = await openDraft(user, [focus, { ...burst, resourceId: 'focus', cost: '1', perUnit: { dice: '1d6' } }]);
+  const r = rule(/^Rule 2: Roll or action/);
+  expect(r.getByRole('textbox', { name: /^Extra dice/ })).toBeTruthy();
+  await user.selectOptions(r.getByRole('combobox', { name: 'Dice' }), 'By formula');
+  expect(r.queryByRole('textbox', { name: /^Extra dice/ })).toBeNull();
+});
+
 it('clearing the dice removes the key; it is never an empty string', async () => {
   const user = userEvent.setup();
   const { rule, checked } = await openDraft(user, [focus, { ...burst, resourceId: 'focus', cost: '1' }]);
@@ -125,6 +134,25 @@ it('clearing the dice removes the key; it is never an empty string', async () =>
   const sent = (await checked()).effect('roll-2') as Raw;
   expect(sent.dice).toBeUndefined();
   expect(JSON.stringify(sent)).not.toContain('"dice"');
+});
+
+it('edits roll dice by formula and requires a die', async () => {
+  const user = userEvent.setup();
+  const { rule, checked } = await openDraft(user, [{ ...burst, futureMember: 1 }]);
+  const r = rule(/^Rule 1: Roll or action/);
+  await user.selectOptions(r.getByRole('combobox', { name: 'Dice' }), 'By formula');
+  expect(r.queryByRole('textbox', { name: /^Dice/ })).toBeNull();
+  await user.type(r.getByRole('textbox', { name: /^Number of dice/ }), 'CLASS_LEVEL');
+  // The die is required on a roll.
+  expect(blocked('Save draft')).toBe(true);
+  await user.type(r.getByRole('textbox', { name: /^Die/ }), '6');
+  expect(blocked('Save draft')).toBe(false);
+  const sent = (await checked()).effect('roll-2') as Raw;
+  expect(sent.scaledDice).toEqual({ count: 'CLASS_LEVEL', die: '6' });
+  expect('dice' in sent).toBe(false);
+  expect(sent.futureMember).toBe(1);
+  await user.selectOptions(r.getByRole('combobox', { name: 'Dice' }), 'Fixed');
+  expect('scaledDice' in ((await checked()).effect('roll-2') as Raw)).toBe(false);
 });
 
 it('clearing the dice also removes the per-unit dice, since they have nothing to add to', async () => {

@@ -382,6 +382,12 @@ public sealed record UpkeepEffect : Effect
 public sealed record AttackDamage(string Count, string Die);
 
 /// <summary>
+/// Content schema v12 (G1): dice whose count (and die) are formulas evaluated for the character. On an <c>attackRider</c> an
+/// absent <see cref="Die"/> means the attack's own damage die; on a <c>roll</c> the die is required.
+/// </summary>
+public sealed record ScaledDice(string Count, string? Die = null);
+
+/// <summary>
 /// Content schema v11 (D43): an attack a feature gives, such as an unarmed strike or a bolt: to hit = the best of the listed
 /// ability modifiers plus the proficiency bonus (unless <see cref="Proficient"/> is false); damage = <see cref="Damage"/> plus
 /// <see cref="DamageBonus"/> (default: that ability modifier). Typed only in a v11 revision: in an older revision an
@@ -503,6 +509,18 @@ public sealed record AttackRiderEffect : Effect
     /// <summary>Riders of one stack group never add: the highest applies.</summary>
     public string? StackGroup { get; init; }
 
+    /// <summary>Content schema v12 (G1): the rider's dice from formulas instead of <see cref="Dice"/>. Below v12 the key stays extension data and does nothing.</summary>
+    public ScaledDice? ScaledDice { get; init; }
+
+    /// <summary>Content schema v12 (G1): true when the rider's dice are added only to a critical damage roll, rolled once. Below v12 the key stays extension data.</summary>
+    public bool? Critical { get; init; }
+
+    /// <summary>Content schema v12 (G1): true when the player adds the rider's dice to a damage roll by choice. Below v12 the key stays extension data.</summary>
+    public bool? OncePerTurn { get; init; }
+
+    /// <summary>The keys content schema v12 adds to this effect (G1); below v12 they stay extension data.</summary>
+    internal static readonly string[] V12Keys = ["scaledDice", "critical", "oncePerTurn"];
+
     /// <summary>Reads <c>NdM</c> exactly: a whole count from 1 to <see cref="DiceLimits.MaxDice"/>, a lowercase d, and an allowed die; no sign, space or modifier.</summary>
     internal static bool TryParseDice(string? source, out int count, out int sides)
     {
@@ -515,7 +533,10 @@ public sealed record AttackRiderEffect : Effect
             && count is >= 1 and <= DiceLimits.MaxDice && AllowedDice.Contains(sides);
     }
 
-    internal static Effect FromUnknown(UnknownEffect unknown) => VersionedEffects.Typed<AttackRiderEffect>(unknown);
+    internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion) =>
+        revisionSchemaVersion < ContentRevision.ScaledDiceSchemaVersion
+            ? VersionedEffects.TypedWithout<AttackRiderEffect>(unknown, V12Keys)
+            : VersionedEffects.Typed<AttackRiderEffect>(unknown);
 }
 
 /// <summary>A choice the player makes (for example, pick one of these content revisions).</summary>
@@ -686,6 +707,9 @@ public sealed record RollEffect : Effect
     /// </summary>
     public CostPayment? Payment { get; init; }
 
+    /// <summary>Content schema v12 (G1): the roll's dice from formulas (count and die) instead of <see cref="Dice"/>. Below v12 the key stays extension data and does nothing.</summary>
+    public ScaledDice? ScaledDice { get; init; }
+
     /// <summary>
     /// Content schema v12 (MECH-X item 1): the content id of a spell this roll casts without spending a slot; the roll rolls the
     /// spell's dice when it has none of its own. Below v12 the key stays extension data and does nothing.
@@ -701,7 +725,13 @@ public sealed record RollEffect : Effect
     internal static readonly string[] V11Keys = ["whileToggle", "save", "area", "range", "targets", "perUnit", "alsoChange", "drawsDown"];
 
     /// <summary>The keys content schema v12 adds to this effect (MECH-X item 1); below v12 they stay extension data.</summary>
-    internal static readonly string[] V12Keys = ["payment", "castsSpell"];
+    internal static readonly string[] V12Keys = ["payment", "castsSpell", "scaledDice"];
+
+    /// <summary>
+    /// Whether a roll with these parts does something in content v11 (the rule <c>validate.roll-dice-or-cost</c> enforces): literal dice, a cost,
+    /// or a spell it casts. One place, so the validator and the lowering to v11 agree.
+    /// </summary>
+    internal static bool DoesSomethingInV11(bool hasDice, bool hasCost, bool castsSpell) => hasDice || hasCost || castsSpell;
 
     /// <summary>
     /// Typed by the revision when the converter hands it over (see <see cref="EffectJsonConverter"/>): v11 keys, and a roll with
@@ -1695,7 +1725,7 @@ internal static class VersionedEffects
             [ToggleGroupEffect.TypeName] = (ToggleGroupEffect.SchemaVersion, (u, _) => ToggleGroupEffect.FromUnknown(u)),
             [UpkeepEffect.TypeName] = (UpkeepEffect.SchemaVersion, (u, _) => UpkeepEffect.FromUnknown(u)),
             [AttackEffect.TypeName] = (AttackEffect.SchemaVersion, AttackEffect.FromUnknown),
-            [AttackRiderEffect.TypeName] = (AttackRiderEffect.SchemaVersion, (u, _) => AttackRiderEffect.FromUnknown(u)),
+            [AttackRiderEffect.TypeName] = (AttackRiderEffect.SchemaVersion, AttackRiderEffect.FromUnknown),
             // Always typed, except that the converter hands these over when they carry a key or value added after v9 (see
             // EffectJsonConverter.CarriesDetailAbove), so the revision's version decides how they read. A later slice that
             // gives one of them a v11 key adds it to that type's V11Keys, and nothing else. A choice is handed over for its
