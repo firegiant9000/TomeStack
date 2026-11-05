@@ -237,6 +237,39 @@ public static partial class CharacterCalculator
         return bonuses;
     }
 
+    /// <summary>
+    /// Content v12 (G1): the dice of each roll that has <c>scaledDice</c>, as <c>NdM</c>. Count 0: null with no diagnostic (the roll
+    /// is then refused as having no dice). A formula that fails reports <c>effect.invalid-formula</c>; a count below 0 or above the dice
+    /// limit, or a die this app does not roll, reports <c>roll.dice-invalid</c>; both give null. Below v12 the key does nothing.
+    /// </summary>
+    private static Dictionary<(ContentReference, string), string?> RollScaledDice(
+        List<ActiveContent> active, Character character, ClassLevelMap classLevels, Dictionary<string, int> values, List<Diagnostic> diagnostics)
+    {
+        var dice = new Dictionary<(ContentReference, string), string?>();
+        foreach (var item in active.Where(a => a.Revision.SchemaVersion >= ContentRevision.ScaledDiceSchemaVersion))
+        {
+            foreach (var roll in item.Revision.Effects.OfType<RollEffect>().Where(r => r.ScaledDice is not null))
+            {
+                var key = (item.Revision.Reference, roll.Id);
+                switch (EvaluateScaledDice(roll.ScaledDice!, true, item, character, classLevels, values, out var count, out var die, out var failure))
+                {
+                    case ScaledDiceStatus.Formula:
+                        dice[key] = null;
+                        diagnostics.Add(InvalidFormula(item.Revision, roll, failure!));
+                        break;
+                    case ScaledDiceStatus.Range:
+                        dice[key] = null;
+                        diagnostics.Add(new("roll.dice-invalid", $"'{item.Revision.Name}' roll '{roll.Id}' has no dice: a count of {count} or a d{die} is outside what this app rolls.", item.Revision.Reference, roll.Id));
+                        break;
+                    default:
+                        dice[key] = count == 0 ? null : $"{count}d{die}";
+                        break;
+                }
+            }
+        }
+        return dice;
+    }
+
     /// <summary>What a roll's cost and save DC came to for this character (<see cref="RollDetailsOf"/>).</summary>
     private sealed record RollDetail(int? Cost, int? SaveDc, IReadOnlyList<TraceEntry>? SaveTrace, bool Failed, IReadOnlyList<AlsoChangeValue>? AlsoChange = null);
 
@@ -353,7 +386,7 @@ public static partial class CharacterCalculator
 
     private static FeatureEntry Feature(
         ActiveContent item, string family, IReadOnlyList<Diagnostic> diagnostics, Dictionary<(ContentReference, string), RollDetail> rollDetails, Dictionary<(ContentReference, string), int> bonuses,
-        Func<ToggleRef, string?> outOfForm, IReadOnlyList<ResourceValue> resources, Dictionary<(ContentReference, string), CastSpellValue> castSpells)
+        Dictionary<(ContentReference, string), string?> scaledDice, Func<ToggleRef, string?> outOfForm, IReadOnlyList<ResourceValue> resources, Dictionary<(ContentReference, string), CastSpellValue> castSpells)
     {
         var revision = item.Revision;
         // Content v11 (D43): a roll with whileToggle is always listed; it is unavailable, with the reason, while its form is off.
@@ -372,7 +405,7 @@ public static partial class CharacterCalculator
             // A cost or save DC that cannot be calculated: the row stays available and the player works it out.
             var automation = detail is { Failed: true } && roll.Automation == AutomationStatus.Automatic ? AutomationStatus.Assisted : roll.Automation;
             return new(
-                roll.Id, roll.Type, automation, roll.Text, roll.Label, roll.Dice, roll.ResourceId, roll.Activation,
+                roll.Id, roll.Type, automation, roll.Text, roll.Label, scaledDice.TryGetValue((revision.Reference, roll.Id), out var scaled) ? scaled : roll.Dice, roll.ResourceId, roll.Activation,
                 roll.ResourceContent, detail?.Cost, roll.VariableCost == true,
                 bonuses.TryGetValue((revision.Reference, roll.Id), out var bonus) ? bonus : null, reason is null, reason,
                 roll.Save?.Ability, detail?.SaveDc, detail?.SaveTrace, roll.Area, roll.Range, roll.Targets, roll.PerUnit,
