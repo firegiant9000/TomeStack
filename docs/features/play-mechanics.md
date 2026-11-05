@@ -684,7 +684,7 @@ Decided in [ADR-022](../decisions/ADR-022-content-v12.md#slice-g1-scaled-dice-cr
 | --- | --- | --- |
 | `scaledDice` | rider, roll | `{ "count": <formula>, "die": <formula>? }` in place of `dice` (the two are exclusive, `validate.scaled-dice`). The formula is evaluated for the character (a `SCALE.` reference needs v9, a `VALUE.` reference v11). `die` is required on a roll. On a rider, no `die` means the attack's own damage die (the weapon's, the versatile die on a two-handed roll, a feature attack's die); such a rider may not have a `stackGroup`. |
 | `critical` | rider | The dice are added only to a damage roll marked critical, rolled once and never doubled. Needs `dice` or `scaledDice`; refuses `toHit`, `damageBonus`, `stackGroup`, `oncePerTurn` (`validate.rider-critical`). |
-| `oncePerTurn` | rider | The dice are not in the attack's damage. Each weapon or feature damage roll offers the rider; the player adds it, and a critical hit doubles the added dice. Same requirements and refusals as `critical`, with `critical` refused instead (`validate.rider-once-per-turn`). |
+| `oncePerTurn` | rider | The dice are not in the attack's damage. Each weapon or feature damage roll offers the rider; the player adds it, and a critical hit doubles the added dice. Needs `dice` or `scaledDice`; refuses `toHit`, `damageBonus`, `stackGroup` (`validate.rider-once-per-turn`). Both flags on one rider is `validate.rider-critical`. |
 
 An explicit `false` for `critical` or `oncePerTurn` is allowed, still needs v12 and counts as absent.
 
@@ -694,11 +694,11 @@ An explicit `false` for `critical` or `oncePerTurn` is allowed, still needs v12 
 
 **Once per turn is offered, not tracked.** TomeStack does not track turns. The player decides when the rider applies and adds it to the roll; there is no "used this turn" state and no character field. This judgement is proposed; the owner decides.
 
-**Play and the studio.** Attack buttons offer each once-per-turn rider as "Add <rider> (dice, once per turn)" on a damage roll. The Homebrew studio's rider and roll dice can be "By formula" (count and, for a rider, an optional die), and a rider has "Only on a critical hit" and "Once per turn, added when you choose" boxes (each disables the other). Switching a rider to "By formula" clears its stack group, since a die-less rider can't have one.
+**Play and the studio.** Attack buttons offer each once-per-turn rider as "Add <rider> (dice, once per turn)" on a damage roll. The Homebrew studio's rider and roll dice can be "By formula" (count and, for a rider, an optional die), and a rider has "Only on a critical hit" and "Once per turn, added when you choose" boxes (each disables the other). Switching a rider to "By formula" clears its stack group, since a die-less rider can't have one; switching a roll to "By formula" drops its per-unit cost and hides those fields.
 
 **Validation** (errors): `validate.scaled-dice`, `validate.rider-critical`, `validate.rider-once-per-turn`; below v12 `validate.requires-v12` applies as for every v12 field. The capability registry lists `scaledDice` and `critical` as Automatic and `oncePerTurn` as Assisted.
 
-**Older versions.** For an older TomeStack ([package-format.md](package-format.md#save-for-an-older-tomestack-d85)) a rider with any of `scaledDice`, `critical` or `oncePerTurn` is dropped whole and listed (`below.effect-unsupported`), because keeping it without the flag would make it stronger. A roll with `scaledDice` loses only that key (`below.v12-key`) when it still has a cost or casts a spell, and is dropped whole (`below.effect-unsupported`) when nothing a v11 roll accepts would remain. This judgement is a proposal that awaits the owner (ADR-022, G1 decision 6).
+**Older versions.** For an older TomeStack ([package-format.md](package-format.md#save-for-an-older-tomestack-d85)) a rider with any of `scaledDice`, `critical` or `oncePerTurn` is dropped whole and listed (`below.effect-unsupported`), because keeping it without the flag would make it stronger. A roll with `scaledDice` loses only that key (`below.v12-key`) when it still has a cost, and is dropped whole (`below.effect-unsupported`) when nothing a v11 roll accepts would remain; a roll that casts a spell still blocks the export, as in G6. This judgement is a proposal that awaits the owner (ADR-022, G1 decision 6).
 
 **Stays by hand:** tracking whether the once-per-turn rider was already used this turn, dice that depend on a roll's result, and marking a damage roll critical (the player still does it).
 
