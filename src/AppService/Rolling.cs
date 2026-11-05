@@ -199,13 +199,14 @@ public sealed partial class TomeStackApp
             // Content v12 (G1): a roll with scaledDice rolls the dice the sheet calculated (null when the count is 0 or invalid).
             var rollDice = effect.ScaledDice is null ? effect.Dice : calculated?.Dice;
             var cast = rollDice is null ? calculated?.CastsSpell : null;
+            // A count out of range or a failing formula is refused with the diagnostic's own code, like a failing bonus, even when the roll
+            // casts a spell (the cast must not hide it); a count of 0 has no diagnostic and, with a cast, rolls the spell's dice.
+            var scaledProblem = effect.ScaledDice is null || rollDice is not null ? null
+                : sheet.Diagnostics.FirstOrDefault(d => d.Code is "effect.invalid-formula" or "roll.dice-invalid" && d.Content == reference && d.EffectId == effect.Id);
+            if (scaledProblem is not null)
+                throw new AppValidationException([new(scaledProblem.Code, $"Roll '{effect.Id}' cannot be rolled: its scaled dice could not be calculated ({scaledProblem.Code}).", reference, effect.Id)], scaledProblem.Code);
             if (rollDice is null && cast?.Dice is null)
             {
-                // A count out of range or a failing formula is refused with the diagnostic's own code, like a failing bonus; a count of 0 has none.
-                var scaledProblem = effect.ScaledDice is null ? null
-                    : sheet.Diagnostics.FirstOrDefault(d => d.Code is "effect.invalid-formula" or "roll.dice-invalid" && d.Content == reference && d.EffectId == effect.Id);
-                if (scaledProblem is not null)
-                    throw new AppValidationException([new(scaledProblem.Code, $"Roll '{effect.Id}' cannot be rolled: its scaled dice could not be calculated ({scaledProblem.Code}).", reference, effect.Id)], scaledProblem.Code);
                 throw new AppValidationException([new("roll.no-dice", $"'{effect.Label}' has no dice to roll.", reference, effect.Id)], "roll.no-dice");
             }
             // The calculation reports a roll's bonus before its cost and save DC, so the first diagnostic is the bonus's own when the bonus fails.
@@ -371,6 +372,9 @@ public sealed partial class TomeStackApp
     {
         string? DiceOf(RiderValue rider) => versatile ? rider.VersatileDice ?? rider.Dice : rider.Dice;
         var formula = damage;
+        // An untrusted payload can carry a null pick or a pick missing its parts; refuse it by code, naming nothing of the pick.
+        if ((command.WithRiders ?? []).Any(p => p is not { Content: not null, EffectId: not null }))
+            throw new AppValidationException([new("roll.rider-unknown", "A rider pick does not name a rider of this attack.")], "roll.rider-unknown");
         foreach (var pick in (command.WithRiders ?? []).Distinct())
         {
             var rider = riders?.FirstOrDefault(r => r.OncePerTurn && r.Content == pick.Content && r.EffectId == pick.EffectId);

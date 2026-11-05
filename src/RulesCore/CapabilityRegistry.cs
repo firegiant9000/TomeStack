@@ -122,6 +122,7 @@ public static class CapabilityRegistry
         var property = Members.GetOrAdd((effect.GetType(), field), key =>
             key.Type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
                 .FirstOrDefault(p => string.Equals(JsonNamingPolicy.CamelCase.ConvertName(p.Name), key.Field, StringComparison.Ordinal)));
-        return property?.GetValue(effect) is not null;
+        // An explicit false (oncePerTurn, critical) is the same as the member being absent: the calculator treats it so.
+        return property?.GetValue(effect) is not (null or false);
     }
 }
