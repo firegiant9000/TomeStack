@@ -1,0 +1,90 @@
+{
+  "packId": "tomestack-scaled-dice-v12-fixtures",
+  "formatVersion": 1,
+  "notice": "Original TomeStack test fixtures (content v12 G1: dice counts from formulas, crit-only and once-per-turn riders). Invented; no SRD or third-party rules text.",
+  "sources": [
+    {
+      "id": "6f0d5000-0000-4000-8000-000000001401",
+      "title": "TomeStack Fixtures: Scaled Dice v12",
+      "publisher": "TomeStack project",
+      "rulesFamilies": ["srd-5.2.1"],
+      "editionVersion": "fixture-1",
+      "license": "Original test fixture",
+      "redistributable": true,
+      "attribution": "Written for TomeStack tests."
+    }
+  ],
+  "revisions": [
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000001401",
+      "revisionId": "6f0de000-0000-4000-8000-000000001401",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Fixture: Gap in the Guard",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000001401", "page": { "start": 1 } },
+      "status": "published",
+      "summary": "A test feature: once per turn, a weapon damage roll may add extra d6s, half your level rounded up in number.",
+      "effects": [
+        { "type": "attackRider", "id": "gap", "tags": ["weapon"], "scaledDice": { "count": "ceil(LEVEL/2)", "die": "6" }, "oncePerTurn": true }
+      ]
+    },
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000001402",
+      "revisionId": "6f0de000-0000-4000-8000-000000001402",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Fixture: Heavy Follow-Through",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000001401", "page": { "start": 2 } },
+      "status": "published",
+      "summary": "A test feature: a critical melee damage roll adds extra dice of the attack's own die, one plus a ninth of your level rounded down.",
+      "effects": [
+        { "type": "attackRider", "id": "follow", "tags": ["melee"], "scaledDice": { "count": "1 + floor(LEVEL/9)" }, "critical": true }
+      ]
+    },
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000001403",
+      "revisionId": "6f0de000-0000-4000-8000-000000001403",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Fixture: Ember Burst",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000001401", "page": { "start": 3 } },
+      "status": "published",
+      "summary": "A test feature: a burst whose dice grow with your level.",
+      "effects": [
+        { "type": "roll", "id": "burst", "rollId": "burst", "label": "Ember burst", "scaledDice": { "count": "floor(LEVEL/2) + 1", "die": "4" }, "text": "Damage: fire." }
+      ]
+    },
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000001404",
+      "revisionId": "6f0de000-0000-4000-8000-000000001404",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Fixture: Plain Edge",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000001401", "page": { "start": 4 } },
+      "status": "published",
+      "summary": "A test feature: weapon damage rolls always add 1d4.",
+      "effects": [
+        { "type": "attackRider", "id": "edge", "tags": ["weapon"], "dice": "1d4" }
+      ]
+    },
+    {
+      "contentId": "6f0dc000-0000-4000-8000-000000001405",
+      "revisionId": "6f0de000-0000-4000-8000-000000001405",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Fixture: Tail Strike",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f0d5000-0000-4000-8000-000000001401", "page": { "start": 5 } },
+      "status": "published",
+      "summary": "A test feature that gives a melee tail attack, and a once-per-turn extra 1d4 on its damage.",
+      "effects": [
+        { "type": "attack", "id": "tail", "attackId": "tail", "label": "Tail strike", "kind": "melee", "abilities": ["str"], "damage": { "count": "1", "die": "6" }, "damageType": "bludgeoning", "tags": ["tail"] },
+        { "type": "attackRider", "id": "tail-extra", "tags": ["tail"], "dice": "1d4", "oncePerTurn": true }
+      ]
+    }
+  ]
+}
