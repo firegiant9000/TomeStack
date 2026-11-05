@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { abilities } from '../classBasics';
 import { parseRiderDice, parseStackGroup, parseTags, toggleValue, type ToggleChoice } from '../attackAuthoring';
 import type { Activation, ContentRevision, Effect } from '../api/types';
@@ -11,6 +11,13 @@ type Rider = Extract<Effect, { type: 'attackRider' }>;
 type Toggle = Extract<Effect, { type: 'toggle' }>;
 type Resource = Extract<Effect, { type: 'resource' }>;
 type ReportProblem = (field: string, problem: string | undefined) => void;
+
+/** A copy of an object without these keys (the key is gone, not set to undefined). */
+export function omit<T extends object>(value: T, ...keys: (keyof T)[]): T {
+  const copy = { ...value };
+  for (const key of keys) delete copy[key];
+  return copy;
+}
 
 /** The toggle choices of a rule: this revision's own, then those of other entries of the source. */
 export interface ToggleChoices {
@@ -102,6 +109,7 @@ export function StrictField<T>(props: {
   id: string;
   label: string;
   initial: string;
+  disabled?: boolean;
   parse: (text: string) => { value: T; problem?: string };
   onValue: (value: T) => void;
   onProblem: ReportProblem;
@@ -123,6 +131,7 @@ export function StrictField<T>(props: {
         {props.label}
         <input
           value={text}
+          disabled={props.disabled}
           aria-invalid={parsed.problem ? true : undefined}
           aria-describedby={parsed.problem ? errorId : undefined}
           onChange={(e) => {
@@ -141,15 +150,79 @@ export function StrictField<T>(props: {
   );
 }
 
-export function FormulaField(props: { effectId: string; part: string; label: string; value: string; previewRevision?: ContentRevision; floorAtZero?: boolean; onChange: (value: string) => void }) {
+export function FormulaField(props: { effectId: string; part: string; label: string; value: string; previewRevision?: ContentRevision; floorAtZero?: boolean; disabled?: boolean; onChange: (value: string) => void }) {
   const previewId = `rule-${props.effectId}-${props.part}-preview`;
   return (
     <>
       <label className="field">
         {props.label}
-        <input value={props.value} aria-describedby={previewId} onChange={(e) => props.onChange(e.target.value)} />
+        <input value={props.value} disabled={props.disabled} aria-describedby={previewId} onChange={(e) => props.onChange(e.target.value)} />
       </label>
       <FormulaPreview id={previewId} formula={props.value} revision={props.previewRevision} floorAtZero={props.floorAtZero} />
+    </>
+  );
+}
+
+/** Reports a problem while it holds and lifts it when it goes or the field goes away. */
+function useProblem(id: string, problem: string | undefined, onProblem: ReportProblem) {
+  useEffect(() => {
+    onProblem(id, problem);
+    return () => onProblem(id, undefined);
+  }, [id, problem, onProblem]);
+}
+
+/**
+ * Content v12 (G1): the "Dice" choice of a rider or a roll. Fixed shows `fixed` (today's dice field); By formula shows a
+ * number-of-dice and a die formula. The parent clears the member that is switched away from. A roll needs the die; a rider's
+ * blank die means the attack's own die.
+ */
+export function DiceSource(props: {
+  effect: { id: string; scaledDice?: { count: string; die?: string } };
+  dieRequired: boolean;
+  previewRevision?: ContentRevision;
+  fixed: ReactNode;
+  onMode: (mode: 'fixed' | 'formula') => void;
+  onScaled: (scaled: { count: string; die?: string }) => void;
+  onProblem: ReportProblem;
+}) {
+  const { effect, onProblem } = props;
+  const scaled = effect.scaledDice;
+  const countLabel = 'Number of dice (a number or a formula)';
+  const dieLabel = props.dieRequired
+    ? 'Die (a number such as 6, or a formula)'
+    : "Die (a number such as 6, or a formula; empty uses the attack's own die)";
+  useProblem(`${effect.id}-scaled-count`, scaled && scaled.count.trim() === '' ? `${countLabel}: a count is needed.` : undefined, onProblem);
+  useProblem(`${effect.id}-scaled-die`, props.dieRequired && scaled && (scaled.die ?? '').trim() === '' ? `${dieLabel}: a die is needed.` : undefined, onProblem);
+  return (
+    <>
+      <label className="field">
+        Dice
+        <select value={scaled ? 'formula' : 'fixed'} onChange={(e) => props.onMode(e.target.value === 'formula' ? 'formula' : 'fixed')}>
+          <option value="fixed">Fixed</option>
+          <option value="formula">By formula</option>
+        </select>
+      </label>
+      {scaled ? (
+        <>
+          <FormulaField effectId={effect.id} part="count" label={countLabel} value={scaled.count} previewRevision={props.previewRevision} onChange={(count) => props.onScaled({ ...scaled, count })} />
+          <FormulaField
+            effectId={effect.id}
+            part="die"
+            label={dieLabel}
+            value={scaled.die ?? ''}
+            previewRevision={props.previewRevision}
+            onChange={(die) => {
+              if (die === '' && !props.dieRequired) {
+                const rest = { ...scaled };
+                delete rest.die;
+                props.onScaled(rest);
+              } else props.onScaled({ ...scaled, die });
+            }}
+          />
+        </>
+      ) : (
+        props.fixed
+      )}
     </>
   );
 }
@@ -329,6 +402,13 @@ export function RiderFields(props: {
 }) {
   const { effect, onChange, onProblem } = props;
   const typeKnown = !effect.damageType || damageTypes.some((t) => t === effect.damageType);
+  // Content v12 (G1): a critical or once-per-turn rider has no to-hit, bonus or stack group, and the two exclude each other.
+  const special = effect.critical === true || effect.oncePerTurn === true;
+  const noStack = special || (effect.scaledDice !== undefined && effect.scaledDice.die === undefined);
+  const hasDice = effect.dice !== undefined || effect.scaledDice !== undefined;
+  useProblem(`${effect.id}-special-dice`, special && !hasDice ? 'Only on a critical hit / Once per turn: choose the dice first.' : undefined, onProblem);
+  const setFlag = (key: 'critical' | 'oncePerTurn', on: boolean) =>
+    onChange(on ? { ...omit(effect, 'toHit', 'damageBonus', 'stackGroup'), [key]: true } : omit(effect, key));
   return (
     <>
       <StrictField
@@ -347,25 +427,45 @@ export function RiderFields(props: {
         part="tohit"
         label="To hit (a number or a formula; empty adds nothing)"
         value={effect.toHit ?? ''}
+        disabled={special}
         previewRevision={props.previewRevision}
         onChange={(value) => onChange({ ...effect, toHit: value || undefined })}
       />
-      <StrictField
-        id={`${effect.id}-dice`}
-        label="Extra damage dice (such as 3d8; empty adds none)"
-        initial={effect.dice ?? ''}
-        parse={(text) => {
-          const parsed = parseRiderDice(text);
-          return { value: parsed.dice, problem: parsed.problem };
-        }}
-        onValue={(dice) => onChange({ ...effect, dice })}
+      <DiceSource
+        effect={effect}
+        dieRequired={false}
+        previewRevision={props.previewRevision}
+        onMode={(mode) => onChange(mode === 'formula' ? { ...omit(effect, 'dice', 'stackGroup'), scaledDice: { count: '' } } : omit(effect, 'scaledDice'))}
+        onScaled={(scaledDice) => onChange({ ...effect, scaledDice, ...(scaledDice.die === undefined ? { stackGroup: undefined } : {}) })}
         onProblem={onProblem}
+        fixed={
+          <StrictField
+            id={`${effect.id}-dice`}
+            label="Extra damage dice (such as 3d8; empty adds none)"
+            initial={effect.dice ?? ''}
+            parse={(text) => {
+              const parsed = parseRiderDice(text);
+              return { value: parsed.dice, problem: parsed.problem };
+            }}
+            onValue={(dice) => onChange({ ...effect, dice })}
+            onProblem={onProblem}
+          />
+        }
       />
+      <label className="choice">
+        <input type="checkbox" checked={effect.critical === true} disabled={effect.oncePerTurn === true} onChange={(e) => setFlag('critical', e.target.checked)} />
+        Only on a critical hit
+      </label>
+      <label className="choice">
+        <input type="checkbox" checked={effect.oncePerTurn === true} disabled={effect.critical === true} onChange={(e) => setFlag('oncePerTurn', e.target.checked)} />
+        Once per turn, added when you choose
+      </label>
       <FormulaField
         effectId={effect.id}
         part="bonus"
         label="Damage bonus (a number or a formula; empty adds nothing)"
         value={effect.damageBonus ?? ''}
+        disabled={special}
         previewRevision={props.previewRevision}
         onChange={(value) => onChange({ ...effect, damageBonus: value || undefined })}
       />
@@ -389,9 +489,11 @@ export function RiderFields(props: {
         onPick={(toggle) => onChange({ ...effect, toggle: toggle?.toggleId, toggleContent: toggle?.contentId })}
       />
       <StrictField
+        key={noStack ? 'no-stack' : 'stack'}
         id={`${effect.id}-group`}
         label="Stack group (riders of one group do not add up; empty for none)"
         initial={effect.stackGroup ?? ''}
+        disabled={noStack}
         parse={(text) => {
           const parsed = parseStackGroup(text);
           return { value: parsed.group, problem: parsed.problem };
@@ -399,6 +501,7 @@ export function RiderFields(props: {
         onValue={(stackGroup) => onChange({ ...effect, stackGroup })}
         onProblem={onProblem}
       />
+      {noStack && !special && <p className="hint">No stack group while the die is empty.</p>}
     </>
   );
 }
