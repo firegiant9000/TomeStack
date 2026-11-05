@@ -193,6 +193,57 @@ public class ScaledDiceV12ServiceTests
         Assert.Equal("roll.no-dice", Code(none, new(noneId, Content: EmberBurst, EffectId: "burst")));
     }
 
+    [Fact]
+    public void Null_picks_are_refused_before_any_die_is_rolled()
+    {
+        var (temp, id) = Start(Fighter(GapInTheGuard));
+        using var _ = temp;
+
+        Assert.Equal("roll.rider-unknown", Code(temp, new(id, Weapon: Longblade, Damage: true, WithRiders: [null!])));
+        Assert.Equal("roll.rider-unknown", Code(temp, new(id, Weapon: Longblade, Damage: true, WithRiders: [new RiderPick(null!, "gap")])));
+        Assert.Equal("roll.rider-unknown", Code(temp, new(id, Weapon: Longblade, Damage: true, WithRiders: [new RiderPick(GapInTheGuard, null!)])));
+    }
+
+    [Fact]
+    public void Scaled_roll_with_an_invalid_formula_is_refused_with_its_code()
+    {
+        var (temp, id) = Start(Fighter(EmberBurst), Scaled("1/0"));
+        using var _ = temp;
+
+        Assert.Equal("effect.invalid-formula", Code(temp, new(id, Content: EmberBurst, EffectId: "burst")));
+    }
+
+    private const string SparkId = "6f0dc000-0000-4000-8000-000000001499";
+
+    private static (TempApp Temp, Guid Id) StartCasting(string count)
+    {
+        var sparkId = Guid.Parse(SparkId);
+        var (temp, id) = Start(Fighter(EmberBurst), revision => Scaled(count)(revision) is var scaled && scaled.Name == "Fixture: Ember Burst"
+            ? scaled with { Effects = [.. scaled.Effects.Select(e => e is RollEffect roll ? roll with { CastsSpell = sparkId } : e)] }
+            : scaled);
+        temp.App.Store.AddRevision(System.Text.Json.JsonSerializer.Deserialize<ContentRevision>(
+            "{\"contentId\":\"" + SparkId + "\",\"revisionId\":\"6f0de000-0000-4000-8000-000000001499\",\"schemaVersion\":12,\"kind\":\"spell\",\"name\":\"Fixture Cast Spark\","
+            + "\"rulesFamilies\":[\"srd-5.2.1\"],\"provenance\":{\"sourceId\":\"" + PackSource + "\",\"page\":{\"start\":1}},\"status\":\"published\","
+            + "\"effects\":[{\"type\":\"spell\",\"id\":\"s\",\"level\":2,\"lists\":[\"fixture-arcane\"],\"attack\":\"none\",\"save\":\"dex\",\"dice\":\"2d6\"}]}",
+            RulesJson.Compact)!);
+        // Saved again so the sheet sees the spell.
+        temp.App.SaveCharacter(temp.App.GetCharacter(id).Character);
+        return (temp, id);
+    }
+
+    [Fact]
+    public void Scaled_roll_failure_is_not_hidden_by_a_cast_but_a_zero_count_still_casts()
+    {
+        var (failing, failingId) = StartCasting("LEVEL*20");
+        using var _ = failing;
+        Assert.Equal("roll.dice-invalid", Code(failing, new(failingId, Content: EmberBurst, EffectId: "burst")));
+
+        var (zero, zeroId) = StartCasting("0");
+        using var __ = zero;
+        var record = zero.App.Roll(new RollCommand(zeroId, Content: EmberBurst, EffectId: "burst"));
+        Assert.Equal("2d6", record.Formula);
+    }
+
     private static Func<ContentRevision, ContentRevision> Scaled(string count) => revision => revision.Name != "Fixture: Ember Burst"
         ? revision
         : revision with { Effects = [.. revision.Effects.Select(e => e is RollEffect roll ? roll with { ScaledDice = new ScaledDice(count, "4") } : e)] };
