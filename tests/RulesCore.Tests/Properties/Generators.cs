@@ -98,6 +98,7 @@ internal static class Generators
         [ResponseEffect.TypeName] = ResponseEffect.SchemaVersion,
         [ItemModEffect.TypeName] = ItemModEffect.SchemaVersion,
         [CompanionEffect.TypeName] = CompanionEffect.SchemaVersion,
+        [RollFloorEffect.TypeName] = RollFloorEffect.SchemaVersion,
     };
 
     /// <summary>
@@ -408,6 +409,17 @@ internal static class Generators
                 from speed in Optional(Gen.Elements("30 ft.", "40 ft.", "fly 60 ft."))
                 select new JsonObject { ["companionId"] = companionId.ToString("D"), ["label"] = label, ["armorClass"] = "13", ["hitPointMaximum"] = "5 * LEVEL" }
                     .With("speed", speed)),
+            // Typed from v12, unknown (and unchanged) below. Exactly one of face or total, as the validator requires.
+            Common(RollFloorEffect.TypeName,
+                from target in Gen.Elements("check", "ability.str.check", "ability.dex.check", "skill.athletics", "skill.stealth")
+                from useFace in Gen.Elements(true, false)
+                from face in Gen.Choose(2, 20)
+                from total in Gen.Elements("STR.SCORE", "5", "10")
+                from proficient in OptionalValue(Gen.Elements(true, false))
+                select new JsonObject { ["target"] = target }
+                    .With("face", useFace ? face : null)
+                    .With("total", useFace ? null : total)
+                    .With("proficient", proficient)),
             Common(ScaleEffect.TypeName,
                 from id in Keys
                 from label in Names
