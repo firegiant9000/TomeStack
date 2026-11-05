@@ -1853,6 +1853,50 @@
         {
           "properties": {
             "type": {
+              "const": "rollFloor"
+            },
+            "target": {
+              "type": "string",
+              "pattern": "^(check|ability\\.(str|dex|con|int|wis|cha)\\.check|skill\\.(acrobatics|animalHandling|arcana|athletics|deception|history|insight|intimidation|investigation|medicine|nature|perception|performance|persuasion|religion|sleightOfHand|stealth|survival))$",
+              "description": "Content v12 (G9): the checks that get the floor: check (every ability-check field), ability.<ability>.check (that ability's checks) or skill.<skill>. Never a save, an attack or initiative."
+            },
+            "face": {
+              "type": "integer",
+              "minimum": 2,
+              "maximum": 20,
+              "description": "Content v12 (G9): a d20 below this counts as it. Exactly one of face and total."
+            },
+            "total": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S",
+              "description": "Content v12 (G9): a formula; a check total below it counts as it. Exactly one of face and total."
+            },
+            "proficient": {
+              "type": "boolean",
+              "description": "Content v12 (G9): true reaches only fields the character is proficient or expert in; false or absent reaches all."
+            }
+          },
+          "required": [
+            "target"
+          ],
+          "oneOf": [
+            {
+              "required": [
+                "face"
+              ]
+            },
+            {
+              "required": [
+                "total"
+              ]
+            }
+          ],
+          "description": "Content v12 (G9): a minimum on checks, either a d20 face or a total. Typed only in a v12 revision: in an older one it is an unknown effect, kept byte for byte."
+        },
+        {
+          "properties": {
+            "type": {
               "const": "response"
             },
             "responseId": {
@@ -2243,6 +2287,7 @@
                   "attackRider",
                   "value",
                   "rollMode",
+                  "rollFloor",
                   "response",
                   "itemMod",
                   "companion"
