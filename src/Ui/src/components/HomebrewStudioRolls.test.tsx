@@ -118,6 +118,15 @@ it('the variable-cost box clears per-unit dice, and leaving the area or save rem
   expect((sent.area as Raw).width).toBeUndefined();
 });
 
+it('a roll with dice by formula offers no per-unit dice', async () => {
+  const user = userEvent.setup();
+  const { rule } = await openDraft(user, [focus, { ...burst, resourceId: 'focus', cost: '1', perUnit: { dice: '1d6' } }]);
+  const r = rule(/^Rule 2: Roll or action/);
+  expect(r.getByRole('textbox', { name: /^Extra dice/ })).toBeTruthy();
+  await user.selectOptions(r.getByRole('combobox', { name: 'Dice' }), 'By formula');
+  expect(r.queryByRole('textbox', { name: /^Extra dice/ })).toBeNull();
+});
+
 it('clearing the dice removes the key; it is never an empty string', async () => {
   const user = userEvent.setup();
   const { rule, checked } = await openDraft(user, [focus, { ...burst, resourceId: 'focus', cost: '1' }]);
