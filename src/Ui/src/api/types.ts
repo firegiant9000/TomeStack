@@ -480,6 +480,12 @@ export interface RiderValue {
   toHit: number;
   damageBonus: number;
   damageType?: string;
+  /** Content v12 (G1): the dice are added only on a critical damage roll, and are not in the attack's damage. Omitted when false. */
+  critical?: boolean;
+  /** Content v12 (G1): offered on each damage roll for the player to add (`RollTarget.withRiders`); not in the attack's damage. Omitted when false. */
+  oncePerTurn?: boolean;
+  /** Content v12 (G1): the dice for a two-handed roll, only when they differ from `dice`. */
+  versatileDice?: string;
 }
 
 /** SPEC C-02, C-04: an attack with an equipped weapon, or (D43) an attack a feature gives. */
@@ -1083,6 +1089,8 @@ export interface RollTarget {
   entryIndex?: number;
   damage?: boolean;
   versatile?: boolean;
+  /** Content v12 (G1): with a weapon or feature-attack `damage` roll, the once-per-turn riders of that attack the player adds. */
+  withRiders?: { content: ContentReference; effectId: string }[];
   /** One of the character's own hand-typed attacks (`character.customAttacks`): its attack roll, or its damage (`damage`). */
   customAttack?: string;
   /** The entry key of an item whose `regain` dice to roll for its charges (Wave 3 item 25). */
@@ -2004,6 +2012,8 @@ export type Effect =
       label: string;
       /** Content v11: a roll may have no dice (an action that only spends a cost); every earlier version requires them. */
       dice?: string;
+      /** Content v12 (G1): dice by formula (`die` required on a roll). Exclusive with `dice`. */
+      scaledDice?: { count: string; die: string };
       resourceId?: string;
       /** Content v5: where the action is listed; absent: "Other". */
       activation?: Activation;
@@ -2061,6 +2071,10 @@ export type Effect =
       tags: string[];
       toHit?: string;
       dice?: string;
+      /** Content v12 (G1): dice by formula; without `die` the attack's own die. Exclusive with `dice`. */
+      scaledDice?: { count: string; die?: string };
+      critical?: boolean;
+      oncePerTurn?: boolean;
       damageBonus?: string;
       damageType?: string;
       toggle?: string;
