@@ -40,7 +40,7 @@ public class RevisionHashProperties
     internal static readonly string[] WeaponV12Keys = ["bonus"];
 
     /// <summary>The roll keys content v12 adds (MECH-X item 1). Written out here on purpose, like <see cref="ToggleV11Keys"/>.</summary>
-    internal static readonly string[] RollV12Keys = ["payment", "castsSpell"];
+    internal static readonly string[] RollV12Keys = ["payment", "castsSpell", "scaledDice"];
 
     /// <summary>The attack key content v12 adds (MECH-X item 1). Written out here on purpose, like <see cref="ToggleV11Keys"/>.</summary>
     internal static readonly string[] AttackV12Keys = ["payment"];
@@ -56,6 +56,9 @@ public class RevisionHashProperties
 
     /// <summary>The rollMode keys content v12 adds (G7). Written out here on purpose, like <see cref="ToggleV11Keys"/>.</summary>
     internal static readonly string[] RollModeV12Keys = ["tags", "ability", "unlessCondition", "prevent"];
+
+    /// <summary>The attackRider keys content v12 adds (G1). Written out here on purpose, like <see cref="ToggleV11Keys"/>.</summary>
+    internal static readonly string[] AttackRiderV12Keys = ["scaledDice", "critical", "oncePerTurn"];
 
     /// <summary>The choice key content v12 adds (MECH-X item 2). Written out here on purpose, like <see cref="ToggleV11Keys"/>.</summary>
     internal static readonly string[] ChoiceV12Keys = ["replaceable"];
@@ -149,6 +152,7 @@ public class RevisionHashProperties
                     ChoiceEffect.TypeName => ChoiceV12Keys,
                     ResponseEffect.TypeName => ResponseV12Keys,
                     RollModeEffect.TypeName => RollModeV12Keys,
+                    AttackRiderEffect.TypeName => AttackRiderV12Keys,
                     _ => [],
                 };
                 foreach (var (name, kept) in inputEffects[i]!.AsObject().Where(p => v12Keys.Contains(p.Key, StringComparer.OrdinalIgnoreCase)))
@@ -274,6 +278,7 @@ public class RevisionHashProperties
                     ChoiceEffect.TypeName => [.. members ?? [], .. ChoiceV12Keys],
                     ResponseEffect.TypeName => [.. members ?? [], .. ResponseV12Keys],
                     RollModeEffect.TypeName => [.. members ?? [], .. RollModeV12Keys],
+                    AttackRiderEffect.TypeName => [.. members ?? [], .. AttackRiderV12Keys],
                     _ => members,
                 };
             }
