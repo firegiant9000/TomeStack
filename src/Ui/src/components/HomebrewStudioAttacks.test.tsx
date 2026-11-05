@@ -186,6 +186,17 @@ it('edits rider dice by formula', async () => {
   expect('scaledDice' in back).toBe(false);
 });
 
+it('switching a rider to formula dice keeps its stack group once a die is given', async () => {
+  const user = userEvent.setup();
+  const { rule, checked } = await openDraft(user, [plainRider]);
+  const r = rule(/^Rule 1: Attack rider/);
+  await user.selectOptions(r.getByRole('combobox', { name: 'Dice' }), 'By formula');
+  await user.type(r.getByRole('textbox', { name: /^Die/ }), '8');
+  await user.type(r.getByRole('textbox', { name: /^Number of dice/ }), '2');
+  expect((r.getByRole('textbox', { name: /^Stack group/ }) as HTMLInputElement).value).toBe('grp');
+  expect(((await checked()).effect('rider-4') as Raw).stackGroup).toBe('grp');
+});
+
 it("rider die blank means the attack's die: no die key, and no stack group", async () => {
   const user = userEvent.setup();
   const { rule, checked } = await openDraft(user, [plainRider]);

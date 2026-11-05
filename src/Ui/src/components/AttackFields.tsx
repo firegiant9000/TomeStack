@@ -435,7 +435,7 @@ export function RiderFields(props: {
         effect={effect}
         dieRequired={false}
         previewRevision={props.previewRevision}
-        onMode={(mode) => onChange(mode === 'formula' ? { ...omit(effect, 'dice', 'stackGroup'), scaledDice: { count: '' } } : omit(effect, 'scaledDice'))}
+        onMode={(mode) => onChange(mode === 'formula' ? { ...omit(effect, 'dice'), scaledDice: { count: '' } } : omit(effect, 'scaledDice'))}
         onScaled={(scaledDice) => onChange({ ...effect, scaledDice, ...(scaledDice.die === undefined ? { stackGroup: undefined } : {}) })}
         onProblem={onProblem}
         fixed={

@@ -323,7 +323,7 @@ export function RollFields(props: {
             floorAtZero
             onChange={(value) => onChange({ ...effect, cost: value || undefined })}
           />
-          <PerUnitFields key={effect.dice ? 'dice' : 'no-dice'} effect={effect} onChange={onChange} onProblem={onProblem} />
+          {!effect.scaledDice && <PerUnitFields key={effect.dice ? 'dice' : 'no-dice'} effect={effect} onChange={onChange} onProblem={onProblem} />}
         </>
       )}
       {/* Hit points and a slot take no pool (R33), so the pool choice is hidden while either is chosen. */}
@@ -382,7 +382,7 @@ export function RollFields(props: {
             </label>
           )}
           {/* Keyed on the dice being there, so its texts start over when clearing the dice removes the per-unit dice. */}
-          {effect.variableCost !== true && <PerUnitFields key={effect.dice ? 'dice' : 'no-dice'} effect={effect} onChange={onChange} onProblem={onProblem} />}
+          {effect.variableCost !== true && !effect.scaledDice && <PerUnitFields key={effect.dice ? 'dice' : 'no-dice'} effect={effect} onChange={onChange} onProblem={onProblem} />}
           <AlsoChangeFields effect={effect} resources={props.resources} otherPools={props.otherPools} previewRevision={props.previewRevision} onChange={onCharging} />
           <DrawsDownField effect={effect} countsUp={countsUp} poolKnown={poolKnown} onChange={onCharging} onProblem={onProblem} />
         </>
