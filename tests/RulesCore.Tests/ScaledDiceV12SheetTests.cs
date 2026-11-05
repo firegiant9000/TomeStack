@@ -259,9 +259,9 @@ public class ScaledDiceV12SheetTests
     }
 
     [Theory]
-    [InlineData("NOPE", "6", "effect.invalid-formula")]
-    [InlineData("2", "NOPE", "effect.invalid-formula")]
-    [InlineData("", "6", "effect.invalid-formula")]
+    [InlineData("NOPE", "6", "roll.dice-invalid")]
+    [InlineData("2", "NOPE", "roll.dice-invalid")]
+    [InlineData("", "6", "roll.dice-invalid")]
     [InlineData("CLASS_LEVEL-6", "6", "roll.dice-invalid")]
     [InlineData("CLASS_LEVEL+96", "6", "roll.dice-invalid")]
     [InlineData("2", "7", "roll.dice-invalid")]

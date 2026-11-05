@@ -239,8 +239,8 @@ public static partial class CharacterCalculator
 
     /// <summary>
     /// Content v12 (G1): the dice of each roll that has <c>scaledDice</c>, as <c>NdM</c>. Count 0: null with no diagnostic (the roll
-    /// is then refused as having no dice). A formula that fails reports <c>effect.invalid-formula</c>; a count below 0 or above the dice
-    /// limit, or a die this app does not roll, reports <c>roll.dice-invalid</c>; both give null. Below v12 the key does nothing.
+    /// is then refused as having no dice). A formula that fails, a count below 0 or above the dice
+    /// limit, or a die this app does not roll, reports <c>roll.dice-invalid</c> and gives null. Below v12 the key does nothing.
     /// </summary>
     private static Dictionary<(ContentReference, string), string?> RollScaledDice(
         List<ActiveContent> active, Character character, ClassLevelMap classLevels, Dictionary<string, int> values, List<Diagnostic> diagnostics)
@@ -255,7 +255,8 @@ public static partial class CharacterCalculator
                 {
                     case ScaledDiceStatus.Formula:
                         dice[key] = null;
-                        diagnostics.Add(InvalidFormula(item.Revision, roll, failure!));
+                        // The same code as the range failure, so a roll refuses on this one code only (bonus, cost and save DC keep theirs).
+                        diagnostics.Add(new("roll.dice-invalid", $"'{item.Revision.Name}' roll '{roll.Id}' has no dice: its scaled dice formula failed ({failure!.Code}).", item.Revision.Reference, roll.Id));
                         break;
                     case ScaledDiceStatus.Range:
                         dice[key] = null;
