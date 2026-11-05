@@ -85,7 +85,11 @@
       { "feature": "rollMode.tags", "rule": "below.effect-unsupported" },
       { "feature": "rollMode.ability", "rule": "below.effect-unsupported" },
       { "feature": "rollMode.unlessCondition", "rule": "below.effect-unsupported" },
-      { "feature": "rollMode.prevent", "rule": "below.effect-unsupported" }
+      { "feature": "rollMode.prevent", "rule": "below.effect-unsupported" },
+      { "feature": "attackRider.scaledDice", "rule": "below.effect-unsupported" },
+      { "feature": "attackRider.critical", "rule": "below.effect-unsupported" },
+      { "feature": "attackRider.oncePerTurn", "rule": "below.effect-unsupported" },
+      { "feature": "roll.scaledDice", "rule": "below.v12-key" }
     ]
   },
   "character": {

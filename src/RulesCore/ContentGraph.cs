@@ -242,6 +242,13 @@ public sealed class ContentGraph
                         yield return (roll.Id, cost);
                     if (roll.Bonus is { } bonus)
                         yield return (roll.Id, bonus);
+                    if (roll.ScaledDice is { } rollScaled)
+                    {
+                        if (rollScaled.Count is { } rollScaledCount)
+                            yield return (roll.Id, rollScaledCount);
+                        if (rollScaled.Die is { } rollScaledDie)
+                            yield return (roll.Id, rollScaledDie);
+                    }
                     if (roll.Save is { } save)
                         yield return (roll.Id, save.Dc);
                     foreach (var change in roll.AlsoChange ?? [])
@@ -255,6 +262,13 @@ public sealed class ContentGraph
                         yield return (rider.Id, toHit);
                     if (rider.DamageBonus is { } damageBonus)
                         yield return (rider.Id, damageBonus);
+                    if (rider.ScaledDice is { } riderScaled)
+                    {
+                        if (riderScaled.Count is { } riderScaledCount)
+                            yield return (rider.Id, riderScaledCount);
+                        if (riderScaled.Die is { } riderScaledDie)
+                            yield return (rider.Id, riderScaledDie);
+                    }
                     break;
                 case AttackEffect attack:
                     // Damage is required, but a draft can omit it (the validator reports attack-incomplete); do not throw on it.

@@ -178,6 +178,24 @@
       "maxLength": 200,
       "description": "Bounded formula (ADR-003 grammar), e.g. \"2\", \"PB + CON.MOD\", \"floor(CLASS_LEVEL / 2)\"; since v9 also \"SCALE.ink\"."
     },
+    "scaledDice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "count"
+      ],
+      "properties": {
+        "count": {
+          "$ref": "#/$defs/formula",
+          "description": "Content v12 (G1): how many dice, 0 to 100, evaluated in the declaring content's context."
+        },
+        "die": {
+          "$ref": "#/$defs/formula",
+          "description": "Content v12 (G1): the sides, one of 4, 6, 8, 10 or 12. Absent on a rider: the attack's own damage die."
+        }
+      },
+      "description": "Content v12 (G1): dice whose count (and die) come from formulas."
+    },
     "fieldId": {
       "type": "string",
       "pattern": "^(initiative|attacks|criticalRange|proficiencyBonus|armorClass|hitPoints|spellAttack|spellSaveDc|pactSlots|speed|speed\\.fly|passive\\.(perception|insight|investigation)|spellSlots\\.[1-9]|ability\\.(str|dex|con|int|wis|cha)\\.(score|mod)|save\\.(str|dex|con|int|wis|cha)|skill\\.[a-z][a-zA-Z]*|resource\\.[^\\s.]+)$",
@@ -748,6 +766,10 @@
             "castsSpell": {
               "$ref": "#/$defs/uuid",
               "description": "Content v12 (MECH-X item 1): the content id of a spell this roll casts without spending a slot; with no dice of its own the roll rolls the spell's dice. Must name spell content (validate.casts-spell), and not with a slot payment."
+            },
+            "scaledDice": {
+              "$ref": "#/$defs/scaledDice",
+              "description": "Content v12 (G1): the roll's dice from formulas instead of dice; die is required here. Not with dice."
             }
           },
           "required": [
@@ -758,6 +780,26 @@
             "alsoChange": [
               "resourceId"
             ]
+          },
+          "not": {
+            "required": [
+              "dice",
+              "scaledDice"
+            ]
+          },
+          "if": {
+            "required": [
+              "scaledDice"
+            ]
+          },
+          "then": {
+            "properties": {
+              "scaledDice": {
+                "required": [
+                  "die"
+                ]
+              }
+            }
           }
         },
         {
@@ -1406,11 +1448,29 @@
               "type": "string",
               "minLength": 1,
               "description": "Riders of one group never add: the highest applies."
+            },
+            "scaledDice": {
+              "$ref": "#/$defs/scaledDice",
+              "description": "Content v12 (G1): the rider's dice from formulas instead of dice. With no die, the attack's own damage die. Not with dice; not with a stackGroup unless it names a die."
+            },
+            "critical": {
+              "type": "boolean",
+              "description": "Content v12 (G1): true adds the rider's dice only to a critical damage roll, rolled once. Needs dice or scaledDice; no toHit, damageBonus, stackGroup or oncePerTurn. Needs v12 even when false."
+            },
+            "oncePerTurn": {
+              "type": "boolean",
+              "description": "Content v12 (G1): true lets the player add the rider's dice to a damage roll by choice. Needs dice or scaledDice; no toHit, damageBonus or stackGroup. Needs v12 even when false."
             }
           },
           "required": [
             "tags"
-          ]
+          ],
+          "not": {
+            "required": [
+              "dice",
+              "scaledDice"
+            ]
+          }
         },
         {
           "description": "Content v10 (Wave 3, R155): attunement and charges of an item. Item content only, at most one per revision. In a revision older than v10 an item effect is unknown and reference-only, kept byte for byte.",
@@ -1677,7 +1737,8 @@
               "uniqueItems": true,
               "items": {
                 "type": "string",
-                "minLength": 1
+                "minLength": 1,
+                "pattern": "\\S"
               },
               "description": "Content v12 (G7): with target attack only, required there: the attack tags the mode applies to (all, or any tag of the attack). Needs v12."
             },
