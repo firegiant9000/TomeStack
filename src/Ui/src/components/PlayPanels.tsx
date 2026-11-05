@@ -1108,8 +1108,8 @@ export function AttackItem({
   // Content v12 (G1): once-per-turn riders are picked per damage roll and cleared after it (in the handler, not an effect); crit-only dice are listed.
   const [picks, setPicks] = useState<string[]>([]);
   const pickKey = (r: RiderValue) => `${r.content.revisionId}|${r.effectId}`;
-  const onceRiders = (attack.riders ?? []).filter((r) => r.oncePerTurn);
-  const critRiders = (attack.riders ?? []).filter((r) => r.critical);
+  const onceRiders = (attack.riders ?? []).filter((r) => r.oncePerTurn && r.dice);
+  const critRiders = (attack.riders ?? []).filter((r) => r.critical && r.dice);
   const riderName = (r: RiderValue) => contentName?.(r.content) ?? attack.name;
   const damageRoll = (t: RollTarget) => {
     const withRiders = onceRiders.filter((r) => picks.includes(pickKey(r))).map((r) => ({ content: r.content, effectId: r.effectId }));
@@ -1141,7 +1141,7 @@ export function AttackItem({
           <ul aria-label={`${label} critical hit dice`}>
             {critRiders.map((r) => (
               <li key={pickKey(r)}>
-                {riderName(r)}: +{r.dice ?? 'the attack die'} on a critical hit{r.versatileDice ? ` (${r.versatileDice} two-handed)` : ''}
+                {riderName(r)}: +{r.dice} on a critical hit{r.versatileDice ? ` (${r.versatileDice} two-handed)` : ''}
               </li>
             ))}
           </ul>
@@ -1168,10 +1168,12 @@ export function AttackItem({
         <label key={pickKey(r)} className="choice">
           <input
             type="checkbox"
+            disabled={locked}
+            aria-label={`Add ${riderName(r)} (${r.dice}, once per turn) to ${label} damage`}
             checked={picks.includes(pickKey(r))}
             onChange={(e) => setPicks((p) => (e.target.checked ? [...p, pickKey(r)] : p.filter((k) => k !== pickKey(r))))}
           />
-          Add {riderName(r)} ({r.dice ?? 'the attack die'}, once per turn)
+          Add {riderName(r)} ({r.dice}, once per turn)
           {r.versatileDice ? <span className="hint"> {r.versatileDice} two-handed</span> : null}
         </label>
       ))}
