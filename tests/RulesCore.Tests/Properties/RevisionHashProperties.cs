@@ -288,6 +288,9 @@ public class RevisionHashProperties
             // Content v12 (MECH-X item 4): the companion is typed only from v12, so only there a null speed, attacks or resourceIds hashes like an absent key.
             if (version >= CompanionEffect.SchemaVersion && type == CompanionEffect.TypeName)
                 members = ["speed", "attacks", "resourceIds"];
+            // Content v12 (G9): the rollFloor is typed only from v12, so only there a null face, total or proficient hashes like an absent key.
+            if (version >= RollFloorEffect.SchemaVersion && type == RollFloorEffect.TypeName)
+                members = ["face", "total", "proficient"];
             if (members is null)
                 continue;
             foreach (var name in members.Append("text"))
