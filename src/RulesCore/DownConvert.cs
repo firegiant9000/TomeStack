@@ -581,8 +581,16 @@ public static class DownConvert
                         // A rider kept without the flag would be stronger (always on, every attack, no scaling), so it is dropped whole.
                         if (AttackRiderEffect.V12Keys.Any(k => Member(effect, k) is not null))
                         {
+                            // Dropping a rider that also lowers the attack (a toHit or damageBonus that can be negative) would make the copy stronger.
+                            if (CanLowerAttack("toHit") || CanLowerAttack("damageBonus"))
+                            {
+                                changes.Add(new(path, BelowAction.Blocks, BelowCodes.EffectUnsupported, $"'{name}': a rider with scaled dice, a critical-only or a once-per-turn flag that also lowers the attack; leaving it out would make the older version stronger."));
+                                continue;
+                            }
                             changes.Add(new(path, BelowAction.Dropped, BelowCodes.EffectUnsupported, $"'{name}': a rider with scaled dice, a critical-only or a once-per-turn flag, which the older version would apply without them."));
                             continue;
+
+                            bool CanLowerAttack(string key) => Member(effect, key) is not null && !StaticallyNonNegative(StringOf(Member(effect, key)), scope);
                         }
                         break;
                     case RollEffect.TypeName:

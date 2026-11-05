@@ -329,6 +329,27 @@ public class DownConvertV12Tests
         Assert.All(result.Changes, c => Assert.Equal(BelowAction.Dropped, c.Action));
     }
 
+    [Theory]
+    [InlineData("toHit", "-2")]
+    [InlineData("damageBonus", "-1")]
+    public void Scaled_rider_that_also_lowers_the_attack_blocks_below_12(string key, string value)
+    {
+        var rider = $$"""{"type":"attackRider","id":"rider","tags":["weapon"],"scaledDice":{"count":"1","die":"6"},"{{key}}":"{{value}}"}""";
+        var result = DownConvert.Below(Rev(rider), 11);
+
+        Assert.True(result.Blocked);
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(BelowAction.Blocks, change.Action);
+        Assert.Equal(BelowCodes.EffectUnsupported, change.Code);
+    }
+
+    [Fact]
+    public void Scaled_rider_with_a_positive_to_hit_is_still_dropped_below_12()
+    {
+        var rider = """{"type":"attackRider","id":"rider","tags":["weapon"],"scaledDice":{"count":"1","die":"6"},"toHit":"1"}""";
+        AssertDroppedWhole(DownConvert.Below(Rev(rider), 11));
+    }
+
     [Fact]
     public void Roll_loses_scaledDice_below_12()
     {
