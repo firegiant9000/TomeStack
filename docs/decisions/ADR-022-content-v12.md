@@ -1,7 +1,7 @@
-# ADR-022: Content schema v12, one slice at a time (G6 first: response triggers and amounts; G7: roll modes on attacks and initiative; G1: scaled dice, critical-only and once-per-turn riders)
+# ADR-022: Content schema v12, one slice at a time (G6 first: response triggers and amounts; G7: roll modes on attacks and initiative; G1: scaled dice, critical-only and once-per-turn riders; G9: roll floor on checks)
 
-Status: **accepted** for the slice list and for slices G6, G7 and G1 (owner, 2026-10-28: LIVING_SPECS D76 and B4; D86, D87, D88). Slice G6 is built on branch `v12-g6`, slice G7 on `v12-g7` (stacked on G6), slice G1 on `v12-g1` (stacked on G7). The warn-or-block judgement for G6's down-conversion (decision 6), the one for G7's (G7 decision 6) and the one for G1's (G1 decision 6), and "once per turn is offered, not tracked" (G1 decision 4), are proposals that await the owner.
-Date: 2026-11-04
+Status: **accepted** for the slice list and for slices G6, G7, G1 and G9 (owner, 2026-10-28: LIVING_SPECS D76 and B4; D86, D87, D88, D89; G9 design rulings 2026-11-05). Slice G6 is built on branch `v12-g6`, slice G7 on `v12-g7` (stacked on G6), slice G1 on `v12-g1` (stacked on G7), slice G9 on `v12-g9` (stacked on G1). The warn-or-block judgement for G6's down-conversion (decision 6), the one for G7's (G7 decision 6) and the one for G1's (G1 decision 6), and "once per turn is offered, not tracked" (G1 decision 4), are proposals that await the owner.
+Date: 2026-11-05
 
 ## Context
 
@@ -162,4 +162,40 @@ The third gap is in the dice of D43 (`attackRider.dice`, `roll.dice`, v11), whic
 - `tests/RulesCore.Tests/DownConvertV12Tests.cs` (rider dropped whole; roll key dropped or roll dropped) with `DownConvertCoverageTests` unchanged at 40, and `CapabilityRegistryTests.cs` (the registry rows).
 - UI: `src/Ui/src/components/HomebrewStudioAttacks.test.tsx` and `HomebrewStudioRolls.test.tsx` (authoring), `ActionsPanel.test.tsx` (the once-per-turn offer on damage rolls).
 
-Related: [ADR-018](ADR-018-play-mechanics.md), [ADR-021](ADR-021-mechanics-beyond-d43.md), [ADR-023](ADR-023-down-conversion-export.md), [play-mechanics.md](../features/play-mechanics.md#content-v12-g6-response-triggers-and-amounts), [its G7 section](../features/play-mechanics.md#content-v12-g7-roll-modes-on-attacks-and-initiative) and [its G1 section](../features/play-mechanics.md#content-v12-g1-scaled-dice-critical-only-and-once-per-turn-riders), LIVING_SPECS D76, D86, D87 and D88. Supersedes: none.
+## Slice G9: roll floor
+
+The fourth gap is a minimum on a check: content that says "when you make this kind of check, a d20 that lands low counts as a set number", or "a check total below a set value counts as that value". v11 has no way to say it (`rollMode` only changes how many d20s are rolled).
+
+### Decision (G9)
+
+1. **A new kind `rollFloor` (v12)** (owner ruling, 2026-11-05: a new kind, not `rollMode` members): `{ "target", "face" | "total", "proficient"? }`. `target` is `check` (every ability-check field: each ability modifier, every skill, initiative), `ability.<x>.check` (that ability's modifier, its skills, and initiative for Dex) or `skill.<s>` (a known skill). **Checks only:** no saves, attacks or other targets (`validate.roll-floor-target`). Exactly one of `face` (an integer 2 to 20: a d20 below it counts as it) or `total` (a formula: a total below it counts as it, evaluated in the declaring content's context, so `SCALE.` needs v9 and `VALUE.` v11) (`validate.roll-floor-value`). There is no toggle, condition or tag.
+2. **`proficient: true`** reaches only fields marked proficient or expertise (owner ruling): a bare ability check and initiative are never reached. `false` counts as absent but still needs v12.
+3. **Sheet.** `DerivedValue.Floor` (`RollFloorSummary`, with `RollFloorReason` entries in content order) holds the highest face and the highest total, separately. Each reason adds one `"floor"` trace step after the field's own steps. A failing total formula leaves that reason out with `effect.invalid-formula`; the sheet still calculates. The displayed field value never changes.
+4. **Rolling.** Only a field roll gets a floor; attacks, damage, saves, death saves, roll effects, spells and custom dice never do. The face raises each d20 of the main expression below it, before keeping, and both raw faces stay visible (`DieResult.Rolled`). The total is floored after modifiers. `RollRecord.Unfloored` and `Floor` keep the raw total and the floor. The roll text reads "7 → 10 (floor)" for a die and "total 12 raised to 16 (source)" for a total.
+5. **Down-conversion** (ADR-023, "never silently stronger"). At the 12 to 11 rung a `rollFloor` is **dropped whole** and listed (`below.effect-unsupported`) (owner ruling): it only raises a roll, so the copy is weaker, and a v11 effect cannot carry it.
+6. **Numbers.** No new ADR and no schema bump (`ContentRevision.CurrentSchemaVersion` stays 12; nothing new is stored on a character). The decision row is D89.
+
+### Consequences (G9)
+
+- Content can set a minimum d20 face or a minimum total on checks, optionally only on skills the character is proficient in. A revision without it keeps its version, bytes and hash; a v11 revision holding a `rollFloor` keeps it as unknown data and ignores it.
+- The sheet lists the floor on each field it reaches. The Homebrew Studio authors it (target, "Minimum d20 face" or "Minimum total", and a proficient-only box).
+- A revision that uses it needs content schema 12 (`validate.requires-v12`). A package that holds one warns `package.needs-newer-build`.
+- New codes: `validate.roll-floor-target`, `validate.roll-floor-value`.
+- The capability registry gains a `rollFloor` row (Automatic, "Applied when a check field is rolled"). The down-conversion coverage count is unchanged by the new drop.
+
+### Not doing (G9)
+
+- **Saves, attacks and tool checks** (tool checks are not sheet fields).
+- **Flooring the displayed field value,** toggles and conditions.
+- **A floor on rolls made outside the app.**
+
+### Evidence (G9)
+
+- `tests/RulesCore.Tests/RollFloorV12SchemaTests.cs` and `RollFloorV12ValidationTests.cs` (the members, the version rung, the validator codes).
+- `tests/RulesCore.Tests/RollFloorV12SheetTests.cs` (highest face and total, proficient-only marks, content order, failing formula, trace steps).
+- `tests/RulesCore.Tests/RollFloorRollerTests.cs` (each d20 raised before keeping, total floored after modifiers).
+- `tests/AppService.Tests/RollFloorV12ServiceTests.cs` (field rolls floored, other roll kinds never) and `tests/RulesCore.Tests/DownConvertV12Tests.cs` (dropped whole).
+- UI: `src/Ui/src/components/HomebrewStudioRollFloors.test.tsx` (authoring) and `rollText.test.ts` (the roll text).
+- The original fixture pack `tests/RulesFixtures/fixture-pack-roll-floor.json`.
+
+Related: [ADR-018](ADR-018-play-mechanics.md), [ADR-021](ADR-021-mechanics-beyond-d43.md), [ADR-023](ADR-023-down-conversion-export.md), [play-mechanics.md](../features/play-mechanics.md#content-v12-g6-response-triggers-and-amounts), [its G7 section](../features/play-mechanics.md#content-v12-g7-roll-modes-on-attacks-and-initiative), [its G1 section](../features/play-mechanics.md#content-v12-g1-scaled-dice-critical-only-and-once-per-turn-riders) and [its G9 section](../features/play-mechanics.md#content-v12-g9-roll-floor), LIVING_SPECS D76, D86, D87, D88 and D89. Supersedes: none.

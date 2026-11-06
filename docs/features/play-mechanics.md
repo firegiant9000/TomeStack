@@ -702,6 +702,29 @@ An explicit `false` for `critical` or `oncePerTurn` is allowed, still needs v12 
 
 **Stays by hand:** tracking whether the once-per-turn rider was already used this turn, dice that depend on a roll's result, and marking a damage roll critical (the player still does it).
 
+## Content v12 (G9): roll floor
+
+Decided in [ADR-022](../decisions/ADR-022-content-v12.md#slice-g9-roll-floor) (LIVING_SPECS D89). A new effect kind, `rollFloor`, content schema v12 only; a revision without it keeps its version and bytes. A v11 revision that holds one keeps it as unknown data and ignores it.
+
+| Member | Meaning |
+| --- | --- |
+| `target` | `check` (every ability-check field: each ability modifier, every skill, initiative), `ability.<x>.check` (that ability's modifier, its skills, and initiative for Dex) or `skill.<s>`. Checks only: no saves, attacks or other targets (`validate.roll-floor-target`). |
+| `face` | An integer 2 to 20: a d20 below it counts as it. |
+| `total` | A formula: a check total below it counts as it. Evaluated in the declaring content's context (`SCALE.` needs v9, `VALUE.` v11). Exactly one of `face` and `total` (`validate.roll-floor-value`). |
+| `proficient` | `true` reaches only fields marked proficient or expertise; a bare ability check and initiative are never reached. `false` counts as absent but still needs v12. |
+
+**Sheet.** A reached field lists its floor ("Why?" shows one "floor" step per source, after the field's own steps). The highest face and the highest total win, separately. A total formula that fails leaves that source out with `effect.invalid-formula` and the sheet still calculates. The field's displayed value never changes.
+
+**Rolling.** Only rolling a field applies a floor; attack, damage, save, death save, roll-effect, spell and custom rolls never do. Each d20 of the roll below the face is raised before keeping, and the last roll shows both values ("7 → 10 (floor)"). The total is then floored after modifiers ("total 12 raised to 16 (source)").
+
+**Studio.** A floor is authored with its target, a "Minimum d20 face" or "Minimum total", and a proficient-only box.
+
+**Validation** (errors): `validate.roll-floor-target`, `validate.roll-floor-value`; below v12 `validate.requires-v12` applies as for every v12 field. The capability registry lists `rollFloor` as Automatic ("Applied when a check field is rolled").
+
+**Older versions.** For an older TomeStack ([package-format.md](package-format.md#save-for-an-older-tomestack-d85)) a `rollFloor` is dropped whole and listed (`below.effect-unsupported`): it only raises a roll, so the copy is weaker (ADR-022, G9 decision 5).
+
+**Stays by hand:** floors on saves, attacks and tool checks, and on rolls made outside the app.
+
 ## Not yet
 
 - Damage responses: the studio's outcome roll picker offers only the same entry's rolls. A roll from another entry can be stored in content but not chosen in the studio yet.
