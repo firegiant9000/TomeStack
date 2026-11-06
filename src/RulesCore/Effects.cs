@@ -942,6 +942,46 @@ public sealed record RollFloorEffect : Effect
         revisionSchemaVersion < SchemaVersion ? unknown : VersionedEffects.Typed<RollFloorEffect>(unknown);
 }
 
+/// <summary>
+/// Content schema v12 (G10): a skill may use another ability's modifier. <see cref="Target"/> is <c>skill.&lt;s&gt;</c> or
+/// <c>ability.&lt;x&gt;.check</c> (every skill whose printed ability is x); <see cref="Ability"/> is the ability it may use.
+/// Typed only in a v12 revision: below v12 it stays an <see cref="UnknownEffect"/>, byte for byte.
+/// </summary>
+public sealed record CheckAbilityEffect : Effect
+{
+    public const string TypeName = "checkAbility";
+
+    public const int SchemaVersion = ContentRevision.CheckAbilitySchemaVersion;
+
+    public override string Type => TypeName;
+
+    /// <summary><c>skill.&lt;s&gt;</c> or <c>ability.&lt;x&gt;.check</c>; validated in the content validator. Required.</summary>
+    [property: JsonRequired]
+    public required string Target { get; init; }
+
+    /// <summary>The lower-case ability key the skill may use (the key <see cref="RollModeEffect"/> reads). Required.</summary>
+    [property: JsonRequired]
+    public required string Ability { get; init; }
+
+    /// <summary>Parses a lower-case ability key exactly (<c>str</c>, <c>dex</c>, ...), as <see cref="RollModeEffect"/> does.</summary>
+    public static bool TryParseAbility(string key, out Ability ability)
+    {
+        foreach (var candidate in Enum.GetValues<Ability>())
+        {
+            if (string.Equals(key, candidate.ToString().ToLowerInvariant(), StringComparison.Ordinal))
+            {
+                ability = candidate;
+                return true;
+            }
+        }
+        ability = default;
+        return false;
+    }
+
+    internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion) =>
+        revisionSchemaVersion < SchemaVersion ? unknown : VersionedEffects.Typed<CheckAbilityEffect>(unknown);
+}
+
 /// <summary>Content schema v11 (D43): where in a damage event a response is offered.</summary>
 public enum ResponsePhase
 {
@@ -1772,6 +1812,7 @@ internal static class VersionedEffects
             [RollModeEffect.TypeName] = (RollModeEffect.SchemaVersion, (u, v) => RollModeEffect.FromUnknown(u, v)),
             [ResponseEffect.TypeName] = (ResponseEffect.SchemaVersion, (u, v) => ResponseEffect.FromUnknown(u, v)),
             [RollFloorEffect.TypeName] = (RollFloorEffect.SchemaVersion, (u, v) => RollFloorEffect.FromUnknown(u, v)),
+            [CheckAbilityEffect.TypeName] = (CheckAbilityEffect.SchemaVersion, (u, v) => CheckAbilityEffect.FromUnknown(u, v)),
             [ItemModEffect.TypeName] = (ItemModEffect.SchemaVersion, (u, _) => ItemModEffect.FromUnknown(u)),
             [CompanionEffect.TypeName] = (CompanionEffect.SchemaVersion, (u, _) => CompanionEffect.FromUnknown(u)),
         };
@@ -1952,7 +1993,7 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
                 RollEffect.TypeName => element.Deserialize<RollEffect>(options),
                 HitDieEffect.TypeName => element.Deserialize<HitDieEffect>(options),
                 // Typed only in revisions of their schema version (ContentRevision.OnDeserialized); older ones keep them as written.
-                ArmorEffect.TypeName or SpellcastingEffect.TypeName or SpellEffect.TypeName or WeaponEffect.TypeName or ToggleEffect.TypeName or ScaleEffect.TypeName or ItemEffect.TypeName or ToggleGroupEffect.TypeName or UpkeepEffect.TypeName or AttackEffect.TypeName or AttackRiderEffect.TypeName or ValueEffect.TypeName or RollModeEffect.TypeName or RollFloorEffect.TypeName or ResponseEffect.TypeName or ItemModEffect.TypeName or CompanionEffect.TypeName => UnknownEffect.From(element),
+                ArmorEffect.TypeName or SpellcastingEffect.TypeName or SpellEffect.TypeName or WeaponEffect.TypeName or ToggleEffect.TypeName or ScaleEffect.TypeName or ItemEffect.TypeName or ToggleGroupEffect.TypeName or UpkeepEffect.TypeName or AttackEffect.TypeName or AttackRiderEffect.TypeName or ValueEffect.TypeName or RollModeEffect.TypeName or RollFloorEffect.TypeName or CheckAbilityEffect.TypeName or ResponseEffect.TypeName or ItemModEffect.TypeName or CompanionEffect.TypeName => UnknownEffect.From(element),
                 LegacyAbilityScoreIncrease or LegacyInitiativeBonus => FromSchemaVersion1(element, type, options),
                 _ => UnknownEffect.From(element),
             } ?? UnknownEffect.From(element);

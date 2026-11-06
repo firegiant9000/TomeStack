@@ -99,6 +99,7 @@ internal static class Generators
         [ItemModEffect.TypeName] = ItemModEffect.SchemaVersion,
         [CompanionEffect.TypeName] = CompanionEffect.SchemaVersion,
         [RollFloorEffect.TypeName] = RollFloorEffect.SchemaVersion,
+        [CheckAbilityEffect.TypeName] = CheckAbilityEffect.SchemaVersion,
     };
 
     /// <summary>
@@ -420,6 +421,11 @@ internal static class Generators
                     .With("face", useFace ? face : null)
                     .With("total", useFace ? null : total)
                     .With("proficient", proficient)),
+            // Typed from v12, unknown (and unchanged) below. Both members required; the validator checks the pairing, not the reader.
+            Common(CheckAbilityEffect.TypeName,
+                from target in Gen.Elements("skill.athletics", "skill.stealth", "ability.int.check", "ability.wis.check")
+                from ability in Gen.Elements("str", "dex", "con", "int", "wis", "cha")
+                select new JsonObject { ["target"] = target, ["ability"] = ability }),
             Common(ScaleEffect.TypeName,
                 from id in Keys
                 from label in Names
