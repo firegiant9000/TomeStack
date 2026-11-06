@@ -470,4 +470,117 @@ public class DownConvertV12Tests
         // The item mod was removed at index 0 in the v12 step; the v11 step still reports the toggle at its original index.
         Assert.Contains(result.Changes, c => c.Code == BelowCodes.ToggleGroup && c.Path == "effects[2].group");
     }
+
+    private static string Mod(string op, string target, string value) =>
+        $$"""{"type":"modifier","id":"m-{{op}}","operation":"{{op}}","target":"{{target}}","value":"{{value}}"}""";
+
+    [Theory]
+    [InlineData("""{"type":"checkAbility","id":"c","target":"skill.athletics","ability":"dex"}""")]
+    [InlineData("""{"type":"checkAbility","id":"c","target":"ability.str.check","ability":"dex"}""")]
+    public void CheckAbility_is_dropped_whole_below_12(string effect)
+    {
+        var result = DownConvert.Below(Rev($"{BiteAttack},{effect}"), 11);
+
+        Assert.False(result.Blocked);
+        Assert.Equal(11, result.Revision.SchemaVersion);
+        Assert.IsType<AttackEffect>(Assert.Single(result.Revision.Effects));
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(BelowCodes.EffectUnsupported, change.Code);
+        Assert.Equal(BelowAction.Dropped, change.Action);
+        Assert.Equal("effects[1]", change.Path);
+        Assert.Equal("'Compat Steady Hands': its use of another ability for a skill; the feature stays as text.", change.Message);
+    }
+
+    [Theory]
+    [InlineData("bonus", "speed.climb", "10")]
+    [InlineData("replace", "speed.swim", "30")]
+    [InlineData("set", "speed.climb", "WALK")]
+    [InlineData("bonus", "speed.swim", "-5")]
+    public void Every_modifier_on_climb_or_swim_is_dropped_below_12(string op, string target, string value)
+    {
+        var result = DownConvert.Below(Rev($"{BiteAttack},{Mod(op, target, value)}"), 11);
+
+        Assert.False(result.Blocked);
+        Assert.IsType<AttackEffect>(Assert.Single(result.Revision.Effects));
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(BelowCodes.UnknownTarget, change.Code);
+        Assert.Equal(BelowAction.Dropped, change.Action);
+        Assert.Equal("effects[1]", change.Path);
+        Assert.Equal($"'Compat Steady Hands': its change to '{target}', which the older version has no field for; the copy has no such speed.", change.Message);
+    }
+
+    [Theory]
+    [InlineData("speed.climb")]
+    [InlineData("speed.swim")]
+    public void Restriction_on_climb_speed_blocks_below_12(string field)
+    {
+        var result = DownConvert.Below(Rev($$"""{"type":"restriction","id":"r","field":"{{field}}","maximum":20}"""), 11);
+
+        Assert.True(result.Blocked);
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(BelowCodes.RestrictionLifted, change.Code);
+        Assert.Equal(BelowAction.Blocks, change.Action);
+        Assert.Equal("effects[0]", change.Path);
+    }
+
+    [Fact]
+    public void Replace_fly_with_SPEED_is_dropped()
+    {
+        var result = DownConvert.Below(Rev(Mod("replace", "speed.fly", "SPEED")), 11);
+
+        Assert.False(result.Blocked);
+        Assert.Empty(result.Revision.Effects);
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(BelowAction.Dropped, change.Action);
+        Assert.Equal(BelowCodes.ValueFormula, change.Code);
+        Assert.Equal("effects[0]", change.Path);
+    }
+
+    [Theory]
+    [InlineData("set", "SPEED")]
+    [InlineData("bonus", "-SPEED")]
+    [InlineData("replace", "SPEED - 10")]
+    public void Set_or_negative_SPEED_on_fly_blocks(string op, string value)
+    {
+        var result = DownConvert.Below(Rev(Mod(op, "speed.fly", value)), 11);
+
+        Assert.True(result.Blocked);
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(BelowAction.Blocks, change.Action);
+        Assert.Equal(BelowCodes.ValueFormula, change.Code);
+    }
+
+    [Fact]
+    public void Bonus_fly_plus_SPEED_is_dropped()
+    {
+        var result = DownConvert.Below(Rev(Mod("bonus", "speed.fly", "SPEED + 5")), 11);
+
+        Assert.False(result.Blocked);
+        Assert.Equal(BelowAction.Dropped, Assert.Single(result.Changes).Action);
+    }
+
+    [Fact]
+    public void Lowered_copy_with_checkAbility_climb_and_SPEED_validates_at_11()
+    {
+        var effects = $"{BiteAttack},{Mod("bonus", "speed.climb", "10")},{Mod("replace", "speed.fly", "SPEED")},"
+            + """{"type":"checkAbility","id":"c","target":"skill.athletics","ability":"dex"}""";
+        var result = DownConvert.Below(Rev(effects), 11);
+
+        Assert.False(result.Blocked);
+        Assert.Equal(11, result.Revision.SchemaVersion);
+        Assert.IsType<AttackEffect>(Assert.Single(result.Revision.Effects));
+        Assert.Equal(3, result.Changes.Count);
+        Assert.DoesNotContain(BelowCodes.ValidationError, result.Changes.Select(c => c.Code));
+        Assert.All(ContentValidator.Validate(result.Revision, Fixtures.M1Catalog()).Errors, e => Assert.Equal("validate.source-missing", e.Code));
+    }
+
+    [Fact]
+    public void V11_revision_is_untouched_at_11_to_10_rung_for_these()
+    {
+        var result = DownConvert.Below(Rev(Mod("bonus", "speed.fly", "10"), 11), 10);
+
+        Assert.DoesNotContain(result.Changes, c => c.Message.Contains("climb", StringComparison.Ordinal)
+            || c.Message.Contains("swim", StringComparison.Ordinal) || c.Message.Contains("SPEED", StringComparison.Ordinal));
+        Assert.Equal(BelowCodes.UnknownTarget, Assert.Single(result.Changes).Code);
+    }
 }

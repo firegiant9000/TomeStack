@@ -214,7 +214,8 @@ public static class DownConvert
 
     // ---- shared helpers for the by-value classification ----------------------------------------------------------------
 
-    private const FormulaFeatures AllFeatures = FormulaFeatures.Scales | FormulaFeatures.Values;
+    // Speed is parsed so a v12 speed modifier reading SPEED can be classified; SPEED counts as a non-negative identifier.
+    private const FormulaFeatures AllFeatures = FormulaFeatures.Scales | FormulaFeatures.Values | FormulaFeatures.Speed;
 
     /// <summary>
     /// Whether the formula can never be below zero for any character: it parses and is made only of non-negative numbers, identifiers
@@ -253,6 +254,9 @@ public static class DownConvert
     private static bool ReadsValue(string? source) =>
         Formula.TryParse(source, AllFeatures, out var formula, out _) && formula!.Identifiers.Any(FormulaIdentifiers.IsValue);
 
+    private static bool ReadsSpeed(string? source) =>
+        Formula.TryParse(source, AllFeatures, out var formula, out _) && formula!.Identifiers.Contains(FormulaIdentifiers.Speed);
+
     private static string? TypeOf(JsonObject effect) => StringOf(Property(effect, "type"));
 
     private static bool IsRemovedTarget(string? target, Scope scope) =>
@@ -260,7 +264,10 @@ public static class DownConvert
         && ((scope.Own >= ContentRevision.PlayMechanicsSchemaVersion && scope.Target < ContentRevision.PlayMechanicsSchemaVersion
                 && (target.StartsWith(ContentValidator.ResourceTargetPrefix, StringComparison.Ordinal) || target == FieldIds.FlySpeed))
             || (scope.Own >= ContentRevision.PlayDetailsSchemaVersion && scope.Target < ContentRevision.PlayDetailsSchemaVersion
-                && CharacterCalculator.IsSpeedOrPassive(target)));
+                && CharacterCalculator.IsSpeedOrPassive(target))
+            || (scope.Own >= ContentRevision.ClimbSwimSchemaVersion && scope.Target < ContentRevision.ClimbSwimSchemaVersion && IsClimbOrSwim(target)));
+
+    private static bool IsClimbOrSwim(string? target) => target is FieldIds.ClimbSpeed or FieldIds.SwimSpeed;
 
     /// <summary>A modifier or restriction on a target the target version lacks. Returns whether the effect was removed.</summary>
     private static bool RemovedTargetBelow(JsonObject effect, string? type, int index, Scope scope, List<BelowChange> changes)
@@ -269,6 +276,10 @@ public static class DownConvert
         var name = scope.Name;
         switch (type)
         {
+            // Climb and swim exist only from v12: the copy has no such speed, which is weaker, so every modifier drops whatever its value.
+            case ModifierEffect.TypeName when StringOf(Property(effect, "target")) is { } climbTarget && IsClimbOrSwim(climbTarget) && IsRemovedTarget(climbTarget, scope):
+                changes.Add(new(path, BelowAction.Dropped, BelowCodes.UnknownTarget, $"'{name}': its change to '{climbTarget}', which the older version has no field for; the copy has no such speed."));
+                return true;
             case ModifierEffect.TypeName when StringOf(Property(effect, "target")) is { } target && IsRemovedTarget(target, scope):
                 changes.Add(string.Equals(StringOf(Property(effect, "operation")), nameof(ModifierOperation.Bonus), StringComparison.OrdinalIgnoreCase)
                     && StaticallyNonNegative(StringOf(Property(effect, "value")), scope)
@@ -539,6 +550,22 @@ public static class DownConvert
                         continue;
                     case RollFloorEffect.TypeName:
                         changes.Add(new(path, BelowAction.Dropped, BelowCodes.EffectUnsupported, $"'{name}': its roll floor; the feature stays as text."));
+                        continue;
+                    case CheckAbilityEffect.TypeName:
+                        changes.Add(new(path, BelowAction.Dropped, BelowCodes.EffectUnsupported, $"'{name}': its use of another ability for a skill; the feature stays as text."));
+                        continue;
+                    case ModifierEffect.TypeName when IsClimbOrSwim(StringOf(Property(effect, "target"))) && RemovedTargetBelow(effect, ModifierEffect.TypeName, i, scope, changes):
+                    case RestrictionEffect.TypeName when IsClimbOrSwim(StringOf(Property(effect, "field"))) && RemovedTargetBelow(effect, RestrictionEffect.TypeName, i, scope, changes):
+                        continue;
+                    case ModifierEffect.TypeName when StringOf(Property(effect, "target")) == FieldIds.FlySpeed && ReadsSpeed(StringOf(Property(effect, "value"))):
+                        // SPEED is the character's speed before this effect: a bonus or replace that cannot go negative only ever adds speed, so the
+                        // older version (which cannot read SPEED) is weaker without it; set, or a formula that can go below zero, would be stronger.
+                        var speedOp = StringOf(Property(effect, "operation"));
+                        var addsOnly = (string.Equals(speedOp, "bonus", StringComparison.OrdinalIgnoreCase) || string.Equals(speedOp, "replace", StringComparison.OrdinalIgnoreCase))
+                            && StaticallyNonNegative(StringOf(Property(effect, "value")), scope);
+                        changes.Add(addsOnly
+                            ? new(path, BelowAction.Dropped, BelowCodes.ValueFormula, $"'{name}': a flying speed that reads the character's speed, which the older version cannot calculate.")
+                            : new(path, BelowAction.Blocks, BelowCodes.ValueFormula, $"'{name}': a flying speed that reads the character's speed, which the older version cannot calculate; leaving it out would change the result."));
                         continue;
                     case ResponseEffect.TypeName:
                         // Only "automatic" is harmless to lose; the rest would make an older build offer a wider, stronger response.
