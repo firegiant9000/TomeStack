@@ -210,7 +210,7 @@ public static partial class CharacterCalculator
     private static RollModeCollection CollectRollModes(
         List<ActiveContent> active, Character character, EffectiveToggles effective, bool autoOn, List<Diagnostic> diagnostics)
     {
-        var byField = new Dictionary<string, List<RollModeReason>>(StringComparer.Ordinal);
+        var targeted = new List<(string Target, RollModeReason Reason)>();
         var attackModes = new List<AttackModeValue>();
         var against = new List<RollModeReason>();
         foreach (var item in active)
@@ -229,32 +229,172 @@ public static partial class CharacterCalculator
                     attackModes.Add(new AttackModeValue(reason, effect.Tags ?? [], effect.Ability));
                 else if (effect.Target == RollModeEffect.AttacksAgainstTarget)
                     against.Add(reason);
-                foreach (var field in RollModeFields(effect.Target))
-                {
-                    if (!byField.TryGetValue(field, out var reasons))
-                        byField[field] = reasons = [];
-                    reasons.Add(reason);
-                }
+                targeted.Add((effect.Target, reason));
             }
         }
-        // Automatic combines only the reasons that need no confirmation (no against) from an automatic effect; the rest are listed notes.
-        var fields = byField.ToDictionary(
+        return new(
+            targeted,
+            attackModes.Count > 0 ? attackModes : null,
+            against.Count > 0 ? new RollModeSummary(RollModes.CombineAgainst(against), against) : null);
+    }
+
+    /// <summary>
+    /// The roll modes of the active content: each reason with the target it names (expanded to fields after the values are known, because
+    /// a skill that uses another ability answers to that ability's checks), the <c>attack</c> modes (v12), and the summary of attacks against the character (v12).
+    /// </summary>
+    private sealed record RollModeCollection(
+        List<(string Target, RollModeReason Reason)> Targeted, IReadOnlyList<AttackModeValue>? AttackModes, RollModeSummary? AttacksAgainst);
+
+    /// <summary>The roll modes by sheet field. Automatic combines only the reasons that need no confirmation (no against) from an automatic effect; the rest are listed notes.</summary>
+    private static Dictionary<string, RollModeSummary> RollModesByField(
+        List<(string Target, RollModeReason Reason)> targeted, IReadOnlyDictionary<string, Ability> skillAbility)
+    {
+        var byField = new Dictionary<string, List<RollModeReason>>(StringComparer.Ordinal);
+        foreach (var (target, reason) in targeted)
+        {
+            foreach (var field in RollModeFields(target, skillAbility))
+            {
+                if (!byField.TryGetValue(field, out var reasons))
+                    byField[field] = reasons = [];
+                reasons.Add(reason);
+            }
+        }
+        return byField.ToDictionary(
             p => p.Key,
             p => new RollModeSummary(
                 RollModes.Combine(p.Value.Where(r => r.IsAutomatic).Select(r => r.Mode)),
                 [.. p.Value]),
             StringComparer.Ordinal);
-        return new(
-            fields,
-            attackModes.Count > 0 ? attackModes : null,
-            against.Count > 0 ? new RollModeSummary(RollModes.CombineAgainst(against), against) : null);
     }
 
-    /// <summary>The roll modes of the active content: by sheet field, the <c>attack</c> modes (v12), and the summary of attacks against the character (v12).</summary>
-    private sealed record RollModeCollection(
-        Dictionary<string, RollModeSummary> ByField, IReadOnlyList<AttackModeValue>? AttackModes, RollModeSummary? AttacksAgainst);
+    /// <summary>Content v12 (G10): a stored candidate for a skill to use <paramref name="Ability"/> instead of its printed ability.</summary>
+    private sealed record CheckAbilityCandidate(Ability Ability, ActiveContent Content, CheckAbilityEffect Effect);
 
-    private static IEnumerable<string> RollModeFields(string target)
+    /// <summary>
+    /// Content v12 (G10): the skills that may use another ability, by skill field, in content order. <c>skill.&lt;s&gt;</c> reaches one skill,
+    /// <c>ability.&lt;x&gt;.check</c> every skill whose printed ability is x. A stored effect that is not automatic and always, whose ability
+    /// or target does not parse, or that names the printed ability, is skipped (validation refuses them).
+    /// </summary>
+    private static Dictionary<string, List<CheckAbilityCandidate>> CollectCheckAbilities(List<ActiveContent> active)
+    {
+        var byField = new Dictionary<string, List<CheckAbilityCandidate>>(StringComparer.Ordinal);
+        foreach (var item in active)
+        {
+            foreach (var effect in item.Revision.Effects.OfType<CheckAbilityEffect>())
+            {
+                if (effect.Automation != AutomationStatus.Automatic || effect.Timing != EffectTiming.Always
+                    || !CheckAbilityEffect.TryParseAbility(effect.Ability, out var ability))
+                    continue;
+                foreach (var skill in Skills.Where(s => s.Ability != ability && CheckAbilityReaches(effect.Target, s.Key, s.Ability)))
+                {
+                    var field = FieldIds.Skill(skill.Key);
+                    if (!byField.TryGetValue(field, out var list))
+                        byField[field] = list = [];
+                    list.Add(new(ability, item, effect));
+                }
+            }
+        }
+        return byField;
+    }
+
+    private static bool CheckAbilityReaches(string target, string skillKey, Ability printed)
+    {
+        if (target.StartsWith("skill.", StringComparison.Ordinal))
+            return target == FieldIds.Skill(skillKey);
+        var mod = FieldIds.Modifier(printed);
+        return target == string.Concat(mod.AsSpan(0, mod.Length - ".mod".Length), ".check");
+    }
+
+    /// <summary>
+    /// The ability a skill (or save) uses: the highest modifier among its printed ability and the candidates. A tie keeps the printed
+    /// ability, then the earlier candidate. Null candidate: the printed ability.
+    /// </summary>
+    private static (Ability Ability, CheckAbilityCandidate? Candidate) ChosenAbility(
+        Ability printed, List<CheckAbilityCandidate>? candidates, IReadOnlyDictionary<string, int> values)
+    {
+        var best = printed;
+        CheckAbilityCandidate? chosen = null;
+        foreach (var candidate in candidates ?? [])
+        {
+            if (values[FieldIds.Modifier(candidate.Ability)] > values[FieldIds.Modifier(best)])
+            {
+                best = candidate.Ability;
+                chosen = candidate;
+            }
+        }
+        return (best, chosen);
+    }
+
+    /// <summary>
+    /// Content v12 (G10): drops the candidates that would close a dependency cycle (the candidate's modifier depends, through modifiers, on the
+    /// skill it would feed), each with <c>effect.dependency-cycle</c>. Returns the dependency edges of the kept candidates, modifier to skill.
+    /// Runs after <see cref="RemoveCycles"/>, so the modifier edges are acyclic; kept candidates are added one by one.
+    /// </summary>
+    private static List<(string From, string To, Modifier? Via)> AcceptCheckAbilities(
+        Dictionary<string, List<CheckAbilityCandidate>> candidates, List<Modifier> modifiers, List<Diagnostic> diagnostics,
+        Dictionary<string, List<Diagnostic>> warnings)
+    {
+        var extra = new List<(string From, string To, Modifier? Via)>();
+        if (candidates.Count == 0)
+            return extra;
+        var adjacency = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        foreach (var (from, to, _) in Edges(modifiers))
+        {
+            if (!adjacency.TryGetValue(from, out var list))
+                adjacency[from] = list = [];
+            list.Add(to);
+        }
+        bool Reaches(string from, string to)
+        {
+            var seen = new HashSet<string>(StringComparer.Ordinal) { from };
+            var pending = new Stack<string>([from]);
+            while (pending.Count > 0)
+            {
+                var current = pending.Pop();
+                if (current == to)
+                    return true;
+                foreach (var next in adjacency.GetValueOrDefault(current) ?? [])
+                {
+                    if (seen.Add(next))
+                        pending.Push(next);
+                }
+            }
+            return false;
+        }
+
+        foreach (var (field, list) in candidates.ToList())
+        {
+            var kept = new List<CheckAbilityCandidate>();
+            foreach (var candidate in list)
+            {
+                var mod = FieldIds.Modifier(candidate.Ability);
+                if (Reaches(field, mod))
+                {
+                    var revision = candidate.Content.Revision;
+                    var diagnostic = new Diagnostic(
+                        "effect.dependency-cycle",
+                        $"'{revision.Name}' effect '{candidate.Effect.Id}' is ignored: using {mod} for {field} would make {mod} depend on {field}.",
+                        revision.Reference,
+                        candidate.Effect.Id);
+                    diagnostics.Add(diagnostic);
+                    warnings[field].Add(diagnostic);
+                    continue;
+                }
+                kept.Add(candidate);
+                extra.Add((mod, field, null));
+                if (!adjacency.TryGetValue(mod, out var outgoing))
+                    adjacency[mod] = outgoing = [];
+                outgoing.Add(field);
+            }
+            if (kept.Count == 0)
+                candidates.Remove(field);
+            else
+                candidates[field] = kept;
+        }
+        return extra;
+    }
+
+    private static IEnumerable<string> RollModeFields(string target, IReadOnlyDictionary<string, Ability> skillAbility)
     {
         if (target == RollModeEffect.InitiativeTarget)
         {
@@ -275,7 +415,8 @@ public static partial class CharacterCalculator
             if (target != string.Concat(mod.AsSpan(0, mod.Length - ".mod".Length), ".check"))
                 continue;
             yield return mod;
-            foreach (var skill in Skills.Where(s => s.Ability == ability))
+            // Content v12 (G10): a skill answers to the ability it uses, which is its printed one unless a checkAbility won.
+            foreach (var skill in Skills.Where(s => skillAbility.GetValueOrDefault(FieldIds.Skill(s.Key), s.Ability) == ability))
                 yield return FieldIds.Skill(skill.Key);
             if (ability == Ability.Dex)
                 yield return FieldIds.Initiative;
@@ -295,7 +436,7 @@ public static partial class CharacterCalculator
     /// </summary>
     private static Dictionary<string, FloorCollection> CollectRollFloors(
         List<ActiveContent> active, Character character, ClassLevelMap classLevels, Dictionary<string, int> values,
-        Func<string, ProficiencyMark> markOf, string family, List<Diagnostic> diagnostics)
+        Func<string, ProficiencyMark> markOf, string family, List<Diagnostic> diagnostics, IReadOnlyDictionary<string, Ability> skillAbility)
     {
         var byField = new Dictionary<string, List<(RollFloorReason Reason, FloorStep Step)>>(StringComparer.Ordinal);
         foreach (var item in active)
@@ -328,7 +469,7 @@ public static partial class CharacterCalculator
                 else
                     continue;
                 var step = new FloorStep(description, floor, ContentOrigin(family, item, effect));
-                foreach (var field in RollFloorFields(effect.Target))
+                foreach (var field in RollFloorFields(effect.Target, skillAbility))
                 {
                     if (effect.Proficient == true && markOf(field) == ProficiencyMark.None)
                         continue;
@@ -346,10 +487,10 @@ public static partial class CharacterCalculator
             StringComparer.Ordinal);
     }
 
-    private static IEnumerable<string> RollFloorFields(string target)
+    private static IEnumerable<string> RollFloorFields(string target, IReadOnlyDictionary<string, Ability> skillAbility)
     {
         if (target != RollFloorEffect.CheckTarget)
-            return RollModeFields(target).Where(f => !f.StartsWith("save.", StringComparison.Ordinal));
+            return RollModeFields(target, skillAbility).Where(f => !f.StartsWith("save.", StringComparison.Ordinal));
         return [.. Enum.GetValues<Ability>().Select(FieldIds.Modifier), .. Skills.Select(s => FieldIds.Skill(s.Key)), FieldIds.Initiative];
     }
 

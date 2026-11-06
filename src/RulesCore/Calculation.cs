@@ -746,7 +746,10 @@ public static partial class CharacterCalculator
             resolved.Classes.FirstOrDefault(c => c.Content.Revision.Reference == e.Class) is { } info && RecordsArmorTraining(info.Content.Revision));
         var worn = AddArmor(active, modifiers, diagnostics, armorTraining, checkTraining, policy, warnings, resolved.ModdedEntries);
         RemoveCycles(modifiers, diagnostics, warnings, manual);
-        var order = TopologicalOrder(modifiers);
+        // Content v12 (G10): skills that may use another ability read that modifier too; none for a sheet without checkAbility.
+        var checkAbilities = CollectCheckAbilities(active);
+        var checkEdges = AcceptCheckAbilities(checkAbilities, modifiers, diagnostics, warnings);
+        var order = TopologicalOrder(modifiers, checkEdges);
         var casters = CollectCasters(active, character, resolved.ClassLevels, diagnostics);
 
         var values = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -756,7 +759,7 @@ public static partial class CharacterCalculator
         {
             var spec = Specs[SpecIndex[id]];
             var steps = new List<Step>();
-            var context = new BaseContext(character, family, values, proficiencies, resolved.Classes, warnings[id], manual, casters);
+            var context = new BaseContext(character, family, values, proficiencies, resolved.Classes, warnings[id], manual, casters, checkAbilities);
             var value = spec.Base(context, steps);
             value = ApplyModifiers(id, value, modifiers.Where(m => m.Effect.Target == id).ToList(), character, resolved.ClassLevels, values, family, steps, warnings[id], manual);
             value = Bound(spec, value, steps, warnings[id], family);
@@ -781,7 +784,18 @@ public static partial class CharacterCalculator
             [FieldIds.SpellAttack] = casterReads,
             [FieldIds.SpellSaveDc] = casterReads,
         };
-        var rollFloors = CollectRollFloors(active, character, resolved.ClassLevels, values, id => MarkOf(id, proficiencies), family, diagnostics);
+        // Content v12 (G10): the ability each skill with a candidate uses; a substituted skill reads that modifier, not the printed one.
+        var skillAbility = new Dictionary<string, Ability>(StringComparer.Ordinal);
+        foreach (var (field, list) in checkAbilities)
+        {
+            var printed = Skills.First(s => FieldIds.Skill(s.Key) == field).Ability;
+            var (used, candidate) = ChosenAbility(printed, list, values);
+            skillAbility[field] = used;
+            if (candidate is not null)
+                actualReads[field] = [FieldIds.Modifier(used), FieldIds.ProficiencyBonus];
+        }
+        var rollModeFields = RollModesByField(rollModes.Targeted, skillAbility);
+        var rollFloors = CollectRollFloors(active, character, resolved.ClassLevels, values, id => MarkOf(id, proficiencies), family, diagnostics, skillAbility);
         var fields = Specs.Select(spec =>
         {
             var closure = Closure(spec.Id, modifiers, actualReads);
@@ -802,7 +816,7 @@ public static partial class CharacterCalculator
                 results[spec.Id].Override,
                 spec.Units,
                 MarkOf(spec.Id, proficiencies),
-                rollModes.ByField.GetValueOrDefault(spec.Id),
+                rollModeFields.GetValueOrDefault(spec.Id),
                 floor?.Summary);
         }).ToList();
 

@@ -8,7 +8,8 @@ public static partial class CharacterCalculator
     /// <param name="Manual">Fields that are only assisted; a base derivation that cannot complete adds its field.</param>
     private sealed record BaseContext(
         Character Character, string Family, Dictionary<string, int> Values, Dictionary<string, Proficiency> Proficiencies,
-        IReadOnlyList<ClassInfo> Classes, List<Diagnostic> Warnings, HashSet<string> Manual, IReadOnlyList<CasterInfo> Casters);
+        IReadOnlyList<ClassInfo> Classes, List<Diagnostic> Warnings, HashSet<string> Manual, IReadOnlyList<CasterInfo> Casters,
+        IReadOnlyDictionary<string, List<CheckAbilityCandidate>> CheckAbilities);
 
     private sealed record FieldSpec(string Id, string Label, string Units, IReadOnlyList<string> Reads, Func<BaseContext, List<Step>, int> Base);
 
@@ -310,8 +311,15 @@ public static partial class CharacterCalculator
         var modifier = FieldIds.Modifier(ability);
         return new(id, label, "modifier", [modifier, FieldIds.ProficiencyBonus], (c, steps) =>
         {
-            var value = c.Values[modifier];
-            steps.Add(new(id, "base", $"{label} starts at the {AbilityNames[ability]} modifier", value, value, new(TraceOriginKind.RulesPolicy, c.Family), [new(modifier, value)]));
+            // Content v12 (G10): a skill may use a higher ability's modifier; with no candidate, or when the printed ability wins, nothing differs.
+            var (used, candidate) = ChosenAbility(ability, c.CheckAbilities.GetValueOrDefault(id), c.Values);
+            var chosenModifier = FieldIds.Modifier(used);
+            var value = c.Values[chosenModifier];
+            if (candidate is null)
+                steps.Add(new(id, "base", $"{label} starts at the {AbilityNames[ability]} modifier", value, value, new(TraceOriginKind.RulesPolicy, c.Family), [new(modifier, value)]));
+            else
+                steps.Add(new(id, "base", $"{label} starts at the {AbilityNames[used]} modifier ({candidate.Content.Revision.Name} lets you use {AbilityNames[used]} instead of {AbilityNames[ability]})",
+                    value, value, ContentOrigin(c.Family, candidate.Content, candidate.Effect), [new(chosenModifier, value)]));
             if (c.Proficiencies.TryGetValue(id, out var proficiency))
             {
                 var pb = c.Values[FieldIds.ProficiencyBonus];
