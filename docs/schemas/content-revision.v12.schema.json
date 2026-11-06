@@ -1858,7 +1858,7 @@
             "target": {
               "type": "string",
               "pattern": "^(check|ability\\.(str|dex|con|int|wis|cha)\\.check|skill\\.(acrobatics|animalHandling|arcana|athletics|deception|history|insight|intimidation|investigation|medicine|nature|perception|performance|persuasion|religion|sleightOfHand|stealth|survival))$",
-              "description": "Content v12 (G9): the checks that get the floor: check (every ability-check field), ability.<ability>.check (that ability's checks) or skill.<skill>. Never a save, an attack or initiative."
+              "description": "Content v12 (G9): the checks that get the floor: check (every ability-check field), ability.<ability>.check (that ability's checks) or skill.<skill>. Never a save or an attack; check and ability.dex.check also reach initiative."
             },
             "face": {
               "type": "integer",

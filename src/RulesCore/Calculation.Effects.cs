@@ -303,6 +303,9 @@ public static partial class CharacterCalculator
             var revision = item.Revision;
             foreach (var effect in revision.Effects.OfType<RollFloorEffect>())
             {
+                // Validation refuses these; stored content that has them is skipped, not applied.
+                if (effect.Automation != AutomationStatus.Automatic || effect.Timing != EffectTiming.Always)
+                    continue;
                 int floor;
                 string description;
                 RollFloorReason reason;

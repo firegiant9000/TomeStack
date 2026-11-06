@@ -222,6 +222,7 @@ public sealed record DieResult(int Term, int Sides, int Value, bool Kept, bool F
 /// never changes a character, resource or any other state (ARCHITECTURE "commands vs calculation").
 /// <paramref name="Explain"/> (D72) is the sheet's trace for the number rolled (a field, an attack, a caster's spell attack):
 /// the roll command copies it, the record is never stored. Null when the roll has no such number.
+/// <paramref name="DiceTotal"/> sums the kept faces after any face floor and excludes the total floor (<paramref name="Unfloored"/> holds the pre-floor total).
 /// </summary>
 public sealed record RollRecord(
     string Formula,

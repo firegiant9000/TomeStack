@@ -576,6 +576,8 @@ public static class ContentValidator
                     break;
                 case RollFloorEffect rollFloor:
                     NeedV12("a rollFloor");
+                    if (rollFloor.Automation != AutomationStatus.Automatic || rollFloor.Timing != EffectTiming.Always)
+                        Error("validate.roll-floor-automation", $"Roll floor '{rollFloor.Id}' must be automatic and always on; a floor is applied to every matching roll, never chosen by the player.", rollFloor.Id);
                     if (!IsRollFloorTarget(rollFloor.Target))
                         Error("validate.roll-floor-target", $"Roll floor '{rollFloor.Id}' targets '{rollFloor.Target}'; use check, ability.<ability>.check (such as ability.str.check) or skill.<skill> (such as skill.stealth). A floor never reaches saves or attacks.", rollFloor.Id);
                     if (rollFloor.Face is not null && rollFloor.Total is not null)

@@ -2150,7 +2150,8 @@ function EffectEditor(props: {
       {/* An upkeep is previewed and confirmed by a turn, never applied by calculation, so it has no automation to choose. */}
       {/* A named value is always calculated (the validator refuses any other automation), so it has none to choose either. */}
       {/* A response is chosen by the player when the hit is taken, so it has no automation to choose either. */}
-      {effect.type !== 'grant' && effect.type !== 'upkeep' && effect.type !== 'value' && effect.type !== 'response' && (
+      {/* A roll floor is always automatic and always on (the validator refuses anything else), so it has none to choose either. */}
+      {effect.type !== 'grant' && effect.type !== 'upkeep' && effect.type !== 'value' && effect.type !== 'response' && effect.type !== 'rollFloor' && (
         <label className="field">
           Automation
           <select

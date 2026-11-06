@@ -154,7 +154,7 @@ public class RollFloorV12ServiceTests
         var report = temp.App.Coverage(new(PackSource));
 
         var totals = Assert.Single(report.Sources).Totals;
-        Assert.True(totals.Automatic >= 4);
+        Assert.Equal(5, totals.Automatic);
         Assert.Equal((0, 0, 0), (totals.Assisted, totals.Reference, totals.Unsupported));
     }
 }

@@ -1,9 +1,8 @@
-import type { Effect } from '../api/types';
+import type { ContentRevision, Effect } from '../api/types';
 import { abilities } from '../classBasics';
 import { FormulaField } from './AttackFields';
 import { skillChoices } from './RollModeFields';
 import { useReportedProblem } from './RollFields';
-import type { ContentRevision } from '../api/types';
 
 type RollFloorEffect = Extract<Effect, { type: 'rollFloor' }>;
 type ReportProblem = (field: string, problem: string | undefined) => void;

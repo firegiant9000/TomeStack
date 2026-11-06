@@ -60,6 +60,12 @@ it('adds a roll floor with defaults', async () => {
   expect((await checked()).effect('rollFloor-1')).toMatchObject({ type: 'rollFloor', target: 'check', face: 10 });
 });
 
+it('offers no Automation select for a roll floor (it is always automatic)', async () => {
+  const user = userEvent.setup();
+  const { rule } = await openDraft(user, [{ type: 'rollFloor', id: 'rollFloor-1', target: 'check', face: 8 }]);
+  expect(rule(/^Rule 1: Roll floor/).queryByRole('combobox', { name: 'Automation' })).toBeNull();
+});
+
 it('switching to total clears face and back', async () => {
   const user = userEvent.setup();
   const { rule, checked } = await openDraft(user, [{ type: 'rollFloor', id: 'rollFloor-1', target: 'check', face: 8 }]);

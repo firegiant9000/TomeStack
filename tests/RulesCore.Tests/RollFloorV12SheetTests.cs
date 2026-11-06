@@ -78,6 +78,19 @@ public class RollFloorV12SheetTests
             Assert.Equal(field.Mark != ProficiencyMark.None, field.Floor is not null);
     }
 
+    [Theory]
+    [InlineData(AutomationStatus.Reference, EffectTiming.Always)]
+    [InlineData(AutomationStatus.Assisted, EffectTiming.Always)]
+    [InlineData(AutomationStatus.Automatic, EffectTiming.WhileActive)]
+    public void Stored_non_automatic_or_non_always_floor_is_not_applied(AutomationStatus automation, EffectTiming timing)
+    {
+        var floor = Floor("f", "check", face: 8) with { Automation = automation, Timing = timing };
+        var sheet = Sheet(Handler(), Feature("Fixture Floor F", 6, floor));
+
+        Assert.Null(sheet.Field(FieldIds.Skill("stealth")).Floor);
+        Assert.Empty(Reached(sheet));
+    }
+
     [Fact]
     public void Proficient_floor_reaches_expertise_skill()
     {

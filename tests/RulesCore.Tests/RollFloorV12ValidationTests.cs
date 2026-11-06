@@ -97,6 +97,14 @@ public class RollFloorV12ValidationTests
         AssertClean(Validate(floor));
     }
 
+    [Theory]
+    [InlineData(AutomationStatus.Assisted, EffectTiming.Always)]
+    [InlineData(AutomationStatus.Reference, EffectTiming.Always)]
+    [InlineData(AutomationStatus.Automatic, EffectTiming.WhileActive)]
+    [InlineData(AutomationStatus.Automatic, EffectTiming.OnRoll)]
+    public void Non_automatic_or_non_always_roll_floor_is_refused(AutomationStatus automation, EffectTiming timing) =>
+        AssertError(Validate(Floor(f => f with { Automation = automation, Timing = timing })), "validate.roll-floor-automation");
+
     [Fact]
     public void Proficient_false_still_requires_12()
     {

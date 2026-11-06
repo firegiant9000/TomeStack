@@ -180,7 +180,7 @@ The fourth gap is a minimum on a check: content that says "when you make this ki
 - Content can set a minimum d20 face or a minimum total on checks, optionally only on skills the character is proficient in. A revision without it keeps its version, bytes and hash; a v11 revision holding a `rollFloor` keeps it as unknown data and ignores it.
 - The sheet lists the floor on each field it reaches. The Homebrew Studio authors it (a "Floor on" choice of "The d20" or "The total", an "At least" value that is a number from 2 to 20 or a formula, and an "Only when proficient" box).
 - A revision that uses it needs content schema 12 (`validate.requires-v12`). A package that holds one warns `package.needs-newer-build`.
-- New codes: `validate.roll-floor-target`, `validate.roll-floor-value`.
+- New codes: `validate.roll-floor-target`, `validate.roll-floor-value`, `validate.roll-floor-automation` (a roll floor is always automatic and always on; validation refuses other automation or timing, and the sheet skips such stored content).
 - The capability registry gains a `rollFloor` row (Automatic, "Applied when a check field is rolled"). The down-conversion coverage count is unchanged by the new drop.
 
 ### Not doing (G9)

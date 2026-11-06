@@ -719,7 +719,7 @@ Decided in [ADR-022](../decisions/ADR-022-content-v12.md#slice-g9-roll-floor) (L
 
 **Studio.** A floor is authored with its target, a "Floor on" choice of "The d20" or "The total", an "At least" value (a number from 2 to 20, or a formula) and an "Only when proficient" box.
 
-**Validation** (errors): `validate.roll-floor-target`, `validate.roll-floor-value`; below v12 `validate.requires-v12` applies as for every v12 field. The capability registry lists `rollFloor` as Automatic ("Applied when a check field is rolled").
+**Validation** (errors): `validate.roll-floor-target`, `validate.roll-floor-value`, `validate.roll-floor-automation` (a roll floor is always automatic and always on; any other automation or timing is refused); below v12 `validate.requires-v12` applies as for every v12 field. The capability registry lists `rollFloor` as Automatic ("Applied when a check field is rolled").
 
 **Older versions.** For an older TomeStack ([package-format.md](package-format.md#save-for-an-older-tomestack-d85)) a `rollFloor` is dropped whole and listed (`below.effect-unsupported`): it only raises a roll, so the copy is weaker (ADR-022, G9 decision 5).
 
