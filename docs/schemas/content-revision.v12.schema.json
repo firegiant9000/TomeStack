@@ -198,8 +198,8 @@
     },
     "fieldId": {
       "type": "string",
-      "pattern": "^(initiative|attacks|criticalRange|proficiencyBonus|armorClass|hitPoints|spellAttack|spellSaveDc|pactSlots|speed|speed\\.fly|passive\\.(perception|insight|investigation)|spellSlots\\.[1-9]|ability\\.(str|dex|con|int|wis|cha)\\.(score|mod)|save\\.(str|dex|con|int|wis|cha)|skill\\.[a-z][a-zA-Z]*|resource\\.[^\\s.]+)$",
-      "description": "Content v11 (D43): resource.<id> names a resource of the same revision; only a modifier uses it (the validator refuses it elsewhere). speed.fly is a fly speed in feet."
+      "pattern": "^(initiative|attacks|criticalRange|proficiencyBonus|armorClass|hitPoints|spellAttack|spellSaveDc|pactSlots|speed|speed\\.fly|speed\\.climb|speed\\.swim|passive\\.(perception|insight|investigation)|spellSlots\\.[1-9]|ability\\.(str|dex|con|int|wis|cha)\\.(score|mod)|save\\.(str|dex|con|int|wis|cha)|skill\\.[a-z][a-zA-Z]*|resource\\.[^\\s.]+)$",
+      "description": "Content v11 (D43): resource.<id> names a resource of the same revision; only a modifier uses it (the validator refuses it elsewhere). speed.fly is a fly speed in feet. Content v12 (G10): speed.climb and speed.swim are a climb and a swim speed in feet (base 0); a modifier on speed.fly, speed.climb or speed.swim may read SPEED. (the walking speed), which is an unknown identifier anywhere else."
     },
     "grantFieldId": {
       "type": "string",

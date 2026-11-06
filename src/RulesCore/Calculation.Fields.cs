@@ -77,6 +77,17 @@ public static partial class CharacterCalculator
             steps.Add(new(FieldIds.FlySpeed, "base", "No flying speed unless content gives one", 0, 0, new(TraceOriginKind.RulesPolicy, c.Family)));
             return 0;
         }));
+        // Content v12 (G10): climbing and swimming speeds, none by default; content may target them only from v12.
+        specs.Add(new(FieldIds.ClimbSpeed, "Climb speed", "feet", [], (c, steps) =>
+        {
+            steps.Add(new(FieldIds.ClimbSpeed, "base", "No climbing speed unless content gives one", 0, 0, new(TraceOriginKind.RulesPolicy, c.Family)));
+            return 0;
+        }));
+        specs.Add(new(FieldIds.SwimSpeed, "Swim speed", "feet", [], (c, steps) =>
+        {
+            steps.Add(new(FieldIds.SwimSpeed, "base", "No swimming speed unless content gives one", 0, 0, new(TraceOriginKind.RulesPolicy, c.Family)));
+            return 0;
+        }));
         specs.Add(new(FieldIds.Initiative, "Initiative", "modifier", [FieldIds.Modifier(Ability.Dex)], (c, steps) =>
         {
             var value = c.Values[FieldIds.Modifier(Ability.Dex)];

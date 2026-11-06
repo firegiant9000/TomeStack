@@ -521,10 +521,14 @@ public static partial class CharacterCalculator
     /// <summary>
     /// Content schema v11 (D43): fly speed is a content target only from v11. Below it the validator refuses it and the
     /// calculator ignores such a modifier with the same diagnostic as <see cref="IsCharacterOnlyField"/>, so a stored older
-    /// revision never moves it, whatever it says.
+    /// revision never moves it, whatever it says. Content v12 (G10): climb and swim speed are content targets only from v12, the same way.
     /// </summary>
     public static bool IsPlayMechanicsOnlyField(string field, int schemaVersion) =>
-        field == FieldIds.FlySpeed && schemaVersion < ContentRevision.PlayMechanicsSchemaVersion;
+        (field == FieldIds.FlySpeed && schemaVersion < ContentRevision.PlayMechanicsSchemaVersion)
+        || (IsClimbOrSwim(field) && schemaVersion < ContentRevision.ClimbSwimSchemaVersion);
+
+    /// <summary>Content v12 (G10): the climb and swim speed fields.</summary>
+    public static bool IsClimbOrSwim(string field) => field is FieldIds.ClimbSpeed or FieldIds.SwimSpeed;
 
     /// <summary>Speed and the passive scores: the fields content may target only from schema v10.</summary>
     public static bool IsSpeedOrPassive(string field) =>
@@ -547,7 +551,7 @@ public static partial class CharacterCalculator
         var modifiers = new List<Modifier>();
         foreach (var effect in revision.Effects.OfType<ModifierEffect>())
         {
-            if (SpecIndex.ContainsKey(effect.Target) && !IsCharacterOnlyField(effect.Target, revision.SchemaVersion) && !IsPlayMechanicsOnlyField(effect.Target, revision.SchemaVersion) && Formula.TryParse(effect.Value, Formula.FeaturesFor(revision), out var formula, out _))
+            if (SpecIndex.ContainsKey(effect.Target) && !IsCharacterOnlyField(effect.Target, revision.SchemaVersion) && !IsPlayMechanicsOnlyField(effect.Target, revision.SchemaVersion) && Formula.TryParse(effect.Value, Formula.ModifierFeaturesFor(revision, effect.Target), out var formula, out _))
                 modifiers.Add(new(content, effect, formula!, [.. formula!.Identifiers.Select(FormulaIdentifiers.FieldFor).OfType<string>().Distinct(StringComparer.Ordinal)]));
         }
         var diagnostics = new List<Diagnostic>();

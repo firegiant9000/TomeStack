@@ -426,7 +426,7 @@ public static partial class CharacterCalculator
                     manual.Add(effect.Target);
                     continue;
                 }
-                if (!Formula.TryParse(effect.Value, Formula.FeaturesFor(revision), out var formula, out var error))
+                if (!Formula.TryParse(effect.Value, Formula.ModifierFeaturesFor(revision, effect.Target), out var formula, out var error))
                 {
                     warnings[effect.Target].Add(InvalidFormula(revision, effect, error!));
                     manual.Add(effect.Target);

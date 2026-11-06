@@ -41,6 +41,14 @@ public static class FormulaIdentifiers
     /// </summary>
     public const string HitPointMaximum = "HP.MAX";
 
+    /// <summary>
+    /// Content schema v12 (G10): <c>SPEED</c>, the walking speed. Only a modifier on <c>speed.climb</c>, <c>speed.swim</c> or
+    /// <c>speed.fly</c> of a v12 revision may read it (<see cref="FormulaFeatures.Speed"/>). It is not in <see cref="All"/> or
+    /// <see cref="IsKnown"/>, so everywhere else it stays an unknown identifier with the usual message; it does read the
+    /// <c>speed</c> field, so dependency order sees it.
+    /// </summary>
+    public const string Speed = "SPEED";
+
     private static readonly Dictionary<string, string?> Fields = Build();
 
     public static IEnumerable<string> All => Fields.Keys;
@@ -62,7 +70,7 @@ public static class FormulaIdentifiers
     public static string ValueId(string identifier) => identifier[ValuePrefix.Length..];
 
     /// <summary>The field an identifier reads, or null for inputs that are not derived fields (LEVEL, CLASS_LEVEL).</summary>
-    public static string? FieldFor(string identifier) => Fields.GetValueOrDefault(identifier);
+    public static string? FieldFor(string identifier) => identifier == Speed ? FieldIds.Speed : Fields.GetValueOrDefault(identifier);
 
     private static Dictionary<string, string?> Build()
     {
@@ -93,6 +101,9 @@ public enum FormulaFeatures
     Scales = 1,
     Values = 2,
     HitPointMaximum = 4,
+
+    /// <summary>Content v12 (G10): <c>SPEED</c>. No revision gets it by default; <see cref="Formula.ModifierFeaturesFor"/> adds it for a speed modifier.</summary>
+    Speed = 8,
 }
 
 /// <summary>Immutable formula AST. Only these node kinds exist; there is no way to express a call to user code.</summary>
@@ -145,6 +156,17 @@ public sealed class Formula
         return (revision.SchemaVersion >= ScaleEffect.SchemaVersion ? FormulaFeatures.Scales : FormulaFeatures.None)
             | (revision.SchemaVersion >= ValueEffect.SchemaVersion ? FormulaFeatures.Values : FormulaFeatures.None);
     }
+
+    /// <summary>
+    /// The identifiers a modifier's value may use: <see cref="FeaturesFor"/>, plus <c>SPEED</c> when the revision is v12 or later
+    /// and the modifier targets <c>speed.climb</c>, <c>speed.swim</c> or <c>speed.fly</c> (G10).
+    /// </summary>
+    public static FormulaFeatures ModifierFeaturesFor(ContentRevision revision, string target) =>
+        FeaturesFor(revision) | (AllowsSpeed(revision.SchemaVersion, target) ? FormulaFeatures.Speed : FormulaFeatures.None);
+
+    /// <summary>Whether a modifier on <paramref name="target"/> in a revision of <paramref name="schemaVersion"/> may read <c>SPEED</c>.</summary>
+    public static bool AllowsSpeed(int schemaVersion, string target) =>
+        schemaVersion >= ContentRevision.ClimbSwimSchemaVersion && target is FieldIds.FlySpeed or FieldIds.ClimbSpeed or FieldIds.SwimSpeed;
 
     public static bool TryParse(string? source, out Formula? formula, out FormulaError? error) =>
         TryParse(source, FormulaFeatures.None, out formula, out error);
@@ -375,7 +397,8 @@ public sealed class Formula
                     if (!FormulaIdentifiers.IsKnown(token.Text)
                         && !(features.HasFlag(FormulaFeatures.Scales) && FormulaIdentifiers.IsScale(token.Text))
                         && !(features.HasFlag(FormulaFeatures.Values) && FormulaIdentifiers.IsValue(token.Text))
-                        && !(features.HasFlag(FormulaFeatures.HitPointMaximum) && token.Text == FormulaIdentifiers.HitPointMaximum))
+                        && !(features.HasFlag(FormulaFeatures.HitPointMaximum) && token.Text == FormulaIdentifiers.HitPointMaximum)
+                        && !(features.HasFlag(FormulaFeatures.Speed) && token.Text == FormulaIdentifiers.Speed))
                         throw new FormulaException("formula.unknown-identifier", $"'{Truncate(token.Text)}' is not a known value. Use one of: {string.Join(", ", FormulaIdentifiers.All)}.");
                     Identifiers.Add(token.Text);
                     return new IdentifierNode(token.Text);

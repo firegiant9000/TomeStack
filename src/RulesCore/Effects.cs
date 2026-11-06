@@ -55,6 +55,15 @@ public static class FieldIds
     /// </summary>
     public const string FlySpeed = "speed.fly";
 
+    /// <summary>
+    /// Content schema v12 (G10): climbing speed in feet, base 0 (no climbing speed). Content may target it only from v12
+    /// (<see cref="CharacterCalculator.IsPlayMechanicsOnlyField"/>).
+    /// </summary>
+    public const string ClimbSpeed = "speed.climb";
+
+    /// <summary>Content schema v12 (G10): swimming speed in feet, base 0 (no swimming speed). Content may target it only from v12.</summary>
+    public const string SwimSpeed = "speed.swim";
+
     public static string Key(Ability ability) => ability.ToString().ToLowerInvariant();
 }
 
