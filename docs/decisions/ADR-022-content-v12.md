@@ -1,6 +1,6 @@
-# ADR-022: Content schema v12, one slice at a time (G6 first: response triggers and amounts; G7: roll modes on attacks and initiative; G1: scaled dice, critical-only and once-per-turn riders; G9: roll floor on checks)
+# ADR-022: Content schema v12, one slice at a time (G6 first: response triggers and amounts; G7: roll modes on attacks and initiative; G1: scaled dice, critical-only and once-per-turn riders; G9: roll floor on checks; G10: check ability, climb and swim speed)
 
-Status: **accepted** for the slice list and for slices G6, G7, G1 and G9 (owner, 2026-10-28: LIVING_SPECS D76 and B4; D86, D87, D88, D89; G9 design rulings 2026-11-05). Slice G6 is built on branch `v12-g6`, slice G7 on `v12-g7` (stacked on G6), slice G1 on `v12-g1` (stacked on G7), slice G9 on `v12-g9` (stacked on G1). The warn-or-block judgement for G6's down-conversion (decision 6), the one for G7's (G7 decision 6) and the one for G1's (G1 decision 6), and "once per turn is offered, not tracked" (G1 decision 4), are proposals that await the owner.
+Status: **accepted** for the slice list and for slices G6, G7, G1, G9 and G10 (owner, 2026-10-28: LIVING_SPECS D76 and B4; D86, D87, D88, D89, D90; G9 and G10 design rulings 2026-11-05). Slice G6 is built on branch `v12-g6`, slice G7 on `v12-g7` (stacked on G6), slice G1 on `v12-g1` (stacked on G7), slice G9 on `v12-g9` (stacked on G1), slice G10 on `v12-g10` (stacked on G9). The warn-or-block judgement for G6's down-conversion (decision 6), the one for G7's (G7 decision 6) and the one for G1's (G1 decision 6), and "once per turn is offered, not tracked" (G1 decision 4), are proposals that await the owner.
 Date: 2026-11-05
 
 ## Context
@@ -34,7 +34,7 @@ The first gap (G6) is in the damage panel. A `response` effect (v11, ADR-018 and
 
 ### The slice list
 
-G6 was built first, G7 second, G1 (with G2 and G3) third (below). The remaining slices follow in the order G9, G10, G11, G5 and G4 (the gap ids are in [effect-vocabulary-coverage.md](../features/effect-vocabulary-coverage.md)). Each extends this ADR with its own decisions and evidence, keeps every new member optional, and adds its own lowering rule.
+G6 was built first, G7 second, G1 (with G2 and G3) third, G9 fourth and G10 fifth (below). The remaining slices follow in the order G11, G5 and G4 (the gap ids are in [effect-vocabulary-coverage.md](../features/effect-vocabulary-coverage.md)). Each extends this ADR with its own decisions and evidence, keeps every new member optional, and adds its own lowering rule.
 
 **0.8.0 waits for every slice** (owner ruling, 2026-11-04): the bundled classes get new v12 revisions only when v12 is complete, and no release is cut while v12 is open. Until then G6 and G7 sit on their branches and, once merged, in `main`.
 
@@ -198,4 +198,45 @@ The fourth gap is a minimum on a check: content that says "when you make this ki
 - UI: `src/Ui/src/components/HomebrewStudioRollFloors.test.tsx` (authoring) and `rollText.test.ts` (the roll text).
 - The original fixture pack `tests/RulesFixtures/fixture-pack-roll-floor.json`.
 
-Related: [ADR-018](ADR-018-play-mechanics.md), [ADR-021](ADR-021-mechanics-beyond-d43.md), [ADR-023](ADR-023-down-conversion-export.md), [play-mechanics.md](../features/play-mechanics.md#content-v12-g6-response-triggers-and-amounts), [its G7 section](../features/play-mechanics.md#content-v12-g7-roll-modes-on-attacks-and-initiative), [its G1 section](../features/play-mechanics.md#content-v12-g1-scaled-dice-critical-only-and-once-per-turn-riders) and [its G9 section](../features/play-mechanics.md#content-v12-g9-roll-floor), LIVING_SPECS D76, D86, D87, D88 and D89. Supersedes: none.
+## Slice G10: check ability, climb and swim speed
+
+The fifth gap is two small things content could not say in v11: "this skill may use another ability" (the skill takes whichever of the two modifiers is higher), and a climbing or swimming speed, including one that is a share of the walking speed ("a climb speed equal to your walking speed").
+
+### Decision (G10)
+
+1. **A new kind `checkAbility` (v12)** (owner ruling, 2026-11-05): `{ "target", "ability" }`. `target` is `skill.<s>` (a known skill) or `ability.<x>.check`, meaning every skill whose **printed** ability is x. It never reaches a bare ability check, initiative or a save. `ability` is the ability the skill may use, written as a roll mode's `ability` is. It must differ from the printed ability of every skill it reaches (`validate.check-ability-target`, `validate.check-ability-ability`). There is no toggle, condition or tag: a situational substitution stays text.
+2. **"May use."** A skill's base is the highest modifier among its printed ability and every candidate. On a tie the printed ability wins, then content order, so the kind only ever helps. Roll modes and G9 floors follow the ability the skill ended up using: with a Dexterity-based Athletics, `ability.dex.check` advantage reaches it and `ability.str.check` disadvantage no longer does. A skill with no substitution keeps its printed ability.
+3. **Always on.** `automation` must be `automatic` and `timing` `always` (`validate.check-ability-automation`); the sheet skips stored content that breaks this, and the studio hides the two selects. This is the G9 `rollFloor` pattern.
+4. **Sheet.** When a substitute wins, the skill's base step reads "{Label} starts at the {Ability} modifier ({source} lets you use {Ability} instead of {Printed})", carries the content origin and takes the chosen modifier as an input; the skill's reads become that modifier and the proficiency bonus. A substitute that cannot win changes nothing: same value, same steps, no new input. Passive scores follow the skill.
+5. **Climb and swim speed.** Two new fields, `speed.climb` ("Climb speed") and `speed.swim` ("Swim speed"), in feet, base 0 ("No climbing speed unless content gives one"). Content may target them only from v12 (`validate.requires-v12`). The sheet shows them in the Combat group and in the summary after Fly ("Climb 30 ft."), hidden at 0 unless overridden.
+6. **`SPEED`.** A speed modifier on `speed.climb`, `speed.swim` or `speed.fly` may read `SPEED` (the walking speed, as in `SPEED / 2`); it needs v12 (`validate.requires-v12`) and stays an unknown identifier everywhere else (armor class, skills, any other target, a v11 revision). The formula preview has no value for it. The cycle the first design guarded against cannot arise: formulas read only ability scores and modifiers, the proficiency bonus, levels, class levels and `SPEED`, never skills, so no `checkAbility` can feed back into its own inputs.
+7. **Down-conversion** (ADR-023, owner rulings). At the 12 to 11 rung: a `checkAbility` is **dropped whole** and listed (`below.effect-unsupported`). Every **modifier** on `speed.climb` or `speed.swim` is dropped (`below.unknown-target`): the older version has no such field, so the copy has no such speed. A **restriction** on either **blocks** (`below.restriction-lifted`; follow-up ruling, 2026-11-05): dropping it would lift a limit on the character. A `speed.fly` modifier whose value reads `SPEED` is dropped when it is a `bonus` or `replace` with a formula that cannot be negative (the copy is weaker), and blocks when it is a `set` or the formula might be negative (`below.value-formula`).
+8. **Registry.** `checkAbility` is Automatic ("Applied to the skill's value on the sheet").
+9. **Numbers.** No new ADR and no schema bump (`ContentRevision.CurrentSchemaVersion` stays 12; nothing new is stored on a character). The decision row is D90.
+
+### Consequences (G10)
+
+- Content can let a skill, or every skill of one ability, use another ability, and can give a climb or swim speed, including one tied to the walking speed. A revision without any of it keeps its version, bytes and hash; a v11 revision holding a `checkAbility` keeps it as unknown data and ignores it. Every sheet gains two fields, `speed.climb` and `speed.swim`, at 0; nothing else on a v11-style sheet moves.
+- The Homebrew Studio authors the substitution (a rule titled "Use another ability for a skill", button "Add check ability"; a "Skill" choice of "Every Strength skill" and so on, then each skill; a "Uses instead" choice) and shows a hint in the modifier editor: "You can use SPEED (your walking speed) in a climb, swim or fly speed modifier, such as SPEED / 2."
+- A revision that uses any of it needs content schema 12 (`validate.requires-v12`). A package that holds one warns `package.needs-newer-build`.
+- New codes: `validate.check-ability-target`, `validate.check-ability-ability`, `validate.check-ability-automation`.
+- The capability registry gains a `checkAbility` row. The down-conversion coverage count is unchanged by the new drops.
+
+### Not doing (G10)
+
+- **Situational substitutions** (toggles, conditions: "while climbing").
+- **Saves, initiative and bare ability checks** as targets, and a forced (lower) ability.
+- **Constitution as a target.** No skill is printed with it, so `ability.con.check` is refused and the studio does not offer "Every Constitution skill". The targets are every Strength, Dexterity, Intelligence, Wisdom or Charisma skill, or one skill.
+- **Jump distance** (no field) and **`SPEED` outside speed modifiers.**
+- **Re-authoring bundled SRD features.** The correction to the coverage notes: Acrobatic Movement (5.2.1) is not a G10 feature (it grants no speed and no check, only vertical surfaces and liquids while unarmored) and stays text. Of the two Second-Story Work versions, 5.1 has no speed; only the 5.2.1 climb speed is expressible, and its jump line is not.
+
+### Evidence (G10)
+
+- `tests/RulesCore.Tests/CheckAbilityV12SchemaTests.cs` and `CheckAbilityV12ValidationTests.cs` (the members, the version rung, the validator codes).
+- `tests/RulesCore.Tests/CheckAbilityV12SheetTests.cs` (highest wins, tie, step text, roll modes and floors follow the ability used) and `ClimbSwimV12Tests.cs` (the fields, `SPEED` scope).
+- `tests/RulesCore.Tests/DownConvertV12Tests.cs` (the drops and the blocks).
+- `tests/AppService.Tests/CheckAbilityV12ServiceTests.cs` and `CheckAbilityV12SchemaFileTests.cs` (the sheet through the service; the published JSON schema).
+- UI: `src/Ui/src/components/HomebrewStudioCheckAbility.test.tsx` (authoring), `CharacterSheet.test.tsx` and `SheetSummary.test.tsx` (climb and swim speed shown).
+- The original fixture pack `tests/RulesFixtures/fixture-pack-check-ability.json`.
+
+Related: [ADR-018](ADR-018-play-mechanics.md), [ADR-021](ADR-021-mechanics-beyond-d43.md), [ADR-023](ADR-023-down-conversion-export.md), [play-mechanics.md](../features/play-mechanics.md#content-v12-g6-response-triggers-and-amounts), [its G7 section](../features/play-mechanics.md#content-v12-g7-roll-modes-on-attacks-and-initiative), [its G1 section](../features/play-mechanics.md#content-v12-g1-scaled-dice-critical-only-and-once-per-turn-riders) [its G9 section](../features/play-mechanics.md#content-v12-g9-roll-floor) and [its G10 section](../features/play-mechanics.md#content-v12-g10-check-ability-climb-and-swim-speed), LIVING_SPECS D76, D86, D87, D88, D89 and D90. Supersedes: none.
