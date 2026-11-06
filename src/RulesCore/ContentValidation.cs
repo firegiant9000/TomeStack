@@ -270,6 +270,9 @@ public static class ContentValidator
                 needsV10 |= CharacterCalculator.IsSpeedOrPassive(modifier.Target); // allowed: this revision is v10
             // Content v11 (D43): fly speed. Below v11 the revision gets validate.requires-v11 (and the calculator ignores it).
             needsV11 |= modifier.Target == FieldIds.FlySpeed;
+            // Content v12 (G10): climb and swim speed. Below v12 the revision gets validate.requires-v12 (and the calculator ignores it).
+            if (CharacterCalculator.IsClimbOrSwim(modifier.Target))
+                NeedV12("a climb or swim speed");
             // Content v8: a lower critical range is better, but set and replace keep the highest value, so only a
             // bonus (such as -1 for Improved Critical) can lower it.
             if (modifier.Target == FieldIds.CriticalRange && modifier.Operation != ModifierOperation.Bonus)
@@ -280,7 +283,10 @@ public static class ContentValidator
                 Error("validate.while-armored-replace", $"Effect '{modifier.Id}' replaces Armor Class only while armor is worn, but worn armor sets the base Armor Class itself, so it could never apply. Use a bonus.", modifier.Id);
             if (modifier.Stacking == StackingRule.HighestInGroup && string.IsNullOrWhiteSpace(modifier.StackGroup))
                 Error("validate.stack-group-missing", $"Effect '{modifier.Id}' uses highest-in-group stacking without a stackGroup.", modifier.Id);
-            CheckFormula(modifier.Value, modifier.Id, "value");
+            // Content v12 (G10): SPEED (the walking speed) is readable only here, by a climb, swim or fly speed modifier of a v12 revision;
+            // elsewhere, and below v12, it is an unknown identifier.
+            CheckFormula(modifier.Value, modifier.Id, "value",
+                features: AllFormulaFeatures | (Formula.AllowsSpeed(revision.SchemaVersion, modifier.Target) ? FormulaFeatures.Speed : FormulaFeatures.None));
             if (modifier.Toggle is { } toggle)
             {
                 needsV6 = true;
@@ -590,6 +596,8 @@ public static class ContentValidator
                     else
                         needsV10 |= CharacterCalculator.IsSpeedOrPassive(restriction.Field);
                     needsV11 |= restriction.Field == FieldIds.FlySpeed;
+                    if (CharacterCalculator.IsClimbOrSwim(restriction.Field))
+                        NeedV12("a climb or swim speed");
                     if (Math.Abs(restriction.Minimum) > FormulaLimits.MaxLiteral)
                         Error("validate.restriction-minimum", $"Restriction '{restriction.Id}' minimum {restriction.Minimum} is outside ±{FormulaLimits.MaxLiteral}.", restriction.Id);
                     break;
@@ -1061,6 +1069,8 @@ public static class ContentValidator
         {
             usedScales.UnionWith(formula.Identifiers.Where(FormulaIdentifiers.IsScale).Select(FormulaIdentifiers.ScaleId));
             usedValues.UnionWith(formula.Identifiers.Where(FormulaIdentifiers.IsValue).Select(FormulaIdentifiers.ValueId));
+            if (formula.Identifiers.Contains(FormulaIdentifiers.Speed))
+                NeedV12("the SPEED formula identifier");
         }
 
         // Content v11 (D43): a roll's save, area, range, targets and per-unit dice.
