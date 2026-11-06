@@ -537,6 +537,9 @@ public static class DownConvert
                     case CompanionEffect.TypeName:
                         changes.Add(new(path, BelowAction.Dropped, BelowCodes.EffectUnsupported, $"'{name}': a companion card; its attacks and pools remain as the character's own."));
                         continue;
+                    case RollFloorEffect.TypeName:
+                        changes.Add(new(path, BelowAction.Dropped, BelowCodes.EffectUnsupported, $"'{name}': its roll floor; the feature stays as text."));
+                        continue;
                     case ResponseEffect.TypeName:
                         // Only "automatic" is harmless to lose; the rest would make an older build offer a wider, stronger response.
                         if (ResponseEffect.V12Keys.Any(k => k != "automatic" && effect.Any(p => string.Equals(p.Key, k, StringComparison.OrdinalIgnoreCase))))

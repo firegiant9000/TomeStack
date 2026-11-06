@@ -127,6 +127,54 @@ public class DownConvertV12Tests
         Assert.All(ContentValidator.Validate(result.Revision, Fixtures.M1Catalog()).Errors, e => Assert.Equal("validate.source-missing", e.Code));
     }
 
+    private const string BiteAttack = """{"type":"attack","id":"bite","attackId":"bite","label":"Bite","kind":"melee","abilities":["str"],"damage":{"count":"1","die":"6"},"damageType":"piercing"}""";
+
+    [Theory]
+    [InlineData("""{"type":"rollFloor","id":"f","target":"skill.stealth","face":12}""")]
+    [InlineData("""{"type":"rollFloor","id":"f","target":"check","total":"STR.SCORE"}""")]
+    public void RollFloor_is_dropped_whole_below_12(string floor)
+    {
+        var result = DownConvert.Below(Rev($"{BiteAttack},{floor}"), 11);
+
+        Assert.False(result.Blocked);
+        Assert.Equal(11, result.Revision.SchemaVersion);
+        Assert.IsType<AttackEffect>(Assert.Single(result.Revision.Effects));
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(BelowCodes.EffectUnsupported, change.Code);
+        Assert.Equal(BelowAction.Dropped, change.Action);
+        Assert.Equal("effects[1]", change.Path);
+        Assert.Contains("its roll floor; the feature stays as text.", change.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RollFloor_not_at_index_zero_reports_its_own_index()
+    {
+        var claw = """{"type":"attack","id":"claw","attackId":"claw","label":"Claw","kind":"melee","abilities":["str"],"damage":{"count":"1","die":"4"},"damageType":"slashing"}""";
+        var floor = """{"type":"rollFloor","id":"f","target":"check","face":10}""";
+        var result = DownConvert.Below(Rev($"{BiteAttack},{claw},{floor}"), 11);
+
+        Assert.False(result.Blocked);
+        Assert.Equal(2, result.Revision.Effects.Count);
+        Assert.All(result.Revision.Effects, e => Assert.IsType<AttackEffect>(e));
+        var change = Assert.Single(result.Changes);
+        Assert.Equal("effects[2]", change.Path);
+        Assert.Equal(BelowCodes.EffectUnsupported, change.Code);
+        Assert.Equal(BelowAction.Dropped, change.Action);
+    }
+
+    [Fact]
+    public void Lowered_copy_with_a_dropped_rollFloor_validates_at_11()
+    {
+        var floor = """{"type":"rollFloor","id":"f","target":"check","total":"STR.SCORE"}""";
+        var result = DownConvert.Below(Rev($"{BiteAttack},{floor}"), 11);
+
+        Assert.Equal(11, result.Revision.SchemaVersion);
+        Assert.IsType<AttackEffect>(Assert.Single(result.Revision.Effects));
+        Assert.Equal(BelowCodes.EffectUnsupported, Assert.Single(result.Changes).Code);
+        Assert.DoesNotContain(BelowCodes.ValidationError, result.Changes.Select(c => c.Code));
+        Assert.All(ContentValidator.Validate(result.Revision, Fixtures.M1Catalog()).Errors, e => Assert.Equal("validate.source-missing", e.Code));
+    }
+
     private const string PlainResponse = """{"type":"response","id":"soak","responseId":"soak","label":"Soak","phase":"damageReduction","amount":"1"}""";
 
     private static string ResponseWith(string extra) =>
