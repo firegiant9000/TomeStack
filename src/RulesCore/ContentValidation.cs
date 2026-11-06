@@ -577,7 +577,7 @@ public static class ContentValidator
                 case RollFloorEffect rollFloor:
                     NeedV12("a rollFloor");
                     if (!IsRollFloorTarget(rollFloor.Target))
-                        Error("validate.roll-floor-target", $"Roll floor '{rollFloor.Id}' targets '{rollFloor.Target}'; use check, ability.<ability>.check (such as ability.str.check) or skill.<skill> (such as skill.stealth). A floor never reaches saves, attacks or initiative.", rollFloor.Id);
+                        Error("validate.roll-floor-target", $"Roll floor '{rollFloor.Id}' targets '{rollFloor.Target}'; use check, ability.<ability>.check (such as ability.str.check) or skill.<skill> (such as skill.stealth). A floor never reaches saves or attacks.", rollFloor.Id);
                     if (rollFloor.Face is not null && rollFloor.Total is not null)
                         Error("validate.roll-floor-value", $"Roll floor '{rollFloor.Id}' has both a face and a total; use exactly one.", rollFloor.Id);
                     else if (rollFloor.Face is null && rollFloor.Total is null)

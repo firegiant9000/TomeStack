@@ -717,7 +717,7 @@ Decided in [ADR-022](../decisions/ADR-022-content-v12.md#slice-g9-roll-floor) (L
 
 **Rolling.** Only rolling a field applies a floor; attack, damage, save, death save, roll-effect, spell and custom rolls never do. Each d20 of the roll below the face is raised before keeping, and the last roll shows both values ("7 → 10 (floor)"). The total is then floored after modifiers ("total 12 raised to 16 (source)").
 
-**Studio.** A floor is authored with its target, a "Minimum d20 face" or "Minimum total", and a proficient-only box.
+**Studio.** A floor is authored with its target, a "Floor on" choice of "The d20" or "The total", an "At least" value (a number from 2 to 20, or a formula) and an "Only when proficient" box.
 
 **Validation** (errors): `validate.roll-floor-target`, `validate.roll-floor-value`; below v12 `validate.requires-v12` applies as for every v12 field. The capability registry lists `rollFloor` as Automatic ("Applied when a check field is rolled").
 
