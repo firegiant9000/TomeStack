@@ -158,6 +158,31 @@ public static class ContentValidator
         return target.StartsWith("ability.", StringComparison.Ordinal) && target.EndsWith(".check", StringComparison.Ordinal) && IsRollModeTarget(target);
     }
 
+    /// <summary>
+    /// Content v12 (G10): the targets of a <c>checkAbility</c>: <c>skill.&lt;skill&gt;</c> (a known skill) or <c>ability.&lt;ability&gt;.check</c>
+    /// (every skill whose printed ability it is). <paramref name="printed"/> is the printed ability of the reached skill(s) for a valid target.
+    /// </summary>
+    internal static bool IsCheckAbilityTarget(string? target, out Ability printed)
+    {
+        printed = default;
+        if (target is null)
+            return false;
+        if (target.StartsWith("skill.", StringComparison.Ordinal))
+        {
+            foreach (var skill in CharacterCalculator.Skills)
+            {
+                if (skill.Key == target["skill.".Length..])
+                {
+                    printed = skill.Ability;
+                    return true;
+                }
+            }
+            return false;
+        }
+        return target.StartsWith("ability.", StringComparison.Ordinal) && target.EndsWith(".check", StringComparison.Ordinal)
+            && IsRollModeTarget(target) && CheckAbilityEffect.TryParseAbility(target["ability.".Length..^".check".Length], out printed);
+    }
+
     private static bool IsCharacterOnlyField(string field, ContentRevision revision) =>
         CharacterCalculator.IsCharacterOnlyField(field, revision.SchemaVersion);
 
@@ -387,6 +412,12 @@ public static class ContentValidator
                     NeedV12("a rollFloor");
                     Error("validate.effect-malformed", $"Effect '{unreadableFloor.Id}' has type '{unreadableFloor.DeclaredType}' but a value or field that does not read (it needs a target and exactly one of face, a whole number from 2 to 20, and total, a formula; proficient is true or false); fix it before publishing.", unreadableFloor.Id);
                     break;
+                // Content v12 (G10): from v12 a checkAbility that stays unknown did not read (a target or ability that is not text), so the
+                // substitution would silently not exist. Below v12 it stays an unsupported effect, kept byte for byte.
+                case UnknownEffect { DeclaredType: CheckAbilityEffect.TypeName } unreadableSwap when revision.SchemaVersion >= CheckAbilityEffect.SchemaVersion:
+                    NeedV12("a checkAbility");
+                    Error("validate.effect-malformed", $"Effect '{unreadableSwap.Id}' has type '{unreadableSwap.DeclaredType}' but a value or field that does not read (it needs a target and an ability, both text); fix it before publishing.", unreadableSwap.Id);
+                    break;
                 // Content v11 (D43): from v11 a response is typed; one that stays unknown did not match the shape (a phase or an outcome
                 // kind that names no member, no responseId, label or phase, a toggle or content that is not an id), so the response would
                 // silently not exist. Published at a lower version it would be an unsupported effect, so it blocks.
@@ -593,6 +624,18 @@ public static class ContentValidator
                         Error("validate.roll-floor-value", $"Roll floor '{rollFloor.Id}' has an empty total; give a formula.", rollFloor.Id);
                     else
                         CheckFormula(rollFloor.Total, rollFloor.Id, "total");
+                    break;
+                case CheckAbilityEffect swap:
+                    NeedV12("a checkAbility");
+                    if (swap.Automation != AutomationStatus.Automatic || swap.Timing != EffectTiming.Always)
+                        Error("validate.check-ability-automation", $"Check ability '{swap.Id}' must be automatic and always on; a skill's ability is chosen by the calculator, never by the player.", swap.Id);
+                    var swapTargetOk = IsCheckAbilityTarget(swap.Target, out var swapPrinted);
+                    if (!swapTargetOk)
+                        Error("validate.check-ability-target", $"Check ability '{swap.Id}' targets '{swap.Target}'; use skill.<skill> (such as skill.athletics) or ability.<ability>.check (such as ability.str.check). It never reaches saves, initiative, a bare check or ability.<ability>.mod.", swap.Id);
+                    if (!CheckAbilityEffect.TryParseAbility(swap.Ability, out var swapAbility))
+                        Error("validate.check-ability-ability", $"Check ability '{swap.Id}' uses '{swap.Ability}', which is not an ability; use str, dex, con, int, wis or cha.", swap.Id);
+                    else if (swapTargetOk && swapAbility == swapPrinted)
+                        Error("validate.check-ability-ability", $"Check ability '{swap.Id}' uses '{swap.Ability}', which is already the printed ability of '{swap.Target}'; use a different ability.", swap.Id);
                     break;
                 case ItemModEffect mod:
                     NeedV12("an item mod");
