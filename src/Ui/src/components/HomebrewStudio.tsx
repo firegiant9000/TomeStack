@@ -1733,6 +1733,7 @@ function EffectEditor(props: {
   const names: Record<Effect['type'], string> = {
     modifier: 'Modifier',
     rollMode: 'Roll mode',
+    rollFloor: 'Roll floor', // G9 Task 8 adds the editor; this only names the kind
     response: 'Damage response',
     grant: isDamageDefence(effect) ? 'Damage defence' : 'Granted feature',
     resource: 'Resource',

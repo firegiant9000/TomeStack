@@ -14,12 +14,20 @@ export function rollHeadline(record: RollRecord): string {
   return `${record.provenance?.label || 'Roll'}: ${record.total} (${record.formula}${rollModeText(record)}${record.critical ? ', critical' : ''})`;
 }
 
+/** G9: " · total 12 raised to 16 (source)" when a total floor raised the total; the source is the first reason whose floor is the one applied. */
+function floorTotalText(record: RollRecord): string {
+  const floor = record.floor?.total;
+  if (record.unfloored === undefined || floor === undefined) return '';
+  const source = record.floor?.reasons.find((r) => r.total === floor)?.source;
+  return ` · total ${record.unfloored} raised to ${floor}${source ? ` (${source})` : ''}`;
+}
+
 /** "Dice: d20 14, d20 7 (dropped) · constant N · {modifier} +N …" (no source citation; the region adds that itself). */
 export function diceLine(record: RollRecord): string {
-  const dice = record.dice.map((d) => `d${d.sides} ${d.value}${d.kept ? '' : ' (dropped)'}${d.fromCritical ? ' (critical)' : ''}`).join(', ');
+  const dice = record.dice.map((d) => `d${d.sides} ${d.rolled !== undefined ? `${d.rolled} → ${d.value} (floor)` : d.value}${d.kept ? '' : ' (dropped)'}${d.fromCritical ? ' (critical)' : ''}`).join(', ');
   const constant = record.expressionConstant !== 0 ? ` · constant ${record.expressionConstant}` : '';
   const modifiers = record.modifiers.map((m) => ` · ${m.label} ${m.amount >= 0 ? '+' : ''}${m.amount}`).join('');
-  return `Dice: ${dice}${constant}${modifiers}`;
+  return `Dice: ${dice}${constant}${modifiers}${floorTotalText(record)}`;
 }
 
 /**

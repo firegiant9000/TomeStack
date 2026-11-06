@@ -26,6 +26,20 @@ function rec(over: Partial<RollRecord> = {}): RollRecord {
   };
 }
 
+it('explain renders a floor step and keeps the value step as final', () => {
+  const steps = [
+    step('base', 'Strength modifier', 2, rules, 2),
+    step('add', 'Proficiency bonus', 4, rules, 2),
+    step('floor', 'Roll floor from Fixture: Practised Calm: a d20 below 10 counts as 10', 4, content('Fixture: Practised Calm'), 10),
+  ];
+  const lines = explainSteps(steps);
+  expect(lines).toHaveLength(3);
+  expect(lines[2]).toBe('Roll floor from Fixture: Practised Calm: a d20 below 10 counts as 10');
+  // the roll record's explain carries the same step; the value steps before it are unchanged
+  expect(explainRoll(rec({ explain: steps })).slice(0, 2)).toEqual(explainSteps(steps.slice(0, 2)));
+  expect(explainRoll(rec({ explain: steps }))).toContain(lines[2]);
+});
+
 describe('explainSteps', () => {
   const rows: [string, TraceEntry, StepContext | undefined, string][] = [
     ['base with an amount', step('base', 'Ability score', 14, rules, 14), undefined, 'Starts at 14: Ability score'],
