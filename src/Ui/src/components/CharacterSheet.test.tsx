@@ -1601,6 +1601,33 @@ it('fly speed shows only when above 0', () => {
   expect(screen.getByRole('heading', { name: 'Fly speed: 30 ft.' })).toBeTruthy();
 });
 
+it('hides climb and swim speed at 0', () => {
+  renderSheet(statsWith('speed.climb', 'Climb speed', 0, 'feet'), 'stats');
+  expect(screen.queryByRole('heading', { name: /Climb speed/ })).toBeNull();
+  cleanup();
+  renderSheet(statsWith('speed.swim', 'Swim speed', 0, 'feet'), 'stats');
+  expect(screen.queryByRole('heading', { name: /Swim speed/ })).toBeNull();
+});
+
+it('shows climb speed when above 0 or overridden', async () => {
+  const user = userEvent.setup();
+  renderSheet(statsWith('speed.climb', 'Climb speed', 30, 'feet'), 'stats');
+  expect(screen.getByRole('heading', { name: 'Climb speed: 30 ft.' })).toBeTruthy();
+  cleanup();
+  const v = statsWith('speed.swim', 'Swim speed', 0, 'feet');
+  const overridden: CharacterView = {
+    ...v,
+    sheet: {
+      ...v.sheet,
+      fields: v.sheet.fields.map((f) =>
+        f.field === 'speed.swim' ? { ...f, value: 0, computedValue: 30, override: { field: 'speed.swim', value: 0, reason: 'Fixture sinks' } } : f),
+    },
+  };
+  renderSheet(overridden, 'stats');
+  await user.click(screen.getByRole('heading', { name: /Swim speed/ }));
+  expect(screen.getByRole('button', { name: /Remove override/ })).toBeTruthy();
+});
+
 it('an override of 0 keeps the fly speed card and its Remove override button', async () => {
   const user = userEvent.setup();
   const v = statsWith('speed.fly', 'Fly speed', 0, 'feet');

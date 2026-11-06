@@ -1743,6 +1743,7 @@ function EffectEditor(props: {
     modifier: 'Modifier',
     rollMode: 'Roll mode',
     rollFloor: 'Roll floor',
+    checkAbility: 'Use another ability for a skill',
     response: 'Damage response',
     grant: isDamageDefence(effect) ? 'Damage defence' : 'Granted feature',
     resource: 'Resource',

@@ -1996,6 +1996,12 @@ export type Effect =
       total?: string;
       proficient?: boolean;
     })
+  // Content v12 (G10): a skill check uses `ability` instead of its usual one.
+  | (EffectBase & {
+      type: 'checkAbility';
+      target: string;
+      ability: string;
+    })
   // Content v11 (D43 S7): a damage-time response. `amount` belongs to a damageReduction or hitPointOutcome response, `when` to a threshold one.
   | (EffectBase & {
       type: 'response';
