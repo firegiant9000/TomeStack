@@ -1,0 +1,90 @@
+{
+  "packId": "tomestack-check-ability-fixtures",
+  "formatVersion": 1,
+  "notice": "Original TomeStack test fixtures (content v12 G10: a skill that may use another ability, climb and swim speed). Invented; no SRD or third-party rules text.",
+  "sources": [
+    {
+      "id": "6f145000-0000-4000-8000-000000001501",
+      "title": "TomeStack Fixtures: Check Ability v12",
+      "publisher": "TomeStack project",
+      "rulesFamilies": ["srd-5.2.1"],
+      "editionVersion": "fixture-1",
+      "license": "Original test fixture",
+      "redistributable": true,
+      "attribution": "Written for TomeStack tests."
+    }
+  ],
+  "revisions": [
+    {
+      "contentId": "6f14c000-0000-4000-8000-000000001501",
+      "revisionId": "6f14e000-0000-4000-8000-000000001501",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Fixture: Limber Grasp",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f145000-0000-4000-8000-000000001501", "page": { "start": 1 } },
+      "status": "published",
+      "summary": "A test feature: Athletics may use Dexterity instead of Strength.",
+      "effects": [
+        { "type": "checkAbility", "id": "grasp", "target": "skill.athletics", "ability": "dex" }
+      ]
+    },
+    {
+      "contentId": "6f14c000-0000-4000-8000-000000001502",
+      "revisionId": "6f14e000-0000-4000-8000-000000001502",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Fixture: Bookish Hunch",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f145000-0000-4000-8000-000000001501", "page": { "start": 2 } },
+      "status": "published",
+      "summary": "A test feature: every Intelligence skill may use Wisdom instead.",
+      "effects": [
+        { "type": "checkAbility", "id": "hunch", "target": "ability.int.check", "ability": "wis" }
+      ]
+    },
+    {
+      "contentId": "6f14c000-0000-4000-8000-000000001503",
+      "revisionId": "6f14e000-0000-4000-8000-000000001503",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Fixture: Wall Strider",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f145000-0000-4000-8000-000000001501", "page": { "start": 3 } },
+      "status": "published",
+      "summary": "A test feature: a climbing speed equal to your walking speed.",
+      "effects": [
+        { "type": "modifier", "id": "strider", "operation": "replace", "target": "speed.climb", "value": "SPEED" }
+      ]
+    },
+    {
+      "contentId": "6f14c000-0000-4000-8000-000000001504",
+      "revisionId": "6f14e000-0000-4000-8000-000000001504",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Fixture: Tide Paddler",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f145000-0000-4000-8000-000000001501", "page": { "start": 4 } },
+      "status": "published",
+      "summary": "A test feature: a swimming speed of 30 feet.",
+      "effects": [
+        { "type": "modifier", "id": "paddler", "operation": "bonus", "target": "speed.swim", "value": "30" }
+      ]
+    },
+    {
+      "contentId": "6f14c000-0000-4000-8000-000000001505",
+      "revisionId": "6f14e000-0000-4000-8000-000000001505",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Fixture: Nimble Streak",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f145000-0000-4000-8000-000000001501", "page": { "start": 5 } },
+      "status": "published",
+      "summary": "A test feature: advantage on Dexterity skill checks and disadvantage on Strength skill checks.",
+      "effects": [
+        { "type": "rollMode", "id": "nimble", "target": "ability.dex.check", "mode": "advantage" },
+        { "type": "rollMode", "id": "heavy", "target": "ability.str.check", "mode": "disadvantage" }
+      ]
+    }
+  ]
+}
