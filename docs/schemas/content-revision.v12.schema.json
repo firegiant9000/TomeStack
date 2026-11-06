@@ -1897,6 +1897,34 @@
         {
           "properties": {
             "type": {
+              "const": "checkAbility"
+            },
+            "target": {
+              "type": "string",
+              "pattern": "^(ability\\.(str|dex|con|int|wis|cha)\\.check|skill\\.(acrobatics|animalHandling|arcana|athletics|deception|history|insight|intimidation|investigation|medicine|nature|perception|performance|persuasion|religion|sleightOfHand|stealth|survival))$",
+              "description": "Content v12 (G10): the skills that may use another ability: skill.<skill>, or ability.<ability>.check (every skill whose printed ability is that one). Never a save, initiative or the bare ability check."
+            },
+            "ability": {
+              "enum": [
+                "str",
+                "dex",
+                "con",
+                "int",
+                "wis",
+                "cha"
+              ],
+              "description": "Content v12 (G10): the ability whose modifier the skill may use instead; it must differ from the printed ability of every skill the target reaches. The skill uses the highest of its printed ability and this one."
+            }
+          },
+          "required": [
+            "target",
+            "ability"
+          ],
+          "description": "Content v12 (G10): a skill may use another ability's modifier. Always on and automatic. Typed only in a v12 revision: in an older one it is an unknown effect, kept byte for byte."
+        },
+        {
+          "properties": {
+            "type": {
               "const": "response"
             },
             "responseId": {
@@ -2288,6 +2316,7 @@
                   "value",
                   "rollMode",
                   "rollFloor",
+                  "checkAbility",
                   "response",
                   "itemMod",
                   "companion"
