@@ -15,7 +15,7 @@ public class CheckAbilityV12ServiceTests
     private static readonly ContentReference BookishHunch = V12(1502);
     private static readonly ContentReference WallStrider = V12(1503);
     private static readonly ContentReference TidePaddler = V12(1504);
-    private static readonly ContentReference NimbleStreak = V12(1505);
+    private static readonly ContentReference QuickstepKnack = V12(1505);
 
     private static readonly ContentReference Longblade = new(Guid.Parse("5f6dc000-0000-4000-8000-000000000001"), Guid.Parse("5f6de000-0000-4000-8000-000000000001"));
     private static readonly ContentReference Duelist = new(Guid.Parse("5f6dc000-0000-4000-8000-000000000011"), Guid.Parse("5f6de000-0000-4000-8000-000000000011"));
@@ -32,7 +32,7 @@ public class CheckAbilityV12ServiceTests
     private static Character Hero(params ContentReference[] features) => new()
     {
         Id = Guid.NewGuid(),
-        Name = "Testy Climber",
+        Name = "Pip Testwright",
         RulesFamily = RulesFamilies.Srd521,
         Level = 1,
         Classes = [new(Duelist, 1)],
@@ -69,7 +69,7 @@ public class CheckAbilityV12ServiceTests
     public void Dex_check_mode_applies_to_the_athletics_roll()
     {
         // Advantage on Dexterity skill checks reaches a Dexterity-based Athletics; disadvantage on Strength ones no longer does.
-        var (temp, id) = Start(Hero(LimberGrasp, NimbleStreak), 5, 15);
+        var (temp, id) = Start(Hero(LimberGrasp, QuickstepKnack), 5, 15);
         using var _ = temp;
         var swapped = temp.App.Roll(new RollCommand(id, Field: "skill.athletics"));
 
@@ -77,7 +77,7 @@ public class CheckAbilityV12ServiceTests
         Assert.Equal(2, swapped.Dice.Count);
 
         // Without the substitution Athletics stays a Strength skill: only the disadvantage applies.
-        var (temp2, id2) = Start(Hero(NimbleStreak), 5, 15);
+        var (temp2, id2) = Start(Hero(QuickstepKnack), 5, 15);
         using var __ = temp2;
         var printed = temp2.App.Roll(new RollCommand(id2, Field: "skill.athletics"));
 
@@ -117,8 +117,8 @@ public class CheckAbilityV12ServiceTests
         using var temp = new TempApp();
         var pack = temp.AddPack("fixture-pack-check-ability.json");
 
-        // Nimble Streak only uses older roll modes, so it publishes lower; the other four each need v12.
-        foreach (var revision in pack.Revisions.Where(r => r.Name != "Fixture: Nimble Streak"))
+        // Quickstep Knack only uses older roll modes, so it publishes lower; the other four each need v12.
+        foreach (var revision in pack.Revisions.Where(r => r.Name != "Fixture: Quickstep Knack"))
         {
             Assert.Equal(12, revision.SchemaVersion);
             var draft = revision with { RevisionId = Guid.NewGuid(), Status = RevisionStatus.Draft };

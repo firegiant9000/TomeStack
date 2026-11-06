@@ -110,6 +110,9 @@ public static class FormulaPreview
     {
         // VALUE parses in a v11 revision (a draft that is v11 too); a value this revision does not declare reads as unresolved, like an unknown SCALE.
         var features = FormulaFeatures.Scales | (revision is { SchemaVersion: >= ValueEffect.SchemaVersion } ? FormulaFeatures.Values : FormulaFeatures.None);
+        // Content v12 (G10): SPEED is a runtime value (the speed field's own), so it parses and reports "can't be previewed here".
+        if (revision is { SchemaVersion: >= ContentRevision.ClimbSwimSchemaVersion })
+            features |= FormulaFeatures.Speed;
         if (!Formula.TryParse(formula, features, out var parsed, out var error))
             return new(formula, error, null, []);
         var scales = Scales(revision);

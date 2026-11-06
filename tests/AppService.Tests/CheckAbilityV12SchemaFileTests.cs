@@ -21,6 +21,7 @@ public class CheckAbilityV12SchemaFileTests
     [InlineData("{\"type\":\"checkAbility\",\"id\":\"c\",\"target\":\"skill.athletics\"}")]
     [InlineData("{\"type\":\"checkAbility\",\"id\":\"c\",\"ability\":\"dex\"}")]
     [InlineData("{\"type\":\"checkAbility\",\"id\":\"c\",\"target\":\"initiative\",\"ability\":\"dex\"}")]
+    [InlineData("{\"type\":\"checkAbility\",\"id\":\"c\",\"target\":\"ability.con.check\",\"ability\":\"dex\"}")]
     [InlineData("{\"type\":\"checkAbility\",\"id\":\"c\",\"target\":\"skill.athletics\",\"ability\":\"Dex\"}")]
     public void The_v12_schema_refuses_a_malformed_check_ability(string effect) => Assert.NotEqual("", Errors(effect));
 }

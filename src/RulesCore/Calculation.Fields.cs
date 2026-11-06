@@ -9,7 +9,7 @@ public static partial class CharacterCalculator
     private sealed record BaseContext(
         Character Character, string Family, Dictionary<string, int> Values, Dictionary<string, Proficiency> Proficiencies,
         IReadOnlyList<ClassInfo> Classes, List<Diagnostic> Warnings, HashSet<string> Manual, IReadOnlyList<CasterInfo> Casters,
-        IReadOnlyDictionary<string, List<CheckAbilityCandidate>> CheckAbilities);
+        IReadOnlyDictionary<string, List<CheckAbilityCandidate>> CheckAbilities, Func<string, Ability, RollMode> CheckMode);
 
     private sealed record FieldSpec(string Id, string Label, string Units, IReadOnlyList<string> Reads, Func<BaseContext, List<Step>, int> Base);
 
@@ -312,7 +312,7 @@ public static partial class CharacterCalculator
         return new(id, label, "modifier", [modifier, FieldIds.ProficiencyBonus], (c, steps) =>
         {
             // Content v12 (G10): a skill may use a higher ability's modifier; with no candidate, or when the printed ability wins, nothing differs.
-            var (used, candidate) = ChosenAbility(ability, c.CheckAbilities.GetValueOrDefault(id), c.Values);
+            var (used, candidate) = ChosenAbility(ability, c.CheckAbilities.GetValueOrDefault(id), c.Values, a => c.CheckMode(id, a));
             var chosenModifier = FieldIds.Modifier(used);
             var value = c.Values[chosenModifier];
             if (candidate is null)

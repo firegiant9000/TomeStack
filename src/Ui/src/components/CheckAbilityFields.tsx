@@ -28,7 +28,10 @@ const printedAbility: Record<string, Ability> = {
   survival: 'wis',
 };
 
-const knownTargets = new Set<string>([...abilities.map(([k]) => `ability.${k}.check`), ...skillChoices.map(([k]) => `skill.${k}`)]);
+/** Constitution has no skill, so "every Constitution skill" is not offered (the service refuses ability.con.check). */
+const skillAbilities = abilities.filter(([k]) => k !== 'con');
+
+const knownTargets = new Set<string>([...skillAbilities.map(([k]) => `ability.${k}.check`), ...skillChoices.map(([k]) => `skill.${k}`)]);
 
 /** The ability the target is printed with: a skill's own, or the one an "every X skill" target names. */
 function printedFor(target: string): string | undefined {
@@ -38,8 +41,8 @@ function printedFor(target: string): string | undefined {
 }
 
 /**
- * Content v12 (G10): a skill may use another ability. The skill takes the highest of its printed ability and this one, so
- * the rule only ever helps. Members this editor doesn't know are left alone, and a stored value it can't offer is shown and
+ * Content v12 (G10): a skill may use another ability. The skill takes the ability whose checks have the better roll mode
+ * (advantage, then normal, then disadvantage), then the higher modifier. Members this editor doesn't know are left alone, and a stored value it can't offer is shown and
  * reported so Save and Publish are blocked until it is fixed.
  */
 export function CheckAbilityFields(props: { effect: CheckAbilityEffect; onChange: (effect: Effect) => void; onProblem: ReportProblem }) {
@@ -58,7 +61,7 @@ export function CheckAbilityFields(props: { effect: CheckAbilityEffect; onChange
         Skill
         <select value={effect.target} onChange={(e) => onChange({ ...effect, target: e.target.value })}>
           {!targetKnown && <option value={effect.target}>{effect.target} (unknown)</option>}
-          {abilities.map(([k, name]) => (
+          {skillAbilities.map(([k, name]) => (
             <option key={k} value={`ability.${k}.check`}>
               Every {name} skill
             </option>

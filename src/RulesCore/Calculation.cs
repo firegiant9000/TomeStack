@@ -748,6 +748,7 @@ public static partial class CharacterCalculator
         RemoveCycles(modifiers, diagnostics, warnings, manual);
         // Content v12 (G10): skills that may use another ability read that modifier too; none for a sheet without checkAbility.
         var checkAbilities = CollectCheckAbilities(active);
+        // Unreachable today (formulas cannot read skills); keeps a future skill-reading identifier from making TopologicalOrder throw.
         var checkEdges = AcceptCheckAbilities(checkAbilities, modifiers, diagnostics, warnings);
         var order = TopologicalOrder(modifiers, checkEdges);
         var casters = CollectCasters(active, character, resolved.ClassLevels, diagnostics);
@@ -759,7 +760,8 @@ public static partial class CharacterCalculator
         {
             var spec = Specs[SpecIndex[id]];
             var steps = new List<Step>();
-            var context = new BaseContext(character, family, values, proficiencies, resolved.Classes, warnings[id], manual, casters, checkAbilities);
+            var context = new BaseContext(character, family, values, proficiencies, resolved.Classes, warnings[id], manual, casters, checkAbilities,
+                (skillField, ability) => CheckModeOf(rollModes.Targeted, skillField, ability));
             var value = spec.Base(context, steps);
             value = ApplyModifiers(id, value, modifiers.Where(m => m.Effect.Target == id).ToList(), character, resolved.ClassLevels, values, family, steps, warnings[id], manual);
             value = Bound(spec, value, steps, warnings[id], family);
@@ -789,7 +791,7 @@ public static partial class CharacterCalculator
         foreach (var (field, list) in checkAbilities)
         {
             var printed = Skills.First(s => FieldIds.Skill(s.Key) == field).Ability;
-            var (used, candidate) = ChosenAbility(printed, list, values);
+            var (used, candidate) = ChosenAbility(printed, list, values, a => CheckModeOf(rollModes.Targeted, field, a));
             skillAbility[field] = used;
             if (candidate is not null)
                 actualReads[field] = [FieldIds.Modifier(used), FieldIds.ProficiencyBonus];
