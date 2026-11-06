@@ -2000,7 +2000,7 @@ export type Effect =
   | (EffectBase & {
       type: 'checkAbility';
       target: string;
-      ability: string;
+      ability: Ability;
     })
   // Content v11 (D43 S7): a damage-time response. `amount` belongs to a damageReduction or hitPointOutcome response, `when` to a threshold one.
   | (EffectBase & {
