@@ -165,6 +165,9 @@ public sealed record ContentRevision : IJsonOnDeserialized
     /// <summary>The content schema version that adds <c>weapon.bonus</c> (MECH-X item 0): <b>v12</b>. A test pins that this is <see cref="PlayMechanicsSchemaVersion"/> plus one.</summary>
     public const int WeaponBonusSchemaVersion = 12;
 
+    /// <summary>G9: the <c>rollFloor</c> effect kind (a d20 or a check total raised to a floor). <b>v12</b>.</summary>
+    public const int RollFloorSchemaVersion = 12;
+
     /// <summary>
     /// The content schema version that adds the Wave 3 details listed above: <b>v10</b> (speed and passive targets,
     /// <c>autoWhen</c>, <c>activation</c>, damage defences, <c>item</c>). Not the play mechanics version, which is

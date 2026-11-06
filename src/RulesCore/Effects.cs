@@ -910,6 +910,38 @@ public sealed record RollModeEffect : Effect
     }
 }
 
+/// <summary>
+/// Content schema v12 (G9): on ability checks, a d20 below <see cref="Face"/> counts as <see cref="Face"/>, or a total below
+/// <see cref="Total"/> counts as it. Typed only in a v12 revision: below v12 it stays an <see cref="UnknownEffect"/>, byte for byte.
+/// </summary>
+public sealed record RollFloorEffect : Effect
+{
+    public const string TypeName = "rollFloor";
+
+    public const int SchemaVersion = ContentRevision.RollFloorSchemaVersion;
+
+    /// <summary>Target: every ability-check field.</summary>
+    public const string CheckTarget = "check";
+
+    public override string Type => TypeName;
+
+    /// <summary>Content schema v12 (G9): <c>check</c>, <c>ability.&lt;x&gt;.check</c> or <c>skill.&lt;s&gt;</c>. Required.</summary>
+    [property: JsonRequired]
+    public required string Target { get; init; }
+
+    /// <summary>Content schema v12 (G9): 2 to 20; a d20 below it counts as it. Exactly one of this and <see cref="Total"/> (validated).</summary>
+    public int? Face { get; init; }
+
+    /// <summary>Content schema v12 (G9): a formula; a check total below it counts as it.</summary>
+    public string? Total { get; init; }
+
+    /// <summary>Content schema v12 (G9): true reaches only proficient or expert fields.</summary>
+    public bool? Proficient { get; init; }
+
+    internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion) =>
+        revisionSchemaVersion < SchemaVersion ? unknown : VersionedEffects.Typed<RollFloorEffect>(unknown);
+}
+
 /// <summary>Content schema v11 (D43): where in a damage event a response is offered.</summary>
 public enum ResponsePhase
 {
@@ -1739,6 +1771,7 @@ internal static class VersionedEffects
             [ValueEffect.TypeName] = (ValueEffect.SchemaVersion, (u, _) => ValueEffect.FromUnknown(u)),
             [RollModeEffect.TypeName] = (RollModeEffect.SchemaVersion, (u, v) => RollModeEffect.FromUnknown(u, v)),
             [ResponseEffect.TypeName] = (ResponseEffect.SchemaVersion, (u, v) => ResponseEffect.FromUnknown(u, v)),
+            [RollFloorEffect.TypeName] = (RollFloorEffect.SchemaVersion, (u, v) => RollFloorEffect.FromUnknown(u, v)),
             [ItemModEffect.TypeName] = (ItemModEffect.SchemaVersion, (u, _) => ItemModEffect.FromUnknown(u)),
             [CompanionEffect.TypeName] = (CompanionEffect.SchemaVersion, (u, _) => CompanionEffect.FromUnknown(u)),
         };
@@ -1919,7 +1952,7 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
                 RollEffect.TypeName => element.Deserialize<RollEffect>(options),
                 HitDieEffect.TypeName => element.Deserialize<HitDieEffect>(options),
                 // Typed only in revisions of their schema version (ContentRevision.OnDeserialized); older ones keep them as written.
-                ArmorEffect.TypeName or SpellcastingEffect.TypeName or SpellEffect.TypeName or WeaponEffect.TypeName or ToggleEffect.TypeName or ScaleEffect.TypeName or ItemEffect.TypeName or ToggleGroupEffect.TypeName or UpkeepEffect.TypeName or AttackEffect.TypeName or AttackRiderEffect.TypeName or ValueEffect.TypeName or RollModeEffect.TypeName or ResponseEffect.TypeName or ItemModEffect.TypeName or CompanionEffect.TypeName => UnknownEffect.From(element),
+                ArmorEffect.TypeName or SpellcastingEffect.TypeName or SpellEffect.TypeName or WeaponEffect.TypeName or ToggleEffect.TypeName or ScaleEffect.TypeName or ItemEffect.TypeName or ToggleGroupEffect.TypeName or UpkeepEffect.TypeName or AttackEffect.TypeName or AttackRiderEffect.TypeName or ValueEffect.TypeName or RollModeEffect.TypeName or RollFloorEffect.TypeName or ResponseEffect.TypeName or ItemModEffect.TypeName or CompanionEffect.TypeName => UnknownEffect.From(element),
                 LegacyAbilityScoreIncrease or LegacyInitiativeBonus => FromSchemaVersion1(element, type, options),
                 _ => UnknownEffect.From(element),
             } ?? UnknownEffect.From(element);

@@ -54,6 +54,32 @@ it('a roll record names its automatic mode', () => {
   expect(rollHeadline(record())).toBe('Strength check: 17 (1d20+3, advantage)');
 });
 
+const floorRef = { contentId: 'fixture', revision: 1 } as never;
+
+it('shows a raised d20 with its raw face', () => {
+  const raised = record({
+    mode: 'normal', modifiers: [], dice: [{ term: 0, sides: 20, value: 10, rolled: 7, kept: true, fromCritical: false }],
+    floor: { face: 10, reasons: [{ source: 'Fixture: Practised Calm', reference: floorRef, face: 10 }] },
+  });
+  expect(diceLine(raised)).toBe('Dice: d20 7 → 10 (floor)');
+});
+
+it('shows a raised total with its source', () => {
+  const raised = record({
+    mode: 'normal', modifiers: [], unfloored: 12, total: 16,
+    floor: { total: 16, reasons: [{ source: 'Fixture: Quiet Focus', reference: floorRef, total: 10 }, { source: 'Fixture: Practised Calm', reference: floorRef, total: 16 }] },
+  });
+  expect(diceLine(raised)).toBe('Dice: d20 14, d20 7 (dropped) · total 12 raised to 16 (Fixture: Practised Calm)');
+});
+
+it('shows nothing extra when the floor did not raise anything', () => {
+  const same = record({
+    mode: 'normal', modifiers: [], dice: [{ term: 0, sides: 20, value: 14, kept: true, fromCritical: false }],
+    floor: { face: 10, total: 16, reasons: [{ source: 'Fixture: Practised Calm', reference: floorRef, face: 10, total: 16 }] },
+  });
+  expect(diceLine(same)).toBe('Dice: d20 14');
+});
+
 it('names disadvantage in the headline', () => {
   expect(rollHeadline(record({ mode: 'disadvantage' }))).toBe('Strength check: 17 (1d20+3, disadvantage)');
 });

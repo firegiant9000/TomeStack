@@ -45,7 +45,7 @@ Coverage words are the Lab's registry words: **Automatic** (the sheet works it o
 | `ieffect2` attack interaction | `attack` with `whileToggle` | Automatic | — | An attack that exists only in a form |
 | `ieffect2` button interaction | `roll` with `whileToggle`, `alsoChange`, `drawsDown` | Assisted | — | An action that exists only in a form; "Use" spends from its pools |
 | `remove_ieffect` | `toggleOff` play action; `upkeep.ifShort: end`; `toggle.duration` running out | Assisted | — | The player ends a form, or an upkeep that cannot be paid ends it |
-| `roll` | `roll.dice`, `roll.perUnit`, `roll.bonus` | Assisted | G9, G12 | Rolled and recorded. A roll's dice count can be a formula (`scaledDice`, G1 built). A roll's result cannot feed a later formula (no run-time variables, ADR-011). Missing: a minimum-roll floor (G9), a reroll (G12) |
+| `roll` | `roll.dice`, `roll.perUnit`, `roll.bonus` | Assisted | G12 | Rolled and recorded. A roll's dice count can be a formula (`scaledDice`, G1 built). A roll's result cannot feed a later formula (no run-time variables, ADR-011). A minimum on a check is the `rollFloor` kind (G9 built, v12, D89). Missing: a reroll (G12) |
 | `text` | `automation: reference`; the feature's description; `resource.resourceFull.text` | Reference | — | Not covered by design: prose only, nothing to automate |
 | `variable` | `value` (`valueId`, `formula`, read as `VALUE.<valueId>`) | Automatic | — | A named formula over the sheet, not a run-time value |
 | `condition` | `toggle` gates (`toggle`, `whileToggle`), `autoWhen: bloodied`, `response.when.atOrBelow` | Assisted | G6 | Not covered as a general branch (no scripting). A response cannot test a save result or a trigger such as damage type (G6) |
@@ -68,14 +68,14 @@ Coverage words are the Lab's registry words: **Automatic** (the sheet works it o
 | Summon | Companions on Play ([sheet-play.md](sheet-play.md)) | Assisted | — | Partly covered: the content v12 `companion` effect (MECH-X item 4, ADR-021) gives a calculated card with its own hit points, attacks and pools; summoned creatures, level-gated upgrades and initiative are not covered. A hand companion is still free text the player fills in (ADR-018) |
 | Teleport | `roll.range`, `roll.area` (text) | Reference | — | Not covered: no map or positions (ADR-018) |
 | Transform | `toggleGroup` and `toggle` (`layer`, `cost`, `duration`); `modifier` `set` on `ability.*`, `armorClass`, `hitPoints`; `attack` and `roll` with `whileToggle`; `grant` defences with `whileToggle` | Assisted | G5, G11 | A form changes each number by its own modifier; no whole stat block swap. No per-effect ability cap (G5), no condition immunity (G11) |
-| Utility | `roll` (with or without `dice`), `toggle`, `value` | Assisted | G9, G12 | A spend-only roll ("Use") or a free roll; no roll floor (G9) or reroll (G12) |
+| Utility | `roll` (with or without `dice`), `toggle`, `value` | Assisted | G12 | A spend-only roll ("Use") or a free roll; a roll floor on checks is a separate kind (`rollFloor`, G9 built); no reroll (G12) |
 
 ## What this says about the martial classes
 
 Both vocabularies' everyday verbs (attack, damage, a saving-throw DC, a pool spent, a timed form, a bonus or a mode on own rolls) map onto v11. The rows that stop at Reference are the evaluation's gaps, and they fall on Barbarian, Rogue and Monk. Ranked by how many Reference rows each would remove (evaluation §3):
 
 - **Remove the most:** G1 (dice count as a formula on riders and rolls; built, content v12, D88), G4 (no armour, no shield, no heavy armour gates), G5 (per-effect ability-score cap), G6 (responses with dice or halving, and save-result or trigger conditions).
-- **Cheap:** G9 (roll floor). G7 (modes on own attack rolls, attacks against the character, initiative alone) is built, content v12, D87.
+- **Cheap:** G9 (roll floor on checks; built, content v12, D89). G7 (modes on own attack rolls, attacks against the character, initiative alone) is built, content v12, D87.
 - **Reminders that may stay Reference:** G8 (rider match on the ability used; Dex for tagged non-finesse weapons), G10 (skill ability substitution; climb and swim speeds), G11 (condition immunity), G12 (reroll).
 - G2 (crit-only dice) is built with G1 (content v12, D88). G3 (once per turn) is built as player-added: the rider is offered on each damage roll and the player adds it; the app does not track turns, and that judgement awaits the owner.
 
@@ -93,7 +93,7 @@ The v12 scope is decided once, from the Lab's coverage report after authoring Ba
 | G6 | Responses with dice or halving amounts, and save-result or trigger conditions |
 | G7 | `rollMode` on own attack rolls, attacks against the character, initiative alone (built, content v12, D87) |
 | G8 | Rider match on the ability used; Dex substitution for tagged non-finesse weapons |
-| G9 | Roll floor |
+| G9 | Roll floor (built on checks, v12, D89) |
 | G10 | Skill-check ability substitution; climb and swim speeds |
 | G11 | Condition immunity grants |
 | G12 | Reroll |

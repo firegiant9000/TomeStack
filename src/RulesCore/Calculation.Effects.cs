@@ -282,6 +282,77 @@ public static partial class CharacterCalculator
         }
     }
 
+    /// <summary>One field's roll floor: the summary, and the trace steps (one per reason) appended after the field's own steps.</summary>
+    private sealed record FloorCollection(RollFloorSummary Summary, List<FloorStep> Steps);
+
+    private sealed record FloorStep(string Description, int Amount, TraceOrigin Origin);
+
+    /// <summary>
+    /// Content v12 (G9): the roll floors of the active content, by the check field they reach (<c>check</c>: every ability modifier, skill
+    /// and initiative; <c>ability.&lt;x&gt;.check</c> and <c>skill.&lt;s&gt;</c> as for roll modes). <c>proficient</c> keeps only fields marked
+    /// Proficient or Expertise. A total formula is evaluated in the declaring content's context; one that fails leaves that reason out
+    /// (<c>effect.invalid-formula</c>). The highest face and the highest total win separately; every reason is listed. A field's value never changes.
+    /// </summary>
+    private static Dictionary<string, FloorCollection> CollectRollFloors(
+        List<ActiveContent> active, Character character, ClassLevelMap classLevels, Dictionary<string, int> values,
+        Func<string, ProficiencyMark> markOf, string family, List<Diagnostic> diagnostics)
+    {
+        var byField = new Dictionary<string, List<(RollFloorReason Reason, FloorStep Step)>>(StringComparer.Ordinal);
+        foreach (var item in active)
+        {
+            var revision = item.Revision;
+            foreach (var effect in revision.Effects.OfType<RollFloorEffect>())
+            {
+                // Validation refuses these; stored content that has them is skipped, not applied.
+                if (effect.Automation != AutomationStatus.Automatic || effect.Timing != EffectTiming.Always)
+                    continue;
+                int floor;
+                string description;
+                RollFloorReason reason;
+                if (effect.Face is { } face)
+                {
+                    floor = face;
+                    description = $"Roll floor from {revision.Name}: a d20 below {face} counts as {face}";
+                    reason = new(revision.Name, revision.Reference, face, null);
+                }
+                else if (effect.Total is { } source)
+                {
+                    if (!TryEvaluate(source, item, character, classLevels, values, [], out floor, out var failure))
+                    {
+                        diagnostics.Add(InvalidFormula(revision, effect, failure!));
+                        continue;
+                    }
+                    description = $"Roll floor from {revision.Name}: a total below {floor} counts as {floor}";
+                    reason = new(revision.Name, revision.Reference, null, floor);
+                }
+                else
+                    continue;
+                var step = new FloorStep(description, floor, ContentOrigin(family, item, effect));
+                foreach (var field in RollFloorFields(effect.Target))
+                {
+                    if (effect.Proficient == true && markOf(field) == ProficiencyMark.None)
+                        continue;
+                    if (!byField.TryGetValue(field, out var list))
+                        byField[field] = list = [];
+                    list.Add((reason, step));
+                }
+            }
+        }
+        return byField.ToDictionary(
+            p => p.Key,
+            p => new FloorCollection(
+                new(p.Value.Select(v => v.Reason.Face).Max(), p.Value.Select(v => v.Reason.Total).Max(), [.. p.Value.Select(v => v.Reason)]),
+                [.. p.Value.Select(v => v.Step)]),
+            StringComparer.Ordinal);
+    }
+
+    private static IEnumerable<string> RollFloorFields(string target)
+    {
+        if (target != RollFloorEffect.CheckTarget)
+            return RollModeFields(target).Where(f => !f.StartsWith("save.", StringComparison.Ordinal));
+        return [.. Enum.GetValues<Ability>().Select(FieldIds.Modifier), .. Skills.Select(s => FieldIds.Skill(s.Key)), FieldIds.Initiative];
+    }
+
     private static List<Modifier> CollectModifiers(
         List<ActiveContent> active, Character character, RulesFamilyPolicy policy, List<Diagnostic> diagnostics, Dictionary<string, List<Diagnostic>> warnings,
         HashSet<string> manual, EffectiveToggles effective, bool autoOn, List<ResourceBonus> resourceBonuses, ClassLevelMap classLevels,
