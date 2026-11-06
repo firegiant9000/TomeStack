@@ -26,7 +26,8 @@ function rec(over: Partial<RollRecord> = {}): RollRecord {
   };
 }
 
-it('explain renders a floor step and keeps the value step as final', () => {
+// explain has no notion of a "final" step (it renders every step in order), so this checks only that a floor step is rendered as its description, after the value steps.
+it('explain renders a floor step as its description, after the value steps', () => {
   const steps = [
     step('base', 'Strength modifier', 2, rules, 2),
     step('add', 'Proficiency bonus', 4, rules, 2),

@@ -67,7 +67,7 @@ it('shows a raised d20 with its raw face', () => {
 it('shows a raised total with its source', () => {
   const raised = record({
     mode: 'normal', modifiers: [], unfloored: 12, total: 16,
-    floor: { total: 16, reasons: [{ source: 'Fixture: Steady Mind', reference: floorRef, total: 10 }, { source: 'Fixture: Practised Calm', reference: floorRef, total: 16 }] },
+    floor: { total: 16, reasons: [{ source: 'Fixture: Quiet Focus', reference: floorRef, total: 10 }, { source: 'Fixture: Practised Calm', reference: floorRef, total: 16 }] },
   });
   expect(diceLine(raised)).toBe('Dice: d20 14, d20 7 (dropped) · total 12 raised to 16 (Fixture: Practised Calm)');
 });
