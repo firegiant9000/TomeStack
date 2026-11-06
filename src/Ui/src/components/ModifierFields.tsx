@@ -65,6 +65,9 @@ export function ModifierFields(props: {
         <input value={effect.value} aria-describedby={`rule-${effect.id}-value-preview`} onChange={(e) => onChange({ ...effect, value: e.target.value })} />
       </label>
       <FormulaPreview id={`rule-${effect.id}-value-preview`} formula={effect.value} revision={props.previewRevision} />
+      {(effect.target === 'speed.climb' || effect.target === 'speed.swim' || effect.target === 'speed.fly') && (
+        <p className="hint">You can use SPEED (your walking speed) in a climb, swim or fly speed modifier, such as SPEED / 2.</p>
+      )}
       {nested && (
         <label className="field">
           Text
