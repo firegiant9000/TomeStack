@@ -40,13 +40,13 @@ public class CheckAbilityV12SheetTests
     public void Dex_athletics_uses_the_higher_dex_with_a_trace_step()
     {
         var baseline = Sheet(Handler(LowStrHighDex));
-        var sheet = Sheet(Handler(LowStrHighDex), Feature("Fixture Nimble", 1, Use("u", Athletics, "dex")));
+        var sheet = Sheet(Handler(LowStrHighDex), Feature("Fixture Quickstep", 1, Use("u", Athletics, "dex")));
 
         var bonus = baseline.Field(Athletics).Value - baseline.Field("ability.str.mod").Value;
         var athletics = sheet.Field(Athletics);
         Assert.Equal(3 + bonus, athletics.Value);
         var step = athletics.Trace.Single(t => t.Field == Athletics && t.Operation == "base");
-        Assert.Equal("Athletics starts at the Dexterity modifier (Fixture Nimble lets you use Dexterity instead of Strength)", step.Description);
+        Assert.Equal("Athletics starts at the Dexterity modifier (Fixture Quickstep lets you use Dexterity instead of Strength)", step.Description);
         Assert.Equal(TraceOriginKind.Content, step.Origin.Kind);
         Assert.Equal("u", step.Origin.EffectId);
         Assert.Equal(new TraceInput("ability.dex.mod", 3), Assert.Single(step.Inputs!));
@@ -58,7 +58,7 @@ public class CheckAbilityV12SheetTests
     {
         var scores = new AbilityScores(16, 10, 10, 10, 10, 10);
         var baseline = Sheet(Handler(scores));
-        var sheet = Sheet(Handler(scores), Feature("Fixture Nimble", 2, Use("u", Athletics, "dex")));
+        var sheet = Sheet(Handler(scores), Feature("Fixture Quickstep", 2, Use("u", Athletics, "dex")));
 
         // Value, step text and inputs of every field are exactly the baseline's (Review Focus 1 and 2).
         foreach (var field in baseline.Fields)
@@ -76,7 +76,7 @@ public class CheckAbilityV12SheetTests
     public void Tie_keeps_the_printed_ability()
     {
         var scores = new AbilityScores(14, 14, 10, 10, 10, 10);
-        var sheet = Sheet(Handler(scores), Feature("Fixture Nimble", 3, Use("u", Athletics, "dex")));
+        var sheet = Sheet(Handler(scores), Feature("Fixture Quickstep", 3, Use("u", Athletics, "dex")));
 
         var step = sheet.Field(Athletics).Trace.Single(t => t.Field == Athletics && t.Operation == "base");
         Assert.Equal("Athletics starts at the Strength modifier", step.Description);
@@ -89,7 +89,7 @@ public class CheckAbilityV12SheetTests
     public void Two_candidates_the_highest_wins(string first, string second)
     {
         var scores = new AbilityScores(8, 14, 16, 10, 10, 10);
-        var sheet = Sheet(Handler(scores), Feature("Fixture Nimble", 4, Use("a", Athletics, first), Use("b", Athletics, second)));
+        var sheet = Sheet(Handler(scores), Feature("Fixture Quickstep", 4, Use("a", Athletics, first), Use("b", Athletics, second)));
 
         var step = sheet.Field(Athletics).Trace.Single(t => t.Field == Athletics && t.Operation == "base");
         Assert.Equal(new TraceInput("ability.con.mod", 3), Assert.Single(step.Inputs!));
@@ -131,7 +131,7 @@ public class CheckAbilityV12SheetTests
     {
         var disadvantage = new RollModeEffect { Id = "r", Target = "ability.str.check", Mode = RollMode.Disadvantage };
         var advantage = new RollModeEffect { Id = "r2", Target = "ability.dex.check", Mode = RollMode.Advantage };
-        var nimble = Feature("Fixture Nimble", 7, Use("u", Athletics, "dex"));
+        var nimble = Feature("Fixture Quickstep", 7, Use("u", Athletics, "dex"));
         var modes = Feature("Fixture Modes", 8, disadvantage, advantage);
 
         var sheet = Sheet(Handler(LowStrHighDex), nimble, modes);
@@ -144,12 +144,67 @@ public class CheckAbilityV12SheetTests
         Assert.Equal(RollMode.Disadvantage, plain.Field(Athletics).Mode!.Automatic);
     }
 
+    // STR 14 = +2, DEX 16 = +3.
+    private static readonly AbilityScores StrBehindDex = new(14, 16, 10, 10, 10, 10);
+
+    private static TraceInput AthleticsBase(CharacterSheet sheet) =>
+        Assert.Single(sheet.Field(Athletics).Trace.Single(t => t.Field == Athletics && t.Operation == "base").Inputs!);
+
+    [Fact]
+    public void Mode_beats_modifier_a_str_check_advantage_keeps_str_athletics()
+    {
+        var rule = Feature("Fixture Quickstep", 20, Use("u", Athletics, "dex"));
+        var strAdvantage = Feature("Fixture Surge Mode", 21, new RollModeEffect { Id = "r", Target = "ability.str.check", Mode = RollMode.Advantage });
+
+        var sheet = Sheet(Handler(StrBehindDex), rule, strAdvantage);
+
+        Assert.Equal(RollMode.Advantage, sheet.Field(Athletics).Mode!.Automatic);
+        Assert.Equal(new TraceInput("ability.str.mod", 2), AthleticsBase(sheet));
+
+        // Not raging (the mode is absent): the higher Dexterity modifier wins.
+        Assert.Equal(new TraceInput("ability.dex.mod", 3), AthleticsBase(Sheet(Handler(StrBehindDex), rule)));
+    }
+
+    [Fact]
+    public void Dex_check_disadvantage_makes_the_lower_str_win()
+    {
+        var rule = Feature("Fixture Quickstep", 22, Use("u", Athletics, "dex"));
+        var dexDisadvantage = Feature("Fixture Drag Mode", 23, new RollModeEffect { Id = "r", Target = "ability.dex.check", Mode = RollMode.Disadvantage });
+
+        var sheet = Sheet(Handler(StrBehindDex), rule, dexDisadvantage);
+
+        Assert.Equal(new TraceInput("ability.str.mod", 2), AthleticsBase(sheet));
+    }
+
+    [Fact]
+    public void Equal_mode_and_equal_modifier_keep_the_printed_ability()
+    {
+        var rule = Feature("Fixture Quickstep", 24, Use("u", Athletics, "dex"));
+        var both = Feature("Fixture Both Modes", 25,
+            new RollModeEffect { Id = "r1", Target = "ability.str.check", Mode = RollMode.Advantage },
+            new RollModeEffect { Id = "r2", Target = "ability.dex.check", Mode = RollMode.Advantage });
+
+        var sheet = Sheet(Handler(new AbilityScores(14, 14, 10, 10, 10, 10)), rule, both);
+
+        Assert.Equal(TraceOriginKind.RulesPolicy, sheet.Field(Athletics).Trace.Single(t => t.Field == Athletics && t.Operation == "base").Origin.Kind);
+        Assert.Equal(new TraceInput("ability.str.mod", 2), AthleticsBase(sheet));
+    }
+
+    [Fact]
+    public void A_user_override_on_the_dex_modifier_changes_the_choice()
+    {
+        var rule = Feature("Fixture Quickstep", 26, Use("u", Athletics, "dex"));
+        var character = Handler(StrBehindDex) with { Overrides = [new FieldOverride("ability.dex.mod", 1, "test")] };
+
+        Assert.Equal(new TraceInput("ability.str.mod", 2), AthleticsBase(Sheet(character, rule)));
+    }
+
     [Fact]
     public void Dex_check_roll_floor_reaches_dex_athletics()
     {
         var floor = new RollFloorEffect { Id = "f", Target = "ability.dex.check", Face = 8 };
         var strFloor = new RollFloorEffect { Id = "f2", Target = "ability.str.check", Face = 5 };
-        var nimble = Feature("Fixture Nimble", 9, Use("u", Athletics, "dex"));
+        var nimble = Feature("Fixture Quickstep", 9, Use("u", Athletics, "dex"));
 
         var sheet = Sheet(Handler(LowStrHighDex), nimble, Feature("Fixture Floors", 10, floor, strFloor));
 
@@ -158,12 +213,12 @@ public class CheckAbilityV12SheetTests
     }
 
     [Fact]
-    public void Cycle_in_a_candidates_modifier_chain_never_breaks_the_substitution()
+    public void Self_cycle_on_the_candidates_score_is_removed_and_the_substitution_still_holds()
     {
         // The formula grammar reads only ability modifiers and scores, so no modifier can depend on a skill and a true
         // skill cycle cannot be authored; the closest case is a modifier on the candidate's own score reading its modifier.
         var selfCycle = new ModifierEffect { Id = "m", Operation = ModifierOperation.Bonus, Target = "ability.dex.score", Value = "DEX.MOD" };
-        var sheet = Sheet(Handler(LowStrHighDex), Feature("Fixture Nimble", 11, Use("u", Athletics, "dex"), selfCycle));
+        var sheet = Sheet(Handler(LowStrHighDex), Feature("Fixture Quickstep", 11, Use("u", Athletics, "dex"), selfCycle));
 
         Assert.Contains(sheet.Diagnostics, d => d.Code == "effect.dependency-cycle");
         var athletics = sheet.Field(Athletics);
@@ -177,7 +232,7 @@ public class CheckAbilityV12SheetTests
     {
         // A modifier on dex.score: Athletics must be computed after dex.mod has the bonus.
         var chained = new ModifierEffect { Id = "m", Operation = ModifierOperation.Bonus, Target = "ability.dex.score", Value = "4" };
-        var sheet = Sheet(Handler(LowStrHighDex), Feature("Fixture Nimble", 12, Use("u", Athletics, "dex"), chained));
+        var sheet = Sheet(Handler(LowStrHighDex), Feature("Fixture Quickstep", 12, Use("u", Athletics, "dex"), chained));
 
         var dex = sheet.Field("ability.dex.mod").Value;
         Assert.Equal(5, dex);
@@ -193,7 +248,7 @@ public class CheckAbilityV12SheetTests
     {
         var effect = Use("u", Athletics, "dex") with { Automation = automation, Timing = timing };
         var baseline = Sheet(Handler(LowStrHighDex));
-        var sheet = Sheet(Handler(LowStrHighDex), Feature("Fixture Nimble", 13, effect));
+        var sheet = Sheet(Handler(LowStrHighDex), Feature("Fixture Quickstep", 13, effect));
 
         Assert.Equal(baseline.Field(Athletics).Value, sheet.Field(Athletics).Value);
     }
@@ -202,7 +257,7 @@ public class CheckAbilityV12SheetTests
     public void Unparsable_ability_or_target_is_skipped()
     {
         var baseline = Sheet(Handler(LowStrHighDex));
-        var sheet = Sheet(Handler(LowStrHighDex), Feature("Fixture Nimble", 14, Use("a", Athletics, "DEX"), Use("b", "skill.nothing", "dex"), Use("c", "save.str", "dex")));
+        var sheet = Sheet(Handler(LowStrHighDex), Feature("Fixture Quickstep", 14, Use("a", Athletics, "DEX"), Use("b", "skill.nothing", "dex"), Use("c", "save.str", "dex")));
 
         foreach (var field in baseline.Fields)
             Assert.Equal(field.Value, sheet.Field(field.Field).Value);
@@ -213,7 +268,7 @@ public class CheckAbilityV12SheetTests
     {
         var scores = new AbilityScores(16, 10, 10, 10, 10, 10);
         var baseline = Sheet(Handler(scores));
-        var sheet = Sheet(Handler(scores), Feature("Fixture Nimble", 15, Use("u", Athletics, "dex")));
+        var sheet = Sheet(Handler(scores), Feature("Fixture Quickstep", 15, Use("u", Athletics, "dex")));
 
         Assert.Equal(baseline.Fields.Select(f => f.Field), sheet.Fields.Select(f => f.Field));
         foreach (var field in baseline.Fields)

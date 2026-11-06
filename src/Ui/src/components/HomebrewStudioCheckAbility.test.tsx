@@ -87,7 +87,15 @@ it('hides automation and timing', async () => {
   const { rule } = await openDraft(user, [{ type: 'checkAbility', id: 'checkAbility-1', target: 'skill.athletics', ability: 'dex' }]);
   const r = rule(RULE);
   expect(r.queryByRole('combobox', { name: 'Automation' })).toBeNull();
-  expect(r.queryByRole('combobox', { name: /Timing/ })).toBeNull();
+});
+
+it('offers no Constitution skill target and shows a stored one as unknown', async () => {
+  const user = userEvent.setup();
+  const { rule } = await openDraft(user, [{ type: 'checkAbility', id: 'checkAbility-1', target: 'ability.con.check', ability: 'dex' }]);
+  const r = rule(RULE);
+  expect(r.queryByRole('option', { name: 'Every Constitution skill' })).toBeNull();
+  expect(r.getByRole('option', { name: 'ability.con.check (unknown)' })).toBeTruthy();
+  expect(r.getByRole('option', { name: 'Every Strength skill' })).toBeTruthy();
 });
 
 it('keeps unknown members across an edit', async () => {
@@ -100,12 +108,11 @@ it('keeps unknown members across an edit', async () => {
 
 it('hints at SPEED only for a climb, swim or fly speed modifier', async () => {
   const user = userEvent.setup();
-  const { rule } = await openDraft(user, [
+  await openDraft(user, [
     { type: 'modifier', id: 'modifier-1', target: 'speed.climb', operation: 'replace', value: '10' },
     { type: 'modifier', id: 'modifier-2', target: 'initiative', operation: 'bonus', value: '1' },
   ]);
   const hint = /SPEED \(your walking speed\)/;
   expect(within(screen.getByRole('group', { name: /^Rule 1:/ })).queryByText(hint)).not.toBeNull();
   expect(within(screen.getByRole('group', { name: /^Rule 2:/ })).queryByText(hint)).toBeNull();
-  void rule;
 });

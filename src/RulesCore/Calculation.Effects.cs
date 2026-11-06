@@ -306,23 +306,38 @@ public static partial class CharacterCalculator
     }
 
     /// <summary>
-    /// The ability a skill (or save) uses: the highest modifier among its printed ability and the candidates. A tie keeps the printed
-    /// ability, then the earlier candidate. Null candidate: the printed ability.
+    /// The ability a skill (or save) uses: the best automatic roll mode first (advantage, then normal, then disadvantage), then the highest
+    /// modifier among equals. A tie keeps the printed ability, then the earlier candidate. Roll floors are not compared. Null candidate: the printed ability.
     /// </summary>
     private static (Ability Ability, CheckAbilityCandidate? Candidate) ChosenAbility(
-        Ability printed, List<CheckAbilityCandidate>? candidates, IReadOnlyDictionary<string, int> values)
+        Ability printed, List<CheckAbilityCandidate>? candidates, IReadOnlyDictionary<string, int> values, Func<Ability, RollMode> modeOf)
     {
+        static int Rank(RollMode mode) => mode == RollMode.Advantage ? 2 : mode == RollMode.Normal ? 1 : 0;
         var best = printed;
+        var bestRank = Rank(modeOf(printed));
         CheckAbilityCandidate? chosen = null;
         foreach (var candidate in candidates ?? [])
         {
-            if (values[FieldIds.Modifier(candidate.Ability)] > values[FieldIds.Modifier(best)])
+            var rank = Rank(modeOf(candidate.Ability));
+            if (rank > bestRank || (rank == bestRank && values[FieldIds.Modifier(candidate.Ability)] > values[FieldIds.Modifier(best)]))
             {
                 best = candidate.Ability;
+                bestRank = rank;
                 chosen = candidate;
             }
         }
         return (best, chosen);
+    }
+
+    /// <summary>
+    /// The automatic roll mode a check of <paramref name="skillField"/> would get if it used <paramref name="ability"/>: the reasons aimed at
+    /// that skill or at that ability's checks, combined as the sheet combines them.
+    /// </summary>
+    private static RollMode CheckModeOf(List<(string Target, RollModeReason Reason)> targeted, string skillField, Ability ability)
+    {
+        var mod = FieldIds.Modifier(ability);
+        var check = string.Concat(mod.AsSpan(0, mod.Length - ".mod".Length), ".check");
+        return RollModes.Combine(targeted.Where(t => t.Reason.IsAutomatic && (t.Target == skillField || t.Target == check)).Select(t => t.Reason.Mode));
     }
 
     /// <summary>

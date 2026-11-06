@@ -46,6 +46,7 @@ public class CheckAbilityV12ValidationTests
     [InlineData("ability.str.mod")]
     [InlineData("ability.str.score")]
     [InlineData("ability.xyz.check")]
+    [InlineData("ability.con.check")]
     public void Target_save_initiative_and_bare_check_are_refused(string target)
     {
         var report = Validate(Swap(c => c with { Target = target }));

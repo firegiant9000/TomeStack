@@ -179,7 +179,9 @@ public static class ContentValidator
             }
             return false;
         }
+        // Constitution has no skill, so ability.con.check would reach nothing; refused (published revisions are insert-only).
         return target.StartsWith("ability.", StringComparison.Ordinal) && target.EndsWith(".check", StringComparison.Ordinal)
+            && target != "ability.con.check"
             && IsRollModeTarget(target) && CheckAbilityEffect.TryParseAbility(target["ability.".Length..^".check".Length], out printed);
     }
 
