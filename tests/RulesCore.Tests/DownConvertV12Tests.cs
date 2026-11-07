@@ -491,6 +491,63 @@ public class DownConvertV12Tests
         Assert.Equal("'Compat Steady Hands': its use of another ability for a skill; the feature stays as text.", change.Message);
     }
 
+    private static ContentRevision CalmWard(string effects) => Rev(effects) with { Name = "Fixture: Calm Ward" };
+
+    private const string CharmedImmunity = """{"type":"grant","id":"calm","grant":"conditionImmunity","condition":"charmed"}""";
+
+    [Fact]
+    public void Condition_immunity_is_dropped_whole_below_12()
+    {
+        var result = DownConvert.Below(CalmWard($"{BiteAttack},{CharmedImmunity}"), 11);
+
+        Assert.False(result.Blocked);
+        Assert.Equal(11, result.Revision.SchemaVersion);
+        Assert.IsType<AttackEffect>(Assert.Single(result.Revision.Effects));
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(BelowCodes.EffectUnsupported, change.Code);
+        Assert.Equal(BelowAction.Dropped, change.Action);
+        Assert.Equal("effects[1]", change.Path);
+        Assert.Equal("'Fixture: Calm Ward': its immunity to the charmed condition; the feature stays as text.", change.Message);
+    }
+
+    [Fact]
+    public void Toggled_condition_immunity_is_dropped_the_same_way()
+    {
+        var toggle = """{"type":"toggle","id":"fury","toggleId":"fury","label":"Fixture: Fury"}""";
+        var toggled = """{"type":"grant","id":"calm","grant":"conditionImmunity","condition":"charmed","whileToggle":{"toggleId":"fury"}}""";
+        var result = DownConvert.Below(CalmWard($"{BiteAttack},{toggle},{toggled}"), 11);
+
+        Assert.False(result.Blocked);
+        Assert.Equal(2, result.Revision.Effects.Count);
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(BelowCodes.EffectUnsupported, change.Code);
+        Assert.Equal(BelowAction.Dropped, change.Action);
+        Assert.Equal("effects[2]", change.Path);
+        Assert.Equal("'Fixture: Calm Ward': its immunity to the charmed condition; the feature stays as text.", change.Message);
+    }
+
+    [Fact]
+    public void Lowered_condition_immunity_copy_validates_at_11()
+    {
+        var result = DownConvert.Below(CalmWard($"{BiteAttack},{CharmedImmunity}"), 11);
+
+        Assert.Equal(11, result.Revision.SchemaVersion);
+        Assert.DoesNotContain(BelowCodes.ValidationError, result.Changes.Select(c => c.Code));
+        Assert.All(ContentValidator.Validate(result.Revision, Fixtures.M1Catalog()).Errors, e => Assert.Equal("validate.source-missing", e.Code));
+    }
+
+    [Fact]
+    public void Damage_immunity_grant_is_untouched_at_12_to_11()
+    {
+        var resistance = """{"type":"grant","id":"ward","grant":"damageResistance","damageType":"fire"}""";
+        var result = DownConvert.Below(CalmWard($"{BiteAttack},{resistance}"), 11);
+
+        Assert.False(result.Blocked);
+        Assert.Equal(2, result.Revision.Effects.Count);
+        Assert.IsType<GrantEffect>(result.Revision.Effects[1]);
+        Assert.DoesNotContain(result.Changes, c => c.Path == "effects[1]");
+    }
+
     [Theory]
     [InlineData("bonus", "speed.climb", "10")]
     [InlineData("replace", "speed.swim", "30")]

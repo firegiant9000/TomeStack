@@ -505,7 +505,7 @@ public static class DownConvert
     }
 
     /// <summary>
-    /// The 12 to 11 step: the item mod, companion and roll floor effects, and the keys v12 added (weapon bonus, spell tags, replaceable choices, payment, castsSpell).
+    /// The 12 to 11 step: the item mod, companion, roll floor and condition immunity effects, and the keys v12 added (weapon bonus, spell tags, replaceable choices, payment, castsSpell).
     /// A revision that declares an older version carries them as inert extension data, so it is left as it is.
     /// </summary>
     private static void ContentBelowV12(Scope scope, JsonObject node, List<BelowChange> changes)
@@ -553,6 +553,10 @@ public static class DownConvert
                         continue;
                     case CheckAbilityEffect.TypeName:
                         changes.Add(new(path, BelowAction.Dropped, BelowCodes.EffectUnsupported, $"'{name}': its use of another ability for a skill; the feature stays as text."));
+                        continue;
+                    case GrantEffect.TypeName when string.Equals(StringOf(Property(effect, "grant")), nameof(GrantKind.ConditionImmunity), StringComparison.OrdinalIgnoreCase):
+                        // Dropped whole (weaker, never stronger): the older version cannot suppress the condition, so the copy would hold it.
+                        changes.Add(new(path, BelowAction.Dropped, BelowCodes.EffectUnsupported, $"'{name}': its immunity to the {StringOf(Property(effect, "condition"))} condition; the feature stays as text."));
                         continue;
                     case ModifierEffect.TypeName when IsClimbOrSwim(StringOf(Property(effect, "target"))) && RemovedTargetBelow(effect, ModifierEffect.TypeName, i, scope, changes):
                     case RestrictionEffect.TypeName when IsClimbOrSwim(StringOf(Property(effect, "field"))) && RemovedTargetBelow(effect, RestrictionEffect.TypeName, i, scope, changes):
