@@ -119,7 +119,8 @@ public sealed record CharacterSheet(
     IReadOnlyList<ResponseValue>? Responses = null,
     IReadOnlyList<CompanionValue>? Companions = null,
     IReadOnlyList<AttackModeValue>? AttackModes = null,
-    RollModeSummary? AttacksAgainst = null)
+    RollModeSummary? AttacksAgainst = null,
+    IReadOnlyList<ConditionImmunityValue>? ConditionImmunities = null)
 {
     public DerivedValue Field(string field) => Fields.Single(f => f.Field == field);
 }
@@ -328,6 +329,9 @@ public sealed record DamageDefenceSource(string Name, ContentReference? Content 
 /// the canonical lower-case name from <see cref="DamageTypes.All"/>; several sources of the same type and kind are one entry.
 /// </summary>
 public sealed record DamageDefenceValue(string Type, DamageDefenceKind Kind, IReadOnlyList<DamageDefenceSource> Sources);
+
+/// <summary>Content v12 (G11): a condition the character cannot gain, from one or more automatic, always-on grants. <paramref name="Condition"/> is a <see cref="ConditionKeys.All"/> key.</summary>
+public sealed record ConditionImmunityValue(string Condition, IReadOnlyList<DamageDefenceSource> Sources);
 
 /// <summary>A calculated field id and its display label.</summary>
 public sealed record FieldInfo(string Id, string Label);
@@ -733,6 +737,7 @@ public static partial class CharacterCalculator
         var effective = ToggleGroups.Resolve(character.Play, declaredToggles, diagnostics, active.Select(a => a.Revision.ContentId).ToHashSet());
         var resourceBonuses = new List<ResourceBonus>();
         var modifiers = CollectModifiers(active, character, policy, diagnostics, warnings, manual, effective, autoOn, resourceBonuses, resolved.ClassLevels, resolved.ModdedEntries);
+        var conditionImmunities = CollectConditionImmunities(active, character, resolved.ClassLevels, effective, autoOn, diagnostics);
         var rollModes = CollectRollModes(active, character, effective, autoOn, diagnostics);
         var weaponProficiencies = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         var armorTraining = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
@@ -943,7 +948,8 @@ public static partial class CharacterCalculator
             spellcasting, spellSlots, pactSlots, attacks, toggles, scales.Count > 0 ? scales : null, bloodied ? true : null,
             damageDefences.Count > 0 ? damageDefences : null, null, // the item uses are added once by Calculate (WithItemUses)
             xpForNextLevel is { } next && character.Xp >= next ? true : null, xpForNextLevel, upkeeps.Count > 0 ? upkeeps : null,
-            responses.Count > 0 ? responses : null, companions.Count > 0 ? companions : null, rollModes.AttackModes, rollModes.AttacksAgainst), active);
+            responses.Count > 0 ? responses : null, companions.Count > 0 ? companions : null, rollModes.AttackModes, rollModes.AttacksAgainst,
+            conditionImmunities.Count > 0 ? conditionImmunities : null), active);
     }
 
     /// <summary>The tags an attack roll mode matches: a weapon's <c>weapon</c>, then its own tags (a feature attack), then <c>melee</c> or <c>ranged</c>.</summary>
@@ -1255,6 +1261,38 @@ public static partial class CharacterCalculator
             .GroupBy(f => (f.Type, f.Kind))
             .OrderBy(g => order.IndexOf(g.Key.Type)).ThenBy(g => g.Key.Kind)
             .Select(g => new DamageDefenceValue(g.Key.Type, g.Key.Kind, [.. g.Select(f => f.Source).Distinct()]))];
+    }
+
+    /// <summary>
+    /// Content v12 (G11): the conditions the character cannot gain. Like damage defences, a grant counts only when it is automatic
+    /// and always on, and its <c>level</c>, <c>onlyAs</c> and <c>whileToggle</c> are met. The character has no hand-entered
+    /// immunities. Several sources of one condition are one entry, ordered by <see cref="ConditionKeys.All"/>.
+    /// </summary>
+    private static List<ConditionImmunityValue> CollectConditionImmunities(
+        List<ActiveContent> active, Character character, ClassLevelMap classLevels, EffectiveToggles effective, bool autoOn, List<Diagnostic> diagnostics)
+    {
+        var found = new List<(string Condition, DamageDefenceSource Source)>();
+        foreach (var item in active)
+        {
+            foreach (var grant in item.Revision.Effects.OfType<GrantEffect>())
+            {
+                if (!GrantEffect.IsConditionImmunity(grant.Grant) || grant.Automation != AutomationStatus.Automatic || grant.Timing != EffectTiming.Always)
+                    continue;
+                if (grant.Level is { } needed && GateLevel(item, character, classLevels) < needed)
+                    continue;
+                if (!EntryApplies(item, grant.OnlyAs, character) || grant.Condition is not { } condition || !ConditionKeys.All.Contains(condition))
+                    continue;
+                if (grant.WhileToggle is { } form
+                    && GateOnToggle(active, item.Revision, grant.Id, form.ToggleId, form.ContentId ?? item.Revision.ContentId, effective, autoOn, diagnostics, out _) != ToggleGate.Applies)
+                    continue;
+                found.Add((condition, new(item.Revision.Name, item.Revision.Reference, grant.Id)));
+            }
+        }
+        var order = ConditionKeys.All.ToList();
+        return [.. found
+            .GroupBy(f => f.Condition)
+            .OrderBy(g => order.IndexOf(g.Key))
+            .Select(g => new ConditionImmunityValue(g.Key, [.. g.Select(f => f.Source).Distinct()]))];
     }
 
     /// <summary>Content v10 (D38): a toggle that switches itself while the character is bloodied. Below v10 <c>autoWhen</c> is extension data and never reaches here.</summary>

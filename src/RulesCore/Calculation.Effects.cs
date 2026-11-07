@@ -668,7 +668,7 @@ public static partial class CharacterCalculator
             foreach (var grant in item.Revision.Effects.OfType<GrantEffect>())
             {
                 // Damage defences (content v10) are display data here: not a proficiency, and nothing to calculate yet.
-                if (grant.Grant == GrantKind.Content || GrantEffect.IsDamageDefence(grant.Grant))
+                if (grant.Grant == GrantKind.Content || GrantEffect.IsDamageDefence(grant.Grant) || GrantEffect.IsConditionImmunity(grant.Grant))
                     continue;
                 if (grant.Level is { } needed && gateLevel(item) < needed)
                     continue;
