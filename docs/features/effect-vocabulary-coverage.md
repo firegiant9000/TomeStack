@@ -59,7 +59,7 @@ Coverage words are the Lab's registry words: **Automatic** (the sheet works it o
 | --- | --- | --- | --- | --- |
 | Attack | `attack`, `attackRider`, `weapon`; `rollMode` on `attack` | Automatic | G8 | As the Avrae `attack` row |
 | Cast | `resource` plus a spend-only `roll` | Reference | — | As the Avrae `spell` row |
-| Check | `skill.<skill>` fields; `rollMode` on `skill.<skill>` and `ability.<ability>.check` | Assisted | G10 built | As the Avrae `check` row |
+| Check | `skill.<skill>` fields; `rollMode` on `skill.<skill>` and `ability.<ability>.check` | Assisted | (G10 built) | As the Avrae `check` row |
 | Damage | `roll.dice`, `roll.perUnit`, `attackRider.dice` | Assisted | (G1, G2 built) | A roll effect's damage has no typed field; the type is in its label or text |
 | Enchant | `attackRider` (tag `weapon`) with `toggle` | Reference | — | Not covered: no effect changes another item's own fields; a toggled rider on every weapon is the nearest |
 | Forward | a second `roll` with its own `cost` on the same pool; `response` outcome `offerRoll` | Assisted | — | One roll cannot call another; author each use as its own roll |
