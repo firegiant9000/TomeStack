@@ -417,6 +417,11 @@
                   "required": [
                     "content"
                   ]
+                },
+                {
+                  "required": [
+                    "condition"
+                  ]
                 }
               ]
             }

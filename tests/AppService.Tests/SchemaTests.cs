@@ -145,6 +145,20 @@ public class SchemaTests
     }
 
     [Fact]
+    public void The_v12_schema_refuses_condition_on_a_damage_defence()
+    {
+        var copy = JsonNode.Parse(File.ReadAllText(Path.Combine(FixtureRoot, "golden", "revisions.json")))!.AsArray()[9]!.DeepClone().AsObject();
+        copy["schemaVersion"] = 12;
+        copy["effects"]!.AsArray().Add(new JsonObject { ["type"] = "grant", ["id"] = "x", ["grant"] = "damageResistance", ["damageType"] = "fire" });
+        using (var document = JsonDocument.Parse(copy.ToJsonString()))
+            Assert.Equal("", Validate("content-revision", document.RootElement));
+
+        copy["effects"]!.AsArray()[^1]!["condition"] = "charmed";
+        using (var document = JsonDocument.Parse(copy.ToJsonString()))
+            Assert.NotEqual("", Validate("content-revision", document.RootElement));
+    }
+
+    [Fact]
     public void The_v12_schema_allows_while_toggle_on_a_condition_immunity_and_refuses_condition_elsewhere()
     {
         var copy = JsonNode.Parse(File.ReadAllText(Path.Combine(FixtureRoot, "golden", "revisions.json")))!.AsArray()[9]!.DeepClone().AsObject();
