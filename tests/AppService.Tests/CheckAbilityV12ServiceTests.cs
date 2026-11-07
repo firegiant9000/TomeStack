@@ -63,6 +63,26 @@ public class CheckAbilityV12ServiceTests
 
         Assert.Equal(before + 4, after); // Dexterity +3 replaces Strength -1
         Assert.Equal(5 + after, record.Total);
+        Assert.Null(record.AutomaticMode); // no roll mode applies: reported as none (Normal), not as a mode
+    }
+
+    [Fact]
+    public void Bookish_hunch_rolls_arcana_with_wisdom()
+    {
+        // Intelligence 8 (-1), Wisdom 16 (+3): the Wisdom-based Arcana is 4 higher than the printed one.
+        var hero = Hero(BookishHunch) with { BaseAbilities = new(10, 10, 12, 8, 16, 10) };
+        var (temp, id) = Start(hero, 7);
+        using var _ = temp;
+        var plain = temp.App.GetCharacter(id).Character with { Pins = [Duelist] };
+        temp.App.SaveCharacter(plain);
+        var before = temp.App.GetCharacter(id).Sheet.Field("skill.arcana").Value;
+        temp.App.SaveCharacter(plain with { Pins = [Duelist, BookishHunch] });
+        var after = temp.App.GetCharacter(id).Sheet.Field("skill.arcana").Value;
+
+        var record = temp.App.Roll(new RollCommand(id, Field: "skill.arcana"));
+
+        Assert.Equal(before + 4, after);
+        Assert.Equal(7 + after, record.Total);
     }
 
     [Fact]
