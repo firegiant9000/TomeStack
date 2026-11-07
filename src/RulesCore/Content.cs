@@ -174,6 +174,9 @@ public sealed record ContentRevision : IJsonOnDeserialized
     /// <summary>G10: the <c>speed.climb</c> and <c>speed.swim</c> fields and the <c>SPEED</c> formula identifier. <b>v12</b>.</summary>
     public const int ClimbSwimSchemaVersion = 12;
 
+    /// <summary>G11: the <c>conditionImmunity</c> grant kind and its <c>condition</c> member (immunity to one condition). <b>v12</b>.</summary>
+    public const int ConditionImmunitySchemaVersion = 12;
+
     /// <summary>
     /// The content schema version that adds the Wave 3 details listed above: <b>v10</b> (speed and passive targets,
     /// <c>autoWhen</c>, <c>activation</c>, damage defences, <c>item</c>). Not the play mechanics version, which is

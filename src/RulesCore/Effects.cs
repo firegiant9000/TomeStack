@@ -91,7 +91,11 @@ public enum EffectTiming { Always, WhileActive, OnRoll, OnShortRest, OnLongRest 
 /// type (<see cref="GrantEffect.DamageType"/>) and no target. They are typed only in a v10 revision: a v9 build cannot read
 /// these values, keeps such an effect as an <see cref="UnknownEffect"/>, and so does this build below v10 (<see cref="GrantEffect.FromUnknown"/>).
 /// </summary>
-public enum GrantKind { Proficiency, Expertise, Content, DamageResistance, DamageImmunity, DamageVulnerability }
+/// <remarks>
+/// Content schema v12 (G11) appends <see cref="ConditionImmunity"/>, which names a condition (<see cref="GrantEffect.Condition"/>).
+/// Below v12 the whole grant stays an <see cref="UnknownEffect"/> (<see cref="GrantEffect.FromUnknown"/>).
+/// </remarks>
+public enum GrantKind { Proficiency, Expertise, Content, DamageResistance, DamageImmunity, DamageVulnerability, ConditionImmunity }
 
 /// <summary>Content schema v10 (Wave 3, D42): when a toggle switches itself, computed from play state and never stored. One value for now.</summary>
 public enum ToggleAutoWhen { Bloodied }
@@ -217,6 +221,19 @@ public sealed record GrantEffect : Effect
     /// </summary>
     public ToggleRef? WhileToggle { get; init; }
 
+    /// <summary>
+    /// Content schema v12 (G11): with <see cref="GrantKind.ConditionImmunity"/>, the condition (one key of
+    /// <see cref="ConditionKeys.All"/>). Below v12 the key stays extension data and does nothing.
+    /// </summary>
+    public string? Condition { get; init; }
+
+    internal const string ConditionProperty = "condition";
+
+    /// <summary>The keys content schema v12 adds to this effect, stripped below v12 in <see cref="FromUnknown"/>.</summary>
+    internal static readonly string[] V12Keys = [ConditionProperty];
+
+    internal static bool IsConditionImmunity(GrantKind kind) => kind == GrantKind.ConditionImmunity;
+
     /// <summary>The content schema version that adds the damage-defence kinds and <see cref="DamageType"/>.</summary>
     public const int DamageSchemaVersion = ContentRevision.PlayDetailsSchemaVersion;
 
@@ -244,14 +261,18 @@ public sealed record GrantEffect : Effect
         {
             if (!VersionedEffects.NamesMember<GrantKind>(unknown.Raw, "grant"))
                 return unknown;
-            return revisionSchemaVersion >= ContentRevision.PlayMechanicsSchemaVersion
-                ? VersionedEffects.Typed<GrantEffect>(unknown)
-                : VersionedEffects.TypedWithout<GrantEffect>(unknown, V11Keys);
+            if (revisionSchemaVersion >= ContentRevision.ConditionImmunitySchemaVersion)
+                return VersionedEffects.Typed<GrantEffect>(unknown);
+            // Content v12 (G11): a v10 or v11 revision keeps a conditionImmunity grant unknown, and a condition key as extension data.
+            var older = revisionSchemaVersion >= ContentRevision.PlayMechanicsSchemaVersion
+                ? VersionedEffects.TypedWithout<GrantEffect>(unknown, V12Keys)
+                : VersionedEffects.TypedWithout<GrantEffect>(unknown, [.. V11Keys, .. V12Keys]);
+            return older is GrantEffect { Grant: GrantKind.ConditionImmunity } ? unknown : older;
         }
         // Below v10 any value outside the v9 names (Proficiency, Expertise, Content) is one a v9 build either refused (it stays
         // unknown) or could only bind by naming a member this build has since added (a damage kind, a padded or listed
         // spelling): this build must not bind it, whatever number it would give.
-        var typed = VersionedEffects.TypedWithout<GrantEffect>(unknown, [DamageTypeProperty, .. V11Keys]);
+        var typed = VersionedEffects.TypedWithout<GrantEffect>(unknown, [DamageTypeProperty, .. V11Keys, .. V12Keys]);
         return typed is GrantEffect { Grant: var kind } && (int)kind > (int)GrantKind.Content ? unknown : typed;
     }
 
@@ -263,7 +284,7 @@ public sealed record GrantEffect : Effect
 
     /// <summary>The names a v9 build could read (the converter hands over any grant whose kind is not exactly one of them).</summary>
     internal static bool IsPreV10Name(string? name) =>
-        name is not null && Enum.GetValues<GrantKind>().Where(k => !IsDamageDefence(k)).Any(k => string.Equals(k.ToString(), name, StringComparison.OrdinalIgnoreCase));
+        name is not null && Enum.GetValues<GrantKind>().Where(k => !IsDamageDefence(k) && !IsConditionImmunity(k)).Any(k => string.Equals(k.ToString(), name, StringComparison.OrdinalIgnoreCase));
 }
 
 /// <summary>Content schema v3: a class's hit point die (d6–d12), used for hit points at each level of that class.</summary>
@@ -2031,7 +2052,7 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
         var newest = type switch
         {
             ModifierEffect.TypeName => ModifierEffect.V11Keys,
-            GrantEffect.TypeName => GrantEffect.V11Keys,
+            GrantEffect.TypeName => [.. GrantEffect.V11Keys, .. GrantEffect.V12Keys],
             ResourceEffect.TypeName => ResourceEffect.V11Keys,
             RollEffect.TypeName => [.. RollEffect.V11Keys, .. RollEffect.V12Keys],
             ChoiceEffect.TypeName => ChoiceEffect.V12Keys,

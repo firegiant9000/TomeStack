@@ -165,6 +165,19 @@ internal static class Generators
                 from whileId in Keys
                 select new JsonObject { ["grant"] = grant, ["damageType"] = damageType }
                     .With("whileToggle", whileToggle ? new JsonObject { ["toggleId"] = whileId }.With("contentId", whileContent?.ToString()) : null)),
+            // The condition immunity (G11): below v12 the whole effect stays unknown and unchanged (a v11 build cannot read the kind).
+            Common(GrantEffect.TypeName,
+                from condition in Gen.Elements("charmed", "frightened", "poisoned")
+                from whileToggle in Gen.Elements(false, false, true)
+                from whileContent in OptionalValue(Guids)
+                from whileId in Keys
+                select new JsonObject { ["grant"] = "conditionImmunity", ["condition"] = condition }
+                    .With("whileToggle", whileToggle ? new JsonObject { ["toggleId"] = whileId }.With("contentId", whileContent?.ToString()) : null)),
+            // A condition key on another grant kind: below v12 it stays extension data, written back where it was.
+            Common(GrantEffect.TypeName,
+                from target in Gen.Elements("skill.stealth", "save.dex")
+                from condition in Gen.Elements("charmed", "Frightened", "exhaustion")
+                select new JsonObject { ["grant"] = "proficiency", ["target"] = target, ["condition"] = condition }),
             Common(ResourceEffect.TypeName,
                 from id in Keys
                 from label in Names
