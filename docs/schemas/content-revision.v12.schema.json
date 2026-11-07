@@ -1913,7 +1913,7 @@
                 "wis",
                 "cha"
               ],
-              "description": "Content v12 (G10): the ability whose modifier the skill may use instead; it must differ from the printed ability of every skill the target reaches. The skill uses the highest of its printed ability and this one."
+              "description": "Content v12 (G10): the ability whose modifier the skill may use instead; it must differ from the printed ability of every skill the target reaches. The skill uses whichever of its printed ability and this one has the best automatic roll mode, then the higher modifier; a tie keeps the printed ability."
             }
           },
           "required": [
