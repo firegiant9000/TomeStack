@@ -1,8 +1,8 @@
 namespace TomeStack.RulesCore.Tests;
 
 /// <summary>
-/// Content schema v12 (G10), Task 5: a <c>checkAbility</c> effect on the calculated sheet. A skill starts at the highest modifier among its
-/// printed ability and the abilities content lets it use, and roll modes and floors follow the ability it ends up using. Original fixtures.
+/// Content schema v12 (G10), Task 5: a <c>checkAbility</c> effect on the calculated sheet. A skill uses, among its printed ability and the
+/// abilities content lets it use, the one with the best automatic roll mode, then the higher modifier (a tie keeps the printed one); roll modes and floors follow the ability it ends up using. Original fixtures.
 /// </summary>
 public class CheckAbilityV12SheetTests
 {
@@ -131,10 +131,10 @@ public class CheckAbilityV12SheetTests
     {
         var disadvantage = new RollModeEffect { Id = "r", Target = "ability.str.check", Mode = RollMode.Disadvantage };
         var advantage = new RollModeEffect { Id = "r2", Target = "ability.dex.check", Mode = RollMode.Advantage };
-        var nimble = Feature("Fixture Quickstep", 7, Use("u", Athletics, "dex"));
+        var quickstep = Feature("Fixture Quickstep", 7, Use("u", Athletics, "dex"));
         var modes = Feature("Fixture Modes", 8, disadvantage, advantage);
 
-        var sheet = Sheet(Handler(LowStrHighDex), nimble, modes);
+        var sheet = Sheet(Handler(LowStrHighDex), quickstep, modes);
 
         Assert.Equal(RollMode.Advantage, sheet.Field(Athletics).Mode!.Automatic);
         Assert.Equal(RollMode.Disadvantage, sheet.Field("ability.str.mod").Mode!.Automatic);
@@ -204,9 +204,9 @@ public class CheckAbilityV12SheetTests
     {
         var floor = new RollFloorEffect { Id = "f", Target = "ability.dex.check", Face = 8 };
         var strFloor = new RollFloorEffect { Id = "f2", Target = "ability.str.check", Face = 5 };
-        var nimble = Feature("Fixture Quickstep", 9, Use("u", Athletics, "dex"));
+        var quickstep = Feature("Fixture Quickstep", 9, Use("u", Athletics, "dex"));
 
-        var sheet = Sheet(Handler(LowStrHighDex), nimble, Feature("Fixture Floors", 10, floor, strFloor));
+        var sheet = Sheet(Handler(LowStrHighDex), quickstep, Feature("Fixture Floors", 10, floor, strFloor));
 
         Assert.Equal(8, sheet.Field(Athletics).Floor!.Face);
         Assert.Equal(5, sheet.Field("ability.str.mod").Floor!.Face);
