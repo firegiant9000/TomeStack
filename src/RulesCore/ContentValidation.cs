@@ -158,6 +158,33 @@ public static class ContentValidator
         return target.StartsWith("ability.", StringComparison.Ordinal) && target.EndsWith(".check", StringComparison.Ordinal) && IsRollModeTarget(target);
     }
 
+    /// <summary>
+    /// Content v12 (G10): the targets of a <c>checkAbility</c>: <c>skill.&lt;skill&gt;</c> (a known skill) or <c>ability.&lt;ability&gt;.check</c>
+    /// (every skill whose printed ability it is). <paramref name="printed"/> is the printed ability of the reached skill(s) for a valid target.
+    /// </summary>
+    internal static bool IsCheckAbilityTarget(string? target, out Ability printed)
+    {
+        printed = default;
+        if (target is null)
+            return false;
+        if (target.StartsWith("skill.", StringComparison.Ordinal))
+        {
+            foreach (var skill in CharacterCalculator.Skills)
+            {
+                if (skill.Key == target["skill.".Length..])
+                {
+                    printed = skill.Ability;
+                    return true;
+                }
+            }
+            return false;
+        }
+        // Constitution has no skill, so ability.con.check would reach nothing; refused (published revisions are insert-only).
+        return target.StartsWith("ability.", StringComparison.Ordinal) && target.EndsWith(".check", StringComparison.Ordinal)
+            && target != "ability.con.check"
+            && IsRollModeTarget(target) && CheckAbilityEffect.TryParseAbility(target["ability.".Length..^".check".Length], out printed);
+    }
+
     private static bool IsCharacterOnlyField(string field, ContentRevision revision) =>
         CharacterCalculator.IsCharacterOnlyField(field, revision.SchemaVersion);
 
@@ -245,6 +272,9 @@ public static class ContentValidator
                 needsV10 |= CharacterCalculator.IsSpeedOrPassive(modifier.Target); // allowed: this revision is v10
             // Content v11 (D43): fly speed. Below v11 the revision gets validate.requires-v11 (and the calculator ignores it).
             needsV11 |= modifier.Target == FieldIds.FlySpeed;
+            // Content v12 (G10): climb and swim speed. Below v12 the revision gets validate.requires-v12 (and the calculator ignores it).
+            if (CharacterCalculator.IsClimbOrSwim(modifier.Target))
+                NeedV12("a climb or swim speed");
             // Content v8: a lower critical range is better, but set and replace keep the highest value, so only a
             // bonus (such as -1 for Improved Critical) can lower it.
             if (modifier.Target == FieldIds.CriticalRange && modifier.Operation != ModifierOperation.Bonus)
@@ -255,7 +285,10 @@ public static class ContentValidator
                 Error("validate.while-armored-replace", $"Effect '{modifier.Id}' replaces Armor Class only while armor is worn, but worn armor sets the base Armor Class itself, so it could never apply. Use a bonus.", modifier.Id);
             if (modifier.Stacking == StackingRule.HighestInGroup && string.IsNullOrWhiteSpace(modifier.StackGroup))
                 Error("validate.stack-group-missing", $"Effect '{modifier.Id}' uses highest-in-group stacking without a stackGroup.", modifier.Id);
-            CheckFormula(modifier.Value, modifier.Id, "value");
+            // Content v12 (G10): SPEED (the walking speed) is readable only here, by a climb, swim or fly speed modifier of a v12 revision;
+            // elsewhere, and below v12, it is an unknown identifier.
+            CheckFormula(modifier.Value, modifier.Id, "value",
+                features: AllFormulaFeatures | (Formula.AllowsSpeed(revision.SchemaVersion, modifier.Target) ? FormulaFeatures.Speed : FormulaFeatures.None));
             if (modifier.Toggle is { } toggle)
             {
                 needsV6 = true;
@@ -386,6 +419,12 @@ public static class ContentValidator
                 case UnknownEffect { DeclaredType: RollFloorEffect.TypeName } unreadableFloor when revision.SchemaVersion >= RollFloorEffect.SchemaVersion:
                     NeedV12("a rollFloor");
                     Error("validate.effect-malformed", $"Effect '{unreadableFloor.Id}' has type '{unreadableFloor.DeclaredType}' but a value or field that does not read (it needs a target and exactly one of face, a whole number from 2 to 20, and total, a formula; proficient is true or false); fix it before publishing.", unreadableFloor.Id);
+                    break;
+                // Content v12 (G10): from v12 a checkAbility that stays unknown did not read (a target or ability that is not text), so the
+                // substitution would silently not exist. Below v12 it stays an unsupported effect, kept byte for byte.
+                case UnknownEffect { DeclaredType: CheckAbilityEffect.TypeName } unreadableSwap when revision.SchemaVersion >= CheckAbilityEffect.SchemaVersion:
+                    NeedV12("a checkAbility");
+                    Error("validate.effect-malformed", $"Effect '{unreadableSwap.Id}' has type '{unreadableSwap.DeclaredType}' but a value or field that does not read (it needs a target and an ability, both text); fix it before publishing.", unreadableSwap.Id);
                     break;
                 // Content v11 (D43): from v11 a response is typed; one that stays unknown did not match the shape (a phase or an outcome
                 // kind that names no member, no responseId, label or phase, a toggle or content that is not an id), so the response would
@@ -559,6 +598,8 @@ public static class ContentValidator
                     else
                         needsV10 |= CharacterCalculator.IsSpeedOrPassive(restriction.Field);
                     needsV11 |= restriction.Field == FieldIds.FlySpeed;
+                    if (CharacterCalculator.IsClimbOrSwim(restriction.Field))
+                        NeedV12("a climb or swim speed");
                     if (Math.Abs(restriction.Minimum) > FormulaLimits.MaxLiteral)
                         Error("validate.restriction-minimum", $"Restriction '{restriction.Id}' minimum {restriction.Minimum} is outside ±{FormulaLimits.MaxLiteral}.", restriction.Id);
                     break;
@@ -593,6 +634,18 @@ public static class ContentValidator
                         Error("validate.roll-floor-value", $"Roll floor '{rollFloor.Id}' has an empty total; give a formula.", rollFloor.Id);
                     else
                         CheckFormula(rollFloor.Total, rollFloor.Id, "total");
+                    break;
+                case CheckAbilityEffect swap:
+                    NeedV12("a checkAbility");
+                    if (swap.Automation != AutomationStatus.Automatic || swap.Timing != EffectTiming.Always)
+                        Error("validate.check-ability-automation", $"Check ability '{swap.Id}' must be automatic and always on; a skill's ability is chosen by the calculator, never by the player.", swap.Id);
+                    var swapTargetOk = IsCheckAbilityTarget(swap.Target, out var swapPrinted);
+                    if (!swapTargetOk)
+                        Error("validate.check-ability-target", $"Check ability '{swap.Id}' targets '{swap.Target}'; use skill.<skill> (such as skill.athletics) or ability.<ability>.check (such as ability.str.check). It never reaches saves, initiative, a bare check or ability.<ability>.mod.", swap.Id);
+                    if (!CheckAbilityEffect.TryParseAbility(swap.Ability, out var swapAbility))
+                        Error("validate.check-ability-ability", $"Check ability '{swap.Id}' uses '{swap.Ability}', which is not an ability; use str, dex, con, int, wis or cha.", swap.Id);
+                    else if (swapTargetOk && swapAbility == swapPrinted)
+                        Error("validate.check-ability-ability", $"Check ability '{swap.Id}' uses '{swap.Ability}', which is already the printed ability of '{swap.Target}'; use a different ability.", swap.Id);
                     break;
                 case ItemModEffect mod:
                     NeedV12("an item mod");
@@ -1018,6 +1071,8 @@ public static class ContentValidator
         {
             usedScales.UnionWith(formula.Identifiers.Where(FormulaIdentifiers.IsScale).Select(FormulaIdentifiers.ScaleId));
             usedValues.UnionWith(formula.Identifiers.Where(FormulaIdentifiers.IsValue).Select(FormulaIdentifiers.ValueId));
+            if (formula.Identifiers.Contains(FormulaIdentifiers.Speed))
+                NeedV12("the SPEED formula identifier");
         }
 
         // Content v11 (D43): a roll's save, area, range, targets and per-unit dice.

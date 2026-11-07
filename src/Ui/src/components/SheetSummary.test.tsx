@@ -395,6 +395,18 @@ it('fly speed shows only when above 0', () => {
   expect(dd('Speed')).toBe('30 ft., Fly 0 ft.'); // an override of 0 stays visible
 });
 
+it('summary lists fly, climb and swim in that order', () => {
+  const base = fixtureView();
+  const withFields = (...extra: ReturnType<typeof field>[]): CharacterView => ({ ...base, sheet: { ...base.sheet, fields: [...base.sheet.fields, ...extra] } });
+  const { rerender } = render(<SheetSummary view={withFields(field('speed.climb', 'Climb speed', 0, 'feet'), field('speed.swim', 'Swim speed', 0, 'feet'))} {...plain} />);
+  expect(dd('Speed')).toBe('30 ft.');
+  rerender(<SheetSummary view={withFields(field('speed.swim', 'Swim speed', 20, 'feet'), field('speed.climb', 'Climb speed', 25, 'feet'), field('speed.fly', 'Fly speed', 30, 'feet'))} {...plain} />);
+  expect(dd('Speed')).toBe('30 ft., Fly 30 ft., Climb 25 ft., Swim 20 ft.');
+  const overridden = { ...field('speed.climb', 'Climb speed', 0, 'feet'), computedValue: 30, override: { field: 'speed.climb', value: 0 } };
+  rerender(<SheetSummary view={withFields(overridden)} {...plain} />);
+  expect(dd('Speed')).toBe('30 ft., Climb 0 ft.');
+});
+
 it('shows a "Bloodied" chip as text when the sheet says bloodied, in the hit points box, with no live region (D38)', () => {
   const base = fixtureView();
   const summary = (bloodied?: boolean) => (

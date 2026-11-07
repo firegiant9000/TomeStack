@@ -120,7 +120,10 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, ac
           <dd>
             {show('speed')}
             {/* Shown above 0, and at 0 when the player set that override (so the override is visible, as on its Stats card). */}
-            {((field('speed.fly')?.value ?? 0) > 0 || field('speed.fly')?.override !== undefined) && `, Fly ${field('speed.fly')!.value} ft.`}
+            {([['speed.fly', 'Fly'], ['speed.climb', 'Climb'], ['speed.swim', 'Swim']] as const).map(([id, label]) => {
+              const f = field(id);
+              return f && (f.value > 0 || f.override !== undefined) ? `, ${label} ${f.value} ft.` : '';
+            })}
           </dd>
         </div>
         {hp && (

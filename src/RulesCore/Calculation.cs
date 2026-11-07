@@ -521,10 +521,14 @@ public static partial class CharacterCalculator
     /// <summary>
     /// Content schema v11 (D43): fly speed is a content target only from v11. Below it the validator refuses it and the
     /// calculator ignores such a modifier with the same diagnostic as <see cref="IsCharacterOnlyField"/>, so a stored older
-    /// revision never moves it, whatever it says.
+    /// revision never moves it, whatever it says. Content v12 (G10): climb and swim speed are content targets only from v12, the same way.
     /// </summary>
     public static bool IsPlayMechanicsOnlyField(string field, int schemaVersion) =>
-        field == FieldIds.FlySpeed && schemaVersion < ContentRevision.PlayMechanicsSchemaVersion;
+        (field == FieldIds.FlySpeed && schemaVersion < ContentRevision.PlayMechanicsSchemaVersion)
+        || (IsClimbOrSwim(field) && schemaVersion < ContentRevision.ClimbSwimSchemaVersion);
+
+    /// <summary>Content v12 (G10): the climb and swim speed fields.</summary>
+    public static bool IsClimbOrSwim(string field) => field is FieldIds.ClimbSpeed or FieldIds.SwimSpeed;
 
     /// <summary>Speed and the passive scores: the fields content may target only from schema v10.</summary>
     public static bool IsSpeedOrPassive(string field) =>
@@ -547,7 +551,7 @@ public static partial class CharacterCalculator
         var modifiers = new List<Modifier>();
         foreach (var effect in revision.Effects.OfType<ModifierEffect>())
         {
-            if (SpecIndex.ContainsKey(effect.Target) && !IsCharacterOnlyField(effect.Target, revision.SchemaVersion) && !IsPlayMechanicsOnlyField(effect.Target, revision.SchemaVersion) && Formula.TryParse(effect.Value, Formula.FeaturesFor(revision), out var formula, out _))
+            if (SpecIndex.ContainsKey(effect.Target) && !IsCharacterOnlyField(effect.Target, revision.SchemaVersion) && !IsPlayMechanicsOnlyField(effect.Target, revision.SchemaVersion) && Formula.TryParse(effect.Value, Formula.ModifierFeaturesFor(revision, effect.Target), out var formula, out _))
                 modifiers.Add(new(content, effect, formula!, [.. formula!.Identifiers.Select(FormulaIdentifiers.FieldFor).OfType<string>().Distinct(StringComparer.Ordinal)]));
         }
         var diagnostics = new List<Diagnostic>();
@@ -742,7 +746,11 @@ public static partial class CharacterCalculator
             resolved.Classes.FirstOrDefault(c => c.Content.Revision.Reference == e.Class) is { } info && RecordsArmorTraining(info.Content.Revision));
         var worn = AddArmor(active, modifiers, diagnostics, armorTraining, checkTraining, policy, warnings, resolved.ModdedEntries);
         RemoveCycles(modifiers, diagnostics, warnings, manual);
-        var order = TopologicalOrder(modifiers);
+        // Content v12 (G10): skills that may use another ability read that modifier too; none for a sheet without checkAbility.
+        var checkAbilities = CollectCheckAbilities(active);
+        // Unreachable today (formulas cannot read skills); keeps a future skill-reading identifier from making TopologicalOrder throw.
+        var checkEdges = AcceptCheckAbilities(checkAbilities, modifiers, diagnostics, warnings);
+        var order = TopologicalOrder(modifiers, checkEdges);
         var casters = CollectCasters(active, character, resolved.ClassLevels, diagnostics);
 
         var values = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -752,7 +760,8 @@ public static partial class CharacterCalculator
         {
             var spec = Specs[SpecIndex[id]];
             var steps = new List<Step>();
-            var context = new BaseContext(character, family, values, proficiencies, resolved.Classes, warnings[id], manual, casters);
+            var context = new BaseContext(character, family, values, proficiencies, resolved.Classes, warnings[id], manual, casters, checkAbilities,
+                (skillField, ability) => CheckModeOf(rollModes.Targeted, skillField, ability));
             var value = spec.Base(context, steps);
             value = ApplyModifiers(id, value, modifiers.Where(m => m.Effect.Target == id).ToList(), character, resolved.ClassLevels, values, family, steps, warnings[id], manual);
             value = Bound(spec, value, steps, warnings[id], family);
@@ -777,7 +786,18 @@ public static partial class CharacterCalculator
             [FieldIds.SpellAttack] = casterReads,
             [FieldIds.SpellSaveDc] = casterReads,
         };
-        var rollFloors = CollectRollFloors(active, character, resolved.ClassLevels, values, id => MarkOf(id, proficiencies), family, diagnostics);
+        // Content v12 (G10): the ability each skill with a candidate uses; a substituted skill reads that modifier, not the printed one.
+        var skillAbility = new Dictionary<string, Ability>(StringComparer.Ordinal);
+        foreach (var (field, list) in checkAbilities)
+        {
+            var printed = Skills.First(s => FieldIds.Skill(s.Key) == field).Ability;
+            var (used, candidate) = ChosenAbility(printed, list, values, a => CheckModeOf(rollModes.Targeted, field, a));
+            skillAbility[field] = used;
+            if (candidate is not null)
+                actualReads[field] = [FieldIds.Modifier(used), FieldIds.ProficiencyBonus];
+        }
+        var rollModeFields = RollModesByField(rollModes.Targeted, skillAbility);
+        var rollFloors = CollectRollFloors(active, character, resolved.ClassLevels, values, id => MarkOf(id, proficiencies), family, diagnostics, skillAbility);
         var fields = Specs.Select(spec =>
         {
             var closure = Closure(spec.Id, modifiers, actualReads);
@@ -798,7 +818,7 @@ public static partial class CharacterCalculator
                 results[spec.Id].Override,
                 spec.Units,
                 MarkOf(spec.Id, proficiencies),
-                rollModes.ByField.GetValueOrDefault(spec.Id),
+                rollModeFields.GetValueOrDefault(spec.Id),
                 floor?.Summary);
         }).ToList();
 

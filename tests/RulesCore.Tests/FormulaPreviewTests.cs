@@ -23,6 +23,23 @@ public class FormulaPreviewTests
     private static int?[] Values(FormulaPreviewResult result) => [.. result.Points.Select(p => p.Value)];
 
     [Fact]
+    public void SPEED_in_a_v12_revision_cannot_be_previewed_rather_than_unknown()
+    {
+        var result = FormulaPreview.Preview("SPEED / 2", Revision(ContentKind.Feature) with { SchemaVersion = 12 });
+
+        Assert.Null(result.Error);
+        Assert.Equal("SPEED can't be previewed here.", result.Unavailable);
+    }
+
+    [Fact]
+    public void A_speed_modifier_lists_its_SPEED_read_in_the_content_graph()
+    {
+        var revision = Revision(ContentKind.Feature, new ModifierEffect { Id = "swim", Operation = ModifierOperation.Set, Target = FieldIds.SwimSpeed, Value = "SPEED" }) with { SchemaVersion = 12 };
+
+        Assert.Contains(("swim", "SPEED"), ContentGraph.Identifiers(revision));
+    }
+
+    [Fact]
     public void PB_at_the_sample_levels_is_2_3_4_5_6()
     {
         var result = FormulaPreview.Preview("PB", null);

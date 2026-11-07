@@ -298,7 +298,14 @@ public sealed class ContentGraph
     }
 
     /// <summary>The identifiers each formula of a revision reads, by effect id. Formulas that do not parse read nothing (validation reports them).</summary>
-    public static IEnumerable<(string EffectId, string Identifier)> Identifiers(ContentRevision revision) =>
-        Formulas(revision).SelectMany(f =>
-            Formula.TryParse(f.Source, Formula.FeaturesFor(revision), out var formula, out _) ? formula!.Identifiers.Select(i => (f.EffectId, i)) : []);
+    public static IEnumerable<(string EffectId, string Identifier)> Identifiers(ContentRevision revision)
+    {
+        // Content v12 (G10): a speed modifier may read SPEED, so its formula parses with the modifier's own features.
+        var targets = revision.Effects.OfType<ModifierEffect>().GroupBy(m => m.Id, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First().Target, StringComparer.Ordinal);
+        return Formulas(revision).SelectMany(f =>
+        {
+            var features = targets.TryGetValue(f.EffectId, out var target) ? Formula.ModifierFeaturesFor(revision, target) : Formula.FeaturesFor(revision);
+            return Formula.TryParse(f.Source, features, out var formula, out _) ? formula!.Identifiers.Select(i => (f.EffectId, i)) : [];
+        });
+    }
 }

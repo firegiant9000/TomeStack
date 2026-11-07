@@ -725,6 +725,27 @@ Decided in [ADR-022](../decisions/ADR-022-content-v12.md#slice-g9-roll-floor) (L
 
 **Stays by hand:** floors on saves, attacks and tool checks, and on rolls made outside the app.
 
+## Content v12 (G10): check ability, climb and swim speed
+
+Decided in [ADR-022](../decisions/ADR-022-content-v12.md#slice-g10-check-ability-climb-and-swim-speed) (LIVING_SPECS D90). A new effect kind, `checkAbility`, two new speed fields and a `SPEED` formula identifier, content schema v12 only; a revision without them keeps its version and bytes. A v11 revision that holds a `checkAbility` keeps it as unknown data and ignores it.
+
+| Member | Meaning |
+| --- | --- |
+| `target` | `skill.<s>` (a known skill) or `ability.<x>.check` (every skill printed with that ability: Strength, Dexterity, Intelligence, Wisdom or Charisma). Never a bare ability check, initiative or a save (`validate.check-ability-target`). |
+| `ability` | The ability the skill may use. It must differ from the printed ability of every skill the target reaches (`validate.check-ability-ability`). |
+
+**Sheet.** The skill picks its ability by the roll mode first (advantage, then normal, then disadvantage, from the active roll modes), then by the strictly higher modifier; a tie goes to the printed ability, then content order. So a Strength-keyed advantage (Rage) can keep Strength Athletics over a higher Dexterity. Known limit: roll floors are not compared when choosing. Exports (SheetExport, Foundry) keep the printed ability. When a substitute wins, "Why?" reads "{Skill} starts at the {Ability} modifier ({source} lets you use {Ability} instead of {Printed})", and passive scores follow. A substitute that cannot win changes nothing. Roll modes and roll floors reach the skill by the ability it ended up using.
+
+**Climb and swim speed.** `speed.climb` and `speed.swim` (feet, base 0) show in the Combat group and in the summary after Fly ("Climb 30 ft.", "Swim 30 ft."), hidden at 0 unless overridden. A speed modifier on climb, swim or fly may read `SPEED`, your walking speed (`SPEED / 2`); anywhere else `SPEED` is an unknown identifier, and it needs v12.
+
+**Studio.** The rule "Use another ability for a skill" ("Add check ability") has a "Skill" choice ("Every Strength skill" and so on, then each skill) and a "Uses instead" choice. It is always on, so Automation and Timing are hidden. The modifier editor hints: "You can use SPEED (your walking speed) in a climb, swim or fly speed modifier, such as SPEED / 2." Constitution is not offered, as no skill uses it.
+
+**Validation** (errors): `validate.check-ability-target`, `validate.check-ability-ability`, `validate.check-ability-automation`; below v12 `validate.requires-v12` applies to the kind, the two fields and `SPEED`. The capability registry lists `checkAbility` as Automatic ("Applied to the skill's value on the sheet").
+
+**Older versions.** For an older TomeStack ([package-format.md](package-format.md#save-for-an-older-tomestack-d85)) a `checkAbility` is dropped whole and listed (`below.effect-unsupported`), and every climb or swim modifier is dropped and listed (`below.unknown-target`). A climb or swim restriction stops the export (`below.restriction-lifted`). A fly-speed modifier reading `SPEED` is dropped when it is a `bonus` or `replace` that cannot be negative, and stops the export when it is a `set` or might be negative (`below.value-formula`).
+
+**Stays by hand:** substitutions that apply only in a situation ("while climbing"), jump distance, and saves, initiative and bare ability checks using another ability.
+
 ## Not yet
 
 - Damage responses: the studio's outcome roll picker offers only the same entry's rolls. A roll from another entry can be stored in content but not chosen in the studio yet.
