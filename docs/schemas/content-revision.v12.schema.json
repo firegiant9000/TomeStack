@@ -308,8 +308,28 @@
                 "content",
                 "damageResistance",
                 "damageImmunity",
-                "damageVulnerability"
+                "damageVulnerability",
+                "conditionImmunity"
               ]
+            },
+            "condition": {
+              "enum": [
+                "blinded",
+                "charmed",
+                "deafened",
+                "frightened",
+                "grappled",
+                "incapacitated",
+                "invisible",
+                "paralyzed",
+                "petrified",
+                "poisoned",
+                "prone",
+                "restrained",
+                "stunned",
+                "unconscious"
+              ],
+              "description": "Content v12 (G11): with conditionImmunity, the one condition the character is immune to. Required there and refused on every other grant kind."
             },
             "damageType": {
               "type": "string",
@@ -402,19 +422,75 @@
             }
           },
           "else": {
-            "not": {
-              "anyOf": [
-                {
-                  "required": [
-                    "damageType"
-                  ]
-                },
-                {
-                  "required": [
-                    "whileToggle"
-                  ]
+            "if": {
+              "properties": {
+                "grant": {
+                  "const": "conditionImmunity"
                 }
-              ]
+              }
+            },
+            "then": {
+              "required": [
+                "condition"
+              ],
+              "properties": {
+                "whileToggle": {
+                  "type": "object",
+                  "required": [
+                    "toggleId"
+                  ],
+                  "properties": {
+                    "contentId": {
+                      "$ref": "#/$defs/uuid"
+                    },
+                    "toggleId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "description": "Content v12 (G11): the immunity applies only while this toggle is on (it may be another content's)."
+                }
+              },
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "target"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "content"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "damageType"
+                    ]
+                  }
+                ]
+              }
+            },
+            "else": {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "damageType"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "whileToggle"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "condition"
+                    ]
+                  }
+                ]
+              }
             }
           }
         },

@@ -509,6 +509,10 @@ public static class ContentValidator
                     needsV10 |= GrantEffect.IsDamageDefence(grant.Grant) || grant.DamageType is not null;
                     if (grant.DamageType is not null && !GrantEffect.IsDamageDefence(grant.Grant))
                         Error("validate.grant-damage-type-kind", $"Effect '{grant.Id}' has a damageType, which only a damageResistance, damageImmunity or damageVulnerability grant takes.", grant.Id);
+                    if (GrantEffect.IsConditionImmunity(grant.Grant) || grant.Condition is not null)
+                        NeedV12("a condition immunity");
+                    if (grant.Condition is not null && !GrantEffect.IsConditionImmunity(grant.Grant))
+                        Error("validate.grant-condition-kind", $"Effect '{grant.Id}' has a condition, which only a conditionImmunity grant takes.", grant.Id);
                     if (GrantEffect.IsDamageDefence(grant.Grant))
                     {
                         // Content v10: a resistance, immunity or vulnerability names a damage type and no target or content.
@@ -516,6 +520,15 @@ public static class ContentValidator
                             Error("validate.grant-damage-type", $"Effect '{grant.Id}' grants {grant.Grant.ToString().ToLowerInvariant()} and needs a damageType: one of {string.Join(", ", DamageTypes.All)}.", grant.Id);
                         if (grant.Target is not null || grant.Content is not null)
                             Error("validate.grant-damage-fields", $"Effect '{grant.Id}' grants a damage defence, which names a damageType only: it takes no target and no content.", grant.Id);
+                    }
+                    else if (GrantEffect.IsConditionImmunity(grant.Grant))
+                    {
+                        // Content v12 (G11): an immunity names one condition and no target, content or damageType. A manual or timed
+                        // one is allowed (the calculator does not apply it and the feature shows Assisted).
+                        if (grant.Condition is not { } immuneCondition || !ConditionKeys.All.Contains(immuneCondition))
+                            Error("validate.grant-condition", $"Effect '{grant.Id}' grants a condition immunity and needs a condition: one of {string.Join(", ", ConditionKeys.All)}.", grant.Id);
+                        if (grant.Target is not null || grant.Content is not null || grant.DamageType is not null)
+                            Error("validate.grant-condition-fields", $"Effect '{grant.Id}' grants a condition immunity, which names a condition only: it takes no target, no content and no damageType.", grant.Id);
                     }
                     else if (grant.Grant == GrantKind.Content)
                     {

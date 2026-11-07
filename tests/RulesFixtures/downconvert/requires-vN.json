@@ -82,6 +82,8 @@
       { "feature": "checkAbility.target:ability.*", "rule": "below.effect-unsupported" },
       { "feature": "checkAbility.target:skill.*", "rule": "below.effect-unsupported" },
       { "feature": "checkAbility.ability", "rule": "below.effect-unsupported" },
+      { "feature": "grant.conditionImmunity", "rule": "below.effect-unsupported" },
+      { "feature": "grant.condition", "rule": "below.effect-unsupported" },
       { "feature": "modifier.target:speed.climb", "rule": "below.unknown-target" },
       { "feature": "modifier.target:speed.swim", "rule": "below.unknown-target" },
       { "feature": "restriction.field:speed.climb", "rule": "below.restriction-lifted" },

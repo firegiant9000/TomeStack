@@ -67,6 +67,28 @@ public class ConditionImmunityV12SchemaTests
         Assert.Equal(hashBefore, RevisionHashProperties.Hash(stored));
     }
 
+    [Theory]
+    [InlineData(11, "\"CONDITIONIMMUNITY\"")]
+    [InlineData(11, "\" conditionImmunity\"")]
+    [InlineData(11, "[\"conditionImmunity\"]")]
+    [InlineData(11, "6")]
+    [InlineData(10, "\"CONDITIONIMMUNITY\"")]
+    [InlineData(10, "\" conditionImmunity\"")]
+    [InlineData(10, "[\"conditionImmunity\"]")]
+    [InlineData(10, "6")]
+    public void Odd_spellings_of_the_kind_below_v12_stay_unknown_with_bytes_and_hash_unchanged(int version, string spelling)
+    {
+        var input = Doc(version, "{\"type\":\"grant\",\"id\":\"g\",\"grant\":" + spelling + ",\"condition\":\"frightened\"}");
+        var hashBefore = RevisionHashProperties.Hash(input);
+
+        var revision = RevisionHashProperties.Read(input);
+
+        Assert.IsType<UnknownEffect>(revision.Effects.Single());
+        var stored = RevisionHashProperties.Write(revision);
+        Assert.Equal(input, stored);
+        Assert.Equal(hashBefore, RevisionHashProperties.Hash(stored));
+    }
+
     [Fact]
     public void V12_condition_immunity_round_trips_byte_for_byte()
     {

@@ -113,6 +113,56 @@ public class SchemaTests
     }
 
     [Theory]
+    [InlineData("frightened", true)]
+    [InlineData("stunned", true)]
+    [InlineData(null, false)]
+    [InlineData("exhaustion", false)]
+    [InlineData("Charmed", false)]
+    public void The_v12_schema_needs_a_known_condition_on_a_condition_immunity(string? condition, bool accepted)
+    {
+        var copy = JsonNode.Parse(File.ReadAllText(Path.Combine(FixtureRoot, "golden", "revisions.json")))!.AsArray()[9]!.DeepClone().AsObject();
+        copy["schemaVersion"] = 12;
+        var grant = new JsonObject { ["type"] = "grant", ["id"] = "x", ["grant"] = "conditionImmunity" };
+        if (condition is not null)
+            grant["condition"] = condition;
+        copy["effects"]!.AsArray().Add(grant);
+        using var document = JsonDocument.Parse(copy.ToJsonString());
+
+        Assert.Equal(accepted, Validate("content-revision", document.RootElement) == "");
+    }
+
+    [Theory]
+    [InlineData("target", "skill.stealth")]
+    [InlineData("damageType", "fire")]
+    public void The_v12_schema_refuses_target_and_damage_type_on_a_condition_immunity(string member, string value)
+    {
+        var copy = JsonNode.Parse(File.ReadAllText(Path.Combine(FixtureRoot, "golden", "revisions.json")))!.AsArray()[9]!.DeepClone().AsObject();
+        copy["schemaVersion"] = 12;
+        copy["effects"]!.AsArray().Add(new JsonObject { ["type"] = "grant", ["id"] = "x", ["grant"] = "conditionImmunity", ["condition"] = "charmed", [member] = value });
+        using var document = JsonDocument.Parse(copy.ToJsonString());
+
+        Assert.NotEqual("", Validate("content-revision", document.RootElement));
+    }
+
+    [Fact]
+    public void The_v12_schema_allows_while_toggle_on_a_condition_immunity_and_refuses_condition_elsewhere()
+    {
+        var copy = JsonNode.Parse(File.ReadAllText(Path.Combine(FixtureRoot, "golden", "revisions.json")))!.AsArray()[9]!.DeepClone().AsObject();
+        copy["schemaVersion"] = 12;
+        copy["effects"]!.AsArray().Add(new JsonObject
+        {
+            ["type"] = "grant", ["id"] = "x", ["grant"] = "conditionImmunity", ["condition"] = "charmed",
+            ["whileToggle"] = new JsonObject { ["toggleId"] = "fury" },
+        });
+        using (var document = JsonDocument.Parse(copy.ToJsonString()))
+            Assert.Equal("", Validate("content-revision", document.RootElement));
+
+        copy["effects"]!.AsArray().Add(new JsonObject { ["type"] = "grant", ["id"] = "y", ["grant"] = "proficiency", ["target"] = "skill.stealth", ["condition"] = "charmed" });
+        using (var document = JsonDocument.Parse(copy.ToJsonString()))
+            Assert.NotEqual("", Validate("content-revision", document.RootElement));
+    }
+
+    [Theory]
     [InlineData(true, true)]
     [InlineData(false, false)]
     public void The_v11_schema_needs_a_roll_with_alsoChange_to_name_its_own_pool(bool hasPool, bool accepted)

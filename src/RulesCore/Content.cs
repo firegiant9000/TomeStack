@@ -137,7 +137,9 @@ public sealed record ContentRevision : IJsonOnDeserialized
     /// a toggle, <c>castsSpell</c> on a roll, and <c>tags</c> on a spell. All are optional and read only in a v12 revision; below
     /// v12 each key stays extension data and does nothing. MECH-X item 2 adds <c>choice.replaceable</c> (when picks may be replaced:
     /// a level-up or a long rest, and how many), under the same rule. Item 3 adds the <c>itemMod</c> effect (content that attaches
-    /// to one carried copy of another item); below v12 it stays an unknown effect.
+    /// to one carried copy of another item); below v12 it stays an unknown effect. Slice G11 adds the grant kind
+    /// <c>conditionImmunity</c> with <c>grant.condition</c> (immunity to one condition, optionally while a toggle is on); below v12
+    /// the grant stays an unknown effect and a <c>condition</c> key on any other grant stays extension data.
     /// </summary>
     public const int CurrentSchemaVersion = 12;
 
