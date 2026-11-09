@@ -27,7 +27,7 @@ public class AbilityCapV12ServiceTests
         RulesFamily = RulesFamilies.Srd521,
         Level = 1,
         Classes = [new(Duelist, 1)],
-        BaseAbilities = new(20, 16, 12, 10, 10, 10),
+        BaseAbilities = new(20, 16, 17, 10, 20, 10),
         Equipment = [new(Longblade, Equipped: true)],
         Pins = [Duelist, .. features],
     };
@@ -51,7 +51,7 @@ public class AbilityCapV12ServiceTests
         using var _ = temp;
         var view = temp.App.GetCharacter(id);
         Assert.Equal(24, Field(view, "ability.str.score").Value);
-        Assert.Equal(16, Field(view, "ability.con.score").Value); // 12 + 4, below 20 either way
+        Assert.Equal(21, Field(view, "ability.con.score").Value); // 17 + 4 crosses 20, stops below the cap 25
 
         // The plain +2 stops at 20 first, then the capped +4 raises it to 24.
         var (temp2, id2) = Start(Summit, Plain);
@@ -70,13 +70,13 @@ public class AbilityCapV12ServiceTests
         var (temp, id) = Start(Lantern);
         using var _ = temp;
         var wisdom = temp.App.GetCharacter(id);
-        Assert.Equal(10, Field(wisdom, "ability.wis.score").Value);
+        Assert.Equal(20, Field(wisdom, "ability.wis.score").Value);
 
         var on = Focus(temp, id, PlayActionKind.ToggleOn);
-        Assert.Equal(12, Field(on, "ability.wis.score").Value);
+        Assert.Equal(22, Field(on, "ability.wis.score").Value);
 
         var off = Focus(temp, id, PlayActionKind.ToggleOff);
-        Assert.Equal(10, Field(off, "ability.wis.score").Value);
+        Assert.Equal(20, Field(off, "ability.wis.score").Value);
     }
 
     [Fact]
@@ -124,7 +124,7 @@ public class AbilityCapV12ServiceTests
             var published = temp.App.Publish(temp.App.SaveDraft(draft));
             var stored = temp.App.Store.FindRevision(published.Published)!.SchemaVersion;
             if (revision.Name == "Fixture: Plain Training")
-                Assert.True(published.Report.RequiredSchemaVersion < 12); // no cap: nothing here needs v12
+                Assert.Equal(3, published.Report.RequiredSchemaVersion); // no cap: nothing here needs v12
             else
                 Assert.Equal((12, 12), (stored, published.Report.RequiredSchemaVersion));
         }
@@ -146,6 +146,16 @@ public class AbilityCapV12ServiceTests
         Assert.All(drops, c => Assert.Equal("'Fixture: Summit Conditioning' (TomeStack Fixtures: Ability Cap v12): that the increase can raise the score above 20 (up to 25); the older version stops it at 20.", c.Message));
 
         var export = temp.App.ExportCharacters([id], ExportPurpose.Share, row, preview.ChangesHash);
-        Assert.NotEmpty(export.Content);
+        using var zip = new System.IO.Compression.ZipArchive(new MemoryStream(export.Content));
+        var lowered = zip.Entries.Where(e => e.FullName.StartsWith("content/", StringComparison.Ordinal)).Select(e =>
+        {
+            using var reader = new StreamReader(e.Open());
+            return System.Text.Json.Nodes.JsonNode.Parse(reader.ReadToEnd())!;
+        }).Single(n => n["name"]!.GetValue<string>() == "Fixture: Summit Conditioning");
+        var effects = lowered["effects"]!.AsArray();
+        Assert.Equal(
+            [("bonus", "ability.str.score", "4"), ("bonus", "ability.con.score", "4")],
+            effects.Select(e => (e!["operation"]!.GetValue<string>(), e["target"]!.GetValue<string>(), e["value"]!.GetValue<string>())));
+        Assert.All(effects, e => Assert.Null(e!["cap"]));
     }
 }
