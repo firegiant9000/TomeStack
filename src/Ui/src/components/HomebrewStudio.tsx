@@ -47,7 +47,7 @@ import { ItemModFields } from './ItemModFields';
 import { ModifierFields } from './ModifierFields';
 import { CheckAbilityFields } from './CheckAbilityFields';
 import { RollFloorFields } from './RollFloorFields';
-import { DefenceFields, RollModeFields, isDamageDefence } from './RollModeFields';
+import { ConditionImmunityFields, DefenceFields, RollModeFields, isConditionImmunity, isDamageDefence } from './RollModeFields';
 import { ResponseFields } from './ResponseFields';
 import { PaymentFields } from './PaymentFields';
 import { RollFields, type SpellChoice } from './RollFields';
@@ -919,8 +919,8 @@ function EntryEditor(props: {
             : false;
   const listed = revision.effects.map((effect, index) => ({ effect, index })).filter(({ effect }) => !shownByEditor(effect));
 
-  function add(type: 'modifier' | 'resource' | 'recovery' | 'roll' | 'armor' | 'grant' | 'scale' | 'value' | 'spellcasting' | 'toggle' | 'toggleGroup' | 'upkeep' | 'attack' | 'attackRider' | 'rollMode' | 'rollFloor' | 'checkAbility' | 'damageDefence' | 'response' | 'weapon' | 'itemMod' | 'companion') {
-    const id = nextId(type === 'damageDefence' ? 'grant' : type);
+  function add(type: 'modifier' | 'resource' | 'recovery' | 'roll' | 'armor' | 'grant' | 'scale' | 'value' | 'spellcasting' | 'toggle' | 'toggleGroup' | 'upkeep' | 'attack' | 'attackRider' | 'rollMode' | 'rollFloor' | 'checkAbility' | 'damageDefence' | 'conditionImmunity' | 'response' | 'weapon' | 'itemMod' | 'companion') {
+    const id = nextId(type === 'damageDefence' || type === 'conditionImmunity' ? 'grant' : type);
     if (type === 'companion') {
       // Content v12 (MECH-X item 4): a valid start except the label. The companion id is made once, here, and never shown.
       update({ effects: [...revision.effects, { type, id, companionId: crypto.randomUUID(), label: '', armorClass: '13', hitPointMaximum: '5 * LEVEL' }] });
@@ -954,6 +954,11 @@ function EntryEditor(props: {
     if (type === 'checkAbility') {
       // Content v12 (G10): a valid start (Athletics may use Dexterity).
       update({ effects: [...revision.effects, { type, id, target: 'skill.athletics', ability: 'dex' }] });
+      return;
+    }
+    if (type === 'conditionImmunity') {
+      // Content v12 (G11): a valid start (immune to charmed).
+      update({ effects: [...revision.effects, { type: 'grant', id, grant: 'conditionImmunity', condition: 'charmed' }] });
       return;
     }
     if (type === 'damageDefence') {
@@ -1285,6 +1290,9 @@ function EntryEditor(props: {
         </button>
         <button type="button" onClick={() => add('checkAbility')}>
           Add check ability
+        </button>
+        <button type="button" onClick={() => add('conditionImmunity')}>
+          Add condition immunity
         </button>
         <button type="button" onClick={() => add('damageDefence')}>
           Add damage defence
@@ -1754,7 +1762,7 @@ function EffectEditor(props: {
     rollFloor: 'Roll floor',
     checkAbility: 'Use another ability for a skill',
     response: 'Damage response',
-    grant: isDamageDefence(effect) ? 'Damage defence' : 'Granted feature',
+    grant: isDamageDefence(effect) ? 'Damage defence' : isConditionImmunity(effect) ? 'Condition immunity' : 'Granted feature',
     resource: 'Resource',
     recovery: 'Recovery',
     roll: 'Roll or action',
@@ -2102,6 +2110,7 @@ function EffectEditor(props: {
         />
       )}
       {isDamageDefence(effect) && <DefenceFields effect={effect} toggles={toggleChoices} showToggle={toggles.length > 0 || props.otherToggles.length > 0} onChange={onChange} />}
+      {isConditionImmunity(effect) && <ConditionImmunityFields effect={effect} toggles={toggleChoices} showToggle={toggles.length > 0 || props.otherToggles.length > 0} onChange={onChange} />}
       {effect.type === 'grant' && effect.grant === 'content' && (
         <>
           <label className="field">

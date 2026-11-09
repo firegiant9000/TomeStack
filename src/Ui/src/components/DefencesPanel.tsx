@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import type { CharacterView, DamageDefence, DamageDefenceValue } from '../api/types';
 import { damageTypeLabel, damageTypes } from './customModel';
-import { conditionLabels } from './PlayPanels';
+import { conditionLabels } from './conditionLabels';
 import { directSave, type SheetSave } from './sheetSave';
 
 interface Props {

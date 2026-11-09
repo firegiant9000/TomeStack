@@ -34,26 +34,10 @@ import { announceRollsOn, diceAnimationOn } from '../settings';
 import { damageTypeLabel, damageTypes, normalizeDamageType } from './customModel';
 import { ExplainList } from './ExplainList';
 import { Pips } from './Pips';
+import { conditionLabels } from './conditionLabels';
 
 /** The one name for the inspiration toggle and its summary line: "Heroic Inspiration" in 5.2.1, "Inspiration" otherwise. */
 export const inspirationLabel = (rulesFamily: string) => (rulesFamily === 'srd-5.2.1' ? 'Heroic Inspiration' : 'Inspiration');
-
-export const conditionLabels: Record<string, string> = {
-  blinded: 'Blinded',
-  charmed: 'Charmed',
-  deafened: 'Deafened',
-  frightened: 'Frightened',
-  grappled: 'Grappled',
-  incapacitated: 'Incapacitated',
-  invisible: 'Invisible',
-  paralyzed: 'Paralyzed',
-  petrified: 'Petrified',
-  poisoned: 'Poisoned',
-  prone: 'Prone',
-  restrained: 'Restrained',
-  stunned: 'Stunned',
-  unconscious: 'Unconscious',
-};
 
 const automationLabels: Record<AutomationStatus, string> = {
   automatic: 'automatic',

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Ability, Effect } from '../api/types';
 import { abilities } from '../classBasics';
 import { ToggleSelect, type ToggleChoices } from './AttackFields';
+import { conditionLabels } from './conditionLabels';
 import { damageTypeLabel, damageTypes } from './customModel';
 import { useReportedProblem } from './RollFields';
 
@@ -250,6 +251,39 @@ const defenceKinds: { value: Grant['grant']; label: string }[] = [
 
 /** Whether a grant is one of the three damage defences, which this minimal editor can edit. */
 export const isDamageDefence = (effect: Effect): effect is Grant => effect.type === 'grant' && defenceKinds.some((k) => k.value === effect.grant);
+
+/** Content v12 (G11): whether a grant is a condition immunity. */
+export const isConditionImmunity = (effect: Effect): effect is Grant => effect.type === 'grant' && effect.grant === 'conditionImmunity';
+
+/** Content v12 (G11): immunity to one condition, optionally only while a form is on (`whileToggle`). */
+export function ConditionImmunityFields(props: { effect: Grant; toggles: ToggleChoices; showToggle: boolean; onChange: (effect: Effect) => void }) {
+  const { effect, onChange } = props;
+  const known = conditionKeys.includes(effect.condition ?? '');
+  return (
+    <>
+      <label className="field">
+        Condition
+        <select value={effect.condition ?? ''} onChange={(e) => onChange({ ...effect, condition: e.target.value })}>
+          {!known && <option value={effect.condition ?? ''}>{effect.condition || 'Choose a condition'}</option>}
+          {conditionKeys.map((k) => (
+            <option key={k} value={k}>
+              {conditionLabels[k] ?? label(k)}
+            </option>
+          ))}
+        </select>
+      </label>
+      {(effect.whileToggle || props.showToggle) && (
+        <ToggleSelect
+          label="Only while"
+          alwaysLabel="Always"
+          choices={props.toggles}
+          current={effect.whileToggle}
+          onPick={(toggle) => onChange({ ...effect, whileToggle: toggle })}
+        />
+      )}
+    </>
+  );
+}
 
 /** Content v11 (D43, slice 6): a damage defence, optionally only while a form is on (`whileToggle`). */
 export function DefenceFields(props: { effect: Grant; toggles: ToggleChoices; showToggle: boolean; onChange: (effect: Effect) => void }) {
