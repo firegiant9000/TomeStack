@@ -604,6 +604,11 @@ public static partial class CharacterCalculator
     /// <summary>SRD: ability score increases stop at 20 (both families, so a rules constant rather than a policy field).</summary>
     public const int AbilityScoreIncreaseCap = 20;
 
+    /// <summary>The ceiling of one ability-score increase: its own cap (schema 12 and later, never on an item mod), else 20.</summary>
+    private static int AbilityCeiling(Modifier modifier) =>
+        modifier.Effect.Cap is { } cap && !modifier.ModBonus && modifier.Content.Revision.SchemaVersion >= ContentRevision.AbilityCapSchemaVersion
+            ? cap : AbilityScoreIncreaseCap;
+
     private static bool IsAbilityScoreField(string field) =>
         field.StartsWith("ability.", StringComparison.Ordinal) && field.EndsWith(".score", StringComparison.Ordinal);
 
