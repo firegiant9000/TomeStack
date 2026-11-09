@@ -294,6 +294,19 @@
               "minimum": 21,
               "maximum": 30,
               "description": "Content v12 (G5): with an ability-score bonus, the highest score its increase can reach (21 to 30); absent means the increase stops at 20."
+            },
+            "notWearing": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "armor",
+                  "heavyArmor",
+                  "shield"
+                ]
+              },
+              "description": "Content v12 (G4): the modifier applies only while none of the listed gear is worn (armor, heavyArmor, shield); armor already covers heavyArmor."
             }
           },
           "required": [
@@ -1671,7 +1684,8 @@
                   },
                   "text": {
                     "type": "string"
-                  }
+                  },
+                  "notWearing": false
                 },
                 "description": "Always on and automatic: a toggle, toggleContent, whileArmored, a timing other than always, a resource target or a non-automatic automation is refused (validate.item-mod-modifier)."
               }

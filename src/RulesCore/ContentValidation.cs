@@ -315,6 +315,17 @@ public static class ContentValidator
                 if (cap is < ModifierEffect.MinCap or > ModifierEffect.MaxCap)
                     Error("validate.modifier-cap-range", $"Effect '{modifier.Id}' has cap {cap}; it must be a whole number from {ModifierEffect.MinCap} to {ModifierEffect.MaxCap} (20 is the usual maximum).", modifier.Id);
             }
+            if (modifier.NotWearing is { } notWearing)
+            {
+                NeedV12("an armor or shield gate");
+                var gear = notWearing.Where(g => g is not null).ToList();
+                if (gear.Count == 0 || gear.Count != notWearing.Count || gear.Any(g => !ModifierEffect.Gear.Contains(g, StringComparer.Ordinal))
+                    || gear.Distinct(StringComparer.Ordinal).Count() != gear.Count
+                    || (gear.Contains(ModifierEffect.GearArmor, StringComparer.Ordinal) && gear.Contains(ModifierEffect.GearHeavyArmor, StringComparer.Ordinal)))
+                    Error("validate.not-wearing", $"Effect '{modifier.Id}' has notWearing [{string.Join(", ", gear)}]; it lists armor, heavyArmor or shield, each once, and armor already covers heavyArmor.", modifier.Id);
+                if (modifier.WhileArmored == true && gear.Contains(ModifierEffect.GearArmor, StringComparer.Ordinal))
+                    Error("validate.not-wearing-armored", $"Effect '{modifier.Id}' applies only while armor is worn and only while none is, so it could never apply.", modifier.Id);
+            }
             if (modifier.ToggleContent is not null)
             {
                 needsV11 = true;
@@ -387,8 +398,16 @@ public static class ContentValidator
                 case UnknownEffect { DeclaredType: ModifierEffect.TypeName } unreadableCap
                     when revision.SchemaVersion >= ContentRevision.AbilityCapSchemaVersion
                         && CarriesV11Key(unreadableCap, ModifierEffect.V12Keys):
-                    NeedV12("an ability-score cap");
-                    Error("validate.effect-malformed", $"Effect '{unreadableCap.Id}' has type '{unreadableCap.DeclaredType}' but a value or field that does not read (its cap must be a whole number from 21 to 30, on an ability-score increase; or a missing field); fix it before publishing.", unreadableCap.Id);
+                    if (unreadableCap.Raw.TryGetProperty(ModifierEffect.CapProperty, out _))
+                    {
+                        NeedV12("an ability-score cap");
+                        Error("validate.effect-malformed", $"Effect '{unreadableCap.Id}' has type '{unreadableCap.DeclaredType}' but a value or field that does not read (its cap must be a whole number from 21 to 30, on an ability-score increase; or a missing field); fix it before publishing.", unreadableCap.Id);
+                    }
+                    else
+                    {
+                        NeedV12("an armor or shield gate");
+                        Error("validate.effect-malformed", $"Effect '{unreadableCap.Id}' has type '{unreadableCap.DeclaredType}' but a value or field that does not read (its notWearing must be a list of armor, heavyArmor or shield; or a missing field); fix it before publishing.", unreadableCap.Id);
+                    }
                     break;
                 // Content v11 (D43): a modifier or roll whose v11 key does not read (toggleContent that is not an id, a whileToggle
                 // without a toggleId). Published at a lower version it would read back as a modifier or roll that ignores the key and
@@ -497,6 +516,8 @@ public static class ContentValidator
                     // MECH-X R50: a mod revision's own top-level modifiers apply as mod modifiers, where the calculator ignores a cap.
                     if (modifier.Cap is not null && revision.Effects.OfType<ItemModEffect>().Any())
                         Error("validate.modifier-cap", $"Effect '{modifier.Id}' has a cap, but this revision is an item mod, whose modifiers cannot raise an ability score above 20.", modifier.Id);
+                    if (modifier.NotWearing is not null && revision.Effects.OfType<ItemModEffect>().Any())
+                        Error("validate.not-wearing", $"Effect '{modifier.Id}' has notWearing, but this revision is an item mod, whose modifiers apply whatever is worn.", modifier.Id);
                     break;
                 case ToggleEffect toggleEffect:
                     needsV6 = true;
@@ -692,7 +713,7 @@ public static class ContentValidator
                         Error("validate.item-mod-modifiers", $"Item mod '{mod.Id}' has {mod.Modifiers.Count} modifiers; at most {ItemModEffect.MaxModifiers}.", mod.Id);
                     foreach (var nested in mod.Modifiers?.Where(m => m is not null) ?? [])
                     {
-                        if (nested.Toggle is not null || nested.ToggleContent is not null || nested.WhileArmored is not null || nested.Cap is not null
+                        if (nested.Toggle is not null || nested.ToggleContent is not null || nested.WhileArmored is not null || nested.Cap is not null || nested.NotWearing is not null
                             || nested.Target.StartsWith(ResourceTargetPrefix, StringComparison.Ordinal)
                             || nested.Stacking != StackingRule.Stack || nested.StackGroup is not null
                             || nested.Timing != EffectTiming.Always || nested.Automation != AutomationStatus.Automatic)
