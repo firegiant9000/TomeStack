@@ -1934,6 +1934,8 @@ export type Effect =
       cap?: number;
       /** Content v12 (G4): the modifier applies only while none of this gear is worn. Absent: whatever is worn. */
       notWearing?: ('armor' | 'heavyArmor' | 'shield')[];
+      /** Content v8 (M2.2): applies only while body armor is worn. */
+      whileArmored?: boolean;
     })
   // Content v6 (M3 B2): switched on and off in play; turning it on can spend one use of a resource of this revision.
   // Content v10 (Wave 3, D42): autoWhen and activation on a toggle, activation on a resource, three damage-defence grant

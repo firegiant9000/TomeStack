@@ -110,13 +110,26 @@ it('unticking every box removes the key', async () => {
 it('hides the gear boxes for a pool maximum and drops the key', async () => {
   const user = userEvent.setup();
   const resource: Raw = { type: 'resource', id: 'resource-1', resourceId: 'pool', label: 'Testy Pool', maximum: '2' };
-  const { rule, checked } = await openDraft(user, [resource, { ...mod, notWearing: ['armor'] }]);
+  const { checked } = await openDraft(user, [resource,{ ...mod, notWearing: ['armor'] }]);
   const r = within(screen.getByRole('group', { name: /^Rule 2: Modifier/ }));
   expect(r.getByRole('group', { name: LEGEND })).toBeTruthy();
   await user.selectOptions(r.getByRole('combobox', { name: 'Changes' }), 'resource.pool');
   expect(r.queryByRole('group', { name: LEGEND })).toBeNull();
   expect('notWearing' in (await checked()).effect('modifier-1')).toBe(false);
-  void rule;
+});
+
+it('a stored unknown value is dropped on the first box click', async () => {
+  const user = userEvent.setup();
+  const { rule, checked } = await openDraft(user, [{ ...mod, notWearing: ['cloak'] }]);
+  await user.click(within(rule(RULE).getByRole('group', { name: LEGEND })).getByRole('checkbox', { name: 'Shield' }));
+  expect((await checked()).effect('modifier-1')).toMatchObject({ notWearing: ['shield'] });
+});
+
+it('stored armor and heavy armor normalise to armor on the first click', async () => {
+  const user = userEvent.setup();
+  const { rule, checked } = await openDraft(user, [{ ...mod, notWearing: ['armor', 'heavyArmor'] }]);
+  await user.click(within(rule(RULE).getByRole('group', { name: LEGEND })).getByRole('checkbox', { name: 'Shield' }));
+  expect((await checked()).effect('modifier-1')).toMatchObject({ notWearing: ['armor', 'shield'] });
 });
 
 it('keeps unknown members across an edit', async () => {
