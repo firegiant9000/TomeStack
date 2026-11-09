@@ -30,7 +30,7 @@ public static class CapabilityRegistry
 
     public static IReadOnlyList<Capability> Entries { get; } =
     [
-        new(ModifierEffect.TypeName, null, AutomationStatus.Automatic, "Applied by the calculator: bonus, set and replace on a derived field; an ability-score increase may declare a maximum above 20", "MechanicsInventoryTests"),
+        new(ModifierEffect.TypeName, null, AutomationStatus.Automatic, "Applied by the calculator: bonus, set and replace on a derived field; an ability-score increase may declare a maximum above 20; it may apply only while no armor, heavy armor or shield is worn", "MechanicsInventoryTests"),
         new(GrantEffect.TypeName, null, AutomationStatus.Automatic, "Proficiencies, expertise, content, damage defences and condition immunities calculate", "DamageDefenceTests"),
         new(HitDieEffect.TypeName, null, AutomationStatus.Automatic, "Hit points per class level calculate", "ClassLevelTests"),
         new(ResourceEffect.TypeName, null, AutomationStatus.Automatic, "The maximum is calculated and the player spends it", "ResourceAndFeatureTests"),
