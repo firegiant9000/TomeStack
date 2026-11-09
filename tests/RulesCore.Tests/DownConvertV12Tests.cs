@@ -247,6 +247,50 @@ public class DownConvertV12Tests
         Assert.All(ContentValidator.Validate(result.Revision, Fixtures.M1Catalog()).Errors, e => Assert.Equal("validate.source-missing", e.Code));
     }
 
+    private const string CappedBonus = """{"type":"modifier","id":"m","operation":"bonus","target":"ability.str.score","value":"2","cap":25}""";
+
+    [Fact]
+    public void Cap_is_removed_and_the_bonus_kept_below_12()
+    {
+        var result = DownConvert.Below(Rev(CappedBonus) with { Name = "Fixture: Summit Conditioning" }, 11);
+
+        Assert.False(result.Blocked);
+        var kept = Assert.IsType<ModifierEffect>(Assert.Single(result.Revision.Effects));
+        Assert.Equal(ModifierOperation.Bonus, kept.Operation);
+        Assert.Equal("ability.str.score", kept.Target);
+        Assert.Equal("2", kept.Value);
+        Assert.Null(kept.Cap);
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(BelowAction.Dropped, change.Action);
+        Assert.Equal(BelowCodes.V12Key, change.Code);
+        Assert.Equal("effects[0].cap", change.Path);
+        Assert.Equal("'Fixture: Summit Conditioning': that the increase can raise the score above 20 (up to 25); the older version stops it at 20.", change.Message);
+        Assert.DoesNotContain("\"cap\"", Written(result), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Lowered_capped_copy_validates_at_11()
+    {
+        var result = DownConvert.Below(Rev(CappedBonus), 11);
+
+        Assert.Equal(11, result.Revision.SchemaVersion);
+        Assert.DoesNotContain(BelowCodes.ValidationError, result.Changes.Select(c => c.Code));
+        Assert.All(ContentValidator.Validate(result.Revision, Fixtures.M1Catalog()).Errors, e => Assert.Equal("validate.source-missing", e.Code));
+    }
+
+    [Fact]
+    public void Modifier_without_cap_is_untouched_at_12_to_11()
+    {
+        const string plain = """{"type":"modifier","id":"m","operation":"bonus","target":"ability.str.score","value":"2"}""";
+        var result = DownConvert.Below(Rev(plain), 11);
+
+        Assert.False(result.Blocked);
+        Assert.Empty(result.Changes);
+        var kept = Assert.IsType<ModifierEffect>(Assert.Single(result.Revision.Effects));
+        Assert.Null(kept.Cap);
+        Assert.Equal("2", kept.Value);
+    }
+
     private static string Mode(string target, string mode, string extra = "") =>
         $$"""{"type":"rollMode","id":"m","target":"{{target}}","mode":"{{mode}}"{{extra}}}""";
 

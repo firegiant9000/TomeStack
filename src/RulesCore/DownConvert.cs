@@ -558,6 +558,10 @@ public static class DownConvert
                         // Dropped whole (weaker, never stronger): the older version cannot suppress the condition, so the copy would hold it.
                         changes.Add(new(path, BelowAction.Dropped, BelowCodes.EffectUnsupported, $"'{name}': its immunity to the {StringOf(Property(effect, "condition"))} condition; the feature stays as text."));
                         continue;
+                    case ModifierEffect.TypeName when Member(effect, "cap") is { } capNode:
+                        // The effect stays: only the cap goes, so the older version applies the same bonus without the higher ceiling.
+                        RemoveKey(effect, "cap", path, BelowAction.Dropped, BelowCodes.V12Key, $"'{name}': that the increase can raise the score above 20 (up to {capNode}); the older version stops it at 20.", changes);
+                        break;
                     case ModifierEffect.TypeName when IsClimbOrSwim(StringOf(Property(effect, "target"))) && RemovedTargetBelow(effect, ModifierEffect.TypeName, i, scope, changes):
                     case RestrictionEffect.TypeName when IsClimbOrSwim(StringOf(Property(effect, "field"))) && RemovedTargetBelow(effect, RestrictionEffect.TypeName, i, scope, changes):
                         continue;
