@@ -6,6 +6,13 @@ import { FormulaPreview } from './FormulaPreview';
 type Modifier = Extract<Effect, { type: 'modifier' }>;
 type Resource = Extract<Effect, { type: 'resource' }>;
 type Toggle = Extract<Effect, { type: 'toggle' }>;
+type GearKind = NonNullable<Modifier['notWearing']>[number];
+// In the order the service writes them: armor, heavyArmor, shield.
+const GEAR: { id: GearKind; label: string }[] = [
+  { id: 'armor', label: 'Armor' },
+  { id: 'heavyArmor', label: 'Heavy armor' },
+  { id: 'shield', label: 'Shield' },
+];
 
 /**
  * The fields of a modifier rule. A top-level modifier also offers the pool maximums and the toggle choice. A nested one (inside
@@ -34,8 +41,29 @@ export function ModifierFields(props: {
     else copy.cap = cap;
     return copy;
   };
+  // Content v12 (G4): the gear gate is for a top-level modifier that does not raise a pool maximum; a target change to one drops it.
+  const withoutGate = (next: Modifier): Modifier => {
+    if (next.notWearing === undefined || !next.target.startsWith('resource.')) return next;
+    const copy = { ...next };
+    delete copy.notWearing;
+    return copy;
+  };
   const withoutCap = (next: Modifier): Modifier =>
-    next.cap === undefined || (next.operation === 'bonus' && isScore(next.target)) ? next : capped(next, undefined);
+    withoutGate(next.cap === undefined || (next.operation === 'bonus' && isScore(next.target)) ? next : capped(next, undefined));
+  const showGate = !nested && !effect.target.startsWith('resource.');
+  const worn = effect.notWearing ?? [];
+  const armorGate = worn.includes('armor');
+  const setGear = (gear: GearKind, on: boolean) => {
+    const has = new Set<GearKind>(worn);
+    if (on) has.add(gear);
+    else has.delete(gear);
+    if (has.has('armor')) has.delete('heavyArmor'); // armor already covers heavy armor
+    const list = GEAR.map((g) => g.id).filter((g) => has.has(g));
+    const copy = { ...effect };
+    if (list.length === 0) delete copy.notWearing;
+    else copy.notWearing = list;
+    onChange(copy);
+  };
   const showCap = !nested && effect.operation === 'bonus' && isScore(effect.target);
   const setCap = (text: string) => {
     const n = Number(text);
@@ -93,6 +121,25 @@ export function ModifierFields(props: {
             Leave empty for the usual 20; up to 30.
           </p>
         </>
+      )}
+      {showGate && (
+        <fieldset aria-describedby={`rule-${effect.id}-gear-hint`}>
+          <legend>Only while not wearing</legend>
+          {GEAR.map((g) => (
+            <label key={g.id} className="check">
+              <input
+                type="checkbox"
+                checked={worn.includes(g.id) && !(g.id === 'heavyArmor' && armorGate)}
+                disabled={g.id === 'heavyArmor' && armorGate}
+                onChange={(e) => setGear(g.id, e.target.checked)}
+              />{' '}
+              {g.label}
+            </label>
+          ))}
+          <p className="hint" id={`rule-${effect.id}-gear-hint`}>
+            Leave all unticked for a rule that applies whatever is worn.
+          </p>
+        </fieldset>
       )}
       {nested && (
         <label className="field">
