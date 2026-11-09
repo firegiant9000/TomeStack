@@ -182,6 +182,9 @@ public sealed record ModifierEffect : Effect
 
     internal const string CapProperty = "cap";
 
+    /// <summary>The lowest and highest <see cref="Cap"/> content may set (20 is the usual maximum).</summary>
+    internal const int MinCap = 21, MaxCap = 30;
+
     /// <summary>The keys content schema v11 adds to this effect; below v11 they stay extension data.</summary>
     internal static readonly string[] V11Keys = ["toggleContent"];
 

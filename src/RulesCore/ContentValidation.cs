@@ -305,6 +305,16 @@ public static class ContentValidator
                     CheckToggleReference(modifier.ToggleContent, toggle, modifier.Id, "validate.toggle-unknown");
                 }
             }
+            if (modifier.Cap is { } cap)
+            {
+                NeedV12("an ability-score cap");
+                if (modifier.Operation != ModifierOperation.Bonus
+                    || !modifier.Target.StartsWith("ability.", StringComparison.Ordinal) || !modifier.Target.EndsWith(".score", StringComparison.Ordinal)
+                    || (int.TryParse(modifier.Value.Trim(), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var literal) && literal < 0))
+                    Error("validate.modifier-cap", $"Effect '{modifier.Id}' has a cap, but a cap belongs on an ability-score increase: a bonus to ability.<x>.score that is not negative.", modifier.Id);
+                if (cap is < ModifierEffect.MinCap or > ModifierEffect.MaxCap)
+                    Error("validate.modifier-cap-range", $"Effect '{modifier.Id}' has cap {cap}; it must be a whole number from {ModifierEffect.MinCap} to {ModifierEffect.MaxCap} (20 is the usual maximum).", modifier.Id);
+            }
             if (modifier.ToggleContent is not null)
             {
                 needsV11 = true;
@@ -370,6 +380,15 @@ public static class ContentValidator
                         && CarriesV11Key(unreadableV12, unreadableV12.DeclaredType == RollEffect.TypeName ? RollEffect.V12Keys : SpellEffect.V12Keys):
                     NeedV12(unreadableV12.DeclaredType == RollEffect.TypeName ? "a roll with a payment, castsSpell or scaledDice" : "spell tags");
                     Error("validate.effect-malformed", $"Effect '{unreadableV12.Id}' has type '{unreadableV12.DeclaredType}' but a value or field that does not read (a payment needs a kind of resource, hitPoints or slot; castsSpell is a content id; scaledDice needs a count and a die, both formulas; tags are a list of keys; or a missing field); fix it before publishing.", unreadableV12.Id);
+                    break;
+                // Content v12 (G5): from v12 a modifier that carries a cap is read with it; one that stays unknown did not read (a cap that
+                // is not a whole number, or another field that does not read). Published at a lower version the cap is stripped and the
+                // increase stops at 20, so it blocks. Below v12 the key is stripped first, so nothing changes there.
+                case UnknownEffect { DeclaredType: ModifierEffect.TypeName } unreadableCap
+                    when revision.SchemaVersion >= ContentRevision.AbilityCapSchemaVersion
+                        && CarriesV11Key(unreadableCap, ModifierEffect.V12Keys):
+                    NeedV12("an ability-score cap");
+                    Error("validate.effect-malformed", $"Effect '{unreadableCap.Id}' has type '{unreadableCap.DeclaredType}' but a value or field that does not read (its cap must be a whole number from 21 to 30, on an ability-score increase; or a missing field); fix it before publishing.", unreadableCap.Id);
                     break;
                 // Content v11 (D43): a modifier or roll whose v11 key does not read (toggleContent that is not an id, a whileToggle
                 // without a toggleId). Published at a lower version it would read back as a modifier or roll that ignores the key and
@@ -670,7 +689,7 @@ public static class ContentValidator
                         Error("validate.item-mod-modifiers", $"Item mod '{mod.Id}' has {mod.Modifiers.Count} modifiers; at most {ItemModEffect.MaxModifiers}.", mod.Id);
                     foreach (var nested in mod.Modifiers?.Where(m => m is not null) ?? [])
                     {
-                        if (nested.Toggle is not null || nested.ToggleContent is not null || nested.WhileArmored is not null
+                        if (nested.Toggle is not null || nested.ToggleContent is not null || nested.WhileArmored is not null || nested.Cap is not null
                             || nested.Target.StartsWith(ResourceTargetPrefix, StringComparison.Ordinal)
                             || nested.Stacking != StackingRule.Stack || nested.StackGroup is not null
                             || nested.Timing != EffectTiming.Always || nested.Automation != AutomationStatus.Automatic)

@@ -288,13 +288,34 @@
             },
             "whileArmored": {
               "type": "boolean"
+            },
+            "cap": {
+              "type": "integer",
+              "minimum": 21,
+              "maximum": 30,
+              "description": "Content v12 (G5): with an ability-score bonus, the highest score its increase can reach (21 to 30); absent means the increase stops at 20."
             }
           },
           "required": [
             "operation",
             "target",
             "value"
-          ]
+          ],
+          "if": {
+            "required": [
+              "cap"
+            ]
+          },
+          "then": {
+            "properties": {
+              "operation": {
+                "const": "bonus"
+              },
+              "target": {
+                "pattern": "^ability\\.(str|dex|con|int|wis|cha)\\.score$"
+              }
+            }
+          }
         },
         {
           "properties": {
