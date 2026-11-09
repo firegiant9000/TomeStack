@@ -26,11 +26,26 @@ export function ModifierFields(props: {
   const resources = props.resources ?? [];
   const toggles = props.toggles ?? [];
   const otherToggles = props.otherToggles ?? [];
+  // Content v12 (G5): only a bonus to an ability score can carry a cap; any change that hides the field drops it.
+  const isScore = (target: string) => /^ability\.[^.]+\.score$/.test(target);
+  const capped = (next: Modifier, cap: number | undefined): Modifier => {
+    const copy = { ...next };
+    if (cap === undefined) delete copy.cap;
+    else copy.cap = cap;
+    return copy;
+  };
+  const withoutCap = (next: Modifier): Modifier =>
+    next.cap === undefined || (next.operation === 'bonus' && isScore(next.target)) ? next : capped(next, undefined);
+  const showCap = !nested && effect.operation === 'bonus' && isScore(effect.target);
+  const setCap = (text: string) => {
+    const n = Number(text);
+    onChange(capped(effect, text.trim() === '' || !Number.isFinite(n) ? undefined : n));
+  };
   return (
     <>
       <label className="field">
         Changes
-        <select value={effect.target} onChange={(e) => onChange({ ...effect, target: e.target.value })}>
+        <select value={effect.target} onChange={(e) => onChange(withoutCap({ ...effect, target: e.target.value }))}>
           {props.fields.map((f) => (
             <option key={f.id} value={f.id}>
               {f.label}
@@ -54,7 +69,7 @@ export function ModifierFields(props: {
       </label>
       <label className="field">
         How
-        <select value={effect.operation} onChange={(e) => onChange({ ...effect, operation: e.target.value as Modifier['operation'] })}>
+        <select value={effect.operation} onChange={(e) => onChange(withoutCap({ ...effect, operation: e.target.value as Modifier['operation'] }))}>
           <option value="bonus">Add (bonus)</option>
           <option value="replace">Replace the base</option>
           <option value="set">Set to</option>
@@ -67,6 +82,17 @@ export function ModifierFields(props: {
       <FormulaPreview id={`rule-${effect.id}-value-preview`} formula={effect.value} revision={props.previewRevision} />
       {(effect.target === 'speed.climb' || effect.target === 'speed.swim' || effect.target === 'speed.fly') && (
         <p className="hint">You can use SPEED (your walking speed) in a climb, swim or fly speed modifier, such as SPEED / 2.</p>
+      )}
+      {showCap && (
+        <>
+          <label className="field">
+            Highest the score can reach
+            <input type="number" min={21} max={30} step={1} value={effect.cap ?? ''} aria-describedby={`rule-${effect.id}-cap-hint`} onChange={(e) => setCap(e.target.value)} />
+          </label>
+          <p className="hint" id={`rule-${effect.id}-cap-hint`}>
+            Leave empty for the usual 20; up to 30.
+          </p>
+        </>
       )}
       {nested && (
         <label className="field">

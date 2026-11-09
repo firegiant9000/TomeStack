@@ -1930,6 +1930,8 @@ export type Effect =
       toggle?: string;
       /** Content v11 (D43): the content that declares `toggle`. Absent: this revision. */
       toggleContent?: string;
+      /** Content v12 (G5): the highest a bonus to `ability.<x>.score` can raise the score (21 to 30). Absent: the usual 20. */
+      cap?: number;
     })
   // Content v6 (M3 B2): switched on and off in play; turning it on can spend one use of a resource of this revision.
   // Content v10 (Wave 3, D42): autoWhen and activation on a toggle, activation on a resource, three damage-defence grant
