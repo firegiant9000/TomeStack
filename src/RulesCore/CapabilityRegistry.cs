@@ -31,7 +31,7 @@ public static class CapabilityRegistry
     public static IReadOnlyList<Capability> Entries { get; } =
     [
         new(ModifierEffect.TypeName, null, AutomationStatus.Automatic, "Applied by the calculator: bonus, set and replace on a derived field", "MechanicsInventoryTests"),
-        new(GrantEffect.TypeName, null, AutomationStatus.Automatic, "Proficiencies, expertise, content and damage defences calculate", "DamageDefenceTests"),
+        new(GrantEffect.TypeName, null, AutomationStatus.Automatic, "Proficiencies, expertise, content, damage defences and condition immunities calculate", "DamageDefenceTests"),
         new(HitDieEffect.TypeName, null, AutomationStatus.Automatic, "Hit points per class level calculate", "ClassLevelTests"),
         new(ResourceEffect.TypeName, null, AutomationStatus.Automatic, "The maximum is calculated and the player spends it", "ResourceAndFeatureTests"),
         new(UpkeepEffect.TypeName, null, AutomationStatus.Automatic, "Previewed and confirmed by a turn command, never applied by calculation", "UpkeepContentTests"),
