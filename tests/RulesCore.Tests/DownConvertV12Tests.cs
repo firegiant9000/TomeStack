@@ -317,6 +317,17 @@ public class DownConvertV12Tests
     }
 
     [Fact]
+    public void Empty_gear_gate_message_reads_as_some_gear()
+    {
+        const string empty = """{"type":"modifier","id":"m","operation":"bonus","target":"ability.con.score","value":"1","notWearing":[]}""";
+        var result = DownConvert.Below(Rev(empty) with { Name = "Fixture: X" }, 11);
+
+        var change = Assert.Single(result.Changes);
+        Assert.Equal("below.equipment-gate", change.Code);
+        Assert.Equal("'Fixture: X': it applies only while some gear is not worn; the older version would apply it whatever is worn.", change.Message);
+    }
+
+    [Fact]
     public void Heavy_armor_gate_message_names_heavy_armor()
     {
         const string heavy = """{"type":"modifier","id":"m","operation":"bonus","target":"ability.con.score","value":"1","notWearing":["heavyArmor"]}""";

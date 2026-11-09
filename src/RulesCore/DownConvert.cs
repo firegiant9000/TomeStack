@@ -773,7 +773,9 @@ public static class DownConvert
 
     /// <summary>The gear a notWearing list names, in plain words: "armor or a shield". Unknown values are written as they are.</summary>
     private static string GearWords(JsonNode? node) =>
-        node is JsonArray gear
+        node is JsonArray { Count: 0 }
+            ? "some gear"
+            : node is JsonArray gear
             ? string.Join(" or ", gear.Select(g => StringOf(g) switch
             {
                 "armor" => "armor",

@@ -241,6 +241,28 @@ public class NotWearingV12SheetTests
     }
 
     [Fact]
+    public void Stack_group_falls_back_when_the_gated_higher_bonus_is_off()
+    {
+        var gate = Gate(V12,
+            Speed([Shield]) with { Id = "big", Stacking = StackingRule.HighestInGroup, StackGroup = "pace" },
+            Speed(null) with { Id = "small", Value = "5", Stacking = StackingRule.HighestInGroup, StackGroup = "pace" });
+
+        Assert.Equal(10, SpeedGain(gate, []));
+        Assert.Equal(5, SpeedGain(gate, [Buckler]));
+    }
+
+    [Fact]
+    public void Shield_gated_ac_replacement_is_off_with_armor_and_shield()
+    {
+        var gate = Gate(V12, new ModifierEffect { Id = "bare", Operation = ModifierOperation.Replace, Target = FieldIds.ArmorClass, Value = "10 + DEX.MOD + WIS.MOD", NotWearing = [Shield] });
+
+        var worn = Calc(RulesFamilies.Srd521, gate, [Coat, Buckler]).Field(FieldIds.ArmorClass);
+
+        Assert.Equal(15, worn.Value); // armor 11 + Dex 2 + shield 2; the replacement would give 15 + Wis 3 only without the shield
+        Assert.Equal(Calc(RulesFamilies.Srd521, null, [Coat, Buckler]).Field(FieldIds.ArmorClass).Value, worn.Value);
+    }
+
+    [Fact]
     public void Ungated_content_keeps_todays_values_and_trace()
     {
         var gate = Gate(V12, Speed(null));

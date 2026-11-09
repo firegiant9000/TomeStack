@@ -63,7 +63,7 @@ public class NotWearingV12ServiceTests
         Assert.Equal(10 + 3 + 5, bareAc); // Dexterity 16 and Wisdom 20: the guard's replacement applies
 
         var shielded = Wear(temp, id, Buckler);
-        Assert.True(Field(shielded, "armorClass").Value < bareAc, "the guard no longer replaces Armor Class behind a shield");
+        Assert.Equal(10 + 3 + 1, Field(shielded, "armorClass").Value); // the guard is off behind a shield: base 10, Dexterity 16 (+3), the shield's +1
         Assert.Equal(bareSpeed - 10, Field(shielded, "speed").Value); // Gearless Sprint is off, Loose Plate Stride is still on
 
         var again = Wear(temp, id);
