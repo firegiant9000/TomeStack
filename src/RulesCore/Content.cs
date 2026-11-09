@@ -139,7 +139,8 @@ public sealed record ContentRevision : IJsonOnDeserialized
     /// a level-up or a long rest, and how many), under the same rule. Item 3 adds the <c>itemMod</c> effect (content that attaches
     /// to one carried copy of another item); below v12 it stays an unknown effect. Slice G11 adds the grant kind
     /// <c>conditionImmunity</c> with <c>grant.condition</c> (immunity to one condition, optionally while a toggle is on); below v12
-    /// the grant stays an unknown effect and a <c>condition</c> key on any other grant stays extension data.
+    /// the grant stays an unknown effect and a <c>condition</c> key on any other grant stays extension data. Slice G5 adds
+    /// <c>modifier.cap</c> (the highest score an ability-score bonus can raise to, 21 to 30); below v12 it stays extension data.
     /// </summary>
     public const int CurrentSchemaVersion = 12;
 
@@ -178,6 +179,9 @@ public sealed record ContentRevision : IJsonOnDeserialized
 
     /// <summary>G11: the <c>conditionImmunity</c> grant kind and its <c>condition</c> member (immunity to one condition). <b>v12</b>.</summary>
     public const int ConditionImmunitySchemaVersion = 12;
+
+    /// <summary>G5: the <c>cap</c> member of an ability-score bonus modifier (the highest score the increase can reach). <b>v12</b>.</summary>
+    public const int AbilityCapSchemaVersion = 12;
 
     /// <summary>
     /// The content schema version that adds the Wave 3 details listed above: <b>v10</b> (speed and passive targets,

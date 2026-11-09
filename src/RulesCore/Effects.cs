@@ -174,14 +174,27 @@ public sealed record ModifierEffect : Effect
     /// </summary>
     public Guid? ToggleContent { get; init; }
 
+    /// <summary>
+    /// Content schema v12 (G5): with an ability-score <c>bonus</c>, the highest score its increase can reach, 21 to 30. Null:
+    /// the increase stops at 20. Below v12 the key stays extension data and does nothing.
+    /// </summary>
+    public int? Cap { get; init; }
+
+    internal const string CapProperty = "cap";
+
     /// <summary>The keys content schema v11 adds to this effect; below v11 they stay extension data.</summary>
     internal static readonly string[] V11Keys = ["toggleContent"];
 
-    /// <summary>Typed by the revision when the converter hands it over (see <see cref="EffectJsonConverter"/>): v11 keys only from v11.</summary>
+    /// <summary>The keys content schema v12 adds to this effect, stripped below v12 in <see cref="FromUnknown"/>.</summary>
+    internal static readonly string[] V12Keys = [CapProperty];
+
+    /// <summary>Typed by the revision when the converter hands it over (see <see cref="EffectJsonConverter"/>): v11 keys only from v11, v12 keys only from v12.</summary>
     internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion) =>
-        revisionSchemaVersion >= ContentRevision.PlayMechanicsSchemaVersion
+        revisionSchemaVersion >= ContentRevision.AbilityCapSchemaVersion
             ? VersionedEffects.Typed<ModifierEffect>(unknown)
-            : VersionedEffects.TypedWithout<ModifierEffect>(unknown, V11Keys);
+            : revisionSchemaVersion >= ContentRevision.PlayMechanicsSchemaVersion
+                ? VersionedEffects.TypedWithout<ModifierEffect>(unknown, V12Keys)
+                : VersionedEffects.TypedWithout<ModifierEffect>(unknown, [.. V11Keys, .. V12Keys]);
 }
 
 /// <summary>Grants a proficiency or expertise in a field (<c>save.dex</c>, <c>skill.stealth</c>), or another content revision.</summary>
@@ -2051,7 +2064,7 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
     {
         var newest = type switch
         {
-            ModifierEffect.TypeName => ModifierEffect.V11Keys,
+            ModifierEffect.TypeName => [.. ModifierEffect.V11Keys, .. ModifierEffect.V12Keys],
             GrantEffect.TypeName => [.. GrantEffect.V11Keys, .. GrantEffect.V12Keys],
             ResourceEffect.TypeName => ResourceEffect.V11Keys,
             RollEffect.TypeName => [.. RollEffect.V11Keys, .. RollEffect.V12Keys],
