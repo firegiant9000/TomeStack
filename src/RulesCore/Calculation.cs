@@ -738,7 +738,8 @@ public static partial class CharacterCalculator
         var resourceBonuses = new List<ResourceBonus>();
         var modifiers = CollectModifiers(active, character, policy, diagnostics, warnings, manual, effective, autoOn, resourceBonuses, resolved.ClassLevels, resolved.ModdedEntries);
         var conditionImmunities = CollectConditionImmunities(active, character, resolved.ClassLevels, effective, autoOn, diagnostics);
-        var rollModes = CollectRollModes(active, character, effective, autoOn, diagnostics);
+        var immune = conditionImmunities.Select(c => c.Condition).ToHashSet(StringComparer.Ordinal);
+        var rollModes = CollectRollModes(active, character, effective, autoOn, immune, diagnostics);
         var weaponProficiencies = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         var armorTraining = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         var unseenArmor = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
@@ -838,7 +839,7 @@ public static partial class CharacterCalculator
         // Before the feature list: a spell that cannot be cast reports on its feature (spells.unusable), like a recorded spell that cannot be listed.
         var castSpells = CastSpellsOf(active, catalog, character, casters.Count > 0, values, diagnostics);
         // Before the feature list: a response whose formula fails reports on its feature (effect.invalid-formula). HP.MAX is this sheet's own maximum.
-        var responses = CollectResponses(active, character, resolved.ClassLevels, values, resources, effective, autoOn, values[FieldIds.HitPoints], diagnostics);
+        var responses = CollectResponses(active, character, resolved.ClassLevels, values, resources, effective, autoOn, values[FieldIds.HitPoints], immune, diagnostics);
         // Before the feature list: a form-only defence of absent content reports on its feature (modifier.toggle-content-missing).
         var damageDefences = CollectDamageDefences(active, character, resolved.ClassLevels, effective, autoOn, diagnostics);
         var scoped = diagnostics.Concat(warnings.Values.SelectMany(w => w)).Concat(resources.SelectMany(r => r.Warnings)).Where(d => d.Content is not null).Distinct().ToList();
@@ -998,7 +999,7 @@ public static partial class CharacterCalculator
     /// </summary>
     private static List<ResponseValue> CollectResponses(
         List<ActiveContent> active, Character character, ClassLevelMap classLevels, Dictionary<string, int> values, List<ResourceValue> resources,
-        EffectiveToggles effective, bool autoOn, int hitPointMaximum, List<Diagnostic> diagnostics)
+        EffectiveToggles effective, bool autoOn, int hitPointMaximum, IReadOnlySet<string> immune, List<Diagnostic> diagnostics)
     {
         var candidates = active
             .SelectMany(item => item.Revision.Effects.OfType<ResponseEffect>()
@@ -1084,7 +1085,7 @@ public static partial class CharacterCalculator
                 else if (left < needed)
                     reason = $"Needs {needed} {pool.Label} ({left} left)";
             }
-            if (reason is null && response.UnlessCondition is { } unless && ConditionKeys.Holds(character.Play.Conditions, unless))
+            if (reason is null && response.UnlessCondition is { } unless && ConditionKeys.Holds(character.Play.Conditions, unless, immune))
                 reason = $"Not while {unless}";
             var trigger = response.Trigger is { DamageTypes: { } types } t
                 ? t with { DamageTypes = [.. types.Select(x => DamageTypes.TryNormalize(x, out var canonical) ? canonical : x)] }

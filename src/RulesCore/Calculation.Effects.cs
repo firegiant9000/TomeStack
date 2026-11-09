@@ -208,7 +208,7 @@ public static partial class CharacterCalculator
     /// Toggled entries are gated like modifiers. A rollMode has no timing, so only its toggle gates it. Order is sheet content order.
     /// </summary>
     private static RollModeCollection CollectRollModes(
-        List<ActiveContent> active, Character character, EffectiveToggles effective, bool autoOn, List<Diagnostic> diagnostics)
+        List<ActiveContent> active, Character character, EffectiveToggles effective, bool autoOn, IReadOnlySet<string> immune, List<Diagnostic> diagnostics)
     {
         var targeted = new List<(string Target, RollModeReason Reason)>();
         var attackModes = new List<AttackModeValue>();
@@ -219,7 +219,7 @@ public static partial class CharacterCalculator
             foreach (var effect in revision.Effects.OfType<RollModeEffect>())
             {
                 // Content v12 (G7): while the character has the condition the effect is left out, like a toggle that is off.
-                if (effect.UnlessCondition is { } unless && ConditionKeys.Holds(character.Play.Conditions, unless))
+                if (effect.UnlessCondition is { } unless && ConditionKeys.Holds(character.Play.Conditions, unless, immune))
                     continue;
                 if (effect.Toggle is { } toggle
                     && GateOnToggle(active, revision, effect.Id, toggle, effect.ToggleContent, effective, autoOn, diagnostics, out _) != ToggleGate.Applies)
