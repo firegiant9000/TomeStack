@@ -180,7 +180,22 @@ public sealed record ModifierEffect : Effect
     /// </summary>
     public int? Cap { get; init; }
 
+    /// <summary>
+    /// Content schema v12 (G4): applies only while none of the listed gear is worn: <see cref="GearArmor"/> (any body armor),
+    /// <see cref="GearHeavyArmor"/> or <see cref="GearShield"/>. Null: whatever is worn. Plain strings, so an unknown value
+    /// in an unvalidated draft is ignored rather than unreadable. Below v12 the key stays extension data and does nothing.
+    /// </summary>
+    public IReadOnlyList<string>? NotWearing { get; init; }
+
     internal const string CapProperty = "cap";
+
+    internal const string NotWearingProperty = "notWearing";
+
+    /// <summary>The <see cref="NotWearing"/> values: body armor of any category, heavy body armor, and a shield.</summary>
+    internal const string GearArmor = "armor", GearHeavyArmor = "heavyArmor", GearShield = "shield";
+
+    /// <summary>Every value <see cref="NotWearing"/> may list, in the order the calculator checks them.</summary>
+    internal static readonly string[] Gear = [GearArmor, GearHeavyArmor, GearShield];
 
     /// <summary>The lowest and highest <see cref="Cap"/> content may set (20 is the usual maximum).</summary>
     internal const int MinCap = 21, MaxCap = 30;
@@ -189,7 +204,7 @@ public sealed record ModifierEffect : Effect
     internal static readonly string[] V11Keys = ["toggleContent"];
 
     /// <summary>The keys content schema v12 adds to this effect, stripped below v12 in <see cref="FromUnknown"/>.</summary>
-    internal static readonly string[] V12Keys = [CapProperty];
+    internal static readonly string[] V12Keys = [CapProperty, NotWearingProperty];
 
     /// <summary>Typed by the revision when the converter hands it over (see <see cref="EffectJsonConverter"/>): v11 keys only from v11, v12 keys only from v12.</summary>
     internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion) =>

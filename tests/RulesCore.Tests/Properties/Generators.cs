@@ -137,12 +137,16 @@ internal static class Generators
                 from toggleContent in OptionalValue(Guids)
                 // Any version: below v12 the key must stay extension data, written back where it was.
                 from cap in OptionalValue(Gen.Choose(21, 30))
+                // Content v12 (G4): from v12 only, on top-level modifiers (item-mod revisions are never generated). Never armor:
+                // with whileArmored it could never apply, and validation refuses it.
+                from gear in Gen.Elements<string[]?>(null, new[] { "shield" }, new[] { "heavyArmor", "shield" })
                 select new JsonObject { ["operation"] = op, ["target"] = target, ["value"] = value }
                     .With("stacking", stackGroup is null ? null : "highestInGroup").With("stackGroup", stackGroup)
                     .With("toggle", v >= ToggleEffect.SchemaVersion ? toggle : null)
                     .With("whileArmored", v >= ContentRevision.CombatDetailsSchemaVersion ? armored : null)
                     .With("toggleContent", toggleContent?.ToString())
-                    .With("cap", op == "bonus" && target == FieldIds.Score(Ability.Dex) ? cap : null)),
+                    .With("cap", op == "bonus" && target == FieldIds.Score(Ability.Dex) ? cap : null)
+                    .With("notWearing", v >= ContentRevision.AbilityCapSchemaVersion && gear is not null ? new JsonArray([.. gear.Select(g => (JsonNode)g)]) : null)),
             Common(GrantEffect.TypeName,
                 from grant in Gen.Elements("proficiency", "expertise")
                 from target in Gen.Elements("skill.stealth", "save.dex", "skill.arcana")
