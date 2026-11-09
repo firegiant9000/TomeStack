@@ -291,6 +291,54 @@ public class DownConvertV12Tests
         Assert.Equal("2", kept.Value);
     }
 
+    private const string GatedBonus = """{"type":"modifier","id":"m","operation":"bonus","target":"ability.dex.score","value":"1","notWearing":["armor","shield"]}""";
+
+    [Fact]
+    public void Gear_gate_blocks_below_12()
+    {
+        var result = DownConvert.Below(Rev(GatedBonus) with { Name = "Fixture: X" }, 11);
+
+        Assert.True(result.Blocked);
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(BelowAction.Blocks, change.Action);
+        Assert.Equal("below.equipment-gate", change.Code);
+        Assert.Equal("effects[0]", change.Path);
+        Assert.Equal("'Fixture: X': it applies only while armor or a shield is not worn; the older version would apply it whatever is worn.", change.Message);
+    }
+
+    [Fact]
+    public void Gear_gate_with_cap_still_blocks()
+    {
+        const string capped = """{"type":"modifier","id":"m","operation":"bonus","target":"ability.dex.score","value":"1","cap":22,"notWearing":["armor","shield"]}""";
+        var result = DownConvert.Below(Rev(capped), 11);
+
+        Assert.True(result.Blocked);
+        Assert.Contains(result.Changes, c => c.Action == BelowAction.Blocks && c.Code == "below.equipment-gate");
+    }
+
+    [Fact]
+    public void Heavy_armor_gate_message_names_heavy_armor()
+    {
+        const string heavy = """{"type":"modifier","id":"m","operation":"bonus","target":"ability.con.score","value":"1","notWearing":["heavyArmor"]}""";
+        var result = DownConvert.Below(Rev(heavy) with { Name = "Fixture: X" }, 11);
+
+        var change = Assert.Single(result.Changes);
+        Assert.Equal("below.equipment-gate", change.Code);
+        Assert.Equal("'Fixture: X': it applies only while heavy armor is not worn; the older version would apply it whatever is worn.", change.Message);
+    }
+
+    [Fact]
+    public void Modifier_without_gate_is_untouched_at_12_to_11()
+    {
+        const string plain = """{"type":"modifier","id":"m","operation":"bonus","target":"ability.dex.score","value":"1"}""";
+        var result = DownConvert.Below(Rev(plain), 11);
+
+        Assert.False(result.Blocked);
+        Assert.Empty(result.Changes);
+        var kept = Assert.IsType<ModifierEffect>(Assert.Single(result.Revision.Effects));
+        Assert.Null(kept.NotWearing);
+    }
+
     private static string Mode(string target, string mode, string extra = "") =>
         $$"""{"type":"rollMode","id":"m","target":"{{target}}","mode":"{{mode}}"{{extra}}}""";
 

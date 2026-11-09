@@ -91,7 +91,7 @@
       { "feature": "formula:SPEED", "rule": "below.value-formula" },
       { "feature": "spell.tags", "rule": "below.v12-key" },
       { "feature": "modifier.cap", "rule": "below.v12-key" },
-      { "feature": "modifier.notWearing", "rule": "below.v12-key" },
+      { "feature": "modifier.notWearing", "rule": "below.equipment-gate" },
       { "feature": "choice.replaceable", "rule": "below.v12-key" },
       { "feature": "roll.payment", "rule": "below.payment" },
       { "feature": "attack.payment", "rule": "below.payment" },

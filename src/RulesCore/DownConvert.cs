@@ -55,6 +55,8 @@ public static class BelowCodes
     public const string ModifierToggleContent = "below.modifier-toggle-content";
     public const string UnknownTarget = "below.unknown-target";
     public const string RestrictionLifted = "below.restriction-lifted";
+    /// <summary>A modifier that applies only while some gear is not worn; the older version would apply it whatever is worn.</summary>
+    public const string EquipmentGate = "below.equipment-gate";
     public const string DefenceWhileToggle = "below.defence-while-toggle";
     public const string GrantDefence = "below.grant-defence";
     public const string ItemAttunement = "below.item-attunement";
@@ -558,6 +560,10 @@ public static class DownConvert
                         // Dropped whole (weaker, never stronger): the older version cannot suppress the condition, so the copy would hold it.
                         changes.Add(new(path, BelowAction.Dropped, BelowCodes.EffectUnsupported, $"'{name}': its immunity to the {StringOf(Property(effect, "condition"))} condition; the feature stays as text."));
                         continue;
+                    case ModifierEffect.TypeName when Member(effect, "notWearing") is { } gearNode:
+                        // Blocked, not dropped: the older version would apply the bonus whatever is worn, so leaving the gate out changes the result.
+                        changes.Add(new(path, BelowAction.Blocks, BelowCodes.EquipmentGate, $"'{name}': it applies only while {GearWords(gearNode)} is not worn; the older version would apply it whatever is worn."));
+                        continue;
                     case ModifierEffect.TypeName when Member(effect, "cap") is { } capNode:
                         // The effect stays: only the cap goes, so the older version applies the same bonus without the higher ceiling.
                         RemoveKey(effect, "cap", path, BelowAction.Dropped, BelowCodes.V12Key, $"'{name}': that the increase can raise the score above 20 (up to {capNode}); the older version stops it at 20.", changes);
@@ -764,6 +770,18 @@ public static class DownConvert
     /// <summary>The value of the property with this name in any case; null when absent or JSON null.</summary>
     private static JsonNode? Property(JsonObject o, string name) =>
         o.FirstOrDefault(p => string.Equals(p.Key, name, StringComparison.OrdinalIgnoreCase)).Value;
+
+    /// <summary>The gear a notWearing list names, in plain words: "armor or a shield". Unknown values are written as they are.</summary>
+    private static string GearWords(JsonNode? node) =>
+        node is JsonArray gear
+            ? string.Join(" or ", gear.Select(g => StringOf(g) switch
+            {
+                "armor" => "armor",
+                "heavyArmor" => "heavy armor",
+                "shield" => "a shield",
+                var other => other ?? g?.ToJsonString() ?? string.Empty,
+            }))
+            : node?.ToJsonString() ?? string.Empty;
 
     private static string? StringOf(JsonNode? node) => node is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;
 
