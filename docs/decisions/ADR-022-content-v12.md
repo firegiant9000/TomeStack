@@ -1,7 +1,7 @@
-# ADR-022: Content schema v12, one slice at a time (G6 first: response triggers and amounts; G7: roll modes on attacks and initiative; G1: scaled dice, critical-only and once-per-turn riders; G9: roll floor on checks; G10: check ability, climb and swim speed)
+# ADR-022: Content schema v12, one slice at a time (G6 first: response triggers and amounts; G7: roll modes on attacks and initiative; G1: scaled dice, critical-only and once-per-turn riders; G9: roll floor on checks; G10: check ability, climb and swim speed; G11: condition immunity)
 
 Status: **accepted** for the slice list and for slices G6, G7, G1, G9 and G10 (owner, 2026-10-28: LIVING_SPECS D76 and B4; D86, D87, D88, D89, D90; G9 and G10 design rulings 2026-11-05). Slice G6 is built on branch `v12-g6`, slice G7 on `v12-g7` (stacked on G6), slice G1 on `v12-g1` (stacked on G7), slice G9 on `v12-g9` (stacked on G1), slice G10 on `v12-g10` (stacked on G9). The warn-or-block judgement for G6's down-conversion (decision 6), the one for G7's (G7 decision 6) and the one for G1's (G1 decision 6), and "once per turn is offered, not tracked" (G1 decision 4), are proposals that await the owner.
-Date: 2026-11-05
+Date: 2026-11-06
 
 ## Context
 
@@ -34,7 +34,7 @@ The first gap (G6) is in the damage panel. A `response` effect (v11, ADR-018 and
 
 ### The slice list
 
-G6 was built first, G7 second, G1 (with G2 and G3) third, G9 fourth and G10 fifth (below). The remaining slices follow in the order G11, G5 and G4 (the gap ids are in [effect-vocabulary-coverage.md](../features/effect-vocabulary-coverage.md)). Each extends this ADR with its own decisions and evidence, keeps every new member optional, and adds its own lowering rule.
+G6 was built first, G7 second, G1 (with G2 and G3) third, G9 fourth, G10 fifth and G11 sixth (below). The remaining slices follow in the order G5 and G4 (the gap ids are in [effect-vocabulary-coverage.md](../features/effect-vocabulary-coverage.md)). Each extends this ADR with its own decisions and evidence, keeps every new member optional, and adds its own lowering rule.
 
 **0.8.0 waits for every slice** (owner ruling, 2026-11-04): the bundled classes get new v12 revisions only when v12 is complete, and no release is cut while v12 is open. Until then G6 and G7 sit on their branches and, once merged, in `main`.
 
@@ -240,4 +240,44 @@ The fifth gap is two small things content could not say in v11: "this skill may 
 - UI: `src/Ui/src/components/HomebrewStudioCheckAbility.test.tsx` (authoring), `CharacterSheet.test.tsx` and `SheetSummary.test.tsx` (climb and swim speed shown).
 - The original fixture pack `tests/RulesFixtures/fixture-pack-check-ability.json`.
 
-Related: [ADR-018](ADR-018-play-mechanics.md), [ADR-021](ADR-021-mechanics-beyond-d43.md), [ADR-023](ADR-023-down-conversion-export.md), [play-mechanics.md](../features/play-mechanics.md#content-v12-g6-response-triggers-and-amounts), [its G7 section](../features/play-mechanics.md#content-v12-g7-roll-modes-on-attacks-and-initiative), [its G1 section](../features/play-mechanics.md#content-v12-g1-scaled-dice-critical-only-and-once-per-turn-riders), [its G9 section](../features/play-mechanics.md#content-v12-g9-roll-floor) and [its G10 section](../features/play-mechanics.md#content-v12-g10-check-ability-climb-and-swim-speed), LIVING_SPECS D76, D86, D87, D88, D89 and D90. Supersedes: none.
+## Slice G11: condition immunity
+
+The sixth gap is "you are immune to the charmed condition", always or only while a mode (a rage, a form) is on. Content could only say it in text. This is the grant the bundled Barbarian's and Monk's immunity lines need once C2-6 re-authors them.
+
+### Decision (G11)
+
+1. **A new grant kind `conditionImmunity` (v12)** (owner rulings, 2026-11-06), with a new member `condition` (JSON `condition`): one key of the 14 conditions, compared exactly (lower case). It is required on this kind and refused on every other kind. The kind takes no `target`, `content` or `damageType`; `level` and `onlyAs` work as on a damage defence.
+2. **Older revisions never bind it.** In a v10 or v11 revision (and below) a grant of this kind stays `unknown`, byte for byte with its hash; a `condition` key on any other grant stays extension data. Only a v12 revision types it.
+3. **Always on, or while a toggle is on.** It is calculated only when `automation` is `automatic` and `timing` is `always`, gated by `level`, `onlyAs` and `whileToggle` (the same or another content's toggle) exactly as a damage defence is. A manual or timed one is not applied and its feature shows Assisted; it is not an error. There is no `unlessCondition` or other condition gate on the grant.
+4. **Play: suppress, do not block.** An immune condition is not held. `ConditionKeys.Holds` takes the immunity set: an immune key is not held, and "incapacitated" is implied only by a held condition that is itself not immune. The G6 response gates and the G7 roll-mode `unlessCondition` gates read this. The player can still record the condition (`addCondition` and `removeCondition` are accepted) and the stored play state never changes because of an immunity, so switching the toggle off shows the condition held again with no write. The G7 `against` lists are untouched.
+5. **Sheet.** `conditionImmunities` lists each condition with its sources, in the order of the 14 keys, sources grouped and distinct; it is absent when there are none, so a sheet without the grant does not change. The grant is not a proficiency. The immunity set is worked out once per calculation, before the roll modes.
+6. **Which conditions.** Any of the 14. Exhaustion (a level) and disease (not a condition) stay text.
+7. **Down-conversion** (ADR-023, owner ruling, 2026-11-06). At the 12 to 11 rung the grant is **dropped whole** and listed (`below.effect-unsupported`: "'{name}': its immunity to the {condition} condition; the feature stays as text."). A copy without it is only weaker, so nothing blocks.
+8. **Registry.** The existing grant row's text reads "Proficiencies, expertise, content, damage defences and condition immunities calculate"; it keeps its evidence class and gains no second row.
+9. **UI copy and numbers.** The Play legend reads "Conditions (reminders; a condition you are immune to has no effect)" and an immune condition's chip reads "{Label} (immune)", still toggleable. The sheet's Defences panel gains a read-only "Condition immunities" list ("{Label} ({sources})"). The studio has "Add condition immunity" (row "Condition immunity") with a "Condition" choice of the 14 labels and the "Only while" choice; its Automation select is hidden, as for every grant, so a manual or timed immunity comes only from JSON or import and shows as Assisted. No new ADR and no schema bump (`ContentRevision.CurrentSchemaVersion` stays 12; `Character.CurrentSchemaVersion` stays 11). The decision row is D91.
+
+### Consequences (G11)
+
+- Content can grant immunity to one condition, optionally while a toggle is on, and the sheet and Play honour it. A revision without it keeps its version, bytes and hash; a v11 revision holding one keeps it as unknown data and ignores it.
+- A revision that uses it needs content schema 12 (`validate.requires-v12`). A package that holds one warns `package.needs-newer-build`.
+- New codes: `validate.grant-condition` (missing or not one of the 14 keys), `validate.grant-condition-kind` (`condition` on another kind) and `validate.grant-condition-fields` (`target`, `content` or `damageType` on the new kind).
+- Print and the summary's conditions line list the stored conditions, as before.
+
+### Not doing (G11)
+
+- **Exhaustion or disease immunity.**
+- **Ending a held condition automatically.** An effect such as "the condition ends when you enter the mode" stays a player action (text).
+- **Blocking `addCondition`.**
+- **The G7 `against` lists**, which stay player-applied.
+- **Re-authoring bundled SRD features** (the Barbarian's Mindless Rage, the 5.1 Monk's Purity of Body): C2-6. Purity of Body's disease line stays text.
+
+### Evidence (G11)
+
+- `tests/RulesCore.Tests/ConditionImmunityV12SchemaTests.cs` and `ConditionImmunityV12ValidationTests.cs` (the member, the version rung, the validator codes, the published JSON schema).
+- `tests/RulesCore.Tests/ConditionImmunityV12SheetTests.cs` (the listing, toggle gating, no proficiency) and `ConditionImmunityV12GateTests.cs` (`Holds`, response and roll-mode gates, implied incapacitated).
+- `tests/RulesCore.Tests/DownConvertV12Tests.cs` (the drop).
+- `tests/AppService.Tests/ConditionImmunityV12ServiceTests.cs` and `SchemaTests` (the sheet through the service; play state is not rewritten).
+- UI: `src/Ui/src/components/HomebrewStudioConditionImmunity.test.tsx` (authoring), `DefencesPanel` and `PlayPanels` tests.
+- The original fixture pack `tests/RulesFixtures/fixture-pack-condition-immunity.json`.
+
+Related: [ADR-018](ADR-018-play-mechanics.md), [ADR-021](ADR-021-mechanics-beyond-d43.md), [ADR-023](ADR-023-down-conversion-export.md), [play-mechanics.md](../features/play-mechanics.md#content-v12-g6-response-triggers-and-amounts), [its G7 section](../features/play-mechanics.md#content-v12-g7-roll-modes-on-attacks-and-initiative), [its G1 section](../features/play-mechanics.md#content-v12-g1-scaled-dice-critical-only-and-once-per-turn-riders), [its G9 section](../features/play-mechanics.md#content-v12-g9-roll-floor), [its G10 section](../features/play-mechanics.md#content-v12-g10-check-ability-climb-and-swim-speed) and [its G11 section](../features/play-mechanics.md#content-v12-g11-condition-immunity), LIVING_SPECS D76, D86, D87, D88, D89, D90 and D91. Supersedes: none.

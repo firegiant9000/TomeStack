@@ -746,6 +746,29 @@ Decided in [ADR-022](../decisions/ADR-022-content-v12.md#slice-g10-check-ability
 
 **Stays by hand:** substitutions that apply only in a situation ("while climbing"), jump distance, and saves, initiative and bare ability checks using another ability.
 
+## Content v12 (G11): condition immunity
+
+Decided in [ADR-022](../decisions/ADR-022-content-v12.md#slice-g11-condition-immunity) (LIVING_SPECS D91). A new grant kind, `conditionImmunity`, with a `condition` member, content schema v12 only; a revision without it keeps its version and bytes. A v11 revision that holds one keeps it as unknown data and ignores it.
+
+| Member | Meaning |
+| --- | --- |
+| `condition` | One of the 14 condition keys (`blinded` ... `unconscious`), required on this kind and refused on any other (`validate.grant-condition`, `validate.grant-condition-kind`). |
+| `whileToggle`, `level`, `onlyAs` | As on a damage defence. The grant takes no `target`, `content` or `damageType` (`validate.grant-condition-fields`). |
+
+**Calculated when** `automation` is `automatic` and `timing` is `always`, and while its `whileToggle` (the same or another content's) is on. A manual or timed one is not applied and its feature shows Assisted.
+
+**Sheet.** The Defences panel lists "Condition immunities" below the damage defences, one line per condition ("Charmed (source names)"); the list is absent when there are none.
+
+**Play.** The conditions legend reads "Conditions (reminders; a condition you are immune to has no effect)", and an immune condition's chip reads "{Label} (immune)". You can still tick it: the condition is stored, but it is not held for the G6 response and G7 roll-mode `unlessCondition` gates, and an immune condition does not imply incapacitated. Stored conditions never change because of an immunity, so switching the toggle off shows the condition held again. Print and the summary list the stored conditions.
+
+**Studio.** "Add condition immunity" (row "Condition immunity") has a "Condition" choice of the 14 labels and the "Only while" choice. Automation is hidden, as for every grant, so a manual or timed immunity comes only from JSON or import and shows as Assisted.
+
+**Validation** (errors): `validate.grant-condition`, `validate.grant-condition-kind`, `validate.grant-condition-fields`; below v12 `validate.requires-v12` applies to the kind and the member. The capability registry grant row reads "Proficiencies, expertise, content, damage defences and condition immunities calculate".
+
+**Older versions.** For an older TomeStack ([package-format.md](package-format.md#save-for-an-older-tomestack-d85)) the grant is dropped whole and listed (`below.effect-unsupported`: "'{name}': its immunity to the {condition} condition; the feature stays as text."). Nothing blocks the export.
+
+**Stays by hand:** immunity to exhaustion or disease, ending a held condition (such as when a mode starts), and the attacks-against lists.
+
 ## Not yet
 
 - Damage responses: the studio's outcome roll picker offers only the same entry's rolls. A roll from another entry can be stored in content but not chosen in the studio yet.

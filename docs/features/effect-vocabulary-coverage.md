@@ -67,7 +67,7 @@ Coverage words are the Lab's registry words: **Automatic** (the sheet works it o
 | Save | `roll.save` | Assisted | — | As the Avrae `save` row: the DC is worked out; `roll.area`, `roll.range` and `roll.targets` are text only |
 | Summon | Companions on Play ([sheet-play.md](sheet-play.md)) | Assisted | — | Partly covered: the content v12 `companion` effect (MECH-X item 4, ADR-021) gives a calculated card with its own hit points, attacks and pools; summoned creatures, level-gated upgrades and initiative are not covered. A hand companion is still free text the player fills in (ADR-018) |
 | Teleport | `roll.range`, `roll.area` (text) | Reference | — | Not covered: no map or positions (ADR-018) |
-| Transform | `toggleGroup` and `toggle` (`layer`, `cost`, `duration`); `modifier` `set` on `ability.*`, `armorClass`, `hitPoints`; `attack` and `roll` with `whileToggle`; `grant` defences with `whileToggle` | Assisted | G5, G11 | A form changes each number by its own modifier; no whole stat block swap. No per-effect ability cap (G5), no condition immunity (G11) |
+| Transform | `toggleGroup` and `toggle` (`layer`, `cost`, `duration`); `modifier` `set` on `ability.*`, `armorClass`, `hitPoints`; `attack` and `roll` with `whileToggle`; `grant` defences and condition immunities with `whileToggle` | Assisted | G5 | A form changes each number by its own modifier; no whole stat block swap. No per-effect ability cap (G5). Condition immunity is covered (`conditionImmunity`, G11 built) |
 | Utility | `roll` (with or without `dice`), `toggle`, `value` | Assisted | G12 | A spend-only roll ("Use") or a free roll; a roll floor on checks is a separate kind (`rollFloor`, G9 built); no reroll (G12) |
 
 ## What this says about the martial classes
@@ -76,7 +76,8 @@ Both vocabularies' everyday verbs (attack, damage, a saving-throw DC, a pool spe
 
 - **Remove the most:** G1 (dice count as a formula on riders and rolls; built, content v12, D88), G4 (no armour, no shield, no heavy armour gates), G5 (per-effect ability-score cap), G6 (responses with dice or halving, and save-result or trigger conditions).
 - **Cheap:** G9 (roll floor on checks; built, content v12, D89). G7 (modes on own attack rolls, attacks against the character, initiative alone) is built, content v12, D87.
-- **Reminders that may stay Reference:** G8 (rider match on the ability used; Dex for tagged non-finesse weapons), G11 (condition immunity), G12 (reroll).
+- **Reminders that may stay Reference:** G8 (rider match on the ability used; Dex for tagged non-finesse weapons), G12 (reroll).
+- G11 (condition immunity) is built, content v12, D91: a `conditionImmunity` grant, optionally while a toggle is on. Mindless Rage (5.2.1 Barbarian) and the 5.1 Purity of Body's poisoned line are expressible once C2-6 re-authors them; disease stays text, and so does ending a held condition.
 - G10 (skill ability substitution; climb and swim speeds) is built, content v12, D90. The 5.2.1 Second-Story Work's climb speed is expressible; its jump line stays text, and 5.1 Second-Story Work has no speed. Acrobatic Movement (5.2.1) grants no speed and no check, so it is not a G10 feature and stays text.
 - G2 (crit-only dice) is built with G1 (content v12, D88). G3 (once per turn) is built as player-added: the rider is offered on each damage roll and the player adds it; the app does not track turns, and that judgement awaits the owner.
 
@@ -96,5 +97,5 @@ The v12 scope is decided once, from the Lab's coverage report after authoring Ba
 | G8 | Rider match on the ability used; Dex substitution for tagged non-finesse weapons |
 | G9 | Roll floor (built on checks, v12, D89) |
 | G10 | Skill-check ability substitution; climb and swim speeds (built, v12, D90) |
-| G11 | Condition immunity grants |
+| G11 | Condition immunity grants (built, v12, D91) |
 | G12 | Reroll |
