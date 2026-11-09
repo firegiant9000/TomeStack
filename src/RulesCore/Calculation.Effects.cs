@@ -6,7 +6,7 @@ public static partial class CharacterCalculator
 
     /// <param name="SkipReason">Set when the rules say this modifier does not apply now (for example, Unarmored Defense while armor is worn); it is traced as not used.</param>
     /// <param name="FollowedToggle">Set when the modifier follows another entry's toggle (content v11 <c>toggleContent</c>): that toggle's label, named in the trace.</param>
-    private sealed record Modifier(ActiveContent Content, ModifierEffect Effect, Formula Formula, IReadOnlyList<string> ReadsFields, string? SkipReason = null, string? FollowedToggle = null, bool ModBonus = false);
+    private sealed record Modifier(ActiveContent Content, ModifierEffect Effect, Formula Formula, IReadOnlyList<string> ReadsFields, string? SkipReason = null, string? FollowedToggle = null, bool ModBonus = false, bool FromItemMod = false);
 
     private const string ResourceTargetPrefix = ContentValidator.ResourceTargetPrefix;
 
@@ -590,7 +590,7 @@ public static partial class CharacterCalculator
                 }
                 // A named value this formula reads counts as the fields that value reads (content v11), so the order and the cycle check see them.
                 var reads = FieldReads(formula!, item, classLevels);
-                modifiers.Add(new(item, effect, formula!, reads, null, followedToggle));
+                modifiers.Add(new(item, effect, formula!, reads, null, followedToggle, FromItemMod: leaf));
             }
         }
         return modifiers;
@@ -604,9 +604,13 @@ public static partial class CharacterCalculator
     /// <summary>SRD: ability score increases stop at 20 (both families, so a rules constant rather than a policy field).</summary>
     public const int AbilityScoreIncreaseCap = 20;
 
-    /// <summary>The ceiling of one ability-score increase: its own cap (schema 12 and later, never on an item mod), else 20.</summary>
+    /// <summary>
+    /// The ceiling of one ability-score increase: its own cap (schema 12 and later, 21 to 30, never on an item mod's modifier nor an
+    /// armor mod's synthetic bonus), else 20. A cap out of range is ignored (validation refuses it).
+    /// </summary>
     private static int AbilityCeiling(Modifier modifier) =>
-        modifier.Effect.Cap is { } cap && !modifier.ModBonus && modifier.Content.Revision.SchemaVersion >= ContentRevision.AbilityCapSchemaVersion
+        modifier.Effect.Cap is { } cap && cap is >= ModifierEffect.MinCap and <= ModifierEffect.MaxCap
+            && !modifier.ModBonus && !modifier.FromItemMod && modifier.Content.Revision.SchemaVersion >= ContentRevision.AbilityCapSchemaVersion
             ? cap : AbilityScoreIncreaseCap;
 
     private static bool IsAbilityScoreField(string field) =>

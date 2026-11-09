@@ -59,7 +59,7 @@ public static partial class CharacterCalculator
         var winners = bonuses
             .Where(b => b.Modifier.Effect.Stacking == StackingRule.HighestInGroup)
             .GroupBy(b => b.Modifier.Effect.StackGroup, StringComparer.Ordinal)
-            .Select(g => g.MaxBy(b => b.Amount).Modifier)
+            .Select(g => g.MaxBy(b => (b.Amount, Ceiling(b))).Modifier) // equal amounts: the higher ceiling wins
             .ToHashSet();
         foreach (var bonus in bonuses)
         {

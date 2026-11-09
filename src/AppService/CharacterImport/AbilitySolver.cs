@@ -15,8 +15,9 @@ public sealed record AbilityPlan(AbilityScores ProposedBase, IReadOnlyList<Abili
 /// a <c>replace</c> or <c>set</c> step means the base cannot be solved (the sheet's score is proposed and noted);
 /// otherwise the <c>add</c> steps are summed into increases <c>P</c> and penalties <c>N</c> (refused modifiers are
 /// <c>ignored</c> steps and do not count). With <c>T = S − N</c>: below 20 the base is <c>T − P</c>; at 20 it is
-/// <c>20 − P</c>, the smallest base consistent with the cap (noted); above 20 plain increases add nothing, so it is <c>T</c>, unless a capped increase (v12) reproduces the sheet: then one preview at <c>T − P</c> is
-/// checked and used when it gives the sheet's score.
+/// <c>20 − P</c>, the smallest base consistent with the cap (noted); above 20 plain increases add nothing, so it is <c>T</c>, unless a capped increase (v12) reproduces the sheet: then the bases
+/// from <c>T − P</c> up to <c>T</c> are previewed and the first that gives the sheet's score is used (noted when the next base gives it too).
+/// During those previews the other abilities stay at the probe base, so a formula that reads another ability can miss; then <c>T</c> stands.
 /// The base is clamped to 1–30. The caller previews again with the result and shows any remaining difference.
 /// </summary>
 internal static class AbilitySolver
@@ -87,11 +88,27 @@ internal static class AbilitySolver
             else
             {
                 solved = target;
-                // A capped increase (content v12) can lift a base of target - increases above 20: check that base reproduces the sheet.
-                var candidate = target - increases;
-                if (increases > 0 && candidate is >= MinBase and <= MaxBase
-                    && Score(preview(WithBase(ability, candidate)), ability) == score)
-                    solved = candidate;
+                if (increases > 0)
+                {
+                    // Capped increases (content v12) can lift a base above 20, and a cap may be only partly used. Scan the bases from
+                    // target - increases up to target (at most increases + 2 previews) and take the first that reproduces the sheet.
+                    var high = Math.Min(MaxBase, target);
+                    var match = -1;
+                    for (var candidate = Math.Max(MinBase, target - increases); candidate <= high; candidate++)
+                    {
+                        if (Score(preview(WithBase(ability, candidate)), ability) == score)
+                        {
+                            match = candidate;
+                            break;
+                        }
+                    }
+                    if (match >= 0)
+                    {
+                        solved = match;
+                        if (match < target && match + 1 <= high && Score(preview(WithBase(ability, match + 1)), ability) == score)
+                            notes.Add(new(ability, "ability.cap-ambiguous", $"{label} reaches a content maximum of {score}, so its base may be higher than proposed; the smallest base that fits is used."));
+                    }
+                }
             }
             if (solved is < MinBase or > MaxBase)
                 notes.Add(new(ability, "ability.out-of-range", $"{label}'s solved base is outside {MinBase} to {MaxBase}, so it is clamped and the score will differ."));

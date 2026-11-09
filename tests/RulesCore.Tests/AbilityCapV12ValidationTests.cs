@@ -82,6 +82,14 @@ public class AbilityCapV12ValidationTests
     }
 
     [Fact]
+    public void Cap_on_a_top_level_modifier_of_an_item_mod_revision_is_refused()
+    {
+        var mod = new ItemModEffect { Id = "im", AppliesTo = ModTarget.Weapon };
+        var report = ContentValidator.Validate(Built(ContentKind.Item, 12, mod, Capped()), Catalog);
+        AssertError(report, "validate.modifier-cap");
+    }
+
+    [Fact]
     public void Cap_inside_an_item_mod_is_refused()
     {
         var mod = new ItemModEffect { Id = "im", AppliesTo = ModTarget.Weapon, Modifiers = [Capped()] };

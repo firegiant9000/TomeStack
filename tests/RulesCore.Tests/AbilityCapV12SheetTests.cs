@@ -117,6 +117,50 @@ public class AbilityCapV12SheetTests
     }
 
     [Fact]
+    public void Cap_on_an_item_mod_modifier_is_ignored()
+    {
+        // An unvalidated item whose mod carries a nested capped bonus: the calculator ignores the cap (validation refuses it).
+        var longblade = new ContentReference(Guid.Parse("6a7e00f3-0000-4000-8000-000000000011"), Guid.Parse("6a7e00f3-0000-4000-8000-000000000111"));
+        var mod = Revision(Guid.Parse("5f5dc000-0000-4000-8000-0000000000c2"), 12, new ItemModEffect { Id = "im", AppliesTo = ModTarget.Weapon, Modifiers = [Bonus("n", 4, 30)] })
+            with { Kind = ContentKind.Item, Name = "Fixture Cap Rune" };
+        var packs = new[] { Fixtures.Pack(), Fixtures.M1Pack(), Fixtures.SpellPack(), Fixtures.CombatPack(), Fixtures.ItemModsPack() };
+        var catalog = new InMemoryContentCatalog([.. packs.SelectMany(p => p.Sources)], [.. packs.SelectMany(p => p.Revisions), mod]);
+        var tinker = Fixtures.Load("pm-tinker-l3.json");
+        var character = tinker with
+        {
+            BaseAbilities = tinker.BaseAbilities with { Str = 20 },
+            Equipment = [new EquipmentEntry(longblade, Equipped: true, Id: Guid.NewGuid(), Mods: [mod.Reference])],
+        };
+
+        var strength = CharacterCalculator.Calculate(character, catalog).Field(FieldIds.Score(Ability.Str));
+
+        Assert.Equal(20, strength.Value);
+    }
+
+    [Theory]
+    [InlineData(99)]
+    [InlineData(5)]
+    public void Out_of_range_cap_is_ignored_by_the_calculator(int cap)
+    {
+        var strength = Strength(20, 12, Bonus("a", 4, cap));
+
+        Assert.Equal(20, strength.Value);
+        Assert.Contains(strength.Trace, t => t.Description == "Bonus from feat 'Fixture: X', capped: increases cannot raise an ability score above 20 (+4 would give 24)");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Equal_bonuses_in_a_group_prefer_the_higher_cap(bool cappedFirst)
+    {
+        var plain = Bonus("p", 2) with { Stacking = StackingRule.HighestInGroup, StackGroup = "g" };
+        var capped = Bonus("c", 2, 22) with { Stacking = StackingRule.HighestInGroup, StackGroup = "g" };
+        Effect[] effects = cappedFirst ? [capped, plain] : [plain, capped];
+
+        Assert.Equal(22, Strength(20, 12, effects).Value);
+    }
+
+    [Fact]
     public void Uncapped_increases_keep_todays_trace()
     {
         var strength = Strength(18, 12, Bonus("a", 1), Bonus("b", 2));

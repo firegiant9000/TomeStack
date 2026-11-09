@@ -494,6 +494,9 @@ public static class ContentValidator
                     break;
                 case ModifierEffect modifier:
                     CheckModifier(modifier);
+                    // MECH-X R50: a mod revision's own top-level modifiers apply as mod modifiers, where the calculator ignores a cap.
+                    if (modifier.Cap is not null && revision.Effects.OfType<ItemModEffect>().Any())
+                        Error("validate.modifier-cap", $"Effect '{modifier.Id}' has a cap, but this revision is an item mod, whose modifiers cannot raise an ability score above 20.", modifier.Id);
                     break;
                 case ToggleEffect toggleEffect:
                     needsV6 = true;
