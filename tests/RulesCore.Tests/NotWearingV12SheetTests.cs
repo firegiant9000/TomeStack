@@ -226,6 +226,21 @@ public class NotWearingV12SheetTests
     }
 
     [Fact]
+    public void Gated_pool_bonus_reads_assisted_in_an_unvalidated_draft()
+    {
+        // A pool maximum is not a calculated field, so a gear gate cannot be applied to it: the pool reads assisted and the player adds it.
+        ContentRevision Pool(string[]? gear) => Gate(V12,
+            new ResourceEffect { Id = "pool", ResourceId = "pool", Label = "Pool", Maximum = "2" },
+            new ModifierEffect { Id = "more", Operation = ModifierOperation.Bonus, Target = "resource.pool", Value = "1", NotWearing = gear });
+
+        var ungated = Calc(RulesFamilies.Srd521, Pool(null), [Buckler]).Resources!.Single(r => r.ResourceId == "pool");
+        var gated = Calc(RulesFamilies.Srd521, Pool([Shield]), [Buckler]).Resources!.Single(r => r.ResourceId == "pool");
+
+        Assert.Equal((3, AutomationStatus.Automatic), (ungated.Maximum, ungated.Automation));
+        Assert.Equal((2, AutomationStatus.Assisted), (gated.Maximum, gated.Automation));
+    }
+
+    [Fact]
     public void Ungated_content_keeps_todays_values_and_trace()
     {
         var gate = Gate(V12, Speed(null));

@@ -31,6 +31,18 @@ public class NotWearingV12ValidationTests
         Assert.Equal(12, report.RequiredSchemaVersion);
     }
 
+    [Fact]
+    public void Gate_on_a_pool_maximum_is_refused()
+    {
+        var pool = new ResourceEffect { Id = "pool", ResourceId = "pool", Label = "Pool", Maximum = "2" };
+        var bonus = new ModifierEffect { Id = "m", Operation = ModifierOperation.Bonus, Target = "resource.pool", Value = "1", NotWearing = ["shield"] };
+
+        var report = ContentValidator.Validate(Built(ContentKind.Feature, 12, pool, bonus), Catalog);
+
+        Assert.Contains(report.Errors, e => e.Code == "validate.not-wearing"
+            && e.Message == "Effect 'm' has notWearing, but it raises a pool maximum, which counts whatever is worn; gear gates apply to calculated fields only.");
+    }
+
     [Theory]
     [InlineData]
     [InlineData("cloak")]

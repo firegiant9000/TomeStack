@@ -582,8 +582,10 @@ public static partial class CharacterCalculator
                 // enters the field pipeline; only a bonus counts, and one naming no resource of its revision changes nothing (validation errors).
                 if (IsResourceTarget(revision, effect))
                 {
+                    // Content v12 (G4): a pool maximum is not a calculated field, so a gear gate cannot be applied to it (validation refuses
+                    // it); in an unvalidated draft the pool reads assisted and the player adds the bonus. Not on an item mod's leaf.
                     if (effect.Operation == ModifierOperation.Bonus)
-                        resourceBonuses.Add(new(item, effect, followedToggle));
+                        resourceBonuses.Add(new(item, effect, followedToggle, Manual: !leaf && effect.NotWearing is { Count: > 0 } && revision.SchemaVersion >= ContentRevision.AbilityCapSchemaVersion));
                     continue;
                 }
                 if (!SpecIndex.ContainsKey(effect.Target))

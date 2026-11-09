@@ -325,6 +325,8 @@ public static class ContentValidator
                     Error("validate.not-wearing", $"Effect '{modifier.Id}' has notWearing [{string.Join(", ", gear)}]; it lists armor, heavyArmor or shield, each once, and armor already covers heavyArmor.", modifier.Id);
                 if (modifier.WhileArmored == true && gear.Contains(ModifierEffect.GearArmor, StringComparer.Ordinal))
                     Error("validate.not-wearing-armored", $"Effect '{modifier.Id}' applies only while armor is worn and only while none is, so it could never apply.", modifier.Id);
+                if (modifier.Target.StartsWith(ResourceTargetPrefix, StringComparison.Ordinal))
+                    Error("validate.not-wearing", $"Effect '{modifier.Id}' has notWearing, but it raises a pool maximum, which counts whatever is worn; gear gates apply to calculated fields only.", modifier.Id);
             }
             if (modifier.ToggleContent is not null)
             {
