@@ -28,12 +28,15 @@ public static partial class CharacterCalculator
     /// Dex; medium: AC + Dex up to the cap; heavy: AC), and while it is worn every other Armor Class replacement is an
     /// unarmored alternative that does not apply, traced as such. (All SRD alternatives, such as Unarmored Defense,
     /// apply only without armor; a shield does not stop them.) A shield is a bonus. Only one body armor and one shield
-    /// count; extra ones get a diagnostic.
+    /// count; extra ones get a diagnostic. Content v12 <c>notWearing</c> turns a modifier off while the listed gear is worn
+    /// (<see cref="GateOnGear"/>).
     /// </summary>
     /// <summary>The body armor and shield that count (at most one of each).</summary>
     private sealed record WornArmor((ActiveContent Content, ArmorEffect Effect)? Body, (ActiveContent Content, ArmorEffect Effect)? Shield);
 
     /// <remarks>
+    /// Content v12 (G4): a modifier's <c>notWearing</c> gate is applied before the armor branch, so the synthetic armor, shield and
+    /// armor-mod modifiers added below are never gated.
     /// Content v8 (M2.2): a <c>whileArmored</c> modifier does not apply without body armor. Armor training is checked only
     /// when <paramref name="checkTraining"/>: every class the character has levels in records its armor training
     /// (<see cref="RecordsArmorTraining"/>). A class written before v8 records none, so its training is unknown, and
@@ -70,6 +73,7 @@ public static partial class CharacterCalculator
             diagnostics.Add(new("equipment.multiple-armor", $"'{extra.Content.Revision.Name}' is armor, but '{body[0].Content.Revision.Name}' is already worn; only one armor counts.", extra.Content.Revision.Reference, extra.Effect.Id));
         foreach (var extra in shields.Skip(1))
             diagnostics.Add(new("equipment.multiple-shields", $"'{extra.Content.Revision.Name}' is a shield, but '{shields[0].Content.Revision.Name}' is already used; only one shield counts.", extra.Content.Revision.Reference, extra.Effect.Id));
+        GateOnGear(modifiers, body.Count > 0 ? body[0] : null, shields.Count > 0 ? shields[0] : null);
 
         if (body.Count > 0)
         {
@@ -126,6 +130,40 @@ public static partial class CharacterCalculator
             modifiers.AddRange(ModBonuses(content, shield.SkipReason));
         }
         return new(body.Count > 0 ? body[0] : null, shields.Count > 0 ? shields[0] : null);
+    }
+
+    /// <summary>
+    /// Content v12 (G4): a modifier with <see cref="ModifierEffect.NotWearing"/> does not apply while any listed gear is worn (the first
+    /// listed in the order armor, heavy armor, shield names the reason). A shield counts as used even when it is untrained and adds no
+    /// Armor Class. Not honoured on an item mod's modifier, an armor mod's synthetic bonus, or a revision below v12 (the sandbox
+    /// calculates drafts that were never validated); an unknown value is ignored.
+    /// </summary>
+    private static void GateOnGear(List<Modifier> modifiers, (ActiveContent Content, ArmorEffect Effect)? body, (ActiveContent Content, ArmorEffect Effect)? shield)
+    {
+        for (var i = 0; i < modifiers.Count; i++)
+        {
+            var modifier = modifiers[i];
+            if (modifier.Effect.NotWearing is not { Count: > 0 } gear || modifier.SkipReason is not null || modifier.FromItemMod || modifier.ModBonus
+                || modifier.Content.Revision.SchemaVersion < ContentRevision.AbilityCapSchemaVersion)
+                continue;
+            string? reason = null;
+            foreach (var kind in ModifierEffect.Gear)
+            {
+                if (!gear.Contains(kind, StringComparer.Ordinal))
+                    continue;
+                reason = kind switch
+                {
+                    ModifierEffect.GearArmor when body is { } worn => $"it applies only while no armor is worn, and {Describe(worn.Content)} is worn",
+                    ModifierEffect.GearHeavyArmor when body is { Effect.Category: ArmorCategory.Heavy } worn => $"it applies only while no heavy armor is worn, and {Describe(worn.Content)} is worn",
+                    ModifierEffect.GearShield when shield is { } used => $"it applies only while no shield is used, and {Describe(used.Content)} is used",
+                    _ => null,
+                };
+                if (reason is not null)
+                    break;
+            }
+            if (reason is not null)
+                modifiers[i] = modifier with { SkipReason = reason };
+        }
     }
 
     /// <summary>
