@@ -400,16 +400,22 @@ public static class ContentValidator
                 case UnknownEffect { DeclaredType: ModifierEffect.TypeName } unreadableCap
                     when revision.SchemaVersion >= ContentRevision.AbilityCapSchemaVersion
                         && CarriesV11Key(unreadableCap, ModifierEffect.V12Keys):
-                    if (unreadableCap.Raw.TryGetProperty(ModifierEffect.CapProperty, out _))
-                    {
+                    var hasCap = unreadableCap.Raw.TryGetProperty(ModifierEffect.CapProperty, out _);
+                    var hasGate = unreadableCap.Raw.TryGetProperty(ModifierEffect.NotWearingProperty, out _);
+                    if (hasCap)
                         NeedV12("an ability-score cap");
-                        Error("validate.effect-malformed", $"Effect '{unreadableCap.Id}' has type '{unreadableCap.DeclaredType}' but a value or field that does not read (its cap must be a whole number from 21 to 30, on an ability-score increase; or a missing field); fix it before publishing.", unreadableCap.Id);
-                    }
-                    else
-                    {
+                    if (hasGate)
                         NeedV12("an armor or shield gate");
-                        Error("validate.effect-malformed", $"Effect '{unreadableCap.Id}' has type '{unreadableCap.DeclaredType}' but a value or field that does not read (its notWearing must be a list of armor, heavyArmor or shield; or a missing field); fix it before publishing.", unreadableCap.Id);
-                    }
+                    var capText = "its cap must be a whole number from 21 to 30, on an ability-score increase";
+                    var gateText = "its notWearing must be a list of armor, heavyArmor or shield";
+                    var detail = (hasCap, hasGate) switch
+                    {
+                        (true, true) => $"{capText}; {gateText}",
+                        (true, false) => capText,
+                        (false, true) => gateText,
+                        _ => "a field that is not a valid v12 modifier key",
+                    };
+                    Error("validate.effect-malformed", $"Effect '{unreadableCap.Id}' has type '{unreadableCap.DeclaredType}' but a value or field that does not read ({detail}; or a missing field); fix it before publishing.", unreadableCap.Id);
                     break;
                 // Content v11 (D43): a modifier or roll whose v11 key does not read (toggleContent that is not an id, a whileToggle
                 // without a toggleId). Published at a lower version it would read back as a modifier or roll that ignores the key and

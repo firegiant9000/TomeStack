@@ -306,7 +306,21 @@
                   "shield"
                 ]
               },
-              "description": "Content v12 (G4): the modifier applies only while none of the listed gear is worn (armor, heavyArmor, shield); armor already covers heavyArmor."
+              "not": {
+                "allOf": [
+                  {
+                    "contains": {
+                      "const": "armor"
+                    }
+                  },
+                  {
+                    "contains": {
+                      "const": "heavyArmor"
+                    }
+                  }
+                ]
+              },
+              "description": "Content v12 (G4): the modifier applies only while none of the listed gear is worn (armor, heavyArmor, shield); armor already covers heavyArmor, so a list with both is refused. The schema cannot express these refusals, which only the validator makes: a pool maximum (resource.*) target, whileArmored: true together with armor, and a top-level modifier of an item-mod revision."
             }
           },
           "required": [

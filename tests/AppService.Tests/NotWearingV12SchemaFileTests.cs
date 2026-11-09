@@ -25,6 +25,7 @@ public class NotWearingV12SchemaFileTests
     [InlineData("[\"cloak\"]")]
     [InlineData("[\"shield\",\"shield\"]")]
     [InlineData("\"armor\"")]
+    [InlineData("[\"armor\",\"heavyArmor\"]")]
     public void The_v12_schema_refuses_a_malformed_gate(string notWearing) => Assert.NotEqual("", Errors(Modifier(notWearing)));
 
     [Fact]

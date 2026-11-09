@@ -118,7 +118,18 @@ public class NotWearingV12ValidationTests
             && e.Message.Contains("notWearing", StringComparison.Ordinal)
             && !e.Message.Contains("cap", StringComparison.Ordinal));
         Assert.Equal(12, report.RequiredSchemaVersion);
-        Assert.Contains(report.Errors, e => e.Code == "validate.requires-v12" || e.Code == "validate.effect-malformed");
+    }
+
+    [Fact]
+    public void Unreadable_cap_and_not_wearing_together_name_both()
+    {
+        var revision = Unreadable("cap\":\"abc\",\"notWearing", "\"abc\"");
+        Assert.IsType<UnknownEffect>(revision.Effects.Single());
+        var report = ContentValidator.Validate(revision, Catalog);
+        Assert.Contains(report.Errors, e => e.Code == "validate.effect-malformed"
+            && e.Message.Contains("its cap must be", StringComparison.Ordinal)
+            && e.Message.Contains("its notWearing must be", StringComparison.Ordinal));
+        Assert.Equal(12, report.RequiredSchemaVersion);
     }
 
     [Fact]
