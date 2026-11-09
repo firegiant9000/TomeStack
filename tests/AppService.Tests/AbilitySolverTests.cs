@@ -142,6 +142,55 @@ public class AbilitySolverTests
         }
     }
 
+    /// <summary>One Strength bonus of <paramref name="value"/>, optionally capped (a v12 effect), and the solver's preview over it.</summary>
+    private static (Func<AbilityScores, CharacterSheet> Preview, TempApp Temp) SetupCapped(int value, int? cap)
+    {
+        var temp = new TempApp();
+        var source = Source(temp, "Fixture Solver Notes", RulesFamilies.Srd521);
+        var effect = Modifier("m0", Str, ModifierOperation.Bonus, value) with { Cap = cap };
+        var pin = Publish(temp, source, ContentKind.Feat, "Fixture: Summit Conditioning", [RulesFamilies.Srd521], [effect]);
+        var character = Character(RulesFamilies.Srd521, pin);
+        return (bases => temp.App.Preview(character with { BaseAbilities = bases }).Sheet, temp);
+    }
+
+    [Fact]
+    public void Score_above_20_from_a_capped_increase_solves_the_base()
+    {
+        var (preview, temp) = SetupCapped(4, 25);
+        using (temp)
+        {
+            var plan = AbilitySolver.Solve(preview, Sheet(24));
+
+            Assert.Equal(20, plan.ProposedBase.Str);
+            Assert.Equal(24, Score(preview(plan.ProposedBase), Ability.Str));
+        }
+    }
+
+    [Fact]
+    public void Score_above_20_without_a_capped_increase_is_unchanged()
+    {
+        var (preview, temp) = Setup(RulesFamilies.Srd521, (ContentKind.Feat, ModifierOperation.Bonus, 2));
+        using (temp)
+        {
+            var plan = AbilitySolver.Solve(preview, Sheet(22));
+
+            Assert.Equal(22, plan.ProposedBase.Str);
+        }
+    }
+
+    [Fact]
+    public void Unreproducible_score_keeps_todays_answer()
+    {
+        // Cap 25: a sheet of 27 cannot come from a base of 23 (23 + 4 stops at 25), so today's answer stands.
+        var (preview, temp) = SetupCapped(4, 25);
+        using (temp)
+        {
+            var plan = AbilitySolver.Solve(preview, Sheet(27));
+
+            Assert.Equal(27, plan.ProposedBase.Str);
+        }
+    }
+
     [Fact]
     public void The_second_preview_equals_the_sheet_for_every_solved_score()
     {

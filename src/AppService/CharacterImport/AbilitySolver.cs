@@ -15,7 +15,8 @@ public sealed record AbilityPlan(AbilityScores ProposedBase, IReadOnlyList<Abili
 /// a <c>replace</c> or <c>set</c> step means the base cannot be solved (the sheet's score is proposed and noted);
 /// otherwise the <c>add</c> steps are summed into increases <c>P</c> and penalties <c>N</c> (refused modifiers are
 /// <c>ignored</c> steps and do not count). With <c>T = S − N</c>: below 20 the base is <c>T − P</c>; at 20 it is
-/// <c>20 − P</c>, the smallest base consistent with the cap (noted); above 20 increases add nothing, so it is <c>T</c>.
+/// <c>20 − P</c>, the smallest base consistent with the cap (noted); above 20 plain increases add nothing, so it is <c>T</c>, unless a capped increase (v12) reproduces the sheet: then one preview at <c>T − P</c> is
+/// checked and used when it gives the sheet's score.
 /// The base is clamped to 1–30. The caller previews again with the result and shows any remaining difference.
 /// </summary>
 internal static class AbilitySolver
@@ -33,6 +34,18 @@ internal static class AbilitySolver
         [Ability.Str] = "Strength", [Ability.Dex] = "Dexterity", [Ability.Con] = "Constitution",
         [Ability.Int] = "Intelligence", [Ability.Wis] = "Wisdom", [Ability.Cha] = "Charisma",
     };
+
+    private static AbilityScores WithBase(Ability ability, int value) => ability switch
+    {
+        Ability.Str => Probe with { Str = value },
+        Ability.Dex => Probe with { Dex = value },
+        Ability.Con => Probe with { Con = value },
+        Ability.Int => Probe with { Int = value },
+        Ability.Wis => Probe with { Wis = value },
+        _ => Probe with { Cha = value },
+    };
+
+    private static int Score(CharacterSheet sheet, Ability ability) => sheet.Field(FieldIds.Score(ability)).Value;
 
     public static AbilityPlan Solve(Func<AbilityScores, CharacterSheet> preview, IReadOnlyDictionary<Ability, int> sheetScores)
     {
@@ -72,7 +85,14 @@ internal static class AbilitySolver
                     notes.Add(new(ability, "ability.cap-ambiguous", $"{label} reaches the cap of {CharacterCalculator.AbilityScoreIncreaseCap}, so its base may be higher than proposed; the smallest base that fits is used."));
             }
             else
+            {
                 solved = target;
+                // A capped increase (content v12) can lift a base of target - increases above 20: check that base reproduces the sheet.
+                var candidate = target - increases;
+                if (increases > 0 && candidate is >= MinBase and <= MaxBase
+                    && Score(preview(WithBase(ability, candidate)), ability) == score)
+                    solved = candidate;
+            }
             if (solved is < MinBase or > MaxBase)
                 notes.Add(new(ability, "ability.out-of-range", $"{label}'s solved base is outside {MinBase} to {MaxBase}, so it is clamped and the score will differ."));
             bases[ability] = Math.Clamp(solved, MinBase, MaxBase);
