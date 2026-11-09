@@ -761,7 +761,7 @@ Decided in [ADR-022](../decisions/ADR-022-content-v12.md#slice-g11-condition-imm
 
 **Play.** The conditions legend reads "Conditions (reminders; a condition you are immune to has no effect)", and an immune condition's chip reads "{Label} (immune)". You can still tick it: the condition is stored, but it is not held for the G6 response and G7 roll-mode `unlessCondition` gates, and an immune condition does not imply incapacitated. Stored conditions never change because of an immunity, so switching the toggle off shows the condition held again. Print and the summary list the stored conditions.
 
-**Studio.** "Add condition immunity" (row "Condition immunity") has a "Condition" choice of the 14 labels and the "Only while" choice. Automation is hidden, as for every grant, so a manual or timed immunity comes only from JSON or import and shows as Assisted.
+**Studio.** "Add condition immunity" (row "Condition immunity") has a "Condition" choice of the 14 labels and the "Only while" choice (shown when a toggle is available). Automation is hidden, as for every grant, so a manual or timed immunity comes only from JSON or import and shows as Assisted.
 
 **Validation** (errors): `validate.grant-condition`, `validate.grant-condition-kind`, `validate.grant-condition-fields`; below v12 `validate.requires-v12` applies to the kind and the member. The capability registry grant row reads "Proficiencies, expertise, content, damage defences and condition immunities calculate".
 

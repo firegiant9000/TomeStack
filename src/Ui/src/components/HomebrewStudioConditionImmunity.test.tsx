@@ -6,6 +6,8 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { client } from '../api/client';
 import type { AppInfo, SourceRecord, StudioEntry } from '../api/types';
 import { HomebrewStudio } from './HomebrewStudio';
+import { conditionLabels } from './conditionLabels';
+import { conditionKeys } from './RollModeFields';
 
 vi.mock('../api/client', () => ({
   client: { listSources: vi.fn(), contentBySource: vi.fn(), publishManyPreview: vi.fn(), createHomebrewSource: vi.fn(), previewFormula: vi.fn(), listCharacters: vi.fn(), validateRevision: vi.fn(), listContent: vi.fn(), contentRevisions: vi.fn() },
@@ -23,6 +25,10 @@ beforeEach(() => {
   vi.mocked(client.validateRevision).mockResolvedValue({ revision: { contentId: 'id-i', revisionId: 'x' }, errors: [], warnings: [], canPublish: true });
 });
 afterEach(cleanup);
+
+it('keeps the studio condition keys and the label map in step, in the same order', () => {
+  expect(Object.keys(conditionLabels)).toEqual([...conditionKeys]);
+});
 
 type Raw = Record<string, unknown>;
 

@@ -524,6 +524,7 @@ public class DownConvertV12Tests
         Assert.Equal(BelowAction.Dropped, change.Action);
         Assert.Equal("effects[2]", change.Path);
         Assert.Equal("'Fixture: Calm Ward': its immunity to the charmed condition; the feature stays as text.", change.Message);
+        Assert.All(ContentValidator.Validate(result.Revision, Fixtures.M1Catalog()).Errors, e => Assert.Equal("validate.source-missing", e.Code));
     }
 
     [Fact]

@@ -64,7 +64,7 @@ public class ConditionImmunityV12GateTests
         var held = Assert.Single(Sheet(play, response).Responses!);
         Assert.False(held.Available);
 
-        var immune = Revision(Ward, "Fearless", Immune("fearless", "frightened"));
+        var immune = Revision(Ward, "Even Temper", Immune("even-temper","frightened"));
         var sheet = Sheet(play, response, immune);
         Assert.True(Assert.Single(sheet.Responses!).Available);
     }
@@ -73,7 +73,7 @@ public class ConditionImmunityV12GateTests
     public void Roll_mode_unless_charmed_applies_while_immune_to_charmed()
     {
         var play = new PlayState { Conditions = ["charmed"] };
-        var mode = Revision(Holder, "Steady Mind",
+        var mode = Revision(Holder, "Clear Head",
             new RollModeEffect { Id = "m", Target = "save.wis", Mode = RollMode.Advantage, UnlessCondition = "charmed" });
 
         Assert.Null(Sheet(play, mode).Field("save.wis").Mode?.Automatic);

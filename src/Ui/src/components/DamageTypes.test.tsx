@@ -212,7 +212,8 @@ it('lists condition immunities with their sources', () => {
 });
 
 it('shows no condition immunity list when there are none', () => {
-  render(<DefencesPanel view={base()} onChanged={() => {}} onError={() => {}} />);
+  render(<DefencesPanel view={defenceView()} onChanged={() => {}} onError={() => {}} />);
+  expect(screen.getByRole('list', { name: 'Damage defences the sheet applies' })).toBeTruthy();
   expect(screen.queryByText('Condition immunities')).toBeNull();
   expect(screen.queryByRole('list', { name: 'Condition immunities' })).toBeNull();
 });
