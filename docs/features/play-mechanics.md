@@ -791,6 +791,26 @@ Decided in [ADR-022](../decisions/ADR-022-content-v12.md#slice-g5-ability-score-
 
 **Stays by hand:** raising the maximum for every source, and caps on `set` or other fields.
 
+## Content v12 (G4): armor and shield gates
+
+Decided in [ADR-022](../decisions/ADR-022-content-v12.md#slice-g4-armor-and-shield-gates) (LIVING_SPECS D93). A new optional member, `notWearing`, on a modifier, content schema v12 only; a revision without it keeps its version and bytes. A v11 revision that holds one keeps it as unknown data and ignores it. It makes the modifier apply only while none of the listed gear is worn, the opposite of `whileArmored`.
+
+| Member | Meaning |
+| --- | --- |
+| `notWearing` | A list of `armor`, `heavyArmor` and `shield`, each once. `armor` means any body armor is counted; `heavyArmor` means heavy body armor is counted; `shield` means a shield is counted, even an untrained one that gives no Armor Class. Not both `armor` and `heavyArmor` (armor already covers it), and not with `whileArmored: true` and `armor` (it could never apply); `whileArmored: true` with `heavyArmor` is fine. |
+
+**What counts as worn.** Exactly what the Armor Class calculation already counts: automatic, always-on armor from active content (equipped items, pins and features). Armor you carry but have not equipped does not count. Every other member (`automation`, `timing`, `toggle`, `stacking`, `whileArmored`, `cap`) combines with the gate.
+
+**Sheet.** The gated value is simply absent while the gear is worn; "Why?" shows the skipped line with its reason: "it applies only while no armor is worn, and {item} is worn", "it applies only while no heavy armor is worn, and {item} is worn" or "it applies only while no shield is used, and {item} is used". Content without `notWearing` calculates as before.
+
+**Studio.** A fieldset "Only while not wearing" with the boxes "Armor", "Heavy armor" and "Shield" (hint "Leave all unticked for a rule that applies whatever is worn."). Ticking "Armor" clears and disables "Heavy armor"; ticking none leaves the rule ungated. It is hidden inside item mods and on pool-maximum targets.
+
+**Validation** (errors): `validate.not-wearing` (an empty list, an unknown or repeated value, both `armor` and `heavyArmor`, a pool-maximum `resource.*` target, or a top-level modifier of an item-mod revision), `validate.not-wearing-armored`; below v12 `validate.requires-v12` ("an armor or shield gate"); a gate inside an item mod is `validate.item-mod-modifier`. The calculator ignores the gate on any item mod's modifier and, in an unvalidated draft, treats a pool-maximum gate as assisted (Manual).
+
+**Older versions.** A gated modifier stops an export for an older TomeStack ([package-format.md](package-format.md#save-for-an-older-tomestack-d85)) with `below.equipment-gate` ("'{name}': it applies only while {gear} is not worn; the older version would apply it whatever is worn."), shown in a save as `package.target-blocked`. Dropping the key would apply the rule while armored, so it is blocked, like a restriction in [G10](#content-v12-g10-check-ability-climb-and-swim-speed) (`below.restriction-lifted`).
+
+**Stays by hand:** gates on roll modes, attacks, riders, responses and grants; a positive "while using a shield" gate. The bundled Unarmored notes are re-authored with this in C2-6.
+
 ## Not yet
 
 - Damage responses: the studio's outcome roll picker offers only the same entry's rolls. A roll from another entry can be stored in content but not chosen in the studio yet.

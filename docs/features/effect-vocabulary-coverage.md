@@ -34,7 +34,7 @@ Coverage words are the Lab's registry words: **Automatic** (the sheet works it o
 | passive `magical_damage`, `silvered_damage` | — | Reference | — | Not covered: damage has a type but no magical or silvered property; text |
 | passive `resistances`, `immunities`, `vulnerabilities` | `grant` `damageResistance` / `damageImmunity` / `damageVulnerability` with `whileToggle` | Automatic | — | |
 | passive `ignored_resistances` | — | Reference | — | Not covered: a target's defences are out of scope (ADR-018) |
-| passive `ac_value`, `ac_bonus` | `modifier` `set` / `replace` / `bonus` on `armorClass` with `toggle`; `armor` | Automatic | G4 | No "no shield" or "no heavy armour" gate; the only equipment gate is `whileArmored` (G4) |
+| passive `ac_value`, `ac_bonus` | `modifier` `set` / `replace` / `bonus` on `armorClass` with `toggle`; `armor` | Automatic | G4 (built) | A modifier can apply only while no armor, no heavy armor or no shield is worn (`notWearing`, content v12, G4 built, D93); the older flag `whileArmored` is the opposite gate. The bundled Unarmored notes become automatable when C2-6 re-authors them. A gate on a roll mode, attack or rider stays text |
 | passive `max_hp_value`, `max_hp_bonus` | `modifier` on `hitPoints` with `toggle` | Automatic | — | An `autoWhen` toggle may not target `hitPoints` (`validate.toggle-auto-target`) |
 | passive `save_bonus` | `modifier` `bonus` on `save.<ability>` | Automatic | — | |
 | passive `save_adv`, `save_dis` | `rollMode` on `save.<ability>`, always or with `toggle` | Automatic | — | |
@@ -74,7 +74,7 @@ Coverage words are the Lab's registry words: **Automatic** (the sheet works it o
 
 Both vocabularies' everyday verbs (attack, damage, a saving-throw DC, a pool spent, a timed form, a bonus or a mode on own rolls) map onto v11. The rows that stop at Reference are the evaluation's gaps, and they fall on Barbarian, Rogue and Monk. Ranked by how many Reference rows each would remove (evaluation §3):
 
-- **Remove the most:** G1 (dice count as a formula on riders and rolls; built, content v12, D88), G4 (no armour, no shield, no heavy armour gates), G5 (per-effect ability-score cap; built, content v12, D92; Body and Mind is expressible after C2-6), G6 (responses with dice or halving, and save-result or trigger conditions).
+- **Remove the most:** G1 (dice count as a formula on riders and rolls; built, content v12, D88), G4 (no armour, no shield, no heavy armour gates; built, content v12, D93), G5 (per-effect ability-score cap; built, content v12, D92; Body and Mind is expressible after C2-6), G6 (responses with dice or halving, and save-result or trigger conditions).
 - **Cheap:** G9 (roll floor on checks; built, content v12, D89). G7 (modes on own attack rolls, attacks against the character, initiative alone) is built, content v12, D87.
 - **Reminders that may stay Reference:** G8 (rider match on the ability used; Dex for tagged non-finesse weapons), G12 (reroll).
 - G11 (condition immunity) is built, content v12, D91: a `conditionImmunity` grant, optionally while a toggle is on. Mindless Rage (5.2.1 Barbarian) and the 5.1 Purity of Body's poisoned line are expressible once C2-6 re-authors them; disease stays text, and so does ending a held condition.
@@ -90,7 +90,7 @@ The v12 scope is decided once, from the Lab's coverage report after authoring Ba
 | G1 | Dice count as a formula (or scale) on `attackRider` and `roll` (built, v12, D88) |
 | G2 | Rider dice on a critical hit only (built, v12, D88) |
 | G3 | Once per turn, consumed automatically (built as offered on each damage roll, not tracked; v12, D88) |
-| G4 | Equipment gates: no armour, no shield, no heavy armour |
+| G4 | Equipment gates: no armour, no shield, no heavy armour (built, content v12, D93) |
 | G5 | Per-effect ability-score cap (built, content v12, D92) |
 | G6 | Responses with dice or halving amounts, and save-result or trigger conditions |
 | G7 | `rollMode` on own attack rolls, attacks against the character, initiative alone (built, content v12, D87) |
