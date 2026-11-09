@@ -769,6 +769,28 @@ Decided in [ADR-022](../decisions/ADR-022-content-v12.md#slice-g11-condition-imm
 
 **Stays by hand:** immunity to exhaustion or disease, ending a held condition (such as when a mode starts), and the attacks-against lists.
 
+## Content v12 (G5): ability-score cap
+
+Decided in [ADR-022](../decisions/ADR-022-content-v12.md#slice-g5-ability-score-cap) (LIVING_SPECS D92). A new optional member, `cap`, on a modifier, content schema v12 only; a revision without it keeps its version and bytes. A v11 revision that holds one keeps it as unknown data and ignores it. The usual rule (an increase cannot raise a score above 20, [rules-family-policy.md](rules-family-policy.md)) stays; `cap` lets one increase go higher.
+
+| Member | Meaning |
+| --- | --- |
+| `cap` | A whole number from 21 to 30. Allowed only on a `bonus` to an `ability.<x>.score` target, never inside an item mod, and not with a literal negative `value` (`validate.modifier-cap`, `validate.modifier-cap-range`). |
+
+**Combining.** Increases apply lowest ceiling first (`cap`, or 20 with none), so content order never matters: 18 with a plain +2 and a +4 capped at 25 gives 20, then 24. Each increase stops at the larger of its ceiling and the score so far. Penalties are never capped and apply last; `set` overwrites and is uncapped.
+
+**Sheet.** The score shows its total; "Why?" shows "Bonus from {name} (it can raise the score up to {cap})" for a capped increase that was not stopped, and "Bonus from {name}, capped: increases cannot raise an ability score above {ceiling} (+{amount} would give {next})" for one that was. With no `cap` the lines are as before.
+
+**Studio.** A "Highest the score can reach" number field (hint "Leave empty for the usual 20; up to 30.") on an "Add (bonus)" modifier whose target is an ability score. Empty means no cap; it is hidden inside item mods.
+
+**Import.** For a sheet score above 20 that content increases reach, the importer first tries the base the increases would give and keeps it when the result matches the sheet; otherwise it keeps the sheet score as the base, as before.
+
+**Validation** (errors): `validate.modifier-cap`, `validate.modifier-cap-range`; below v12 `validate.requires-v12` ("an ability-score cap"); a `cap` in an item mod is `validate.item-mod-modifier`.
+
+**Older versions.** For an older TomeStack ([package-format.md](package-format.md#save-for-an-older-tomestack-d85)) the `cap` key is dropped and the bonus kept (`below.v12-key`: "'{name}': that the increase can raise the score above 20 (up to {cap}); the older version stops it at 20."). Nothing blocks the export.
+
+**Stays by hand:** raising the maximum for every source, and caps on `set` or other fields.
+
 ## Not yet
 
 - Damage responses: the studio's outcome roll picker offers only the same entry's rolls. A roll from another entry can be stored in content but not chosen in the studio yet.

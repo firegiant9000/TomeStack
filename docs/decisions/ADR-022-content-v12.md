@@ -1,7 +1,7 @@
-# ADR-022: Content schema v12, one slice at a time (G6 first: response triggers and amounts; G7: roll modes on attacks and initiative; G1: scaled dice, critical-only and once-per-turn riders; G9: roll floor on checks; G10: check ability, climb and swim speed; G11: condition immunity)
+# ADR-022: Content schema v12, one slice at a time (G6 first: response triggers and amounts; G7: roll modes on attacks and initiative; G1: scaled dice, critical-only and once-per-turn riders; G9: roll floor on checks; G10: check ability, climb and swim speed; G11: condition immunity; G5: ability-score cap)
 
-Status: **accepted** for the slice list and for slices G6, G7, G1, G9, G10 and G11 (owner, 2026-10-28: LIVING_SPECS D76 and B4; D86, D87, D88, D89, D90, D91; G9 and G10 design rulings 2026-11-05; G11 design rulings 2026-11-06). Slice G6 is built on branch `v12-g6`, slice G7 on `v12-g7` (stacked on G6), slice G1 on `v12-g1` (stacked on G7), slice G9 on `v12-g9` (stacked on G1), slice G10 on `v12-g10` (stacked on G9), slice G11 on `v12-g11` (stacked on G10). The warn-or-block judgement for G6's down-conversion (decision 6), the one for G7's (G7 decision 6) and the one for G1's (G1 decision 6), and "once per turn is offered, not tracked" (G1 decision 4), are proposals that await the owner.
-Date: 2026-11-06
+Status: **accepted** for the slice list and for slices G6, G7, G1, G9, G10, G11 and G5 (owner, 2026-10-28: LIVING_SPECS D76 and B4; D86, D87, D88, D89, D90, D91, D92; G9 and G10 design rulings 2026-11-05; G11 design rulings 2026-11-06; G5 design rulings 2026-11-08). Slice G6 is built on branch `v12-g6`, slice G7 on `v12-g7` (stacked on G6), slice G1 on `v12-g1` (stacked on G7), slice G9 on `v12-g9` (stacked on G1), slice G10 on `v12-g10` (stacked on G9), slice G11 on `v12-g11` (stacked on G10), slice G5 on `v12-g5` (stacked on G11). The warn-or-block judgement for G6's down-conversion (decision 6), the one for G7's (G7 decision 6) and the one for G1's (G1 decision 6), and "once per turn is offered, not tracked" (G1 decision 4), are proposals that await the owner.
+Date: 2026-11-08
 
 ## Context
 
@@ -34,7 +34,7 @@ The first gap (G6) is in the damage panel. A `response` effect (v11, ADR-018 and
 
 ### The slice list
 
-G6 was built first, G7 second, G1 (with G2 and G3) third, G9 fourth, G10 fifth and G11 sixth (below). The remaining slices follow in the order G5 and G4 (the gap ids are in [effect-vocabulary-coverage.md](../features/effect-vocabulary-coverage.md)). Each extends this ADR with its own decisions and evidence, keeps every new member optional, and adds its own lowering rule.
+G6 was built first, G7 second, G1 (with G2 and G3) third, G9 fourth, G10 fifth, G11 sixth and G5 seventh (below). The remaining slice is G4 (the gap ids are in [effect-vocabulary-coverage.md](../features/effect-vocabulary-coverage.md)). Each extends this ADR with its own decisions and evidence, keeps every new member optional, and adds its own lowering rule.
 
 **0.8.0 waits for every slice** (owner ruling, 2026-11-04): the bundled classes get new v12 revisions only when v12 is complete, and no release is cut while v12 is open. Until then G6 and G7 sit on their branches and, once merged, in `main`.
 
@@ -280,4 +280,44 @@ The sixth gap is "you are immune to the charmed condition", always or only while
 - UI: `src/Ui/src/components/HomebrewStudioConditionImmunity.test.tsx` (authoring), `DefencesPanel` and `PlayPanels` tests.
 - The original fixture pack `tests/RulesFixtures/fixture-pack-condition-immunity.json`.
 
-Related: [ADR-018](ADR-018-play-mechanics.md), [ADR-021](ADR-021-mechanics-beyond-d43.md), [ADR-023](ADR-023-down-conversion-export.md), [play-mechanics.md](../features/play-mechanics.md#content-v12-g6-response-triggers-and-amounts), [its G7 section](../features/play-mechanics.md#content-v12-g7-roll-modes-on-attacks-and-initiative), [its G1 section](../features/play-mechanics.md#content-v12-g1-scaled-dice-critical-only-and-once-per-turn-riders), [its G9 section](../features/play-mechanics.md#content-v12-g9-roll-floor), [its G10 section](../features/play-mechanics.md#content-v12-g10-check-ability-climb-and-swim-speed) and [its G11 section](../features/play-mechanics.md#content-v12-g11-condition-immunity), LIVING_SPECS D76, D86, D87, D88, D89, D90 and D91. Supersedes: none.
+## Slice G5: ability-score cap
+
+The seventh gap is "this increase can raise a score above 20, up to a named maximum". The usual rule stops every ability-score increase at 20 (a rules constant, `CharacterCalculator.AbilityScoreIncreaseCap`); content could only say it in text. This is the grant the bundled Body and Mind feature needs once C2-6 re-authors it.
+
+### Decision (G5)
+
+1. **Shape** (owner rulings, 2026-11-08). A new optional member `ModifierEffect.Cap` (`int?`, JSON `cap`), trailing after `toggleContent`, constant `ContentRevision.AbilityCapSchemaVersion = 12`. It is allowed only when `operation` is `bonus` and `target` is an ability score (`ability.<x>.score`). The range is 21 to 30 inclusive (20 is the default and 30 is the score maximum). A literal negative `value` with a `cap` is refused; a formula that evaluates negative is a penalty and its cap does nothing. The cap is a content field, never a `RulesFamilyPolicy` field.
+2. **Older revisions never bind it.** In a v12 revision the member is typed in full. In a v11 revision a `cap` key stays extension data (round-trips byte for byte, hash unchanged) and calculates as if no cap were there; below v11 the v11 and v12 keys are both left as data.
+3. **Combining: lowest cap first.** Ability-score bonuses sort (stable) with penalties last and, among increases, by their ceiling (`cap`, or 20 with none) ascending. An increase stops at the larger of its ceiling and the running score, so content order never matters. Penalties are never capped; `set` overwrites everything and is uncapped; a `highestInGroup` loser is skipped as today and its cap does nothing. Examples: 18 with a plain +2 and a +4 with cap 25 gives 18, then 20, then 24 in either content order; 20 with a +2 capped at 22 and a +2 capped at 24 gives 22, then 24.
+4. **Trace copy.** A stopped increase reads "Bonus from {name}, capped: increases cannot raise an ability score above {ceiling} (+{amount} would give {next})" (exactly today's text when there is no cap, because the ceiling is 20). An increase with a cap that is not stopped reads "Bonus from {name} (it can raise the score up to {cap})". Without a cap the text and the step order are unchanged, so golden sheets do not move.
+5. **Inherited members all work** (`automation`, `timing`, `toggle` and `toggleContent`, `whileArmored`, `stacking`), except **item mods**: a `cap` inside an item mod is `validate.item-mod-modifier`, and the calculator also ignores it there.
+6. **Down-conversion** (ADR-023, owner ruling, 2026-11-08). At the 12 to 11 rung the `cap` key is dropped and the bonus kept (`below.v12-key`: "'{name}': that the increase can raise the score above 20 (up to {cap}); the older version stops it at 20."). A copy that stops at 20 is only weaker, so nothing blocks.
+7. **Import.** The ability solver, for a sheet score above 20 with increases from content, first tries the base that the increases would give (score minus increases) and keeps it when a preview with that base reproduces the sheet score; otherwise it keeps today's answer (the base equals the score). It costs one extra preview for such an ability and changes nothing for scores of 20 or below.
+8. **Registry, preview, graph.** The capability registry's modifier row gains "; an ability-score increase may declare a maximum above 20". The formula preview and the content graph read only `value`, so they do not change.
+9. **UI copy (studio only; no sheet change).** A number field "Highest the score can reach" (21 to 30) with the hint "Leave empty for the usual 20; up to 30.", shown when the target is an ability score, the operation is "Add (bonus)" and the field is not nested in an item mod. Empty means no cap. Changing the target or operation so the field hides removes `cap`. No schema bump (`ContentRevision.CurrentSchemaVersion` stays 12; `Character.CurrentSchemaVersion` stays 11). The decision row is D92.
+
+### Consequences (G5)
+
+- Content can let one increase go above 20 up to a maximum it names, and several such increases combine the same way in any order. A revision without `cap` keeps its version, bytes and hash and calculates exactly as before; a v11 revision holding one keeps it as unknown data and ignores it.
+- A revision that uses it needs content schema 12 (`validate.requires-v12`: "an ability-score cap"). A package that holds one warns `package.needs-newer-build`.
+- New codes: `validate.modifier-cap` (on an operation or target that does not allow it, or a literal negative value) and `validate.modifier-cap-range` (not 21 to 30).
+- The sheet gains no new panel: the score shows its total and "Why?" shows the trace lines above.
+
+### Not doing (G5)
+
+- **Raising the maximum for every source** (a separate "maximum" effect).
+- **Caps on `set` or `replace`, or on other fields.**
+- **`cap` in item mods.**
+- **An "ambiguous" note from the solver for capped scores.**
+- **Re-authoring bundled Body and Mind** (C2-6).
+
+### Evidence (G5)
+
+- `tests/RulesCore.Tests/AbilityCapV12SchemaTests.cs` and `AbilityCapV12ValidationTests.cs` (the member, the version rung, the validator codes, item mods), and `tests/AppService.Tests/AbilityCapV12SchemaFileTests.cs` (the published JSON schema).
+- `tests/RulesCore.Tests/AbilityCapV12SheetTests.cs` (lowest cap first in either order, penalties and set uncapped, traces) and `AbilityCapTests.cs` (the unchanged 20 cap for both families).
+- `tests/RulesCore.Tests/DownConvertV12Tests.cs` (the key drop).
+- `tests/AppService.Tests/AbilityCapV12ServiceTests.cs` (the sheet through the service) and `AbilitySolverTests.cs` (scores above 20 solve the base; unreproducible scores keep today's answer; the second preview equals the sheet).
+- UI: the studio field in `src/Ui/src/components/ModifierFields.tsx` and its tests.
+- The original fixture pack `tests/RulesFixtures/fixture-pack-ability-cap.json`.
+
+Related: [ADR-018](ADR-018-play-mechanics.md), [ADR-021](ADR-021-mechanics-beyond-d43.md), [ADR-023](ADR-023-down-conversion-export.md), [play-mechanics.md](../features/play-mechanics.md#content-v12-g6-response-triggers-and-amounts), [its G7 section](../features/play-mechanics.md#content-v12-g7-roll-modes-on-attacks-and-initiative), [its G1 section](../features/play-mechanics.md#content-v12-g1-scaled-dice-critical-only-and-once-per-turn-riders), [its G9 section](../features/play-mechanics.md#content-v12-g9-roll-floor), [its G10 section](../features/play-mechanics.md#content-v12-g10-check-ability-climb-and-swim-speed) and [its G11 section](../features/play-mechanics.md#content-v12-g11-condition-immunity) and [its G5 section](../features/play-mechanics.md#content-v12-g5-ability-score-cap), LIVING_SPECS D76, D86, D87, D88, D89, D90, D91 and D92. Supersedes: none.
