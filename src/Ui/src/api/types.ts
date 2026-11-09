@@ -649,6 +649,8 @@ export interface CharacterSheet {
   bloodied?: boolean;
   /** Wave 3 item 21: the character's own damage defences and the v10 damage grants, merged; absent when there are none. */
   damageDefences?: DamageDefenceValue[];
+  /** Content v12 (G11): conditions the character is immune to; absent when none. */
+  conditionImmunities?: ConditionImmunityValue[];
   /** Wave 3 item 25: each equipment entry of an item that needs attunement or has charges, or (MECH-X item 3) any weapon or armor entry or one with mods, carried or equipped; absent when there are none. */
   itemUses?: ItemUseValue[];
   /** Wave 3 item 27: experience points are tracked and the total has reached the next level's threshold. Display only; absent otherwise. */
@@ -713,6 +715,12 @@ export interface DamageDefenceSource {
 export interface DamageDefenceValue {
   type: string;
   kind: DamageDefence['kind'];
+  sources: DamageDefenceSource[];
+}
+
+/** One condition the character is immune to on the sheet (Content v12, G11): the active grants only, toggle-gated ones included. */
+export interface ConditionImmunityValue {
+  condition: string;
   sources: DamageDefenceSource[];
 }
 
@@ -1963,8 +1971,10 @@ export type Effect =
     })
   | (EffectBase & {
       type: 'grant';
-      grant: 'proficiency' | 'expertise' | 'content' | 'damageResistance' | 'damageImmunity' | 'damageVulnerability';
+      grant: 'proficiency' | 'expertise' | 'content' | 'damageResistance' | 'damageImmunity' | 'damageVulnerability' | 'conditionImmunity';
       target?: string;
+      /** Content v12 (G11): the condition key a `conditionImmunity` grant makes the character immune to. */
+      condition?: string;
       content?: ContentReference;
       level?: number;
       onlyAs?: ClassEntry;
