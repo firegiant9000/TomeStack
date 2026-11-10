@@ -297,8 +297,8 @@ public class DownConversionExportTests
         var result = Result(Send(new CommandDispatcher(app.App), "package.targets", "{}"));
 
         Assert.Equal(AppVersionStamp.CurrentVersion, result.GetProperty("current").GetString());
-        Assert.Equal("0.7.0", result.GetProperty("currentRow").GetString());
-        Assert.Equal("0.6.0", result.GetProperty("previousMinor").GetString());
+        Assert.Equal("0.8.0", result.GetProperty("currentRow").GetString());
+        Assert.Equal("0.7.0", result.GetProperty("previousMinor").GetString());
         var targets = result.GetProperty("targets").EnumerateArray().ToList();
         Assert.Equal(
             [("0.6.0", 9, 10), ("0.5.0", 8, 9)],
@@ -309,6 +309,7 @@ public class DownConversionExportTests
     [InlineData("0.4.0")]
     [InlineData("0.7.0")]
     [InlineData("0.7.1")]
+    [InlineData("0.8.0")]
     [InlineData("0.6")]
     public void Preview_with_unknown_target_fails(string target)
     {

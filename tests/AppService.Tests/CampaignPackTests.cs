@@ -194,7 +194,7 @@ public class CampaignPackTests
     }
 
     [Fact]
-    public void A_campaign_pack_preview_warns_once_when_a_revision_is_at_schema_v11_and_not_for_older_content()
+    public void A_campaign_pack_preview_warns_once_when_a_revision_is_at_schema_v12_and_not_for_older_content()
     {
         using var temp = new TempApp();
         var old = Homebrew(temp, "Test Old Notes");
@@ -208,14 +208,14 @@ public class CampaignPackTests
             temp.App.Store.AddRevision(new ContentRevision
             {
                 ContentId = Guid.NewGuid(), RevisionId = Guid.NewGuid(), Kind = ContentKind.Feat, Name = $"Test Newer {name}", RulesFamilies = [RulesFamilies.Srd521],
-                Provenance = new(newer.Id), Status = RevisionStatus.Published, SchemaVersion = 11,
+                Provenance = new(newer.Id), Status = RevisionStatus.Published, SchemaVersion = 12,
                 Effects = [new ModifierEffect { Id = "init", Operation = ModifierOperation.Bonus, Target = FieldIds.Initiative, Value = "1" }],
             });
         }
         var campaign = Campaign(temp, "Test Newer Table", Srd521Source, old.Id, newer.Id);
         var warning = Assert.Single(temp.App.PreviewCampaignPack(campaign.Id).Warnings, w => w.Code == "package.needs-newer-build");
-        Assert.Equal($"Opening this needs TomeStack 0.7.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Test Newer One' is content at schema 11, and 'Test Newer Two' is content at schema 11. Older versions refuse the file.", warning.Message);
-        Assert.Equal("0.7.0", temp.App.PreviewCampaignPack(campaign.Id).OpensIn);
+        Assert.Equal($"Opening this needs TomeStack 0.8.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Test Newer One' is content at schema 12, and 'Test Newer Two' is content at schema 12. Older versions refuse the file.", warning.Message);
+        Assert.Equal("0.8.0", temp.App.PreviewCampaignPack(campaign.Id).OpensIn);
     }
 
     [Fact]
