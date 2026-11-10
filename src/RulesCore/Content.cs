@@ -153,6 +153,9 @@ public sealed record ContentRevision : IJsonOnDeserialized
     /// <summary>MECH-X item 4: the companion effect. <b>v12</b>, the same version as <see cref="WeaponBonusSchemaVersion"/>.</summary>
     public const int CompanionSchemaVersion = 12;
 
+    /// <summary>G6: the response effect's trigger, share, dice, automatic, unlessCondition and supersedes members. <b>v12</b>, the same version as <see cref="WeaponBonusSchemaVersion"/>.</summary>
+    public const int ResponseTriggerSchemaVersion = 12;
+
     /// <summary>The content schema version that adds <c>weapon.bonus</c> (MECH-X item 0): <b>v12</b>. A test pins that this is <see cref="PlayMechanicsSchemaVersion"/> plus one.</summary>
     public const int WeaponBonusSchemaVersion = 12;
 

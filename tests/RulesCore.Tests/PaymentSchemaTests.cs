@@ -346,6 +346,7 @@ public class PaymentSchemaTests
     [InlineData(typeof(AttackEffect), new[] { "payment" })]
     [InlineData(typeof(ToggleEffect), new[] { "payment" })]
     [InlineData(typeof(SpellEffect), new[] { "tags" })]
+    [InlineData(typeof(ResponseEffect), new[] { "trigger", "share", "dice", "automatic", "unlessCondition", "supersedes" })]
     public void V12_key_lists_match(Type type, string[] expected)
     {
         var field = type.GetField("V12Keys", BindingFlags.NonPublic | BindingFlags.Static);

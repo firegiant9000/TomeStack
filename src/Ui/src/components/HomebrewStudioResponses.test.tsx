@@ -250,3 +250,108 @@ it('the ninth outcome can\'t be added and says why', async () => {
   expect(add().getAttribute('aria-disabled')).toBeNull();
   expect(r.queryByText(/at most 8 outcomes/)).toBeNull();
 });
+
+it('edits trigger, share, dice, automatic and condition', async () => {
+  const user = userEvent.setup();
+  const reduction: Raw = { type: 'response', id: 'response-1', responseId: 'response-1', label: 'Brace', phase: 'damageReduction', amount: '2' };
+  const { rule, checked } = await openDraft(user, [reduction]);
+  const r = rule(/^Rule 1: Damage response/);
+
+  // A trigger: a save needs an ability and a result; damage types narrow it.
+  expect(r.queryByRole('combobox', { name: 'Saving throw ability' })).toBeNull();
+  await user.selectOptions(r.getByRole('combobox', { name: 'Only when the hit comes from' }), 'save');
+  await user.selectOptions(r.getByRole('combobox', { name: 'Saving throw ability' }), 'dex');
+  await user.selectOptions(r.getByRole('combobox', { name: 'Saving throw result' }), 'success');
+  await user.click(r.getByRole('checkbox', { name: 'Fire' }));
+  await user.click(r.getByRole('checkbox', { name: 'Cold' }));
+  await user.click(r.getByRole('checkbox', { name: 'Fire' }));
+  expect((await checked()).effect('response-1')).toMatchObject({ trigger: { from: 'save', ability: 'dex', result: 'success', damageTypes: ['cold'] }, amount: '2' });
+
+  // Leaving "save" drops the ability and result; clearing every type drops damageTypes.
+  await user.selectOptions(r.getByRole('combobox', { name: 'Only when the hit comes from' }), 'fall');
+  await user.click(r.getByRole('checkbox', { name: 'Cold' }));
+  let sent = (await checked()).effect('response-1');
+  expect(sent.trigger).toEqual({ from: 'fall' });
+  await user.selectOptions(r.getByRole('combobox', { name: 'Only when the hit comes from' }), '');
+  sent = (await checked()).effect('response-1');
+  expect(sent.trigger).toBeUndefined();
+
+  // Dice go with an amount; a share replaces the amount and the dice.
+  await user.type(r.getByRole('textbox', { name: /^Dice to roll/ }), '1d10');
+  expect((await checked()).effect('response-1')).toMatchObject({ amount: '2', dice: '1d10' });
+  await user.selectOptions(r.getByRole('combobox', { name: 'Damage reduced by' }), 'half');
+  sent = (await checked()).effect('response-1');
+  expect(sent).toMatchObject({ share: 'half' });
+  expect('amount' in sent).toBe(false);
+  expect('dice' in sent).toBe(false);
+  expect(r.queryByRole('textbox', { name: /^Damage taken off/ })).toBeNull();
+  expect(r.queryByRole('textbox', { name: /^Dice to roll/ })).toBeNull();
+  await user.selectOptions(r.getByRole('combobox', { name: 'Damage reduced by' }), 'amount');
+  sent = (await checked()).effect('response-1');
+  expect(sent).toMatchObject({ amount: '1' });
+  expect('share' in sent).toBe(false);
+
+  // Automatic and a blocking condition.
+  await user.click(r.getByRole('checkbox', { name: /^Ticked when first offered/ }));
+  await user.selectOptions(r.getByRole('combobox', { name: 'Does not apply while I am' }), 'prone');
+  expect((await checked()).effect('response-1')).toMatchObject({ automatic: true, unlessCondition: 'prone' });
+  await user.click(r.getByRole('checkbox', { name: /^Ticked when first offered/ }));
+  await user.selectOptions(r.getByRole('combobox', { name: 'Does not apply while I am' }), '');
+  sent = (await checked()).effect('response-1');
+  expect(sent.automatic).toBeUndefined();
+  expect(sent.unlessCondition).toBeUndefined();
+});
+
+it('clearing the amount clears the dice, and a loaded automatic effect with a pool can be unticked', async () => {
+  const user = userEvent.setup();
+  const a: Raw = { type: 'response', id: 'response-1', responseId: 'response-1', label: 'Brace', phase: 'damageReduction', amount: '2', dice: '1d10', automatic: true, resourceId: 'grit' };
+  const { rule, checked } = await openDraft(user, [grit, a]);
+  const r = rule(/^Rule 2: Damage response/);
+  const auto = r.getByRole('checkbox', { name: /^Ticked when first offered/ }) as HTMLInputElement;
+  expect(auto.disabled).toBe(false);
+  await user.click(auto);
+  expect((await checked()).effect('response-1').automatic).toBeUndefined();
+  expect((r.getByRole('checkbox', { name: /^Ticked when first offered/ }) as HTMLInputElement).disabled).toBe(true);
+  await user.clear(r.getByRole('textbox', { name: /^Damage taken off/ }));
+  const sent = (await checked()).effect('response-1');
+  expect(sent.dice).toBeUndefined();
+});
+
+it('keeps supersedes and unknown members across an edit', async () => {
+  const user = userEvent.setup();
+  const response: Raw = {
+    type: 'response', id: 'response-1', responseId: 'response-1', label: 'Brace', phase: 'damageReduction', amount: '2',
+    supersedes: { content: '11111111-1111-1111-1111-111111111111', responseId: 'older' },
+    trigger: { from: 'attack', damageTypes: ['fire', 'bogus'] },
+    futureMember: { keep: true },
+  };
+  const { rule, checked } = await openDraft(user, [response]);
+  const r = rule(/^Rule 1: Damage response/);
+  expect(r.getByText('Supersedes older')).toBeTruthy();
+  // A value no list offers is shown as removable, not hidden.
+  const bogus = r.getByRole('checkbox', { name: 'bogus (removed)' });
+  expect((bogus as HTMLInputElement).checked).toBe(true);
+
+  await user.type(r.getByRole('textbox', { name: 'Response name' }), '!');
+  await user.selectOptions(r.getByRole('combobox', { name: 'Phase' }), 'threshold');
+  const sent = (await checked()).effect('response-1');
+  expect(sent).toMatchObject({ label: 'Brace!', supersedes: { content: '11111111-1111-1111-1111-111111111111', responseId: 'older' }, futureMember: { keep: true } });
+
+  await user.click(r.getByRole('checkbox', { name: 'bogus (removed)' }));
+  expect((await checked()).effect('response-1').trigger).toEqual({ from: 'attack', damageTypes: ['fire'] });
+});
+
+it('leaving damage reduction clears share, dice and automatic', async () => {
+  const user = userEvent.setup();
+  const a: Raw = { type: 'response', id: 'response-1', responseId: 'response-1', label: 'Brace', phase: 'damageReduction', amount: '2', dice: '1d10', automatic: true };
+  const b: Raw = { type: 'response', id: 'response-2', responseId: 'response-2', label: 'Soak', phase: 'damageReduction', share: 'all', unlessCondition: 'prone' };
+  const { rule, checked } = await openDraft(user, [a, b]);
+  await user.selectOptions(rule(/^Rule 1: Damage response/).getByRole('combobox', { name: 'Phase' }), 'hitPointOutcome');
+  await user.selectOptions(rule(/^Rule 2: Damage response/).getByRole('combobox', { name: 'Phase' }), 'threshold');
+  const done = await checked();
+  for (const id of ['response-1', 'response-2']) {
+    const sent = done.effect(id);
+    for (const key of ['share', 'dice', 'automatic']) expect(key in sent).toBe(false);
+  }
+  expect(done.effect('response-2')).toMatchObject({ unlessCondition: 'prone' });
+});

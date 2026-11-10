@@ -7,6 +7,7 @@ import type {
   AutomationStatus,
   CharacterView,
   ContentKind,
+  DamageHow,
   DamageOutcome,
   Diagnostic,
   FeatureEffect,
@@ -140,32 +141,54 @@ export function HitPointsPanel({
   damageType?: string;
   onDamageType?: (type: string) => void;
   /** D43 S7: opens the damage panel (amount, type '' for untyped). Used instead of a one-step damage when the sheet has damage responses. */
-  onDamage?: (amount: number, type: string) => void;
+  onDamage?: (amount: number, type: string, how?: DamageHow) => void;
   /** The damage panel is open and lists the skipped responses itself, so this panel does not repeat them. */
   panelOpen?: boolean;
 }) {
   const hp = view.sheet.hitPoints;
   const [amount, setAmount] = useState('');
   const [ownType, setOwnType] = useState('');
+  // Content v12 (G6): how the hit came. '' is not said. A save adds the ability, whether it succeeded and whether a success halves.
+  const [from, setFrom] = useState<'' | DamageHow['from']>('');
+  const [saveAbility, setSaveAbility] = useState<Ability>('dex');
+  const [saveSucceeded, setSaveSucceeded] = useState(false);
+  const [saveHalf, setSaveHalf] = useState(true);
   const type = damageType ?? ownType;
   const setType = onDamageType ?? setOwnType;
   if (!hp) return null;
   const n = Number(amount);
   const valid = amount !== '' && Number.isInteger(n) && n >= 0;
+  const how: DamageHow | undefined =
+    from === '' ? undefined : from === 'save' ? { from, save: { ability: saveAbility, succeeded: saveSucceeded, half: saveHalf } } : { from };
 
   function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
   }
 
+  function reset(action: PlayAction['action']) {
+    setAmount('');
+    if (action !== 'damage') return; // only applying damage resets how it hit
+    setFrom('');
+    setSaveAbility('dex');
+    setSaveSucceeded(false);
+    setSaveHalf(true);
+  }
+
   function apply(action: PlayAction['action']) {
     if (!valid) return;
     if (action === 'damage' && onDamage && (view.sheet.responses ?? []).length > 0) {
-      onDamage(n, type);
-      setAmount('');
+      if (how) onDamage(n, type, how);
+      else onDamage(n, type);
+      reset(action);
       return;
     }
-    act({ action, amount: n, ...(action === 'damage' && type ? { damageType: type } : {}) });
-    setAmount('');
+    act({
+      action,
+      amount: n,
+      ...(action === 'damage' && type ? { damageType: type } : {}),
+      ...(action === 'damage' && how ? { damageFrom: how.from, ...(how.save ? { damageSave: how.save } : {}) } : {}),
+    });
+    reset(action);
   }
 
   return (
@@ -190,6 +213,38 @@ export function HitPointsPanel({
             ))}
           </select>
         </label>
+        <label className="field">
+          How did it hit?
+          <select value={from} onChange={(e) => setFrom(e.target.value as '' | DamageHow['from'])}>
+            <option value="">Not said</option>
+            <option value="attack">An attack</option>
+            <option value="fall">A fall</option>
+            <option value="save">A saving throw</option>
+          </select>
+        </label>
+        {from === 'save' && (
+          <>
+            <label className="field">
+              Ability
+              <select value={saveAbility} onChange={(e) => setSaveAbility(e.target.value as Ability)}>
+                <option value="str">Strength</option>
+                <option value="dex">Dexterity</option>
+                <option value="con">Constitution</option>
+                <option value="int">Intelligence</option>
+                <option value="wis">Wisdom</option>
+                <option value="cha">Charisma</option>
+              </select>
+            </label>
+            <label className="choice">
+              <input type="checkbox" checked={saveSucceeded} onChange={(e) => setSaveSucceeded(e.target.checked)} />
+              Succeeded
+            </label>
+            <label className="choice">
+              <input type="checkbox" checked={saveHalf} onChange={(e) => setSaveHalf(e.target.checked)} />
+              Half damage on a success
+            </label>
+          </>
+        )}
         <button type="button" disabled={!valid} onClick={() => apply('damage')}>
           Take damage
         </button>

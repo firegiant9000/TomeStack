@@ -106,6 +106,8 @@ public enum PlayActionKind
 /// <param name="RollId">D43 S8, with <c>useAction</c> and <paramref name="ContentId"/>: the roll (its <c>rollId</c>) to use. MECH-X item 1 (R36): else the feature attack with this effect id (a paying attack); a revision where both match is ambiguous and refused <c>use.not-found</c>.</param>
 /// <param name="Clear">D43 S8, with <c>endEncounter</c> only: counting-up pools whose built-up value goes to 0 in the same change, as <c>"{contentId:D}/{resourceId}"</c> (at most 64). Refused <c>play.clear-invalid</c> with any other action or any entry that is not a counting-up pool of the character.</param>
 /// <param name="ContentId">With <paramref name="ResourceId"/>, the resource to spend or regain (the content that defines it).</param>
+/// <param name="DamageFrom">Content v12 (G6), with <c>damage</c>: how the hit came (<c>attack</c>, <c>fall</c> or <c>save</c>); wire <c>damageFrom</c>. Absent: unsaid.</param>
+/// <param name="DamageSave">Content v12 (G6), with <c>damage</c> and <c>damageFrom: save</c>: the saving throw (<c>ability</c>, <c>succeeded</c>, <c>half</c>); wire <c>damageSave</c>. A successful halving save halves the hit before anything else; anything else is refused <c>damage.invalid-source</c>.</param>
 public sealed record PlayCommand(
     Guid CharacterId,
     PlayActionKind Action,
@@ -124,7 +126,9 @@ public sealed record PlayCommand(
     DateTimeOffset? ExpectedUpdatedAt = null,
     IReadOnlyList<ResponseChoice>? Responses = null,
     string? RollId = null,
-    IReadOnlyList<string>? Clear = null);
+    IReadOnlyList<string>? Clear = null,
+    ResponseSource? DamageFrom = null,
+    DamageSave? DamageSave = null);
 
 /// <summary>
 /// <c>character.undoPlay</c> (D43 S2): undoes the last compound play change. <paramref name="UpdatedAt"/> is the stamp of the copy the
@@ -719,9 +723,9 @@ public sealed partial class TomeStackApp
     /// </summary>
     private static PlayState Damage(PlayState play, CharacterSheet sheet, PlayCommand command, RulesFamilyPolicy family, out DamageOutcome outcome)
     {
-        var type = NormalizedDamageType(command.DamageType);
+        var damage = DamageEventOf(command.Amount, command.DamageType, command.DamageFrom, command.DamageSave);
         var hp = sheet.HitPoints!;
-        var result = DamagePipeline.Resolve(new(command.Amount, type), hp, sheet.DamageDefences?.Select(d => new DamageDefence(d.Type, d.Kind)).ToList() ?? [], play.Concentration is not null, family);
+        var result = DamagePipeline.Resolve(damage, hp, sheet.DamageDefences?.Select(d => new DamageDefence(d.Type, d.Kind)).ToList() ?? [], play.Concentration is not null, family);
         outcome = result.Outcome;
         if (result.Outcome.Adjusted == 0)
             return play; // nothing changes and no concentration check is asked for

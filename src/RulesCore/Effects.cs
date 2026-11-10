@@ -887,6 +887,28 @@ public sealed record ResponseOutcome(
     string? RollId,
     Guid? RollContent);
 
+/// <summary>Content schema v12 (G6): what a damage event comes from, for <see cref="ResponseTrigger.From"/>.</summary>
+public enum ResponseSource { Attack, Fall, Save }
+
+/// <summary>Content schema v12 (G6): the result of a saving throw a response is offered on.</summary>
+public enum SaveResult { Success, Failure }
+
+/// <summary>Content schema v12 (G6): how much of the damage a damage reduction response takes off.</summary>
+public enum ResponseShare { Half, All }
+
+/// <summary>
+/// Content schema v12 (G6): when a response is offered. <paramref name="From"/> is what the damage came from; <paramref name="Ability"/>
+/// and <paramref name="Result"/> narrow a save; <paramref name="DamageTypes"/> limits it to those damage types.
+/// </summary>
+public sealed record ResponseTrigger(
+    [property: JsonRequired] ResponseSource From,
+    string? Ability = null,
+    SaveResult? Result = null,
+    IReadOnlyList<string>? DamageTypes = null);
+
+/// <summary>Content schema v12 (G6): the response a response replaces; <paramref name="Content"/> absent means this revision's content.</summary>
+public sealed record ResponseSupersedes(Guid? Content, [property: JsonRequired] string ResponseId);
+
 /// <summary>
 /// Content schema v11 (D43): a reaction the character can choose when they take damage: reduce it, survive at some hit points, or
 /// answer a threshold with outcomes. Typed only in a v11 revision: in an older revision a <c>response</c> stays an
@@ -932,17 +954,60 @@ public sealed record ResponseEffect : Effect
     /// <summary>What the response does once chosen.</summary>
     public IReadOnlyList<ResponseOutcome>? Outcomes { get; init; }
 
-    /// <summary>The other contents this response names: its pool, its toggle, and each outcome's pool, toggle and roll content. Null content means this one and is left out.</summary>
+    /// <summary>Content schema v12 (G6): when the response is offered, beyond the damage event itself (what the damage came from, and for a save which ability, which result and which damage types). Null: any damage event.</summary>
+    public ResponseTrigger? Trigger { get; init; }
+
+    /// <summary>Content schema v12 (G6): how much of the damage a <see cref="ResponsePhase.DamageReduction"/> response takes off: half or all. Null: the <see cref="Amount"/> formula.</summary>
+    public ResponseShare? Share { get; init; }
+
+    /// <summary>Content schema v12 (G6): a dice expression the response rolls (added to its amount).</summary>
+    public string? Dice { get; init; }
+
+    /// <summary>Content schema v12 (G6): true when the response applies on its own, without the player choosing it.</summary>
+    public bool? Automatic { get; init; }
+
+    /// <summary>Content schema v12 (G6): a condition id that, while the character has it, stops the response being offered.</summary>
+    public string? UnlessCondition { get; init; }
+
+    /// <summary>Content schema v12 (G6): another response this one replaces while this one is offered.</summary>
+    public ResponseSupersedes? Supersedes { get; init; }
+
+    /// <summary>The keys content schema v12 adds to this effect; below v12 they stay extension data.</summary>
+    internal static readonly string[] V12Keys = ["trigger", "share", "dice", "automatic", "unlessCondition", "supersedes"];
+
+    /// <summary>The other contents this response names: its pool, its toggle, the response it supersedes, and each outcome's pool, toggle and roll content. Null content means this one and is left out.</summary>
     public IEnumerable<Guid> ReferencedContent() =>
-        new[] { ResourceContent, Toggle?.ContentId }
+        new[] { ResourceContent, Toggle?.ContentId, Supersedes?.Content }
             .Concat((Outcomes ?? []).SelectMany(o => new[] { o?.ResourceContent, o?.Toggle?.ContentId, o?.RollContent }))
             .OfType<Guid>();
 
-    /// <summary>Typed when the phase and every outcome's kind name a member exactly (the serializer also binds padded or combined names, which no schema allows).</summary>
-    internal static Effect FromUnknown(UnknownEffect unknown) =>
-        VersionedEffects.NamesMember<ResponsePhase>(unknown.Raw, "phase") && OutcomeKindsNamed(unknown.Raw)
+    /// <summary>
+    /// Typed when the phase and every outcome's kind name a member exactly (the serializer also binds padded or combined names, which no
+    /// schema allows). Below v12 the six v12 keys stay extension data; from v12 the trigger's source and result and the share must also
+    /// name a member exactly.
+    /// </summary>
+    internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion)
+    {
+        if (!VersionedEffects.NamesMember<ResponsePhase>(unknown.Raw, "phase") || !OutcomeKindsNamed(unknown.Raw))
+            return unknown;
+        if (revisionSchemaVersion < ContentRevision.ResponseTriggerSchemaVersion)
+            return VersionedEffects.TypedWithout<ResponseEffect>(unknown, V12Keys);
+        return VersionedEffects.NamesMember<ResponseShare>(unknown.Raw, "share") && TriggerNamed(unknown.Raw)
             ? VersionedEffects.Typed<ResponseEffect>(unknown)
             : unknown;
+    }
+
+    private static bool TriggerNamed(JsonElement raw)
+    {
+        foreach (var p in raw.EnumerateObject())
+        {
+            if (!string.Equals(p.Name, "trigger", StringComparison.OrdinalIgnoreCase) || p.Value.ValueKind != JsonValueKind.Object)
+                continue;
+            if (!VersionedEffects.NamesMember<ResponseSource>(p.Value, "from") || !VersionedEffects.NamesMember<SaveResult>(p.Value, "result"))
+                return false;
+        }
+        return true;
+    }
 
     private static bool OutcomeKindsNamed(JsonElement raw)
     {
@@ -1593,7 +1658,7 @@ internal static class VersionedEffects
             [RollEffect.TypeName] = (1, RollEffect.FromUnknown),
             [ValueEffect.TypeName] = (ValueEffect.SchemaVersion, (u, _) => ValueEffect.FromUnknown(u)),
             [RollModeEffect.TypeName] = (RollModeEffect.SchemaVersion, (u, _) => RollModeEffect.FromUnknown(u)),
-            [ResponseEffect.TypeName] = (ResponseEffect.SchemaVersion, (u, _) => ResponseEffect.FromUnknown(u)),
+            [ResponseEffect.TypeName] = (ResponseEffect.SchemaVersion, (u, v) => ResponseEffect.FromUnknown(u, v)),
             [ItemModEffect.TypeName] = (ItemModEffect.SchemaVersion, (u, _) => ItemModEffect.FromUnknown(u)),
             [CompanionEffect.TypeName] = (CompanionEffect.SchemaVersion, (u, _) => CompanionEffect.FromUnknown(u)),
         };
