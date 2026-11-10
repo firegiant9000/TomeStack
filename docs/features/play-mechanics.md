@@ -809,7 +809,7 @@ Decided in [ADR-022](../decisions/ADR-022-content-v12.md#slice-g4-armor-and-shie
 
 **Older versions.** A gated modifier stops an export for an older TomeStack ([package-format.md](package-format.md#save-for-an-older-tomestack-d85)) with `below.equipment-gate` ("'{name}': it applies only while {gear} is not worn; the older version would apply it whatever is worn."), shown in a save as `package.target-blocked`. Dropping the key would apply the rule while armored, so it is blocked, like a restriction in [G10](#content-v12-g10-check-ability-climb-and-swim-speed) (`below.restriction-lifted`).
 
-**Stays by hand:** gates on roll modes, attacks, riders, responses and grants; a positive "while using a shield" gate. The bundled Unarmored notes are re-authored with this in C2-6.
+**Stays by hand:** gates on roll modes, attacks, riders, responses and grants; a positive "while using a shield" gate. The bundled Monk and Barbarian gates (Unarmored Defense, Unarmored Movement, Fast Movement) are authored with this in the C2-6 v12 revisions.
 
 ## Not yet
 

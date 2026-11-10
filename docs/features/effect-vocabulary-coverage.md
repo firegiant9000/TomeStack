@@ -34,7 +34,7 @@ Coverage words are the Lab's registry words: **Automatic** (the sheet works it o
 | passive `magical_damage`, `silvered_damage` | — | Reference | — | Not covered: damage has a type but no magical or silvered property; text |
 | passive `resistances`, `immunities`, `vulnerabilities` | `grant` `damageResistance` / `damageImmunity` / `damageVulnerability` with `whileToggle` | Automatic | — | |
 | passive `ignored_resistances` | — | Reference | — | Not covered: a target's defences are out of scope (ADR-018) |
-| passive `ac_value`, `ac_bonus` | `modifier` `set` / `replace` / `bonus` on `armorClass` with `toggle`; `armor` | Automatic | G4 (built) | A modifier can apply only while no armor, no heavy armor or no shield is worn (`notWearing`, content v12, G4 built, D93); the older flag `whileArmored` is the opposite gate. The bundled Unarmored notes become automatable when C2-6 re-authors them. A gate on a roll mode, attack or rider stays text |
+| passive `ac_value`, `ac_bonus` | `modifier` `set` / `replace` / `bonus` on `armorClass` with `toggle`; `armor` | Automatic | G4 (built) | A modifier can apply only while no armor, no heavy armor or no shield is worn (`notWearing`, content v12, G4 built, D93); the older flag `whileArmored` is the opposite gate. The bundled Monk's Unarmored Defense and Unarmored Movement and the Barbarian's Fast Movement use it in the C2-6 v12 revisions (done). A gate on a roll mode, attack or rider stays text |
 | passive `max_hp_value`, `max_hp_bonus` | `modifier` on `hitPoints` with `toggle` | Automatic | — | An `autoWhen` toggle may not target `hitPoints` (`validate.toggle-auto-target`) |
 | passive `save_bonus` | `modifier` `bonus` on `save.<ability>` | Automatic | — | |
 | passive `save_adv`, `save_dis` | `rollMode` on `save.<ability>`, always or with `toggle` | Automatic | — | |
@@ -74,12 +74,25 @@ Coverage words are the Lab's registry words: **Automatic** (the sheet works it o
 
 Both vocabularies' everyday verbs (attack, damage, a saving-throw DC, a pool spent, a timed form, a bonus or a mode on own rolls) map onto v11. The rows that stop at Reference are the evaluation's gaps, and they fall on Barbarian, Rogue and Monk. Ranked by how many Reference rows each would remove (evaluation §3):
 
-- **Remove the most:** G1 (dice count as a formula on riders and rolls; built, content v12, D88), G4 (no armour, no shield, no heavy armour gates; built, content v12, D93), G5 (per-effect ability-score cap; built, content v12, D92; Body and Mind is expressible after C2-6), G6 (responses with dice or halving, and save-result or trigger conditions).
+- **Remove the most:** G1 (dice count as a formula on riders and rolls; built, content v12, D88), G4 (no armour, no shield, no heavy armour gates; built, content v12, D93), G5 (per-effect ability-score cap; built, content v12, D92; Primal Champion and Body and Mind use it in the C2-6 v12 revisions, done), G6 (responses with dice or halving, and save-result or trigger conditions).
 - **Cheap:** G9 (roll floor on checks; built, content v12, D89). G7 (modes on own attack rolls, attacks against the character, initiative alone) is built, content v12, D87.
 - **Reminders that may stay Reference:** G8 (rider match on the ability used; Dex for tagged non-finesse weapons), G12 (reroll).
-- G11 (condition immunity) is built, content v12, D91: a `conditionImmunity` grant, optionally while a toggle is on. Mindless Rage (5.2.1 Barbarian) and the 5.1 Purity of Body's poisoned line are expressible once C2-6 re-authors them; disease stays text, and so does ending a held condition.
+- G11 (condition immunity) is built, content v12, D91: a `conditionImmunity` grant, optionally while a toggle is on. Mindless Rage (5.2.1 Barbarian) and the 5.1 Purity of Body's poisoned line are authored in the C2-6 v12 revisions (done); disease stays text, and so does ending a held condition.
 - G10 (skill ability substitution; climb and swim speeds) is built, content v12, D90. The 5.2.1 Second-Story Work's climb speed is expressible; its jump line stays text, and 5.1 Second-Story Work has no speed. Acrobatic Movement (5.2.1) grants no speed and no check, so it is not a G10 feature and stays text.
 - G2 (crit-only dice) is built with G1 (content v12, D88). G3 (once per turn) is built as player-added: the rider is offered on each damage roll and the player adds it; the app does not track turns, and that judgement awaits the owner.
+
+**C2-6 (done, 2026-11-10): what stays Reference per class and family.** The Barbarian, Rogue and Monk are re-authored on v12 in new insert-only revisions; existing characters get them through the class update offer. The sets below are what the sheet still lists as Reference at level 20 on the new revisions. Each row is the exact set, pinned by that class's `Reference_features_are_listed_as_reference` test (Ability Score Improvement and Epic Boon are Reference by nature and are listed).
+
+| Class and family | Stays Reference |
+|---|---|
+| Barbarian 5.1 | Persistent Rage; Intimidating Presence; Retaliation; Frenzy; Ability Score Improvement |
+| Barbarian 5.2.1 | Persistent Rage; Improved Brutal Strike (its extra die is the class scale, its options are text); Weapon Mastery; Instinctive Pounce; Retaliation; Ability Score Improvement; Epic Boon |
+| Rogue 5.1 | Thieves' Cant; Cunning Action; Second-Story Work; Blindsense; Expertise; Ability Score Improvement; Fast Hands; Use Magic Device; Thief's Reflexes |
+| Rogue 5.2.1 | Thieves' Cant; Cunning Action; Cunning Strike; Improved Cunning Strike; Devious Strikes; Weapon Mastery; Expertise; Ability Score Improvement; Fast Hands; Use Magic Device; Thief's Reflexes; Epic Boon; Supreme Sneak |
+| Monk 5.1 | Ability Score Improvement; Ki-Empowered Strikes; Open Hand Technique; Perfect Self; Stillness of Mind; Timeless Body; Tongue of the Sun and Moon; Tranquility |
+| Monk 5.2.1 | Ability Score Improvement; Open Hand Technique; Empowered Strikes; Perfect Focus; Acrobatic Movement; Heightened Focus; Self-Restoration; Epic Boon; Fleet Step |
+
+Assisted, not Automatic: Sneak Attack (both families) and Brutal Strike (5.2.1) are once-per-turn riders picked on the damage roll; their preconditions stay by hand. The reactions of Uncanny Dodge, Slow Fall and the Deflect responses are free in the engine (spent by hand, no per-class pool, which would double on a multiclass character). The saving-throw clause of Indomitable Might (5.2.1), the tool-check clause of Reliable Talent and the disease line of Purity of Body stay by hand inside otherwise automatic features.
 
 The v12 scope is decided once, from the Lab's coverage report after authoring Barbarian, Rogue and Monk under v11, not class by class.
 
