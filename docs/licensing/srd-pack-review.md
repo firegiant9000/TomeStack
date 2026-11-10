@@ -266,6 +266,14 @@ With the M1 Dwarf, Soldier and Savage Attacker and the four Fighting Style feats
 - **Not taken:** the starting equipment, the Epic Boon feats themselves (Boon of Irresistible Offense is named in the text only), and the choice of the tool or instrument.
 - **Checks:** `SrdPackTests` (source records, attribution, every revision validates), the PDF-gated `SrdClassTableTests` and `SrdDetectionMeasurementTests` with `TOMESTACK_SRD_PDF_DIR` set (the pack grants match the printed tables, level by level), and `ContentDiagnoseTests`.
 
+## C2-6 v12 revisions (2026-11-10)
+
+**Scope:** six new pack files, each holding insert-only schema-12 revisions of features, classes and subclasses already reviewed above (C2-1 Barbarian, C2-2 Rogue, C2-3 Monk, both families): `srd-5.1-barbarian-v12.json`, `srd-5.2.1-barbarian-v12.json`, `srd-5.1-rogue-v12.json`, `srd-5.2.1-rogue-v12.json`, `srd-5.1-monk-v12.json` and `srd-5.2.1-monk-v12.json`.
+
+- **No new SRD text.** The summaries reuse the already-reviewed text of the revisions they supersede, with short TomeStack notes in our own words and the "(by hand)" wording dropped from parts that are now automatic. Nothing outside the pages already reviewed is taken, so the page tables above still bound the scope.
+- **Same attribution.** Each file carries the same `packId`, notice and sources shape as its base pack, with a notice saying these are new v12 revisions.
+- **Nothing outside `src/AppService/Content/`.** The docs name features and describe mechanics in our own words only.
+
 ## README screenshots (docs/media, reviewed 2026-09-30)
 
 Two screenshots of the app, shown in the README, reproduce bundled SRD 5.2.1 content as the app renders it. They add no SRD text that the packs above do not already hold, and nothing from outside the two checked PDFs.

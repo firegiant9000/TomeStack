@@ -242,7 +242,7 @@ The fifth gap is two small things content could not say in v11: "this skill may 
 
 ## Slice G11: condition immunity
 
-The sixth gap is "you are immune to the charmed condition", always or only while a mode (a rage, a form) is on. Content could only say it in text. This is the grant the bundled Barbarian's and Monk's immunity lines need once C2-6 re-authors them.
+The sixth gap is "you are immune to the charmed condition", always or only while a mode (a rage, a form) is on. Content could only say it in text. This is the grant the bundled Barbarian's and Monk's immunity lines use in the C2-6 v12 revisions (done).
 
 ### Decision (G11)
 
@@ -269,7 +269,7 @@ The sixth gap is "you are immune to the charmed condition", always or only while
 - **Ending a held condition automatically.** An effect such as "the condition ends when you enter the mode" stays a player action (text).
 - **Blocking `addCondition`.**
 - **The G7 `against` lists**, which stay player-applied.
-- **Re-authoring bundled SRD features** (the Barbarian's Mindless Rage, the 5.1 Monk's Purity of Body): C2-6. Purity of Body's disease line stays text.
+- **Re-authoring bundled SRD features** (the Barbarian's Mindless Rage, the 5.1 Monk's Purity of Body): done in C2-6 (new insert-only revisions). Purity of Body's disease line stays text, so no change was needed there.
 
 ### Evidence (G11)
 
@@ -282,7 +282,7 @@ The sixth gap is "you are immune to the charmed condition", always or only while
 
 ## Slice G5: ability-score cap
 
-The seventh gap is "this increase can raise a score above 20, up to a named maximum". The usual rule stops every ability-score increase at 20 (a rules constant, `CharacterCalculator.AbilityScoreIncreaseCap`); content could only say it in text. This is the grant the bundled Body and Mind feature needs once C2-6 re-authors it.
+The seventh gap is "this increase can raise a score above 20, up to a named maximum". The usual rule stops every ability-score increase at 20 (a rules constant, `CharacterCalculator.AbilityScoreIncreaseCap`); content could only say it in text. This is the grant the bundled Body and Mind feature uses in the C2-6 v12 revision (done; cap 25 in 5.2.1; Primal Champion uses 24 in 5.1 and 25 in 5.2.1).
 
 ### Decision (G5)
 
@@ -308,7 +308,7 @@ The seventh gap is "this increase can raise a score above 20, up to a named maxi
 - **Raising the maximum for every source** (a separate "maximum" effect).
 - **Caps on `set` or `replace`, or on other fields.**
 - **`cap` in item mods.**
-- **Re-authoring bundled Body and Mind** (C2-6).
+- **Re-authoring bundled Body and Mind**: done in C2-6.
 
 Known limits (G5):
 
@@ -327,7 +327,7 @@ Known limits (G5):
 
 ## Slice G4: armor and shield gates
 
-The eighth and last gap is "this bonus applies only while no armor (or no heavy armor, or no shield) is worn". The existing `whileArmored` flag can only say "while armored"; the opposite, and the shield, could only be written in text. This is the gate the bundled Unarmored Defense and Unarmored Movement notes need once C2-6 re-authors them (see [effect-vocabulary-coverage.md](../features/effect-vocabulary-coverage.md)).
+The eighth and last gap is "this bonus applies only while no armor (or no heavy armor, or no shield) is worn". The existing `whileArmored` flag can only say "while armored"; the opposite, and the shield, could only be written in text. This is the gate the bundled Unarmored Defense and Unarmored Movement notes (and the Barbarian's Fast Movement) use in the C2-6 v12 revisions (done; see [effect-vocabulary-coverage.md](../features/effect-vocabulary-coverage.md)).
 
 ### Decision (G4)
 
@@ -354,9 +354,9 @@ The eighth and last gap is "this bonus applies only while no armor (or no heavy 
 - **Gates on roll modes, attacks, riders, responses or grants**; the heavy-armor line of the bundled rage feature and the Martial Arts armor condition stay text.
 - **A positive "while using a shield" gate.**
 - **Changing `whileArmored`, or adding it to the studio.**
-- **Re-authoring bundled Monk and Barbarian content** (C2-6).
+- **Re-authoring bundled Monk and Barbarian content**: done in C2-6 (new insert-only revisions; the gates apply only to them).
 - **Character schema changes.**
-- **Acrobatic Movement**, which is text only with no effect to gate. Acrobatic Movement (spec caveat) is text only with no effect to gate; G4 adds the vocabulary that C2-6 uses to automate the Unarmored notes.
+- **Acrobatic Movement**, which is text only with no effect to gate. Acrobatic Movement (spec caveat) is text only with no effect to gate; G4 adds the vocabulary that C2-6 used to automate the Unarmored notes. No change was needed for Acrobatic Movement, which stays text.
 
 ### Evidence (G4)
 
