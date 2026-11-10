@@ -1,0 +1,730 @@
+{
+  "packId": "srd-5.2.1-monk-v12",
+  "formatVersion": 1,
+  "notice": "The Monk of the System Reference Document 5.2.1 (CC-BY-4.0), pp. 49-52; new v12 revisions of Unarmored Defense, Unarmored Movement, Deflect Attacks, Slow Fall, Evasion, Deflect Energy and Body and Mind, with the class that grants them. Taken from SRD_CC_v5.2.1.pdf (SHA-256 8974902d109d6e63672d7c490bde9ccf052410503d9cfa768237154fbc5e3d87). See docs/licensing/srd-pack-review.md.",
+  "sources": [
+    {
+      "id": "52500000-0000-4000-8000-000000000001",
+      "title": "System Reference Document 5.2.1",
+      "publisher": "SRD 5.2.1 (CC-BY-4.0)",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "editionVersion": "5.2.1",
+      "license": "CC-BY-4.0",
+      "redistributable": true,
+      "attribution": "This work includes material from the System Reference Document 5.2.1 (\"SRD 5.2.1\") by Wizards of the Coast LLC, available at https://www.dndbeyond.com/srd. The SRD 5.2.1 is licensed under the Creative Commons Attribution 4.0 International License, available at https://creativecommons.org/licenses/by/4.0/legalcode.",
+      "modificationNotice": "Modified: TomeStack adapted this material into structured data. Selected passages are excerpted or shortened, with line breaks and hyphenation repaired, and rules are encoded as machine-readable effects.",
+      "sha256": "8974902d109d6e63672d7c490bde9ccf052410503d9cfa768237154fbc5e3d87"
+    }
+  ],
+  "revisions": [
+    {
+      "contentId": "52c00000-0000-4000-8000-000000420001",
+      "revisionId": "52e00000-0000-4000-8000-000012420001",
+      "schemaVersion": 12,
+      "kind": "class",
+      "name": "Monk",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 49,
+          "end": 52
+        }
+      },
+      "status": "published",
+      "summary": "Primary Ability: Dexterity and Wisdom. Hit Point Die: D8 per Monk level. Saving Throw Proficiencies: Strength and Dexterity. Skill Proficiencies: Choose 2: Acrobatics, Athletics, History, Insight, Religion, or Stealth. Weapon Proficiencies: Simple weapons and Martial weapons that have the Light property. Tool Proficiencies: Choose one type of Artisan’s Tools or Musical Instrument (see “Equipment”). Armor Training: None. TomeStack: levels 1-20. The Artisan’s Tools or Musical Instrument proficiency is recorded by hand.",
+      "effects": [
+        {
+          "type": "hitDie",
+          "id": "monk-hit-die",
+          "die": 8
+        },
+        {
+          "type": "scale",
+          "id": "monk-martial-arts-die",
+          "scaleId": "martialArts",
+          "label": "Martial Arts die",
+          "values": [
+            6,
+            6,
+            6,
+            6,
+            8,
+            8,
+            8,
+            8,
+            8,
+            8,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            12,
+            12,
+            12,
+            12
+          ]
+        },
+        {
+          "type": "scale",
+          "id": "monk-unarmored-movement",
+          "scaleId": "unarmoredMovement",
+          "label": "Unarmored Movement (ft.)",
+          "values": [
+            0,
+            10,
+            10,
+            10,
+            10,
+            15,
+            15,
+            15,
+            15,
+            20,
+            20,
+            20,
+            20,
+            25,
+            25,
+            25,
+            25,
+            30,
+            30,
+            30
+          ]
+        },
+        {
+          "type": "grant",
+          "id": "monk-save-str",
+          "grant": "proficiency",
+          "target": "save.str",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "monk-save-dex",
+          "grant": "proficiency",
+          "target": "save.dex",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "choice",
+          "id": "monk-skills",
+          "choiceId": "monk-skills",
+          "count": 2,
+          "text": "Skill Proficiencies: Choose 2: Acrobatics, Athletics, History, Insight, Religion, or Stealth.",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000420801",
+              "revisionId": "52e00000-0000-4000-8000-000000420801"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000420802",
+              "revisionId": "52e00000-0000-4000-8000-000000420802"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000420803",
+              "revisionId": "52e00000-0000-4000-8000-000000420803"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000420804",
+              "revisionId": "52e00000-0000-4000-8000-000000420804"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000420805",
+              "revisionId": "52e00000-0000-4000-8000-000000420805"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000420806",
+              "revisionId": "52e00000-0000-4000-8000-000000420806"
+            }
+          ],
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "martial-arts",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000420101",
+            "revisionId": "52e00000-0000-4000-8000-000000420101"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "unarmored-defense",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000420102",
+            "revisionId": "52e00000-0000-4000-8000-000012420102"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "monks-focus",
+          "grant": "content",
+          "level": 2,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000420103",
+            "revisionId": "52e00000-0000-4000-8000-000000420103"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "unarmored-movement",
+          "grant": "content",
+          "level": 2,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000420104",
+            "revisionId": "52e00000-0000-4000-8000-000012420104"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "uncanny-metabolism",
+          "grant": "content",
+          "level": 2,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000420105",
+            "revisionId": "52e00000-0000-4000-8000-000000420105"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "deflect-attacks",
+          "grant": "content",
+          "level": 3,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000420106",
+            "revisionId": "52e00000-0000-4000-8000-000012420106"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement",
+          "grant": "content",
+          "level": 4,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000420107",
+            "revisionId": "52e00000-0000-4000-8000-000000420107"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-slow-fall",
+          "grant": "content",
+          "level": 4,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000420108",
+            "revisionId": "52e00000-0000-4000-8000-000012420108"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-extra-attack",
+          "grant": "content",
+          "level": 5,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000420109",
+            "revisionId": "52e00000-0000-4000-8000-000000420109"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-stunning-strike",
+          "grant": "content",
+          "level": 5,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000420110",
+            "revisionId": "52e00000-0000-4000-8000-000000420110"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-empowered-strikes",
+          "grant": "content",
+          "level": 6,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000420111",
+            "revisionId": "52e00000-0000-4000-8000-000000420111"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-evasion",
+          "grant": "content",
+          "level": 7,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000420112",
+            "revisionId": "52e00000-0000-4000-8000-000012420112"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement-8",
+          "grant": "content",
+          "level": 8,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000420107",
+            "revisionId": "52e00000-0000-4000-8000-000000420107"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-acrobatic-movement",
+          "grant": "content",
+          "level": 9,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000420113",
+            "revisionId": "52e00000-0000-4000-8000-000000420113"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-heightened-focus",
+          "grant": "content",
+          "level": 10,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000420114",
+            "revisionId": "52e00000-0000-4000-8000-000000420114"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-self-restoration",
+          "grant": "content",
+          "level": 10,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000420115",
+            "revisionId": "52e00000-0000-4000-8000-000000420115"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement-12",
+          "grant": "content",
+          "level": 12,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000420107",
+            "revisionId": "52e00000-0000-4000-8000-000000420107"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-deflect-energy",
+          "grant": "content",
+          "level": 13,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000420116",
+            "revisionId": "52e00000-0000-4000-8000-000012420116"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-disciplined-survivor",
+          "grant": "content",
+          "level": 14,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000420117",
+            "revisionId": "52e00000-0000-4000-8000-000000420117"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-perfect-focus",
+          "grant": "content",
+          "level": 15,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000420118",
+            "revisionId": "52e00000-0000-4000-8000-000000420118"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement-16",
+          "grant": "content",
+          "level": 16,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000420107",
+            "revisionId": "52e00000-0000-4000-8000-000000420107"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-superior-defense",
+          "grant": "content",
+          "level": 18,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000420119",
+            "revisionId": "52e00000-0000-4000-8000-000000420119"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-epic-boon",
+          "grant": "content",
+          "level": 19,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000420120",
+            "revisionId": "52e00000-0000-4000-8000-000000420120"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-body-and-mind",
+          "grant": "content",
+          "level": 20,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000420121",
+            "revisionId": "52e00000-0000-4000-8000-000012420121"
+          }
+        },
+        {
+          "type": "choice",
+          "id": "monk-subclass",
+          "choiceId": "monk-subclass",
+          "count": 1,
+          "level": 3,
+          "text": "Level 3: Monk Subclass. You gain a Monk subclass of your choice. (The SRD 5.2.1 includes the Warrior of the Open Hand.)",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000420002",
+              "revisionId": "52e00000-0000-4000-8000-000000420002"
+            }
+          ]
+        },
+        {
+          "type": "grant",
+          "id": "monk-weapons-simple",
+          "grant": "proficiency",
+          "target": "weapon.simple",
+          "onlyAs": "startingClass",
+          "text": "Weapon Proficiencies: Simple weapons and Martial weapons that have the Light property."
+        },
+        {
+          "type": "grant",
+          "id": "monk-weapon-scimitar",
+          "grant": "proficiency",
+          "target": "weapon.scimitar",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "monk-weapon-shortsword",
+          "grant": "proficiency",
+          "target": "weapon.shortsword",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "monk-weapon-hand-crossbow",
+          "grant": "proficiency",
+          "target": "weapon.hand-crossbow",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "monk-armor-none",
+          "grant": "proficiency",
+          "target": "armor.none",
+          "text": "Armor Training: None"
+        },
+        {
+          "type": "restriction",
+          "id": "monk-multiclass-dex",
+          "field": "ability.dex.score",
+          "minimum": 13,
+          "multiclass": true,
+          "text": "To qualify for a new class, you must have a score of at least 13 in the primary ability of the new class and your current classes (SRD 5.2.1 pp. 24-25); the Monk’s primary abilities are Dexterity and Wisdom. As a multiclass character you gain only the Hit Point Die trait from the Core Monk Traits table (SRD 5.2.1 p. 49): no saving throw, skill, weapon or armor proficiency."
+        },
+        {
+          "type": "restriction",
+          "id": "monk-multiclass-wis",
+          "field": "ability.wis.score",
+          "minimum": 13,
+          "multiclass": true
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000420102",
+      "revisionId": "52e00000-0000-4000-8000-000012420102",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Unarmored Defense",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 50
+        }
+      },
+      "status": "published",
+      "summary": "While you aren’t wearing armor or wielding a Shield, your base Armor Class equals 10 plus your Dexterity and Wisdom modifiers.\n\nTomeStack: applies only while no armor is worn and no Shield is used (the Armor Class breakdown shows it as not used otherwise).",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "unarmored-defense-ac",
+          "operation": "replace",
+          "target": "armorClass",
+          "value": "10 + DEX.MOD + WIS.MOD",
+          "notWearing": [
+            "shield"
+          ],
+          "text": "Applies only while no armor is worn and no Shield is used."
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000420104",
+      "revisionId": "52e00000-0000-4000-8000-000012420104",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Unarmored Movement",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 51
+        }
+      },
+      "status": "published",
+      "summary": "Your speed increases by 10 feet while you aren’t wearing armor or wielding a Shield. This bonus increases when you reach certain Monk levels, as shown on the Monk Features table.\n\nTomeStack: the bonus from the Unarmored Movement column is added to your Speed only while no armor is worn and no Shield is used.",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "unarmored-movement-speed",
+          "operation": "bonus",
+          "target": "speed",
+          "value": "SCALE.unarmoredMovement",
+          "notWearing": [
+            "armor",
+            "shield"
+          ],
+          "text": "Not while you wear armor or wield a Shield."
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000420106",
+      "revisionId": "52e00000-0000-4000-8000-000012420106",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Deflect Attacks",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 51
+        }
+      },
+      "status": "published",
+      "summary": "When an attack roll hits you and its damage includes Bludgeoning, Piercing, or Slashing damage, you can take a Reaction to reduce the attack’s total damage against you. The reduction equals 1d10 plus your Dexterity modifier and Monk level.\n\nIf you reduce the damage to 0, you can expend 1 Focus Point to redirect some of the attack’s force. If you do so, choose a creature you can see within 5 feet of yourself if the attack was a melee attack or a creature you can see within 60 feet of yourself that isn’t behind Total Cover if the attack was a ranged attack. That creature must succeed on a Dexterity saving throw or take damage equal to two rolls of your Martial Arts die plus your Dexterity modifier. The damage is the same type dealt by the attack.\n\nTomeStack: the damage reduction is offered in the damage panel for a hit from an attack that deals Bludgeoning, Piercing, or Slashing damage; you spend your Reaction by hand. The redirect spends 1 Focus Point and shows the Dexterity saving throw DC; the redirected damage is done by hand.",
+      "effects": [
+        {
+          "type": "roll",
+          "id": "deflect-attacks-redirect",
+          "rollId": "deflectAttacksRedirect",
+          "label": "Deflect Attacks: redirect",
+          "resourceId": "focus",
+          "activation": "reaction",
+          "resourceContent": "52c00000-0000-4000-8000-000000420103",
+          "cost": "1",
+          "save": {
+            "ability": "dex",
+            "dc": "8 + WIS.MOD + PB"
+          }
+        },
+        {
+          "type": "response",
+          "id": "deflect-attacks",
+          "responseId": "deflectAttacks",
+          "label": "Deflect Attacks",
+          "phase": "damageReduction",
+          "trigger": {
+            "from": "attack",
+            "damageTypes": [
+              "bludgeoning",
+              "piercing",
+              "slashing"
+            ]
+          },
+          "dice": "1d10",
+          "amount": "DEX.MOD + CLASS_LEVEL",
+          "text": "You spend your reaction by hand; TomeStack does not track it."
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000420108",
+      "revisionId": "52e00000-0000-4000-8000-000012420108",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Slow Fall",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 51
+        }
+      },
+      "status": "published",
+      "summary": "You can take a Reaction when you fall to reduce any damage you take from the fall by an amount equal to five times your Monk level.\n\nTomeStack: the reduction is offered in the damage panel for fall damage. You spend your reaction by hand; TomeStack does not track it.",
+      "effects": [
+        {
+          "type": "response",
+          "id": "slow-fall",
+          "responseId": "slowFall",
+          "label": "Slow Fall",
+          "phase": "damageReduction",
+          "trigger": {
+            "from": "fall"
+          },
+          "amount": "5 * CLASS_LEVEL",
+          "text": "You spend your reaction by hand; TomeStack does not track it."
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000420112",
+      "revisionId": "52e00000-0000-4000-8000-000012420112",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Evasion",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 51
+        }
+      },
+      "status": "published",
+      "summary": "When you’re subjected to an effect that allows you to make a Dexterity saving throw to take only half damage, you instead take no damage if you succeed on the saving throw and only half damage if you fail.\n\nYou don’t benefit from this feature if you have the Incapacitated condition.\n\nTomeStack: offered in the damage panel for a Dexterity saving throw, and off while the Incapacitated condition is marked.",
+      "effects": [
+        {
+          "type": "response",
+          "id": "evasion-success",
+          "responseId": "evasionSuccess",
+          "label": "Evasion",
+          "phase": "damageReduction",
+          "trigger": {
+            "from": "save",
+            "ability": "dex",
+            "result": "success"
+          },
+          "share": "all",
+          "automatic": true,
+          "unlessCondition": "incapacitated"
+        },
+        {
+          "type": "response",
+          "id": "evasion-failure",
+          "responseId": "evasionFailure",
+          "label": "Evasion",
+          "phase": "damageReduction",
+          "trigger": {
+            "from": "save",
+            "ability": "dex",
+            "result": "failure"
+          },
+          "share": "half",
+          "automatic": true,
+          "unlessCondition": "incapacitated"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000420116",
+      "revisionId": "52e00000-0000-4000-8000-000012420116",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Deflect Energy",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 52
+        }
+      },
+      "status": "published",
+      "summary": "You can now use your Deflect Attacks feature against attacks that deal any damage type, not just Bludgeoning, Piercing, or Slashing.\n\nTomeStack: this replaces the Deflect Attacks damage reduction in the damage panel with one for any damage type. You spend your reaction by hand; TomeStack does not track it.",
+      "effects": [
+        {
+          "type": "response",
+          "id": "deflect-energy",
+          "responseId": "deflectEnergy",
+          "label": "Deflect Energy",
+          "phase": "damageReduction",
+          "trigger": {
+            "from": "attack"
+          },
+          "dice": "1d10",
+          "amount": "DEX.MOD + CLASS_LEVEL",
+          "supersedes": {
+            "content": "52c00000-0000-4000-8000-000000420106",
+            "responseId": "deflectAttacks"
+          },
+          "text": "You spend your reaction by hand; TomeStack does not track it."
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000420121",
+      "revisionId": "52e00000-0000-4000-8000-000012420121",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Body and Mind",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 52
+        }
+      },
+      "status": "published",
+      "summary": "You have developed your body and mind to new heights. Your Dexterity and Wisdom scores increase by 4, to a maximum of 25.\n\nTomeStack: both scores are raised by 4, to a maximum of 25.",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "body-and-mind-dex",
+          "operation": "bonus",
+          "target": "ability.dex.score",
+          "value": "4",
+          "cap": 25,
+          "text": "Dexterity increases by 4, to a maximum of 25."
+        },
+        {
+          "type": "modifier",
+          "id": "body-and-mind-wis",
+          "operation": "bonus",
+          "target": "ability.wis.score",
+          "value": "4",
+          "cap": 25,
+          "text": "Wisdom increases by 4, to a maximum of 25."
+        }
+      ]
+    }
+  ]
+}

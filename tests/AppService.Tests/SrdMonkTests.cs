@@ -28,12 +28,20 @@ public class SrdMonkTests
     // C2-6: the 5.1 Monk as srd-5.1-monk-v12.json revised it.
     private static ContentReference NewClass51 => Ref(RulesFamilies.Srd51, 420001, 12420001);
 
-    private static ContentReference V12(long content) => Ref(RulesFamilies.Srd51, content, 12000000 + (content % 1000000));
+    private static ContentReference V12(long content, string family = RulesFamilies.Srd51) => Ref(family, content, 12000000 + (content % 1000000));
 
     private static ContentPack V12Pack51 => TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.1-monk-v12.json");
 
-    private static Character V12Monk(int level, IReadOnlyList<EquipmentEntry>? equipment = null, AbilityScores? scores = null) =>
-        Monk(RulesFamilies.Srd51, level, equipment, scores, NewClass51);
+    private static ContentPack V12Pack521 => TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.2.1-monk-v12.json");
+
+    private static ContentPack V12Pack(string family) => family == RulesFamilies.Srd51 ? V12Pack51 : V12Pack521;
+
+    private static ContentReference NewClass(string family) => Ref(family, 420001, 12420001);
+
+    private static Character V12Monk(int level, IReadOnlyList<EquipmentEntry>? equipment = null, AbilityScores? scores = null, string family = RulesFamilies.Srd51) =>
+        Monk(family, level, equipment, scores, NewClass(family));
+
+    private static Character V12Monk52(int level, IReadOnlyList<EquipmentEntry>? equipment = null) => V12Monk(level, equipment, null, RulesFamilies.Srd521);
 
     /// <summary>Monk's Focus (5.2.1) / Ki (5.1): the feature that declares the pool every other spender names.</summary>
     private static ContentReference PoolFeature(string family) => Ref(family, 420103);
@@ -444,14 +452,22 @@ public class SrdMonkTests
     }
 
     [Fact]
-    public void Body_and_Mind_is_not_applied()
+    public void Body_and_mind_raises_dex_and_wis_to_cap_25()
     {
         using var temp = new TempApp();
-        var sheet = temp.App.SaveCharacter(Monk(RulesFamilies.Srd521, 20)).Sheet;
+        var effects = V12Pack521.Revisions.Single(r => r.Name == "Body and Mind").Effects.OfType<ModifierEffect>().ToList();
+        Assert.Equal(2, effects.Count);
+        Assert.All(effects, e => Assert.Equal(25, e.Cap));
 
-        Assert.Equal(16, sheet.Field(FieldIds.Score(Ability.Dex)).Value);
-        Assert.Equal(14, sheet.Field(FieldIds.Score(Ability.Wis)).Value);
-        Assert.Equal(AutomationStatus.Reference, sheet.Features!.Single(f => f.Name == "Body and Mind").Automation);
+        var sheet = temp.App.SaveCharacter(V12Monk52(20)).Sheet;
+        Assert.Equal(20, sheet.Field(FieldIds.Score(Ability.Dex)).Value);
+        Assert.Equal(18, sheet.Field(FieldIds.Score(Ability.Wis)).Value);
+        Assert.NotEqual(AutomationStatus.Reference, sheet.Features!.Single(f => f.Name == "Body and Mind").Automation);
+
+        // The cap stops the increase at 25.
+        var high = temp.App.SaveCharacter(V12Monk(20, null, new(10, 23, 14, 8, 24, 8), RulesFamilies.Srd521)).Sheet;
+        Assert.Equal(25, high.Field(FieldIds.Score(Ability.Dex)).Value);
+        Assert.Equal(25, high.Field(FieldIds.Score(Ability.Wis)).Value);
     }
 
     [Fact]
@@ -461,17 +477,16 @@ public class SrdMonkTests
         string[] both = ["Ability Score Improvement", "Open Hand Technique"];
         var names = new Dictionary<string, string[]>
         {
-            [RulesFamilies.Srd521] = [.. both, "Slow Fall", "Evasion", "Empowered Strikes", "Perfect Focus", "Acrobatic Movement", "Heightened Focus", "Self-Restoration", "Deflect Energy", "Epic Boon", "Body and Mind", "Fleet Step"],
-            // The 5.1 Monk is the C2-6 v12 revision: Slow Fall and Evasion are Automatic now.
+            // Both Monks are the C2-6 v12 revisions: Slow Fall, Evasion, Deflect Energy and Body and Mind are Automatic now.
+            [RulesFamilies.Srd521] = [.. both, "Empowered Strikes", "Perfect Focus", "Acrobatic Movement", "Heightened Focus", "Self-Restoration", "Epic Boon", "Fleet Step"],
             [RulesFamilies.Srd51] = [.. both, "Ki-Empowered Strikes", "Perfect Self", "Stillness of Mind", "Tongue of the Sun and Moon", "Timeless Body", "Tranquility"],
         };
         foreach (var family in Families)
         {
-            var sheet = temp.App.SaveCharacter(family == RulesFamilies.Srd51 ? V12Monk(20) : Monk(family, 20)).Sheet;
+            var sheet = temp.App.SaveCharacter(V12Monk(20, null, null, family)).Sheet;
             // Scoped to this family's Monk revisions: other classes have an "Evasion" or a "Slow Fall" of their own.
             var monkRevisions = MonkPack(family).Revisions.Select(r => r.RevisionId).ToHashSet();
-            if (family == RulesFamilies.Srd51)
-                monkRevisions.UnionWith(V12Pack51.Revisions.Select(r => r.RevisionId));
+            monkRevisions.UnionWith(V12Pack(family).Revisions.Select(r => r.RevisionId));
             var features = sheet.Features!.Where(f => monkRevisions.Contains(f.Content.RevisionId)).ToList();
             foreach (var name in names[family])
             {
@@ -487,7 +502,7 @@ public class SrdMonkTests
     [Fact]
     public void The_monk_packs_add_nothing_to_existing_characters()
     {
-        string[] monkFiles = ["TomeStack.Content.srd-5.1-monk.json", "TomeStack.Content.srd-5.2.1-monk.json", "TomeStack.Content.srd-5.1-monk-v12.json"];
+        string[] monkFiles = ["TomeStack.Content.srd-5.1-monk.json", "TomeStack.Content.srd-5.2.1-monk.json", "TomeStack.Content.srd-5.1-monk-v12.json", "TomeStack.Content.srd-5.2.1-monk-v12.json"];
         var fixtures = new Dictionary<string, string>
         {
             [RulesFamilies.Srd521] = "characters/m1-acceptance-srd521-brenna.json",
@@ -696,6 +711,147 @@ public class SrdMonkTests
         Assert.Equal(["poisoned"], sheet.ConditionImmunities!.Select(c => c.Condition));
         Assert.Equal(AutomationStatus.Automatic, sheet.Features!.Single(f => f.Name == "Evasion").Automation);
         Assert.Contains(sheet.Active!, r => r == OpenHand(family));
+    }
+
+    // ---- C2-6: the 5.2.1 v12 revisions -----------------------------------------------------------------------------------------
+
+    [Fact]
+    public void The_5_2_1_unarmored_defense_and_movement_stop_with_armor_or_shield()
+    {
+        using var temp = new TempApp();
+        var family = RulesFamilies.Srd521;
+        var shield = new EquipmentEntry(Armor(family, "Shield"), Equipped: true);
+        var leather = new EquipmentEntry(Armor(family, LeatherName(family)), Equipped: true);
+
+        Assert.Equal(40, temp.App.SaveCharacter(V12Monk52(2)).Sheet.Field(FieldIds.Speed).Value);
+        Assert.Equal(30, temp.App.SaveCharacter(V12Monk52(2, [shield])).Sheet.Field(FieldIds.Speed).Value);
+        Assert.Equal(30, temp.App.SaveCharacter(V12Monk52(2, [leather])).Sheet.Field(FieldIds.Speed).Value);
+        // The old revision adds the bonus regardless.
+        Assert.Equal(40, temp.App.SaveCharacter(Monk(family, 2, [shield])).Sheet.Field(FieldIds.Speed).Value);
+
+        // Dex 3, Wis 4: bare 10 + 3 + 4 = 17. The old revision keeps the replace with a shield; the new one switches it off, leaving the ordinary 10 + Dex (13).
+        AbilityScores wise = new(10, 16, 14, 8, 18, 8);
+        Assert.Equal(17, temp.App.SaveCharacter(V12Monk(1, null, wise, family)).Sheet.Field(FieldIds.ArmorClass).Value);
+        Assert.Equal(17, temp.App.SaveCharacter(Monk(family, 1, [shield], wise)).Sheet.Field(FieldIds.ArmorClass).Value);
+        Assert.Equal(13, temp.App.SaveCharacter(V12Monk(1, [shield], wise, family)).Sheet.Field(FieldIds.ArmorClass).Value);
+    }
+
+    [Fact]
+    public void The_5_2_1_slow_fall_reduces_by_five_per_level()
+    {
+        using var temp = new TempApp();
+        var slowFall = V12(420108, RulesFamilies.Srd521);
+        var id = temp.App.SaveCharacter(V12Monk52(4)).Character.Id;
+
+        Assert.Equal(AutomationStatus.Automatic, temp.App.GetCharacter(id).Sheet.Features!.Single(f => f.Name == "Slow Fall").Automation);
+        var fall = temp.App.PreviewDamage(new(id, 30, null, [new(slowFall.ContentId, "slowFall")], ResponseSource.Fall));
+        Assert.Empty(fall.Notes);
+        Assert.Equal(20, fall.Reduction);
+        Assert.Null(Assert.Single(V12Pack521.Revisions.Single(r => r.Name == "Slow Fall").Effects.OfType<ResponseEffect>()).ResourceId);
+    }
+
+    [Fact]
+    public void The_5_2_1_evasion_is_off_while_incapacitated()
+    {
+        using var temp = new TempApp();
+        var evasion = V12(420112, RulesFamilies.Srd521);
+        var id = temp.App.SaveCharacter(V12Monk52(7)).Character.Id;
+
+        var success = temp.App.PreviewDamage(new(id, 20, "fire", [new(evasion.ContentId, "evasionSuccess")], ResponseSource.Save, new DamageSave("dex", true)));
+        Assert.Empty(success.Notes);
+        Assert.Equal(0, success.Outcome.Adjusted);
+        var failure = temp.App.PreviewDamage(new(id, 20, "fire", [new(evasion.ContentId, "evasionFailure")], ResponseSource.Save, new DamageSave("dex", false)));
+        Assert.Equal(10, failure.Outcome.Adjusted);
+
+        Assert.Equal(AutomationStatus.Automatic, temp.App.GetCharacter(id).Sheet.Features!.Single(f => f.Name == "Evasion").Automation);
+        Assert.All(V12Pack521.Revisions.Single(r => r.Name == "Evasion").Effects.OfType<ResponseEffect>(), e => Assert.Equal("incapacitated", e.UnlessCondition));
+    }
+
+    [Fact]
+    public void The_5_2_1_deflect_attacks_reduces_physical_damage_only()
+    {
+        using var temp = new TempApp();
+        var deflect = V12(420106, RulesFamilies.Srd521);
+        var id = temp.App.SaveCharacter(V12Monk52(3)).Character.Id;
+
+        // Dex +3 and level 3 on a rolled 6: 12 less.
+        var preview = temp.App.PreviewDamage(new(id, 20, "slashing", [new(deflect.ContentId, "deflectAttacks", Rolled: 6)], ResponseSource.Attack));
+        Assert.Empty(preview.Notes);
+        Assert.Equal(8, preview.Outcome.Adjusted);
+
+        Assert.DoesNotContain(temp.App.PreviewDamage(new(id, 20, "fire", null, ResponseSource.Attack)).Offers, o => o.Response.ResponseId == "deflectAttacks");
+
+        var effects = V12Pack521.Revisions.Single(r => r.Name == "Deflect Attacks").Effects;
+        var redirect = Assert.Single(effects.OfType<RollEffect>());
+        Assert.Equal(("deflectAttacksRedirect", "focus", "1"), (redirect.RollId, redirect.ResourceId, redirect.Cost));
+        Assert.Null(Assert.Single(effects.OfType<ResponseEffect>()).ResourceId);
+        Assert.Equal(AutomationStatus.Automatic, temp.App.GetCharacter(id).Sheet.Features!.Single(f => f.Name == "Deflect Attacks").Automation);
+    }
+
+    [Fact]
+    public void Deflect_energy_supersedes_deflect_attacks_from_level_13()
+    {
+        using var temp = new TempApp();
+        var attacks = V12(420106, RulesFamilies.Srd521);
+        var energy = V12(420116, RulesFamilies.Srd521);
+
+        var supersedes = Assert.Single(V12Pack521.Revisions.Single(r => r.Name == "Deflect Energy").Effects.OfType<ResponseEffect>()).Supersedes;
+        Assert.Equal((attacks.ContentId, "deflectAttacks"), (supersedes!.Content, supersedes.ResponseId));
+
+        var twelve = temp.App.SaveCharacter(V12Monk52(12)).Character.Id;
+        var before = temp.App.PreviewDamage(new(twelve, 20, "slashing", null, ResponseSource.Attack));
+        Assert.Contains(before.Offers, o => o.Response.ResponseId == "deflectAttacks");
+        Assert.DoesNotContain(before.Offers, o => o.Response.ResponseId == "deflectEnergy");
+
+        var thirteen = temp.App.SaveCharacter(V12Monk52(13)).Character.Id;
+        var after = temp.App.PreviewDamage(new(thirteen, 20, "slashing", null, ResponseSource.Attack));
+        Assert.DoesNotContain(after.Offers, o => o.Response.ResponseId == "deflectAttacks");
+        Assert.Contains(after.Offers, o => o.Response.ContentId == energy.ContentId && o.Response.ResponseId == "deflectEnergy");
+        var fire = temp.App.PreviewDamage(new(thirteen, 20, "fire", null, ResponseSource.Attack));
+        Assert.Contains(fire.Offers, o => o.Response.ResponseId == "deflectEnergy");
+        Assert.Equal(AutomationStatus.Automatic, temp.App.GetCharacter(thirteen).Sheet.Features!.Single(f => f.Name == "Deflect Energy").Automation);
+    }
+
+    [Fact]
+    public void The_5_2_1_v12_Monk_keeps_every_unchanged_grant_and_the_Open_Hand()
+    {
+        var family = RulesFamilies.Srd521;
+        var old = MonkPack(family).Revisions.Single(r => r.Kind == ContentKind.Class);
+        var revised = V12Pack521.Revisions.Single(r => r.Kind == ContentKind.Class);
+        var changed = new[] { 420102L, 420104, 420106, 420108, 420112, 420116, 420121 };
+        IEnumerable<(string, ContentReference)> Grants(ContentRevision r) => r.Effects.OfType<GrantEffect>().Where(g => g.Content is not null).Select(g => (g.Id, g.Content!));
+        var oldGrants = Grants(old).ToDictionary(g => g.Item1, g => g.Item2);
+        foreach (var (id, content) in Grants(revised))
+            Assert.Equal(changed.Any(n => V12(n, family).ContentId == content.ContentId) ? V12(int.Parse(content.ContentId.ToString()[^6..]), family) : oldGrants[id], content);
+        Assert.Equal(oldGrants.Count, Grants(revised).Count());
+        Assert.Equal(changed.Length, V12Pack521.Revisions.Count(r => r.Kind == ContentKind.Feature));
+        Assert.Equal(changed.Length + 1, V12Pack521.Revisions.Count);
+    }
+
+    [Fact]
+    public void A_C2_3_5_2_1_Monk_is_offered_the_v12_class_and_the_effects_apply_after_the_update()
+    {
+        using var temp = new TempApp();
+        var family = RulesFamilies.Srd521;
+        var shield = Armor(family, "Shield");
+        var id = temp.App.SaveCharacter(Monk(family, 10, [new(shield, Equipped: true)])).Character.Id;
+        var sheet = temp.App.GetCharacter(id).Sheet;
+
+        AssertClean(sheet);
+        Assert.Equal(50, sheet.Field(FieldIds.Speed).Value); // the old speed bonus ignores the shield
+        Assert.Equal(AutomationStatus.Reference, sheet.Features!.Single(f => f.Name == "Evasion").Automation);
+
+        var offer = Assert.Single(temp.App.AvailableUpdates(id), o => o.Role == ReferenceRole.Class && o.Name == "Monk");
+        Assert.Equal((MonkClass(family), NewClass(family), true), (offer.From, offer.To, offer.Bundled));
+        Assert.Equal(MonkClass(family), temp.App.GetCharacter(id).Character.Classes[0].Class);
+
+        var updated = temp.App.ApplyUpdate(id, MonkClass(family), NewClass(family), confirm: true);
+        Assert.Equal(NewClass(family), updated.Character.Classes[0].Class);
+        AssertClean(updated.Sheet);
+        Assert.All(updated.Sheet.Choices!, c => Assert.True(c.Resolved, c.ChoiceId));
+        Assert.Equal(30, updated.Sheet.Field(FieldIds.Speed).Value); // the shield now switches the bonus off
+        Assert.Equal(AutomationStatus.Automatic, updated.Sheet.Features!.Single(f => f.Name == "Evasion").Automation);
+        Assert.Contains(updated.Sheet.Active!, r => r == OpenHand(family));
     }
 
     private static readonly string[] FixtureLevels =["1", "3", "5", "11", "17", "20"];
