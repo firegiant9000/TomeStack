@@ -1,0 +1,804 @@
+{
+  "packId": "srd-5.1-rogue-v12",
+  "formatVersion": 1,
+  "notice": "The Rogue of the System Reference Document 5.1 (CC-BY-4.0), pp. 39-41; new v12 revisions of Sneak Attack, Uncanny Dodge, Evasion, Reliable Talent and Elusive, with the class that grants them. Taken from SRD_CC_v5.1.pdf (SHA-256 2504d2a0abb0a4d491a939be4f17910a2dde0312570ab8d208080225ccf0a1f0). See docs/licensing/srd-pack-review.md.",
+  "sources": [
+    {
+      "id": "51500000-0000-4000-8000-000000000001",
+      "title": "System Reference Document 5.1",
+      "publisher": "SRD 5.1 (CC-BY-4.0)",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "editionVersion": "5.1",
+      "license": "CC-BY-4.0",
+      "redistributable": true,
+      "attribution": "This work includes material taken from the System Reference Document 5.1 (\"SRD 5.1\") by Wizards of the Coast LLC and available at https://dnd.wizards.com/resources/systems-reference-document. The SRD 5.1 is licensed under the Creative Commons Attribution 4.0 International License available at https://creativecommons.org/licenses/by/4.0/legalcode.",
+      "modificationNotice": "Modified: TomeStack adapted this material into structured data. Selected passages are excerpted or shortened, with line breaks and hyphenation repaired, and rules are encoded as machine-readable effects.",
+      "sha256": "2504d2a0abb0a4d491a939be4f17910a2dde0312570ab8d208080225ccf0a1f0"
+    }
+  ],
+  "revisions": [
+    {
+      "contentId": "51c00000-0000-4000-8000-000000410001",
+      "revisionId": "51e00000-0000-4000-8000-000012410001",
+      "schemaVersion": 12,
+      "kind": "class",
+      "name": "Rogue",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 39,
+          "end": 41
+        }
+      },
+      "status": "published",
+      "summary": "Hit Dice: 1d8 per rogue level. Hit Points at 1st Level: 8 + your Constitution modifier. Hit Points at Higher Levels: 1d8 (or 5) + your Constitution modifier per rogue level after 1st. Armor: Light armor. Weapons: Simple weapons, hand crossbows, longswords, rapiers, shortswords. Tools: Thieves’ tools. Saving Throws: Dexterity, Intelligence. Skills: Choose four from Acrobatics, Athletics, Deception, Insight, Intimidation, Investigation, Perception, Performance, Persuasion, Sleight of Hand, and Stealth. TomeStack: levels 1-20. Thieves’ tools proficiency is recorded by hand.",
+      "effects": [
+        {
+          "type": "hitDie",
+          "id": "rogue-hit-die",
+          "die": 8
+        },
+        {
+          "type": "scale",
+          "id": "rogue-sneak-attack-dice",
+          "scaleId": "sneakAttack",
+          "label": "Sneak Attack dice (d6)",
+          "values": [
+            1,
+            1,
+            2,
+            2,
+            3,
+            3,
+            4,
+            4,
+            5,
+            5,
+            6,
+            6,
+            7,
+            7,
+            8,
+            8,
+            9,
+            9,
+            10,
+            10
+          ]
+        },
+        {
+          "type": "grant",
+          "id": "rogue-save-dex",
+          "grant": "proficiency",
+          "target": "save.dex",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "rogue-save-int",
+          "grant": "proficiency",
+          "target": "save.int",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "choice",
+          "id": "rogue-skills",
+          "choiceId": "rogue-skills",
+          "count": 4,
+          "text": "Skills: Choose four from Acrobatics, Athletics, Deception, Insight, Intimidation, Investigation, Perception, Performance, Persuasion, Sleight of Hand, and Stealth.",
+          "options": [
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410801",
+              "revisionId": "51e00000-0000-4000-8000-000000410801"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410802",
+              "revisionId": "51e00000-0000-4000-8000-000000410802"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410803",
+              "revisionId": "51e00000-0000-4000-8000-000000410803"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410804",
+              "revisionId": "51e00000-0000-4000-8000-000000410804"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410805",
+              "revisionId": "51e00000-0000-4000-8000-000000410805"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410806",
+              "revisionId": "51e00000-0000-4000-8000-000000410806"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410807",
+              "revisionId": "51e00000-0000-4000-8000-000000410807"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410808",
+              "revisionId": "51e00000-0000-4000-8000-000000410808"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410809",
+              "revisionId": "51e00000-0000-4000-8000-000000410809"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410810",
+              "revisionId": "51e00000-0000-4000-8000-000000410810"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410811",
+              "revisionId": "51e00000-0000-4000-8000-000000410811"
+            }
+          ],
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "choice",
+          "id": "rogue-multiclass-skill",
+          "choiceId": "rogue-multiclass-skill",
+          "count": 1,
+          "text": "As a multiclass character, one skill of your choice from the rogue’s skill list.",
+          "options": [
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410801",
+              "revisionId": "51e00000-0000-4000-8000-000000410801"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410802",
+              "revisionId": "51e00000-0000-4000-8000-000000410802"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410803",
+              "revisionId": "51e00000-0000-4000-8000-000000410803"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410804",
+              "revisionId": "51e00000-0000-4000-8000-000000410804"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410805",
+              "revisionId": "51e00000-0000-4000-8000-000000410805"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410806",
+              "revisionId": "51e00000-0000-4000-8000-000000410806"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410807",
+              "revisionId": "51e00000-0000-4000-8000-000000410807"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410808",
+              "revisionId": "51e00000-0000-4000-8000-000000410808"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410809",
+              "revisionId": "51e00000-0000-4000-8000-000000410809"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410810",
+              "revisionId": "51e00000-0000-4000-8000-000000410810"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410811",
+              "revisionId": "51e00000-0000-4000-8000-000000410811"
+            }
+          ],
+          "onlyAs": "multiclass"
+        },
+        {
+          "type": "choice",
+          "id": "rogue-expertise",
+          "choiceId": "rogue-expertise",
+          "count": 2,
+          "level": 1,
+          "text": "Level 1: Expertise. Choose two of your skill proficiencies, or one of your skill proficiencies and your proficiency with thieves’ tools.",
+          "options": [
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410821",
+              "revisionId": "51e00000-0000-4000-8000-000000410821"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410822",
+              "revisionId": "51e00000-0000-4000-8000-000000410822"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410823",
+              "revisionId": "51e00000-0000-4000-8000-000000410823"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410824",
+              "revisionId": "51e00000-0000-4000-8000-000000410824"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410825",
+              "revisionId": "51e00000-0000-4000-8000-000000410825"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410826",
+              "revisionId": "51e00000-0000-4000-8000-000000410826"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410827",
+              "revisionId": "51e00000-0000-4000-8000-000000410827"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410828",
+              "revisionId": "51e00000-0000-4000-8000-000000410828"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410829",
+              "revisionId": "51e00000-0000-4000-8000-000000410829"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410830",
+              "revisionId": "51e00000-0000-4000-8000-000000410830"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410831",
+              "revisionId": "51e00000-0000-4000-8000-000000410831"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410832",
+              "revisionId": "51e00000-0000-4000-8000-000000410832"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410833",
+              "revisionId": "51e00000-0000-4000-8000-000000410833"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410834",
+              "revisionId": "51e00000-0000-4000-8000-000000410834"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410835",
+              "revisionId": "51e00000-0000-4000-8000-000000410835"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410836",
+              "revisionId": "51e00000-0000-4000-8000-000000410836"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410837",
+              "revisionId": "51e00000-0000-4000-8000-000000410837"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410838",
+              "revisionId": "51e00000-0000-4000-8000-000000410838"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410839",
+              "revisionId": "51e00000-0000-4000-8000-000000410839"
+            }
+          ]
+        },
+        {
+          "type": "choice",
+          "id": "rogue-expertise-6",
+          "choiceId": "rogue-expertise-6",
+          "count": 2,
+          "level": 6,
+          "text": "Level 6: Expertise. Choose two more of your proficiencies (in skills or with thieves’ tools) to gain this benefit.",
+          "options": [
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410821",
+              "revisionId": "51e00000-0000-4000-8000-000000410821"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410822",
+              "revisionId": "51e00000-0000-4000-8000-000000410822"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410823",
+              "revisionId": "51e00000-0000-4000-8000-000000410823"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410824",
+              "revisionId": "51e00000-0000-4000-8000-000000410824"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410825",
+              "revisionId": "51e00000-0000-4000-8000-000000410825"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410826",
+              "revisionId": "51e00000-0000-4000-8000-000000410826"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410827",
+              "revisionId": "51e00000-0000-4000-8000-000000410827"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410828",
+              "revisionId": "51e00000-0000-4000-8000-000000410828"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410829",
+              "revisionId": "51e00000-0000-4000-8000-000000410829"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410830",
+              "revisionId": "51e00000-0000-4000-8000-000000410830"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410831",
+              "revisionId": "51e00000-0000-4000-8000-000000410831"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410832",
+              "revisionId": "51e00000-0000-4000-8000-000000410832"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410833",
+              "revisionId": "51e00000-0000-4000-8000-000000410833"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410834",
+              "revisionId": "51e00000-0000-4000-8000-000000410834"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410835",
+              "revisionId": "51e00000-0000-4000-8000-000000410835"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410836",
+              "revisionId": "51e00000-0000-4000-8000-000000410836"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410837",
+              "revisionId": "51e00000-0000-4000-8000-000000410837"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410838",
+              "revisionId": "51e00000-0000-4000-8000-000000410838"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410839",
+              "revisionId": "51e00000-0000-4000-8000-000000410839"
+            }
+          ]
+        },
+        {
+          "type": "grant",
+          "id": "feature-expertise",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000410101",
+            "revisionId": "51e00000-0000-4000-8000-000000410101"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-sneak-attack",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000410102",
+            "revisionId": "51e00000-0000-4000-8000-000012410102"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-thieves-cant",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000410103",
+            "revisionId": "51e00000-0000-4000-8000-000000410103"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-cunning-action",
+          "grant": "content",
+          "level": 2,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000410105",
+            "revisionId": "51e00000-0000-4000-8000-000000410105"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement",
+          "grant": "content",
+          "level": 4,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000410107",
+            "revisionId": "51e00000-0000-4000-8000-000000410107"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-uncanny-dodge",
+          "grant": "content",
+          "level": 5,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000410109",
+            "revisionId": "51e00000-0000-4000-8000-000012410109"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-expertise-6",
+          "grant": "content",
+          "level": 6,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000410101",
+            "revisionId": "51e00000-0000-4000-8000-000000410101"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-evasion",
+          "grant": "content",
+          "level": 7,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000410110",
+            "revisionId": "51e00000-0000-4000-8000-000012410110"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement-8",
+          "grant": "content",
+          "level": 8,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000410107",
+            "revisionId": "51e00000-0000-4000-8000-000000410107"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement-10",
+          "grant": "content",
+          "level": 10,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000410107",
+            "revisionId": "51e00000-0000-4000-8000-000000410107"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-reliable-talent",
+          "grant": "content",
+          "level": 11,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000410111",
+            "revisionId": "51e00000-0000-4000-8000-000012410111"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement-12",
+          "grant": "content",
+          "level": 12,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000410107",
+            "revisionId": "51e00000-0000-4000-8000-000000410107"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-blindsense",
+          "grant": "content",
+          "level": 14,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000410112",
+            "revisionId": "51e00000-0000-4000-8000-000000410112"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-slippery-mind",
+          "grant": "content",
+          "level": 15,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000410114",
+            "revisionId": "51e00000-0000-4000-8000-000000410114"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement-16",
+          "grant": "content",
+          "level": 16,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000410107",
+            "revisionId": "51e00000-0000-4000-8000-000000410107"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-elusive",
+          "grant": "content",
+          "level": 18,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000410115",
+            "revisionId": "51e00000-0000-4000-8000-000012410115"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement-19",
+          "grant": "content",
+          "level": 19,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000410107",
+            "revisionId": "51e00000-0000-4000-8000-000000410107"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-stroke-of-luck",
+          "grant": "content",
+          "level": 20,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000410117",
+            "revisionId": "51e00000-0000-4000-8000-000000410117"
+          }
+        },
+        {
+          "type": "choice",
+          "id": "roguish-archetype",
+          "choiceId": "roguish-archetype",
+          "count": 1,
+          "level": 3,
+          "text": "Roguish Archetype. At 3rd level, you choose an archetype that you emulate in the exercise of your rogue abilities, such as Thief. Your archetype choice grants you features at 3rd level and then again at 9th, 13th, and 17th level. (The SRD 5.1 includes the Thief.)",
+          "options": [
+            {
+              "contentId": "51c00000-0000-4000-8000-000000410002",
+              "revisionId": "51e00000-0000-4000-8000-000000410002"
+            }
+          ]
+        },
+        {
+          "type": "grant",
+          "id": "rogue-weapon-simple",
+          "grant": "proficiency",
+          "target": "weapon.simple",
+          "onlyAs": "startingClass",
+          "text": "Weapons: Simple weapons, hand crossbows, longswords, rapiers, shortswords."
+        },
+        {
+          "type": "grant",
+          "id": "rogue-weapon-hand-crossbow",
+          "grant": "proficiency",
+          "target": "weapon.hand-crossbow",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "rogue-weapon-longsword",
+          "grant": "proficiency",
+          "target": "weapon.longsword",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "rogue-weapon-rapier",
+          "grant": "proficiency",
+          "target": "weapon.rapier",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "rogue-weapon-shortsword",
+          "grant": "proficiency",
+          "target": "weapon.shortsword",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "rogue-armor-light",
+          "grant": "proficiency",
+          "target": "armor.light",
+          "text": "Armor: Light armor."
+        },
+        {
+          "type": "restriction",
+          "id": "rogue-multiclass-dex",
+          "field": "ability.dex.score",
+          "minimum": 13,
+          "multiclass": true,
+          "text": "Multiclassing prerequisite: Dexterity 13. Multiclassing proficiencies gained: light armor, one skill from the class’s skill list, thieves’ tools (SRD 5.1 pp. 56-57)."
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000410102",
+      "revisionId": "51e00000-0000-4000-8000-000012410102",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Sneak Attack",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 39
+        }
+      },
+      "status": "published",
+      "summary": "Beginning at 1st level, you know how to strike subtly and exploit a foe’s distraction. Once per turn, you can deal an extra 1d6 damage to one creature you hit with an attack if you have advantage on the attack roll. The attack must use a finesse or a ranged weapon.\n\nYou don’t need advantage on the attack roll if another enemy of the target is within 5 feet of it, that enemy isn’t incapacitated, and you don’t have disadvantage on the attack roll.\n\nThe amount of the extra damage increases as you gain levels in this class, as shown in the Sneak Attack column of the Rogue table.\n\nTomeStack: Sneak Attack is offered as an extra rider on weapon attack damage rolls, once per turn, with the dice from the Sneak Attack column. Whether the weapon is finesse or ranged, and whether you have advantage or an ally is next to the target, is by hand.",
+      "effects": [
+        {
+          "type": "attackRider",
+          "id": "sneak-attack",
+          "tags": [
+            "weapon"
+          ],
+          "oncePerTurn": true,
+          "automation": "assisted",
+          "scaledDice": {
+            "count": "SCALE.sneakAttack",
+            "die": "6"
+          },
+          "text": "Only with a finesse or ranged weapon, and only with advantage or an ally of the target within 5 feet (by hand)."
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000410109",
+      "revisionId": "51e00000-0000-4000-8000-000012410109",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Uncanny Dodge",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 40
+        }
+      },
+      "status": "published",
+      "summary": "Starting at 5th level, when an attacker that you can see hits you with an attack, you can use your reaction to halve the attack’s damage against you.\n\nTomeStack: the halving is offered in the damage panel for a hit from an attack; that you can see the attacker is by hand.",
+      "effects": [
+        {
+          "type": "resource",
+          "id": "uncanny-dodge-reaction",
+          "resourceId": "uncannyDodgeReaction",
+          "label": "Reaction",
+          "maximum": "1",
+          "activation": "reaction",
+          "allowance": true
+        },
+        {
+          "type": "upkeep",
+          "id": "uncanny-dodge-refresh",
+          "at": "turnStart",
+          "resourceId": "uncannyDodgeReaction",
+          "change": "regain",
+          "amount": "all"
+        },
+        {
+          "type": "response",
+          "id": "uncanny-dodge",
+          "responseId": "uncannyDodge",
+          "label": "Uncanny Dodge",
+          "phase": "damageReduction",
+          "trigger": {
+            "from": "attack"
+          },
+          "share": "half",
+          "resourceId": "uncannyDodgeReaction",
+          "cost": "1",
+          "text": "Only an attacker you can see (by hand)."
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000410110",
+      "revisionId": "51e00000-0000-4000-8000-000012410110",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Evasion",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 40
+        }
+      },
+      "status": "published",
+      "summary": "Beginning at 7th level, you can nimbly dodge out of the way of certain area effects, such as a red dragon’s fiery breath or an ice storm spell. When you are subjected to an effect that allows you to make a Dexterity saving throw to take only half damage, you instead take no damage if you succeed on the saving throw, and only half damage if you fail.",
+      "effects": [
+        {
+          "type": "response",
+          "id": "evasion-success",
+          "responseId": "evasionSuccess",
+          "label": "Evasion",
+          "phase": "damageReduction",
+          "trigger": {
+            "from": "save",
+            "ability": "dex",
+            "result": "success"
+          },
+          "share": "all",
+          "automatic": true
+        },
+        {
+          "type": "response",
+          "id": "evasion-failure",
+          "responseId": "evasionFailure",
+          "label": "Evasion",
+          "phase": "damageReduction",
+          "trigger": {
+            "from": "save",
+            "ability": "dex",
+            "result": "failure"
+          },
+          "share": "half",
+          "automatic": true
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000410111",
+      "revisionId": "51e00000-0000-4000-8000-000012410111",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Reliable Talent",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 40
+        }
+      },
+      "status": "published",
+      "summary": "By 11th level, you have refined your chosen skills until they approach perfection. Whenever you make an ability check that lets you add your proficiency bonus, you can treat a d20 roll of 9 or lower as a 10.",
+      "effects": [
+        {
+          "type": "rollFloor",
+          "id": "reliable-talent",
+          "target": "check",
+          "face": 10,
+          "proficient": true
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000410115",
+      "revisionId": "51e00000-0000-4000-8000-000012410115",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Elusive",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 40
+        }
+      },
+      "status": "published",
+      "summary": "Beginning at 18th level, you are so evasive that attackers rarely gain the upper hand against you. No attack roll has advantage against you while you aren’t incapacitated.",
+      "effects": [
+        {
+          "type": "rollMode",
+          "id": "elusive",
+          "target": "attacksAgainst",
+          "mode": "advantage",
+          "prevent": true,
+          "unlessCondition": "incapacitated"
+        }
+      ]
+    }
+  ]
+}
