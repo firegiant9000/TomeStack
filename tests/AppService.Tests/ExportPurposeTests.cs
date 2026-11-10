@@ -108,28 +108,38 @@ public class ExportPurposeTests
     private static IEnumerable<Diagnostic> NewerBuildWarnings(ExportPreview preview) => (preview.Warnings ?? []).Where(w => w.Code == "package.needs-newer-build");
 
     [Fact]
-    public void Export_preview_warns_once_when_a_pinned_revision_is_at_schema_v11()
+    public void Export_preview_warns_once_when_a_pinned_revision_is_at_schema_v12()
     {
         using var origin = new TempApp();
-        var id = SaveMixedCharacter(origin, homebrewSchemaVersion: 11);
+        var id = SaveMixedCharacter(origin, homebrewSchemaVersion: 12);
 
         var backup = NewerBuildWarnings(origin.App.PreviewExport([id], ExportPurpose.Backup));
-        Assert.Equal($"Opening this needs TomeStack 0.7.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Homebrew Quick Draw' is content at schema 11. Older versions refuse the file.", Assert.Single(backup).Message);
-        // A share leaves the non-redistributable homebrew out, so nothing at v11 would be written.
+        Assert.Equal($"Opening this needs TomeStack 0.8.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Homebrew Quick Draw' is content at schema 12. Older versions refuse the file.", Assert.Single(backup).Message);
+        // A share leaves the non-redistributable homebrew out, so nothing at v12 would be written.
         Assert.Empty(NewerBuildWarnings(origin.App.PreviewExport([id], ExportPurpose.Share)));
     }
 
     [Fact]
-    public void Export_preview_warns_once_with_the_v12_text_when_a_pinned_draft_revision_is_at_schema_v12()
+    public void Export_preview_does_not_warn_when_a_pinned_revision_is_at_the_previous_minors_schema_v11()
     {
-        // A character package carries drafts (PackageService.Plan includes them), so a v12 draft triggers the v12 warning (R26).
+        using var origin = new TempApp();
+        var id = SaveMixedCharacter(origin, homebrewSchemaVersion: 11);
+
+        var preview = origin.App.PreviewExport([id], ExportPurpose.Backup);
+        Assert.Equal("0.7.0", preview.OpensIn);
+        Assert.Empty(NewerBuildWarnings(preview));
+    }
+
+    [Fact]
+    public void Export_preview_warns_once_when_a_pinned_draft_revision_is_at_schema_v12()
+    {
+        // A character package carries drafts (PackageService.Plan includes them), so a v12 draft triggers the warning (R26).
         using var origin = new TempApp();
         var id = SaveMixedCharacter(origin, homebrewSchemaVersion: 12, homebrewStatus: RevisionStatus.Draft);
 
         var backup = NewerBuildWarnings(origin.App.PreviewExport([id], ExportPurpose.Backup));
-        Assert.Equal("Opening this needs a TomeStack version that reads content schema 12 or later: it holds content that older versions refuse.", Assert.Single(backup).Message);
-        // No released row opens content v12, so the ladder (D83) names no release (R22).
-        Assert.Null(origin.App.PreviewExport([id], ExportPurpose.Backup).OpensIn);
+        Assert.Equal($"Opening this needs TomeStack 0.8.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Homebrew Quick Draw' is content at schema 12. Older versions refuse the file.", Assert.Single(backup).Message);
+        Assert.Equal("0.8.0", origin.App.PreviewExport([id], ExportPurpose.Backup).OpensIn);
     }
 
     [Fact]
@@ -145,12 +155,18 @@ public class ExportPurposeTests
 
         var fixture = TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json");
         var v10 = origin.App.SaveCharacter(fixture with { Id = Guid.NewGuid(), Name = "Encounter Hero", Play = (fixture.Play ?? new PlayState()) with { Encounter = new EncounterState(0) } }).Character.Id;
-        var newer = origin.App.PreviewExport([v10], ExportPurpose.Backup);
-        Assert.Equal("0.7.0", newer.OpensIn);
+        var previous = origin.App.PreviewExport([v10], ExportPurpose.Backup);
+        Assert.Equal("0.7.0", previous.OpensIn); // the previous minor: no causes, no warning
+        Assert.Empty(previous.OpensInCauses!);
+        Assert.Empty(NewerBuildWarnings(previous));
+
+        using var other = new TempApp();
+        var v12 = SaveMixedCharacter(other, homebrewSchemaVersion: 12);
+        var newer = other.App.PreviewExport([v12], ExportPurpose.Backup);
+        Assert.Equal("0.8.0", newer.OpensIn);
         var cause = Assert.Single(newer.OpensInCauses!);
-        Assert.Equal(("character", 10), (cause.Kind, cause.SchemaVersion));
-        Assert.Equal($"Opening this needs TomeStack 0.7.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Encounter Hero' is a character at schema 10. Older versions refuse the file.", Assert.Single(NewerBuildWarnings(newer)).Message);
-        Assert.Equal("'Encounter Hero' is a character at schema 10", cause.Message);
+        Assert.Equal(("content", 12), (cause.Kind, cause.SchemaVersion));
+        Assert.Equal("'Homebrew Quick Draw' is content at schema 12", cause.Message);
     }
 
     [Fact]
@@ -187,8 +203,8 @@ public class ExportPurposeTests
             Assert.Null(preview.OpensIn);
             var cause = Assert.Single(preview.OpensInCauses!);
             Assert.Equal(("content", stance.RevisionId, "SRD 5.1"), (cause.Kind, cause.Id, cause.BundledPack));
-            Assert.Equal($"'{character.Name}' uses 'Compat Tide Stance' from the bundled SRD 5.1 pack, which TomeStack 0.6.0 does not have", cause.Message);
-            Assert.Equal("Opening this needs a TomeStack version newer than 0.7.0: it holds bundled SRD content that released versions do not have.", Assert.Single(NewerBuildWarnings(preview)).Message);
+            Assert.Equal($"'{character.Name}' uses 'Compat Tide Stance' from the bundled SRD 5.1 pack, which TomeStack 0.7.0 does not have", cause.Message);
+            Assert.Equal("Opening this needs a TomeStack version newer than 0.8.0: it holds bundled SRD content that released versions do not have.", Assert.Single(NewerBuildWarnings(preview)).Message);
         }
     }
 
@@ -216,12 +232,18 @@ public class ExportPurposeTests
 
         using var origin = new TempApp();
         var fixture = TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json");
-        var saved = origin.App.SaveCharacter(fixture with { Play = (fixture.Play ?? new PlayState()) with { Encounter = new EncounterState(0) } }).Character;
-        var preview = origin.App.PreviewLibraryBackup();
-        Assert.Equal("0.7.0", preview.OpensIn);
+        origin.App.SaveCharacter(fixture with { Play = (fixture.Play ?? new PlayState()) with { Encounter = new EncounterState(0) } });
+        var previous = origin.App.PreviewLibraryBackup();
+        Assert.Equal("0.7.0", previous.OpensIn); // the previous minor: no causes
+        Assert.Empty(previous.OpensInCauses!);
+
+        using var other = new TempApp();
+        SaveMixedCharacter(other, homebrewSchemaVersion: 12);
+        var preview = other.App.PreviewLibraryBackup();
+        Assert.Equal("0.8.0", preview.OpensIn);
         var cause = Assert.Single(preview.OpensInCauses!);
-        Assert.Equal(("character", 10), (cause.Kind, cause.SchemaVersion));
-        Assert.Equal($"'{saved.Name}' is a character at schema 10", cause.Message);
+        Assert.Equal(("content", 12), (cause.Kind, cause.SchemaVersion));
+        Assert.Equal("'Homebrew Quick Draw' is content at schema 12", cause.Message);
     }
 
     [Fact]
@@ -235,15 +257,15 @@ public class ExportPurposeTests
     }
 
     [Fact]
-    public void Export_preview_warns_for_a_character_mid_encounter_even_with_only_old_content()
+    public void Export_preview_does_not_warn_for_a_character_mid_encounter_the_previous_minor_opens()
     {
         using var origin = new TempApp();
         var character = TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json");
         var id = origin.App.SaveCharacter(character with { Play = (character.Play ?? new PlayState()) with { Encounter = new EncounterState(0) } }).Character.Id;
         Assert.Equal(Character.EncounterSchemaVersion, origin.App.Store.FindCharacter(id)!.SchemaVersion);
 
-        Assert.Single(NewerBuildWarnings(origin.App.PreviewExport([id], ExportPurpose.Share)));
-        Assert.Single(NewerBuildWarnings(origin.App.PreviewExport([id], ExportPurpose.Backup)));
+        Assert.Empty(NewerBuildWarnings(origin.App.PreviewExport([id], ExportPurpose.Share)));
+        Assert.Empty(NewerBuildWarnings(origin.App.PreviewExport([id], ExportPurpose.Backup)));
     }
 
     [Fact]

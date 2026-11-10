@@ -12,7 +12,7 @@ body:
     attributes:
       label: TomeStack version
       description: Settings > About shows it.
-      placeholder: "0.7.1"
+      placeholder: "0.8.0"
     validations:
       required: true
   - type: input
