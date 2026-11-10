@@ -361,7 +361,7 @@ Rules core: `RollModeEffect`, `GrantEffect.WhileToggle` and `FieldIds.FlySpeed` 
 | modifier / restriction | `target` | `speed.fly` | A fly speed in feet. The sheet always has the field (0 when nothing gives a fly speed) |
 | `grant` (resistance, immunity, vulnerability) | `whileToggle` | `{ contentId?, toggleId }` | The defence applies only while that toggle is on (it may be another entry's). Read on the three damage defence kinds only; the v11 schema refuses it on any other grant |
 
-Below v11 the new keys stay extension data, byte for byte, and do nothing. A `rollMode` stays an unknown effect below v11 (a build without slice 6 cannot type it), a `mode` that names no member of the list leaves the effect unreadable and a v11 revision reports `validate.effect-malformed`, and a revision that uses none of them keeps its version, bytes and hash. A modifier or restriction on `speed.fly` makes a revision need v11; a stored revision below v11 that carries one has it skipped by the calculation (see below). **"+1, maximum 20" is the global ability-score cap** (the existing rule, ruling C1): a bonus to an ability score stops at 20 whatever the content says, a score already above 20 is neither raised nor lowered by a bonus, and a penalty or a set effect is not capped. There is therefore no `upTo` field and no per-effect cap.
+Below v11 the new keys stay extension data, byte for byte, and do nothing. A `rollMode` stays an unknown effect below v11 (a build without slice 6 cannot type it), a `mode` that names no member of the list leaves the effect unreadable and a v11 revision reports `validate.effect-malformed`, and a revision that uses none of them keeps its version, bytes and hash. A modifier or restriction on `speed.fly` makes a revision need v11; a stored revision below v11 that carries one has it skipped by the calculation (see below). **"+1, maximum 20" is the global ability-score cap** (the existing rule, ruling C1): up to content v11 a bonus to an ability score stops at 20 whatever the content says, a score already above 20 is neither raised nor lowered by a bonus, and a penalty or a set effect is not capped. There is therefore no `upTo` field and no per-effect cap up to v11. From content v12 an increase may carry `cap` (G5, amending ruling C1): see [Content v12 (G5): ability-score cap](#content-v12-g5-ability-score-cap).
 
 ### Validation (added)
 
@@ -725,6 +725,92 @@ Decided in [ADR-022](../decisions/ADR-022-content-v12.md#slice-g9-roll-floor) (L
 
 **Stays by hand:** floors on saves, attacks and tool checks, and on rolls made outside the app.
 
+## Content v12 (G10): check ability, climb and swim speed
+
+Decided in [ADR-022](../decisions/ADR-022-content-v12.md#slice-g10-check-ability-climb-and-swim-speed) (LIVING_SPECS D90). A new effect kind, `checkAbility`, two new speed fields and a `SPEED` formula identifier, content schema v12 only; a revision without them keeps its version and bytes. A v11 revision that holds a `checkAbility` keeps it as unknown data and ignores it.
+
+| Member | Meaning |
+| --- | --- |
+| `target` | `skill.<s>` (a known skill) or `ability.<x>.check` (every skill printed with that ability: Strength, Dexterity, Intelligence, Wisdom or Charisma). Never a bare ability check, initiative or a save (`validate.check-ability-target`). |
+| `ability` | The ability the skill may use. It must differ from the printed ability of every skill the target reaches (`validate.check-ability-ability`). |
+
+**Sheet.** The skill picks its ability by the roll mode first (advantage, then normal, then disadvantage, from the active roll modes), then by the strictly higher modifier; a tie goes to the printed ability, then content order. So a Strength-keyed advantage (Rage) can keep Strength Athletics over a higher Dexterity. Known limit: roll floors are not compared when choosing. Exports (SheetExport, Foundry) keep the printed ability. When a substitute wins, "Why?" reads "{Skill} starts at the {Ability} modifier ({source} lets you use {Ability} instead of {Printed})", and passive scores follow. A substitute that cannot win changes nothing. Roll modes and roll floors reach the skill by the ability it ended up using.
+
+**Climb and swim speed.** `speed.climb` and `speed.swim` (feet, base 0) show in the Combat group and in the summary after Fly ("Climb 30 ft.", "Swim 30 ft."), hidden at 0 unless overridden. A speed modifier on climb, swim or fly may read `SPEED`, your walking speed (`SPEED / 2`); anywhere else `SPEED` is an unknown identifier, and it needs v12.
+
+**Studio.** The rule "Use another ability for a skill" ("Add check ability") has a "Skill" choice ("Every Strength skill" and so on, then each skill) and a "Uses instead" choice. It is always on, so Automation and Timing are hidden. The modifier editor hints: "You can use SPEED (your walking speed) in a climb, swim or fly speed modifier, such as SPEED / 2." Constitution is not offered, as no skill uses it.
+
+**Validation** (errors): `validate.check-ability-target`, `validate.check-ability-ability`, `validate.check-ability-automation`; below v12 `validate.requires-v12` applies to the kind, the two fields and `SPEED`. The capability registry lists `checkAbility` as Automatic ("Applied to the skill's value on the sheet").
+
+**Older versions.** For an older TomeStack ([package-format.md](package-format.md#save-for-an-older-tomestack-d85)) a `checkAbility` is dropped whole and listed (`below.effect-unsupported`), and every climb or swim modifier is dropped and listed (`below.unknown-target`). A climb or swim restriction stops the export (`below.restriction-lifted`). A fly-speed modifier reading `SPEED` is dropped when it is a `bonus` or `replace` that cannot be negative, and stops the export when it is a `set` or might be negative (`below.value-formula`).
+
+**Stays by hand:** substitutions that apply only in a situation ("while climbing"), jump distance, and saves, initiative and bare ability checks using another ability.
+
+## Content v12 (G11): condition immunity
+
+Decided in [ADR-022](../decisions/ADR-022-content-v12.md#slice-g11-condition-immunity) (LIVING_SPECS D91). A new grant kind, `conditionImmunity`, with a `condition` member, content schema v12 only; a revision without it keeps its version and bytes. A v11 revision that holds one keeps it as unknown data and ignores it.
+
+| Member | Meaning |
+| --- | --- |
+| `condition` | One of the 14 condition keys (`blinded` ... `unconscious`), required on this kind and refused on any other (`validate.grant-condition`, `validate.grant-condition-kind`). |
+| `whileToggle`, `level`, `onlyAs` | As on a damage defence. The grant takes no `target`, `content` or `damageType` (`validate.grant-condition-fields`). |
+
+**Calculated when** `automation` is `automatic` and `timing` is `always`, and while its `whileToggle` (the same or another content's) is on. A manual or timed one is not applied and its feature shows Assisted.
+
+**Sheet.** The Defences panel lists "Condition immunities" below the damage defences, one line per condition ("Charmed (source names)"); the list is absent when there are none.
+
+**Play.** The conditions legend reads "Conditions (reminders; a condition you are immune to has no effect)", and an immune condition's chip reads "{Label} (immune)". You can still tick it: the condition is stored, but it is not held for the G6 response and G7 roll-mode `unlessCondition` gates, and an immune condition does not imply incapacitated. Stored conditions never change because of an immunity, so switching the toggle off shows the condition held again. Print and the summary list the stored conditions.
+
+**Studio.** "Add condition immunity" (row "Condition immunity") has a "Condition" choice of the 14 labels and the "Only while" choice (shown when a toggle is available). Automation is hidden, as for every grant, so a manual or timed immunity comes only from JSON or import and shows as Assisted.
+
+**Validation** (errors): `validate.grant-condition`, `validate.grant-condition-kind`, `validate.grant-condition-fields`; below v12 `validate.requires-v12` applies to the kind and the member. The capability registry grant row reads "Proficiencies, expertise, content, damage defences and condition immunities calculate".
+
+**Older versions.** For an older TomeStack ([package-format.md](package-format.md#save-for-an-older-tomestack-d85)) the grant is dropped whole and listed (`below.effect-unsupported`: "'{name}': its immunity to the {condition} condition; the feature stays as text."). Nothing blocks the export.
+
+**Stays by hand:** immunity to exhaustion or disease, ending a held condition (such as when a mode starts), and the attacks-against lists.
+
+## Content v12 (G5): ability-score cap
+
+Decided in [ADR-022](../decisions/ADR-022-content-v12.md#slice-g5-ability-score-cap) (LIVING_SPECS D92). A new optional member, `cap`, on a modifier, content schema v12 only; a revision without it keeps its version and bytes. A v11 revision that holds one keeps it as unknown data and ignores it. The usual rule (an increase cannot raise a score above 20, [rules-family-policy.md](rules-family-policy.md)) stays; `cap` lets one increase go higher.
+
+| Member | Meaning |
+| --- | --- |
+| `cap` | A whole number from 21 to 30. Allowed only on a `bonus` to an `ability.<x>.score` target, never inside an item mod, and not with a literal negative `value` (`validate.modifier-cap`, `validate.modifier-cap-range`). |
+
+**Combining.** Increases apply lowest ceiling first (`cap`, or 20 with none), so content order never matters: 18 with a plain +2 and a +4 capped at 25 gives 20, then 24. Each increase stops at the larger of its ceiling and the score so far. Penalties are never capped and apply last; `set` overwrites and is uncapped. In a highest-in-group set the group keeps its highest amount; equal amounts prefer the higher cap, and a larger plain bonus still beats a smaller capped one. The calculator ignores a `cap` outside 21 to 30 and any `cap` on an item mod's modifier.
+
+**Sheet.** The score shows its total; "Why?" shows "Bonus from {name} (it can raise the score up to {cap})" for a capped increase that was not stopped, and "Bonus from {name}, capped: increases cannot raise an ability score above {ceiling} (+{amount} would give {next})" for one that was. With no `cap` the lines are as before.
+
+**Studio.** A "Highest the score can reach" number field (hint "Leave empty for the usual 20; up to 30.") on an "Add (bonus)" modifier whose target is an ability score. Empty means no cap; it is hidden inside item mods.
+
+**Import.** For a sheet score above 20 that content increases reach, the importer first tries the base the increases would give and keeps it when the result matches the sheet; otherwise it keeps the sheet score as the base, as before. When a cap is only partly used it tries each base from there up to the score and takes the first that matches; if the next base matches too, it adds the note "reaches a content maximum of N, so its base may be higher than proposed".
+
+**Validation** (errors): `validate.modifier-cap`, `validate.modifier-cap-range`; below v12 `validate.requires-v12` ("an ability-score cap"); a `cap` in an item mod, or on a top-level modifier of an item-mod revision, is refused (`validate.item-mod-modifier`, `validate.modifier-cap`).
+
+**Older versions.** For an older TomeStack ([package-format.md](package-format.md#save-for-an-older-tomestack-d85)) the `cap` key is dropped and the bonus kept (`below.v12-key`: "'{name}': that the increase can raise the score above 20 (up to {cap}); the older version stops it at 20."). Nothing blocks the export.
+
+**Stays by hand:** raising the maximum for every source, and caps on `set` or other fields.
+
+## Content v12 (G4): armor and shield gates
+
+Decided in [ADR-022](../decisions/ADR-022-content-v12.md#slice-g4-armor-and-shield-gates) (LIVING_SPECS D93). A new optional member, `notWearing`, on a modifier, content schema v12 only; a revision without it keeps its version and bytes. A v11 revision that holds one keeps it as unknown data and ignores it. It makes the modifier apply only while none of the listed gear is worn, the opposite of `whileArmored`.
+
+| Member | Meaning |
+| --- | --- |
+| `notWearing` | A list of `armor`, `heavyArmor` and `shield`, each once. `armor` means any body armor is counted; `heavyArmor` means heavy body armor is counted; `shield` means a shield is counted, even an untrained one that gives no Armor Class. Not both `armor` and `heavyArmor` (armor already covers it), and not with `whileArmored: true` and `armor` (it could never apply); `whileArmored: true` with `heavyArmor` is fine. |
+
+**What counts as worn.** Exactly what the Armor Class calculation already counts: automatic, always-on armor from active content (equipped items, pins and features). Armor you carry but have not equipped does not count. Every other member (`automation`, `timing`, `toggle`, `stacking`, `whileArmored`, `cap`) combines with the gate.
+
+**Sheet.** The gated value is simply absent while the gear is worn; "Why?" shows the skipped line with its reason: "it applies only while no armor is worn, and {item} is worn", "it applies only while no heavy armor is worn, and {item} is worn" or "it applies only while no shield is used, and {item} is used". Content without `notWearing` calculates as before.
+
+**Studio.** A fieldset "Only while not wearing" with the boxes "Armor", "Heavy armor" and "Shield" (hint "Leave all unticked for a rule that applies whatever is worn."). Ticking "Armor" clears and disables "Heavy armor"; ticking none leaves the rule ungated. It is hidden inside item mods and on pool-maximum targets.
+
+**Validation** (errors): `validate.not-wearing` (an empty list, an unknown or repeated value, both `armor` and `heavyArmor`, a pool-maximum `resource.*` target, or a top-level modifier of an item-mod revision), `validate.not-wearing-armored`; below v12 `validate.requires-v12` ("an armor or shield gate"); a gate inside an item mod is `validate.item-mod-modifier`. The calculator ignores the gate on any item mod's modifier and, in an unvalidated draft, treats a pool-maximum gate as assisted (Manual).
+
+**Older versions.** A gated modifier stops an export for an older TomeStack ([package-format.md](package-format.md#save-for-an-older-tomestack-d85)) with `below.equipment-gate` ("'{name}': it applies only while {gear} is not worn; the older version would apply it whatever is worn."), shown in a save as `package.target-blocked`. Dropping the key would apply the rule while armored, so it is blocked, like a restriction in [G10](#content-v12-g10-check-ability-climb-and-swim-speed) (`below.restriction-lifted`).
+
+**Stays by hand:** gates on roll modes, attacks, riders, responses and grants; a positive "while using a shield" gate. The bundled Unarmored notes are re-authored with this in C2-6.
+
 ## Not yet
 
 - Damage responses: the studio's outcome roll picker offers only the same entry's rolls. A roll from another entry can be stored in content but not chosen in the studio yet.
@@ -736,5 +822,5 @@ Decided in [ADR-022](../decisions/ADR-022-content-v12.md#slice-g9-roll-floor) (L
 - Rolling for other creatures and a DM view (out of scope, ADR-018). Initiative itself is rolled; a mode on it is content v12 (G7).
 - A general overlay-to-overlay exclusion.
 - A toggle that gives back what it spent when turned off.
-- Roll modes: a per-effect cap on an ability bonus (`upTo`; the global cap of 20 applies), a mode that applies automatically against a condition (an `against` mode is a note the player confirms), and modes on death saves. The concentration save applies the `save.con` automatic modes and names them on its button; it does not send the d20 picker's choice. An automatic advantage on Perception (or on Wisdom checks) does not add +5 to passive Perception.
+- Roll modes: a mode that applies automatically against a condition (an `against` mode is a note the player confirms), and modes on death saves. The concentration save applies the `save.con` automatic modes and names them on its button; it does not send the d20 picker's choice. An automatic advantage on Perception (or on Wisdom checks) does not add +5 to passive Perception.
 - `whileToggle` on a grant that is not one of the three damage defences (the schema refuses it there, and the calculation ignores it).

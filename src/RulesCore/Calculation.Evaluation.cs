@@ -48,13 +48,18 @@ public static partial class CharacterCalculator
 
         // Ability scores: increases first (capped at 20 below), then penalties, so the result does not depend on the
         // order of the content (19 + 2 - 2 is 18 either way). A stable sort keeps content order within each group.
+        // Content v12: an increase may carry its own cap (ceiling). Increases sort lowest ceiling first, so a plain +2 and a +4 capped at 25
+        // give the same score in either content order. Below schema 12 the cap is extension data and the ceiling stays 20.
+        static int Ceiling((Modifier Modifier, int Amount, List<TraceInput> Inputs) b) => AbilityCeiling(b.Modifier);
+        var scoreField = IsAbilityScoreField(field);
         var bonuses = evaluated.Where(e => e.Modifier.Effect.Operation == ModifierOperation.Bonus)
-            .OrderBy(e => IsAbilityScoreField(field) && e.Amount < 0)
+            .OrderBy(e => scoreField && e.Amount < 0)
+            .ThenBy(e => scoreField && e.Amount > 0 ? Ceiling(e) : 0)
             .ToList();
         var winners = bonuses
             .Where(b => b.Modifier.Effect.Stacking == StackingRule.HighestInGroup)
             .GroupBy(b => b.Modifier.Effect.StackGroup, StringComparer.Ordinal)
-            .Select(g => g.MaxBy(b => b.Amount).Modifier)
+            .Select(g => g.MaxBy(b => (b.Amount, Ceiling(b))).Modifier) // equal amounts: the higher ceiling wins
             .ToHashSet();
         foreach (var bonus in bonuses)
         {
@@ -79,16 +84,21 @@ public static partial class CharacterCalculator
             }
             // SRD (both families, owner decision 2026-09-27): increases cannot raise an ability score above 20. A bonus
             // stops at 20 (or at the score it started from, if that was already higher); set effects and overrides may
-            // exceed it. A higher content-declared maximum (for example 24) is not modeled yet.
-            if (IsAbilityScoreField(field) && bonus.Amount > 0 && next > Math.Max(AbilityScoreIncreaseCap, value))
+            // exceed it. At schema 12 an increase may declare its own higher ceiling (21 to 30), see AbilityCeiling.
+            var ceiling = Ceiling(bonus);
+            if (scoreField && bonus.Amount > 0 && next > Math.Max(ceiling, value))
             {
-                var capped = Math.Max(AbilityScoreIncreaseCap, value);
-                steps.Add(new(field, "add", $"Bonus from {Name(bonus.Modifier)}, capped: increases cannot raise an ability score above {AbilityScoreIncreaseCap} (+{bonus.Amount} would give {next})", capped - value, capped, Origin(bonus.Modifier), Inputs(bonus.Inputs)));
+                var capped = Math.Max(ceiling, value);
+                steps.Add(new(field, "add", $"Bonus from {Name(bonus.Modifier)}, capped: increases cannot raise an ability score above {ceiling} (+{bonus.Amount} would give {next})", capped - value, capped, Origin(bonus.Modifier), Inputs(bonus.Inputs)));
                 value = capped;
                 continue;
             }
             value = (int)next;
-            steps.Add(new(field, "add", bonus.Modifier.ModBonus && !string.IsNullOrEmpty(bonus.Modifier.Effect.Text) ? bonus.Modifier.Effect.Text : $"Bonus from {Name(bonus.Modifier)}", bonus.Amount, value, Origin(bonus.Modifier), Inputs(bonus.Inputs)));
+            var hasOwnCap = scoreField && bonus.Amount > 0 && ceiling != AbilityScoreIncreaseCap;
+            steps.Add(new(field, "add",
+                hasOwnCap ? $"Bonus from {Name(bonus.Modifier)} (it can raise the score up to {ceiling})"
+                : bonus.Modifier.ModBonus && !string.IsNullOrEmpty(bonus.Modifier.Effect.Text) ? bonus.Modifier.Effect.Text : $"Bonus from {Name(bonus.Modifier)}",
+                bonus.Amount, value, Origin(bonus.Modifier), Inputs(bonus.Inputs)));
         }
 
         var sets = evaluated.Where(e => e.Modifier.Effect.Operation == ModifierOperation.Set).ToList();

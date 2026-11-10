@@ -34,7 +34,7 @@ Coverage words are the Lab's registry words: **Automatic** (the sheet works it o
 | passive `magical_damage`, `silvered_damage` | — | Reference | — | Not covered: damage has a type but no magical or silvered property; text |
 | passive `resistances`, `immunities`, `vulnerabilities` | `grant` `damageResistance` / `damageImmunity` / `damageVulnerability` with `whileToggle` | Automatic | — | |
 | passive `ignored_resistances` | — | Reference | — | Not covered: a target's defences are out of scope (ADR-018) |
-| passive `ac_value`, `ac_bonus` | `modifier` `set` / `replace` / `bonus` on `armorClass` with `toggle`; `armor` | Automatic | G4 | No "no shield" or "no heavy armour" gate; the only equipment gate is `whileArmored` (G4) |
+| passive `ac_value`, `ac_bonus` | `modifier` `set` / `replace` / `bonus` on `armorClass` with `toggle`; `armor` | Automatic | G4 (built) | A modifier can apply only while no armor, no heavy armor or no shield is worn (`notWearing`, content v12, G4 built, D93); the older flag `whileArmored` is the opposite gate. The bundled Unarmored notes become automatable when C2-6 re-authors them. A gate on a roll mode, attack or rider stays text |
 | passive `max_hp_value`, `max_hp_bonus` | `modifier` on `hitPoints` with `toggle` | Automatic | — | An `autoWhen` toggle may not target `hitPoints` (`validate.toggle-auto-target`) |
 | passive `save_bonus` | `modifier` `bonus` on `save.<ability>` | Automatic | — | |
 | passive `save_adv`, `save_dis` | `rollMode` on `save.<ability>`, always or with `toggle` | Automatic | — | |
@@ -51,7 +51,7 @@ Coverage words are the Lab's registry words: **Automatic** (the sheet works it o
 | `condition` | `toggle` gates (`toggle`, `whileToggle`), `autoWhen: bloodied`, `response.when.atOrBelow` | Assisted | G6 | Not covered as a general branch (no scripting). A response cannot test a save result or a trigger such as damage type (G6) |
 | `counter` | `resource`, `roll.resourceId` / `cost` / `variableCost`, `attack.cost`, `toggle.cost`, `upkeep`, `recovery`, `alsoChange`, `drawsDown`; `item.charges`; spell slots from `spellcasting` | Assisted | (G3 built as offered) | Costs are evaluated and spent in one confirmed change ("Spend", "Use"). "Once per turn" is not consumed automatically: a rider marked `oncePerTurn` is offered on each damage roll and the player adds it, the app does not track it (G3, proposed, awaits the owner); a per-turn `allowance` regained at `turnStart` is the nearest |
 | `spell` | `resource` plus a spend-only `roll` for the uses | Reference | — | Not covered: a feature cannot add a spell to the character or cast one without a slot. The pool tracks the uses; the spell is named in text and cast by hand |
-| `check` | `skill.<skill>` fields; `rollMode` targets `skill.<skill>` and `ability.<ability>.check` (a roll target, not a field) | Assisted | G10 | The character's own checks are Automatic. Not covered: an action asking a target for a check (`roll` has `save` only), and using another ability for a skill (G10) |
+| `check` | `skill.<skill>` fields; `rollMode` targets `skill.<skill>` and `ability.<ability>.check` (a roll target, not a field) | Assisted | G10 | The character's own checks are Automatic. Using another ability for a skill is the `checkAbility` kind (G10 built, v12, D90). Not covered: an action asking a target for a check (`roll` has `save` only), and a substitution that holds only in a situation |
 
 ## Foundry dnd5e activity types
 
@@ -59,7 +59,7 @@ Coverage words are the Lab's registry words: **Automatic** (the sheet works it o
 | --- | --- | --- | --- | --- |
 | Attack | `attack`, `attackRider`, `weapon`; `rollMode` on `attack` | Automatic | G8 | As the Avrae `attack` row |
 | Cast | `resource` plus a spend-only `roll` | Reference | — | As the Avrae `spell` row |
-| Check | `skill.<skill>` fields; `rollMode` on `skill.<skill>` and `ability.<ability>.check` | Assisted | G10 | As the Avrae `check` row |
+| Check | `skill.<skill>` fields; `rollMode` on `skill.<skill>` and `ability.<ability>.check` | Assisted | (G10 built) | As the Avrae `check` row |
 | Damage | `roll.dice`, `roll.perUnit`, `attackRider.dice` | Assisted | (G1, G2 built) | A roll effect's damage has no typed field; the type is in its label or text |
 | Enchant | `attackRider` (tag `weapon`) with `toggle` | Reference | — | Not covered: no effect changes another item's own fields; a toggled rider on every weapon is the nearest |
 | Forward | a second `roll` with its own `cost` on the same pool; `response` outcome `offerRoll` | Assisted | — | One roll cannot call another; author each use as its own roll |
@@ -67,16 +67,18 @@ Coverage words are the Lab's registry words: **Automatic** (the sheet works it o
 | Save | `roll.save` | Assisted | — | As the Avrae `save` row: the DC is worked out; `roll.area`, `roll.range` and `roll.targets` are text only |
 | Summon | Companions on Play ([sheet-play.md](sheet-play.md)) | Assisted | — | Partly covered: the content v12 `companion` effect (MECH-X item 4, ADR-021) gives a calculated card with its own hit points, attacks and pools; summoned creatures, level-gated upgrades and initiative are not covered. A hand companion is still free text the player fills in (ADR-018) |
 | Teleport | `roll.range`, `roll.area` (text) | Reference | — | Not covered: no map or positions (ADR-018) |
-| Transform | `toggleGroup` and `toggle` (`layer`, `cost`, `duration`); `modifier` `set` on `ability.*`, `armorClass`, `hitPoints`; `attack` and `roll` with `whileToggle`; `grant` defences with `whileToggle` | Assisted | G5, G11 | A form changes each number by its own modifier; no whole stat block swap. No per-effect ability cap (G5), no condition immunity (G11) |
+| Transform | `toggleGroup` and `toggle` (`layer`, `cost`, `duration`); `modifier` `set` on `ability.*`, `armorClass`, `hitPoints`; `attack` and `roll` with `whileToggle`; `grant` defences and condition immunities with `whileToggle` | Assisted | G5 | A form changes each number by its own modifier; no whole stat block swap. A per-effect ability cap is covered (`cap` on an ability-score bonus, G5 built). Condition immunity is covered (`conditionImmunity`, G11 built) |
 | Utility | `roll` (with or without `dice`), `toggle`, `value` | Assisted | G12 | A spend-only roll ("Use") or a free roll; a roll floor on checks is a separate kind (`rollFloor`, G9 built); no reroll (G12) |
 
 ## What this says about the martial classes
 
 Both vocabularies' everyday verbs (attack, damage, a saving-throw DC, a pool spent, a timed form, a bonus or a mode on own rolls) map onto v11. The rows that stop at Reference are the evaluation's gaps, and they fall on Barbarian, Rogue and Monk. Ranked by how many Reference rows each would remove (evaluation §3):
 
-- **Remove the most:** G1 (dice count as a formula on riders and rolls; built, content v12, D88), G4 (no armour, no shield, no heavy armour gates), G5 (per-effect ability-score cap), G6 (responses with dice or halving, and save-result or trigger conditions).
+- **Remove the most:** G1 (dice count as a formula on riders and rolls; built, content v12, D88), G4 (no armour, no shield, no heavy armour gates; built, content v12, D93), G5 (per-effect ability-score cap; built, content v12, D92; Body and Mind is expressible after C2-6), G6 (responses with dice or halving, and save-result or trigger conditions).
 - **Cheap:** G9 (roll floor on checks; built, content v12, D89). G7 (modes on own attack rolls, attacks against the character, initiative alone) is built, content v12, D87.
-- **Reminders that may stay Reference:** G8 (rider match on the ability used; Dex for tagged non-finesse weapons), G10 (skill ability substitution; climb and swim speeds), G11 (condition immunity), G12 (reroll).
+- **Reminders that may stay Reference:** G8 (rider match on the ability used; Dex for tagged non-finesse weapons), G12 (reroll).
+- G11 (condition immunity) is built, content v12, D91: a `conditionImmunity` grant, optionally while a toggle is on. Mindless Rage (5.2.1 Barbarian) and the 5.1 Purity of Body's poisoned line are expressible once C2-6 re-authors them; disease stays text, and so does ending a held condition.
+- G10 (skill ability substitution; climb and swim speeds) is built, content v12, D90. The 5.2.1 Second-Story Work's climb speed is expressible; its jump line stays text, and 5.1 Second-Story Work has no speed. Acrobatic Movement (5.2.1) grants no speed and no check, so it is not a G10 feature and stays text.
 - G2 (crit-only dice) is built with G1 (content v12, D88). G3 (once per turn) is built as player-added: the rider is offered on each damage roll and the player adds it; the app does not track turns, and that judgement awaits the owner.
 
 The v12 scope is decided once, from the Lab's coverage report after authoring Barbarian, Rogue and Monk under v11, not class by class.
@@ -88,12 +90,12 @@ The v12 scope is decided once, from the Lab's coverage report after authoring Ba
 | G1 | Dice count as a formula (or scale) on `attackRider` and `roll` (built, v12, D88) |
 | G2 | Rider dice on a critical hit only (built, v12, D88) |
 | G3 | Once per turn, consumed automatically (built as offered on each damage roll, not tracked; v12, D88) |
-| G4 | Equipment gates: no armour, no shield, no heavy armour |
-| G5 | Per-effect ability-score cap |
+| G4 | Equipment gates: no armour, no shield, no heavy armour (built, content v12, D93) |
+| G5 | Per-effect ability-score cap (built, content v12, D92) |
 | G6 | Responses with dice or halving amounts, and save-result or trigger conditions |
 | G7 | `rollMode` on own attack rolls, attacks against the character, initiative alone (built, content v12, D87) |
 | G8 | Rider match on the ability used; Dex substitution for tagged non-finesse weapons |
 | G9 | Roll floor (built on checks, v12, D89) |
-| G10 | Skill-check ability substitution; climb and swim speeds |
-| G11 | Condition immunity grants |
+| G10 | Skill-check ability substitution; climb and swim speeds (built, v12, D90) |
+| G11 | Condition immunity grants (built, v12, D91) |
 | G12 | Reroll |

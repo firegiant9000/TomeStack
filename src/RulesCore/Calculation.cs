@@ -119,7 +119,8 @@ public sealed record CharacterSheet(
     IReadOnlyList<ResponseValue>? Responses = null,
     IReadOnlyList<CompanionValue>? Companions = null,
     IReadOnlyList<AttackModeValue>? AttackModes = null,
-    RollModeSummary? AttacksAgainst = null)
+    RollModeSummary? AttacksAgainst = null,
+    IReadOnlyList<ConditionImmunityValue>? ConditionImmunities = null)
 {
     public DerivedValue Field(string field) => Fields.Single(f => f.Field == field);
 }
@@ -329,6 +330,9 @@ public sealed record DamageDefenceSource(string Name, ContentReference? Content 
 /// </summary>
 public sealed record DamageDefenceValue(string Type, DamageDefenceKind Kind, IReadOnlyList<DamageDefenceSource> Sources);
 
+/// <summary>Content v12 (G11): a condition the character cannot gain, from one or more automatic, always-on grants. <paramref name="Condition"/> is a <see cref="ConditionKeys.All"/> key.</summary>
+public sealed record ConditionImmunityValue(string Condition, IReadOnlyList<DamageDefenceSource> Sources);
+
 /// <summary>A calculated field id and its display label.</summary>
 public sealed record FieldInfo(string Id, string Label);
 
@@ -521,10 +525,14 @@ public static partial class CharacterCalculator
     /// <summary>
     /// Content schema v11 (D43): fly speed is a content target only from v11. Below it the validator refuses it and the
     /// calculator ignores such a modifier with the same diagnostic as <see cref="IsCharacterOnlyField"/>, so a stored older
-    /// revision never moves it, whatever it says.
+    /// revision never moves it, whatever it says. Content v12 (G10): climb and swim speed are content targets only from v12, the same way.
     /// </summary>
     public static bool IsPlayMechanicsOnlyField(string field, int schemaVersion) =>
-        field == FieldIds.FlySpeed && schemaVersion < ContentRevision.PlayMechanicsSchemaVersion;
+        (field == FieldIds.FlySpeed && schemaVersion < ContentRevision.PlayMechanicsSchemaVersion)
+        || (IsClimbOrSwim(field) && schemaVersion < ContentRevision.ClimbSwimSchemaVersion);
+
+    /// <summary>Content v12 (G10): the climb and swim speed fields.</summary>
+    public static bool IsClimbOrSwim(string field) => field is FieldIds.ClimbSpeed or FieldIds.SwimSpeed;
 
     /// <summary>Speed and the passive scores: the fields content may target only from schema v10.</summary>
     public static bool IsSpeedOrPassive(string field) =>
@@ -547,7 +555,7 @@ public static partial class CharacterCalculator
         var modifiers = new List<Modifier>();
         foreach (var effect in revision.Effects.OfType<ModifierEffect>())
         {
-            if (SpecIndex.ContainsKey(effect.Target) && !IsCharacterOnlyField(effect.Target, revision.SchemaVersion) && !IsPlayMechanicsOnlyField(effect.Target, revision.SchemaVersion) && Formula.TryParse(effect.Value, Formula.FeaturesFor(revision), out var formula, out _))
+            if (SpecIndex.ContainsKey(effect.Target) && !IsCharacterOnlyField(effect.Target, revision.SchemaVersion) && !IsPlayMechanicsOnlyField(effect.Target, revision.SchemaVersion) && Formula.TryParse(effect.Value, Formula.ModifierFeaturesFor(revision, effect.Target), out var formula, out _))
                 modifiers.Add(new(content, effect, formula!, [.. formula!.Identifiers.Select(FormulaIdentifiers.FieldFor).OfType<string>().Distinct(StringComparer.Ordinal)]));
         }
         var diagnostics = new List<Diagnostic>();
@@ -729,7 +737,9 @@ public static partial class CharacterCalculator
         var effective = ToggleGroups.Resolve(character.Play, declaredToggles, diagnostics, active.Select(a => a.Revision.ContentId).ToHashSet());
         var resourceBonuses = new List<ResourceBonus>();
         var modifiers = CollectModifiers(active, character, policy, diagnostics, warnings, manual, effective, autoOn, resourceBonuses, resolved.ClassLevels, resolved.ModdedEntries);
-        var rollModes = CollectRollModes(active, character, effective, autoOn, diagnostics);
+        var conditionImmunities = CollectConditionImmunities(active, character, resolved.ClassLevels, effective, autoOn, diagnostics);
+        var immune = conditionImmunities.Select(c => c.Condition).ToHashSet(StringComparer.Ordinal);
+        var rollModes = CollectRollModes(active, character, effective, autoOn, immune, diagnostics);
         var weaponProficiencies = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         var armorTraining = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         var unseenArmor = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
@@ -742,7 +752,11 @@ public static partial class CharacterCalculator
             resolved.Classes.FirstOrDefault(c => c.Content.Revision.Reference == e.Class) is { } info && RecordsArmorTraining(info.Content.Revision));
         var worn = AddArmor(active, modifiers, diagnostics, armorTraining, checkTraining, policy, warnings, resolved.ModdedEntries);
         RemoveCycles(modifiers, diagnostics, warnings, manual);
-        var order = TopologicalOrder(modifiers);
+        // Content v12 (G10): skills that may use another ability read that modifier too; none for a sheet without checkAbility.
+        var checkAbilities = CollectCheckAbilities(active);
+        // Unreachable today (formulas cannot read skills); keeps a future skill-reading identifier from making TopologicalOrder throw.
+        var checkEdges = AcceptCheckAbilities(checkAbilities, modifiers, diagnostics, warnings);
+        var order = TopologicalOrder(modifiers, checkEdges);
         var casters = CollectCasters(active, character, resolved.ClassLevels, diagnostics);
 
         var values = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -752,7 +766,8 @@ public static partial class CharacterCalculator
         {
             var spec = Specs[SpecIndex[id]];
             var steps = new List<Step>();
-            var context = new BaseContext(character, family, values, proficiencies, resolved.Classes, warnings[id], manual, casters);
+            var context = new BaseContext(character, family, values, proficiencies, resolved.Classes, warnings[id], manual, casters, checkAbilities,
+                (skillField, ability) => CheckModeOf(rollModes.Targeted, skillField, ability));
             var value = spec.Base(context, steps);
             value = ApplyModifiers(id, value, modifiers.Where(m => m.Effect.Target == id).ToList(), character, resolved.ClassLevels, values, family, steps, warnings[id], manual);
             value = Bound(spec, value, steps, warnings[id], family);
@@ -777,7 +792,18 @@ public static partial class CharacterCalculator
             [FieldIds.SpellAttack] = casterReads,
             [FieldIds.SpellSaveDc] = casterReads,
         };
-        var rollFloors = CollectRollFloors(active, character, resolved.ClassLevels, values, id => MarkOf(id, proficiencies), family, diagnostics);
+        // Content v12 (G10): the ability each skill with a candidate uses; a substituted skill reads that modifier, not the printed one.
+        var skillAbility = new Dictionary<string, Ability>(StringComparer.Ordinal);
+        foreach (var (field, list) in checkAbilities)
+        {
+            var printed = Skills.First(s => FieldIds.Skill(s.Key) == field).Ability;
+            var (used, candidate) = ChosenAbility(printed, list, values, a => CheckModeOf(rollModes.Targeted, field, a));
+            skillAbility[field] = used;
+            if (candidate is not null)
+                actualReads[field] = [FieldIds.Modifier(used), FieldIds.ProficiencyBonus];
+        }
+        var rollModeFields = RollModesByField(rollModes.Targeted, skillAbility);
+        var rollFloors = CollectRollFloors(active, character, resolved.ClassLevels, values, id => MarkOf(id, proficiencies), family, diagnostics, skillAbility);
         var fields = Specs.Select(spec =>
         {
             var closure = Closure(spec.Id, modifiers, actualReads);
@@ -798,7 +824,7 @@ public static partial class CharacterCalculator
                 results[spec.Id].Override,
                 spec.Units,
                 MarkOf(spec.Id, proficiencies),
-                rollModes.ByField.GetValueOrDefault(spec.Id),
+                rollModeFields.GetValueOrDefault(spec.Id),
                 floor?.Summary);
         }).ToList();
 
@@ -813,7 +839,7 @@ public static partial class CharacterCalculator
         // Before the feature list: a spell that cannot be cast reports on its feature (spells.unusable), like a recorded spell that cannot be listed.
         var castSpells = CastSpellsOf(active, catalog, character, casters.Count > 0, values, diagnostics);
         // Before the feature list: a response whose formula fails reports on its feature (effect.invalid-formula). HP.MAX is this sheet's own maximum.
-        var responses = CollectResponses(active, character, resolved.ClassLevels, values, resources, effective, autoOn, values[FieldIds.HitPoints], diagnostics);
+        var responses = CollectResponses(active, character, resolved.ClassLevels, values, resources, effective, autoOn, values[FieldIds.HitPoints], immune, diagnostics);
         // Before the feature list: a form-only defence of absent content reports on its feature (modifier.toggle-content-missing).
         var damageDefences = CollectDamageDefences(active, character, resolved.ClassLevels, effective, autoOn, diagnostics);
         var scoped = diagnostics.Concat(warnings.Values.SelectMany(w => w)).Concat(resources.SelectMany(r => r.Warnings)).Where(d => d.Content is not null).Distinct().ToList();
@@ -923,7 +949,8 @@ public static partial class CharacterCalculator
             spellcasting, spellSlots, pactSlots, attacks, toggles, scales.Count > 0 ? scales : null, bloodied ? true : null,
             damageDefences.Count > 0 ? damageDefences : null, null, // the item uses are added once by Calculate (WithItemUses)
             xpForNextLevel is { } next && character.Xp >= next ? true : null, xpForNextLevel, upkeeps.Count > 0 ? upkeeps : null,
-            responses.Count > 0 ? responses : null, companions.Count > 0 ? companions : null, rollModes.AttackModes, rollModes.AttacksAgainst), active);
+            responses.Count > 0 ? responses : null, companions.Count > 0 ? companions : null, rollModes.AttackModes, rollModes.AttacksAgainst,
+            conditionImmunities.Count > 0 ? conditionImmunities : null), active);
     }
 
     /// <summary>The tags an attack roll mode matches: a weapon's <c>weapon</c>, then its own tags (a feature attack), then <c>melee</c> or <c>ranged</c>.</summary>
@@ -972,7 +999,7 @@ public static partial class CharacterCalculator
     /// </summary>
     private static List<ResponseValue> CollectResponses(
         List<ActiveContent> active, Character character, ClassLevelMap classLevels, Dictionary<string, int> values, List<ResourceValue> resources,
-        EffectiveToggles effective, bool autoOn, int hitPointMaximum, List<Diagnostic> diagnostics)
+        EffectiveToggles effective, bool autoOn, int hitPointMaximum, IReadOnlySet<string> immune, List<Diagnostic> diagnostics)
     {
         var candidates = active
             .SelectMany(item => item.Revision.Effects.OfType<ResponseEffect>()
@@ -1058,7 +1085,7 @@ public static partial class CharacterCalculator
                 else if (left < needed)
                     reason = $"Needs {needed} {pool.Label} ({left} left)";
             }
-            if (reason is null && response.UnlessCondition is { } unless && ConditionKeys.Holds(character.Play.Conditions, unless))
+            if (reason is null && response.UnlessCondition is { } unless && ConditionKeys.Holds(character.Play.Conditions, unless, immune))
                 reason = $"Not while {unless}";
             var trigger = response.Trigger is { DamageTypes: { } types } t
                 ? t with { DamageTypes = [.. types.Select(x => DamageTypes.TryNormalize(x, out var canonical) ? canonical : x)] }
@@ -1235,6 +1262,38 @@ public static partial class CharacterCalculator
             .GroupBy(f => (f.Type, f.Kind))
             .OrderBy(g => order.IndexOf(g.Key.Type)).ThenBy(g => g.Key.Kind)
             .Select(g => new DamageDefenceValue(g.Key.Type, g.Key.Kind, [.. g.Select(f => f.Source).Distinct()]))];
+    }
+
+    /// <summary>
+    /// Content v12 (G11): the conditions the character cannot gain. Like damage defences, a grant counts only when it is automatic
+    /// and always on, and its <c>level</c>, <c>onlyAs</c> and <c>whileToggle</c> are met. The character has no hand-entered
+    /// immunities. Several sources of one condition are one entry, ordered by <see cref="ConditionKeys.All"/>.
+    /// </summary>
+    private static List<ConditionImmunityValue> CollectConditionImmunities(
+        List<ActiveContent> active, Character character, ClassLevelMap classLevels, EffectiveToggles effective, bool autoOn, List<Diagnostic> diagnostics)
+    {
+        var found = new List<(string Condition, DamageDefenceSource Source)>();
+        foreach (var item in active)
+        {
+            foreach (var grant in item.Revision.Effects.OfType<GrantEffect>())
+            {
+                if (!GrantEffect.IsConditionImmunity(grant.Grant) || grant.Automation != AutomationStatus.Automatic || grant.Timing != EffectTiming.Always)
+                    continue;
+                if (grant.Level is { } needed && GateLevel(item, character, classLevels) < needed)
+                    continue;
+                if (!EntryApplies(item, grant.OnlyAs, character) || grant.Condition is not { } condition || !ConditionKeys.All.Contains(condition))
+                    continue;
+                if (grant.WhileToggle is { } form
+                    && GateOnToggle(active, item.Revision, grant.Id, form.ToggleId, form.ContentId ?? item.Revision.ContentId, effective, autoOn, diagnostics, out _) != ToggleGate.Applies)
+                    continue;
+                found.Add((condition, new(item.Revision.Name, item.Revision.Reference, grant.Id)));
+            }
+        }
+        var order = ConditionKeys.All.ToList();
+        return [.. found
+            .GroupBy(f => f.Condition)
+            .OrderBy(g => order.IndexOf(g.Key))
+            .Select(g => new ConditionImmunityValue(g.Key, [.. g.Select(f => f.Source).Distinct()]))];
     }
 
     /// <summary>Content v10 (D38): a toggle that switches itself while the character is bloodied. Below v10 <c>autoWhen</c> is extension data and never reaches here.</summary>

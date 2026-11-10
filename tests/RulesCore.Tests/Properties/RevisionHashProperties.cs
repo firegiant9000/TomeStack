@@ -60,6 +60,9 @@ public class RevisionHashProperties
     /// <summary>The attackRider keys content v12 adds (G1). Written out here on purpose, like <see cref="ToggleV11Keys"/>.</summary>
     internal static readonly string[] AttackRiderV12Keys = ["scaledDice", "critical", "oncePerTurn"];
 
+    /// <summary>The grant key content v12 adds (G11). Written out here on purpose, like <see cref="ToggleV11Keys"/>.</summary>
+    internal static readonly string[] GrantV12Keys = ["condition"];
+
     /// <summary>The choice key content v12 adds (MECH-X item 2). Written out here on purpose, like <see cref="ToggleV11Keys"/>.</summary>
     internal static readonly string[] ChoiceV12Keys = ["replaceable"];
 
@@ -107,7 +110,10 @@ public class RevisionHashProperties
             var unknown = Generators.StaysUnknown(type, version)
                 || IsDiceLessRollBelowV11(type, version, inputEffects[i])
                 || (type == GrantEffect.TypeName && version < ContentRevision.PlayDetailsSchemaVersion
-                    && ((string?)inputEffects[i]!["grant"])?.StartsWith("damage", StringComparison.OrdinalIgnoreCase) == true);
+                    && ((string?)inputEffects[i]!["grant"])?.StartsWith("damage", StringComparison.OrdinalIgnoreCase) == true)
+                // Content v12 (G11): a conditionImmunity grant is a value a v11 build cannot read, so below v12 the effect stays unknown.
+                || (type == GrantEffect.TypeName && version < ContentRevision.ConditionImmunitySchemaVersion
+                    && string.Equals((string?)inputEffects[i]!["grant"], "conditionImmunity", StringComparison.OrdinalIgnoreCase));
             if (read.Effects[i] is UnknownEffect != unknown)
                 return $"effect {i} ({type}) is {(unknown ? "typed" : "unknown")} in v{version}";
             if (unknown && !JsonNode.DeepEquals(inputEffects[i], outputEffects[i]))
@@ -146,6 +152,7 @@ public class RevisionHashProperties
                 var v12Keys = type switch
                 {
                     RollEffect.TypeName => RollV12Keys,
+                    GrantEffect.TypeName => GrantV12Keys,
                     AttackEffect.TypeName => AttackV12Keys,
                     ToggleEffect.TypeName => ToggleV12Keys,
                     SpellEffect.TypeName => SpellV12Keys,
@@ -225,6 +232,9 @@ public class RevisionHashProperties
             // A damage-defence grant below v10 stays an unknown effect, kept exactly as written (nothing to add).
             if (type == GrantEffect.TypeName && version < ContentRevision.PlayDetailsSchemaVersion && ((string?)effect["grant"])?.StartsWith("damage", StringComparison.OrdinalIgnoreCase) == true)
                 continue;
+            // A conditionImmunity grant below v12 stays an unknown effect, kept exactly as written (nothing to add).
+            if (type == GrantEffect.TypeName && version < ContentRevision.ConditionImmunitySchemaVersion && string.Equals((string?)effect["grant"], "conditionImmunity", StringComparison.OrdinalIgnoreCase))
+                continue;
             // A roll with no dice below v11 stays an unknown effect, kept exactly as written (nothing to add).
             if (IsDiceLessRollBelowV11(type, version, effect))
                 continue;
@@ -272,6 +282,7 @@ public class RevisionHashProperties
                 members = type switch
                 {
                     RollEffect.TypeName => [.. members ?? [], .. RollV12Keys],
+                    GrantEffect.TypeName => [.. members ?? [], .. GrantV12Keys],
                     AttackEffect.TypeName => [.. members ?? [], .. AttackV12Keys],
                     ToggleEffect.TypeName => [.. members ?? [], .. ToggleV12Keys],
                     SpellEffect.TypeName => [.. members ?? [], .. SpellV12Keys],

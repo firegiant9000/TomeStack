@@ -8,7 +8,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import type { Character, CharacterView, DamageOutcome } from '../api/types';
 import { DefencesPanel } from './DefencesPanel';
 import { normalizeDamageType } from './customModel';
-import { ActionsPanel, damageResultText, HitPointsPanel } from './PlayPanels';
+import { ActionsPanel, ConditionsPanel, damageResultText, HitPointsPanel } from './PlayPanels';
 
 afterEach(cleanup);
 
@@ -198,4 +198,39 @@ it('removes a defence of its own, and refuses a duplicate before it is sent', as
 
   await user.click(screen.getByRole('button', { name: 'Remove slashing resistance' }));
   expect(onChanged.mock.calls[0]?.[0].character.damageDefences).toEqual([]);
+});
+
+// ---- Content v12 G11: condition immunities -------------------------------------------------------------------------------
+
+const stormSource = { name: 'Fixture: Storm Temper', content: { contentId: 'c', revisionId: 'r' }, effectId: 'g' };
+
+it('lists condition immunities with their sources', () => {
+  const view = base({}, { conditionImmunities: [{ condition: 'charmed', sources: [stormSource] }] });
+  render(<DefencesPanel view={view} onChanged={() => {}} onError={() => {}} />);
+  const list = screen.getByRole('list', { name: 'Condition immunities' });
+  expect(within(list).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Charmed (Fixture: Storm Temper)']);
+});
+
+it('shows no condition immunity list when there are none', () => {
+  render(<DefencesPanel view={defenceView()} onChanged={() => {}} onError={() => {}} />);
+  expect(screen.getByRole('list', { name: 'Damage defences the sheet applies' })).toBeTruthy();
+  expect(screen.queryByText('Condition immunities')).toBeNull();
+  expect(screen.queryByRole('list', { name: 'Condition immunities' })).toBeNull();
+});
+
+it('marks an immune condition chip and keeps it toggleable', async () => {
+  const user = userEvent.setup();
+  const act = vi.fn();
+  const view = base({}, { conditionImmunities: [{ condition: 'frightened', sources: [stormSource] }] });
+  render(<ConditionsPanel view={view} act={act} />);
+  const box = screen.getByRole('checkbox', { name: 'Frightened (immune)' }) as HTMLInputElement;
+  expect(box.disabled).toBe(false);
+  expect(screen.getByRole('checkbox', { name: 'Charmed' })).toBeTruthy();
+  await user.click(box);
+  expect(act).toHaveBeenCalledWith({ action: 'addCondition', condition: 'frightened' });
+});
+
+it('legend says immunities cancel conditions', () => {
+  render(<ConditionsPanel view={base()} act={() => {}} />);
+  expect(screen.getByText('Conditions (reminders; a condition you are immune to has no effect)')).toBeTruthy();
 });

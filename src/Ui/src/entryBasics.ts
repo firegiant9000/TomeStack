@@ -26,6 +26,7 @@ const abilityLabel = (key: AbilityKey) => abilities.find(([k]) => k === key)![1]
  */
 export const isAbilityIncrease = (e: Effect, effects: Effect[]): e is Modifier =>
   e.type === 'modifier' &&
+  isUngated(e) &&
   e.operation === 'bonus' &&
   abilityTarget.test(e.target) &&
   /^[1-9]$/.test(e.value) &&
@@ -33,7 +34,10 @@ export const isAbilityIncrease = (e: Effect, effects: Effect[]): e is Modifier =
   (e.timing === undefined || e.timing === 'always') &&
   effects.find((x) => x.type === 'modifier' && x.operation === 'bonus' && x.target === e.target && isPlainIncrease(x)) === e;
 
-const isPlainIncrease = (x: Modifier) => /^[1-9]$/.test(x.value) && x.toggle === undefined && (x.timing === undefined || x.timing === 'always');
+/** A gate, a cap or an armor condition is editable only in the rule list, so a rule that carries one is never a Basics row. */
+const isUngated = (e: Modifier) => e.notWearing === undefined && e.cap === undefined && e.whileArmored === undefined;
+
+const isPlainIncrease = (x: Modifier) => isUngated(x) && /^[1-9]$/.test(x.value) && x.toggle === undefined && (x.timing === undefined || x.timing === 'always');
 
 export function abilityIncreases(effects: Effect[]): Partial<Record<AbilityKey, number>> {
   const found: Partial<Record<AbilityKey, number>> = {};
@@ -71,7 +75,7 @@ const isSpeedValue = (value: string) => /^[1-9]\d{0,2}$/.test(value) && Number(v
 
 export const isSpeciesSpeed =(e: Effect, effects: Effect[]): e is Modifier => {
   const replaces = speedReplaces(effects);
-  return replaces.length === 1 && replaces[0] === e && isSpeedValue(e.value) && e.toggle === undefined && (e.timing === undefined || e.timing === 'always');
+  return replaces.length === 1 && replaces[0] === e && isUngated(e) && isSpeedValue(e.value) && e.toggle === undefined && (e.timing === undefined || e.timing === 'always');
 };
 
 export const speciesSpeed = (effects: Effect[]): number | undefined => {

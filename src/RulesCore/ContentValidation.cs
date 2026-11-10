@@ -158,6 +158,33 @@ public static class ContentValidator
         return target.StartsWith("ability.", StringComparison.Ordinal) && target.EndsWith(".check", StringComparison.Ordinal) && IsRollModeTarget(target);
     }
 
+    /// <summary>
+    /// Content v12 (G10): the targets of a <c>checkAbility</c>: <c>skill.&lt;skill&gt;</c> (a known skill) or <c>ability.&lt;ability&gt;.check</c>
+    /// (every skill whose printed ability it is). <paramref name="printed"/> is the printed ability of the reached skill(s) for a valid target.
+    /// </summary>
+    internal static bool IsCheckAbilityTarget(string? target, out Ability printed)
+    {
+        printed = default;
+        if (target is null)
+            return false;
+        if (target.StartsWith("skill.", StringComparison.Ordinal))
+        {
+            foreach (var skill in CharacterCalculator.Skills)
+            {
+                if (skill.Key == target["skill.".Length..])
+                {
+                    printed = skill.Ability;
+                    return true;
+                }
+            }
+            return false;
+        }
+        // Constitution has no skill, so ability.con.check would reach nothing; refused (published revisions are insert-only).
+        return target.StartsWith("ability.", StringComparison.Ordinal) && target.EndsWith(".check", StringComparison.Ordinal)
+            && target != "ability.con.check"
+            && IsRollModeTarget(target) && CheckAbilityEffect.TryParseAbility(target["ability.".Length..^".check".Length], out printed);
+    }
+
     private static bool IsCharacterOnlyField(string field, ContentRevision revision) =>
         CharacterCalculator.IsCharacterOnlyField(field, revision.SchemaVersion);
 
@@ -245,6 +272,9 @@ public static class ContentValidator
                 needsV10 |= CharacterCalculator.IsSpeedOrPassive(modifier.Target); // allowed: this revision is v10
             // Content v11 (D43): fly speed. Below v11 the revision gets validate.requires-v11 (and the calculator ignores it).
             needsV11 |= modifier.Target == FieldIds.FlySpeed;
+            // Content v12 (G10): climb and swim speed. Below v12 the revision gets validate.requires-v12 (and the calculator ignores it).
+            if (CharacterCalculator.IsClimbOrSwim(modifier.Target))
+                NeedV12("a climb or swim speed");
             // Content v8: a lower critical range is better, but set and replace keep the highest value, so only a
             // bonus (such as -1 for Improved Critical) can lower it.
             if (modifier.Target == FieldIds.CriticalRange && modifier.Operation != ModifierOperation.Bonus)
@@ -255,7 +285,10 @@ public static class ContentValidator
                 Error("validate.while-armored-replace", $"Effect '{modifier.Id}' replaces Armor Class only while armor is worn, but worn armor sets the base Armor Class itself, so it could never apply. Use a bonus.", modifier.Id);
             if (modifier.Stacking == StackingRule.HighestInGroup && string.IsNullOrWhiteSpace(modifier.StackGroup))
                 Error("validate.stack-group-missing", $"Effect '{modifier.Id}' uses highest-in-group stacking without a stackGroup.", modifier.Id);
-            CheckFormula(modifier.Value, modifier.Id, "value");
+            // Content v12 (G10): SPEED (the walking speed) is readable only here, by a climb, swim or fly speed modifier of a v12 revision;
+            // elsewhere, and below v12, it is an unknown identifier.
+            CheckFormula(modifier.Value, modifier.Id, "value",
+                features: AllFormulaFeatures | (Formula.AllowsSpeed(revision.SchemaVersion, modifier.Target) ? FormulaFeatures.Speed : FormulaFeatures.None));
             if (modifier.Toggle is { } toggle)
             {
                 needsV6 = true;
@@ -271,6 +304,29 @@ public static class ContentValidator
                 {
                     CheckToggleReference(modifier.ToggleContent, toggle, modifier.Id, "validate.toggle-unknown");
                 }
+            }
+            if (modifier.Cap is { } cap)
+            {
+                NeedV12("an ability-score cap");
+                if (modifier.Operation != ModifierOperation.Bonus
+                    || !modifier.Target.StartsWith("ability.", StringComparison.Ordinal) || !modifier.Target.EndsWith(".score", StringComparison.Ordinal)
+                    || (int.TryParse(modifier.Value.Trim(), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var literal) && literal < 0))
+                    Error("validate.modifier-cap", $"Effect '{modifier.Id}' has a cap, but a cap belongs on an ability-score increase: a bonus to ability.<x>.score that is not negative.", modifier.Id);
+                if (cap is < ModifierEffect.MinCap or > ModifierEffect.MaxCap)
+                    Error("validate.modifier-cap-range", $"Effect '{modifier.Id}' has cap {cap}; it must be a whole number from {ModifierEffect.MinCap} to {ModifierEffect.MaxCap} (20 is the usual maximum).", modifier.Id);
+            }
+            if (modifier.NotWearing is { } notWearing)
+            {
+                NeedV12("an armor or shield gate");
+                var gear = notWearing.Where(g => g is not null).ToList();
+                if (gear.Count == 0 || gear.Count != notWearing.Count || gear.Any(g => !ModifierEffect.Gear.Contains(g, StringComparer.Ordinal))
+                    || gear.Distinct(StringComparer.Ordinal).Count() != gear.Count
+                    || (gear.Contains(ModifierEffect.GearArmor, StringComparer.Ordinal) && gear.Contains(ModifierEffect.GearHeavyArmor, StringComparer.Ordinal)))
+                    Error("validate.not-wearing", $"Effect '{modifier.Id}' has notWearing [{string.Join(", ", gear)}]; it lists armor, heavyArmor or shield, each once, and armor already covers heavyArmor.", modifier.Id);
+                if (modifier.WhileArmored == true && gear.Contains(ModifierEffect.GearArmor, StringComparer.Ordinal))
+                    Error("validate.not-wearing-armored", $"Effect '{modifier.Id}' applies only while armor is worn and only while none is, so it could never apply.", modifier.Id);
+                if (modifier.Target.StartsWith(ResourceTargetPrefix, StringComparison.Ordinal))
+                    Error("validate.not-wearing", $"Effect '{modifier.Id}' has notWearing, but it raises a pool maximum, which counts whatever is worn; gear gates apply to calculated fields only.", modifier.Id);
             }
             if (modifier.ToggleContent is not null)
             {
@@ -338,6 +394,29 @@ public static class ContentValidator
                     NeedV12(unreadableV12.DeclaredType == RollEffect.TypeName ? "a roll with a payment, castsSpell or scaledDice" : "spell tags");
                     Error("validate.effect-malformed", $"Effect '{unreadableV12.Id}' has type '{unreadableV12.DeclaredType}' but a value or field that does not read (a payment needs a kind of resource, hitPoints or slot; castsSpell is a content id; scaledDice needs a count and a die, both formulas; tags are a list of keys; or a missing field); fix it before publishing.", unreadableV12.Id);
                     break;
+                // Content v12 (G5): from v12 a modifier that carries a cap is read with it; one that stays unknown did not read (a cap that
+                // is not a whole number, or another field that does not read). Published at a lower version the cap is stripped and the
+                // increase stops at 20, so it blocks. Below v12 the key is stripped first, so nothing changes there.
+                case UnknownEffect { DeclaredType: ModifierEffect.TypeName } unreadableCap
+                    when revision.SchemaVersion >= ContentRevision.AbilityCapSchemaVersion
+                        && CarriesV11Key(unreadableCap, ModifierEffect.V12Keys):
+                    var hasCap = unreadableCap.Raw.TryGetProperty(ModifierEffect.CapProperty, out _);
+                    var hasGate = unreadableCap.Raw.TryGetProperty(ModifierEffect.NotWearingProperty, out _);
+                    if (hasCap)
+                        NeedV12("an ability-score cap");
+                    if (hasGate)
+                        NeedV12("an armor or shield gate");
+                    var capText = "its cap must be a whole number from 21 to 30, on an ability-score increase";
+                    var gateText = "its notWearing must be a list of armor, heavyArmor or shield";
+                    var detail = (hasCap, hasGate) switch
+                    {
+                        (true, true) => $"{capText}; {gateText}",
+                        (true, false) => capText,
+                        (false, true) => gateText,
+                        _ => "a field that is not a valid v12 modifier key",
+                    };
+                    Error("validate.effect-malformed", $"Effect '{unreadableCap.Id}' has type '{unreadableCap.DeclaredType}' but a value or field that does not read ({detail}; or a missing field); fix it before publishing.", unreadableCap.Id);
+                    break;
                 // Content v11 (D43): a modifier or roll whose v11 key does not read (toggleContent that is not an id, a whileToggle
                 // without a toggleId). Published at a lower version it would read back as a modifier or roll that ignores the key and
                 // applies always, so it blocks like the other malformed effects. Without a v11 key it is what it always was: a warning.
@@ -386,6 +465,12 @@ public static class ContentValidator
                 case UnknownEffect { DeclaredType: RollFloorEffect.TypeName } unreadableFloor when revision.SchemaVersion >= RollFloorEffect.SchemaVersion:
                     NeedV12("a rollFloor");
                     Error("validate.effect-malformed", $"Effect '{unreadableFloor.Id}' has type '{unreadableFloor.DeclaredType}' but a value or field that does not read (it needs a target and exactly one of face, a whole number from 2 to 20, and total, a formula; proficient is true or false); fix it before publishing.", unreadableFloor.Id);
+                    break;
+                // Content v12 (G10): from v12 a checkAbility that stays unknown did not read (a target or ability that is not text), so the
+                // substitution would silently not exist. Below v12 it stays an unsupported effect, kept byte for byte.
+                case UnknownEffect { DeclaredType: CheckAbilityEffect.TypeName } unreadableSwap when revision.SchemaVersion >= CheckAbilityEffect.SchemaVersion:
+                    NeedV12("a checkAbility");
+                    Error("validate.effect-malformed", $"Effect '{unreadableSwap.Id}' has type '{unreadableSwap.DeclaredType}' but a value or field that does not read (it needs a target and an ability, both text); fix it before publishing.", unreadableSwap.Id);
                     break;
                 // Content v11 (D43): from v11 a response is typed; one that stays unknown did not match the shape (a phase or an outcome
                 // kind that names no member, no responseId, label or phase, a toggle or content that is not an id), so the response would
@@ -436,6 +521,11 @@ public static class ContentValidator
                     break;
                 case ModifierEffect modifier:
                     CheckModifier(modifier);
+                    // MECH-X R50: a mod revision's own top-level modifiers apply as mod modifiers, where the calculator ignores a cap.
+                    if (modifier.Cap is not null && revision.Effects.OfType<ItemModEffect>().Any())
+                        Error("validate.modifier-cap", $"Effect '{modifier.Id}' has a cap, but this revision is an item mod, whose modifiers cannot raise an ability score above 20.", modifier.Id);
+                    if (modifier.NotWearing is not null && revision.Effects.OfType<ItemModEffect>().Any())
+                        Error("validate.not-wearing", $"Effect '{modifier.Id}' has notWearing, but this revision is an item mod, whose modifiers apply whatever is worn.", modifier.Id);
                     break;
                 case ToggleEffect toggleEffect:
                     needsV6 = true;
@@ -470,6 +560,10 @@ public static class ContentValidator
                     needsV10 |= GrantEffect.IsDamageDefence(grant.Grant) || grant.DamageType is not null;
                     if (grant.DamageType is not null && !GrantEffect.IsDamageDefence(grant.Grant))
                         Error("validate.grant-damage-type-kind", $"Effect '{grant.Id}' has a damageType, which only a damageResistance, damageImmunity or damageVulnerability grant takes.", grant.Id);
+                    if (GrantEffect.IsConditionImmunity(grant.Grant) || grant.Condition is not null)
+                        NeedV12("a condition immunity");
+                    if (grant.Condition is not null && !GrantEffect.IsConditionImmunity(grant.Grant))
+                        Error("validate.grant-condition-kind", $"Effect '{grant.Id}' has a condition, which only a conditionImmunity grant takes.", grant.Id);
                     if (GrantEffect.IsDamageDefence(grant.Grant))
                     {
                         // Content v10: a resistance, immunity or vulnerability names a damage type and no target or content.
@@ -477,6 +571,15 @@ public static class ContentValidator
                             Error("validate.grant-damage-type", $"Effect '{grant.Id}' grants {grant.Grant.ToString().ToLowerInvariant()} and needs a damageType: one of {string.Join(", ", DamageTypes.All)}.", grant.Id);
                         if (grant.Target is not null || grant.Content is not null)
                             Error("validate.grant-damage-fields", $"Effect '{grant.Id}' grants a damage defence, which names a damageType only: it takes no target and no content.", grant.Id);
+                    }
+                    else if (GrantEffect.IsConditionImmunity(grant.Grant))
+                    {
+                        // Content v12 (G11): an immunity names one condition and no target, content or damageType. A manual or timed
+                        // one is allowed (the calculator does not apply it and the feature shows Assisted).
+                        if (grant.Condition is not { } immuneCondition || !ConditionKeys.All.Contains(immuneCondition))
+                            Error("validate.grant-condition", $"Effect '{grant.Id}' grants a condition immunity and needs a condition: one of {string.Join(", ", ConditionKeys.All)}.", grant.Id);
+                        if (grant.Target is not null || grant.Content is not null || grant.DamageType is not null)
+                            Error("validate.grant-condition-fields", $"Effect '{grant.Id}' grants a condition immunity, which names a condition only: it takes no target, no content and no damageType.", grant.Id);
                     }
                     else if (grant.Grant == GrantKind.Content)
                     {
@@ -559,6 +662,8 @@ public static class ContentValidator
                     else
                         needsV10 |= CharacterCalculator.IsSpeedOrPassive(restriction.Field);
                     needsV11 |= restriction.Field == FieldIds.FlySpeed;
+                    if (CharacterCalculator.IsClimbOrSwim(restriction.Field))
+                        NeedV12("a climb or swim speed");
                     if (Math.Abs(restriction.Minimum) > FormulaLimits.MaxLiteral)
                         Error("validate.restriction-minimum", $"Restriction '{restriction.Id}' minimum {restriction.Minimum} is outside ±{FormulaLimits.MaxLiteral}.", restriction.Id);
                     break;
@@ -594,6 +699,18 @@ public static class ContentValidator
                     else
                         CheckFormula(rollFloor.Total, rollFloor.Id, "total");
                     break;
+                case CheckAbilityEffect swap:
+                    NeedV12("a checkAbility");
+                    if (swap.Automation != AutomationStatus.Automatic || swap.Timing != EffectTiming.Always)
+                        Error("validate.check-ability-automation", $"Check ability '{swap.Id}' must be automatic and always on; a skill's ability is chosen by the calculator, never by the player.", swap.Id);
+                    var swapTargetOk = IsCheckAbilityTarget(swap.Target, out var swapPrinted);
+                    if (!swapTargetOk)
+                        Error("validate.check-ability-target", $"Check ability '{swap.Id}' targets '{swap.Target}'; use skill.<skill> (such as skill.athletics) or ability.<ability>.check (such as ability.str.check). It never reaches saves, initiative, a bare check or ability.<ability>.mod.", swap.Id);
+                    if (!CheckAbilityEffect.TryParseAbility(swap.Ability, out var swapAbility))
+                        Error("validate.check-ability-ability", $"Check ability '{swap.Id}' uses '{swap.Ability}', which is not an ability; use str, dex, con, int, wis or cha.", swap.Id);
+                    else if (swapTargetOk && swapAbility == swapPrinted)
+                        Error("validate.check-ability-ability", $"Check ability '{swap.Id}' uses '{swap.Ability}', which is already the printed ability of '{swap.Target}'; use a different ability.", swap.Id);
+                    break;
                 case ItemModEffect mod:
                     NeedV12("an item mod");
                     if (revision.Kind != ContentKind.Item)
@@ -604,7 +721,7 @@ public static class ContentValidator
                         Error("validate.item-mod-modifiers", $"Item mod '{mod.Id}' has {mod.Modifiers.Count} modifiers; at most {ItemModEffect.MaxModifiers}.", mod.Id);
                     foreach (var nested in mod.Modifiers?.Where(m => m is not null) ?? [])
                     {
-                        if (nested.Toggle is not null || nested.ToggleContent is not null || nested.WhileArmored is not null
+                        if (nested.Toggle is not null || nested.ToggleContent is not null || nested.WhileArmored is not null || nested.Cap is not null || nested.NotWearing is not null
                             || nested.Target.StartsWith(ResourceTargetPrefix, StringComparison.Ordinal)
                             || nested.Stacking != StackingRule.Stack || nested.StackGroup is not null
                             || nested.Timing != EffectTiming.Always || nested.Automation != AutomationStatus.Automatic)
@@ -1018,6 +1135,8 @@ public static class ContentValidator
         {
             usedScales.UnionWith(formula.Identifiers.Where(FormulaIdentifiers.IsScale).Select(FormulaIdentifiers.ScaleId));
             usedValues.UnionWith(formula.Identifiers.Where(FormulaIdentifiers.IsValue).Select(FormulaIdentifiers.ValueId));
+            if (formula.Identifiers.Contains(FormulaIdentifiers.Speed))
+                NeedV12("the SPEED formula identifier");
         }
 
         // Content v11 (D43): a roll's save, area, range, targets and per-unit dice.
