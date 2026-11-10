@@ -665,31 +665,6 @@
       "summary": "Starting at 5th level, when an attacker that you can see hits you with an attack, you can use your reaction to halve the attack’s damage against you.\n\nTomeStack: the halving is offered in the damage panel for a hit from an attack; that you can see the attacker is by hand.",
       "effects": [
         {
-          "type": "resource",
-          "id": "uncanny-dodge-reaction",
-          "resourceId": "uncannyDodgeReaction",
-          "label": "Reaction",
-          "maximum": "1",
-          "activation": "reaction",
-          "allowance": true
-        },
-        {
-          "type": "upkeep",
-          "id": "uncanny-dodge-refresh",
-          "at": "turnStart",
-          "resourceId": "uncannyDodgeReaction",
-          "change": "regain",
-          "amount": "all"
-        },
-        {
-          "type": "recovery",
-          "id": "uncanny-dodge-long-rest",
-          "timing": "onLongRest",
-          "resourceId": "uncannyDodgeReaction",
-          "on": "longRest",
-          "amount": "all"
-        },
-        {
           "type": "response",
           "id": "uncanny-dodge",
           "responseId": "uncannyDodge",
@@ -699,9 +674,7 @@
             "from": "attack"
           },
           "share": "half",
-          "resourceId": "uncannyDodgeReaction",
-          "cost": "1",
-          "text": "Only an attacker you can see (by hand)."
+          "text": "Only an attacker you can see. You spend your reaction by hand; TomeStack does not track it."
         }
       ]
     },

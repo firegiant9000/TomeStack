@@ -491,11 +491,20 @@ public class SrdRogueTests
         var fall = temp.App.PreviewDamage(new(id, 20, null, [new(uncanny.ContentId, "uncannyDodge")], ResponseSource.Fall));
         Assert.Equal(20, fall.Outcome.Adjusted);
 
-        // Taking it spends the reaction.
+        // Taking it is free: the reaction is spent by hand, so no resource is charged.
         var stamp = temp.App.GetCharacter(id).Character.UpdatedAt;
         var view = temp.App.Play(new(id, PlayActionKind.Damage, Confirm: true, Amount: 20, DamageType: "slashing", ExpectedUpdatedAt: stamp, Responses: [new(uncanny.ContentId, "uncannyDodge")], DamageFrom: ResponseSource.Attack));
         Assert.Equal(10, view.Damage!.Adjusted);
-        Assert.Equal(0, view.Sheet.Resources!.Single(r => r.ResourceId == "uncannyDodgeReaction").Current);
+        Assert.DoesNotContain(view.Sheet.Resources ?? [], r => r.ResourceId == "uncannyDodgeReaction" || r.Label == "Reaction");
+    }
+
+    [Fact]
+    public void Uncanny_dodge_has_no_reaction_pool_on_a_level_5_rogue()
+    {
+        using var temp = new TempApp();
+        var sheet = Sheet(temp, 5);
+
+        Assert.DoesNotContain(sheet.Resources ?? [], r => r.ResourceId == "uncannyDodgeReaction" || r.Label == "Reaction");
     }
 
     [Fact]
