@@ -119,9 +119,15 @@ public class ContentDiagnoseTests
             // it stay valid after the class update (a choice accepts only its listed options or extensions). That is the one stale pin
             // per family (the 5.1 choice is "primal-path").
             // C2-2: the Rogue's Sneak Attack dice are shown on Play and rolled by hand, so no formula reads the scale (debug.scale-unused).
-            // C2-6: the 5.2.1 Rogue's subclass choice lists the old Thief revision second for the same reason.
-            var findings = report.Findings.Where(f => !(f is { ContentName: "Barbarian", Code: "debug.reference-stale", EffectId: "barbarian-subclass" or "primal-path" })
-                && !(f is { ContentName: "Rogue", Code: "debug.reference-stale", EffectId: "rogue-subclass" })
+            // C2-6: the 5.2.1 Rogue's subclass choice lists the old Thief revision second for the same reason. Both are pinned to the
+            // v12 class revisions that carry them.
+            var staleOnV12Class = new[]
+            {
+                "51e00000-0000-4000-8000-000012000003", // Barbarian 5.1
+                "52e00000-0000-4000-8000-000012000011", // Barbarian 5.2.1
+                "52e00000-0000-4000-8000-000012410001", // Rogue 5.2.1
+            }.Select(Guid.Parse).ToHashSet();
+            var findings = report.Findings.Where(f => !(f is { Code: "debug.reference-stale", EffectId: "barbarian-subclass" or "primal-path" or "rogue-subclass" } && staleOnV12Class.Contains(f.Content.RevisionId))
                 && !(f is { ContentName: "Rogue", Code: "debug.scale-unused", EffectId: "rogue-sneak-attack-dice" })).ToList();
             Assert.True(findings.Count == 0, $"{source.Title}: " + string.Join("; ", findings.Take(10).Select(f => $"{f.ContentName} {f.Code} {f.EffectId}")));
             Assert.False(report.Truncated);

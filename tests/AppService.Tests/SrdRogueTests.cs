@@ -847,4 +847,24 @@ public class SrdRogueTests
         Assert.Equal(30, thief.Sheet.Field(FieldIds.ClimbSpeed).Value);
         Assert.Contains(thief.Sheet.Active!, r => r == NewThief52);
     }
+
+    [Fact]
+    public void The_Thief_update_first_keeps_the_Thief_resolved_and_the_class_update_after_it_is_clean()
+    {
+        using var temp = new TempApp();
+        var id = temp.App.SaveCharacter(Rogue(RulesFamilies.Srd521, 18)).Character.Id;
+
+        // The Thief first, while the character is still on the old class (whose subclass choice lists only the old Thief).
+        var viaThief = temp.App.ApplyUpdate(id, Thief(RulesFamilies.Srd521), NewThief52, confirm: true);
+        Assert.Equal(RogueClass(RulesFamilies.Srd521), viaThief.Character.Classes[0].Class);
+        Assert.DoesNotContain(viaThief.Sheet.Diagnostics, d => d.Code == "choice.invalid-option");
+        AssertClean(viaThief.Sheet);
+        Assert.True(viaThief.Sheet.Choices!.Single(c => c.ChoiceId == SubclassChoice(RulesFamilies.Srd521)).Resolved);
+        Assert.Equal(30, viaThief.Sheet.Field(FieldIds.ClimbSpeed).Value);
+
+        var both = temp.App.ApplyUpdate(id, RogueClass(RulesFamilies.Srd521), NewClass52, confirm: true);
+        AssertClean(both.Sheet);
+        Assert.Contains(both.Sheet.Active!, r => r == NewThief52);
+        Assert.Equal(30, both.Sheet.Field(FieldIds.ClimbSpeed).Value);
+    }
 }
