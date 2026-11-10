@@ -85,12 +85,12 @@ Both vocabularies' everyday verbs (attack, damage, a saving-throw DC, a pool spe
 
 | Class and family | Stays Reference |
 |---|---|
-| Barbarian 5.1 | Persistent Rage |
-| Barbarian 5.2.1 | Persistent Rage; Improved Brutal Strike (its extra die is the class scale, its options are text); Weapon Mastery; Instinctive Pounce; Retaliation |
+| Barbarian 5.1 | Persistent Rage; Intimidating Presence; Retaliation; Ability Score Improvement |
+| Barbarian 5.2.1 | Persistent Rage; Improved Brutal Strike (its extra die is the class scale, its options are text); Weapon Mastery; Instinctive Pounce; Retaliation; Ability Score Improvement; Epic Boon |
 | Rogue 5.1 | Thieves' Cant; Cunning Action; Second-Story Work; Blindsense |
 | Rogue 5.2.1 | Thieves' Cant; Cunning Action; Cunning Strike; Improved Cunning Strike; Devious Strikes; Weapon Mastery |
-| Monk 5.1 | Ki-Empowered Strikes; Open Hand Technique; Perfect Self; Stillness of Mind; Timeless Body; Tongue of the Sun and Moon; Tranquility |
-| Monk 5.2.1 | Open Hand Technique; Empowered Strikes; Perfect Focus; Acrobatic Movement; Heightened Focus; Self-Restoration; Fleet Step |
+| Monk 5.1 | Ability Score Improvement; Ki-Empowered Strikes; Open Hand Technique; Perfect Self; Stillness of Mind; Timeless Body; Tongue of the Sun and Moon; Tranquility |
+| Monk 5.2.1 | Ability Score Improvement; Open Hand Technique; Empowered Strikes; Perfect Focus; Acrobatic Movement; Heightened Focus; Self-Restoration; Epic Boon; Fleet Step |
 
 Assisted, not Automatic: Sneak Attack (both families) and Brutal Strike (5.2.1) are once-per-turn riders picked on the damage roll; their preconditions stay by hand. The reactions of Uncanny Dodge, Slow Fall and the Deflect responses are free in the engine (spent by hand, no per-class pool, which would double on a multiclass character). The saving-throw clause of Indomitable Might (5.2.1), the tool-check clause of Reliable Talent and the disease line of Purity of Body stay by hand inside otherwise automatic features.
 
