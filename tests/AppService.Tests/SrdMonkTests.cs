@@ -579,6 +579,37 @@ public class SrdMonkTests
         Assert.DoesNotContain(temp.App.GetCharacter(id).Sheet.Resources ?? [], r => r.Label == "Reaction");
     }
 
+    [Theory]
+    [InlineData(RulesFamilies.Srd51)]
+    [InlineData(RulesFamilies.Srd521)]
+    public void A_Rogue_and_Monk_multiclass_applies_Evasion_once(string family)
+    {
+        using var temp = new TempApp();
+        var rogueEvasion = Ref(family, 410110, 12410110);
+        var monkEvasion = V12(family == RulesFamilies.Srd51 ? 420111 : 420112, family);
+        var monk = V12Monk(7, null, null, family);
+        var multiclass = monk with
+        {
+            Level = 14,
+            Classes = [new(Ref(family, 410001, 12410001), 7), .. monk.Classes],
+        };
+        var id = temp.App.SaveCharacter(multiclass).Character.Id;
+
+        // Both Evasions are on the sheet, but the Monk's names the Rogue's as the one it replaces.
+        var sheet = temp.App.GetCharacter(id).Sheet;
+        Assert.Equal(2, sheet.Features!.Count(f => f.Name == "Evasion"));
+
+        var failure = temp.App.PreviewDamage(new(id, 20, "fire",
+            [new(rogueEvasion.ContentId, "evasionFailure"), new(monkEvasion.ContentId, "evasionFailure")], ResponseSource.Save, new DamageSave("dex", false)));
+        Assert.Equal(10, failure.Outcome.Adjusted);
+        Assert.Single(failure.Offers, o => o.Response.ResponseId == "evasionFailure");
+
+        var success = temp.App.PreviewDamage(new(id, 20, "fire",
+            [new(rogueEvasion.ContentId, "evasionSuccess"), new(monkEvasion.ContentId, "evasionSuccess")], ResponseSource.Save, new DamageSave("dex", true)));
+        Assert.Equal(0, success.Outcome.Adjusted);
+        Assert.Single(success.Offers, o => o.Response.ResponseId == "evasionSuccess");
+    }
+
     [Fact]
     public void Evasion_success_takes_none_failure_takes_half()
     {

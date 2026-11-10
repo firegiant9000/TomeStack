@@ -632,6 +632,10 @@
           },
           "share": "all",
           "automatic": true,
+          "supersedes": {
+            "content": "52c00000-0000-4000-8000-000000410110",
+            "responseId": "evasionSuccess"
+          },
           "unlessCondition": "incapacitated"
         },
         {
@@ -647,6 +651,10 @@
           },
           "share": "half",
           "automatic": true,
+          "supersedes": {
+            "content": "52c00000-0000-4000-8000-000000410110",
+            "responseId": "evasionFailure"
+          },
           "unlessCondition": "incapacitated"
         }
       ]

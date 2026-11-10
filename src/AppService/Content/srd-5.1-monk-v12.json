@@ -586,7 +586,11 @@
             "result": "success"
           },
           "share": "all",
-          "automatic": true
+          "automatic": true,
+          "supersedes": {
+            "content": "51c00000-0000-4000-8000-000000410110",
+            "responseId": "evasionSuccess"
+          }
         },
         {
           "type": "response",
@@ -600,7 +604,11 @@
             "result": "failure"
           },
           "share": "half",
-          "automatic": true
+          "automatic": true,
+          "supersedes": {
+            "content": "51c00000-0000-4000-8000-000000410110",
+            "responseId": "evasionFailure"
+          }
         }
       ]
     },
