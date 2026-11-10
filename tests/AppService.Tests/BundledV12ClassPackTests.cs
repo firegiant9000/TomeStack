@@ -12,6 +12,7 @@ public class BundledV12ClassPackTests
     [InlineData("TomeStack.Content.srd-5.1-barbarian-v12.json")]
     [InlineData("TomeStack.Content.srd-5.2.1-barbarian-v12.json")]
     [InlineData("TomeStack.Content.srd-5.1-rogue-v12.json")]
+    [InlineData("TomeStack.Content.srd-5.2.1-rogue-v12.json")]
     public void Every_revision_is_new_and_v12(string resource)
     {
         Assert.Contains(resource, TomeStackApp.BundledPacks);

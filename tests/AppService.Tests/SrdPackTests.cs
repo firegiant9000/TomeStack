@@ -34,8 +34,9 @@ public class SrdPackTests
     private static readonly ContentPack BarbarianV1251 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.1-barbarian-v12.json"); // C2-6
     private static readonly ContentPack BarbarianV12521 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.2.1-barbarian-v12.json"); // C2-6
     private static readonly ContentPack RogueV1251 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.1-rogue-v12.json"); // C2-6
-    private static readonly ContentPack Srd51 = Merge(Base51, Spells51, Equipment51, Classes51, Armor51, Fighter51, Origins51, Barbarian51, Rogue51, Monk51, BarbarianV1251, RogueV1251);
-    private static readonly ContentPack Srd521 = Merge(Base521, Spells521, Equipment521, Classes521, Armor521, Fighter521, Feats521, Origins521, Barbarian521, Rogue521, Monk521, BarbarianV12521);
+    private static readonly ContentPack RogueV12521 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.2.1-rogue-v12.json"); // C2-6
+    private static readonly ContentPack Srd51 =Merge(Base51, Spells51, Equipment51, Classes51, Armor51, Fighter51, Origins51, Barbarian51, Rogue51, Monk51, BarbarianV1251, RogueV1251);
+    private static readonly ContentPack Srd521 = Merge(Base521, Spells521, Equipment521, Classes521, Armor521, Fighter521, Feats521, Origins521, Barbarian521, Rogue521, Monk521, BarbarianV12521, RogueV12521);
 
     private static ContentPack Merge(params ContentPack[] packs) => new()
     {
@@ -58,7 +59,7 @@ public class SrdPackTests
     {
         foreach (var pack in new[] { Spells51, Equipment51, Classes51, Armor51, Fighter51, Origins51, Barbarian51, Rogue51, Monk51, BarbarianV1251, RogueV1251 })
             Assert.Equal(TempApp.Json(Base51.Sources), TempApp.Json(pack.Sources));
-        foreach (var pack in new[] { Spells521, Equipment521, Classes521, Armor521, Fighter521, Feats521, Origins521, Barbarian521, Rogue521, Monk521, BarbarianV12521 })
+        foreach (var pack in new[] { Spells521, Equipment521, Classes521, Armor521, Fighter521, Feats521, Origins521, Barbarian521, Rogue521, Monk521, BarbarianV12521, RogueV12521 })
             Assert.Equal(TempApp.Json(Base521.Sources), TempApp.Json(pack.Sources));
     }
 

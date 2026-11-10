@@ -28,9 +28,16 @@ public class SrdRogueTests
     /// <summary>The 5.1 Rogue as C2-6 revised it (srd-5.1-rogue-v12.json): the new class revision and the v12 feature revisions it grants.</summary>
     private static ContentReference NewClass51 => Ref(RulesFamilies.Srd51, 410001, 12410001);
 
-    private static ContentReference V12(long content) => Ref(RulesFamilies.Srd51, content, 12000000 + (content % 1000000));
+    private static ContentReference V12(long content, string family = RulesFamilies.Srd51) => Ref(family, content, 12000000 + (content % 1000000));
 
     private static ContentPack V12Pack51 => TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.1-rogue-v12.json");
+
+    /// <summary>The 5.2.1 Rogue and Thief as C2-6 revised them (srd-5.2.1-rogue-v12.json).</summary>
+    private static ContentReference NewClass52 => Ref(RulesFamilies.Srd521, 410001, 12410001);
+
+    private static ContentReference NewThief52 => V12(410002, RulesFamilies.Srd521);
+
+    private static ContentPack V12Pack521 => TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.2.1-rogue-v12.json");
 
     private static string SubclassChoice(string family) => family == RulesFamilies.Srd51 ? "roguish-archetype" : "rogue-subclass";
 
@@ -52,7 +59,7 @@ public class SrdRogueTests
     /// two (Perception and Stealth unless <paramref name="expertise"/> says otherwise), a second pair from level 6 and the Thief from
     /// level 3. Str 10, Dex 16 (+3), Con 14 (+2), Wis 12 (+1).
     /// </summary>
-    private static Character Rogue(string family, int level, IReadOnlyList<EquipmentEntry>? equipment = null, AbilityScores? scores = null, string[]? expertise = null, ContentReference? cls = null)
+    private static Character Rogue(string family, int level, IReadOnlyList<EquipmentEntry>? equipment = null, AbilityScores? scores = null, string[]? expertise = null, ContentReference? cls = null, ContentReference? thief = null)
     {
         cls ??= RogueClass(family);
         List<ChoiceSelection> choices =
@@ -61,7 +68,7 @@ public class SrdRogueTests
             new(cls, "rogue-expertise", [.. (expertise ?? DefaultExpertise).Select(s => Expert(family, s))]),
         ];
         if (level >= 3)
-            choices.Add(new(cls, SubclassChoice(family), [Thief(family)]));
+            choices.Add(new(cls, SubclassChoice(family), [thief ?? Thief(family)]));
         if (level >= 6)
             choices.Add(new(cls, "rogue-expertise-6", [.. SecondExpertise.Select(s => Expert(family, s))]));
         return new Character
@@ -355,16 +362,18 @@ public class SrdRogueTests
     public void Reference_features_are_listed_as_reference()
     {
         using var temp = new TempApp();
-        string[] both = ["Sneak Attack", "Thieves’ Cant", "Cunning Action", "Uncanny Dodge", "Evasion", "Reliable Talent", "Elusive", "Second-Story Work"];
         var names = new Dictionary<string, string[]>
         {
-            [RulesFamilies.Srd521] = [.. both, "Steady Aim", "Cunning Strike", "Weapon Mastery"],
+            // C2-6: on the v12 class and Thief the 5.2.1 Sneak Attack is Assisted, Steady Aim, Uncanny Dodge, Evasion, Reliable Talent,
+            // Elusive and Second-Story Work are Automatic, and no effect removes dice, so the Cunning Strikes stay Reference.
+            [RulesFamilies.Srd521] = ["Thieves’ Cant", "Cunning Action", "Cunning Strike", "Improved Cunning Strike", "Devious Strikes", "Weapon Mastery"],
             // C2-6: on the v12 class the 5.1 Sneak Attack is Assisted and Uncanny Dodge, Evasion, Reliable Talent and Elusive are Automatic.
             [RulesFamilies.Srd51] = ["Thieves’ Cant", "Cunning Action", "Second-Story Work", "Blindsense"],
         };
         foreach (var family in Families)
         {
-            var sheet = temp.App.SaveCharacter(Rogue(family, 20, cls: family == RulesFamilies.Srd51 ? NewClass51 : null)).Sheet;
+            var v12 = family == RulesFamilies.Srd51;
+            var sheet = temp.App.SaveCharacter(Rogue(family, 20, cls: v12 ? NewClass51 : NewClass52, thief: v12 ? null : NewThief52)).Sheet;
             // Scoped to this family's Rogue revisions: "Expertise" and "Weapon Mastery" exist in other classes too.
             var rogueRevisions = RoguePack(family).Revisions.Select(r => r.RevisionId).ToHashSet();
             var features = sheet.Features!.Where(f => rogueRevisions.Contains(f.Content.RevisionId)).ToList();
@@ -379,7 +388,7 @@ public class SrdRogueTests
     [Fact]
     public void The_rogue_packs_add_nothing_to_existing_characters()
     {
-        string[] rogueFiles = ["TomeStack.Content.srd-5.1-rogue.json", "TomeStack.Content.srd-5.2.1-rogue.json", "TomeStack.Content.srd-5.1-rogue-v12.json"];
+        string[] rogueFiles = ["TomeStack.Content.srd-5.1-rogue.json", "TomeStack.Content.srd-5.2.1-rogue.json", "TomeStack.Content.srd-5.1-rogue-v12.json", "TomeStack.Content.srd-5.2.1-rogue-v12.json"];
         var fixtures = new Dictionary<string, string>
         {
             [RulesFamilies.Srd521] = "characters/m1-acceptance-srd521-brenna.json",
@@ -624,5 +633,218 @@ public class SrdRogueTests
         Assert.Contains(offers, o => o.From == RogueClass(RulesFamilies.Srd51) && o.To == NewClass51);
         // The Thief is untouched by C2-6 in 5.1.
         Assert.DoesNotContain(offers, o => o.From == Thief(RulesFamilies.Srd51));
+    }
+
+    // ---- C2-6: the 5.2.1 v12 revisions -------------------------------------------------------------------------------------------
+
+    private static Character V12Rogue52(int level, IReadOnlyList<EquipmentEntry>? equipment = null) =>
+        Rogue(RulesFamilies.Srd521, level, equipment, cls: NewClass52, thief: NewThief52);
+
+    private static CharacterSheet Sheet52(TempApp temp, int level) => temp.App.SaveCharacter(V12Rogue52(level)).Sheet;
+
+    [Theory]
+    [InlineData(1, "1d6")]
+    [InlineData(5, "3d6")]
+    [InlineData(11, "6d6")]
+    [InlineData(20, "10d6")]
+    public void Sneak_attack_52_offers_scaled_d6_once_per_turn(int level, string dice)
+    {
+        using var temp = new TempApp();
+        var sword = Weapon(RulesFamilies.Srd521, "Shortsword");
+        var sheet = temp.App.SaveCharacter(V12Rogue52(level, [new(sword, Equipped: true)])).Sheet;
+
+        var rider = Assert.Single(AttackOf(sheet, sword).Riders!, r => r.OncePerTurn);
+        Assert.Equal(dice, rider.Dice);
+        Assert.Equal(AutomationStatus.Assisted, sheet.Features!.Single(f => f.Name == "Sneak Attack").Automation);
+        AssertClean(sheet);
+    }
+
+    [Fact]
+    public void Steady_aim_gives_advantage_and_speed_0()
+    {
+        using var temp = new TempApp();
+        var sword = Weapon(RulesFamilies.Srd521, "Shortsword");
+        var steady = V12(410106, RulesFamilies.Srd521);
+        var id = temp.App.SaveCharacter(V12Rogue52(3, [new(sword, Equipped: true)])).Character.Id;
+
+        var off = temp.App.GetCharacter(id).Sheet;
+        Assert.Contains(off.Toggles!, t => t.ToggleId == "steadyAim" && !t.On);
+        Assert.Null(AttackOf(off, sword).Mode);
+        Assert.Equal(30, off.Field(FieldIds.Speed).Value);
+        Assert.Equal(AutomationStatus.Automatic, off.Features!.Single(f => f.Name == "Steady Aim").Automation);
+
+        var on = temp.App.Play(new(id, PlayActionKind.ToggleOn, Confirm: true, ContentId: steady.ContentId, ToggleId: "steadyAim")).Sheet;
+        Assert.Equal(RollMode.Advantage, AttackOf(on, sword).Mode!.Automatic);
+        Assert.Equal(0, on.Field(FieldIds.Speed).Value);
+
+        var again = temp.App.Play(new(id, PlayActionKind.ToggleOff, Confirm: true, ContentId: steady.ContentId, ToggleId: "steadyAim")).Sheet;
+        Assert.Null(AttackOf(again, sword).Mode);
+        Assert.Equal(30, again.Field(FieldIds.Speed).Value);
+    }
+
+    [Fact]
+    public void Second_story_work_gives_climb_speed_equal_to_speed()
+    {
+        using var temp = new TempApp();
+        Assert.Equal(0, Sheet52(temp, 2).Field(FieldIds.ClimbSpeed).Value);
+
+        var sheet = Sheet52(temp, 3);
+        Assert.Equal(sheet.Field(FieldIds.Speed).Value, sheet.Field(FieldIds.ClimbSpeed).Value);
+        Assert.Equal(30, sheet.Field(FieldIds.ClimbSpeed).Value);
+        Assert.Equal(AutomationStatus.Automatic, sheet.Features!.Single(f => f.Name == "Second-Story Work").Automation);
+
+        // The old Thief revision gives no climb speed.
+        var old = temp.App.SaveCharacter(Rogue(RulesFamilies.Srd521, 3, cls: NewClass52)).Sheet;
+        Assert.Equal(0, old.Field(FieldIds.ClimbSpeed).Value);
+        AssertClean(sheet);
+    }
+
+    [Fact]
+    public void Uncanny_dodge_52_halves_an_attack_and_costs_nothing()
+    {
+        using var temp = new TempApp();
+        var uncanny = V12(410109, RulesFamilies.Srd521);
+        var id = temp.App.SaveCharacter(V12Rogue52(5)).Character.Id;
+
+        Assert.Equal(AutomationStatus.Automatic, temp.App.GetCharacter(id).Sheet.Features!.Single(f => f.Name == "Uncanny Dodge").Automation);
+        var preview = temp.App.PreviewDamage(new(id, 20, "slashing", [new(uncanny.ContentId, "uncannyDodge")], ResponseSource.Attack));
+        Assert.Empty(preview.Notes);
+        Assert.Equal(10, preview.Outcome.Adjusted);
+        Assert.DoesNotContain(Sheet52(temp, 5).Resources ?? [], r => r.ResourceId == "uncannyDodgeReaction" || r.Label == "Reaction");
+
+        var fall = temp.App.PreviewDamage(new(id, 20, null, [new(uncanny.ContentId, "uncannyDodge")], ResponseSource.Fall));
+        Assert.Equal(20, fall.Outcome.Adjusted);
+    }
+
+    [Fact]
+    public void Evasion_52_success_takes_none_failure_takes_half()
+    {
+        using var temp = new TempApp();
+        var evasion = V12(410110, RulesFamilies.Srd521);
+        var id = temp.App.SaveCharacter(V12Rogue52(7)).Character.Id;
+
+        var success = temp.App.PreviewDamage(new(id, 20, "fire", [new(evasion.ContentId, "evasionSuccess")], ResponseSource.Save, new DamageSave("dex", true)));
+        Assert.Empty(success.Notes);
+        Assert.Equal(0, success.Outcome.Adjusted);
+
+        var failure = temp.App.PreviewDamage(new(id, 20, "fire", [new(evasion.ContentId, "evasionFailure")], ResponseSource.Save, new DamageSave("dex", false)));
+        Assert.Empty(failure.Notes);
+        Assert.Equal(10, failure.Outcome.Adjusted);
+    }
+
+    [Fact]
+    public void Evasion_does_nothing_while_incapacitated()
+    {
+        using var temp = new TempApp();
+        var evasion = V12(410110, RulesFamilies.Srd521);
+        var rogue = V12Rogue52(7);
+        Assert.All(V12Pack521.Revisions.Single(r => r.Name == "Evasion").Effects.OfType<ResponseEffect>(), e => Assert.Equal("incapacitated", e.UnlessCondition));
+
+        var id = temp.App.SaveCharacter(rogue with { Play = rogue.Play with { Conditions = ["incapacitated"] } }).Character.Id;
+        var sheet = temp.App.GetCharacter(id).Sheet;
+        Assert.All(sheet.Responses!.Where(r => r.ResponseId.StartsWith("evasion", StringComparison.Ordinal)), r =>
+        {
+            Assert.False(r.Available);
+            Assert.Equal("Not while incapacitated", r.UnavailableReason);
+        });
+
+        var success = temp.App.PreviewDamage(new(id, 20, "fire", [new(evasion.ContentId, "evasionSuccess")], ResponseSource.Save, new DamageSave("dex", true)));
+        // A save for half damage still halves on a success; Evasion's "none" is not applied.
+        Assert.Equal(10, success.Outcome.Adjusted);
+        var failure = temp.App.PreviewDamage(new(id, 20, "fire", [new(evasion.ContentId, "evasionFailure")], ResponseSource.Save, new DamageSave("dex", false)));
+        Assert.Equal(20, failure.Outcome.Adjusted);
+    }
+
+    [Fact]
+    public void Reliable_talent_52_floors_a_proficient_check_at_10()
+    {
+        using var temp = new TempApp();
+        Assert.Null(temp.App.Roll(new RollCommand(temp.App.SaveCharacter(V12Rogue52(6)).Character.Id, Field: FieldIds.Skill("stealth"))).Floor);
+
+        var id = temp.App.SaveCharacter(V12Rogue52(7)).Character.Id;
+        var stealth = temp.App.Roll(new RollCommand(id, Field: FieldIds.Skill("stealth")));
+        Assert.Equal(10, stealth.Floor!.Face);
+        Assert.Equal(["Reliable Talent"], stealth.Floor.Reasons.Select(r => r.Source));
+        Assert.Null(temp.App.Roll(new RollCommand(id, Field: FieldIds.Skill("athletics"))).Floor);
+    }
+
+    [Fact]
+    public void Elusive_52_prevents_advantage_against_unless_incapacitated()
+    {
+        using var temp = new TempApp();
+        Assert.Null(Sheet52(temp, 17).AttacksAgainst);
+
+        var reason = Assert.Single(Sheet52(temp, 18).AttacksAgainst!.Reasons, r => r.Source == "Elusive");
+        Assert.Equal((RollMode.Advantage, true), (reason.Mode, reason.Prevent));
+
+        var incapacitated = V12Rogue52(18);
+        var sheet = temp.App.SaveCharacter(incapacitated with { Play = incapacitated.Play with { Conditions = ["incapacitated"] } }).Sheet;
+        Assert.DoesNotContain(sheet.AttacksAgainst?.Reasons ?? [], r => r.Source == "Elusive" && r.Prevent);
+    }
+
+    [Fact]
+    public void The_v12_Rogue_52_keeps_every_unchanged_grant_and_adds_the_new_Thief_beside_the_old()
+    {
+        var old = RoguePack(RulesFamilies.Srd521).Revisions.Single(r => r.Kind == ContentKind.Class);
+        var revised = V12Pack521.Revisions.Single(r => r.Kind == ContentKind.Class);
+        var changed = new[] { 410102L, 410106, 410109, 410110, 410111, 410115 }.Select(n => V12(n, RulesFamilies.Srd521).ContentId).ToHashSet();
+        IEnumerable<(string, ContentReference)> Grants(ContentRevision r) => r.Effects.OfType<GrantEffect>().Where(g => g.Content is not null).Select(g => (g.Id, g.Content!));
+        var oldGrants = Grants(old).ToDictionary(g => g.Item1, g => g.Item2);
+        foreach (var (id, content) in Grants(revised))
+            Assert.Equal(changed.Contains(content.ContentId) ? V12(int.Parse(content.ContentId.ToString()[^6..]), RulesFamilies.Srd521) : oldGrants[id], content);
+        Assert.Equal(oldGrants.Count, Grants(revised).Count());
+
+        var choice = revised.Effects.OfType<ChoiceEffect>().Single(c => c.ChoiceId == "rogue-subclass");
+        Assert.Equal([NewThief52, Thief(RulesFamilies.Srd521)], choice.Options);
+
+        var oldThief = RoguePack(RulesFamilies.Srd521).Revisions.Single(r => r.Kind == ContentKind.Subclass);
+        var newThief = V12Pack521.Revisions.Single(r => r.Kind == ContentKind.Subclass);
+        var oldThiefGrants = Grants(oldThief).ToDictionary(g => g.Item1, g => g.Item2);
+        foreach (var (id, content) in Grants(newThief))
+            Assert.Equal(id == "second-story-work" ? V12(410502, RulesFamilies.Srd521) : oldThiefGrants[id], content);
+        Assert.Equal(oldThiefGrants.Count, Grants(newThief).Count());
+    }
+
+    // ---- C2-6: existing characters on the older 5.2.1 Rogue ------------------------------------------------------------------------
+
+    [Fact]
+    public void A_C2_2_Rogue_52_calculates_as_before_and_is_offered_the_v12_class_and_Thief()
+    {
+        using var temp = new TempApp();
+        var sword = Weapon(RulesFamilies.Srd521, "Shortsword");
+        var id = temp.App.SaveCharacter(Rogue(RulesFamilies.Srd521, 18, [new(sword, Equipped: true)])).Character.Id;
+        var sheet = temp.App.GetCharacter(id).Sheet;
+
+        AssertClean(sheet);
+        Assert.DoesNotContain(AttackOf(sheet, sword).Riders ?? [], r => r.OncePerTurn);
+        Assert.Null(sheet.AttacksAgainst);
+        Assert.Equal(0, sheet.Field(FieldIds.ClimbSpeed).Value);
+        Assert.Equal(AutomationStatus.Reference, sheet.Features!.Single(f => f.Name == "Evasion").Automation);
+
+        var offers = temp.App.AvailableUpdates(id);
+        var offer = Assert.Single(offers, o => o.Role == ReferenceRole.Class && o.Name == "Rogue");
+        Assert.Equal((RogueClass(RulesFamilies.Srd521), NewClass52, true), (offer.From, offer.To, offer.Bundled));
+        Assert.Contains(offers, o => o.From == Thief(RulesFamilies.Srd521) && o.To == NewThief52);
+    }
+
+    [Fact]
+    public void After_the_class_and_Thief_updates_the_52_v12_effects_apply()
+    {
+        using var temp = new TempApp();
+        var sword = Weapon(RulesFamilies.Srd521, "Shortsword");
+        var id = temp.App.SaveCharacter(Rogue(RulesFamilies.Srd521, 18, [new(sword, Equipped: true)])).Character.Id;
+
+        var updated = temp.App.ApplyUpdate(id, RogueClass(RulesFamilies.Srd521), NewClass52, confirm: true);
+        AssertClean(updated.Sheet);
+        Assert.All(updated.Sheet.Choices!, c => Assert.True(c.Resolved, c.ChoiceId));
+        Assert.Equal(NewClass52, updated.Character.Classes[0].Class);
+        Assert.Equal("9d6", AttackOf(updated.Sheet, sword).Riders!.Single(r => r.OncePerTurn).Dice);
+        Assert.Contains(updated.Sheet.AttacksAgainst!.Reasons, r => r.Source == "Elusive" && r.Prevent);
+        Assert.Equal(0, updated.Sheet.Field(FieldIds.ClimbSpeed).Value);
+
+        var thief = temp.App.ApplyUpdate(id, Thief(RulesFamilies.Srd521), NewThief52, confirm: true);
+        AssertClean(thief.Sheet);
+        Assert.Equal(30, thief.Sheet.Field(FieldIds.ClimbSpeed).Value);
+        Assert.Contains(thief.Sheet.Active!, r => r == NewThief52);
     }
 }
