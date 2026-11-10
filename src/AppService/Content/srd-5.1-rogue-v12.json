@@ -682,6 +682,14 @@
           "amount": "all"
         },
         {
+          "type": "recovery",
+          "id": "uncanny-dodge-long-rest",
+          "timing": "onLongRest",
+          "resourceId": "uncannyDodgeReaction",
+          "on": "longRest",
+          "amount": "all"
+        },
+        {
           "type": "response",
           "id": "uncanny-dodge",
           "responseId": "uncannyDodge",
