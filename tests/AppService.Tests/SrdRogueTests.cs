@@ -366,9 +366,11 @@ public class SrdRogueTests
         {
             // C2-6: on the v12 class and Thief the 5.2.1 Sneak Attack is Assisted, Steady Aim, Uncanny Dodge, Evasion, Reliable Talent,
             // Elusive and Second-Story Work are Automatic, and no effect removes dice, so the Cunning Strikes stay Reference.
-            [RulesFamilies.Srd521] = ["Thieves’ Cant", "Cunning Action", "Cunning Strike", "Improved Cunning Strike", "Devious Strikes", "Weapon Mastery"],
+            [RulesFamilies.Srd521] = ["Thieves’ Cant", "Cunning Action", "Cunning Strike", "Improved Cunning Strike", "Devious Strikes", "Weapon Mastery",
+                "Expertise", "Ability Score Improvement", "Fast Hands", "Use Magic Device", "Thief’s Reflexes", "Epic Boon", "Supreme Sneak"],
             // C2-6: on the v12 class the 5.1 Sneak Attack is Assisted and Uncanny Dodge, Evasion, Reliable Talent and Elusive are Automatic.
-            [RulesFamilies.Srd51] = ["Thieves’ Cant", "Cunning Action", "Second-Story Work", "Blindsense"],
+            [RulesFamilies.Srd51] = ["Thieves’ Cant", "Cunning Action", "Second-Story Work", "Blindsense",
+                "Expertise", "Ability Score Improvement", "Fast Hands", "Use Magic Device", "Thief’s Reflexes"],
         };
         foreach (var family in Families)
         {
@@ -382,6 +384,10 @@ public class SrdRogueTests
                 var feature = Assert.Single(features, f => f.Name == name);
                 Assert.True(feature.Automation == AutomationStatus.Reference, $"{family}: {name} is {feature.Automation}");
             }
+            // The exact set (see docs/features/effect-vocabulary-coverage.md): nothing else in the Rogue is Reference, so an Automatic
+            // feature cannot silently become one.
+            var actual = features.Where(f => f.Automation == AutomationStatus.Reference).Select(f => f.Name).Distinct().Order(StringComparer.Ordinal);
+            Assert.Equal(names[family].Order(StringComparer.Ordinal), actual);
         }
     }
 
@@ -421,7 +427,11 @@ public class SrdRogueTests
         {
             var pack = TomeStackApp.LoadBundledPack(file);
             var json = TempApp.Json(pack.Revisions);
-            Assert.DoesNotContain(rogueGuids, g => json.Contains(g, StringComparison.OrdinalIgnoreCase));
+            // C2-6: the v12 Monk's Evasion names the v12 Rogue's (`supersedes`), so a Rogue/Monk halves once. That is the one allowed mention.
+            var allowed = file.EndsWith("-monk-v12.json", StringComparison.Ordinal)
+                ? new[] { Ref(file.Contains("5.1", StringComparison.Ordinal) ? RulesFamilies.Srd51 : RulesFamilies.Srd521, 410110).ContentId.ToString("D") }
+                : [];
+            Assert.DoesNotContain(rogueGuids.Except(allowed), g => json.Contains(g, StringComparison.OrdinalIgnoreCase));
             var rogueContent = rogueRevisions.Select(r => r.ContentId).ToHashSet();
             Assert.DoesNotContain(pack.Revisions, r => r.ExtendsChoice is { } e && rogueContent.Contains(e.ContentId));
         }

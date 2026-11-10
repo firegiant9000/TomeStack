@@ -81,14 +81,14 @@ Both vocabularies' everyday verbs (attack, damage, a saving-throw DC, a pool spe
 - G10 (skill ability substitution; climb and swim speeds) is built, content v12, D90. The 5.2.1 Second-Story Work's climb speed is expressible; its jump line stays text, and 5.1 Second-Story Work has no speed. Acrobatic Movement (5.2.1) grants no speed and no check, so it is not a G10 feature and stays text.
 - G2 (crit-only dice) is built with G1 (content v12, D88). G3 (once per turn) is built as player-added: the rider is offered on each damage roll and the player adds it; the app does not track turns, and that judgement awaits the owner.
 
-**C2-6 (done, 2026-11-10): what stays Reference per class and family.** The Barbarian, Rogue and Monk are re-authored on v12 in new insert-only revisions; existing characters get them through the class update offer. The sets below are what the sheet still lists as Reference at level 20 on the new revisions (class features such as Ability Score Improvement and Epic Boon are Reference by nature and not repeated, except where a test names them).
+**C2-6 (done, 2026-11-10): what stays Reference per class and family.** The Barbarian, Rogue and Monk are re-authored on v12 in new insert-only revisions; existing characters get them through the class update offer. The sets below are what the sheet still lists as Reference at level 20 on the new revisions. Each row is the exact set, pinned by that class's `Reference_features_are_listed_as_reference` test (Ability Score Improvement and Epic Boon are Reference by nature and are listed).
 
 | Class and family | Stays Reference |
 |---|---|
-| Barbarian 5.1 | Persistent Rage; Intimidating Presence; Retaliation; Ability Score Improvement |
+| Barbarian 5.1 | Persistent Rage; Intimidating Presence; Retaliation; Frenzy; Ability Score Improvement |
 | Barbarian 5.2.1 | Persistent Rage; Improved Brutal Strike (its extra die is the class scale, its options are text); Weapon Mastery; Instinctive Pounce; Retaliation; Ability Score Improvement; Epic Boon |
-| Rogue 5.1 | Thieves' Cant; Cunning Action; Second-Story Work; Blindsense |
-| Rogue 5.2.1 | Thieves' Cant; Cunning Action; Cunning Strike; Improved Cunning Strike; Devious Strikes; Weapon Mastery |
+| Rogue 5.1 | Thieves' Cant; Cunning Action; Second-Story Work; Blindsense; Expertise; Ability Score Improvement; Fast Hands; Use Magic Device; Thief's Reflexes |
+| Rogue 5.2.1 | Thieves' Cant; Cunning Action; Cunning Strike; Improved Cunning Strike; Devious Strikes; Weapon Mastery; Expertise; Ability Score Improvement; Fast Hands; Use Magic Device; Thief's Reflexes; Epic Boon; Supreme Sneak |
 | Monk 5.1 | Ability Score Improvement; Ki-Empowered Strikes; Open Hand Technique; Perfect Self; Stillness of Mind; Timeless Body; Tongue of the Sun and Moon; Tranquility |
 | Monk 5.2.1 | Ability Score Improvement; Open Hand Technique; Empowered Strikes; Perfect Focus; Acrobatic Movement; Heightened Focus; Self-Restoration; Epic Boon; Fleet Step |
 

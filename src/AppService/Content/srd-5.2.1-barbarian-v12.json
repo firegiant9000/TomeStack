@@ -436,7 +436,7 @@
           "toggleId": "reckless",
           "label": "Reckless Attack",
           "duration": "1",
-          "text": "Turn this on as your first attack roll of the turn; the \"first attack roll on your turn\" condition is by hand. It lasts until the start of your next turn: turn it off yourself."
+          "text": "Turn this on as your first attack roll of the turn; the \"first attack roll on your turn\" condition is by hand. It ends at the start of your next turn in an encounter; outside an encounter, turn it off yourself."
         },
         {
           "type": "rollMode",

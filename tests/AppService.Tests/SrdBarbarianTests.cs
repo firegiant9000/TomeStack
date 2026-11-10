@@ -570,15 +570,15 @@ public class SrdBarbarianTests
         using var temp = new TempApp();
         var names = new Dictionary<string, string[]>
         {
-            [RulesFamilies.Srd521] = ["Persistent Rage"],
-            // C2-6: the other features are re-authored at v12 and are no longer Reference.
-            [RulesFamilies.Srd51] = ["Persistent Rage"],
+            // C2-6: the rest of the Barbarian is re-authored at v12 and is no longer Reference. These are the exact sets.
+            [RulesFamilies.Srd521] = ["Persistent Rage", "Improved Brutal Strike", "Weapon Mastery", "Instinctive Pounce", "Retaliation", "Ability Score Improvement", "Epic Boon"],
+            [RulesFamilies.Srd51] = ["Persistent Rage", "Intimidating Presence", "Retaliation", "Frenzy", "Ability Score Improvement"],
         };
         foreach (var family in Families)
         {
             var sheet = temp.App.SaveCharacter(Barbarian(family, 20)).Sheet;
-            foreach (var name in names[family])
-                Assert.True(sheet.Features!.Any(f => f.Name == name && f.Automation == AutomationStatus.Reference), $"{family}: {name}");
+            var actual = sheet.Features!.Where(f => f.Automation == AutomationStatus.Reference).Select(f => f.Name).Distinct().Order(StringComparer.Ordinal);
+            Assert.Equal(names[family].Order(StringComparer.Ordinal), actual);
         }
         var classic = temp.App.SaveCharacter(Barbarian(RulesFamilies.Srd51, 20)).Sheet;
         foreach (var name in new[] { "Reckless Attack", "Feral Instinct", "Brutal Critical", "Indomitable Might", "Mindless Rage", "Fast Movement", "Primal Champion" })
