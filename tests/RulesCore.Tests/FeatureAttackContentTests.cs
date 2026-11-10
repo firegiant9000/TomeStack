@@ -166,7 +166,7 @@ public class FeatureAttackContentTests
     public void The_modifier_and_roll_v11_key_lists_match_the_properties_the_build_added()
     {
         string[] common = ["Id", "Automation", "Timing", "Text", "Extensions"];
-        AssertKeys<ModifierEffect>([.. common, "Operation", "Target", "Value", "Stacking", "StackGroup", "Toggle", "WhileArmored"], Properties.RevisionHashProperties.ModifierV11Keys);
+        AssertKeys<ModifierEffect>([.. common, "Operation", "Target", "Value", "Stacking", "StackGroup", "Toggle", "WhileArmored", "Cap", "NotWearing"], Properties.RevisionHashProperties.ModifierV11Keys); // Cap is a v12 key (G5); NotWearing is a v12 key (G4)
         AssertKeys<RollEffect>([.. common, "RollId", "Label", "Dice", "ResourceId", "Activation", "ResourceContent", "Cost", "VariableCost", "Bonus", "Payment", "CastsSpell", "ScaledDice"], Properties.RevisionHashProperties.RollV11Keys); // Payment, CastsSpell and ScaledDice are v12 keys (MECH-X item 1, G1)
 
         static void AssertKeys<T>(string[] pinned, string[] hashTestCopy)

@@ -31,7 +31,7 @@ Rules core: `src/RulesCore/Calculation.cs` (resources, features, hit points) and
 | `currentHitPoints` | Absent/null = at the maximum, so a character at full keeps full hit points after a level-up. Shown clamped to 0…maximum |
 | `temporaryHitPoints` | 0 or more |
 | `resources[]` | `{ contentId, resourceId, spent }`. Keyed by content id, not revision, so an update to a new revision keeps the count |
-| `conditions[]` | Keys of the 14 conditions both SRDs define (`blinded` … `unconscious`). Reminders only: they do not change calculated values |
+| `conditions[]` | Keys of the 14 conditions both SRDs define (`blinded` … `unconscious`). Reminders: they do not change calculated values, but the content v12 response and roll-mode gates read them, and a condition immunity (content v12 G11) cancels one |
 | `exhaustion` | 0–6 |
 | `hitDiceSpent[]` (v5) | `{ die, spent }` per hit die size (d6–d12, 0–20). Spent on a short rest, given back by a long rest ([rests.md](rests.md)) |
 | `deathSaves` (v5) | `{ successes, failures }`, 0–3 each. Three successes: Stable (the 3 stays as the marker). Three failures: dead |

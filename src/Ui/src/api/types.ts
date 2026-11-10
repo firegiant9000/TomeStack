@@ -256,6 +256,23 @@ export interface DerivedValue {
   mark?: 'none' | 'proficient' | 'expertise';
   /** Content v11 (D43 S6): on saves, skills, ability modifiers and initiative, the advantage or disadvantage the sheet found; absent when none. */
   mode?: RollModeSummary;
+  /** Content v12 (G9): on ability checks, skills and initiative, the roll floor the sheet found; absent when none. */
+  floor?: RollFloorSummary;
+}
+
+/** Content v12 (G9): one roll-floor effect that reaches a field. */
+export interface RollFloorReason {
+  source: string;
+  reference: ContentReference;
+  face?: number;
+  total?: number;
+}
+
+/** The highest face floor and the highest total floor for a field, and every reason listed. */
+export interface RollFloorSummary {
+  face?: number;
+  total?: number;
+  reasons: RollFloorReason[];
 }
 
 /** One reason a d20 roll has advantage or disadvantage; `against` (condition keys) means the player confirms it, so it is only a note. */
@@ -632,6 +649,8 @@ export interface CharacterSheet {
   bloodied?: boolean;
   /** Wave 3 item 21: the character's own damage defences and the v10 damage grants, merged; absent when there are none. */
   damageDefences?: DamageDefenceValue[];
+  /** Content v12 (G11): conditions the character is immune to; absent when none. */
+  conditionImmunities?: ConditionImmunityValue[];
   /** Wave 3 item 25: each equipment entry of an item that needs attunement or has charges, or (MECH-X item 3) any weapon or armor entry or one with mods, carried or equipped; absent when there are none. */
   itemUses?: ItemUseValue[];
   /** Wave 3 item 27: experience points are tracked and the total has reached the next level's threshold. Display only; absent otherwise. */
@@ -696,6 +715,12 @@ export interface DamageDefenceSource {
 export interface DamageDefenceValue {
   type: string;
   kind: DamageDefence['kind'];
+  sources: DamageDefenceSource[];
+}
+
+/** One condition the character is immune to on the sheet (Content v12, G11): the active grants only, toggle-gated ones included. */
+export interface ConditionImmunityValue {
+  condition: string;
   sources: DamageDefenceSource[];
 }
 
@@ -1009,6 +1034,8 @@ export interface DieResult {
   term: number;
   sides: number;
   value: number;
+  /** Content v12 (G9): the face as rolled, present only when a roll floor raised it (`value` is the raised face). */
+  rolled?: number;
   kept: boolean;
   fromCritical: boolean;
 }
@@ -1037,6 +1064,10 @@ export interface RollRecord {
   expressionConstant: number;
   modifiers: RollModifier[];
   total: number;
+  /** Content v12 (G9): the total before a total floor; present only when the floor raised it. */
+  unfloored?: number;
+  /** Content v12 (G9): the roll floor the sheet gave this field roll. */
+  floor?: RollFloorSummary;
   provenance?: RollProvenance;
   /** D43 S5: the uses this roll implies spending from a pool (informational; the Spend button sends `character.play`). */
   spend?: RollSpend;
@@ -1899,6 +1930,12 @@ export type Effect =
       toggle?: string;
       /** Content v11 (D43): the content that declares `toggle`. Absent: this revision. */
       toggleContent?: string;
+      /** Content v12 (G5): the highest a bonus to `ability.<x>.score` can raise the score (21 to 30). Absent: the usual 20. */
+      cap?: number;
+      /** Content v12 (G4): the modifier applies only while none of this gear is worn. Absent: whatever is worn. */
+      notWearing?: ('armor' | 'heavyArmor' | 'shield')[];
+      /** Content v8 (M2.2): applies only while body armor is worn. */
+      whileArmored?: boolean;
     })
   // Content v6 (M3 B2): switched on and off in play; turning it on can spend one use of a resource of this revision.
   // Content v10 (Wave 3, D42): autoWhen and activation on a toggle, activation on a resource, three damage-defence grant
@@ -1940,8 +1977,10 @@ export type Effect =
     })
   | (EffectBase & {
       type: 'grant';
-      grant: 'proficiency' | 'expertise' | 'content' | 'damageResistance' | 'damageImmunity' | 'damageVulnerability';
+      grant: 'proficiency' | 'expertise' | 'content' | 'damageResistance' | 'damageImmunity' | 'damageVulnerability' | 'conditionImmunity';
       target?: string;
+      /** Content v12 (G11): the condition key a `conditionImmunity` grant makes the character immune to. */
+      condition?: string;
       content?: ContentReference;
       level?: number;
       onlyAs?: ClassEntry;
@@ -1964,6 +2003,20 @@ export type Effect =
       unlessCondition?: string;
       /** Content v12 (G7): `attacksAgainst` only: attacks against the character can't have `mode`. */
       prevent?: boolean;
+    })
+  // Content v12 (G9): a d20 below `face`, or a total below `total`, counts as it on check fields.
+  | (EffectBase & {
+      type: 'rollFloor';
+      target: string;
+      face?: number;
+      total?: string;
+      proficient?: boolean;
+    })
+  // Content v12 (G10): a skill check uses `ability` instead of its usual one.
+  | (EffectBase & {
+      type: 'checkAbility';
+      target: string;
+      ability: Ability;
     })
   // Content v11 (D43 S7): a damage-time response. `amount` belongs to a damageReduction or hitPointOutcome response, `when` to a threshold one.
   | (EffectBase & {

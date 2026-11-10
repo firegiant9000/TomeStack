@@ -72,7 +72,7 @@ const statGroups: { title: string; match: (field: string) => boolean }[] = [
   { title: 'Proficiency', match: (f) => f === 'proficiencyBonus' },
   { title: 'Saving throws', match: (f) => f.startsWith('save.') },
   { title: 'Skills', match: (f) => f.startsWith('skill.') || f.startsWith('passive.') },
-  { title: 'Combat', match: (f) => f === 'initiative' || f === 'speed' || f === 'speed.fly' || f === 'armorClass' || f === 'hitPoints' || f === 'attacks' || f === 'criticalRange' },
+  { title: 'Combat', match: (f) => f === 'initiative' || f === 'speed' || f === 'speed.fly' || f === 'speed.climb' || f === 'speed.swim' || f === 'armorClass' || f === 'hitPoints' || f === 'attacks' || f === 'criticalRange' },
 ];
 // D04: the caster numbers, with traces and overrides, on the Spells tab (ADR-014). Slots combine on the multiclass table
 // (M3 C3); an override is the manual step only for class revisions that do not say how they combine.
@@ -1178,7 +1178,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
         {statGroups.map((group) =>
           fieldGroup(
             group.title,
-            sheet.fields.filter((f) => group.match(f.field) && !(f.field === 'speed.fly' && f.computedValue <= 0 && !f.override)), // fly speed is hidden at 0, unless an override is set (its card holds Remove override)
+            sheet.fields.filter((f) => group.match(f.field) && !((f.field === 'speed.fly' || f.field === 'speed.climb' || f.field === 'speed.swim') && f.computedValue <= 0 && !f.override)), // fly, climb and swim speed are hidden at 0, unless an override is set (its card holds Remove override)
           ),
         )}
         <DefencesPanel view={view} onChanged={onChanged} onError={onError} saveCharacter={saveCharacter} />

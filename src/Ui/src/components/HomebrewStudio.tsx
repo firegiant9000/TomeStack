@@ -45,7 +45,9 @@ import { WeaponFields } from './WeaponFields';
 import { CompanionFields } from './CompanionFields';
 import { ItemModFields } from './ItemModFields';
 import { ModifierFields } from './ModifierFields';
-import { DefenceFields, RollModeFields, isDamageDefence } from './RollModeFields';
+import { CheckAbilityFields } from './CheckAbilityFields';
+import { RollFloorFields } from './RollFloorFields';
+import { ConditionImmunityFields, DefenceFields, RollModeFields, isConditionImmunity, isDamageDefence } from './RollModeFields';
 import { ResponseFields } from './ResponseFields';
 import { PaymentFields } from './PaymentFields';
 import { RollFields, type SpellChoice } from './RollFields';
@@ -917,8 +919,8 @@ function EntryEditor(props: {
             : false;
   const listed = revision.effects.map((effect, index) => ({ effect, index })).filter(({ effect }) => !shownByEditor(effect));
 
-  function add(type: 'modifier' | 'resource' | 'recovery' | 'roll' | 'armor' | 'grant' | 'scale' | 'value' | 'spellcasting' | 'toggle' | 'toggleGroup' | 'upkeep' | 'attack' | 'attackRider' | 'rollMode' | 'damageDefence' | 'response' | 'weapon' | 'itemMod' | 'companion') {
-    const id = nextId(type === 'damageDefence' ? 'grant' : type);
+  function add(type: 'modifier' | 'resource' | 'recovery' | 'roll' | 'armor' | 'grant' | 'scale' | 'value' | 'spellcasting' | 'toggle' | 'toggleGroup' | 'upkeep' | 'attack' | 'attackRider' | 'rollMode' | 'rollFloor' | 'checkAbility' | 'damageDefence' | 'conditionImmunity' | 'response' | 'weapon' | 'itemMod' | 'companion') {
+    const id = nextId(type === 'damageDefence' || type === 'conditionImmunity' ? 'grant' : type);
     if (type === 'companion') {
       // Content v12 (MECH-X item 4): a valid start except the label. The companion id is made once, here, and never shown.
       update({ effects: [...revision.effects, { type, id, companionId: crypto.randomUUID(), label: '', armorClass: '13', hitPointMaximum: '5 * LEVEL' }] });
@@ -942,6 +944,21 @@ function EntryEditor(props: {
     if (type === 'rollMode') {
       // Content v11 (D43 slice 6): a valid start (advantage on a Dexterity save).
       update({ effects: [...revision.effects, { type, id, target: 'save.dex', mode: 'advantage' }] });
+      return;
+    }
+    if (type === 'rollFloor') {
+      // Content v12 (G9): a valid start (a d20 under 10 counts as 10 on any check).
+      update({ effects: [...revision.effects, { type, id, target: 'check', face: 10 }] });
+      return;
+    }
+    if (type === 'checkAbility') {
+      // Content v12 (G10): a valid start (Athletics may use Dexterity).
+      update({ effects: [...revision.effects, { type, id, target: 'skill.athletics', ability: 'dex' }] });
+      return;
+    }
+    if (type === 'conditionImmunity') {
+      // Content v12 (G11): a valid start (immune to charmed).
+      update({ effects: [...revision.effects, { type: 'grant', id, grant: 'conditionImmunity', condition: 'charmed' }] });
       return;
     }
     if (type === 'damageDefence') {
@@ -1267,6 +1284,15 @@ function EntryEditor(props: {
         </button>
         <button type="button" onClick={() => add('rollMode')}>
           Add roll mode
+        </button>
+        <button type="button" onClick={() => add('rollFloor')}>
+          Add roll floor
+        </button>
+        <button type="button" onClick={() => add('checkAbility')}>
+          Add check ability
+        </button>
+        <button type="button" onClick={() => add('conditionImmunity')}>
+          Add condition immunity
         </button>
         <button type="button" onClick={() => add('damageDefence')}>
           Add damage defence
@@ -1733,8 +1759,10 @@ function EffectEditor(props: {
   const names: Record<Effect['type'], string> = {
     modifier: 'Modifier',
     rollMode: 'Roll mode',
+    rollFloor: 'Roll floor',
+    checkAbility: 'Use another ability for a skill',
     response: 'Damage response',
-    grant: isDamageDefence(effect) ? 'Damage defence' : 'Granted feature',
+    grant: isDamageDefence(effect) ? 'Damage defence' : isConditionImmunity(effect) ? 'Condition immunity' : 'Granted feature',
     resource: 'Resource',
     recovery: 'Recovery',
     roll: 'Roll or action',
@@ -2066,6 +2094,8 @@ function EffectEditor(props: {
       {effect.type === 'rollMode' && (
         <RollModeFields effect={effect} toggles={toggleChoices} showToggle={toggles.length > 0 || props.otherToggles.length > 0} onChange={onChange} onProblem={onProblem} />
       )}
+      {effect.type === 'rollFloor' && <RollFloorFields effect={effect} previewRevision={props.previewRevision} onChange={onChange} onProblem={onProblem} />}
+      {effect.type === 'checkAbility' && <CheckAbilityFields effect={effect} onChange={onChange} onProblem={onProblem} />}
       {effect.type === 'response' && (
         <ResponseFields
           effect={effect}
@@ -2080,6 +2110,7 @@ function EffectEditor(props: {
         />
       )}
       {isDamageDefence(effect) && <DefenceFields effect={effect} toggles={toggleChoices} showToggle={toggles.length > 0 || props.otherToggles.length > 0} onChange={onChange} />}
+      {isConditionImmunity(effect) && <ConditionImmunityFields effect={effect} toggles={toggleChoices} showToggle={toggles.length > 0 || props.otherToggles.length > 0} onChange={onChange} />}
       {effect.type === 'grant' && effect.grant === 'content' && (
         <>
           <label className="field">
@@ -2139,7 +2170,9 @@ function EffectEditor(props: {
       {/* An upkeep is previewed and confirmed by a turn, never applied by calculation, so it has no automation to choose. */}
       {/* A named value is always calculated (the validator refuses any other automation), so it has none to choose either. */}
       {/* A response is chosen by the player when the hit is taken, so it has no automation to choose either. */}
-      {effect.type !== 'grant' && effect.type !== 'upkeep' && effect.type !== 'value' && effect.type !== 'response' && (
+      {/* A roll floor is always automatic and always on (the validator refuses anything else), so it has none to choose either. */}
+      {/* A check ability is likewise always automatic and always on (no timing either), so it has none to choose. */}
+      {effect.type !== 'grant' && effect.type !== 'upkeep' && effect.type !== 'value' && effect.type !== 'response' && effect.type !== 'rollFloor' && effect.type !== 'checkAbility' && (
         <label className="field">
           Automation
           <select

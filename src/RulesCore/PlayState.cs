@@ -250,7 +250,8 @@ public sealed record DeathSaveOutcome(int Successes, int Failures, bool RegainsO
 
 /// <summary>
 /// The conditions both SRDs define (exhaustion is a level, <see cref="PlayState.Exhaustion"/>). Keys only: the rules text
-/// of each condition is not bundled, and conditions do not change calculated fields yet (they are reminders).
+/// of each condition is not bundled. Conditions are reminders, except that the G6 response and G7 roll-mode unlessCondition gates
+/// read them, and an immunity from content cancels a held condition for those gates.
 /// </summary>
 public static class ConditionKeys
 {
@@ -263,10 +264,14 @@ public static class ConditionKeys
     private static readonly string[] IncludingIncapacitated = ["paralyzed", "petrified", "stunned", "unconscious"];
 
     /// <summary>True when <paramref name="key"/> is held. Incapacitated is also held by a condition that includes it
-    /// (paralyzed, petrified, stunned, unconscious); the stored play state never gains the implied condition.</summary>
-    public static bool Holds(IEnumerable<string> held, string key)
+    /// (paralyzed, petrified, stunned, unconscious); the stored play state never gains the implied condition. A condition in
+    /// <paramref name="immune"/> (content immunity) is never held, and an immune including condition does not imply incapacitated.</summary>
+    public static bool Holds(IEnumerable<string> held, string key, IReadOnlySet<string>? immune = null)
     {
+        if (immune is not null && immune.Contains(key))
+            return false;
         var list = held as ICollection<string> ?? held.ToList();
-        return list.Contains(key) || (key == "incapacitated" && IncludingIncapacitated.Any(list.Contains));
+        return list.Contains(key)
+            || (key == "incapacitated" && IncludingIncapacitated.Any(c => list.Contains(c) && immune?.Contains(c) != true));
     }
 }

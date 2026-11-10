@@ -1,7 +1,7 @@
-# ADR-022: Content schema v12, one slice at a time (G6 first: response triggers and amounts; G7: roll modes on attacks and initiative; G1: scaled dice, critical-only and once-per-turn riders)
+# ADR-022: Content schema v12, one slice at a time (G6 first: response triggers and amounts; G7: roll modes on attacks and initiative; G1: scaled dice, critical-only and once-per-turn riders; G9: roll floor on checks; G10: check ability, climb and swim speed; G11: condition immunity; G5: ability-score cap; G4: armor and shield gates)
 
-Status: **accepted** for the slice list and for slices G6, G7 and G1 (owner, 2026-10-28: LIVING_SPECS D76 and B4; D86, D87, D88). Slice G6 is built on branch `v12-g6`, slice G7 on `v12-g7` (stacked on G6), slice G1 on `v12-g1` (stacked on G7). The warn-or-block judgement for G6's down-conversion (decision 6), the one for G7's (G7 decision 6) and the one for G1's (G1 decision 6), and "once per turn is offered, not tracked" (G1 decision 4), are proposals that await the owner.
-Date: 2026-11-04
+Status: **accepted** for the slice list and for slices G6, G7, G1, G9, G10, G11, G5 and G4 (owner, 2026-10-28: LIVING_SPECS D76 and B4; D86, D87, D88, D89, D90, D91, D92, D93; G9 and G10 design rulings 2026-11-05; G11 design rulings 2026-11-06; G5 design rulings 2026-11-08; G4 design rulings 2026-11-09). Slice G6 is built on branch `v12-g6`, slice G7 on `v12-g7` (stacked on G6), slice G1 on `v12-g1` (stacked on G7), slice G9 on `v12-g9` (stacked on G1), slice G10 on `v12-g10` (stacked on G9), slice G11 on `v12-g11` (stacked on G10), slice G5 on `v12-g5` (stacked on G11), slice G4 on `v12-g4` (stacked on G5). The warn-or-block judgement for G6's down-conversion (decision 6), the one for G7's (G7 decision 6) and the one for G1's (G1 decision 6), and "once per turn is offered, not tracked" (G1 decision 4), are proposals that await the owner.
+Date: 2026-11-09
 
 ## Context
 
@@ -34,7 +34,7 @@ The first gap (G6) is in the damage panel. A `response` effect (v11, ADR-018 and
 
 ### The slice list
 
-G6 was built first, G7 second, G1 (with G2 and G3) third (below). The remaining slices follow in the order G9, G10, G11, G5 and G4 (the gap ids are in [effect-vocabulary-coverage.md](../features/effect-vocabulary-coverage.md)). Each extends this ADR with its own decisions and evidence, keeps every new member optional, and adds its own lowering rule.
+G6 was built first, G7 second, G1 (with G2 and G3) third, G9 fourth, G10 fifth, G11 sixth, G5 seventh and G4 eighth and last (below); the gap ids are in [effect-vocabulary-coverage.md](../features/effect-vocabulary-coverage.md). Each extends this ADR with its own decisions and evidence, keeps every new member optional, and adds its own lowering rule.
 
 **0.8.0 waits for every slice** (owner ruling, 2026-11-04): the bundled classes get new v12 revisions only when v12 is complete, and no release is cut while v12 is open. Until then G6 and G7 sit on their branches and, once merged, in `main`.
 
@@ -162,4 +162,208 @@ The third gap is in the dice of D43 (`attackRider.dice`, `roll.dice`, v11), whic
 - `tests/RulesCore.Tests/DownConvertV12Tests.cs` (rider dropped whole; roll key dropped or roll dropped) with `DownConvertCoverageTests` unchanged at 40, and `CapabilityRegistryTests.cs` (the registry rows).
 - UI: `src/Ui/src/components/HomebrewStudioAttacks.test.tsx` and `HomebrewStudioRolls.test.tsx` (authoring), `ActionsPanel.test.tsx` (the once-per-turn offer on damage rolls).
 
-Related: [ADR-018](ADR-018-play-mechanics.md), [ADR-021](ADR-021-mechanics-beyond-d43.md), [ADR-023](ADR-023-down-conversion-export.md), [play-mechanics.md](../features/play-mechanics.md#content-v12-g6-response-triggers-and-amounts), [its G7 section](../features/play-mechanics.md#content-v12-g7-roll-modes-on-attacks-and-initiative) and [its G1 section](../features/play-mechanics.md#content-v12-g1-scaled-dice-critical-only-and-once-per-turn-riders), LIVING_SPECS D76, D86, D87 and D88. Supersedes: none.
+## Slice G9: roll floor
+
+The fourth gap is a minimum on a check: content that says "when you make this kind of check, a d20 that lands low counts as a set number", or "a check total below a set value counts as that value". v11 has no way to say it (`rollMode` only changes how many d20s are rolled).
+
+### Decision (G9)
+
+1. **A new kind `rollFloor` (v12)** (owner ruling, 2026-11-05: a new kind, not `rollMode` members): `{ "target", "face" | "total", "proficient"? }`. `target` is `check` (every ability-check field: each ability modifier, every skill, initiative), `ability.<x>.check` (that ability's modifier, its skills, and initiative for Dex) or `skill.<s>` (a known skill). **Checks only:** no saves, attacks or other targets (`validate.roll-floor-target`). Exactly one of `face` (an integer 2 to 20: a d20 below it counts as it) or `total` (a formula: a total below it counts as it, evaluated in the declaring content's context, so `SCALE.` needs v9 and `VALUE.` v11) (`validate.roll-floor-value`). There is no toggle, condition or tag.
+2. **`proficient: true`** reaches only fields marked proficient or expertise (owner ruling): a bare ability check and initiative are never reached. `false` counts as absent but still needs v12.
+3. **Sheet.** `DerivedValue.Floor` (`RollFloorSummary`, with `RollFloorReason` entries in content order) holds the highest face and the highest total, separately. Each reason adds one `"floor"` trace step after the field's own steps. A failing total formula leaves that reason out with `effect.invalid-formula`; the sheet still calculates. A total that evaluates below 1 still counts (a no-op floor). Each floor trace step has `Amount` = the floor and `Result` = the field value unchanged. The displayed field value never changes.
+4. **Rolling.** Only a field roll gets a floor; attacks, damage, saves, death saves, roll effects, spells and custom dice never do. The face raises each d20 of the main expression below it, before keeping, and both raw faces stay visible (`DieResult.Rolled`). The total is floored after modifiers. `RollRecord.Unfloored` and `Floor` keep the raw total and the floor. The roll text reads "7 → 10 (floor)" for a die and "total 12 raised to 16 (source)" for a total.
+5. **Down-conversion** (ADR-023, "never silently stronger"). At the 12 to 11 rung a `rollFloor` is **dropped whole** and listed (`below.effect-unsupported`) (owner ruling): it only raises a roll, so the copy is weaker, and a v11 effect cannot carry it.
+6. **Numbers.** No new ADR and no schema bump (`ContentRevision.CurrentSchemaVersion` stays 12; nothing new is stored on a character). The decision row is D89.
+
+### Consequences (G9)
+
+- Content can set a minimum d20 face or a minimum total on checks, optionally only on skills the character is proficient in. A revision without it keeps its version, bytes and hash; a v11 revision holding a `rollFloor` keeps it as unknown data and ignores it.
+- The sheet lists the floor on each field it reaches. The Homebrew Studio authors it (a "Floor on" choice of "The d20" or "The total", an "At least" value that is a number from 2 to 20 or a formula, and an "Only when proficient" box).
+- A revision that uses it needs content schema 12 (`validate.requires-v12`). A package that holds one warns `package.needs-newer-build`.
+- New codes: `validate.roll-floor-target`, `validate.roll-floor-value`, `validate.roll-floor-automation` (a roll floor is always automatic and always on; validation refuses other automation or timing, and the sheet skips such stored content).
+- The capability registry gains a `rollFloor` row (Automatic, "Applied when a check field is rolled"). The down-conversion coverage count is unchanged by the new drop.
+
+### Not doing (G9)
+
+- **Saves, attacks and tool checks** (tool checks are not sheet fields).
+- **Flooring the displayed field value,** toggles and conditions.
+- **A floor on rolls made outside the app.**
+
+### Evidence (G9)
+
+- `tests/RulesCore.Tests/RollFloorV12SchemaTests.cs` and `RollFloorV12ValidationTests.cs` (the members, the version rung, the validator codes).
+- `tests/RulesCore.Tests/RollFloorV12SheetTests.cs` (highest face and total, proficient-only marks, content order, failing formula, trace steps).
+- `tests/RulesCore.Tests/RollFloorRollerTests.cs` (each d20 raised before keeping, total floored after modifiers).
+- `tests/AppService.Tests/RollFloorV12ServiceTests.cs` (field rolls floored, other roll kinds never) and `tests/RulesCore.Tests/DownConvertV12Tests.cs` (dropped whole).
+- UI: `src/Ui/src/components/HomebrewStudioRollFloors.test.tsx` (authoring) and `rollText.test.ts` (the roll text).
+- The original fixture pack `tests/RulesFixtures/fixture-pack-roll-floor.json`.
+
+## Slice G10: check ability, climb and swim speed
+
+The fifth gap is two small things content could not say in v11: "this skill may use another ability" (the skill takes whichever of the two modifiers is higher), and a climbing or swimming speed, including one that is a share of the walking speed ("a climb speed equal to your walking speed").
+
+### Decision (G10)
+
+1. **A new kind `checkAbility` (v12)** (owner ruling, 2026-11-05): `{ "target", "ability" }`. `target` is `skill.<s>` (a known skill) or `ability.<x>.check`, meaning every skill whose **printed** ability is x. It never reaches a bare ability check, initiative or a save. `ability` is the ability the skill may use, written as a roll mode's `ability` is. It must differ from the printed ability of every skill it reaches (`validate.check-ability-target`, `validate.check-ability-ability`). There is no toggle, condition or tag: a situational substitution stays text.
+2. **"May use": the mode first, then the modifier** (owner ruling, 2026-11-05). For each candidate (the printed ability and every `checkAbility` candidate for that skill) the sheet works out the automatic roll mode the skill's checks would get from the active roll modes. The best mode wins: advantage, then normal, then disadvantage (advantage and disadvantage together are normal). Among candidates with the same mode the strictly higher modifier wins, and a tie goes to the printed ability, then content order. So a raging hero with Strength 14 and Dexterity 16 keeps Strength for Athletics when Rage gives Strength checks advantage, and uses Dexterity when not raging. Roll modes and G9 floors follow the ability the skill ended up using: with a Dexterity-based Athletics, `ability.dex.check` advantage reaches it and `ability.str.check` disadvantage no longer does. A skill with no substitution keeps its printed ability. Known limit: roll floors are not compared when choosing.
+3. **Always on.** `automation` must be `automatic` and `timing` `always` (`validate.check-ability-automation`); the sheet skips stored content that breaks this, and the studio hides the two selects. This is the G9 `rollFloor` pattern.
+4. **Sheet.** When a substitute wins, the skill's base step reads "{Label} starts at the {Ability} modifier ({source} lets you use {Ability} instead of {Printed})", carries the content origin and takes the chosen modifier as an input; the skill's reads become that modifier and the proficiency bonus. A substitute that cannot win changes nothing: same value, same steps, no new input. Passive scores follow the skill.
+5. **Climb and swim speed.** Two new fields, `speed.climb` ("Climb speed") and `speed.swim` ("Swim speed"), in feet, base 0 ("No climbing speed unless content gives one"). Content may target them only from v12 (`validate.requires-v12`). The sheet shows them in the Combat group and in the summary after Fly ("Climb 30 ft."), hidden at 0 unless overridden.
+6. **`SPEED`.** A speed modifier on `speed.climb`, `speed.swim` or `speed.fly` may read `SPEED` (the walking speed, as in `SPEED / 2`); it needs v12 (`validate.requires-v12`) and stays an unknown identifier everywhere else (armor class, skills, any other target, a v11 revision). The formula preview has no value for it. The cycle the first design guarded against cannot arise: formulas read only ability scores and modifiers, the proficiency bonus, levels, class levels and `SPEED`, never skills, so no `checkAbility` can feed back into its own inputs.
+7. **Down-conversion** (ADR-023, owner rulings). At the 12 to 11 rung: a `checkAbility` is **dropped whole** and listed (`below.effect-unsupported`). Every **modifier** on `speed.climb` or `speed.swim` is dropped (`below.unknown-target`): the older version has no such field, so the copy has no such speed. A **restriction** on either **blocks** (`below.restriction-lifted`; follow-up ruling, 2026-11-05): dropping it would lift a limit on the character. A `speed.fly` modifier whose value reads `SPEED` is dropped when it is a `bonus` or `replace` with a formula that cannot be negative (the copy is weaker), and blocks when it is a `set` or the formula might be negative (`below.value-formula`).
+8. **Registry.** `checkAbility` is Automatic ("Applied to the skill's value on the sheet").
+9. **Numbers.** No new ADR and no schema bump (`ContentRevision.CurrentSchemaVersion` stays 12; nothing new is stored on a character). The decision row is D90.
+
+### Consequences (G10)
+
+- Content can let a skill, or every skill of one ability, use another ability, and can give a climb or swim speed, including one tied to the walking speed. A revision without any of it keeps its version, bytes and hash; a v11 revision holding a `checkAbility` keeps it as unknown data and ignores it. Every sheet gains two fields, `speed.climb` and `speed.swim`, at 0; nothing else on a v11-style sheet moves.
+- The Homebrew Studio authors the substitution (a rule titled "Use another ability for a skill", button "Add check ability"; a "Skill" choice of "Every Strength skill" and so on, then each skill; a "Uses instead" choice) and shows a hint in the modifier editor: "You can use SPEED (your walking speed) in a climb, swim or fly speed modifier, such as SPEED / 2."
+- A revision that uses any of it needs content schema 12 (`validate.requires-v12`). A package that holds one warns `package.needs-newer-build`.
+- New codes: `validate.check-ability-target`, `validate.check-ability-ability`, `validate.check-ability-automation`.
+- The capability registry gains a `checkAbility` row. The down-conversion coverage count is unchanged by the new drops.
+
+### Not doing (G10)
+
+- **Situational substitutions** (toggles, conditions: "while climbing").
+- **Saves, initiative and bare ability checks** as targets, and a forced (lower) ability.
+- **Constitution as a target.** No skill is printed with it, so `ability.con.check` is refused and the studio does not offer "Every Constitution skill". The targets are every Strength, Dexterity, Intelligence, Wisdom or Charisma skill, or one skill.
+- **Exports carrying the substitution.** SheetExport and the Foundry export keep the printed ability; neither format has a field for a substituted ability.
+- **Jump distance** (no field) and **`SPEED` outside speed modifiers.**
+- **Re-authoring bundled SRD features.** The correction to the coverage notes: Acrobatic Movement (5.2.1) is not a G10 feature (it grants no speed and no check, only vertical surfaces and liquids while unarmored) and stays text. Of the two Second-Story Work versions, 5.1 has no speed; only the 5.2.1 climb speed is expressible, and its jump line is not.
+
+### Evidence (G10)
+
+- `tests/RulesCore.Tests/CheckAbilityV12SchemaTests.cs` and `CheckAbilityV12ValidationTests.cs` (the members, the version rung, the validator codes).
+- `tests/RulesCore.Tests/CheckAbilityV12SheetTests.cs` (highest wins, tie, step text, roll modes and floors follow the ability used) and `ClimbSwimV12Tests.cs` (the fields, `SPEED` scope).
+- `tests/RulesCore.Tests/DownConvertV12Tests.cs` (the drops and the blocks).
+- `tests/AppService.Tests/CheckAbilityV12ServiceTests.cs` and `CheckAbilityV12SchemaFileTests.cs` (the sheet through the service; the published JSON schema).
+- UI: `src/Ui/src/components/HomebrewStudioCheckAbility.test.tsx` (authoring), `CharacterSheet.test.tsx` and `SheetSummary.test.tsx` (climb and swim speed shown).
+- The original fixture pack `tests/RulesFixtures/fixture-pack-check-ability.json`.
+
+## Slice G11: condition immunity
+
+The sixth gap is "you are immune to the charmed condition", always or only while a mode (a rage, a form) is on. Content could only say it in text. This is the grant the bundled Barbarian's and Monk's immunity lines use in the C2-6 v12 revisions (done).
+
+### Decision (G11)
+
+1. **A new grant kind `conditionImmunity` (v12)** (owner rulings, 2026-11-06), with a new member `condition` (JSON `condition`): one key of the 14 conditions, compared exactly (lower case). It is required on this kind and refused on every other kind. The kind takes no `target`, `content` or `damageType`; `level` and `onlyAs` work as on a damage defence.
+2. **Older revisions never bind it.** In a v10 or v11 revision (and below) a grant of this kind stays `unknown`, byte for byte with its hash; a `condition` key on any other grant stays extension data. Only a v12 revision types it.
+3. **Always on, or while a toggle is on.** It is calculated only when `automation` is `automatic` and `timing` is `always`, gated by `level`, `onlyAs` and `whileToggle` (the same or another content's toggle) exactly as a damage defence is. A manual or timed one is not applied and its feature shows Assisted; it is not an error. There is no `unlessCondition` or other condition gate on the grant.
+4. **Play: suppress, do not block.** An immune condition is not held. `ConditionKeys.Holds` takes the immunity set: an immune key is not held, and "incapacitated" is implied only by a held condition that is itself not immune. The G6 response gates and the G7 roll-mode `unlessCondition` gates read this. The player can still record the condition (`addCondition` and `removeCondition` are accepted) and the stored play state never changes because of an immunity, so switching the toggle off shows the condition held again with no write. The G7 `against` lists are untouched.
+5. **Sheet.** `conditionImmunities` lists each condition with its sources, in the order of the 14 keys, sources grouped and distinct; it is absent when there are none, so a sheet without the grant does not change. The grant is not a proficiency. The immunity set is worked out once per calculation, before the roll modes.
+6. **Which conditions.** Any of the 14. Exhaustion (a level) and disease (not a condition) stay text.
+7. **Down-conversion** (ADR-023, owner ruling, 2026-11-06). At the 12 to 11 rung the grant is **dropped whole** and listed (`below.effect-unsupported`: "'{name}': its immunity to the {condition} condition; the feature stays as text."). A copy without it is only weaker, so nothing blocks.
+8. **Registry.** The existing grant row's text reads "Proficiencies, expertise, content, damage defences and condition immunities calculate"; it keeps its evidence class and gains no second row.
+9. **UI copy and numbers.** The Play legend reads "Conditions (reminders; a condition you are immune to has no effect)" and an immune condition's chip reads "{Label} (immune)", still toggleable. The sheet's Defences panel gains a read-only "Condition immunities" list ("{Label} ({sources})"). The studio has "Add condition immunity" (row "Condition immunity") with a "Condition" choice of the 14 labels and the "Only while" choice (shown when a toggle is available); its Automation select is hidden, as for every grant, so a manual or timed immunity comes only from JSON or import and shows as Assisted. No new ADR and no schema bump (`ContentRevision.CurrentSchemaVersion` stays 12; `Character.CurrentSchemaVersion` stays 11). The decision row is D91.
+
+### Consequences (G11)
+
+- Content can grant immunity to one condition, optionally while a toggle is on, and the sheet and Play honour it. A revision without it keeps its version, bytes and hash; a v11 revision holding one keeps it as unknown data and ignores it.
+- A revision that uses it needs content schema 12 (`validate.requires-v12`). A package that holds one warns `package.needs-newer-build`.
+- New codes: `validate.grant-condition` (missing or not one of the 14 keys), `validate.grant-condition-kind` (`condition` on another kind) and `validate.grant-condition-fields` (`target`, `content` or `damageType` on the new kind).
+- Print and the summary's conditions line list the stored conditions, as before.
+
+### Not doing (G11)
+
+- **Exhaustion or disease immunity.**
+- **Ending a held condition automatically.** An effect such as "the condition ends when you enter the mode" stays a player action (text).
+- **Blocking `addCondition`.**
+- **The G7 `against` lists**, which stay player-applied.
+- **Re-authoring bundled SRD features** (the Barbarian's Mindless Rage, the 5.1 Monk's Purity of Body): done in C2-6 (new insert-only revisions). Purity of Body's disease line stays text, so no change was needed there.
+
+### Evidence (G11)
+
+- `tests/RulesCore.Tests/ConditionImmunityV12SchemaTests.cs` and `ConditionImmunityV12ValidationTests.cs` (the member, the version rung, the validator codes, the published JSON schema).
+- `tests/RulesCore.Tests/ConditionImmunityV12SheetTests.cs` (the listing, toggle gating, no proficiency) and `ConditionImmunityV12GateTests.cs` (`Holds`, response and roll-mode gates, implied incapacitated).
+- `tests/RulesCore.Tests/DownConvertV12Tests.cs` (the drop).
+- `tests/AppService.Tests/ConditionImmunityV12ServiceTests.cs` and `SchemaTests` (the sheet through the service; play state is not rewritten).
+- UI: `src/Ui/src/components/HomebrewStudioConditionImmunity.test.tsx` (authoring), `DefencesPanel` and `PlayPanels` tests.
+- The original fixture pack `tests/RulesFixtures/fixture-pack-condition-immunity.json`.
+
+## Slice G5: ability-score cap
+
+The seventh gap is "this increase can raise a score above 20, up to a named maximum". The usual rule stops every ability-score increase at 20 (a rules constant, `CharacterCalculator.AbilityScoreIncreaseCap`); content could only say it in text. This is the grant the bundled Body and Mind feature uses in the C2-6 v12 revision (done; cap 25 in 5.2.1; Primal Champion uses 24 in 5.1 and 25 in 5.2.1).
+
+### Decision (G5)
+
+1. **Shape** (owner rulings, 2026-11-08). A new optional member `ModifierEffect.Cap` (`int?`, JSON `cap`), trailing after `toggleContent`, constant `ContentRevision.AbilityCapSchemaVersion = 12`. It is allowed only when `operation` is `bonus` and `target` is an ability score (`ability.<x>.score`). The range is 21 to 30 inclusive (20 is the default and 30 is the score maximum). A literal negative `value` with a `cap` is refused; a formula that evaluates negative is a penalty and its cap does nothing. The cap is a content field, never a `RulesFamilyPolicy` field.
+2. **Older revisions never bind it.** In a v12 revision the member is typed in full. In a v11 revision a `cap` key stays extension data (round-trips byte for byte, hash unchanged) and calculates as if no cap were there; below v11 the v11 and v12 keys are both left as data.
+3. **Combining: lowest cap first.** Ability-score bonuses sort (stable) with penalties last and, among increases, by their ceiling (`cap`, or 20 with none) ascending. An increase stops at the larger of its ceiling and the running score, so content order never matters. Penalties are never capped; `set` overwrites everything and is uncapped; a `highestInGroup` loser is skipped as today and its cap does nothing; among equal amounts in a group the higher cap wins. Examples: 18 with a plain +2 and a +4 with cap 25 gives 18, then 20, then 24 in either content order; 20 with a +2 capped at 22 and a +2 capped at 24 gives 22, then 24.
+4. **Trace copy.** A stopped increase reads "Bonus from {name}, capped: increases cannot raise an ability score above {ceiling} (+{amount} would give {next})" (exactly today's text when there is no cap, because the ceiling is 20). An increase with a cap that is not stopped reads "Bonus from {name} (it can raise the score up to {cap})". Without a cap the text and the step order are unchanged, so golden sheets do not move.
+5. **Inherited members all work** (`automation`, `timing`, `toggle` and `toggleContent`, `whileArmored`, `stacking`, and G4's `notWearing`), except **item mods**: a `cap` inside an item mod is `validate.item-mod-modifier`, and a `cap` on a top-level modifier of an item-mod revision (which applies as a mod modifier) is `validate.modifier-cap`. The calculator ignores a cap on any item mod's modifier, nested or top-level, and a cap outside 21 to 30, so unvalidated content still stops at 20 there.
+6. **Down-conversion** (ADR-023, owner ruling, 2026-11-08). At the 12 to 11 rung the `cap` key is dropped and the bonus kept (`below.v12-key`: "'{name}': that the increase can raise the score above 20 (up to {cap}); the older version stops it at 20."). A copy that stops at 20 is only weaker, so nothing blocks.
+7. **Import.** The ability solver, for a sheet score above 20 with increases from content, previews the bases from the one the increases would give (score minus increases) up to the score and keeps the first that reproduces the sheet score (so a partly used cap solves); otherwise it keeps today's answer (the base equals the score). When the next base reproduces the score too, it adds the note `ability.cap-ambiguous` ("reaches a content maximum of N, so its base may be higher than proposed; the smallest base that fits is used."). It costs at most the increases plus two extra previews for such an ability and changes nothing for scores of 20 or below.
+8. **Registry, preview, graph.** The capability registry's modifier row gains "; an ability-score increase may declare a maximum above 20". The formula preview and the content graph read only `value`, so they do not change.
+9. **UI copy (studio only; no sheet change).** A number field "Highest the score can reach" (21 to 30) with the hint "Leave empty for the usual 20; up to 30.", shown when the target is an ability score, the operation is "Add (bonus)" and the field is not nested in an item mod. Empty means no cap. Changing the target or operation so the field hides removes `cap`. No schema bump (`ContentRevision.CurrentSchemaVersion` stays 12; `Character.CurrentSchemaVersion` stays 11). The decision row is D92.
+
+### Consequences (G5)
+
+- Content can let one increase go above 20 up to a maximum it names, and several such increases combine the same way in any order. A revision without `cap` keeps its version, bytes and hash and calculates exactly as before; a v11 revision holding one keeps it as unknown data and ignores it.
+- A revision that uses it needs content schema 12 (`validate.requires-v12`: "an ability-score cap"). A package that holds one warns `package.needs-newer-build`.
+- New codes: `validate.modifier-cap` (on an operation or target that does not allow it, or a literal negative value) and `validate.modifier-cap-range` (not 21 to 30).
+- The sheet gains no new panel: the score shows its total and "Why?" shows the trace lines above.
+
+### Not doing (G5)
+
+- **Raising the maximum for every source** (a separate "maximum" effect).
+- **Caps on `set` or `replace`, or on other fields.**
+- **`cap` in item mods.**
+- **Re-authoring bundled Body and Mind**: done in C2-6.
+
+Known limits (G5):
+
+- In a highest-in-group set a larger plain bonus still beats a smaller capped one (the group keeps its highest amount; equal amounts prefer the higher cap).
+- At the 12 to 11 rung the cap is dropped as weaker. A formula elsewhere that reads that ability with a negative sign could come out stronger in the lowered copy; this is not checked (owner question on the PR).
+- The import solver's check keeps the other abilities at the probe base, so a formula that reads another ability can miss; then the sheet score stays as the base.
+
+### Evidence (G5)
+
+- `tests/RulesCore.Tests/AbilityCapV12SchemaTests.cs` and `AbilityCapV12ValidationTests.cs` (the member, the version rung, the validator codes, item mods), and `tests/AppService.Tests/AbilityCapV12SchemaFileTests.cs` (the published JSON schema).
+- `tests/RulesCore.Tests/AbilityCapV12SheetTests.cs` (lowest cap first in either order, penalties and set uncapped, traces, item-mod and out-of-range caps ignored, the group tie rule) and `AbilityCapTests.cs` (the unchanged 20 cap for both families).
+- `tests/RulesCore.Tests/DownConvertV12Tests.cs` (the key drop).
+- `tests/AppService.Tests/AbilityCapV12ServiceTests.cs` (the sheet through the service) and `AbilitySolverTests.cs` (scores above 20 solve the base; unreproducible scores keep today's answer; the second preview equals the sheet).
+- UI: the studio field in `src/Ui/src/components/ModifierFields.tsx` and its tests, `src/Ui/src/components/HomebrewStudioAbilityCap.test.tsx`.
+- The original fixture pack `tests/RulesFixtures/fixture-pack-ability-cap.json`.
+
+## Slice G4: armor and shield gates
+
+The eighth and last gap is "this bonus applies only while no armor (or no heavy armor, or no shield) is worn". The existing `whileArmored` flag can only say "while armored"; the opposite, and the shield, could only be written in text. This is the gate the bundled Unarmored Defense and Unarmored Movement notes (and the Barbarian's Fast Movement) use in the C2-6 v12 revisions (done; see [effect-vocabulary-coverage.md](../features/effect-vocabulary-coverage.md)).
+
+### Decision (G4)
+
+1. **Shape** (owner rulings, 2026-11-09). A new optional member `ModifierEffect.NotWearing` (a list of strings, JSON `notWearing`), trailing after `cap`. The values are `armor`, `heavyArmor` and `shield`, plain strings rather than an enum, so an unknown value in an unvalidated studio draft cannot make the revision unreadable; the calculator ignores values it does not know. The gate is a content field, never a `RulesFamilyPolicy` field.
+2. **Meaning of "worn".** `armor`: the counted body armor exists, of any category. `heavyArmor`: it exists and is heavy. `shield`: the counted shield exists, even when it is untrained and gives no Armor Class, because it is still wielded. "Worn" is exactly what the armor pass already counts (automatic, always-on armor effects of active content: equipped items, pins and feature armor); there is no separate equipment lookup.
+3. **Calculator.** One helper, `GateOnGear`, runs in the armor pass once the counted body armor and shield are known. For each modifier that lists gear, applies (is not already skipped), is not an item mod's modifier and sits in a v12 revision, it skips the modifier with the first worn gear in the order armor, heavyArmor, shield: "it applies only while no armor is worn, and {item} is worn", "it applies only while no heavy armor is worn, and {item} is worn" or "it applies only while no shield is used, and {item} is used". Synthetic armor, shield and item-mod bonuses are added afterwards, so they are never gated. Below v12 the key is extension data and the calculator ignores it.
+4. **Validation.** `validate.not-wearing` when the list is empty, holds a value other than the three, repeats a value, or holds both `armor` and `heavyArmor` ("it lists armor, heavyArmor or shield, each once, and armor already covers heavyArmor"). `validate.not-wearing-armored` when `whileArmored` is true and the list holds `armor` ("applies only while armor is worn and only while none is, so it could never apply"); `whileArmored: true` with `heavyArmor` is valid (light or medium armor only). An Armor Class `replace` with `armor` is valid but redundant, and is not an error. A v12 revision that uses the member needs content schema 12 (`validate.requires-v12`: "an armor or shield gate"), and the unreadable-modifier message names the phrase of each key actually present (both, when both are).
+5. **Pool maximums are refused.** A `notWearing` on a `resource.*` target (a pool-maximum bonus) is `validate.not-wearing` ("it raises a pool maximum, which counts whatever is worn; gear gates apply to calculated fields only"), because pool bonuses are collected before the armor pass. In an unvalidated draft the calculator treats it as assisted (Manual) rather than gating it, and the studio hides the boxes for pool-maximum targets.
+6. **Inherited members all combine** (owner: as G5): `automation`, `timing`, `toggle` and `toggleContent`, `stacking`, `whileArmored` (except the contradiction above) and `cap`. The gate applies whenever the modifier would otherwise apply.
+7. **Item mods.** A `notWearing` inside an item mod is `validate.item-mod-modifier`; one on a top-level modifier of an item-mod revision is `validate.not-wearing` ("this revision is an item mod, whose modifiers apply whatever is worn"). The calculator ignores the gate on any item mod's modifier, so unvalidated content is not gated there either.
+8. **Down-conversion** (ADR-023, owner ruling, 2026-11-09). At the 12 to 11 rung a modifier that carries `notWearing` Blocks with `below.equipment-gate` ("'{name}': it applies only while {gear} is not worn; the older version would apply it whatever is worn."), because dropping the key would apply the rule while armored, which is stronger. The arm sits before the `cap` arm so a modifier with both still Blocks. The service surfaces it as `package.target-blocked`, carrying that message.
+9. **Registry, preview, graph.** The capability registry's modifier row gains "; it may apply only while no armor, heavy armor or shield is worn". The formula preview and the content graph read only `value`, so they do not change.
+10. **UI copy (studio only; no sheet change).** A fieldset "Only while not wearing" with three checkboxes, "Armor", "Heavy armor" and "Shield", and the hint "Leave all unticked for a rule that applies whatever is worn.", shown when the modifier is not nested in an item mod and the target is not a pool maximum. Ticking "Armor" removes `heavyArmor` and disables the "Heavy armor" box; ticking none removes the key; values are written in the order armor, heavyArmor, shield. No schema bump (`ContentRevision.CurrentSchemaVersion` stays 12; `Character.CurrentSchemaVersion` stays 11). The decision row is D93.
+
+### Consequences (G4)
+
+- Content can make a bonus or Armor Class rule apply only while none of the named gear is worn. A revision without `notWearing` keeps its version, bytes and hash and calculates exactly as before; a v11 revision holding one keeps it as unknown data and ignores it.
+- Saving such content for the previous version is refused (Block), not weakened. A package that holds one warns `package.needs-newer-build`.
+- New codes: `validate.not-wearing`, `validate.not-wearing-armored` and `below.equipment-gate`.
+- The sheet gains no new panel: "Why?" shows the skip reason above for a gated modifier.
+
+### Not doing (G4)
+
+- **Gates on roll modes, attacks, riders, responses or grants**; the heavy-armor line of the bundled rage feature and the Martial Arts armor condition stay text.
+- **A positive "while using a shield" gate.**
+- **Changing `whileArmored`, or adding it to the studio.**
+- **Re-authoring bundled Monk and Barbarian content**: done in C2-6 (new insert-only revisions; the gates apply only to them).
+- **Character schema changes.**
+- **Acrobatic Movement**, which is text only with no effect to gate. Acrobatic Movement (spec caveat) is text only with no effect to gate; G4 adds the vocabulary that C2-6 used to automate the Unarmored notes. No change was needed for Acrobatic Movement, which stays text.
+
+### Evidence (G4)
+
+- `tests/RulesCore.Tests/NotWearingV12SchemaTests.cs` and `NotWearingV12ValidationTests.cs` (the member, the version rung, the validator codes, item mods, pool maximums), and `tests/AppService.Tests/NotWearingV12SchemaFileTests.cs` (the published JSON schema).
+- `tests/RulesCore.Tests/NotWearingV12SheetTests.cs` (each gate with the gear worn and not worn, with different values, traces, item-mod and unknown values ignored, pool-maximum drafts assisted) and `DownConvertV12Tests.cs` (the Block).
+- `tests/AppService.Tests/NotWearingV12ServiceTests.cs` (the sheet through the service, and the Block as `package.target-blocked`).
+- UI: the studio fieldset in `src/Ui/src/components/ModifierFields.tsx` and its test, `src/Ui/src/components/HomebrewStudioGearGate.test.tsx`.
+- The original fixture pack `tests/RulesFixtures/fixture-pack-gear-gates.json` ("Fixture: Bare Palm Guard", "Fixture: Gearless Sprint", "Fixture: Loose Plate Stride").
+
+Related: [ADR-018](ADR-018-play-mechanics.md), [ADR-021](ADR-021-mechanics-beyond-d43.md), [ADR-023](ADR-023-down-conversion-export.md), [play-mechanics.md](../features/play-mechanics.md#content-v12-g6-response-triggers-and-amounts), [its G7 section](../features/play-mechanics.md#content-v12-g7-roll-modes-on-attacks-and-initiative), [its G1 section](../features/play-mechanics.md#content-v12-g1-scaled-dice-critical-only-and-once-per-turn-riders), [its G9 section](../features/play-mechanics.md#content-v12-g9-roll-floor), [its G10 section](../features/play-mechanics.md#content-v12-g10-check-ability-climb-and-swim-speed), [its G11 section](../features/play-mechanics.md#content-v12-g11-condition-immunity), [its G5 section](../features/play-mechanics.md#content-v12-g5-ability-score-cap) and [its G4 section](../features/play-mechanics.md#content-v12-g4-armor-and-shield-gates), LIVING_SPECS D76, D86, D87, D88, D89, D90, D91, D92 and D93. Supersedes: none.

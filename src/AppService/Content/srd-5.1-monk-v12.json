@@ -1,0 +1,648 @@
+{
+  "packId": "srd-5.1-monk-v12",
+  "formatVersion": 1,
+  "notice": "The Monk of the System Reference Document 5.1 (CC-BY-4.0), pp. 26-29; new v12 revisions of Unarmored Defense, Unarmored Movement, Deflect Missiles, Slow Fall, Evasion and Purity of Body, with the class that grants them. Taken from SRD_CC_v5.1.pdf (SHA-256 2504d2a0abb0a4d491a939be4f17910a2dde0312570ab8d208080225ccf0a1f0). See docs/licensing/srd-pack-review.md.",
+  "sources": [
+    {
+      "id": "51500000-0000-4000-8000-000000000001",
+      "title": "System Reference Document 5.1",
+      "publisher": "SRD 5.1 (CC-BY-4.0)",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "editionVersion": "5.1",
+      "license": "CC-BY-4.0",
+      "redistributable": true,
+      "attribution": "This work includes material taken from the System Reference Document 5.1 (\"SRD 5.1\") by Wizards of the Coast LLC and available at https://dnd.wizards.com/resources/systems-reference-document. The SRD 5.1 is licensed under the Creative Commons Attribution 4.0 International License available at https://creativecommons.org/licenses/by/4.0/legalcode.",
+      "modificationNotice": "Modified: TomeStack adapted this material into structured data. Selected passages are excerpted or shortened, with line breaks and hyphenation repaired, and rules are encoded as machine-readable effects.",
+      "sha256": "2504d2a0abb0a4d491a939be4f17910a2dde0312570ab8d208080225ccf0a1f0"
+    }
+  ],
+  "revisions": [
+    {
+      "contentId": "51c00000-0000-4000-8000-000000420001",
+      "revisionId": "51e00000-0000-4000-8000-000012420001",
+      "schemaVersion": 12,
+      "kind": "class",
+      "name": "Monk",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 26,
+          "end": 29
+        }
+      },
+      "status": "published",
+      "summary": "Hit Dice: 1d8 per monk level. Hit Points at 1st Level: 8 + your Constitution modifier. Hit Points at Higher Levels: 1d8 (or 5) + your Constitution modifier per monk level after 1st. Armor: None. Weapons: Simple weapons, shortswords. Tools: Choose one type of artisan’s tools or one musical instrument. Saving Throws: Strength, Dexterity. Skills: Choose two from Acrobatics, Athletics, History, Insight, Religion, and Stealth. TomeStack: levels 1-20. The artisan’s tools or musical instrument proficiency is recorded by hand.",
+      "effects": [
+        {
+          "type": "hitDie",
+          "id": "monk-hit-die",
+          "die": 8
+        },
+        {
+          "type": "scale",
+          "id": "monk-martial-arts-die",
+          "scaleId": "martialArts",
+          "label": "Martial Arts die",
+          "values": [
+            4,
+            4,
+            4,
+            4,
+            6,
+            6,
+            6,
+            6,
+            6,
+            6,
+            8,
+            8,
+            8,
+            8,
+            8,
+            8,
+            10,
+            10,
+            10,
+            10
+          ]
+        },
+        {
+          "type": "scale",
+          "id": "monk-unarmored-movement",
+          "scaleId": "unarmoredMovement",
+          "label": "Unarmored Movement (ft.)",
+          "values": [
+            0,
+            10,
+            10,
+            10,
+            10,
+            15,
+            15,
+            15,
+            15,
+            20,
+            20,
+            20,
+            20,
+            25,
+            25,
+            25,
+            25,
+            30,
+            30,
+            30
+          ]
+        },
+        {
+          "type": "grant",
+          "id": "monk-save-str",
+          "grant": "proficiency",
+          "target": "save.str",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "monk-save-dex",
+          "grant": "proficiency",
+          "target": "save.dex",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "choice",
+          "id": "monk-skills",
+          "choiceId": "monk-skills",
+          "count": 2,
+          "text": "Skills: Choose two from Acrobatics, Athletics, History, Insight, Religion, and Stealth",
+          "options": [
+            {
+              "contentId": "51c00000-0000-4000-8000-000000420801",
+              "revisionId": "51e00000-0000-4000-8000-000000420801"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000420802",
+              "revisionId": "51e00000-0000-4000-8000-000000420802"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000420803",
+              "revisionId": "51e00000-0000-4000-8000-000000420803"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000420804",
+              "revisionId": "51e00000-0000-4000-8000-000000420804"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000420805",
+              "revisionId": "51e00000-0000-4000-8000-000000420805"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000420806",
+              "revisionId": "51e00000-0000-4000-8000-000000420806"
+            }
+          ],
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "feature-unarmored-defense",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420101",
+            "revisionId": "51e00000-0000-4000-8000-000012420101"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-martial-arts",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420102",
+            "revisionId": "51e00000-0000-4000-8000-000000420102"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ki",
+          "grant": "content",
+          "level": 2,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420103",
+            "revisionId": "51e00000-0000-4000-8000-000000420103"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-unarmored-movement",
+          "grant": "content",
+          "level": 2,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420104",
+            "revisionId": "51e00000-0000-4000-8000-000012420104"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-deflect-missiles",
+          "grant": "content",
+          "level": 3,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420105",
+            "revisionId": "51e00000-0000-4000-8000-000012420105"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement",
+          "grant": "content",
+          "level": 4,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420106",
+            "revisionId": "51e00000-0000-4000-8000-000000420106"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-slow-fall",
+          "grant": "content",
+          "level": 4,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420107",
+            "revisionId": "51e00000-0000-4000-8000-000012420107"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-extra-attack",
+          "grant": "content",
+          "level": 5,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420108",
+            "revisionId": "51e00000-0000-4000-8000-000000420108"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-stunning-strike",
+          "grant": "content",
+          "level": 5,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420109",
+            "revisionId": "51e00000-0000-4000-8000-000000420109"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ki-empowered-strikes",
+          "grant": "content",
+          "level": 6,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420110",
+            "revisionId": "51e00000-0000-4000-8000-000000420110"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-evasion",
+          "grant": "content",
+          "level": 7,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420111",
+            "revisionId": "51e00000-0000-4000-8000-000012420111"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-stillness-of-mind",
+          "grant": "content",
+          "level": 7,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420112",
+            "revisionId": "51e00000-0000-4000-8000-000000420112"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement-8",
+          "grant": "content",
+          "level": 8,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420106",
+            "revisionId": "51e00000-0000-4000-8000-000000420106"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-purity-of-body",
+          "grant": "content",
+          "level": 10,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420113",
+            "revisionId": "51e00000-0000-4000-8000-000012420113"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement-12",
+          "grant": "content",
+          "level": 12,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420106",
+            "revisionId": "51e00000-0000-4000-8000-000000420106"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-tongue-of-the-sun-and-moon",
+          "grant": "content",
+          "level": 13,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420114",
+            "revisionId": "51e00000-0000-4000-8000-000000420114"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-diamond-soul",
+          "grant": "content",
+          "level": 14,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420115",
+            "revisionId": "51e00000-0000-4000-8000-000000420115"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-timeless-body",
+          "grant": "content",
+          "level": 15,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420116",
+            "revisionId": "51e00000-0000-4000-8000-000000420116"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement-16",
+          "grant": "content",
+          "level": 16,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420106",
+            "revisionId": "51e00000-0000-4000-8000-000000420106"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-empty-body",
+          "grant": "content",
+          "level": 18,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420117",
+            "revisionId": "51e00000-0000-4000-8000-000000420117"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement-19",
+          "grant": "content",
+          "level": 19,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420106",
+            "revisionId": "51e00000-0000-4000-8000-000000420106"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-perfect-self",
+          "grant": "content",
+          "level": 20,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000420118",
+            "revisionId": "51e00000-0000-4000-8000-000000420118"
+          }
+        },
+        {
+          "type": "choice",
+          "id": "monastic-tradition",
+          "choiceId": "monastic-tradition",
+          "count": 1,
+          "level": 3,
+          "text": "Monastic Tradition. When you reach 3rd level, you commit yourself to a monastic tradition, such as the Way of the Open Hand. Your tradition grants you features at 3rd level and again at 6th, 11th, and 17th level. (The SRD 5.1 includes the Way of the Open Hand.)",
+          "options": [
+            {
+              "contentId": "51c00000-0000-4000-8000-000000420002",
+              "revisionId": "51e00000-0000-4000-8000-000000420002"
+            }
+          ]
+        },
+        {
+          "type": "grant",
+          "id": "monk-weapon-simple",
+          "grant": "proficiency",
+          "target": "weapon.simple",
+          "text": "Weapons: Simple weapons, shortswords"
+        },
+        {
+          "type": "grant",
+          "id": "monk-weapon-shortsword",
+          "grant": "proficiency",
+          "target": "weapon.shortsword"
+        },
+        {
+          "type": "grant",
+          "id": "monk-armor-none",
+          "grant": "proficiency",
+          "target": "armor.none",
+          "text": "Armor: None"
+        },
+        {
+          "type": "restriction",
+          "id": "monk-multiclass-dex",
+          "field": "ability.dex.score",
+          "minimum": 13,
+          "multiclass": true,
+          "text": "Multiclassing prerequisite: Dexterity 13 and Wisdom 13. Multiclassing proficiencies gained: simple weapons, shortswords (SRD 5.1 pp. 56-57)."
+        },
+        {
+          "type": "restriction",
+          "id": "monk-multiclass-wis",
+          "field": "ability.wis.score",
+          "minimum": 13,
+          "multiclass": true
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000420101",
+      "revisionId": "51e00000-0000-4000-8000-000012420101",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Unarmored Defense",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 26
+        }
+      },
+      "status": "published",
+      "summary": "Beginning at 1st level, while you are wearing no armor and not wielding a shield, your AC equals 10 + your Dexterity modifier + your Wisdom modifier.\n\nTomeStack: applies only while no armor is worn and no shield is used (the Armor Class breakdown shows it as not used otherwise).",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "unarmored-defense-ac",
+          "operation": "replace",
+          "target": "armorClass",
+          "value": "10 + DEX.MOD + WIS.MOD",
+          "notWearing": [
+            "shield"
+          ],
+          "text": "Applies only while no armor is worn and no shield is used."
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000420104",
+      "revisionId": "51e00000-0000-4000-8000-000012420104",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Unarmored Movement",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 27
+        }
+      },
+      "status": "published",
+      "summary": "Starting at 2nd level, your speed increases by 10 feet while you are not wearing armor or wielding a shield. This bonus increases when you reach certain monk levels, as shown in the Monk table.\n\nAt 9th level, you gain the ability to move along vertical surfaces and across liquids on your turn without falling during the move.\n\nTomeStack: the bonus from the Unarmored Movement column is added to your speed only while no armor is worn and no shield is used. Moving along vertical surfaces and across liquids is by hand.",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "unarmored-movement-speed",
+          "operation": "bonus",
+          "target": "speed",
+          "value": "SCALE.unarmoredMovement",
+          "notWearing": [
+            "armor",
+            "shield"
+          ],
+          "text": "Moving along vertical surfaces and across liquids is by hand."
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000420105",
+      "revisionId": "51e00000-0000-4000-8000-000012420105",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Deflect Missiles",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 27
+        }
+      },
+      "status": "published",
+      "summary": "Starting at 3rd level, you can use your reaction to deflect or catch the missile when you are hit by a ranged weapon attack. When you do so, the damage you take from the attack is reduced by 1d10 + your Dexterity modifier + your monk level.\n\nIf you reduce the damage to 0, you can catch the missile if it is small enough for you to hold in one hand and you have at least one hand free. If you catch a missile in this way, you can spend 1 ki point to make a ranged attack with the weapon or piece of ammunition you just caught, as part of the same reaction. You make this attack with proficiency, regardless of your weapon proficiencies, and the missile counts as a monk weapon for the attack, which has a normal range of 20 feet and a long range of 60 feet.\n\nTomeStack: the damage reduction is offered in the damage panel for a hit from an attack, and the throw spends 1 ki point. That the attack was a ranged weapon attack, catching the missile and the throw itself are by hand.",
+      "effects": [
+        {
+          "type": "roll",
+          "id": "deflect-missiles-throw",
+          "rollId": "deflectMissilesThrow",
+          "label": "Deflect Missiles: throw",
+          "resourceId": "ki",
+          "activation": "reaction",
+          "resourceContent": "51c00000-0000-4000-8000-000000420103",
+          "cost": "1"
+        },
+        {
+          "type": "response",
+          "id": "deflect-missiles",
+          "responseId": "deflectMissiles",
+          "label": "Deflect Missiles",
+          "phase": "damageReduction",
+          "trigger": {
+            "from": "attack"
+          },
+          "dice": "1d10",
+          "amount": "DEX.MOD + CLASS_LEVEL",
+          "text": "Only a ranged weapon attack (by hand). You spend your reaction by hand; TomeStack does not track it."
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000420107",
+      "revisionId": "51e00000-0000-4000-8000-000012420107",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Slow Fall",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 27
+        }
+      },
+      "status": "published",
+      "summary": "Beginning at 4th level, you can use your reaction when you fall to reduce any falling damage you take by an amount equal to five times your monk level.\n\nTomeStack: the reduction is offered in the damage panel for fall damage. You spend your reaction by hand; TomeStack does not track it.",
+      "effects": [
+        {
+          "type": "response",
+          "id": "slow-fall",
+          "responseId": "slowFall",
+          "label": "Slow Fall",
+          "phase": "damageReduction",
+          "trigger": {
+            "from": "fall"
+          },
+          "amount": "5 * CLASS_LEVEL",
+          "text": "You spend your reaction by hand; TomeStack does not track it."
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000420111",
+      "revisionId": "51e00000-0000-4000-8000-000012420111",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Evasion",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 28
+        }
+      },
+      "status": "published",
+      "summary": "At 7th level, your instinctive agility lets you dodge out of the way of certain area effects, such as a blue dragon’s lightning breath or a fireball spell. When you are subjected to an effect that allows you to make a Dexterity saving throw to take only half damage, you instead take no damage if you succeed on the saving throw, and only half damage if you fail.",
+      "effects": [
+        {
+          "type": "response",
+          "id": "evasion-success",
+          "responseId": "evasionSuccess",
+          "label": "Evasion",
+          "phase": "damageReduction",
+          "trigger": {
+            "from": "save",
+            "ability": "dex",
+            "result": "success"
+          },
+          "share": "all",
+          "automatic": true,
+          "supersedes": {
+            "content": "51c00000-0000-4000-8000-000000410110",
+            "responseId": "evasionSuccess"
+          }
+        },
+        {
+          "type": "response",
+          "id": "evasion-failure",
+          "responseId": "evasionFailure",
+          "label": "Evasion",
+          "phase": "damageReduction",
+          "trigger": {
+            "from": "save",
+            "ability": "dex",
+            "result": "failure"
+          },
+          "share": "half",
+          "automatic": true,
+          "supersedes": {
+            "content": "51c00000-0000-4000-8000-000000410110",
+            "responseId": "evasionFailure"
+          }
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000420113",
+      "revisionId": "51e00000-0000-4000-8000-000012420113",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Purity of Body",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 28
+        }
+      },
+      "status": "published",
+      "summary": "At 10th level, your mastery of the ki flowing through you makes you immune to disease and poison.\n\nTomeStack: immunity to poison damage and to the poisoned condition is applied. Immunity to disease is by hand.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "purity-of-body-poison",
+          "grant": "damageImmunity",
+          "damageType": "Poison"
+        },
+        {
+          "type": "grant",
+          "id": "purity-of-body-poisoned",
+          "grant": "conditionImmunity",
+          "condition": "poisoned"
+        }
+      ]
+    }
+  ]
+}

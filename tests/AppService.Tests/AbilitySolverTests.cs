@@ -142,6 +142,93 @@ public class AbilitySolverTests
         }
     }
 
+    /// <summary>One Strength bonus of <paramref name="value"/>, optionally capped (a v12 effect), and the solver's preview over it.</summary>
+    private static (Func<AbilityScores, CharacterSheet> Preview, TempApp Temp) SetupCapped(int value, int? cap)
+    {
+        var temp = new TempApp();
+        var source = Source(temp, "Fixture Solver Notes", RulesFamilies.Srd521);
+        var effect = Modifier("m0", Str, ModifierOperation.Bonus, value) with { Cap = cap };
+        var pin = Publish(temp, source, ContentKind.Feat, "Fixture: Summit Conditioning", [RulesFamilies.Srd521], [effect]);
+        var character = Character(RulesFamilies.Srd521, pin);
+        return (bases => temp.App.Preview(character with { BaseAbilities = bases }).Sheet, temp);
+    }
+
+    [Fact]
+    public void Score_above_20_from_a_capped_increase_solves_the_base()
+    {
+        var (preview, temp) = SetupCapped(4, 25);
+        using (temp)
+        {
+            var plan = AbilitySolver.Solve(preview, Sheet(24));
+
+            Assert.Equal(20, plan.ProposedBase.Str);
+            Assert.Equal(24, Score(preview(plan.ProposedBase), Ability.Str));
+        }
+    }
+
+    [Fact]
+    public void Partly_used_cap_solves_the_base()
+    {
+        // A plain +2 and a +2 capped at 25, sheet 24: base 20 gives 22, 21 gives 23, 22 gives 24 (the plain +2 adds nothing above 20).
+        var temp = new TempApp();
+        using (temp)
+        {
+            var source = Source(temp, "Fixture Solver Notes", RulesFamilies.Srd521);
+            var plain = Modifier("m0", Str, ModifierOperation.Bonus, 2);
+            var capped = Modifier("m1", Str, ModifierOperation.Bonus, 2) with { Cap = 25 };
+            var pin = Publish(temp, source, ContentKind.Feat, "Fixture: Summit Pair", [RulesFamilies.Srd521], [plain, capped]);
+            var character = Character(RulesFamilies.Srd521, pin);
+            Func<AbilityScores, CharacterSheet> preview = bases => temp.App.Preview(character with { BaseAbilities = bases }).Sheet;
+
+            var plan = AbilitySolver.Solve(preview, Sheet(24));
+
+            Assert.Equal(22, plan.ProposedBase.Str);
+            Assert.Equal(24, Score(preview(plan.ProposedBase), Ability.Str));
+            Assert.DoesNotContain(plan.Notes, n => n.Code == "ability.cap-ambiguous");
+        }
+    }
+
+    [Fact]
+    public void Score_at_a_content_cap_notes_ambiguity()
+    {
+        // +4 capped at 25, sheet 25: bases 21 and above all give 25, so the smallest is proposed and the note says so.
+        var (preview, temp) = SetupCapped(4, 25);
+        using (temp)
+        {
+            var plan = AbilitySolver.Solve(preview, Sheet(25));
+
+            Assert.Equal(21, plan.ProposedBase.Str);
+            var note = Assert.Single(plan.Notes);
+            Assert.Equal((Ability.Str, "ability.cap-ambiguous"), (note.Ability, note.Code));
+            Assert.Contains("content maximum of 25", note.Message, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void Score_above_20_without_a_capped_increase_is_unchanged()
+    {
+        var (preview, temp) = Setup(RulesFamilies.Srd521, (ContentKind.Feat, ModifierOperation.Bonus, 2));
+        using (temp)
+        {
+            var plan = AbilitySolver.Solve(preview, Sheet(22));
+
+            Assert.Equal(22, plan.ProposedBase.Str);
+        }
+    }
+
+    [Fact]
+    public void Unreproducible_score_keeps_todays_answer()
+    {
+        // Cap 25: a sheet of 27 cannot come from a base of 23 (23 + 4 stops at 25), so today's answer stands.
+        var (preview, temp) = SetupCapped(4, 25);
+        using (temp)
+        {
+            var plan = AbilitySolver.Solve(preview, Sheet(27));
+
+            Assert.Equal(27, plan.ProposedBase.Str);
+        }
+    }
+
     [Fact]
     public void The_second_preview_equals_the_sheet_for_every_solved_score()
     {
