@@ -162,6 +162,29 @@ public class DiceTests
     }
 
     [Fact]
+    public void Undoubled_dice_are_rolled_once_on_a_critical()
+    {
+        // 1d8 doubles (2 dice), the undoubled 2d6 is rolled as written (2 dice), flagged FromCritical, after the formula's dice.
+        var record = Roll(new RollRequest("1d8+3", Critical: true, Undoubled: "2d6"), new ScriptedRandom(5, 2, 6, 4));
+
+        Assert.Equal([8, 8, 6, 6], record.Dice.Select(d => d.Sides));
+        Assert.Equal([false, true, true, true], record.Dice.Select(d => d.FromCritical));
+        Assert.Equal(5 + 2 + 6 + 4, record.DiceTotal);
+        Assert.Equal(record.DiceTotal + 3, record.Total);
+        Assert.Equal("1d8+3", record.Formula);
+    }
+
+    [Fact]
+    public void Null_undoubled_changes_nothing()
+    {
+        var plain = Roll(new RollRequest("1d8+3", Critical: true), new ScriptedRandom(5, 2));
+        var explicitNull = Roll(new RollRequest("1d8+3", Critical: true, Undoubled: null), new ScriptedRandom(5, 2));
+
+        Assert.Equal(plain.Total, explicitNull.Total);
+        Assert.Equal(2, plain.Dice.Count);
+    }
+
+    [Fact]
     public void Seeded_rolls_are_reproducible_and_stay_in_range()
     {
         var a = Roll(new RollRequest("10d6+1"), new SeededRandomSource(42));

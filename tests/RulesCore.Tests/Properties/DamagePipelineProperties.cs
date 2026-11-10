@@ -127,6 +127,58 @@ public class DamagePipelineProperties
             return chosen.Count(IsHitPointOutcome) <= 1 && healOrTemporary <= 1;
         });
 
+    // ---- content v12 G6 task 4 ------------------------------------------------------------------------------------------------
+
+    // The pre-G6 oracle (6b602847): the chosen, available reductions come off the amount as a flat sum, never below 0, and the rest is
+    // Resolve. Checked where no hit point outcome is chosen (a survival amends the result) and the plan has no note.
+    [Property(MaxTest = 300)]
+    public Property Event_without_source_or_save_plans_as_before() =>
+        Prop.ForAll(ResponseCases.ToArbitrary(), c =>
+        {
+            var (character, sheet) = ResponseSheets[c.Sheet];
+            var hp = new HitPointState(sheet.HitPoints!.Maximum, Math.Min(c.Current, sheet.HitPoints.Maximum), c.Temporary);
+            sheet = sheet with { HitPoints = hp };
+            character = character with { Play = character.Play with { Concentration = c.Concentrating ? new Concentration(Fixtures.Bulwark, "Held") : null } };
+            var picked = sheet.Responses!.Where((_, i) => (c.Mask & (1 << i)) != 0).ToList();
+            var chosen = picked.Select(r => new ResponseChoice(r.ContentId, r.ResponseId)).ToList();
+            var policy = RulesFamilies.Get(RulesFamilies.Srd521);
+            var plan = DamagePipeline.Plan(new(c.Amount, c.Type), character, sheet, chosen, policy);
+            if (plan.Notes.Count > 0 || picked.Any(r => r.Phase == ResponsePhase.HitPointOutcome))
+                return true;
+            var taken = picked.Where(r => r.Phase == ResponsePhase.DamageReduction && r.Available).Sum(r => r.Amount ?? 0);
+            var defences = sheet.DamageDefences?.Select(d => new DamageDefence(d.Type, d.Kind)).ToList() ?? [];
+            var legacy = DamagePipeline.Resolve(new(Math.Max(c.Amount - taken, 0), c.Type), hp, defences, c.Concentrating, policy);
+            // Reduction is capped at the damage (Task 4 ruling); the pre-G6 figure was the uncapped sum.
+            return plan.Reduction == Math.Min(taken, c.Amount)
+                && JsonSerializer.Serialize(plan.Result) == JsonSerializer.Serialize(legacy)
+                && !plan.Result.Outcome.SaveHalved;
+        });
+
+    [Property(MaxTest = 300)]
+    public Property AfterSave_never_exceeds_the_amount() =>
+        Prop.ForAll(
+            (from amount in Gen.Choose(0, PlayState.MaxHitPoints)
+             from from_ in Gen.Elements<ResponseSource?>(null, ResponseSource.Attack, ResponseSource.Fall, ResponseSource.Save)
+             from ok in Gen.Elements(true, false)
+             from half in Gen.Elements(true, false)
+             select new DamageEvent(amount, null, from_, new DamageSave("dex", ok, half))).ToArbitrary(),
+            e => DamagePipeline.AfterSave(e) <= e.Amount && DamagePipeline.AfterSave(e) >= 0);
+
+    [Property(MaxTest = 300)]
+    public Property Reduction_is_never_negative_and_never_exceeds_the_amount_after_the_save() =>
+        Prop.ForAll(
+            (from c in ResponseCases
+             from save in Gen.Elements(true, false)
+             select (c, save)).ToArbitrary(),
+            x =>
+            {
+                var (character, sheet) = ResponseSheets[x.c.Sheet];
+                var chosen = sheet.Responses!.Where((_, i) => (x.c.Mask & (1 << i)) != 0).Select(r => new ResponseChoice(r.ContentId, r.ResponseId)).ToList();
+                var e = new DamageEvent(x.c.Amount, x.c.Type, ResponseSource.Save, new DamageSave("dex", x.save));
+                var plan = DamagePipeline.Plan(e, character, sheet, chosen, RulesFamilies.Get(RulesFamilies.Srd521));
+                return plan.Reduction >= 0 && plan.Reduction <= DamagePipeline.AfterSave(e);
+            });
+
     [Property(MaxTest = 300)]
     public Property Planning_is_deterministic() =>
         Prop.ForAll(ResponseCases.ToArbitrary(), c => JsonSerializer.Serialize(PlanOf(c)) == JsonSerializer.Serialize(PlanOf(c)));

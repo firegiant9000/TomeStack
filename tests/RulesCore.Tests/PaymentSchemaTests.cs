@@ -342,10 +342,13 @@ public class PaymentSchemaTests
 
     /// <summary>The gotcha of 2026-10-20: the production key lists are internal and this project cannot see them, so reflection compares them with the lists written out here.</summary>
     [Theory]
-    [InlineData(typeof(RollEffect), new[] { "payment", "castsSpell" })]
+    [InlineData(typeof(RollEffect), new[] { "payment", "castsSpell", "scaledDice" })]
+    [InlineData(typeof(AttackRiderEffect), new[] { "scaledDice", "critical", "oncePerTurn" })]
     [InlineData(typeof(AttackEffect), new[] { "payment" })]
     [InlineData(typeof(ToggleEffect), new[] { "payment" })]
     [InlineData(typeof(SpellEffect), new[] { "tags" })]
+    [InlineData(typeof(ResponseEffect), new[] { "trigger", "share", "dice", "automatic", "unlessCondition", "supersedes" })]
+    [InlineData(typeof(RollModeEffect), new[] { "tags", "ability", "unlessCondition", "prevent" })]
     public void V12_key_lists_match(Type type, string[] expected)
     {
         var field = type.GetField("V12Keys", BindingFlags.NonPublic | BindingFlags.Static);

@@ -382,6 +382,12 @@ public sealed record UpkeepEffect : Effect
 public sealed record AttackDamage(string Count, string Die);
 
 /// <summary>
+/// Content schema v12 (G1): dice whose count (and die) are formulas evaluated for the character. On an <c>attackRider</c> an
+/// absent <see cref="Die"/> means the attack's own damage die; on a <c>roll</c> the die is required.
+/// </summary>
+public sealed record ScaledDice(string Count, string? Die = null);
+
+/// <summary>
 /// Content schema v11 (D43): an attack a feature gives, such as an unarmed strike or a bolt: to hit = the best of the listed
 /// ability modifiers plus the proficiency bonus (unless <see cref="Proficient"/> is false); damage = <see cref="Damage"/> plus
 /// <see cref="DamageBonus"/> (default: that ability modifier). Typed only in a v11 revision: in an older revision an
@@ -503,6 +509,18 @@ public sealed record AttackRiderEffect : Effect
     /// <summary>Riders of one stack group never add: the highest applies.</summary>
     public string? StackGroup { get; init; }
 
+    /// <summary>Content schema v12 (G1): the rider's dice from formulas instead of <see cref="Dice"/>. Below v12 the key stays extension data and does nothing.</summary>
+    public ScaledDice? ScaledDice { get; init; }
+
+    /// <summary>Content schema v12 (G1): true when the rider's dice are added only to a critical damage roll, rolled once. Below v12 the key stays extension data.</summary>
+    public bool? Critical { get; init; }
+
+    /// <summary>Content schema v12 (G1): true when the player adds the rider's dice to a damage roll by choice. Below v12 the key stays extension data.</summary>
+    public bool? OncePerTurn { get; init; }
+
+    /// <summary>The keys content schema v12 adds to this effect (G1); below v12 they stay extension data.</summary>
+    internal static readonly string[] V12Keys = ["scaledDice", "critical", "oncePerTurn"];
+
     /// <summary>Reads <c>NdM</c> exactly: a whole count from 1 to <see cref="DiceLimits.MaxDice"/>, a lowercase d, and an allowed die; no sign, space or modifier.</summary>
     internal static bool TryParseDice(string? source, out int count, out int sides)
     {
@@ -515,7 +533,10 @@ public sealed record AttackRiderEffect : Effect
             && count is >= 1 and <= DiceLimits.MaxDice && AllowedDice.Contains(sides);
     }
 
-    internal static Effect FromUnknown(UnknownEffect unknown) => VersionedEffects.Typed<AttackRiderEffect>(unknown);
+    internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion) =>
+        revisionSchemaVersion < ContentRevision.ScaledDiceSchemaVersion
+            ? VersionedEffects.TypedWithout<AttackRiderEffect>(unknown, V12Keys)
+            : VersionedEffects.Typed<AttackRiderEffect>(unknown);
 }
 
 /// <summary>A choice the player makes (for example, pick one of these content revisions).</summary>
@@ -686,6 +707,9 @@ public sealed record RollEffect : Effect
     /// </summary>
     public CostPayment? Payment { get; init; }
 
+    /// <summary>Content schema v12 (G1): the roll's dice from formulas (count and die) instead of <see cref="Dice"/>. Below v12 the key stays extension data and does nothing.</summary>
+    public ScaledDice? ScaledDice { get; init; }
+
     /// <summary>
     /// Content schema v12 (MECH-X item 1): the content id of a spell this roll casts without spending a slot; the roll rolls the
     /// spell's dice when it has none of its own. Below v12 the key stays extension data and does nothing.
@@ -701,7 +725,13 @@ public sealed record RollEffect : Effect
     internal static readonly string[] V11Keys = ["whileToggle", "save", "area", "range", "targets", "perUnit", "alsoChange", "drawsDown"];
 
     /// <summary>The keys content schema v12 adds to this effect (MECH-X item 1); below v12 they stay extension data.</summary>
-    internal static readonly string[] V12Keys = ["payment", "castsSpell"];
+    internal static readonly string[] V12Keys = ["payment", "castsSpell", "scaledDice"];
+
+    /// <summary>
+    /// Whether a roll with these parts does something in content v11 (the rule <c>validate.roll-dice-or-cost</c> enforces): literal dice, a cost,
+    /// or a spell it casts. One place, so the validator and the lowering to v11 agree.
+    /// </summary>
+    internal static bool DoesSomethingInV11(bool hasDice, bool hasCost, bool castsSpell) => hasDice || hasCost || castsSpell;
 
     /// <summary>
     /// Typed by the revision when the converter hands it over (see <see cref="EffectJsonConverter"/>): v11 keys, and a roll with
@@ -800,7 +830,9 @@ public sealed record ValueEffect : Effect
 
 /// <summary>
 /// Content schema v11 (D43): advantage or disadvantage on a saving throw, skill check or ability check. Typed only in a v11
-/// revision: in an older revision a <c>rollMode</c> stays an <see cref="UnknownEffect"/>, byte for byte. A mode that names no
+/// revision: in an older revision a <c>rollMode</c> stays an <see cref="UnknownEffect"/>, byte for byte. Targets: <c>save.&lt;ability&gt;</c>,
+/// <c>skill.&lt;skill&gt;</c>, <c>ability.&lt;ability&gt;.check</c>, and from v12 (G7) <c>attack</c>, <c>initiative</c> and <c>attacksAgainst</c>; the four
+/// G7 members are typed only from v12, and a v12 target below v12 stays untyped. A mode that names no
 /// <see cref="RollMode"/> member stays untyped here too, and the validator reports it.
 /// </summary>
 public sealed record RollModeEffect : Effect
@@ -811,7 +843,7 @@ public sealed record RollModeEffect : Effect
 
     public override string Type => TypeName;
 
-    /// <summary><c>save.&lt;ability&gt;</c>, <c>skill.&lt;skill&gt;</c> or <c>ability.&lt;ability&gt;.check</c> (the last is a roll target only, not a field); validated in the content validator.</summary>
+    /// <summary><c>save.&lt;ability&gt;</c>, <c>skill.&lt;skill&gt;</c> or <c>ability.&lt;ability&gt;.check</c> (the last is a roll target only, not a field); from v12 also <c>attack</c>, <c>initiative</c> and <c>attacksAgainst</c>; validated in the content validator.</summary>
     public required string Target { get; init; }
 
     /// <summary>Advantage or disadvantage. <see cref="RollMode.Normal"/> reads but is refused by the validator.</summary>
@@ -826,8 +858,56 @@ public sealed record RollModeEffect : Effect
     /// <summary>The content that declares <see cref="Toggle"/>, when it is not this revision's. Null: this revision.</summary>
     public Guid? ToggleContent { get; init; }
 
-    internal static Effect FromUnknown(UnknownEffect unknown) =>
-        VersionedEffects.NamesMember<RollMode>(unknown.Raw, "mode") ? VersionedEffects.Typed<RollModeEffect>(unknown) : unknown;
+    /// <summary>Content schema v12 (G7) targets: the character's own attack rolls, initiative, and the attack rolls other creatures make against the character.</summary>
+    public const string AttackTarget = "attack", InitiativeTarget = "initiative", AttacksAgainstTarget = "attacksAgainst";
+
+    /// <summary>Content schema v12 (G7): with target <c>attack</c>, the attack tags the mode applies to (<c>all</c> or any tag of the attack). Non-empty, distinct.</summary>
+    public IReadOnlyList<string>? Tags { get; init; }
+
+    /// <summary>Content schema v12 (G7): with target <c>attack</c>, the ability the attack must use.</summary>
+    public Ability? Ability { get; init; }
+
+    /// <summary>Content schema v12 (G7): a condition key that, while the character has it, leaves the effect out.</summary>
+    public string? UnlessCondition { get; init; }
+
+    /// <summary>Content schema v12 (G7): with target <c>attacksAgainst</c>, true means attacks against the character can't have <see cref="Mode"/>.</summary>
+    public bool? Prevent { get; init; }
+
+    /// <summary>The keys content schema v12 adds to this effect; below v12 they stay extension data.</summary>
+    internal static readonly string[] V12Keys = ["tags", "ability", "unlessCondition", "prevent"];
+
+    /// <summary>Whether <paramref name="target"/> is one of the targets content schema v12 adds (matched exactly, as the validator does).</summary>
+    internal static bool IsV12Target(string? target) =>
+        target is AttackTarget or InitiativeTarget or AttacksAgainstTarget;
+
+    /// <summary>
+    /// Typed when the mode names a member. Below v12 a v12 target stays untyped, byte for byte, and the four v12 keys stay extension
+    /// data. From v12 an <c>ability</c> must be a lower-case ability key exactly.
+    /// </summary>
+    internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion)
+    {
+        if (!VersionedEffects.NamesMember<RollMode>(unknown.Raw, "mode"))
+            return unknown;
+        if (revisionSchemaVersion < ContentRevision.RollModeTargetsSchemaVersion)
+        {
+            foreach (var p in unknown.Raw.EnumerateObject())
+            {
+                if (string.Equals(p.Name, "target", StringComparison.OrdinalIgnoreCase)
+                    && p.Value.ValueKind == JsonValueKind.String && IsV12Target(p.Value.GetString()))
+                    return unknown;
+            }
+            return VersionedEffects.TypedWithout<RollModeEffect>(unknown, V12Keys);
+        }
+        foreach (var p in unknown.Raw.EnumerateObject())
+        {
+            if (string.Equals(p.Name, "ability", StringComparison.OrdinalIgnoreCase)
+                && p.Value.ValueKind != JsonValueKind.Null
+                && !(p.Value.ValueKind == JsonValueKind.String
+                    && Enum.GetNames<Ability>().Any(n => string.Equals(p.Value.GetString(), n.ToLowerInvariant(), StringComparison.Ordinal))))
+                return unknown;
+        }
+        return VersionedEffects.Typed<RollModeEffect>(unknown);
+    }
 }
 
 /// <summary>Content schema v11 (D43): where in a damage event a response is offered.</summary>
@@ -887,6 +967,28 @@ public sealed record ResponseOutcome(
     string? RollId,
     Guid? RollContent);
 
+/// <summary>Content schema v12 (G6): what a damage event comes from, for <see cref="ResponseTrigger.From"/>.</summary>
+public enum ResponseSource { Attack, Fall, Save }
+
+/// <summary>Content schema v12 (G6): the result of a saving throw a response is offered on.</summary>
+public enum SaveResult { Success, Failure }
+
+/// <summary>Content schema v12 (G6): how much of the damage a damage reduction response takes off.</summary>
+public enum ResponseShare { Half, All }
+
+/// <summary>
+/// Content schema v12 (G6): when a response is offered. <paramref name="From"/> is what the damage came from; <paramref name="Ability"/>
+/// and <paramref name="Result"/> narrow a save; <paramref name="DamageTypes"/> limits it to those damage types.
+/// </summary>
+public sealed record ResponseTrigger(
+    [property: JsonRequired] ResponseSource From,
+    string? Ability = null,
+    SaveResult? Result = null,
+    IReadOnlyList<string>? DamageTypes = null);
+
+/// <summary>Content schema v12 (G6): the response a response replaces; <paramref name="Content"/> absent means this revision's content.</summary>
+public sealed record ResponseSupersedes(Guid? Content, [property: JsonRequired] string ResponseId);
+
 /// <summary>
 /// Content schema v11 (D43): a reaction the character can choose when they take damage: reduce it, survive at some hit points, or
 /// answer a threshold with outcomes. Typed only in a v11 revision: in an older revision a <c>response</c> stays an
@@ -932,17 +1034,60 @@ public sealed record ResponseEffect : Effect
     /// <summary>What the response does once chosen.</summary>
     public IReadOnlyList<ResponseOutcome>? Outcomes { get; init; }
 
-    /// <summary>The other contents this response names: its pool, its toggle, and each outcome's pool, toggle and roll content. Null content means this one and is left out.</summary>
+    /// <summary>Content schema v12 (G6): when the response is offered, beyond the damage event itself (what the damage came from, and for a save which ability, which result and which damage types). Null: any damage event.</summary>
+    public ResponseTrigger? Trigger { get; init; }
+
+    /// <summary>Content schema v12 (G6): how much of the damage a <see cref="ResponsePhase.DamageReduction"/> response takes off: half or all. Null: the <see cref="Amount"/> formula.</summary>
+    public ResponseShare? Share { get; init; }
+
+    /// <summary>Content schema v12 (G6): a dice expression the response rolls (added to its amount).</summary>
+    public string? Dice { get; init; }
+
+    /// <summary>Content schema v12 (G6): true when the response applies on its own, without the player choosing it.</summary>
+    public bool? Automatic { get; init; }
+
+    /// <summary>Content schema v12 (G6): a condition id that, while the character has it, stops the response being offered.</summary>
+    public string? UnlessCondition { get; init; }
+
+    /// <summary>Content schema v12 (G6): another response this one replaces while this one is offered.</summary>
+    public ResponseSupersedes? Supersedes { get; init; }
+
+    /// <summary>The keys content schema v12 adds to this effect; below v12 they stay extension data.</summary>
+    internal static readonly string[] V12Keys = ["trigger", "share", "dice", "automatic", "unlessCondition", "supersedes"];
+
+    /// <summary>The other contents this response names: its pool, its toggle, the response it supersedes, and each outcome's pool, toggle and roll content. Null content means this one and is left out.</summary>
     public IEnumerable<Guid> ReferencedContent() =>
-        new[] { ResourceContent, Toggle?.ContentId }
+        new[] { ResourceContent, Toggle?.ContentId, Supersedes?.Content }
             .Concat((Outcomes ?? []).SelectMany(o => new[] { o?.ResourceContent, o?.Toggle?.ContentId, o?.RollContent }))
             .OfType<Guid>();
 
-    /// <summary>Typed when the phase and every outcome's kind name a member exactly (the serializer also binds padded or combined names, which no schema allows).</summary>
-    internal static Effect FromUnknown(UnknownEffect unknown) =>
-        VersionedEffects.NamesMember<ResponsePhase>(unknown.Raw, "phase") && OutcomeKindsNamed(unknown.Raw)
+    /// <summary>
+    /// Typed when the phase and every outcome's kind name a member exactly (the serializer also binds padded or combined names, which no
+    /// schema allows). Below v12 the six v12 keys stay extension data; from v12 the trigger's source and result and the share must also
+    /// name a member exactly.
+    /// </summary>
+    internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion)
+    {
+        if (!VersionedEffects.NamesMember<ResponsePhase>(unknown.Raw, "phase") || !OutcomeKindsNamed(unknown.Raw))
+            return unknown;
+        if (revisionSchemaVersion < ContentRevision.ResponseTriggerSchemaVersion)
+            return VersionedEffects.TypedWithout<ResponseEffect>(unknown, V12Keys);
+        return VersionedEffects.NamesMember<ResponseShare>(unknown.Raw, "share") && TriggerNamed(unknown.Raw)
             ? VersionedEffects.Typed<ResponseEffect>(unknown)
             : unknown;
+    }
+
+    private static bool TriggerNamed(JsonElement raw)
+    {
+        foreach (var p in raw.EnumerateObject())
+        {
+            if (!string.Equals(p.Name, "trigger", StringComparison.OrdinalIgnoreCase) || p.Value.ValueKind != JsonValueKind.Object)
+                continue;
+            if (!VersionedEffects.NamesMember<ResponseSource>(p.Value, "from") || !VersionedEffects.NamesMember<SaveResult>(p.Value, "result"))
+                return false;
+        }
+        return true;
+    }
 
     private static bool OutcomeKindsNamed(JsonElement raw)
     {
@@ -1580,7 +1725,7 @@ internal static class VersionedEffects
             [ToggleGroupEffect.TypeName] = (ToggleGroupEffect.SchemaVersion, (u, _) => ToggleGroupEffect.FromUnknown(u)),
             [UpkeepEffect.TypeName] = (UpkeepEffect.SchemaVersion, (u, _) => UpkeepEffect.FromUnknown(u)),
             [AttackEffect.TypeName] = (AttackEffect.SchemaVersion, AttackEffect.FromUnknown),
-            [AttackRiderEffect.TypeName] = (AttackRiderEffect.SchemaVersion, (u, _) => AttackRiderEffect.FromUnknown(u)),
+            [AttackRiderEffect.TypeName] = (AttackRiderEffect.SchemaVersion, AttackRiderEffect.FromUnknown),
             // Always typed, except that the converter hands these over when they carry a key or value added after v9 (see
             // EffectJsonConverter.CarriesDetailAbove), so the revision's version decides how they read. A later slice that
             // gives one of them a v11 key adds it to that type's V11Keys, and nothing else. A choice is handed over for its
@@ -1592,8 +1737,8 @@ internal static class VersionedEffects
             [ResourceEffect.TypeName] = (1, ResourceEffect.FromUnknown),
             [RollEffect.TypeName] = (1, RollEffect.FromUnknown),
             [ValueEffect.TypeName] = (ValueEffect.SchemaVersion, (u, _) => ValueEffect.FromUnknown(u)),
-            [RollModeEffect.TypeName] = (RollModeEffect.SchemaVersion, (u, _) => RollModeEffect.FromUnknown(u)),
-            [ResponseEffect.TypeName] = (ResponseEffect.SchemaVersion, (u, _) => ResponseEffect.FromUnknown(u)),
+            [RollModeEffect.TypeName] = (RollModeEffect.SchemaVersion, (u, v) => RollModeEffect.FromUnknown(u, v)),
+            [ResponseEffect.TypeName] = (ResponseEffect.SchemaVersion, (u, v) => ResponseEffect.FromUnknown(u, v)),
             [ItemModEffect.TypeName] = (ItemModEffect.SchemaVersion, (u, _) => ItemModEffect.FromUnknown(u)),
             [CompanionEffect.TypeName] = (CompanionEffect.SchemaVersion, (u, _) => CompanionEffect.FromUnknown(u)),
         };

@@ -3,6 +3,8 @@
 Status: accepted (owner decision D75, 2026-10-24). Items 0–5 are adopted and built; the schema rows were approved 2026-10-27.
 Date: 2026-10-27
 
+Content v12 is extended slice by slice by [ADR-022](ADR-022-content-v12.md) (G6, response triggers and amounts, first).
+
 ## Context
 
 ADR-018 (D43) built a generic play-mechanics engine: form groups, costs from a shared pool, rounds and upkeep, dice-less actions, attacks and riders from features, and the basis guard with server undo. A few mechanics that third-party and homebrew classes use are still out of reach:

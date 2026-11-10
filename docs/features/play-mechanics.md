@@ -194,7 +194,7 @@ Rules core: `AttackEffect`, `AttackRiderEffect` and the new `ModifierEffect.Togg
 | `attackRider` | `toHit`, `dice`, `damageBonus` | formula, `NdM`, formula | Added to the attack roll, extra damage dice, added to the damage. At least one is needed. `dice` is a count of 1 to 100 and a d4, d6, d8, d10 or d12 |
 | `attackRider` | `damageType` | damage type | The type of the extra dice. Absent: the attack's own |
 | `attackRider` | `toggle`, `toggleContent` | toggle id, content id | The rider applies only while this toggle is on (`toggleContent`: the content that declares it, when it is not this revision). Absent: always |
-| `attackRider` | `stackGroup` | key | Riders of one group never add: the strongest applies |
+| `attackRider` | `stackGroup` | key | Riders of one group never add: the strongest applies. In v11 a rider's `dice` and a roll's `dice` are literal; content v12 adds `scaledDice`, `critical` and `oncePerTurn` ([Content v12 (G1)](#content-v12-g1-scaled-dice-critical-only-and-once-per-turn-riders)) |
 | `modifier` | `toggleContent` | content id | With `toggle`: the modifier follows that content's toggle, not one of its own revision |
 | `roll` | `whileToggle` | `{ contentId?, toggleId }` | The action is available only while this toggle is on |
 | `modifier` | `target: resource.<id>` | a pool of this revision | A `bonus` raises that pool's maximum (see below) |
@@ -354,7 +354,7 @@ Rules core: `RollModeEffect`, `GrantEffect.WhileToggle` and `FieldIds.FlySpeed` 
 
 | Effect | Field | Type | Does |
 | --- | --- | --- | --- |
-| `rollMode` (new type, v11 only) | `target` | text | The roll that gets the mode: `save.<ability>` (`str` ... `cha`), `skill.<skill>` (any of the 18 skills, such as `skill.stealth`) or `ability.<ability>.check`. Nothing else is a target (not `initiative`, not `ability.<ability>.mod`) |
+| `rollMode` (new type, v11 only) | `target` | text | The roll that gets the mode: `save.<ability>` (`str` ... `cha`), `skill.<skill>` (any of the 18 skills, such as `skill.stealth`) or `ability.<ability>.check`. In content v11 nothing else is a target (not `initiative`, not `ability.<ability>.mod`); content v12 adds `attack`, `initiative` and `attacksAgainst` ([Content v12 (G7)](#content-v12-g7-roll-modes-on-attacks-and-initiative)) |
 | `rollMode` | `mode` | `advantage` or `disadvantage` | `normal` changes nothing and is refused |
 | `rollMode` | `against` | list of condition keys | The mode applies only against these conditions (for a save, the condition being imposed); the player applies it (`blinded`, `charmed`, `deafened`, `frightened`, `grappled`, `incapacitated`, `invisible`, `paralyzed`, `petrified`, `poisoned`, `prone`, `restrained`, `stunned`, `unconscious`). Absent: always. Never an empty list |
 | `rollMode` | `toggle`, `toggleContent` | toggle id, content id | The mode applies only while that toggle is on. It is the lookup of a modifier's `toggle`: a toggle of this revision, or of another entry with `toggleContent` (which needs a `toggle`) |
@@ -449,6 +449,8 @@ Outcomes (at most 8 per response, at most 20 responses per revision): `spend` an
 Validation codes (errors, except where marked): `validate.response-incomplete` (no id or label, a cost with no pool, a pool the content does not define), `validate.response-amount`, `validate.response-when`, `validate.response-outcome` (a missing member for the outcome's kind, an unknown pool, toggle or roll, or more than one hit point outcome), `validate.response-outcome-amount` (a hit point amount that is missing or not a formula), `validate.response-duplicate` and `validate.response-too-many` (more than 20 responses, or more than 8 outcomes in one). `validate.requires-v11` applies as for every v11 field, and the warning `validate.toggle-content-missing` covers a response's or outcome's toggle of content that is not installed.
 
 ### The order (D45, amends D19 as amended 2026-10-20)
+
+Content v12 (G6, [ADR-022](../decisions/ADR-022-content-v12.md)) adds a save's half and the `share` reductions before step 1, and a rolled `dice` amount to the reduction; see [Content v12 (G6)](#content-v12-g6-response-triggers-and-amounts).
 
 1. **Reduction:** the sum of the chosen reductions comes off the amount.
 2. **Immunity, resistance and vulnerability** apply to what is left.
@@ -614,6 +616,92 @@ TomeStack 0.6.0 refuses a package that holds a content revision at schema v11 or
 
 **Saving for an older TomeStack (D85).** The sender can instead save a copy for 0.6.0 or 0.5.0 ([package-format.md](package-format.md#save-for-an-older-tomestack-d85)). The v11 fields are lowered by "never silently stronger": what only makes the sheet weaker or by hand (for example a toggle's `duration`, a roll's `whileToggle`, an upkeep that only regains) is dropped and listed, and what would lift a cost, an exclusive form group, a level gate or a penalty (a toggle `cost` or `group`, `counts: up`, an `alsoChange` that spends, a disadvantage roll mode) blocks the copy. A v11 revision that changes becomes a copy with a new id; a running encounter blocks, and a toggle's `roundsLeft` is dropped.
 
+## Content v12 (G6): response triggers and amounts
+
+Decided in [ADR-022](../decisions/ADR-022-content-v12.md) (LIVING_SPECS D86). Six optional members on a `response`, all content schema v12; a revision without them keeps its version.
+
+| Member | Meaning |
+| --- | --- |
+| `trigger` | `{ from: attack \| fall \| save, ability?, result?, damageTypes? }`. `ability` and `result` (`success` or `failure`) go with `from: save` and only there. A save trigger matches only a save that halves on a success. |
+| `share` | `half` or `all`, damage reduction only, instead of `amount`. Half leaves `floor(d / 2)`; all leaves 0. |
+| `dice` | A dice expression such as `1d10`, damage reduction with `amount` only. The reduction is the rolled total plus `amount`. It cannot total below 0 (`1d4-5` is refused). |
+| `automatic` | `true` pre-ticks the response. Damage reduction only, no cost. Only what is chosen applies. |
+| `unlessCondition` | A condition key. The response is on the sheet but unavailable while the character has the condition. A condition that includes incapacitated (paralyzed, petrified, stunned, unconscious) counts as incapacitated. |
+| `supersedes` | `{ content?, responseId }`. While this response is available and not part of a loop, the named one is left off the sheet; an upgrade you cannot use (pool empty, form off, condition held) leaves it in place. A loop is refused by validation; one that still reaches a sheet hides nothing and shows `response.supersedes-cycle`. |
+
+**The hit.** The damage request can say how the hit came (`from`: attack, fall or save, and for a save `save`: the ability, whether it succeeded and whether it halves). It is never stored. The hit points panel asks "How did it hit?"; the play command carries `damageFrom` and `damageSave`, the preview `from` and `save`. A save without `from: save` is refused with `damage.invalid-source`.
+
+**Matching.** No trigger matches every hit. An unknown source offers attack and fall triggers (you judge, as before) and never a save trigger. A known source offers only its own kind. `damageTypes` needs the hit's type in the list (an untyped hit never matches). A trigger gates every phase.
+
+**The order, with v12.** The save's half (`floor(d / 2)` on a success that halves), then the chosen `share` reductions in sheet order on the running amount, then flat `amount` reductions plus any rolled `dice`, then immunity, resistance and vulnerability, temporary hit points and hit points as in the order above, then survivals and thresholds. "Reduced by N" counts what responses took off, never more than the damage that reached them and never the save's half.
+
+**Rolls.** A chosen dice response carries `Rolled`, within the expression's minimum and maximum; only a dice response may. Otherwise `damage.response-roll` (one note per response) and nothing applies. The panel shows a roll box for each chosen dice response; you roll the dice yourself.
+
+**Validation** (errors): `validate.response-trigger`, `validate.response-share`, `validate.response-dice`, `validate.response-automatic`, `validate.response-condition`, `validate.response-supersedes`; below v12 `validate.requires-v12` applies as for every v12 field.
+
+**Homebrew Studio.** The response editor can author all six members.
+
+**Older versions.** For an older TomeStack ([package-format.md](package-format.md#save-for-an-older-tomestack-d85)) a response that uses `trigger`, `share`, `dice`, `unlessCondition` or `supersedes` is dropped whole and listed (`below.effect-unsupported`), and so is any response of the same revision it replaced; `automatic` alone drops just the key (`below.v12-key`). This judgement is a proposal that awaits the owner (ADR-022 decision 6).
+
+**Stays by hand:** a hit-time formula variable (a name that reads the hit's damage), a redirect damage roll, and rolling the target's or your own save.
+
+## Content v12 (G7): roll modes on attacks and initiative
+
+Decided in [ADR-022](../decisions/ADR-022-content-v12.md#slice-g7-roll-modes-on-attacks-and-initiative) (LIVING_SPECS D87). Three new targets and four optional members on a `rollMode`, all content schema v12; a revision without them keeps its version and bytes.
+
+| Target | Reaches |
+| --- | --- |
+| `attack` | The character's own attack rolls (weapon, feature and spell attack rolls). Needs `tags`. |
+| `initiative` | Initiative only. `ability.dex.check` still reaches it too, as in v11. |
+| `attacksAgainst` | Attack rolls other creatures make against the character. Shown on the sheet; the app never rolls for them (ADR-018). |
+
+| Member | Meaning |
+| --- | --- |
+| `tags` | Target `attack` only, and required with it: a non-empty list of distinct tags. Matches as attack riders match: `all`, or any tag in the attack's tag list. A weapon attack has `weapon` and `melee` or `ranged`; a feature attack its own tags plus `melee` or `ranged`; a spell attack roll `spell` and `melee` or `ranged`. |
+| `ability` | Target `attack` only: the attack must use that ability. A finesse weapon used with the other ability does not get the mode. |
+| `unlessCondition` | Any target, a condition key. While the character has the condition the effect is left out, as a toggle that is off. A condition that includes incapacitated (paralyzed, petrified, stunned, unconscious) counts as incapacitated. |
+| `prevent` | Target `attacksAgainst` only. `true`: attacks against the character can't have `mode`, and the sources of that mode are ignored. `false` is allowed and still needs v12. |
+
+`against` (v11) stays allowed with `attack` and is refused with `initiative` and `attacksAgainst`.
+
+**On the sheet.** `CharacterSheet.attackModes` lists the reasons that reach attacks, `AttackEntry.mode` is each attack's own summary (null on a companion attack), and `CharacterSheet.attacksAgainst` is the summary for attacks against you (null when nothing reaches it). Its automatic mode combines the automatic reasons after removing every mode an automatic `prevent` reason names. An initiative target reaches the initiative field only. Advantage from one source and a prevent from another against you give Normal, both listed; when the prevent is left out (for example under `unlessCondition`), the advantage shows.
+
+**Rolling.** Weapon, feature and spell attack rolls combine your mode with the automatic reasons (advantage and disadvantage cancel) and report the automatic mode, its sources and a note, as a field roll does. Custom and companion attack rolls are unchanged: they are not the character's own rolls.
+
+**Play and the studio.** Attack buttons show the automatic mode. An "Attacks against you" line sits near Armor Class. The Homebrew studio offers "Attack rolls", "Initiative" and "Attacks against you" targets with the tags, ability, "Can't have this" (`prevent`) and "Unless" (a condition) fields; members that don't fit the chosen target are reported with a Remove button.
+
+**Validation** (errors): `validate.roll-mode-tags`, `validate.roll-mode-ability`, `validate.roll-mode-condition`, `validate.roll-mode-prevent`; `validate.roll-mode-target` and `validate.roll-mode-against` are reused; below v12 `validate.requires-v12` applies as for every v12 field.
+
+**Older versions.** For an older TomeStack ([package-format.md](package-format.md#save-for-an-older-tomestack-d85)) a rollMode with a v12 target or member is dropped whole and listed (`below.effect-unsupported`) when it helps the character: a target of your own (attack, initiative or a v11 target) with advantage, or attacks against you with disadvantage and no `prevent`, or with advantage and `prevent: true`. Any other one blocks the copy (`below.roll-mode-disadvantage`), and the blocked copy leaves it out as its one change. `prevent: false` alone on an otherwise v11 effect drops just the key (`below.v12-key`). This judgement is a proposal that awaits the owner (ADR-022, G7 decision 6).
+
+**Stays by hand:** "the next attack roll only" (switch the toggle off yourself), conditions such as "if you haven't moved" (the toggle is yours to judge), a prevent on your own rolls, and a mode on damage or non-d20 rolls.
+
+## Content v12 (G1): scaled dice, critical-only and once-per-turn riders
+
+Decided in [ADR-022](../decisions/ADR-022-content-v12.md#slice-g1-scaled-dice-critical-only-and-once-per-turn-riders) (LIVING_SPECS D88). New optional members on an `attackRider` and a `roll`, all content schema v12; a revision without them keeps its version and bytes. A v11 revision whose rider carries one stays unknown data and applies with its v11 `dice`.
+
+| Member | On | Meaning |
+| --- | --- | --- |
+| `scaledDice` | rider, roll | `{ "count": <formula>, "die": <formula>? }` in place of `dice` (the two are exclusive, `validate.scaled-dice`). The formula is evaluated for the character (a `SCALE.` reference needs v9, a `VALUE.` reference v11). `die` is required on a roll. On a rider, no `die` means the attack's own damage die (the weapon's, the versatile die on a two-handed roll, a feature attack's die); such a rider may not have a `stackGroup`. |
+| `critical` | rider | The dice are added only to a damage roll marked critical, rolled once and never doubled. Needs `dice` or `scaledDice`; refuses `toHit`, `damageBonus`, `stackGroup`, `oncePerTurn` (`validate.rider-critical`). |
+| `oncePerTurn` | rider | The dice are not in the attack's damage. Each weapon or feature damage roll offers the rider; the player adds it, and a critical hit doubles the added dice. Needs `dice` or `scaledDice`; refuses `toHit`, `damageBonus`, `stackGroup` (`validate.rider-once-per-turn`). Both flags on one rider is `validate.rider-critical`. |
+
+An explicit `false` for `critical` or `oncePerTurn` is allowed, still needs v12 and counts as absent.
+
+**Evaluated range.** A count of 0 adds no dice: a rider adds the trace note `rider.no-dice` (and is not listed when it has no other part); a roll has no dice, so the roll command gives `roll.no-dice`, or rolls the spell's dice when the roll casts a spell. A count below 0 or above 100, a die outside d4 to d12 or a failing formula is `rider.dice-invalid` on a rider (the rider is left out of that attack; the attack stays listed and rollable) and `roll.dice-invalid` on a roll (the roll command refuses with that code). Nothing throws.
+
+**Rolling.** `RollCommand.WithRiders` lists once-per-turn riders (content and effect id) to add. It is allowed only on a weapon or feature-attack damage roll (`roll.riders-not-allowed`), each pick must be a once-per-turn rider on that entry (`roll.rider-unknown`), and duplicates collapse. On a critical roll the entry's critical riders' dice are added once, undoubled; the picked dice are doubled like any dice in the formula; flat parts are never doubled.
+
+**Once per turn is offered, not tracked.** TomeStack does not track turns. The player decides when the rider applies and adds it to the roll; there is no "used this turn" state and no character field. This judgement is proposed; the owner decides.
+
+**Play and the studio.** Attack buttons offer each once-per-turn rider as "Add <rider> (dice, once per turn)" on a damage roll. The Homebrew studio's rider and roll dice can be "By formula" (count and, for a rider, an optional die), and a rider has "Only on a critical hit" and "Once per turn, added when you choose" boxes (each disables the other). Switching a rider to "By formula" clears its stack group, since a die-less rider can't have one; switching a roll to "By formula" drops its per-unit cost and hides those fields.
+
+**Validation** (errors): `validate.scaled-dice`, `validate.rider-critical`, `validate.rider-once-per-turn`; below v12 `validate.requires-v12` applies as for every v12 field. The capability registry lists `scaledDice` and `critical` as Automatic and `oncePerTurn` as Assisted.
+
+**Older versions.** For an older TomeStack ([package-format.md](package-format.md#save-for-an-older-tomestack-d85)) a rider with any of `scaledDice`, `critical` or `oncePerTurn` is dropped whole and listed (`below.effect-unsupported`), because keeping it without the flag would make it stronger; a rider that also lowers the attack (a `toHit` or `damageBonus` that can be negative) blocks the export instead. A roll with `scaledDice` loses only that key (`below.v12-key`) when it still has a cost, and is dropped whole (`below.effect-unsupported`) when nothing a v11 roll accepts would remain; a roll that casts a spell still blocks the export, as in G6. This judgement is a proposal that awaits the owner (ADR-022, G1 decision 6).
+
+**Stays by hand:** tracking whether the once-per-turn rider was already used this turn, dice that depend on a roll's result, and marking a damage roll critical (the player still does it).
+
 ## Not yet
 
 - Damage responses: the studio's outcome roll picker offers only the same entry's rolls. A roll from another entry can be stored in content but not chosen in the studio yet.
@@ -622,8 +710,8 @@ TomeStack 0.6.0 refuses a package that holds a content revision at schema v11 or
 - Applying a saving throw, an area or a range: they are shown as text. Nothing rolls a target's save or places the area. A feature attack has no per-unit amount (only a roll effect does; an `amount` on anything else is `roll.amount-not-allowed`). A dice-less `variableCost` action spends its full cost through Use: there is no box to choose a smaller amount.
 - Named values outside a class (a species or a feat pinned on its own has none), a value that takes arguments, and a catalog-wide `validate.value-unknown` for features.
 - A trace view of a save DC on the sheet (the trace is on the data; Play shows the number).
-- Initiative, other creatures and a DM view (out of scope, ADR-018).
+- Rolling for other creatures and a DM view (out of scope, ADR-018). Initiative itself is rolled; a mode on it is content v12 (G7).
 - A general overlay-to-overlay exclusion.
 - A toggle that gives back what it spent when turned off.
-- Roll modes: a target for initiative alone (a Dexterity check mode reaches initiative with the Dexterity skills), a per-effect cap on an ability bonus (`upTo`; the global cap of 20 applies), a mode that applies automatically against a condition (an `against` mode is a note the player confirms), and modes on attack rolls or death saves. The concentration save applies the `save.con` automatic modes and names them on its button; it does not send the d20 picker's choice. An automatic advantage on Perception (or on Wisdom checks) does not add +5 to passive Perception.
+- Roll modes: a per-effect cap on an ability bonus (`upTo`; the global cap of 20 applies), a mode that applies automatically against a condition (an `against` mode is a note the player confirms), and modes on death saves. The concentration save applies the `save.con` automatic modes and names them on its button; it does not send the d20 picker's choice. An automatic advantage on Perception (or on Wisdom checks) does not add +5 to passive Perception.
 - `whileToggle` on a grant that is not one of the three damage defences (the schema refuses it there, and the calculation ignores it).

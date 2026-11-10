@@ -35,4 +35,17 @@ public class RollModeProperties
             var expected = hasAdv == hasDis ? RollMode.Normal : hasAdv ? RollMode.Advantage : RollMode.Disadvantage;
             return order && combined == expected;
         });
+
+    [Property(MaxTest = 100)]
+    public Property ForAttack_with_no_modes_is_null() =>
+        Prop.ForAll(Gen.Elements(Enum.GetValues<Ability>()).ToArbitrary(), ability =>
+            RollModes.ForAttack(null, ["weapon", "melee"], ability) is null && RollModes.ForAttack([], ["weapon"], ability) is null);
+
+    [Property(MaxTest = 300)]
+    public Property CombineAgainst_without_prevent_equals_Combine() =>
+        Prop.ForAll(Modes.ToArbitrary(), modes =>
+        {
+            var reasons = modes.Select(m => new RollModeReason(m, "Fixture", default!, null)).ToList();
+            return RollModes.CombineAgainst(reasons) == RollModes.Combine(modes);
+        });
 }

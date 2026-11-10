@@ -3,10 +3,13 @@ import type {
   Ability,
   Activation,
   AttackEntry,
+  ContentReference,
+  RiderValue,
   EquipmentEntry,
   AutomationStatus,
   CharacterView,
   ContentKind,
+  DamageHow,
   DamageOutcome,
   Diagnostic,
   FeatureEffect,
@@ -25,7 +28,7 @@ import { castsText, paying, paymentText } from '../payment';
 import { explainSteps } from '../explain';
 import { hitDiceText, rollBonus } from '../format';
 import { attackPin, customPin, maxPins, pinKey, rollPin, togglePin, weaponTarget, type Pin } from '../quickbar';
-import { rollButtonSuffix } from '../rollModes';
+import { assistedNotes, rollButtonSuffix } from '../rollModes';
 import { diceLine, rollKey, rollModeText } from '../rollText';
 import { announceRollsOn, diceAnimationOn } from '../settings';
 import { damageTypeLabel, damageTypes, normalizeDamageType } from './customModel';
@@ -140,32 +143,54 @@ export function HitPointsPanel({
   damageType?: string;
   onDamageType?: (type: string) => void;
   /** D43 S7: opens the damage panel (amount, type '' for untyped). Used instead of a one-step damage when the sheet has damage responses. */
-  onDamage?: (amount: number, type: string) => void;
+  onDamage?: (amount: number, type: string, how?: DamageHow) => void;
   /** The damage panel is open and lists the skipped responses itself, so this panel does not repeat them. */
   panelOpen?: boolean;
 }) {
   const hp = view.sheet.hitPoints;
   const [amount, setAmount] = useState('');
   const [ownType, setOwnType] = useState('');
+  // Content v12 (G6): how the hit came. '' is not said. A save adds the ability, whether it succeeded and whether a success halves.
+  const [from, setFrom] = useState<'' | DamageHow['from']>('');
+  const [saveAbility, setSaveAbility] = useState<Ability>('dex');
+  const [saveSucceeded, setSaveSucceeded] = useState(false);
+  const [saveHalf, setSaveHalf] = useState(true);
   const type = damageType ?? ownType;
   const setType = onDamageType ?? setOwnType;
   if (!hp) return null;
   const n = Number(amount);
   const valid = amount !== '' && Number.isInteger(n) && n >= 0;
+  const how: DamageHow | undefined =
+    from === '' ? undefined : from === 'save' ? { from, save: { ability: saveAbility, succeeded: saveSucceeded, half: saveHalf } } : { from };
 
   function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
   }
 
+  function reset(action: PlayAction['action']) {
+    setAmount('');
+    if (action !== 'damage') return; // only applying damage resets how it hit
+    setFrom('');
+    setSaveAbility('dex');
+    setSaveSucceeded(false);
+    setSaveHalf(true);
+  }
+
   function apply(action: PlayAction['action']) {
     if (!valid) return;
     if (action === 'damage' && onDamage && (view.sheet.responses ?? []).length > 0) {
-      onDamage(n, type);
-      setAmount('');
+      if (how) onDamage(n, type, how);
+      else onDamage(n, type);
+      reset(action);
       return;
     }
-    act({ action, amount: n, ...(action === 'damage' && type ? { damageType: type } : {}) });
-    setAmount('');
+    act({
+      action,
+      amount: n,
+      ...(action === 'damage' && type ? { damageType: type } : {}),
+      ...(action === 'damage' && how ? { damageFrom: how.from, ...(how.save ? { damageSave: how.save } : {}) } : {}),
+    });
+    reset(action);
   }
 
   return (
@@ -190,6 +215,38 @@ export function HitPointsPanel({
             ))}
           </select>
         </label>
+        <label className="field">
+          How did it hit?
+          <select value={from} onChange={(e) => setFrom(e.target.value as '' | DamageHow['from'])}>
+            <option value="">Not said</option>
+            <option value="attack">An attack</option>
+            <option value="fall">A fall</option>
+            <option value="save">A saving throw</option>
+          </select>
+        </label>
+        {from === 'save' && (
+          <>
+            <label className="field">
+              Ability
+              <select value={saveAbility} onChange={(e) => setSaveAbility(e.target.value as Ability)}>
+                <option value="str">Strength</option>
+                <option value="dex">Dexterity</option>
+                <option value="con">Constitution</option>
+                <option value="int">Intelligence</option>
+                <option value="wis">Wisdom</option>
+                <option value="cha">Charisma</option>
+              </select>
+            </label>
+            <label className="choice">
+              <input type="checkbox" checked={saveSucceeded} onChange={(e) => setSaveSucceeded(e.target.checked)} />
+              Succeeded
+            </label>
+            <label className="choice">
+              <input type="checkbox" checked={saveHalf} onChange={(e) => setSaveHalf(e.target.checked)} />
+              Half damage on a success
+            </label>
+          </>
+        )}
         <button type="button" disabled={!valid} onClick={() => apply('damage')}>
           Take damage
         </button>
@@ -624,7 +681,8 @@ export function ActionsPanel({
   onPin,
 }: {
   view: CharacterView;
-  roll: (target: RollTarget) => void;
+  /** Resolves to false when the roll was refused (the sheet then shows the error); a caller that returns nothing counts as rolled. */
+  roll: (target: RollTarget) => void | Promise<boolean>;
   act: Act;
   /** D73: the visible, resolved quickbar pins; a row whose pin is among them shows "Unpin". */
   pins?: Pin[];
@@ -661,7 +719,7 @@ export function ActionsPanel({
   };
   const rollDamage = (target: RollTarget, type?: string) => {
     onDamageType?.(normalizeDamageType(type));
-    roll(target);
+    return roll(target);
   };
   // MECH-X item 4: a content companion's attacks and pools are shown on its card, so this display list skips them. Lookups keep every pool.
   const attacks = (view.sheet.attacks ?? []).filter((a) => !a.companionId);
@@ -775,6 +833,7 @@ export function ActionsPanel({
                   key={`${attack.item.revisionId}-${attack.effectId}-${attack.entryIndex ?? ''}`}
                   attack={attack}
                   label={attackLabel(attack, view.character.equipment ?? [])}
+                  contentName={(c) => (view.sheet.features ?? []).find((f) => f.content.revisionId === c.revisionId)?.name}
                   critical={critical}
                   rollMode={rollMode}
                   roll={roll}
@@ -1021,14 +1080,17 @@ export function AttackItem({
   pool,
   availability,
   pinning,
+  contentName,
 }: {
   attack: AttackEntry;
   /** The name shown and used in control names: the attack's, with its copy number when the weapon is carried several times. */
   label: string;
+  /** G1: names the content a rider comes from (the sheet's feature list); falls back to the attack's own name. */
+  contentName?: (content: ContentReference) => string | undefined;
   critical: boolean;
   rollMode: RollMode;
   roll: (target: RollTarget) => void;
-  rollDamage: (target: RollTarget, type?: string) => void;
+  rollDamage: (target: RollTarget, type?: string) => void | Promise<boolean>;
   /** The pool a feature attack spends from, to name it in the cost line. */
   pool?: ResourceValue;
   /** D73: a feature attack the pool can't pay stays enabled and says so. */
@@ -1044,6 +1106,17 @@ export function AttackItem({
   const locked = attack.available === false;
   const needs = locked ? '' : availability.reasons.join(' ');
   const described = locked ? reasonId : needs ? needsId : undefined;
+  // Content v12 (G1): once-per-turn riders are picked per damage roll and cleared after it (in the handler, not an effect); crit-only dice are listed.
+  const [picks, setPicks] = useState<string[]>([]);
+  const pickKey = (r: RiderValue) => `${r.content.revisionId}|${r.effectId}`;
+  const onceRiders = (attack.riders ?? []).filter((r) => r.oncePerTurn && r.dice);
+  const critRiders = (attack.riders ?? []).filter((r) => r.critical && r.dice);
+  const riderName = (r: RiderValue) => contentName?.(r.content) ?? attack.name;
+  const damageRoll = async (t: RollTarget) => {
+    const withRiders = onceRiders.filter((r) => picks.includes(pickKey(r))).map((r) => ({ content: r.content, effectId: r.effectId }));
+    // A refused roll keeps the picks so the player can retry; only a roll that went through clears them.
+    if ((await rollDamage(withRiders.length > 0 ? { ...t, withRiders } : t, attack.damageType)) !== false) setPicks([]);
+  };
   return (
     <li className="feature">
       <details>
@@ -1065,6 +1138,15 @@ export function AttackItem({
             <li key={i}>{sentence}</li>
           ))}
         </ul>
+        {critRiders.length > 0 && (
+          <ul aria-label={`${label} critical hit dice`}>
+            {critRiders.map((r) => (
+              <li key={pickKey(r)}>
+                {riderName(r)}: +{r.dice} on a critical hit{r.versatileDice ? ` (${r.versatileDice} two-handed)` : ''}
+              </li>
+            ))}
+          </ul>
+        )}
         {attack.warnings.length > 0 && (
           <ul className="warnings" aria-label={`${label} warnings`}>
             {attack.warnings.map((w) => (
@@ -1075,9 +1157,28 @@ export function AttackItem({
       </details>
       {feature && attack.replacesAttack && <p className="hint">replaces one attack of the Attack action</p>}
       <button type="button" disabled={locked} aria-describedby={described} onClick={() => roll({ ...target, mode: rollMode })}>
-        Roll {label} attack
+        Roll{rollButtonSuffix(attack)} {label} attack
       </button>
-      <button type="button" disabled={locked} aria-describedby={described} onClick={() => rollDamage({ ...target, damage: true, critical }, attack.damageType)}>
+      {assistedNotes(attack).map((note) => (
+        <span key={note} className="hint">
+          {' '}
+          {note}
+        </span>
+      ))}
+      {onceRiders.map((r) => (
+        <label key={pickKey(r)} className="choice">
+          <input
+            type="checkbox"
+            disabled={locked}
+            aria-label={`Add ${riderName(r)} (${r.dice}, once per turn) to ${label} damage`}
+            checked={picks.includes(pickKey(r))}
+            onChange={(e) => setPicks((p) => (e.target.checked ? [...p, pickKey(r)] : p.filter((k) => k !== pickKey(r))))}
+          />
+          Add {riderName(r)} ({r.dice}, once per turn)
+          {r.versatileDice ? <span className="hint"> {r.versatileDice} two-handed</span> : null}
+        </label>
+      ))}
+      <button type="button" disabled={locked} aria-describedby={described} onClick={() => damageRoll({ ...target, damage: true, critical })}>
         Roll {label} damage{attack.damage ? ` (${attack.damage})` : ''}
       </button>
       {locked && (
@@ -1093,7 +1194,7 @@ export function AttackItem({
         </span>
       )}
       {attack.versatileDamage && (
-        <button type="button" onClick={() => rollDamage({ ...weaponTarget(attack), damage: true, versatile: true, critical }, attack.damageType)}>
+        <button type="button" onClick={() => damageRoll({ ...weaponTarget(attack), damage: true, versatile: true, critical })}>
           Roll {label} two-handed damage ({attack.versatileDamage})
         </button>
       )}

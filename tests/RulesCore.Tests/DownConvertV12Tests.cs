@@ -127,6 +127,277 @@ public class DownConvertV12Tests
         Assert.All(ContentValidator.Validate(result.Revision, Fixtures.M1Catalog()).Errors, e => Assert.Equal("validate.source-missing", e.Code));
     }
 
+    private const string PlainResponse = """{"type":"response","id":"soak","responseId":"soak","label":"Soak","phase":"damageReduction","amount":"1"}""";
+
+    private static string ResponseWith(string extra) =>
+        $$"""{"type":"response","id":"soak","responseId":"soak","label":"Soak","phase":"damageReduction","amount":"1"{{extra}}}""";
+
+    [Theory]
+    [InlineData("trigger", ",\"trigger\":{\"source\":\"attack\"}")]
+    [InlineData("share", ",\"share\":\"ally\"")]
+    [InlineData("dice", ",\"dice\":\"1d6\"")]
+    [InlineData("unlessCondition", ",\"unlessCondition\":\"alpha\"")]
+    [InlineData("supersedes", ",\"supersedes\":\"other\"")]
+    public void Response_with_member_is_dropped_below_12(string member, string extra)
+    {
+        var result = DownConvert.Below(Rev($"{PlainResponse},{ResponseWith(extra).Replace("\"soak\"", "\"two\"", StringComparison.Ordinal)}"), 11);
+
+        Assert.False(result.Blocked);
+        Assert.Single(result.Revision.Effects);
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(BelowCodes.EffectUnsupported, change.Code);
+        Assert.Equal(BelowAction.Dropped, change.Action);
+        Assert.Equal("effects[1]", change.Path);
+        Assert.DoesNotContain($"\"{member}\":", Written(result), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_response_the_dropped_one_replaced_is_dropped_too()
+    {
+        const string upgrade = """{"type":"response","id":"two","responseId":"two","label":"Two","phase":"damageReduction","amount":"2","supersedes":{"responseId":"soak"}}""";
+        var unrelated = ResponseWith("").Replace("\"soak\"", "\"keep\"", StringComparison.Ordinal);
+        var result = DownConvert.Below(Rev($"{PlainResponse},{upgrade},{unrelated}"), 11);
+
+        Assert.False(result.Blocked);
+        var kept = Assert.IsType<ResponseEffect>(Assert.Single(result.Revision.Effects));
+        Assert.Equal("keep", kept.ResponseId);
+        Assert.Equal(["effects[0]", "effects[1]"], result.Changes.Select(c => c.Path).OrderBy(p => p, StringComparer.Ordinal));
+        Assert.All(result.Changes, c => { Assert.Equal(BelowCodes.EffectUnsupported, c.Code); Assert.Equal(BelowAction.Dropped, c.Action); });
+    }
+
+    [Fact]
+    public void Automatic_alone_drops_only_the_key_below_12()
+    {
+        var result = DownConvert.Below(Rev(ResponseWith(""","automatic":true""")), 11);
+
+        Assert.False(result.Blocked);
+        Assert.IsType<ResponseEffect>(Assert.Single(result.Revision.Effects));
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(BelowCodes.V12Key, change.Code);
+        Assert.Equal(BelowAction.Dropped, change.Action);
+        Assert.Equal("effects[0].automatic", change.Path);
+        Assert.DoesNotContain("\"automatic\":true", Written(result), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Removing_a_response_after_an_earlier_removal_reports_the_original_index()
+    {
+        var mod = """{"type":"itemMod","id":"m","appliesTo":"weapon","bonus":1}""";
+        var result = DownConvert.Below(Item($"{mod},{ResponseWith(",\"share\":\"ally\"")}"), 11);
+
+        Assert.Equal(["effects[0]", "effects[1]"], result.Changes.Select(c => c.Path).OrderBy(p => p, StringComparer.Ordinal));
+        Assert.Empty(result.Revision.Effects);
+    }
+
+    [Fact]
+    public void Lowered_copy_validates_at_11()
+    {
+        var result = DownConvert.Below(Rev($"{ResponseWith(""","dice":"1d6","automatic":true""")}"), 11);
+
+        Assert.Equal(11, result.Revision.SchemaVersion);
+        Assert.DoesNotContain(BelowCodes.ValidationError, result.Changes.Select(c => c.Code));
+        Assert.All(ContentValidator.Validate(result.Revision, Fixtures.M1Catalog()).Errors, e => Assert.Equal("validate.source-missing", e.Code));
+    }
+
+    private static string Mode(string target, string mode, string extra = "") =>
+        $$"""{"type":"rollMode","id":"m","target":"{{target}}","mode":"{{mode}}"{{extra}}}""";
+
+    private static void AssertDroppedWhole(ContentBelow result, string code = "below.effect-unsupported")
+    {
+        Assert.False(result.Blocked);
+        Assert.Empty(result.Revision.Effects);
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(code, change.Code);
+        Assert.Equal(BelowAction.Dropped, change.Action);
+        Assert.Equal("effects[0]", change.Path);
+    }
+
+    private static void AssertBlocked(ContentBelow result)
+    {
+        Assert.True(result.Blocked);
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(BelowCodes.RollModeDisadvantage, change.Code);
+        Assert.Equal(BelowAction.Blocks, change.Action);
+        Assert.Equal("effects[0]", change.Path);
+    }
+
+    [Fact]
+    public void Helping_attack_mode_is_dropped_below_12() =>
+        AssertDroppedWhole(DownConvert.Below(Rev(Mode("attack", "advantage", ",\"tags\":[\"all\"]")), 11));
+
+    [Fact]
+    public void Hindering_attack_mode_blocks_below_12() =>
+        AssertBlocked(DownConvert.Below(Rev(Mode("attack", "disadvantage", ",\"tags\":[\"all\"]")), 11));
+
+    [Fact]
+    public void Initiative_advantage_is_dropped_below_12() =>
+        AssertDroppedWhole(DownConvert.Below(Rev(Mode("initiative", "advantage")), 11));
+
+    [Fact]
+    public void Advantage_against_you_blocks_below_12() =>
+        AssertBlocked(DownConvert.Below(Rev(Mode("attacksAgainst", "advantage")), 11));
+
+    [Fact]
+    public void Prevent_against_you_is_dropped_below_12() =>
+        AssertDroppedWhole(DownConvert.Below(Rev(Mode("attacksAgainst", "advantage", ",\"prevent\":true")), 11));
+
+    [Fact]
+    public void Prevent_disadvantage_against_you_blocks_below_12() =>
+        AssertBlocked(DownConvert.Below(Rev(Mode("attacksAgainst", "disadvantage", ",\"prevent\":true")), 11));
+
+    [Fact]
+    public void Roll_mode_change_after_an_earlier_removal_reports_the_original_index()
+    {
+        var mod = """{"type":"itemMod","id":"m2","appliesTo":"weapon","bonus":1}""";
+        var result = DownConvert.Below(Item($"{mod},{Mode("initiative", "advantage")}"), 11);
+
+        Assert.Empty(result.Revision.Effects);
+        Assert.Equal(["effects[0]", "effects[1]"], result.Changes.Select(c => c.Path).OrderBy(p => p, StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void Disadvantage_against_you_is_dropped_below_12() =>
+        AssertDroppedWhole(DownConvert.Below(Rev(Mode("attacksAgainst", "disadvantage")), 11));
+
+    [Fact]
+    public void Save_advantage_with_unlessCondition_is_dropped_whole_below_12() =>
+        AssertDroppedWhole(DownConvert.Below(Rev(Mode("save.wis", "advantage", ",\"unlessCondition\":\"alpha\"")), 11));
+
+    [Fact]
+    public void Save_disadvantage_with_unlessCondition_blocks_below_12() =>
+        AssertBlocked(DownConvert.Below(Rev(Mode("save.wis", "disadvantage", ",\"unlessCondition\":\"alpha\"")), 11));
+
+    [Fact]
+    public void Prevent_false_alone_drops_only_the_key()
+    {
+        var result = DownConvert.Below(Rev(Mode("save.wis", "advantage", ",\"prevent\":false")), 11);
+
+        Assert.False(result.Blocked);
+        Assert.IsType<RollModeEffect>(Assert.Single(result.Revision.Effects));
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(BelowCodes.V12Key, change.Code);
+        Assert.Equal(BelowAction.Dropped, change.Action);
+        Assert.Equal("effects[0].prevent", change.Path);
+        Assert.DoesNotContain("\"prevent\"", Written(result), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_plain_v11_rollMode_is_untouched_at_this_rung()
+    {
+        var result = DownConvert.Below(Rev(Mode("save.wis", "disadvantage")), 11);
+
+        Assert.Empty(result.Changes);
+        Assert.IsType<RollModeEffect>(Assert.Single(result.Revision.Effects));
+    }
+
+    [Fact]
+    public void Lowered_roll_mode_copy_validates_at_11()
+    {
+        var kept = Mode("save.dex", "advantage").Replace("\"m\"", "\"keep\"", StringComparison.Ordinal);
+        var result = DownConvert.Below(Rev($"{Mode("attack", "advantage", ",\"tags\":[\"all\"]")},{kept}"), 11);
+
+        Assert.Equal(11, result.Revision.SchemaVersion);
+        Assert.DoesNotContain(BelowCodes.ValidationError, result.Changes.Select(c => c.Code));
+        Assert.Single(result.Revision.Effects);
+        Assert.All(ContentValidator.Validate(result.Revision, Fixtures.M1Catalog()).Errors, e => Assert.Equal("validate.source-missing", e.Code));
+    }
+
+    private const string Scaled = """{"type":"attackRider","id":"rider","tags":["all"],"scaledDice":{"count":"1"}}""";
+    private const string Plain = """{"type":"attackRider","id":"plain","tags":["all"],"dice":"1d4"}""";
+
+    [Fact]
+    public void Scaled_rider_is_dropped_whole_below_12() =>
+        AssertDroppedWhole(DownConvert.Below(Rev(Scaled), 11));
+
+    [Fact]
+    public void Critical_rider_is_dropped_whole_below_12() =>
+        AssertDroppedWhole(DownConvert.Below(Rev("""{"type":"attackRider","id":"rider","tags":["all"],"dice":"1d6","critical":true}"""), 11));
+
+    [Fact]
+    public void Once_per_turn_false_rider_is_dropped_whole_below_12()
+    {
+        // Not at index 0: the earlier effect is removed, so the reported origin index (2) differs from the working index (1).
+        var mod = """{"type":"itemMod","id":"m2","appliesTo":"weapon","bonus":1}""";
+        var rider = """{"type":"attackRider","id":"rider","tags":["all"],"dice":"1d6","oncePerTurn":false}""";
+        var result = DownConvert.Below(Item($"{mod},{Plain},{rider}"), 11);
+
+        Assert.False(result.Blocked);
+        Assert.IsType<AttackRiderEffect>(Assert.Single(result.Revision.Effects));
+        Assert.Equal(
+            [("effects[0]", BelowCodes.EffectUnsupported), ("effects[2]", BelowCodes.EffectUnsupported)],
+            result.Changes.OrderBy(c => c.Path, StringComparer.Ordinal).Select(c => (c.Path, c.Code)));
+        Assert.All(result.Changes, c => Assert.Equal(BelowAction.Dropped, c.Action));
+    }
+
+    [Theory]
+    [InlineData("toHit", "-2")]
+    [InlineData("damageBonus", "-1")]
+    public void Scaled_rider_that_also_lowers_the_attack_blocks_below_12(string key, string value)
+    {
+        var rider = $$"""{"type":"attackRider","id":"rider","tags":["weapon"],"scaledDice":{"count":"1","die":"6"},"{{key}}":"{{value}}"}""";
+        var result = DownConvert.Below(Rev(rider), 11);
+
+        Assert.True(result.Blocked);
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(BelowAction.Blocks, change.Action);
+        Assert.Equal(BelowCodes.EffectUnsupported, change.Code);
+    }
+
+    [Fact]
+    public void Scaled_rider_with_a_positive_to_hit_is_still_dropped_below_12()
+    {
+        var rider = """{"type":"attackRider","id":"rider","tags":["weapon"],"scaledDice":{"count":"1","die":"6"},"toHit":"1"}""";
+        AssertDroppedWhole(DownConvert.Below(Rev(rider), 11));
+    }
+
+    [Fact]
+    public void Roll_loses_scaledDice_below_12()
+    {
+        var roll = """{"type":"roll","id":"r","rollId":"r","label":"R","scaledDice":{"count":"1","die":"6"},"resourceId":"p","cost":"1"}""";
+        var result = DownConvert.Below(Rev(roll), 11);
+
+        Assert.False(result.Blocked, string.Join("|", result.Changes.Select(c => $"{c.Code} {c.Path} {c.Message}")));
+        var kept = Assert.IsType<RollEffect>(Assert.Single(result.Revision.Effects));
+        Assert.Equal("R", kept.Label);
+        Assert.Equal("1", kept.Cost);
+        Assert.Null(kept.Dice);
+        Assert.DoesNotContain("scaledDice", Written(result), StringComparison.OrdinalIgnoreCase);
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(BelowCodes.V12Key, change.Code);
+        Assert.Equal(BelowAction.Dropped, change.Action);
+        Assert.Equal("effects[0].scaledDice", change.Path);
+    }
+
+    [Fact]
+    public void Roll_with_only_scaledDice_is_dropped_whole_below_12_because_v11_refuses_a_do_nothing_roll()
+    {
+        var roll = """{"type":"roll","id":"r","rollId":"r","label":"R","scaledDice":{"count":"1","die":"6"}}""";
+        var result = DownConvert.Below(Rev(roll), 11);
+
+        AssertDroppedWhole(result);
+        Assert.All(ContentValidator.Validate(result.Revision, Fixtures.M1Catalog()).Errors, e => Assert.Equal("validate.source-missing", e.Code));
+    }
+
+    [Fact]
+    public void V11_rider_is_untouched_at_the_12_rung()
+    {
+        var result = DownConvert.Below(Rev(Plain), 11);
+
+        Assert.Empty(result.Changes);
+        Assert.IsType<AttackRiderEffect>(Assert.Single(result.Revision.Effects));
+    }
+
+    [Fact]
+    public void Lowered_rider_copy_validates_at_11()
+    {
+        var result = DownConvert.Below(Rev($"{Scaled},{Plain}"), 11);
+
+        Assert.Equal(11, result.Revision.SchemaVersion);
+        Assert.DoesNotContain(BelowCodes.ValidationError, result.Changes.Select(c => c.Code));
+        Assert.Single(result.Revision.Effects);
+        Assert.All(ContentValidator.Validate(result.Revision, Fixtures.M1Catalog()).Errors, e => Assert.Equal("validate.source-missing", e.Code));
+    }
+
     [Fact]
     public void A_v12_revision_with_no_v12_feature_lowers_silently()
     {

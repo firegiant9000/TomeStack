@@ -1,4 +1,5 @@
-import type { Effect } from '../api/types';
+import { useState } from 'react';
+import type { Ability, Effect } from '../api/types';
 import { abilities } from '../classBasics';
 import { ToggleSelect, type ToggleChoices } from './AttackFields';
 import { damageTypeLabel, damageTypes } from './customModel';
@@ -54,7 +55,34 @@ const knownTargets = new Set<string>([
   ...abilities.map(([k]) => `save.${k}`),
   ...skillChoices.map(([k]) => `skill.${k}`),
   ...abilities.map(([k]) => `ability.${k}.check`),
+  'attack',
+  'initiative',
+  'attacksAgainst',
 ]);
+
+/** "a, b, a, " becomes ["a", "b"]: trimmed, no blanks, distinct. */
+const parseTags = (text: string) => [...new Set(text.split(',').map((t) => t.trim()).filter((t) => t !== ''))];
+
+/** The comma-separated tags box; it keeps what is typed (a trailing comma) while the effect holds the parsed list. */
+function TagsInput(props: { tags: string[] | undefined; onTags: (tags: string[]) => void }) {
+  const [text, setText] = useState((props.tags ?? []).join(', '));
+  return (
+    <>
+      <label className="field">
+        Attack tags
+        <input
+          type="text"
+          value={text}
+          onChange={(e) => {
+            setText(e.target.value);
+            props.onTags(parseTags(e.target.value));
+          }}
+        />
+      </label>
+      <p className="hint">Comma-separated: all, or tags such as melee or ranged.</p>
+    </>
+  );
+}
 
 /**
  * Content v11 (D43, slice 6): automatic advantage or disadvantage on a save, a skill check or an ability check, optionally
@@ -72,16 +100,48 @@ export function RollModeFields(props: { effect: RollModeEffect; toggles: ToggleC
   useReportedProblem(`${effect.id}-mode`, modeKnown ? undefined : `Mode: "${String(effect.mode)}" is not advantage or disadvantage.`, onProblem);
   useReportedProblem(`${effect.id}-against`, unknownKeys.length === 0 ? undefined : `Only against conditions: ${unknownKeys.join(', ')} ${unknownKeys.length === 1 ? 'is' : 'are'} not a known condition.`, onProblem);
 
+  const isAttack = effect.target === 'attack';
+  const isAgainstYou = effect.target === 'attacksAgainst';
+  const noConditions = effect.target === 'initiative' || isAgainstYou; // the service refuses `against` with these
+  const abilityKnown = !effect.ability || abilities.some(([k]) => k === effect.ability);
+  const unlessKnown = !effect.unlessCondition || conditionKeys.includes(effect.unlessCondition);
+  const storedTags = effect.tags ?? [];
+  const tagsClean = storedTags.length === parseTags(storedTags.join(',')).length && storedTags.every((t) => t === t.trim() && !t.includes(','));
+  useReportedProblem(`${effect.id}-tags`, !isAttack ? undefined : storedTags.length === 0 ? 'Attack tags: name at least one tag, or all.' : tagsClean ? undefined : 'Attack tags: tags must not be blank or repeated; edit the box to tidy them.', onProblem);
+  useReportedProblem(`${effect.id}-ability`, isAttack && !abilityKnown ? `Ability: "${effect.ability}" is not an ability.` : undefined, onProblem);
+  // Members this target does not allow (hand-edited or imported JSON): the service would refuse them, so they block until removed.
+  const strays: { name: string; clear: () => void }[] = [];
+  if (!isAttack && effect.tags !== undefined) strays.push({ name: 'tags', clear: () => onChange({ ...effect, tags: undefined }) });
+  if (!isAttack && effect.ability !== undefined) strays.push({ name: 'ability', clear: () => onChange({ ...effect, ability: undefined }) });
+  if (!isAgainstYou && effect.prevent !== undefined) strays.push({ name: 'prevent', clear: () => onChange({ ...effect, prevent: undefined }) });
+  if (noConditions && effect.against !== undefined) strays.push({ name: 'against', clear: () => onChange({ ...effect, against: undefined }) });
+  useReportedProblem(`${effect.id}-stray`, strays.length === 0 ? undefined : `Not allowed for this target: ${strays.map((s) => s.name).join(', ')}. Remove ${strays.length === 1 ? 'it' : 'them'}.`, onProblem);
+  useReportedProblem(`${effect.id}-unless`, unlessKnown ? undefined : `Unless: "${effect.unlessCondition}" is not a known condition.`, onProblem);
+
   const setAgainst = (next: string[]) => {
     // Never an empty list: none checked means always (the key is dropped when the revision is sent).
     onChange({ ...effect, against: next.length === 0 ? undefined : next });
+  };
+
+  /** Moving to a target drops the members it does not allow (tags and ability: attack only; prevent: attacksAgainst only; against: not initiative or attacksAgainst). */
+  const setTarget = (target: string) => {
+    const next: RollModeEffect = { ...effect, target };
+    if (target !== 'attack') {
+      delete next.tags;
+      delete next.ability;
+    } else if (!next.tags) {
+      next.tags = ['all'];
+    }
+    if (target !== 'attacksAgainst') delete next.prevent;
+    if (target === 'initiative' || target === 'attacksAgainst') delete next.against;
+    onChange(next);
   };
 
   return (
     <>
       <label className="field">
         Applies to
-        <select value={effect.target} onChange={(e) => onChange({ ...effect, target: e.target.value })}>
+        <select value={effect.target} onChange={(e) => setTarget(e.target.value)}>
           {!targetKnown && <option value={effect.target}>{effect.target} (unknown)</option>}
           <optgroup label="Saving throws">
             {abilities.map(([k, name]) => (
@@ -104,6 +164,11 @@ export function RollModeFields(props: { effect: RollModeEffect; toggles: ToggleC
               </option>
             ))}
           </optgroup>
+          <optgroup label="Combat">
+            <option value="attack">Attack rolls</option>
+            <option value="initiative">Initiative</option>
+            <option value="attacksAgainst">Attacks against you</option>
+          </optgroup>
         </select>
       </label>
       <label className="field">
@@ -114,15 +179,56 @@ export function RollModeFields(props: { effect: RollModeEffect; toggles: ToggleC
           <option value="disadvantage">Disadvantage</option>
         </select>
       </label>
-      <fieldset className="field">
-        <legend>Only against conditions (none checked: always)</legend>
-        {[...conditionKeys, ...unknownKeys].map((key) => (
-          <label key={key} className="choice">
-            <input type="checkbox" checked={against.includes(key)} onChange={(e) => setAgainst(e.target.checked ? [...against, key] : against.filter((k) => k !== key))} />
-            {conditionKeys.includes(key) ? label(key) : key}
-          </label>
-        ))}
-      </fieldset>
+      {strays.map((s) => (
+        <p key={s.name} className="hint">
+          {`${s.name} doesn't apply to this target. `}
+          <button type="button" onClick={s.clear}>{`Remove ${s.name}`}</button>
+        </p>
+      ))}
+      {isAttack && <TagsInput key={effect.id} tags={effect.tags} onTags={(tags) => onChange({ ...effect, tags })} />}
+      {isAttack && (
+        <label className="field">
+          Ability
+          <select value={effect.ability ?? ''} onChange={(e) => onChange({ ...effect, ability: (e.target.value || undefined) as Ability | undefined })}>
+            <option value="">Any</option>
+            {abilities.map(([k, name]) => (
+              <option key={k} value={k}>
+                {name}
+              </option>
+            ))}
+            {!abilityKnown && <option value={effect.ability}>{effect.ability} (removed)</option>}
+          </select>
+        </label>
+      )}
+      {isAgainstYou && (
+        <label className="choice">
+          <input type="checkbox" checked={effect.prevent === true} onChange={(e) => onChange({ ...effect, prevent: e.target.checked ? true : undefined })} />
+          Can't have this
+        </label>
+      )}
+      {!noConditions && (
+        <fieldset className="field">
+          <legend>Only against conditions (none checked: always)</legend>
+          {[...conditionKeys, ...unknownKeys].map((key) => (
+            <label key={key} className="choice">
+              <input type="checkbox" checked={against.includes(key)} onChange={(e) => setAgainst(e.target.checked ? [...against, key] : against.filter((k) => k !== key))} />
+              {conditionKeys.includes(key) ? label(key) : key}
+            </label>
+          ))}
+        </fieldset>
+      )}
+      <label className="field">
+        Unless
+        <select value={effect.unlessCondition ?? ''} onChange={(e) => onChange({ ...effect, unlessCondition: e.target.value || undefined })}>
+          <option value="">Never</option>
+          {conditionKeys.map((k) => (
+            <option key={k} value={k}>
+              {label(k)}
+            </option>
+          ))}
+          {!unlessKnown && <option value={effect.unlessCondition}>{effect.unlessCondition} (removed)</option>}
+        </select>
+      </label>
       {(effect.toggle || props.showToggle) && (
         <ToggleSelect
           label="Only while"

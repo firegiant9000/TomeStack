@@ -116,7 +116,9 @@ public sealed record CharacterSheet(
     int? XpForNextLevel = null,
     IReadOnlyList<UpkeepValue>? Upkeeps = null,
     IReadOnlyList<ResponseValue>? Responses = null,
-    IReadOnlyList<CompanionValue>? Companions = null)
+    IReadOnlyList<CompanionValue>? Companions = null,
+    IReadOnlyList<AttackModeValue>? AttackModes = null,
+    RollModeSummary? AttacksAgainst = null)
 {
     public DerivedValue Field(string field) => Fields.Single(f => f.Field == field);
 }
@@ -417,13 +419,23 @@ public sealed record AttackEntry(
     int? Cost = null,
     PaymentValue? Payment = null,
     int? EntryIndex = null,
-    Guid? CompanionId = null);
+    Guid? CompanionId = null,
+    RollModeSummary? Mode = null);
 
 /// <summary>Content v11 (D43): where an attack on the sheet comes from. Custom attacks are not on the sheet's list.</summary>
 public enum AttackSource { Weapon, Feature }
 
 /// <summary>Content v11 (D43): an attack rider that applies to an attack now, with its numbers (formulas evaluated).</summary>
-public sealed record RiderValue(ContentReference Content, string EffectId, string? Dice, int ToHit, int DamageBonus, string? DamageType);
+/// <remarks>
+/// Content v12 (G1): <paramref name="Critical"/> riders add their dice only to a critical damage roll and <paramref name="OncePerTurn"/>
+/// riders only when the player adds them; neither is in the entry's damage. <paramref name="VersatileDice"/> is the dice against the versatile
+/// die (set only when it differs from <paramref name="Dice"/>). All three are omitted when default, so a v11 sheet is unchanged.
+/// </remarks>
+public sealed record RiderValue(
+    ContentReference Content, string EffectId, string? Dice, int ToHit, int DamageBonus, string? DamageType,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)] bool Critical = false,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)] bool OncePerTurn = false,
+    string? VersatileDice = null);
 
 /// <summary>A known or prepared spell with its game data, for the sheet (a spell is never active content).</summary>
 public sealed record SpellEntry(
@@ -716,7 +728,7 @@ public static partial class CharacterCalculator
         var effective = ToggleGroups.Resolve(character.Play, declaredToggles, diagnostics, active.Select(a => a.Revision.ContentId).ToHashSet());
         var resourceBonuses = new List<ResourceBonus>();
         var modifiers = CollectModifiers(active, character, policy, diagnostics, warnings, manual, effective, autoOn, resourceBonuses, resolved.ClassLevels, resolved.ModdedEntries);
-        var rollModes = CollectRollModes(active, effective, autoOn, diagnostics);
+        var rollModes = CollectRollModes(active, character, effective, autoOn, diagnostics);
         var weaponProficiencies = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         var armorTraining = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         var unseenArmor = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
@@ -779,7 +791,7 @@ public static partial class CharacterCalculator
                 results[spec.Id].Override,
                 spec.Units,
                 MarkOf(spec.Id, proficiencies),
-                rollModes.GetValueOrDefault(spec.Id));
+                rollModes.ByField.GetValueOrDefault(spec.Id));
         }).ToList();
 
         // Before the feature list: an attack whose die is invalid reports on its feature (attack.die-invalid).
@@ -788,6 +800,7 @@ public static partial class CharacterCalculator
         // MECH-X item 4: tag the attacks and pools a companion lists (same rows, never moved) before responses and the feature list read them.
         var companions = CollectCompanions(active, values, character, resolved.ClassLevels, family, attacks, resources, diagnostics);
         var rollBonuses = RollBonuses(active, character, resolved.ClassLevels, values, diagnostics);
+        var scaledRollDice = RollScaledDice(active, character, resolved.ClassLevels, values, diagnostics);
         var rollDetails = RollDetailsOf(active, family, character, resolved.ClassLevels, values, diagnostics);
         // Before the feature list: a spell that cannot be cast reports on its feature (spells.unusable), like a recorded spell that cannot be listed.
         var castSpells = CastSpellsOf(active, catalog, character, casters.Count > 0, values, diagnostics);
@@ -797,7 +810,7 @@ public static partial class CharacterCalculator
         var damageDefences = CollectDamageDefences(active, character, resolved.ClassLevels, effective, autoOn, diagnostics);
         var scoped = diagnostics.Concat(warnings.Values.SelectMany(w => w)).Concat(resources.SelectMany(r => r.Warnings)).Where(d => d.Content is not null).Distinct().ToList();
         var features = active.Select(item => Feature(
-            item, family, [.. scoped.Where(d => d.Content == item.Revision.Reference)], rollDetails, rollBonuses, form => OutOfForm(active, item, form, effective, autoOn), resources, castSpells)).ToList();
+            item, family, [.. scoped.Where(d => d.Content == item.Revision.Reference)], rollDetails, rollBonuses, scaledRollDice, form => OutOfForm(active, item, form, effective, autoOn), resources, castSpells)).ToList();
         var toggles = active
             .SelectMany(item => item.Revision.Effects.OfType<ToggleEffect>()
                 .Where(t => t.Automation != AutomationStatus.Reference && LevelReached(item, t, character, resolved.ClassLevels))
@@ -879,6 +892,9 @@ public static partial class CharacterCalculator
         // S2/R40: the payment rows were built before hit points and slots existed; settle whether each can be made now. Available is untouched.
         toggles = [.. toggles.Select(t => t.Payment is { } p ? t with { Payment = Affordability(p, t.Cost, hitPoints, spellSlots, pactSlots) } : t)];
         attacks = [.. attacks.Select(a => a.Payment is { } p ? a with { Payment = Affordability(p, a.Cost, hitPoints, spellSlots, pactSlots) } : a)];
+        // Content v12 (G7): the character's own attacks get the attack modes that reach them. After the companion tagging: a companion's attack is not the character's roll.
+        if (rollModes.AttackModes is not null)
+            attacks = [.. attacks.Select(a => a.CompanionId is null && RollModes.ForAttack(rollModes.AttackModes, AttackTagsOf(a), a.Ability) is { } mode ? a with { Mode = mode } : a)];
         features = [.. features.Select(f => f.Effects.Any(e => e.Payment is not null)
             ? f with { Effects = [.. f.Effects.Select(e => e.Payment is { } p ? e with { Payment = Affordability(p, e.Cost, hitPoints, spellSlots, pactSlots) } : e)] }
             : f)];
@@ -899,8 +915,15 @@ public static partial class CharacterCalculator
             spellcasting, spellSlots, pactSlots, attacks, toggles, scales.Count > 0 ? scales : null, bloodied ? true : null,
             damageDefences.Count > 0 ? damageDefences : null, null, // the item uses are added once by Calculate (WithItemUses)
             xpForNextLevel is { } next && character.Xp >= next ? true : null, xpForNextLevel, upkeeps.Count > 0 ? upkeeps : null,
-            responses.Count > 0 ? responses : null, companions.Count > 0 ? companions : null), active);
+            responses.Count > 0 ? responses : null, companions.Count > 0 ? companions : null, rollModes.AttackModes, rollModes.AttacksAgainst), active);
     }
+
+    /// <summary>The tags an attack roll mode matches: a weapon's <c>weapon</c>, then its own tags (a feature attack), then <c>melee</c> or <c>ranged</c>.</summary>
+    private static IReadOnlyList<string> AttackTagsOf(AttackEntry attack) =>
+    [
+        .. attack.Source == AttackSource.Weapon ? new[] { "weapon" } : attack.Tags ?? [],
+        attack.Attack == WeaponAttack.Ranged ? "ranged" : "melee",
+    ];
 
     /// <summary>
     /// A response whose toggleOn outcome names a form that is missing, automatic or unavailable, or whose spend or regain outcome names a pool
@@ -948,11 +971,6 @@ public static partial class CharacterCalculator
                 .Where(r => r.Automation != AutomationStatus.Reference && r.Timing == EffectTiming.Always)
                 .Select(r => (Item: item, Effect: r)))
             .ToList();
-        if (candidates.Count > MaxResponses)
-        {
-            AddOnce(diagnostics, new("response.too-many", $"The character has {candidates.Count} damage responses; only the first {MaxResponses} are listed."));
-            candidates = candidates.GetRange(0, MaxResponses);
-        }
 
         ResponseValue ResponseOf(ActiveContent item, ResponseEffect response)
         {
@@ -1032,12 +1050,65 @@ public static partial class CharacterCalculator
                 else if (left < needed)
                     reason = $"Needs {needed} {pool.Label} ({left} left)";
             }
+            if (reason is null && response.UnlessCondition is { } unless && ConditionKeys.Holds(character.Play.Conditions, unless))
+                reason = $"Not while {unless}";
+            var trigger = response.Trigger is { DamageTypes: { } types } t
+                ? t with { DamageTypes = [.. types.Select(x => DamageTypes.TryNormalize(x, out var canonical) ? canonical : x)] }
+                : response.Trigger;
             return new(
                 own, revision.Name, response.ResponseId, response.Label, response.Phase, amount, poolContent, response.ResourceId, cost,
-                reason is null, reason, response.Text, atOrBelow, response.When?.Survived == true, outcomes.Count > 0 ? outcomes : null);
+                reason is null, reason, response.Text, atOrBelow, response.When?.Survived == true, outcomes.Count > 0 ? outcomes : null,
+                trigger, response.Share, response.Dice, response.Automatic == true, response.UnlessCondition);
         }
 
-        return [.. candidates.Select(c => ResponseOf(c.Item, c.Effect))];
+        var all = candidates.Select(c => (c.Item, c.Effect, Value: ResponseOf(c.Item, c.Effect))).ToList();
+
+        // Content v12 (G6): a response named by another collected response's `supersedes` is left off only while the superseder is
+        // available (after cost, pool, toggle, formula and condition), and only when that edge is not on a cycle. A cycle that reaches
+        // the sheet (older catalog, cross-content) ignores every edge on it, so all its responses stay, with one diagnostic.
+        // Each response names at most one target, so an edge is on a cycle exactly when following targets from it returns to its owner.
+        var byKey = new Dictionary<(Guid, string), ResponseSupersedes>();
+        foreach (var c in all)
+            if (c.Effect.Supersedes is { } s)
+            {
+                var key = (c.Item.Revision.ContentId, c.Effect.ResponseId);
+                var target = (s.Content ?? key.ContentId, s.ResponseId);
+                if (target != key)
+                    byKey.TryAdd(key, s with { Content = target.Item1 });
+            }
+        var onCycle = new HashSet<(Guid, string)>();
+        foreach (var start in byKey.Keys)
+        {
+            var at = start;
+            for (var steps = 0; steps <= byKey.Count; steps++)
+            {
+                if (!byKey.TryGetValue(at, out var next))
+                    break;
+                at = (next.Content!.Value, next.ResponseId);
+                if (at == start)
+                {
+                    onCycle.Add(start);
+                    break;
+                }
+            }
+        }
+        if (onCycle.Count > 0)
+            AddOnce(diagnostics, new("response.supersedes-cycle",
+                "Damage responses replace each other in a loop, so none of them is hidden: "
+                + string.Join(", ", onCycle.Select(k => $"{k.Item1}/{k.Item2}").Order(StringComparer.Ordinal)) + "."));
+        var superseded = all
+            .Where(c => c.Value.Available && c.Effect.Supersedes is not null && !onCycle.Contains((c.Item.Revision.ContentId, c.Effect.ResponseId)))
+            .Select(c => (c.Effect.Supersedes!.Content ?? c.Item.Revision.ContentId, c.Effect.Supersedes.ResponseId, Owner: (c.Item.Revision.ContentId, c.Effect.ResponseId)))
+            .Where(s => (s.Item1, s.ResponseId) != s.Owner)
+            .Select(s => (s.Item1, s.ResponseId))
+            .ToHashSet();
+        var kept = all.Where(c => !superseded.Contains((c.Item.Revision.ContentId, c.Effect.ResponseId))).Select(c => c.Value).ToList();
+        if (kept.Count > MaxResponses)
+        {
+            AddOnce(diagnostics, new("response.too-many", $"The character has {kept.Count} damage responses; only the first {MaxResponses} are listed."));
+            kept = kept.GetRange(0, MaxResponses);
+        }
+        return kept;
     }
 
     /// <summary>

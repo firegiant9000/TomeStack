@@ -120,6 +120,18 @@ public class CapabilityRegistryTests
     }
 
     [Fact]
+    public void An_explicit_false_rider_flag_is_absent_and_true_lowers_to_assisted()
+    {
+        var rider = new AttackRiderEffect { Id = "r", Tags = ["melee"], Dice = "1d4" };
+
+        Assert.Equal(AutomationStatus.Automatic, CapabilityRegistry.Ceiling(rider with { OncePerTurn = false }));
+        Assert.Equal(AutomationStatus.Assisted, CapabilityRegistry.Ceiling(rider with { OncePerTurn = true }));
+        // critical is an Automatic row: neither value lowers the ceiling.
+        Assert.Equal(AutomationStatus.Automatic, CapabilityRegistry.Ceiling(rider with { Critical = false }));
+        Assert.Equal(AutomationStatus.Automatic, CapabilityRegistry.Ceiling(rider with { Critical = true }));
+    }
+
+    [Fact]
     public void An_unregistered_type_is_unsupported_with_no_status()
     {
         var unknown = Read("""{"type":"fixture-unknown","id":"u"}""");

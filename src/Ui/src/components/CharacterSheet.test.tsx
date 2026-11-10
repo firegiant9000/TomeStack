@@ -1517,6 +1517,16 @@ it('a save with automatic advantage says so on its button and in its accessible 
   expect(screen.getByRole('button', { name: 'Roll Initiative' })).toBeTruthy(); // a field with no reason is unchanged
 });
 
+it('initiative shows advantage from an initiative mode', async () => {
+  const user = userEvent.setup();
+  const mode = { automatic: 'advantage' as const, reasons: [modeReason('advantage', 'Fixture Quick Eye')] };
+  const v = view();
+  const withInit: CharacterView = { ...v, sheet: { ...v.sheet, fields: v.sheet.fields.map((f) => (f.field === 'initiative' ? { ...f, mode } : f)) } };
+  renderSheet(withInit, 'stats');
+  await user.click(screen.getByRole('heading', { name: 'Initiative: +1' }));
+  expect(screen.getByRole('button', { name: 'Roll Initiative (advantage: Fixture Quick Eye)' })).toBeTruthy();
+});
+
 it('a field card shows a closed "Why?" above its trace table, with the proficiency sentence (D72 X04)', async () => {
   const user = userEvent.setup();
   const rules = { kind: 'rulesPolicy', rulesFamily: 'srd-5.2.1' } as const;
