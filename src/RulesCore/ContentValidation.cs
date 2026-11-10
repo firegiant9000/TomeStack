@@ -146,6 +146,18 @@ public static class ContentValidator
             && abilities.Contains(target[abilityPrefix.Length..^checkSuffix.Length], StringComparer.Ordinal);
     }
 
+    /// <summary>Content v12 (G9): the targets of a <c>rollFloor</c>: <c>check</c>, <c>ability.&lt;ability&gt;.check</c> or <c>skill.&lt;skill&gt;</c> (a known skill).</summary>
+    internal static bool IsRollFloorTarget(string? target)
+    {
+        if (target is null)
+            return false;
+        if (target == RollFloorEffect.CheckTarget)
+            return true;
+        if (target.StartsWith("skill.", StringComparison.Ordinal))
+            return CharacterCalculator.Skills.Any(s => s.Key == target["skill.".Length..]);
+        return target.StartsWith("ability.", StringComparison.Ordinal) && target.EndsWith(".check", StringComparison.Ordinal) && IsRollModeTarget(target);
+    }
+
     private static bool IsCharacterOnlyField(string field, ContentRevision revision) =>
         CharacterCalculator.IsCharacterOnlyField(field, revision.SchemaVersion);
 
@@ -368,6 +380,13 @@ public static class ContentValidator
                     if (!v12TargetBelow)
                         Error("validate.effect-malformed", $"Effect '{unknownMode.Id}' has type '{unknownMode.DeclaredType}' but a value or field that does not read (its mode must be advantage or disadvantage; it needs a target; against is a list of condition keys; toggleContent is an id); fix it before publishing.", unknownMode.Id);
                     break;
+                // Content v12 (G9): from v12 a rollFloor that stays unknown did not read (a target that is not text, a face that is not
+                // a whole number, a total that is not text, a proficient that is not true or false), so the floor would silently not
+                // exist. Below v12 it stays an unsupported effect (the default arm below), kept byte for byte.
+                case UnknownEffect { DeclaredType: RollFloorEffect.TypeName } unreadableFloor when revision.SchemaVersion >= RollFloorEffect.SchemaVersion:
+                    NeedV12("a rollFloor");
+                    Error("validate.effect-malformed", $"Effect '{unreadableFloor.Id}' has type '{unreadableFloor.DeclaredType}' but a value or field that does not read (it needs a target and exactly one of face, a whole number from 2 to 20, and total, a formula; proficient is true or false); fix it before publishing.", unreadableFloor.Id);
+                    break;
                 // Content v11 (D43): from v11 a response is typed; one that stays unknown did not match the shape (a phase or an outcome
                 // kind that names no member, no responseId, label or phase, a toggle or content that is not an id), so the response would
                 // silently not exist. Published at a lower version it would be an unsupported effect, so it blocks.
@@ -554,6 +573,26 @@ public static class ContentValidator
                         if (charges.Recovery?.Regain is { } regain && !DiceExpression.TryParse(regain, out _, out var regainError))
                             Error("validate.dice-invalid", $"Item '{item.Id}' regain is not a dice expression such as 1d4+1 ({regainError!.Code})", item.Id);
                     }
+                    break;
+                case RollFloorEffect rollFloor:
+                    NeedV12("a rollFloor");
+                    if (rollFloor.Automation != AutomationStatus.Automatic || rollFloor.Timing != EffectTiming.Always)
+                        Error("validate.roll-floor-automation", $"Roll floor '{rollFloor.Id}' must be automatic and always on; a floor is applied to every matching roll, never chosen by the player.", rollFloor.Id);
+                    if (!IsRollFloorTarget(rollFloor.Target))
+                        Error("validate.roll-floor-target", $"Roll floor '{rollFloor.Id}' targets '{rollFloor.Target}'; use check, ability.<ability>.check (such as ability.str.check) or skill.<skill> (such as skill.stealth). A floor never reaches saves or attacks.", rollFloor.Id);
+                    if (rollFloor.Face is not null && rollFloor.Total is not null)
+                        Error("validate.roll-floor-value", $"Roll floor '{rollFloor.Id}' has both a face and a total; use exactly one.", rollFloor.Id);
+                    else if (rollFloor.Face is null && rollFloor.Total is null)
+                        Error("validate.roll-floor-value", $"Roll floor '{rollFloor.Id}' has neither a face nor a total; use exactly one.", rollFloor.Id);
+                    else if (rollFloor.Face is { } floorFace)
+                    {
+                        if (floorFace is < 2 or > 20)
+                            Error("validate.roll-floor-value", $"Roll floor '{rollFloor.Id}' has face {floorFace}; it must be a whole number from 2 to 20.", rollFloor.Id);
+                    }
+                    else if (string.IsNullOrWhiteSpace(rollFloor.Total))
+                        Error("validate.roll-floor-value", $"Roll floor '{rollFloor.Id}' has an empty total; give a formula.", rollFloor.Id);
+                    else
+                        CheckFormula(rollFloor.Total, rollFloor.Id, "total");
                     break;
                 case ItemModEffect mod:
                     NeedV12("an item mod");

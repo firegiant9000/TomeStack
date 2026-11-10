@@ -256,6 +256,23 @@ export interface DerivedValue {
   mark?: 'none' | 'proficient' | 'expertise';
   /** Content v11 (D43 S6): on saves, skills, ability modifiers and initiative, the advantage or disadvantage the sheet found; absent when none. */
   mode?: RollModeSummary;
+  /** Content v12 (G9): on ability checks, skills and initiative, the roll floor the sheet found; absent when none. */
+  floor?: RollFloorSummary;
+}
+
+/** Content v12 (G9): one roll-floor effect that reaches a field. */
+export interface RollFloorReason {
+  source: string;
+  reference: ContentReference;
+  face?: number;
+  total?: number;
+}
+
+/** The highest face floor and the highest total floor for a field, and every reason listed. */
+export interface RollFloorSummary {
+  face?: number;
+  total?: number;
+  reasons: RollFloorReason[];
 }
 
 /** One reason a d20 roll has advantage or disadvantage; `against` (condition keys) means the player confirms it, so it is only a note. */
@@ -1009,6 +1026,8 @@ export interface DieResult {
   term: number;
   sides: number;
   value: number;
+  /** Content v12 (G9): the face as rolled, present only when a roll floor raised it (`value` is the raised face). */
+  rolled?: number;
   kept: boolean;
   fromCritical: boolean;
 }
@@ -1037,6 +1056,10 @@ export interface RollRecord {
   expressionConstant: number;
   modifiers: RollModifier[];
   total: number;
+  /** Content v12 (G9): the total before a total floor; present only when the floor raised it. */
+  unfloored?: number;
+  /** Content v12 (G9): the roll floor the sheet gave this field roll. */
+  floor?: RollFloorSummary;
   provenance?: RollProvenance;
   /** D43 S5: the uses this roll implies spending from a pool (informational; the Spend button sends `character.play`). */
   spend?: RollSpend;
@@ -1964,6 +1987,14 @@ export type Effect =
       unlessCondition?: string;
       /** Content v12 (G7): `attacksAgainst` only: attacks against the character can't have `mode`. */
       prevent?: boolean;
+    })
+  // Content v12 (G9): a d20 below `face`, or a total below `total`, counts as it on check fields.
+  | (EffectBase & {
+      type: 'rollFloor';
+      target: string;
+      face?: number;
+      total?: string;
+      proficient?: boolean;
     })
   // Content v11 (D43 S7): a damage-time response. `amount` belongs to a damageReduction or hitPointOutcome response, `when` to a threshold one.
   | (EffectBase & {

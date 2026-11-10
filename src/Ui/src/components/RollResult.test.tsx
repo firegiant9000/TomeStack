@@ -35,6 +35,16 @@ it('heads a record whose label is an empty string with "Roll" (Review Focus 2)',
   expect(region().textContent).toMatch(/^Roll: 7 \(2d6\)/);
 });
 
+it('shows a raised d20 and a raised total in the dice line', () => {
+  const floored = record({
+    formula: '1d20+3', dice: [die(20, 10, { rolled: 7 })], modifiers: [], unfloored: 12, total: 16,
+    floor: { face: 10, total: 16, reasons: [{ source: 'Fixture Calm', reference: { contentId: 'fixture', revision: 1 } as never, face: 10, total: 16 }] },
+  });
+  render(<RollResult record={floored} resources={[]} features={[]} act={() => {}} />);
+  expect(region().textContent).toContain('d20 7 → 10 (floor)');
+  expect(region().textContent).toContain('total 12 raised to 16 (Fixture Calm)');
+});
+
 it('names a roll button by the effect id when its label is an empty string', () => {
   const view = {
     character: {},

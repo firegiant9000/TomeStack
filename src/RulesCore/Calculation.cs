@@ -67,7 +67,8 @@ public sealed record DerivedValue(
     FieldOverride? Override,
     string Units = "",
     ProficiencyMark Mark = ProficiencyMark.None,
-    RollModeSummary? Mode = null);
+    RollModeSummary? Mode = null,
+    RollFloorSummary? Floor = null);
 
 /// <summary>
 /// SPEC C-01: one choice an active revision offers (and whose level is reached), what was selected for it, and whether
@@ -776,22 +777,29 @@ public static partial class CharacterCalculator
             [FieldIds.SpellAttack] = casterReads,
             [FieldIds.SpellSaveDc] = casterReads,
         };
+        var rollFloors = CollectRollFloors(active, character, resolved.ClassLevels, values, id => MarkOf(id, proficiencies), family, diagnostics);
         var fields = Specs.Select(spec =>
         {
             var closure = Closure(spec.Id, modifiers, actualReads);
+            var trace = Flatten(closure, ownSteps, order);
+            rollFloors.TryGetValue(spec.Id, out var floor);
+            // Content v12 (G9): one "floor" step per reason, after the field's own steps; the value is unchanged.
+            foreach (var step in floor?.Steps ?? [])
+                trace.Add(new(trace.Count + 1, "floor", step.Description, step.Amount, results[spec.Id].Value, step.Origin, spec.Id));
             return new DerivedValue(
                 spec.Id,
                 spec.Label,
                 results[spec.Id].Value,
                 results[spec.Id].Computed,
-                Flatten(closure, ownSteps, order),
+                trace,
                 // A field explains itself with its inputs' warnings too, e.g. an ignored Dex increase explains initiative.
                 [.. order.Where(closure.Contains).SelectMany(id => warnings[id]).Distinct()],
                 closure.Any(manual.Contains) ? AutomationStatus.Assisted : AutomationStatus.Automatic,
                 results[spec.Id].Override,
                 spec.Units,
                 MarkOf(spec.Id, proficiencies),
-                rollModes.ByField.GetValueOrDefault(spec.Id));
+                rollModes.ByField.GetValueOrDefault(spec.Id),
+                floor?.Summary);
         }).ToList();
 
         // Before the feature list: an attack whose die is invalid reports on its feature (attack.die-invalid).

@@ -52,6 +52,7 @@ public static class CapabilityRegistry
         new(RollModeEffect.TypeName, "unlessCondition", AutomationStatus.Automatic, "Left out while the character has the condition", "RollModeV12SheetTests"),
         new(RollModeEffect.TypeName, "prevent", AutomationStatus.Automatic, "Attacks against the character can't have the mode", "RollModeV12SheetTests"),
         new(RollModeEffect.TypeName, "against", AutomationStatus.Assisted, "Listed with its conditions; the player applies it and it never changes the automatic mode", "RollModeTests"),
+        new(RollFloorEffect.TypeName, null, AutomationStatus.Automatic, "Applied when a check field is rolled", "RollFloorV12ServiceTests"),
         new(ResponseEffect.TypeName, null, AutomationStatus.Automatic, "Offered when damage is taken; the player chooses it and the outcomes apply", "DamageResponseTests"),
         new(ToggleEffect.TypeName, null, AutomationStatus.Automatic, "Gates its own effects", "ToggleAndCostTests"),
         new(ToggleGroupEffect.TypeName, null, AutomationStatus.Automatic, "Enforces which toggles may be on together", "ToggleGroupTests"),
