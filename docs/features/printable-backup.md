@@ -6,7 +6,7 @@ UI: `src/Ui/src/components/PrintView.tsx`, opened by "Print…" in the sheet hea
 
 ## What it is
 
-A paper (or "Microsoft Print to PDF") copy of the character to play from if the computer is not at the table. It is not a restorable backup: that is the personal backup package (ADR-007). It is a print-only layout of the sheet, not a PDF layout engine. Printable and condensed PDF sheets and cards stay M7 (BACKLOG B14).
+A paper (or "Microsoft Print to PDF") copy of the character to play from if the computer is not at the table. It is not a restorable backup: that is the personal backup package (ADR-007). It is a print-only layout of the sheet, not a PDF layout engine. Printable and condensed PDF sheets stay M7; cards are BACKLOG B14 (unscheduled).
 
 ## Flow
 

@@ -11,7 +11,7 @@ The four items ADR-008 left open before the first published installer (LIVING_SP
 
 ## Next release re-check (after 0.7.1)
 
-- **Windows SDK binaries (item 2): none ship (option (b), 2026-10-27).** See [§2](#2-windows-sdk-binaries-ocr). The release page no longer carries the SDK terms line (`scripts/release-notes.ps1`).
+- **Windows SDK binaries (item 2): none ship (option (b), 2026-10-27).** See [§2](#2-windows-sdk-binaries-ocr). The release page no longer carries the SDK terms line (`scripts/release-notes.ps1`). The generated projection is the SDK license's permitted use (owner, 2026-11-04).
 - **Dependencies:** `Microsoft.Windows.CsWinRT` 2.3.1 (MIT) is a new build-time package of the import worker; its runtime sources and the projection it generates are compiled into `TomeStack.ImportWorker.Host.dll`, so both are listed in `ATTRIBUTION.md`, which also carries C#/WinRT's MIT license text. It does not appear in `dotnet list src/DesktopShell package --include-transitive` (it is private to the worker); check it with `dotnet list src/ImportWorker.Host package`. `Microsoft.Windows.SDK.Contracts` 10.0.19041.2 (Windows SDK license) is downloaded at build time for its API metadata and not shipped.
 
 ## 0.7.0 re-check (2026-10-24)
@@ -56,9 +56,9 @@ A search on 2026-10-01 for `D&D`, `Dungeons`, `Dragons`, `D&D Beyond`, `Wizards 
 
 ## 2. Windows SDK binaries (OCR)
 
-**Done for the build (2026-10-27): option (b).** From the next release after 0.7.1 no Windows SDK file ships, so the conditions below, which are the terms for redistributing those files, no longer apply to that release as a redistribution. Whether any SDK terms still reach the generated projection is an owner decision pending (below).
+**Done for the build (2026-10-27): option (b).** From the next release after 0.7.1 no Windows SDK file ships, so the conditions below, which are the terms for redistributing those files, no longer apply to that release as a redistribution. The generated projection is recorded as the SDK license's permitted use (owner, 2026-11-04; below).
 - The import worker builds with C#/WinRT 2.3.1 in embedded mode (`CsWinRTEmbedded`): the projection of only the Windows types it calls, with C#/WinRT's runtime, is compiled into `TomeStack.ImportWorker.Host.dll` (the runtime sources are MIT; both are listed in `ATTRIBUTION.md`). The worker and the shell keep the `net10.0-windows10.0.19041.0` target framework for its platform floor, and set `IncludeWindowsSDKRefFrameworkReferences=false` so the target framework no longer brings `Microsoft.Windows.SDK.NET.Ref`.
-- **Build-time SDK terms may still apply (recorded):** the projection is generated from the API metadata in `Microsoft.Windows.SDK.Contracts` 10.0.19041.2, under the Windows SDK license. The build reads it, and no Microsoft file from the package ships. The generated projection compiled into the worker does contain the API names, signatures and interface IDs from that metadata, as any program that calls these Windows APIs has to. Whether that makes the SDK license apply to the generated code is not settled here; **owner decision pending**: whether to record it as the license's permitted use (building a program that calls Windows APIs) recorded here in §2 with its date, and stated in any future code-signing application (§4).
+- **Build-time SDK terms (decided, owner 2026-11-04):** the projection is generated from the API metadata in `Microsoft.Windows.SDK.Contracts` 10.0.19041.2, under the Windows SDK license. The build reads it, and no Microsoft file from the package ships. The generated projection compiled into the worker does contain the API names, signatures and interface IDs from that metadata, as any program that calls these Windows APIs has to. **Decided (owner, 2026-11-04): recorded as the license's permitted use**, building a program that calls Windows APIs. Any code-signing application (§4) states the same. This is an owner decision, not legal advice.
 - Checked by `PublishedOutputTests` (neither deps file lists the projection) and by `scripts/pack-installer.ps1`, which fails if either DLL is in the publish folder. OCR runs in the worker process as before (`OcrTests`, including `The_worker_process_reads_an_image_only_page_with_ocr_too`). These skip on a machine with no OCR language; the CI runner has one (0 skipped in `TomeStack.ImportWorker.Tests` on `main` at 66d5515, run 39911203994, before this change), so a skip there would be a regression. The PR's CI run is the check on the embedded build.
 - Size, self-contained publish at 0.6.0's version: 188,790,433 → 166,100,513 bytes (−22.7 MB; the worker DLL grows from 14 KB to 1.6 MB). `TomeStack.App-win-Setup.exe`: 86,876,089 → 80,750,609 bytes (−6.1 MB, −7 %).
 - The end-user terms are gone from `ATTRIBUTION.md`, the `NOTICE` line is removed, and the release page no longer points to them. Releases up to 0.7.1 shipped the two DLLs under option (a); they stay published with their terms in their own `ATTRIBUTION.md`, and option (a), including the indemnity, keeps applying to them. The history below stands for them.
@@ -87,7 +87,7 @@ A search on 2026-10-01 for `D&D`, `Dungeons`, `Dragons`, `D&D Beyond`, `Wizards 
 
 The options that were considered:
 - **(a) Accept them:** keep the DLLs; add short end-user terms covering them (a line in `ATTRIBUTION.md` and on the release page, or an installer licence page); and accept the indemnity.
-- **(b) Remove the DLLs:** C#/WinRT can compile the projection into the worker ("embedded" mode, C#/WinRT 1.4.1 and later), so no Microsoft DLL ships. This is an engineering change to the worker, with its own test run, and the build-time license terms still apply. **Done 2026-10-27** (above); build-time SDK terms may still apply (recorded).
+- **(b) Remove the DLLs:** C#/WinRT can compile the projection into the worker ("embedded" mode, C#/WinRT 1.4.1 and later), so no Microsoft DLL ships. This is an engineering change to the worker, with its own test run, and the build-time license terms still apply. **Done 2026-10-27** (above); the build-time SDK terms are recorded as the license's permitted use (owner, 2026-11-04).
 - **(c) Ship without OCR:** build the worker without the Windows TFM, so nothing from the SDK ships. Scanned PDFs then can't be read.
 
 Note that the roadmap's fallback ("ship with OCR off by default") does not resolve this. With OCR off, the DLLs would still be distributed.
@@ -119,6 +119,7 @@ Velopack (MIT, Caelan Sayler) builds `Setup.exe` and `Update.exe` in Rust, with 
   - "Windows protected your PC" appears; choose **More info**, then **Run anyway**.
   - Windows 11 with Smart App Control on, and some managed PCs, block unsigned apps outright.
 - **To sign a later release:** `vpk pack` accepts `--azureTrustedSignFile` (Artifact Signing `metadata.json`) or `--signParams` (signtool). Add one to `pack-installer.ps1` and the workflow with secrets, then record the change here.
+- **What a signing application says about the Windows SDK (owner, 2026-11-04):** no Windows SDK file ships; the import worker's generated projection is the Windows SDK license's permitted use, building a program that calls Windows APIs ([§2](#2-windows-sdk-binaries-ocr)).
 
 ## Updates
 
