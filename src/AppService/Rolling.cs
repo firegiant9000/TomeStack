@@ -236,14 +236,15 @@ public sealed partial class TomeStackApp
                 throw new AppValidationException([new("roll.field-not-rollable", $"'{field}' is not an ability check, saving throw, skill or initiative.")]);
             var value = sheet.Field(field);
             // The modifier cites the step that set the displayed value: the override if there is one, else the last step.
-            var origin = value.Trace.Count > 0 ? value.Trace[^1].Origin : null;
+            // Content v12 (G9): the floor's steps sort after the field's own, so they are skipped here.
+            var origin = value.Trace.LastOrDefault(t => t.Operation != "floor")?.Origin;
             // Investigation 2026-10-06: an ability modifier field is a check, named as the summary's button names it
             // ("Strength check"); saves, skills and initiative keep "{label} (d20 test)" (the e2e asserts the save form).
             var label = field.StartsWith("ability.", StringComparison.Ordinal) && field.EndsWith(".mod", StringComparison.Ordinal)
                 ? $"{(value.Label.EndsWith(" modifier", StringComparison.Ordinal) ? value.Label[..^" modifier".Length] : value.Label)} check"
                 : $"{value.Label} (d20 test)";
             // D43 S6: the player's choice and the sheet's automatic mode combine (advantage and disadvantage cancel); the record says which.
-            request = new RollRequest("1d20", command.Mode, command.Critical, [new RollModifier(value.Label, value.Value, origin)], new RollProvenance(field, label));
+            request = new RollRequest("1d20", command.Mode, command.Critical, [new RollModifier(value.Label, value.Value, origin)], new RollProvenance(field, label), Floor: value.Floor);
             modeNote = TakeAutomatic(ref request, value.Mode);
             explain = value.Trace;
         }

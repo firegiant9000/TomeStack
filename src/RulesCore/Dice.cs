@@ -209,17 +209,20 @@ public sealed record RollRequest(
     IReadOnlyList<RollModifier>? Modifiers = null,
     RollProvenance? Provenance = null,
     int? KeepHighest = null,
-    string? Undoubled = null);
+    string? Undoubled = null,
+    RollFloorSummary? Floor = null);
 
 /// <param name="Term">Index of the expression term the die belongs to.</param>
 /// <param name="Kept">False for a die that does not count: dropped by advantage/disadvantage or by KeepHighest.</param>
-public sealed record DieResult(int Term, int Sides, int Value, bool Kept, bool FromCritical = false);
+/// <param name="Rolled">Content v12 (G9): the face before a roll floor raised it (then <paramref name="Value"/> is the raised face); null when not raised.</param>
+public sealed record DieResult(int Term, int Sides, int Value, bool Kept, bool FromCritical = false, int? Rolled = null);
 
 /// <summary>
 /// SPEC C-04: formula, component dice, modifiers and provenance of one roll. A record is data only. Producing one
 /// never changes a character, resource or any other state (ARCHITECTURE "commands vs calculation").
 /// <paramref name="Explain"/> (D72) is the sheet's trace for the number rolled (a field, an attack, a caster's spell attack):
 /// the roll command copies it, the record is never stored. Null when the roll has no such number.
+/// <paramref name="DiceTotal"/> sums the kept faces after any face floor and excludes the total floor (<paramref name="Unfloored"/> holds the pre-floor total).
 /// </summary>
 public sealed record RollRecord(
     string Formula,
@@ -235,7 +238,9 @@ public sealed record RollRecord(
     RollMode? AutomaticMode = null,
     IReadOnlyList<string>? ModeSources = null,
     IReadOnlyList<TraceEntry>? Explain = null,
-    RollPayment? Payment = null);
+    RollPayment? Payment = null,
+    int? Unfloored = null,
+    RollFloorSummary? Floor = null);
 
 /// <summary>
 /// MECH-X item 1: the hit-point or slot payment a roll or a feature attack's to-hit roll implies (informational: rolling never pays;
@@ -309,19 +314,25 @@ public static class DiceRoller
             }
             if (request.Mode != RollMode.Normal)
             {
-                var first = random.Next(term.Sides);
-                var second = random.Next(term.Sides);
+                var rawFirst = random.Next(term.Sides);
+                var rawSecond = random.Next(term.Sides);
+                var first = Raise(rawFirst, term.Sides);
+                var second = Raise(rawSecond, term.Sides);
                 var keepFirst = request.Mode == RollMode.Advantage ? first >= second : first <= second;
-                dice.Add(new(t, term.Sides, first, keepFirst));
-                dice.Add(new(t, term.Sides, second, !keepFirst));
+                dice.Add(new(t, term.Sides, first, keepFirst, Rolled: first != rawFirst ? rawFirst : null));
+                dice.Add(new(t, term.Sides, second, !keepFirst, Rolled: second != rawSecond ? rawSecond : null));
                 diceTotal += term.Sign * (keepFirst ? first : second);
                 continue;
             }
             // 5e critical: roll the damage dice twice; flat modifiers are not doubled.
             var count = request.Critical ? term.Count * 2 : term.Count;
             var values = new int[count];
+            var raw = new int[count];
             for (var d = 0; d < count; d++)
-                values[d] = random.Next(term.Sides);
+            {
+                raw[d] = random.Next(term.Sides);
+                values[d] = Raise(raw[d], term.Sides);
+            }
             var kept = new bool[count];
             Array.Fill(kept, true);
             if (request.KeepHighest is { } keepCount)
@@ -332,7 +343,7 @@ public static class DiceRoller
             }
             for (var d = 0; d < count; d++)
             {
-                dice.Add(new(t, term.Sides, values[d], kept[d], FromCritical: d >= term.Count));
+                dice.Add(new(t, term.Sides, values[d], kept[d], FromCritical: d >= term.Count, Rolled: values[d] != raw[d] ? raw[d] : null));
                 if (kept[d])
                     diceTotal += term.Sign * values[d];
             }
@@ -362,8 +373,19 @@ public static class DiceRoller
         }
 
         var total = diceTotal + constant + modifiers.Sum(m => m.Amount);
-        record = new RollRecord(request.Formula, request.Mode, request.Critical, dice, diceTotal, constant, modifiers, total, request.Provenance);
+        int? unfloored = null;
+        if (request.Floor?.Total is { } totalFloor && total < totalFloor)
+        {
+            unfloored = total;
+            total = totalFloor;
+        }
+
+        record = new RollRecord(request.Formula, request.Mode, request.Critical, dice, diceTotal, constant, modifiers, total, request.Provenance,
+            Unfloored: unfloored, Floor: request.Floor);
         return true;
+
+        // Content v12 (G9): a face floor raises only d20s of the main expression (never the Undoubled dice).
+        int Raise(int face, int sides) => sides == 20 && request.Floor?.Face is { } faceFloor && face < faceFloor ? faceFloor : face;
     }
 
     /// <summary>

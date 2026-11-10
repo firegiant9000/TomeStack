@@ -18,10 +18,33 @@ import {
   setSpell,
   skillGrants,
   spellOf,
+  speciesSpeed,
   toggleSkill,
 } from './entryBasics';
 
 const ref = (n: number) => ({ contentId: `c${n}`, revisionId: `r${n}` });
+
+describe('a gated, capped or armored rule is not a Basics effect', () => {
+  const increase = { type: 'modifier', id: 'inc', operation: 'bonus', target: 'ability.str.score', value: '2' } as const;
+  const speed = { type: 'modifier', id: 'spd', operation: 'replace', target: 'speed', value: '30' } as const;
+
+  it('keeps a plain rule as a Basics effect', () => {
+    expect(abilityIncreases([increase])).toEqual({ str: 2 });
+    expect(speciesSpeed([speed])).toBe(30);
+  });
+
+  it.each([
+    ['notWearing', { notWearing: ['shield'] }],
+    ['cap', { cap: 22 }],
+    ['whileArmored', { whileArmored: true }],
+  ] as const)('does not claim a rule with %s', (_key, extra) => {
+    const gatedIncrease: Effect = { ...increase, ...extra } as Effect;
+    const gatedSpeed: Effect = { ...speed, ...extra } as Effect;
+    expect(abilityIncreases([gatedIncrease])).toEqual({});
+    expect(setAbilityIncrease([gatedIncrease], 'str', undefined)).toEqual([gatedIncrease]);
+    expect(speciesSpeed([gatedSpeed])).toBeUndefined();
+  });
+});
 
 describe('species ability increases', () => {
   it('writes one bonus modifier per ability, keeps the others, and reads them back', () => {

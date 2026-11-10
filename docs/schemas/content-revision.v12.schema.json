@@ -198,8 +198,8 @@
     },
     "fieldId": {
       "type": "string",
-      "pattern": "^(initiative|attacks|criticalRange|proficiencyBonus|armorClass|hitPoints|spellAttack|spellSaveDc|pactSlots|speed|speed\\.fly|passive\\.(perception|insight|investigation)|spellSlots\\.[1-9]|ability\\.(str|dex|con|int|wis|cha)\\.(score|mod)|save\\.(str|dex|con|int|wis|cha)|skill\\.[a-z][a-zA-Z]*|resource\\.[^\\s.]+)$",
-      "description": "Content v11 (D43): resource.<id> names a resource of the same revision; only a modifier uses it (the validator refuses it elsewhere). speed.fly is a fly speed in feet."
+      "pattern": "^(initiative|attacks|criticalRange|proficiencyBonus|armorClass|hitPoints|spellAttack|spellSaveDc|pactSlots|speed|speed\\.fly|speed\\.climb|speed\\.swim|passive\\.(perception|insight|investigation)|spellSlots\\.[1-9]|ability\\.(str|dex|con|int|wis|cha)\\.(score|mod)|save\\.(str|dex|con|int|wis|cha)|skill\\.[a-z][a-zA-Z]*|resource\\.[^\\s.]+)$",
+      "description": "Content v11 (D43): resource.<id> names a resource of the same revision; only a modifier uses it (the validator refuses it elsewhere). speed.fly is a fly speed in feet. Content v12 (G10): speed.climb and speed.swim are a climb and a swim speed in feet (base 0); a modifier on speed.fly, speed.climb or speed.swim may read SPEED. (the walking speed), which is an unknown identifier anywhere else."
     },
     "grantFieldId": {
       "type": "string",
@@ -288,13 +288,61 @@
             },
             "whileArmored": {
               "type": "boolean"
+            },
+            "cap": {
+              "type": "integer",
+              "minimum": 21,
+              "maximum": 30,
+              "description": "Content v12 (G5): with an ability-score bonus, the highest score its increase can reach (21 to 30); absent means the increase stops at 20."
+            },
+            "notWearing": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "armor",
+                  "heavyArmor",
+                  "shield"
+                ]
+              },
+              "not": {
+                "allOf": [
+                  {
+                    "contains": {
+                      "const": "armor"
+                    }
+                  },
+                  {
+                    "contains": {
+                      "const": "heavyArmor"
+                    }
+                  }
+                ]
+              },
+              "description": "Content v12 (G4): the modifier applies only while none of the listed gear is worn (armor, heavyArmor, shield); armor already covers heavyArmor, so a list with both is refused. The schema cannot express these refusals, which only the validator makes: a pool maximum (resource.*) target, whileArmored: true together with armor, and a top-level modifier of an item-mod revision."
             }
           },
           "required": [
             "operation",
             "target",
             "value"
-          ]
+          ],
+          "if": {
+            "required": [
+              "cap"
+            ]
+          },
+          "then": {
+            "properties": {
+              "operation": {
+                "const": "bonus"
+              },
+              "target": {
+                "pattern": "^ability\\.(str|dex|con|int|wis|cha)\\.score$"
+              }
+            }
+          }
         },
         {
           "properties": {
@@ -308,8 +356,28 @@
                 "content",
                 "damageResistance",
                 "damageImmunity",
-                "damageVulnerability"
+                "damageVulnerability",
+                "conditionImmunity"
               ]
+            },
+            "condition": {
+              "enum": [
+                "blinded",
+                "charmed",
+                "deafened",
+                "frightened",
+                "grappled",
+                "incapacitated",
+                "invisible",
+                "paralyzed",
+                "petrified",
+                "poisoned",
+                "prone",
+                "restrained",
+                "stunned",
+                "unconscious"
+              ],
+              "description": "Content v12 (G11): with conditionImmunity, the one condition the character is immune to. Required there and refused on every other grant kind."
             },
             "damageType": {
               "type": "string",
@@ -397,24 +465,85 @@
                   "required": [
                     "content"
                   ]
+                },
+                {
+                  "required": [
+                    "condition"
+                  ]
                 }
               ]
             }
           },
           "else": {
-            "not": {
-              "anyOf": [
-                {
-                  "required": [
-                    "damageType"
-                  ]
-                },
-                {
-                  "required": [
-                    "whileToggle"
-                  ]
+            "if": {
+              "properties": {
+                "grant": {
+                  "const": "conditionImmunity"
                 }
-              ]
+              }
+            },
+            "then": {
+              "required": [
+                "condition"
+              ],
+              "properties": {
+                "whileToggle": {
+                  "type": "object",
+                  "required": [
+                    "toggleId"
+                  ],
+                  "properties": {
+                    "contentId": {
+                      "$ref": "#/$defs/uuid"
+                    },
+                    "toggleId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "description": "Content v12 (G11): the immunity applies only while this toggle is on (it may be another content's)."
+                }
+              },
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "target"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "content"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "damageType"
+                    ]
+                  }
+                ]
+              }
+            },
+            "else": {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "damageType"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "whileToggle"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "condition"
+                    ]
+                  }
+                ]
+              }
             }
           }
         },
@@ -1569,7 +1698,8 @@
                   },
                   "text": {
                     "type": "string"
-                  }
+                  },
+                  "notWearing": false
                 },
                 "description": "Always on and automatic: a toggle, toggleContent, whileArmored, a timing other than always, a resource target or a non-automatic automation is refused (validate.item-mod-modifier)."
               }
@@ -1849,6 +1979,78 @@
             }
           ],
           "description": "Content v11 (D43): advantage or disadvantage on a saving throw, skill check or ability check, optionally while a toggle is on or against some conditions; from v12 (G7) also on the character's attack rolls, initiative, or attack rolls against the character. Typed only in a v11 revision: in an older one it is an unknown effect, kept byte for byte."
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "rollFloor"
+            },
+            "target": {
+              "type": "string",
+              "pattern": "^(check|ability\\.(str|dex|con|int|wis|cha)\\.check|skill\\.(acrobatics|animalHandling|arcana|athletics|deception|history|insight|intimidation|investigation|medicine|nature|perception|performance|persuasion|religion|sleightOfHand|stealth|survival))$",
+              "description": "Content v12 (G9): the checks that get the floor: check (every ability-check field), ability.<ability>.check (that ability's checks) or skill.<skill>. Never a save or an attack; check and ability.dex.check also reach initiative."
+            },
+            "face": {
+              "type": "integer",
+              "minimum": 2,
+              "maximum": 20,
+              "description": "Content v12 (G9): a d20 below this counts as it. Exactly one of face and total."
+            },
+            "total": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S",
+              "description": "Content v12 (G9): a formula; a check total below it counts as it. Exactly one of face and total."
+            },
+            "proficient": {
+              "type": "boolean",
+              "description": "Content v12 (G9): true reaches only fields the character is proficient or expert in; false or absent reaches all."
+            }
+          },
+          "required": [
+            "target"
+          ],
+          "oneOf": [
+            {
+              "required": [
+                "face"
+              ]
+            },
+            {
+              "required": [
+                "total"
+              ]
+            }
+          ],
+          "description": "Content v12 (G9): a minimum on checks, either a d20 face or a total. Typed only in a v12 revision: in an older one it is an unknown effect, kept byte for byte."
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "checkAbility"
+            },
+            "target": {
+              "type": "string",
+              "pattern": "^(ability\\.(str|dex|int|wis|cha)\\.check|skill\\.(acrobatics|animalHandling|arcana|athletics|deception|history|insight|intimidation|investigation|medicine|nature|perception|performance|persuasion|religion|sleightOfHand|stealth|survival))$",
+              "description": "Content v12 (G10): the skills that may use another ability: skill.<skill>, or ability.<ability>.check (every skill whose printed ability is that one). Never a save, initiative, the bare ability check or ability.con.check (Constitution has no skill)."
+            },
+            "ability": {
+              "enum": [
+                "str",
+                "dex",
+                "con",
+                "int",
+                "wis",
+                "cha"
+              ],
+              "description": "Content v12 (G10): the ability whose modifier the skill may use instead; it must differ from the printed ability of every skill the target reaches. The skill uses whichever of its printed ability and this one has the best automatic roll mode, then the higher modifier; a tie keeps the printed ability."
+            }
+          },
+          "required": [
+            "target",
+            "ability"
+          ],
+          "description": "Content v12 (G10): a skill may use another ability's modifier. Always on and automatic. Typed only in a v12 revision: in an older one it is an unknown effect, kept byte for byte."
         },
         {
           "properties": {
@@ -2243,6 +2445,8 @@
                   "attackRider",
                   "value",
                   "rollMode",
+                  "rollFloor",
+                  "checkAbility",
                   "response",
                   "itemMod",
                   "companion"

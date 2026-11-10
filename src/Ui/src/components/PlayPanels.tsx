@@ -34,26 +34,10 @@ import { announceRollsOn, diceAnimationOn } from '../settings';
 import { damageTypeLabel, damageTypes, normalizeDamageType } from './customModel';
 import { ExplainList } from './ExplainList';
 import { Pips } from './Pips';
+import { conditionLabels } from './conditionLabels';
 
 /** The one name for the inspiration toggle and its summary line: "Heroic Inspiration" in 5.2.1, "Inspiration" otherwise. */
 export const inspirationLabel = (rulesFamily: string) => (rulesFamily === 'srd-5.2.1' ? 'Heroic Inspiration' : 'Inspiration');
-
-const conditionLabels: Record<string, string> = {
-  blinded: 'Blinded',
-  charmed: 'Charmed',
-  deafened: 'Deafened',
-  frightened: 'Frightened',
-  grappled: 'Grappled',
-  incapacitated: 'Incapacitated',
-  invisible: 'Invisible',
-  paralyzed: 'Paralyzed',
-  petrified: 'Petrified',
-  poisoned: 'Poisoned',
-  prone: 'Prone',
-  restrained: 'Restrained',
-  stunned: 'Stunned',
-  unconscious: 'Unconscious',
-};
 
 const automationLabels: Record<AutomationStatus, string> = {
   automatic: 'automatic',
@@ -412,11 +396,12 @@ export function ConcentrationPanel({ view, act, roll }: { view: CharacterView; a
 export function ConditionsPanel({ view, act }: { view: CharacterView; act: Act }) {
   const play = view.character.play;
   const active = play?.conditions ?? [];
+  const immune = new Set((view.sheet.conditionImmunities ?? []).map((i) => i.condition));
   return (
     <section aria-labelledby="conditions-heading" className="play-panel">
       <h3 id="conditions-heading">Conditions</h3>
       <fieldset className="conditions">
-        <legend>Conditions (reminders; they do not change calculated values)</legend>
+        <legend>Conditions (reminders; a condition you are immune to has no effect)</legend>
         {Object.entries(conditionLabels).map(([key, label]) => (
           <label key={key} className="choice">
             <input
@@ -424,7 +409,7 @@ export function ConditionsPanel({ view, act }: { view: CharacterView; act: Act }
               checked={active.includes(key)}
               onChange={() => act({ action: active.includes(key) ? 'removeCondition' : 'addCondition', condition: key })}
             />
-            {label}
+            {immune.has(key) ? `${label} (immune)` : label}
           </label>
         ))}
       </fieldset>

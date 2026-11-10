@@ -419,7 +419,7 @@ public static partial class CharacterCalculator
             ResourceEffect resource => new FeatureEffect(e.Id, e.Type, e.Automation, e.Text, resource.Label, ResourceId: resource.ResourceId),
             RecoveryEffect recovery => new FeatureEffect(e.Id, e.Type, e.Automation, e.Text, ResourceId: recovery.ResourceId),
             // A damage defence that is conditional is not applied by the calculator: the player applies it (D19 amended).
-            GrantEffect { Timing: not EffectTiming.Always } grant when GrantEffect.IsDamageDefence(grant.Grant) =>
+            GrantEffect { Timing: not EffectTiming.Always } grant when GrantEffect.IsDamageDefence(grant.Grant) || GrantEffect.IsConditionImmunity(grant.Grant) =>
                 new FeatureEffect(e.Id, e.Type, e.Automation == AutomationStatus.Automatic ? AutomationStatus.Assisted : e.Automation, e.Text),
             _ => new FeatureEffect(e.Id, e.Type, e.Automation, e.Text),
         }).ToList();

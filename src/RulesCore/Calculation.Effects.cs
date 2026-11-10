@@ -6,7 +6,7 @@ public static partial class CharacterCalculator
 
     /// <param name="SkipReason">Set when the rules say this modifier does not apply now (for example, Unarmored Defense while armor is worn); it is traced as not used.</param>
     /// <param name="FollowedToggle">Set when the modifier follows another entry's toggle (content v11 <c>toggleContent</c>): that toggle's label, named in the trace.</param>
-    private sealed record Modifier(ActiveContent Content, ModifierEffect Effect, Formula Formula, IReadOnlyList<string> ReadsFields, string? SkipReason = null, string? FollowedToggle = null, bool ModBonus = false);
+    private sealed record Modifier(ActiveContent Content, ModifierEffect Effect, Formula Formula, IReadOnlyList<string> ReadsFields, string? SkipReason = null, string? FollowedToggle = null, bool ModBonus = false, bool FromItemMod = false);
 
     private const string ResourceTargetPrefix = ContentValidator.ResourceTargetPrefix;
 
@@ -28,12 +28,15 @@ public static partial class CharacterCalculator
     /// Dex; medium: AC + Dex up to the cap; heavy: AC), and while it is worn every other Armor Class replacement is an
     /// unarmored alternative that does not apply, traced as such. (All SRD alternatives, such as Unarmored Defense,
     /// apply only without armor; a shield does not stop them.) A shield is a bonus. Only one body armor and one shield
-    /// count; extra ones get a diagnostic.
+    /// count; extra ones get a diagnostic. Content v12 <c>notWearing</c> turns a modifier off while the listed gear is worn
+    /// (<see cref="GateOnGear"/>).
     /// </summary>
     /// <summary>The body armor and shield that count (at most one of each).</summary>
     private sealed record WornArmor((ActiveContent Content, ArmorEffect Effect)? Body, (ActiveContent Content, ArmorEffect Effect)? Shield);
 
     /// <remarks>
+    /// Content v12 (G4): a modifier's <c>notWearing</c> gate is applied before the armor branch, so the synthetic armor, shield and
+    /// armor-mod modifiers added below are never gated.
     /// Content v8 (M2.2): a <c>whileArmored</c> modifier does not apply without body armor. Armor training is checked only
     /// when <paramref name="checkTraining"/>: every class the character has levels in records its armor training
     /// (<see cref="RecordsArmorTraining"/>). A class written before v8 records none, so its training is unknown, and
@@ -70,6 +73,7 @@ public static partial class CharacterCalculator
             diagnostics.Add(new("equipment.multiple-armor", $"'{extra.Content.Revision.Name}' is armor, but '{body[0].Content.Revision.Name}' is already worn; only one armor counts.", extra.Content.Revision.Reference, extra.Effect.Id));
         foreach (var extra in shields.Skip(1))
             diagnostics.Add(new("equipment.multiple-shields", $"'{extra.Content.Revision.Name}' is a shield, but '{shields[0].Content.Revision.Name}' is already used; only one shield counts.", extra.Content.Revision.Reference, extra.Effect.Id));
+        GateOnGear(modifiers, body.Count > 0 ? body[0] : null, shields.Count > 0 ? shields[0] : null);
 
         if (body.Count > 0)
         {
@@ -126,6 +130,40 @@ public static partial class CharacterCalculator
             modifiers.AddRange(ModBonuses(content, shield.SkipReason));
         }
         return new(body.Count > 0 ? body[0] : null, shields.Count > 0 ? shields[0] : null);
+    }
+
+    /// <summary>
+    /// Content v12 (G4): a modifier with <see cref="ModifierEffect.NotWearing"/> does not apply while any listed gear is worn (the first
+    /// listed in the order armor, heavy armor, shield names the reason). A shield counts as used even when it is untrained and adds no
+    /// Armor Class. Not honoured on an item mod's modifier, an armor mod's synthetic bonus, or a revision below v12 (the sandbox
+    /// calculates drafts that were never validated); an unknown value is ignored.
+    /// </summary>
+    private static void GateOnGear(List<Modifier> modifiers, (ActiveContent Content, ArmorEffect Effect)? body, (ActiveContent Content, ArmorEffect Effect)? shield)
+    {
+        for (var i = 0; i < modifiers.Count; i++)
+        {
+            var modifier = modifiers[i];
+            if (modifier.Effect.NotWearing is not { Count: > 0 } gear || modifier.SkipReason is not null || modifier.FromItemMod || modifier.ModBonus
+                || modifier.Content.Revision.SchemaVersion < ContentRevision.AbilityCapSchemaVersion)
+                continue;
+            string? reason = null;
+            foreach (var kind in ModifierEffect.Gear)
+            {
+                if (!gear.Contains(kind, StringComparer.Ordinal))
+                    continue;
+                reason = kind switch
+                {
+                    ModifierEffect.GearArmor when body is { } worn => $"it applies only while no armor is worn, and {Describe(worn.Content)} is worn",
+                    ModifierEffect.GearHeavyArmor when body is { Effect.Category: ArmorCategory.Heavy } worn => $"it applies only while no heavy armor is worn, and {Describe(worn.Content)} is worn",
+                    ModifierEffect.GearShield when shield is { } used => $"it applies only while no shield is used, and {Describe(used.Content)} is used",
+                    _ => null,
+                };
+                if (reason is not null)
+                    break;
+            }
+            if (reason is not null)
+                modifiers[i] = modifier with { SkipReason = reason };
+        }
     }
 
     /// <summary>
@@ -208,9 +246,9 @@ public static partial class CharacterCalculator
     /// Toggled entries are gated like modifiers. A rollMode has no timing, so only its toggle gates it. Order is sheet content order.
     /// </summary>
     private static RollModeCollection CollectRollModes(
-        List<ActiveContent> active, Character character, EffectiveToggles effective, bool autoOn, List<Diagnostic> diagnostics)
+        List<ActiveContent> active, Character character, EffectiveToggles effective, bool autoOn, IReadOnlySet<string> immune, List<Diagnostic> diagnostics)
     {
-        var byField = new Dictionary<string, List<RollModeReason>>(StringComparer.Ordinal);
+        var targeted = new List<(string Target, RollModeReason Reason)>();
         var attackModes = new List<AttackModeValue>();
         var against = new List<RollModeReason>();
         foreach (var item in active)
@@ -219,7 +257,7 @@ public static partial class CharacterCalculator
             foreach (var effect in revision.Effects.OfType<RollModeEffect>())
             {
                 // Content v12 (G7): while the character has the condition the effect is left out, like a toggle that is off.
-                if (effect.UnlessCondition is { } unless && ConditionKeys.Holds(character.Play.Conditions, unless))
+                if (effect.UnlessCondition is { } unless && ConditionKeys.Holds(character.Play.Conditions, unless, immune))
                     continue;
                 if (effect.Toggle is { } toggle
                     && GateOnToggle(active, revision, effect.Id, toggle, effect.ToggleContent, effective, autoOn, diagnostics, out _) != ToggleGate.Applies)
@@ -229,32 +267,187 @@ public static partial class CharacterCalculator
                     attackModes.Add(new AttackModeValue(reason, effect.Tags ?? [], effect.Ability));
                 else if (effect.Target == RollModeEffect.AttacksAgainstTarget)
                     against.Add(reason);
-                foreach (var field in RollModeFields(effect.Target))
-                {
-                    if (!byField.TryGetValue(field, out var reasons))
-                        byField[field] = reasons = [];
-                    reasons.Add(reason);
-                }
+                targeted.Add((effect.Target, reason));
             }
         }
-        // Automatic combines only the reasons that need no confirmation (no against) from an automatic effect; the rest are listed notes.
-        var fields = byField.ToDictionary(
+        return new(
+            targeted,
+            attackModes.Count > 0 ? attackModes : null,
+            against.Count > 0 ? new RollModeSummary(RollModes.CombineAgainst(against), against) : null);
+    }
+
+    /// <summary>
+    /// The roll modes of the active content: each reason with the target it names (expanded to fields after the values are known, because
+    /// a skill that uses another ability answers to that ability's checks), the <c>attack</c> modes (v12), and the summary of attacks against the character (v12).
+    /// </summary>
+    private sealed record RollModeCollection(
+        List<(string Target, RollModeReason Reason)> Targeted, IReadOnlyList<AttackModeValue>? AttackModes, RollModeSummary? AttacksAgainst);
+
+    /// <summary>The roll modes by sheet field. Automatic combines only the reasons that need no confirmation (no against) from an automatic effect; the rest are listed notes.</summary>
+    private static Dictionary<string, RollModeSummary> RollModesByField(
+        List<(string Target, RollModeReason Reason)> targeted, IReadOnlyDictionary<string, Ability> skillAbility)
+    {
+        var byField = new Dictionary<string, List<RollModeReason>>(StringComparer.Ordinal);
+        foreach (var (target, reason) in targeted)
+        {
+            foreach (var field in RollModeFields(target, skillAbility))
+            {
+                if (!byField.TryGetValue(field, out var reasons))
+                    byField[field] = reasons = [];
+                reasons.Add(reason);
+            }
+        }
+        return byField.ToDictionary(
             p => p.Key,
             p => new RollModeSummary(
                 RollModes.Combine(p.Value.Where(r => r.IsAutomatic).Select(r => r.Mode)),
                 [.. p.Value]),
             StringComparer.Ordinal);
-        return new(
-            fields,
-            attackModes.Count > 0 ? attackModes : null,
-            against.Count > 0 ? new RollModeSummary(RollModes.CombineAgainst(against), against) : null);
     }
 
-    /// <summary>The roll modes of the active content: by sheet field, the <c>attack</c> modes (v12), and the summary of attacks against the character (v12).</summary>
-    private sealed record RollModeCollection(
-        Dictionary<string, RollModeSummary> ByField, IReadOnlyList<AttackModeValue>? AttackModes, RollModeSummary? AttacksAgainst);
+    /// <summary>Content v12 (G10): a stored candidate for a skill to use <paramref name="Ability"/> instead of its printed ability.</summary>
+    private sealed record CheckAbilityCandidate(Ability Ability, ActiveContent Content, CheckAbilityEffect Effect);
 
-    private static IEnumerable<string> RollModeFields(string target)
+    /// <summary>
+    /// Content v12 (G10): the skills that may use another ability, by skill field, in content order. <c>skill.&lt;s&gt;</c> reaches one skill,
+    /// <c>ability.&lt;x&gt;.check</c> every skill whose printed ability is x. A stored effect that is not automatic and always, whose ability
+    /// or target does not parse, or that names the printed ability, is skipped (validation refuses them).
+    /// </summary>
+    private static Dictionary<string, List<CheckAbilityCandidate>> CollectCheckAbilities(List<ActiveContent> active)
+    {
+        var byField = new Dictionary<string, List<CheckAbilityCandidate>>(StringComparer.Ordinal);
+        foreach (var item in active)
+        {
+            foreach (var effect in item.Revision.Effects.OfType<CheckAbilityEffect>())
+            {
+                if (effect.Automation != AutomationStatus.Automatic || effect.Timing != EffectTiming.Always
+                    || !CheckAbilityEffect.TryParseAbility(effect.Ability, out var ability))
+                    continue;
+                foreach (var skill in Skills.Where(s => s.Ability != ability && CheckAbilityReaches(effect.Target, s.Key, s.Ability)))
+                {
+                    var field = FieldIds.Skill(skill.Key);
+                    if (!byField.TryGetValue(field, out var list))
+                        byField[field] = list = [];
+                    list.Add(new(ability, item, effect));
+                }
+            }
+        }
+        return byField;
+    }
+
+    private static bool CheckAbilityReaches(string target, string skillKey, Ability printed)
+    {
+        if (target.StartsWith("skill.", StringComparison.Ordinal))
+            return target == FieldIds.Skill(skillKey);
+        var mod = FieldIds.Modifier(printed);
+        return target == string.Concat(mod.AsSpan(0, mod.Length - ".mod".Length), ".check");
+    }
+
+    /// <summary>
+    /// The ability a skill (or save) uses: the best automatic roll mode first (advantage, then normal, then disadvantage), then the highest
+    /// modifier among equals. A tie keeps the printed ability, then the earlier candidate. Roll floors are not compared. Null candidate: the printed ability.
+    /// </summary>
+    private static (Ability Ability, CheckAbilityCandidate? Candidate) ChosenAbility(
+        Ability printed, List<CheckAbilityCandidate>? candidates, IReadOnlyDictionary<string, int> values, Func<Ability, RollMode> modeOf)
+    {
+        static int Rank(RollMode mode) => mode == RollMode.Advantage ? 2 : mode == RollMode.Normal ? 1 : 0;
+        var best = printed;
+        var bestRank = Rank(modeOf(printed));
+        CheckAbilityCandidate? chosen = null;
+        foreach (var candidate in candidates ?? [])
+        {
+            var rank = Rank(modeOf(candidate.Ability));
+            if (rank > bestRank || (rank == bestRank && values[FieldIds.Modifier(candidate.Ability)] > values[FieldIds.Modifier(best)]))
+            {
+                best = candidate.Ability;
+                bestRank = rank;
+                chosen = candidate;
+            }
+        }
+        return (best, chosen);
+    }
+
+    /// <summary>
+    /// The automatic roll mode a check of <paramref name="skillField"/> would get if it used <paramref name="ability"/>: the reasons aimed at
+    /// that skill or at that ability's checks, combined as the sheet combines them.
+    /// </summary>
+    private static RollMode CheckModeOf(List<(string Target, RollModeReason Reason)> targeted, string skillField, Ability ability)
+    {
+        var mod = FieldIds.Modifier(ability);
+        var check = string.Concat(mod.AsSpan(0, mod.Length - ".mod".Length), ".check");
+        return RollModes.Combine(targeted.Where(t => t.Reason.IsAutomatic && (t.Target == skillField || t.Target == check)).Select(t => t.Reason.Mode));
+    }
+
+    /// <summary>
+    /// Content v12 (G10): drops the candidates that would close a dependency cycle (the candidate's modifier depends, through modifiers, on the
+    /// skill it would feed), each with <c>effect.dependency-cycle</c>. Returns the dependency edges of the kept candidates, modifier to skill.
+    /// Runs after <see cref="RemoveCycles"/>, so the modifier edges are acyclic; kept candidates are added one by one.
+    /// </summary>
+    private static List<(string From, string To, Modifier? Via)> AcceptCheckAbilities(
+        Dictionary<string, List<CheckAbilityCandidate>> candidates, List<Modifier> modifiers, List<Diagnostic> diagnostics,
+        Dictionary<string, List<Diagnostic>> warnings)
+    {
+        var extra = new List<(string From, string To, Modifier? Via)>();
+        if (candidates.Count == 0)
+            return extra;
+        var adjacency = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        foreach (var (from, to, _) in Edges(modifiers))
+        {
+            if (!adjacency.TryGetValue(from, out var list))
+                adjacency[from] = list = [];
+            list.Add(to);
+        }
+        bool Reaches(string from, string to)
+        {
+            var seen = new HashSet<string>(StringComparer.Ordinal) { from };
+            var pending = new Stack<string>([from]);
+            while (pending.Count > 0)
+            {
+                var current = pending.Pop();
+                if (current == to)
+                    return true;
+                foreach (var next in adjacency.GetValueOrDefault(current) ?? [])
+                {
+                    if (seen.Add(next))
+                        pending.Push(next);
+                }
+            }
+            return false;
+        }
+
+        foreach (var (field, list) in candidates.ToList())
+        {
+            var kept = new List<CheckAbilityCandidate>();
+            foreach (var candidate in list)
+            {
+                var mod = FieldIds.Modifier(candidate.Ability);
+                if (Reaches(field, mod))
+                {
+                    var revision = candidate.Content.Revision;
+                    var diagnostic = new Diagnostic(
+                        "effect.dependency-cycle",
+                        $"'{revision.Name}' effect '{candidate.Effect.Id}' is ignored: using {mod} for {field} would make {mod} depend on {field}.",
+                        revision.Reference,
+                        candidate.Effect.Id);
+                    diagnostics.Add(diagnostic);
+                    warnings[field].Add(diagnostic);
+                    continue;
+                }
+                kept.Add(candidate);
+                extra.Add((mod, field, null));
+                if (!adjacency.TryGetValue(mod, out var outgoing))
+                    adjacency[mod] = outgoing = [];
+                outgoing.Add(field);
+            }
+            if (kept.Count == 0)
+                candidates.Remove(field);
+            else
+                candidates[field] = kept;
+        }
+        return extra;
+    }
+
+    private static IEnumerable<string> RollModeFields(string target, IReadOnlyDictionary<string, Ability> skillAbility)
     {
         if (target == RollModeEffect.InitiativeTarget)
         {
@@ -275,11 +468,83 @@ public static partial class CharacterCalculator
             if (target != string.Concat(mod.AsSpan(0, mod.Length - ".mod".Length), ".check"))
                 continue;
             yield return mod;
-            foreach (var skill in Skills.Where(s => s.Ability == ability))
+            // Content v12 (G10): a skill answers to the ability it uses, which is its printed one unless a checkAbility won.
+            foreach (var skill in Skills.Where(s => skillAbility.GetValueOrDefault(FieldIds.Skill(s.Key), s.Ability) == ability))
                 yield return FieldIds.Skill(skill.Key);
             if (ability == Ability.Dex)
                 yield return FieldIds.Initiative;
         }
+    }
+
+    /// <summary>One field's roll floor: the summary, and the trace steps (one per reason) appended after the field's own steps.</summary>
+    private sealed record FloorCollection(RollFloorSummary Summary, List<FloorStep> Steps);
+
+    private sealed record FloorStep(string Description, int Amount, TraceOrigin Origin);
+
+    /// <summary>
+    /// Content v12 (G9): the roll floors of the active content, by the check field they reach (<c>check</c>: every ability modifier, skill
+    /// and initiative; <c>ability.&lt;x&gt;.check</c> and <c>skill.&lt;s&gt;</c> as for roll modes). <c>proficient</c> keeps only fields marked
+    /// Proficient or Expertise. A total formula is evaluated in the declaring content's context; one that fails leaves that reason out
+    /// (<c>effect.invalid-formula</c>). The highest face and the highest total win separately; every reason is listed. A field's value never changes.
+    /// </summary>
+    private static Dictionary<string, FloorCollection> CollectRollFloors(
+        List<ActiveContent> active, Character character, ClassLevelMap classLevels, Dictionary<string, int> values,
+        Func<string, ProficiencyMark> markOf, string family, List<Diagnostic> diagnostics, IReadOnlyDictionary<string, Ability> skillAbility)
+    {
+        var byField = new Dictionary<string, List<(RollFloorReason Reason, FloorStep Step)>>(StringComparer.Ordinal);
+        foreach (var item in active)
+        {
+            var revision = item.Revision;
+            foreach (var effect in revision.Effects.OfType<RollFloorEffect>())
+            {
+                // Validation refuses these; stored content that has them is skipped, not applied.
+                if (effect.Automation != AutomationStatus.Automatic || effect.Timing != EffectTiming.Always)
+                    continue;
+                int floor;
+                string description;
+                RollFloorReason reason;
+                if (effect.Face is { } face)
+                {
+                    floor = face;
+                    description = $"Roll floor from {revision.Name}: a d20 below {face} counts as {face}";
+                    reason = new(revision.Name, revision.Reference, face, null);
+                }
+                else if (effect.Total is { } source)
+                {
+                    if (!TryEvaluate(source, item, character, classLevels, values, [], out floor, out var failure))
+                    {
+                        diagnostics.Add(InvalidFormula(revision, effect, failure!));
+                        continue;
+                    }
+                    description = $"Roll floor from {revision.Name}: a total below {floor} counts as {floor}";
+                    reason = new(revision.Name, revision.Reference, null, floor);
+                }
+                else
+                    continue;
+                var step = new FloorStep(description, floor, ContentOrigin(family, item, effect));
+                foreach (var field in RollFloorFields(effect.Target, skillAbility))
+                {
+                    if (effect.Proficient == true && markOf(field) == ProficiencyMark.None)
+                        continue;
+                    if (!byField.TryGetValue(field, out var list))
+                        byField[field] = list = [];
+                    list.Add((reason, step));
+                }
+            }
+        }
+        return byField.ToDictionary(
+            p => p.Key,
+            p => new FloorCollection(
+                new(p.Value.Select(v => v.Reason.Face).Max(), p.Value.Select(v => v.Reason.Total).Max(), [.. p.Value.Select(v => v.Reason)]),
+                [.. p.Value.Select(v => v.Step)]),
+            StringComparer.Ordinal);
+    }
+
+    private static IEnumerable<string> RollFloorFields(string target, IReadOnlyDictionary<string, Ability> skillAbility)
+    {
+        if (target != RollFloorEffect.CheckTarget)
+            return RollModeFields(target, skillAbility).Where(f => !f.StartsWith("save.", StringComparison.Ordinal));
+        return [.. Enum.GetValues<Ability>().Select(FieldIds.Modifier), .. Skills.Select(s => FieldIds.Skill(s.Key)), FieldIds.Initiative];
     }
 
     private static List<Modifier> CollectModifiers(
@@ -317,8 +582,10 @@ public static partial class CharacterCalculator
                 // enters the field pipeline; only a bonus counts, and one naming no resource of its revision changes nothing (validation errors).
                 if (IsResourceTarget(revision, effect))
                 {
+                    // Content v12 (G4): a pool maximum is not a calculated field, so a gear gate cannot be applied to it (validation refuses
+                    // it); in an unvalidated draft the pool reads assisted and the player adds the bonus. Not on an item mod's leaf.
                     if (effect.Operation == ModifierOperation.Bonus)
-                        resourceBonuses.Add(new(item, effect, followedToggle));
+                        resourceBonuses.Add(new(item, effect, followedToggle, Manual: !leaf && effect.NotWearing is { Count: > 0 } && revision.SchemaVersion >= ContentRevision.AbilityCapSchemaVersion));
                     continue;
                 }
                 if (!SpecIndex.ContainsKey(effect.Target))
@@ -355,7 +622,7 @@ public static partial class CharacterCalculator
                     manual.Add(effect.Target);
                     continue;
                 }
-                if (!Formula.TryParse(effect.Value, Formula.FeaturesFor(revision), out var formula, out var error))
+                if (!Formula.TryParse(effect.Value, Formula.ModifierFeaturesFor(revision, effect.Target), out var formula, out var error))
                 {
                     warnings[effect.Target].Add(InvalidFormula(revision, effect, error!));
                     manual.Add(effect.Target);
@@ -363,7 +630,7 @@ public static partial class CharacterCalculator
                 }
                 // A named value this formula reads counts as the fields that value reads (content v11), so the order and the cycle check see them.
                 var reads = FieldReads(formula!, item, classLevels);
-                modifiers.Add(new(item, effect, formula!, reads, null, followedToggle));
+                modifiers.Add(new(item, effect, formula!, reads, null, followedToggle, FromItemMod: leaf));
             }
         }
         return modifiers;
@@ -376,6 +643,15 @@ public static partial class CharacterCalculator
     // a separate feature). Every operation counts, so `set` or `replace` cannot bypass it either.
     /// <summary>SRD: ability score increases stop at 20 (both families, so a rules constant rather than a policy field).</summary>
     public const int AbilityScoreIncreaseCap = 20;
+
+    /// <summary>
+    /// The ceiling of one ability-score increase: its own cap (schema 12 and later, 21 to 30, never on an item mod's modifier nor an
+    /// armor mod's synthetic bonus), else 20. A cap out of range is ignored (validation refuses it).
+    /// </summary>
+    private static int AbilityCeiling(Modifier modifier) =>
+        modifier.Effect.Cap is { } cap && cap is >= ModifierEffect.MinCap and <= ModifierEffect.MaxCap
+            && !modifier.ModBonus && !modifier.FromItemMod && modifier.Content.Revision.SchemaVersion >= ContentRevision.AbilityCapSchemaVersion
+            ? cap : AbilityScoreIncreaseCap;
 
     private static bool IsAbilityScoreField(string field) =>
         field.StartsWith("ability.", StringComparison.Ordinal) && field.EndsWith(".score", StringComparison.Ordinal);
@@ -441,7 +717,7 @@ public static partial class CharacterCalculator
             foreach (var grant in item.Revision.Effects.OfType<GrantEffect>())
             {
                 // Damage defences (content v10) are display data here: not a proficiency, and nothing to calculate yet.
-                if (grant.Grant == GrantKind.Content || GrantEffect.IsDamageDefence(grant.Grant))
+                if (grant.Grant == GrantKind.Content || GrantEffect.IsDamageDefence(grant.Grant) || GrantEffect.IsConditionImmunity(grant.Grant))
                     continue;
                 if (grant.Level is { } needed && gateLevel(item) < needed)
                     continue;

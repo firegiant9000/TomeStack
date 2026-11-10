@@ -21,6 +21,12 @@ public sealed record RollModeReason(
 /// <summary>The roll mode the sheet calculates for a field, and every reason listed for it (sheet content order).</summary>
 public sealed record RollModeSummary(RollMode Automatic, IReadOnlyList<RollModeReason> Reasons);
 
+/// <summary>Content v12 (G9): one roll floor that reaches a check field: a d20 below <paramref name="Face"/> counts as it, or a total below <paramref name="Total"/> counts as it (one of the two is set).</summary>
+public sealed record RollFloorReason(string Source, ContentReference Reference, int? Face, int? Total);
+
+/// <summary>Content v12 (G9): the roll floor of a check field: the highest face and the highest total (each null when no reason gives one), and every reason (sheet content order).</summary>
+public sealed record RollFloorSummary(int? Face, int? Total, IReadOnlyList<RollFloorReason> Reasons);
+
 /// <summary>Content v12 (G7): an <c>attack</c> roll mode with the attack tags it reaches and the ability the attack must use (null: any).</summary>
 public sealed record AttackModeValue(RollModeReason Reason, IReadOnlyList<string> Tags, Ability? Ability);
 

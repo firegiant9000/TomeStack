@@ -98,6 +98,8 @@ internal static class Generators
         [ResponseEffect.TypeName] = ResponseEffect.SchemaVersion,
         [ItemModEffect.TypeName] = ItemModEffect.SchemaVersion,
         [CompanionEffect.TypeName] = CompanionEffect.SchemaVersion,
+        [RollFloorEffect.TypeName] = RollFloorEffect.SchemaVersion,
+        [CheckAbilityEffect.TypeName] = CheckAbilityEffect.SchemaVersion,
     };
 
     /// <summary>
@@ -133,11 +135,22 @@ internal static class Generators
                 from armored in OptionalValue(Gen.Elements(true, false))
                 // Any version: below v11 the key must stay extension data, written back where it was.
                 from toggleContent in OptionalValue(Guids)
+                // Any version: below v12 the key must stay extension data, written back where it was.
+                from cap in OptionalValue(Gen.Choose(21, 30))
+                // Content v12 (G4): any version, as cap is: below v12 the key stays extension data, written back where it was (a
+                // malformed value too, so only there); from v12 it is a gate, so always well formed. Never armor: with
+                // whileArmored it could never apply, and validation refuses it.
+                from gear in Gen.Elements<string[]?>(null, new[] { "shield" }, new[] { "heavyArmor", "shield" })
+                from malformed in Gen.Elements<JsonNode?>(null, null, null, JsonValue.Create("x"), JsonValue.Create(5))
                 select new JsonObject { ["operation"] = op, ["target"] = target, ["value"] = value }
                     .With("stacking", stackGroup is null ? null : "highestInGroup").With("stackGroup", stackGroup)
                     .With("toggle", v >= ToggleEffect.SchemaVersion ? toggle : null)
                     .With("whileArmored", v >= ContentRevision.CombatDetailsSchemaVersion ? armored : null)
-                    .With("toggleContent", toggleContent?.ToString())),
+                    .With("toggleContent", toggleContent?.ToString())
+                    .With("cap", op == "bonus" && target == FieldIds.Score(Ability.Dex) ? cap : null)
+                    .With("notWearing", v < ContentRevision.AbilityCapSchemaVersion && malformed is not null
+                        ? malformed.DeepClone()
+                        : gear is not null ? new JsonArray([.. gear.Select(g => (JsonNode)g)]) : null)),
             Common(GrantEffect.TypeName,
                 from grant in Gen.Elements("proficiency", "expertise")
                 from target in Gen.Elements("skill.stealth", "save.dex", "skill.arcana")
@@ -163,6 +176,19 @@ internal static class Generators
                 from whileId in Keys
                 select new JsonObject { ["grant"] = grant, ["damageType"] = damageType }
                     .With("whileToggle", whileToggle ? new JsonObject { ["toggleId"] = whileId }.With("contentId", whileContent?.ToString()) : null)),
+            // The condition immunity (G11): below v12 the whole effect stays unknown and unchanged (a v11 build cannot read the kind).
+            Common(GrantEffect.TypeName,
+                from condition in Gen.Elements("charmed", "frightened", "poisoned")
+                from whileToggle in Gen.Elements(false, false, true)
+                from whileContent in OptionalValue(Guids)
+                from whileId in Keys
+                select new JsonObject { ["grant"] = "conditionImmunity", ["condition"] = condition }
+                    .With("whileToggle", whileToggle ? new JsonObject { ["toggleId"] = whileId }.With("contentId", whileContent?.ToString()) : null)),
+            // A condition key on another grant kind: below v12 it stays extension data, written back where it was.
+            Common(GrantEffect.TypeName,
+                from target in Gen.Elements("skill.stealth", "save.dex")
+                from condition in Gen.Elements("charmed", "Frightened", "exhaustion")
+                select new JsonObject { ["grant"] = "proficiency", ["target"] = target, ["condition"] = condition }),
             Common(ResourceEffect.TypeName,
                 from id in Keys
                 from label in Names
@@ -408,6 +434,22 @@ internal static class Generators
                 from speed in Optional(Gen.Elements("30 ft.", "40 ft.", "fly 60 ft."))
                 select new JsonObject { ["companionId"] = companionId.ToString("D"), ["label"] = label, ["armorClass"] = "13", ["hitPointMaximum"] = "5 * LEVEL" }
                     .With("speed", speed)),
+            // Typed from v12, unknown (and unchanged) below. Exactly one of face or total, as the validator requires.
+            Common(RollFloorEffect.TypeName,
+                from target in Gen.Elements("check", "ability.str.check", "ability.dex.check", "skill.athletics", "skill.stealth")
+                from useFace in Gen.Elements(true, false)
+                from face in Gen.Choose(2, 20)
+                from total in Gen.Elements("STR.SCORE", "5", "10")
+                from proficient in OptionalValue(Gen.Elements(true, false))
+                select new JsonObject { ["target"] = target }
+                    .With("face", useFace ? face : null)
+                    .With("total", useFace ? null : total)
+                    .With("proficient", proficient)),
+            // Typed from v12, unknown (and unchanged) below. Both members required; the validator checks the pairing, not the reader.
+            Common(CheckAbilityEffect.TypeName,
+                from target in Gen.Elements("skill.athletics", "skill.stealth", "ability.int.check", "ability.wis.check")
+                from ability in Gen.Elements("str", "dex", "con", "int", "wis", "cha")
+                select new JsonObject { ["target"] = target, ["ability"] = ability }),
             Common(ScaleEffect.TypeName,
                 from id in Keys
                 from label in Names

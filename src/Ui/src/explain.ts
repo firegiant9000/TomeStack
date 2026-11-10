@@ -57,6 +57,8 @@ function explainStep(step: TraceEntry, context: StepContext): string {
       return context === 'attack' ? description : `${description}: ${result}`;
     case 'override':
       return `Your override: ${result}`;
+    case 'floor': // G9: a roll floor leaves the field value as it was; the description says what it does
+      return description;
     case 'ignored':
     case 'rider.not-applied':
       return `Not counted: ${description}`;

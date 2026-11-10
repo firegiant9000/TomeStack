@@ -55,6 +55,15 @@ public static class FieldIds
     /// </summary>
     public const string FlySpeed = "speed.fly";
 
+    /// <summary>
+    /// Content schema v12 (G10): climbing speed in feet, base 0 (no climbing speed). Content may target it only from v12
+    /// (<see cref="CharacterCalculator.IsPlayMechanicsOnlyField"/>).
+    /// </summary>
+    public const string ClimbSpeed = "speed.climb";
+
+    /// <summary>Content schema v12 (G10): swimming speed in feet, base 0 (no swimming speed). Content may target it only from v12.</summary>
+    public const string SwimSpeed = "speed.swim";
+
     public static string Key(Ability ability) => ability.ToString().ToLowerInvariant();
 }
 
@@ -82,7 +91,11 @@ public enum EffectTiming { Always, WhileActive, OnRoll, OnShortRest, OnLongRest 
 /// type (<see cref="GrantEffect.DamageType"/>) and no target. They are typed only in a v10 revision: a v9 build cannot read
 /// these values, keeps such an effect as an <see cref="UnknownEffect"/>, and so does this build below v10 (<see cref="GrantEffect.FromUnknown"/>).
 /// </summary>
-public enum GrantKind { Proficiency, Expertise, Content, DamageResistance, DamageImmunity, DamageVulnerability }
+/// <remarks>
+/// Content schema v12 (G11) appends <see cref="ConditionImmunity"/>, which names a condition (<see cref="GrantEffect.Condition"/>).
+/// Below v12 the whole grant stays an <see cref="UnknownEffect"/> (<see cref="GrantEffect.FromUnknown"/>).
+/// </remarks>
+public enum GrantKind { Proficiency, Expertise, Content, DamageResistance, DamageImmunity, DamageVulnerability, ConditionImmunity }
 
 /// <summary>Content schema v10 (Wave 3, D42): when a toggle switches itself, computed from play state and never stored. One value for now.</summary>
 public enum ToggleAutoWhen { Bloodied }
@@ -161,14 +174,45 @@ public sealed record ModifierEffect : Effect
     /// </summary>
     public Guid? ToggleContent { get; init; }
 
+    /// <summary>
+    /// Content schema v12 (G5): with an ability-score <c>bonus</c>, the highest score its increase can reach, 21 to 30. Null:
+    /// the increase stops at 20. Below v12 the key stays extension data and does nothing.
+    /// </summary>
+    public int? Cap { get; init; }
+
+    /// <summary>
+    /// Content schema v12 (G4): applies only while none of the listed gear is worn: <see cref="GearArmor"/> (any body armor),
+    /// <see cref="GearHeavyArmor"/> or <see cref="GearShield"/>. Null: whatever is worn. Plain strings, so an unknown value
+    /// in an unvalidated draft is ignored rather than unreadable. Below v12 the key stays extension data and does nothing.
+    /// </summary>
+    public IReadOnlyList<string>? NotWearing { get; init; }
+
+    internal const string CapProperty = "cap";
+
+    internal const string NotWearingProperty = "notWearing";
+
+    /// <summary>The <see cref="NotWearing"/> values: body armor of any category, heavy body armor, and a shield.</summary>
+    internal const string GearArmor = "armor", GearHeavyArmor = "heavyArmor", GearShield = "shield";
+
+    /// <summary>Every value <see cref="NotWearing"/> may list, in the order the calculator checks them.</summary>
+    internal static readonly string[] Gear = [GearArmor, GearHeavyArmor, GearShield];
+
+    /// <summary>The lowest and highest <see cref="Cap"/> content may set (20 is the usual maximum).</summary>
+    internal const int MinCap = 21, MaxCap = 30;
+
     /// <summary>The keys content schema v11 adds to this effect; below v11 they stay extension data.</summary>
     internal static readonly string[] V11Keys = ["toggleContent"];
 
-    /// <summary>Typed by the revision when the converter hands it over (see <see cref="EffectJsonConverter"/>): v11 keys only from v11.</summary>
+    /// <summary>The keys content schema v12 adds to this effect, stripped below v12 in <see cref="FromUnknown"/>.</summary>
+    internal static readonly string[] V12Keys = [CapProperty, NotWearingProperty];
+
+    /// <summary>Typed by the revision when the converter hands it over (see <see cref="EffectJsonConverter"/>): v11 keys only from v11, v12 keys only from v12.</summary>
     internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion) =>
-        revisionSchemaVersion >= ContentRevision.PlayMechanicsSchemaVersion
+        revisionSchemaVersion >= ContentRevision.AbilityCapSchemaVersion
             ? VersionedEffects.Typed<ModifierEffect>(unknown)
-            : VersionedEffects.TypedWithout<ModifierEffect>(unknown, V11Keys);
+            : revisionSchemaVersion >= ContentRevision.PlayMechanicsSchemaVersion
+                ? VersionedEffects.TypedWithout<ModifierEffect>(unknown, V12Keys)
+                : VersionedEffects.TypedWithout<ModifierEffect>(unknown, [.. V11Keys, .. V12Keys]);
 }
 
 /// <summary>Grants a proficiency or expertise in a field (<c>save.dex</c>, <c>skill.stealth</c>), or another content revision.</summary>
@@ -208,6 +252,19 @@ public sealed record GrantEffect : Effect
     /// </summary>
     public ToggleRef? WhileToggle { get; init; }
 
+    /// <summary>
+    /// Content schema v12 (G11): with <see cref="GrantKind.ConditionImmunity"/>, the condition (one key of
+    /// <see cref="ConditionKeys.All"/>). Below v12 the key stays extension data and does nothing.
+    /// </summary>
+    public string? Condition { get; init; }
+
+    internal const string ConditionProperty = "condition";
+
+    /// <summary>The keys content schema v12 adds to this effect, stripped below v12 in <see cref="FromUnknown"/>.</summary>
+    internal static readonly string[] V12Keys = [ConditionProperty];
+
+    internal static bool IsConditionImmunity(GrantKind kind) => kind == GrantKind.ConditionImmunity;
+
     /// <summary>The content schema version that adds the damage-defence kinds and <see cref="DamageType"/>.</summary>
     public const int DamageSchemaVersion = ContentRevision.PlayDetailsSchemaVersion;
 
@@ -235,14 +292,18 @@ public sealed record GrantEffect : Effect
         {
             if (!VersionedEffects.NamesMember<GrantKind>(unknown.Raw, "grant"))
                 return unknown;
-            return revisionSchemaVersion >= ContentRevision.PlayMechanicsSchemaVersion
-                ? VersionedEffects.Typed<GrantEffect>(unknown)
-                : VersionedEffects.TypedWithout<GrantEffect>(unknown, V11Keys);
+            if (revisionSchemaVersion >= ContentRevision.ConditionImmunitySchemaVersion)
+                return VersionedEffects.Typed<GrantEffect>(unknown);
+            // Content v12 (G11): a v10 or v11 revision keeps a conditionImmunity grant unknown, and a condition key as extension data.
+            var older = revisionSchemaVersion >= ContentRevision.PlayMechanicsSchemaVersion
+                ? VersionedEffects.TypedWithout<GrantEffect>(unknown, V12Keys)
+                : VersionedEffects.TypedWithout<GrantEffect>(unknown, [.. V11Keys, .. V12Keys]);
+            return older is GrantEffect { Grant: GrantKind.ConditionImmunity } ? unknown : older;
         }
         // Below v10 any value outside the v9 names (Proficiency, Expertise, Content) is one a v9 build either refused (it stays
         // unknown) or could only bind by naming a member this build has since added (a damage kind, a padded or listed
         // spelling): this build must not bind it, whatever number it would give.
-        var typed = VersionedEffects.TypedWithout<GrantEffect>(unknown, [DamageTypeProperty, .. V11Keys]);
+        var typed = VersionedEffects.TypedWithout<GrantEffect>(unknown, [DamageTypeProperty, .. V11Keys, .. V12Keys]);
         return typed is GrantEffect { Grant: var kind } && (int)kind > (int)GrantKind.Content ? unknown : typed;
     }
 
@@ -254,7 +315,7 @@ public sealed record GrantEffect : Effect
 
     /// <summary>The names a v9 build could read (the converter hands over any grant whose kind is not exactly one of them).</summary>
     internal static bool IsPreV10Name(string? name) =>
-        name is not null && Enum.GetValues<GrantKind>().Where(k => !IsDamageDefence(k)).Any(k => string.Equals(k.ToString(), name, StringComparison.OrdinalIgnoreCase));
+        name is not null && Enum.GetValues<GrantKind>().Where(k => !IsDamageDefence(k) && !IsConditionImmunity(k)).Any(k => string.Equals(k.ToString(), name, StringComparison.OrdinalIgnoreCase));
 }
 
 /// <summary>Content schema v3: a class's hit point die (d6–d12), used for hit points at each level of that class.</summary>
@@ -908,6 +969,78 @@ public sealed record RollModeEffect : Effect
         }
         return VersionedEffects.Typed<RollModeEffect>(unknown);
     }
+}
+
+/// <summary>
+/// Content schema v12 (G9): on ability checks, a d20 below <see cref="Face"/> counts as <see cref="Face"/>, or a total below
+/// <see cref="Total"/> counts as it. Typed only in a v12 revision: below v12 it stays an <see cref="UnknownEffect"/>, byte for byte.
+/// </summary>
+public sealed record RollFloorEffect : Effect
+{
+    public const string TypeName = "rollFloor";
+
+    public const int SchemaVersion = ContentRevision.RollFloorSchemaVersion;
+
+    /// <summary>Target: every ability-check field.</summary>
+    public const string CheckTarget = "check";
+
+    public override string Type => TypeName;
+
+    /// <summary>Content schema v12 (G9): <c>check</c>, <c>ability.&lt;x&gt;.check</c> or <c>skill.&lt;s&gt;</c>. Required.</summary>
+    [property: JsonRequired]
+    public required string Target { get; init; }
+
+    /// <summary>Content schema v12 (G9): 2 to 20; a d20 below it counts as it. Exactly one of this and <see cref="Total"/> (validated).</summary>
+    public int? Face { get; init; }
+
+    /// <summary>Content schema v12 (G9): a formula; a check total below it counts as it.</summary>
+    public string? Total { get; init; }
+
+    /// <summary>Content schema v12 (G9): true reaches only proficient or expert fields.</summary>
+    public bool? Proficient { get; init; }
+
+    internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion) =>
+        revisionSchemaVersion < SchemaVersion ? unknown : VersionedEffects.Typed<RollFloorEffect>(unknown);
+}
+
+/// <summary>
+/// Content schema v12 (G10): a skill may use another ability's modifier. <see cref="Target"/> is <c>skill.&lt;s&gt;</c> or
+/// <c>ability.&lt;x&gt;.check</c> (every skill whose printed ability is x); <see cref="Ability"/> is the ability it may use.
+/// Typed only in a v12 revision: below v12 it stays an <see cref="UnknownEffect"/>, byte for byte.
+/// </summary>
+public sealed record CheckAbilityEffect : Effect
+{
+    public const string TypeName = "checkAbility";
+
+    public const int SchemaVersion = ContentRevision.CheckAbilitySchemaVersion;
+
+    public override string Type => TypeName;
+
+    /// <summary><c>skill.&lt;s&gt;</c> or <c>ability.&lt;x&gt;.check</c>; validated in the content validator. Required.</summary>
+    [property: JsonRequired]
+    public required string Target { get; init; }
+
+    /// <summary>The lower-case ability key the skill may use (the key <see cref="RollModeEffect"/> reads). Required.</summary>
+    [property: JsonRequired]
+    public required string Ability { get; init; }
+
+    /// <summary>Parses a lower-case ability key exactly (<c>str</c>, <c>dex</c>, ...), as <see cref="RollModeEffect"/> does.</summary>
+    public static bool TryParseAbility(string key, out Ability ability)
+    {
+        foreach (var candidate in Enum.GetValues<Ability>())
+        {
+            if (string.Equals(key, candidate.ToString().ToLowerInvariant(), StringComparison.Ordinal))
+            {
+                ability = candidate;
+                return true;
+            }
+        }
+        ability = default;
+        return false;
+    }
+
+    internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion) =>
+        revisionSchemaVersion < SchemaVersion ? unknown : VersionedEffects.Typed<CheckAbilityEffect>(unknown);
 }
 
 /// <summary>Content schema v11 (D43): where in a damage event a response is offered.</summary>
@@ -1739,6 +1872,8 @@ internal static class VersionedEffects
             [ValueEffect.TypeName] = (ValueEffect.SchemaVersion, (u, _) => ValueEffect.FromUnknown(u)),
             [RollModeEffect.TypeName] = (RollModeEffect.SchemaVersion, (u, v) => RollModeEffect.FromUnknown(u, v)),
             [ResponseEffect.TypeName] = (ResponseEffect.SchemaVersion, (u, v) => ResponseEffect.FromUnknown(u, v)),
+            [RollFloorEffect.TypeName] = (RollFloorEffect.SchemaVersion, (u, v) => RollFloorEffect.FromUnknown(u, v)),
+            [CheckAbilityEffect.TypeName] = (CheckAbilityEffect.SchemaVersion, (u, v) => CheckAbilityEffect.FromUnknown(u, v)),
             [ItemModEffect.TypeName] = (ItemModEffect.SchemaVersion, (u, _) => ItemModEffect.FromUnknown(u)),
             [CompanionEffect.TypeName] = (CompanionEffect.SchemaVersion, (u, _) => CompanionEffect.FromUnknown(u)),
         };
@@ -1919,7 +2054,7 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
                 RollEffect.TypeName => element.Deserialize<RollEffect>(options),
                 HitDieEffect.TypeName => element.Deserialize<HitDieEffect>(options),
                 // Typed only in revisions of their schema version (ContentRevision.OnDeserialized); older ones keep them as written.
-                ArmorEffect.TypeName or SpellcastingEffect.TypeName or SpellEffect.TypeName or WeaponEffect.TypeName or ToggleEffect.TypeName or ScaleEffect.TypeName or ItemEffect.TypeName or ToggleGroupEffect.TypeName or UpkeepEffect.TypeName or AttackEffect.TypeName or AttackRiderEffect.TypeName or ValueEffect.TypeName or RollModeEffect.TypeName or ResponseEffect.TypeName or ItemModEffect.TypeName or CompanionEffect.TypeName => UnknownEffect.From(element),
+                ArmorEffect.TypeName or SpellcastingEffect.TypeName or SpellEffect.TypeName or WeaponEffect.TypeName or ToggleEffect.TypeName or ScaleEffect.TypeName or ItemEffect.TypeName or ToggleGroupEffect.TypeName or UpkeepEffect.TypeName or AttackEffect.TypeName or AttackRiderEffect.TypeName or ValueEffect.TypeName or RollModeEffect.TypeName or RollFloorEffect.TypeName or CheckAbilityEffect.TypeName or ResponseEffect.TypeName or ItemModEffect.TypeName or CompanionEffect.TypeName => UnknownEffect.From(element),
                 LegacyAbilityScoreIncrease or LegacyInitiativeBonus => FromSchemaVersion1(element, type, options),
                 _ => UnknownEffect.From(element),
             } ?? UnknownEffect.From(element);
@@ -1947,8 +2082,8 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
     {
         var newest = type switch
         {
-            ModifierEffect.TypeName => ModifierEffect.V11Keys,
-            GrantEffect.TypeName => GrantEffect.V11Keys,
+            ModifierEffect.TypeName => [.. ModifierEffect.V11Keys, .. ModifierEffect.V12Keys],
+            GrantEffect.TypeName => [.. GrantEffect.V11Keys, .. GrantEffect.V12Keys],
             ResourceEffect.TypeName => ResourceEffect.V11Keys,
             RollEffect.TypeName => [.. RollEffect.V11Keys, .. RollEffect.V12Keys],
             ChoiceEffect.TypeName => ChoiceEffect.V12Keys,

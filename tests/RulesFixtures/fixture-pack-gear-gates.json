@@ -1,0 +1,103 @@
+{
+  "packId": "tomestack-gear-gate-fixtures",
+  "formatVersion": 1,
+  "notice": "Original TomeStack test fixtures (content v12 G4: armor and shield gates). Invented; no SRD or third-party rules text.",
+  "sources": [
+    {
+      "id": "7a145000-0000-4000-8000-000000001801",
+      "title": "TomeStack Fixtures: Gear Gates v12",
+      "publisher": "TomeStack project",
+      "rulesFamilies": ["srd-5.2.1"],
+      "editionVersion": "fixture-1",
+      "license": "Original test fixture",
+      "redistributable": true,
+      "attribution": "Written for TomeStack tests."
+    }
+  ],
+  "revisions": [
+    {
+      "contentId": "7a14c000-0000-4000-8000-000000001801",
+      "revisionId": "7a14e000-0000-4000-8000-000000001801",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Fixture: Bare Palm Guard",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "7a145000-0000-4000-8000-000000001801", "page": { "start": 1 } },
+      "status": "published",
+      "summary": "A test feature: Armor Class is 10 plus Dexterity and Wisdom modifiers, while no shield is used.",
+      "effects": [
+        { "type": "modifier", "id": "palm-guard", "target": "armorClass", "operation": "replace", "value": "10 + DEX.MOD + WIS.MOD", "notWearing": ["shield"] }
+      ]
+    },
+    {
+      "contentId": "7a14c000-0000-4000-8000-000000001802",
+      "revisionId": "7a14e000-0000-4000-8000-000000001802",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Fixture: Gearless Sprint",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "7a145000-0000-4000-8000-000000001801", "page": { "start": 2 } },
+      "status": "published",
+      "summary": "A test feature: Speed rises by 10 while no armor and no shield is used.",
+      "effects": [
+        { "type": "modifier", "id": "sprint-speed", "target": "speed", "operation": "bonus", "value": "10", "notWearing": ["armor", "shield"] }
+      ]
+    },
+    {
+      "contentId": "7a14c000-0000-4000-8000-000000001803",
+      "revisionId": "7a14e000-0000-4000-8000-000000001803",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Fixture: Loose Plate Stride",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "7a145000-0000-4000-8000-000000001801", "page": { "start": 3 } },
+      "status": "published",
+      "summary": "A test feature: Speed rises by 10 while no heavy armor is worn.",
+      "effects": [
+        { "type": "modifier", "id": "stride-speed", "target": "speed", "operation": "bonus", "value": "10", "notWearing": ["heavyArmor"] }
+      ]
+    },
+    {
+      "contentId": "7a14c000-0000-4000-8000-000000001811",
+      "revisionId": "7a14e000-0000-4000-8000-000000001811",
+      "schemaVersion": 4,
+      "kind": "item",
+      "name": "Fixture: Wisp Jerkin",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "7a145000-0000-4000-8000-000000001801", "page": { "start": 4 } },
+      "status": "published",
+      "summary": "Light test armor.",
+      "effects": [
+        { "type": "armor", "id": "jerkin-armor", "category": "light", "armorClass": 11, "text": "Light armor: 11 plus Dexterity modifier." }
+      ]
+    },
+    {
+      "contentId": "7a14c000-0000-4000-8000-000000001812",
+      "revisionId": "7a14e000-0000-4000-8000-000000001812",
+      "schemaVersion": 4,
+      "kind": "item",
+      "name": "Fixture: Ironbound Carapace",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "7a145000-0000-4000-8000-000000001801", "page": { "start": 5 } },
+      "status": "published",
+      "summary": "Heavy test armor.",
+      "effects": [
+        { "type": "armor", "id": "carapace-armor", "category": "heavy", "armorClass": 16, "text": "Heavy armor: 16, no Dexterity modifier." }
+      ]
+    },
+    {
+      "contentId": "7a14c000-0000-4000-8000-000000001813",
+      "revisionId": "7a14e000-0000-4000-8000-000000001813",
+      "schemaVersion": 4,
+      "kind": "item",
+      "name": "Fixture: Oak Buckler",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "7a145000-0000-4000-8000-000000001801", "page": { "start": 6 } },
+      "status": "published",
+      "summary": "A test shield.",
+      "effects": [
+        { "type": "armor", "id": "buckler-shield", "category": "shield", "armorClass": 1, "text": "Shield: +1 Armor Class." }
+      ]
+    }
+  ]
+}

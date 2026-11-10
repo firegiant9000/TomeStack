@@ -127,6 +127,54 @@ public class DownConvertV12Tests
         Assert.All(ContentValidator.Validate(result.Revision, Fixtures.M1Catalog()).Errors, e => Assert.Equal("validate.source-missing", e.Code));
     }
 
+    private const string BiteAttack = """{"type":"attack","id":"bite","attackId":"bite","label":"Bite","kind":"melee","abilities":["str"],"damage":{"count":"1","die":"6"},"damageType":"piercing"}""";
+
+    [Theory]
+    [InlineData("""{"type":"rollFloor","id":"f","target":"skill.stealth","face":12}""")]
+    [InlineData("""{"type":"rollFloor","id":"f","target":"check","total":"STR.SCORE"}""")]
+    public void RollFloor_is_dropped_whole_below_12(string floor)
+    {
+        var result = DownConvert.Below(Rev($"{BiteAttack},{floor}"), 11);
+
+        Assert.False(result.Blocked);
+        Assert.Equal(11, result.Revision.SchemaVersion);
+        Assert.IsType<AttackEffect>(Assert.Single(result.Revision.Effects));
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(BelowCodes.EffectUnsupported, change.Code);
+        Assert.Equal(BelowAction.Dropped, change.Action);
+        Assert.Equal("effects[1]", change.Path);
+        Assert.Contains("its roll floor; the feature stays as text.", change.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RollFloor_not_at_index_zero_reports_its_own_index()
+    {
+        var claw = """{"type":"attack","id":"claw","attackId":"claw","label":"Claw","kind":"melee","abilities":["str"],"damage":{"count":"1","die":"4"},"damageType":"slashing"}""";
+        var floor = """{"type":"rollFloor","id":"f","target":"check","face":10}""";
+        var result = DownConvert.Below(Rev($"{BiteAttack},{claw},{floor}"), 11);
+
+        Assert.False(result.Blocked);
+        Assert.Equal(2, result.Revision.Effects.Count);
+        Assert.All(result.Revision.Effects, e => Assert.IsType<AttackEffect>(e));
+        var change = Assert.Single(result.Changes);
+        Assert.Equal("effects[2]", change.Path);
+        Assert.Equal(BelowCodes.EffectUnsupported, change.Code);
+        Assert.Equal(BelowAction.Dropped, change.Action);
+    }
+
+    [Fact]
+    public void Lowered_copy_with_a_dropped_rollFloor_validates_at_11()
+    {
+        var floor = """{"type":"rollFloor","id":"f","target":"check","total":"STR.SCORE"}""";
+        var result = DownConvert.Below(Rev($"{BiteAttack},{floor}"), 11);
+
+        Assert.Equal(11, result.Revision.SchemaVersion);
+        Assert.IsType<AttackEffect>(Assert.Single(result.Revision.Effects));
+        Assert.Equal(BelowCodes.EffectUnsupported, Assert.Single(result.Changes).Code);
+        Assert.DoesNotContain(BelowCodes.ValidationError, result.Changes.Select(c => c.Code));
+        Assert.All(ContentValidator.Validate(result.Revision, Fixtures.M1Catalog()).Errors, e => Assert.Equal("validate.source-missing", e.Code));
+    }
+
     private const string PlainResponse = """{"type":"response","id":"soak","responseId":"soak","label":"Soak","phase":"damageReduction","amount":"1"}""";
 
     private static string ResponseWith(string extra) =>
@@ -197,6 +245,109 @@ public class DownConvertV12Tests
         Assert.Equal(11, result.Revision.SchemaVersion);
         Assert.DoesNotContain(BelowCodes.ValidationError, result.Changes.Select(c => c.Code));
         Assert.All(ContentValidator.Validate(result.Revision, Fixtures.M1Catalog()).Errors, e => Assert.Equal("validate.source-missing", e.Code));
+    }
+
+    private const string CappedBonus = """{"type":"modifier","id":"m","operation":"bonus","target":"ability.str.score","value":"2","cap":25}""";
+
+    [Fact]
+    public void Cap_is_removed_and_the_bonus_kept_below_12()
+    {
+        var result = DownConvert.Below(Rev(CappedBonus) with { Name = "Fixture: Summit Conditioning" }, 11);
+
+        Assert.False(result.Blocked);
+        var kept = Assert.IsType<ModifierEffect>(Assert.Single(result.Revision.Effects));
+        Assert.Equal(ModifierOperation.Bonus, kept.Operation);
+        Assert.Equal("ability.str.score", kept.Target);
+        Assert.Equal("2", kept.Value);
+        Assert.Null(kept.Cap);
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(BelowAction.Dropped, change.Action);
+        Assert.Equal(BelowCodes.V12Key, change.Code);
+        Assert.Equal("effects[0].cap", change.Path);
+        Assert.Equal("'Fixture: Summit Conditioning': that the increase can raise the score above 20 (up to 25); the older version stops it at 20.", change.Message);
+        Assert.DoesNotContain("\"cap\"", Written(result), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Lowered_capped_copy_validates_at_11()
+    {
+        var result = DownConvert.Below(Rev(CappedBonus), 11);
+
+        Assert.Equal(11, result.Revision.SchemaVersion);
+        Assert.DoesNotContain(BelowCodes.ValidationError, result.Changes.Select(c => c.Code));
+        Assert.All(ContentValidator.Validate(result.Revision, Fixtures.M1Catalog()).Errors, e => Assert.Equal("validate.source-missing", e.Code));
+    }
+
+    [Fact]
+    public void Modifier_without_cap_is_untouched_at_12_to_11()
+    {
+        const string plain = """{"type":"modifier","id":"m","operation":"bonus","target":"ability.str.score","value":"2"}""";
+        var result = DownConvert.Below(Rev(plain), 11);
+
+        Assert.False(result.Blocked);
+        Assert.Empty(result.Changes);
+        var kept = Assert.IsType<ModifierEffect>(Assert.Single(result.Revision.Effects));
+        Assert.Null(kept.Cap);
+        Assert.Equal("2", kept.Value);
+    }
+
+    private const string GatedBonus = """{"type":"modifier","id":"m","operation":"bonus","target":"ability.dex.score","value":"1","notWearing":["armor","shield"]}""";
+
+    [Fact]
+    public void Gear_gate_blocks_below_12()
+    {
+        var result = DownConvert.Below(Rev(GatedBonus) with { Name = "Fixture: X" }, 11);
+
+        Assert.True(result.Blocked);
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(BelowAction.Blocks, change.Action);
+        Assert.Equal("below.equipment-gate", change.Code);
+        Assert.Equal("effects[0]", change.Path);
+        Assert.Equal("'Fixture: X': it applies only while armor or a shield is not worn; the older version would apply it whatever is worn.", change.Message);
+    }
+
+    [Fact]
+    public void Gear_gate_with_cap_still_blocks()
+    {
+        const string capped = """{"type":"modifier","id":"m","operation":"bonus","target":"ability.dex.score","value":"1","cap":22,"notWearing":["armor","shield"]}""";
+        var result = DownConvert.Below(Rev(capped), 11);
+
+        Assert.True(result.Blocked);
+        Assert.Contains(result.Changes, c => c.Action == BelowAction.Blocks && c.Code == "below.equipment-gate");
+    }
+
+    [Fact]
+    public void Empty_gear_gate_message_reads_as_some_gear()
+    {
+        const string empty = """{"type":"modifier","id":"m","operation":"bonus","target":"ability.con.score","value":"1","notWearing":[]}""";
+        var result = DownConvert.Below(Rev(empty) with { Name = "Fixture: X" }, 11);
+
+        var change = Assert.Single(result.Changes);
+        Assert.Equal("below.equipment-gate", change.Code);
+        Assert.Equal("'Fixture: X': it applies only while some gear is not worn; the older version would apply it whatever is worn.", change.Message);
+    }
+
+    [Fact]
+    public void Heavy_armor_gate_message_names_heavy_armor()
+    {
+        const string heavy = """{"type":"modifier","id":"m","operation":"bonus","target":"ability.con.score","value":"1","notWearing":["heavyArmor"]}""";
+        var result = DownConvert.Below(Rev(heavy) with { Name = "Fixture: X" }, 11);
+
+        var change = Assert.Single(result.Changes);
+        Assert.Equal("below.equipment-gate", change.Code);
+        Assert.Equal("'Fixture: X': it applies only while heavy armor is not worn; the older version would apply it whatever is worn.", change.Message);
+    }
+
+    [Fact]
+    public void Modifier_without_gate_is_untouched_at_12_to_11()
+    {
+        const string plain = """{"type":"modifier","id":"m","operation":"bonus","target":"ability.dex.score","value":"1"}""";
+        var result = DownConvert.Below(Rev(plain), 11);
+
+        Assert.False(result.Blocked);
+        Assert.Empty(result.Changes);
+        var kept = Assert.IsType<ModifierEffect>(Assert.Single(result.Revision.Effects));
+        Assert.Null(kept.NotWearing);
     }
 
     private static string Mode(string target, string mode, string extra = "") =>
@@ -421,5 +572,176 @@ public class DownConvertV12Tests
         Assert.Contains(result.Changes, c => c.Code == BelowCodes.WeaponBonus && c.Path == "effects[1].bonus");
         // The item mod was removed at index 0 in the v12 step; the v11 step still reports the toggle at its original index.
         Assert.Contains(result.Changes, c => c.Code == BelowCodes.ToggleGroup && c.Path == "effects[2].group");
+    }
+
+    private static string Mod(string op, string target, string value) =>
+        $$"""{"type":"modifier","id":"m-{{op}}","operation":"{{op}}","target":"{{target}}","value":"{{value}}"}""";
+
+    [Theory]
+    [InlineData("""{"type":"checkAbility","id":"c","target":"skill.athletics","ability":"dex"}""")]
+    [InlineData("""{"type":"checkAbility","id":"c","target":"ability.str.check","ability":"dex"}""")]
+    public void CheckAbility_is_dropped_whole_below_12(string effect)
+    {
+        var result = DownConvert.Below(Rev($"{BiteAttack},{effect}"), 11);
+
+        Assert.False(result.Blocked);
+        Assert.Equal(11, result.Revision.SchemaVersion);
+        Assert.IsType<AttackEffect>(Assert.Single(result.Revision.Effects));
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(BelowCodes.EffectUnsupported, change.Code);
+        Assert.Equal(BelowAction.Dropped, change.Action);
+        Assert.Equal("effects[1]", change.Path);
+        Assert.Equal("'Compat Steady Hands': its use of another ability for a skill; the feature stays as text.", change.Message);
+    }
+
+    private static ContentRevision CalmWard(string effects) => Rev(effects) with { Name = "Fixture: Calm Ward" };
+
+    private const string CharmedImmunity = """{"type":"grant","id":"calm","grant":"conditionImmunity","condition":"charmed"}""";
+
+    [Fact]
+    public void Condition_immunity_is_dropped_whole_below_12()
+    {
+        var result = DownConvert.Below(CalmWard($"{BiteAttack},{CharmedImmunity}"), 11);
+
+        Assert.False(result.Blocked);
+        Assert.Equal(11, result.Revision.SchemaVersion);
+        Assert.IsType<AttackEffect>(Assert.Single(result.Revision.Effects));
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(BelowCodes.EffectUnsupported, change.Code);
+        Assert.Equal(BelowAction.Dropped, change.Action);
+        Assert.Equal("effects[1]", change.Path);
+        Assert.Equal("'Fixture: Calm Ward': its immunity to the charmed condition; the feature stays as text.", change.Message);
+    }
+
+    [Fact]
+    public void Toggled_condition_immunity_is_dropped_the_same_way()
+    {
+        var toggle = """{"type":"toggle","id":"fury","toggleId":"fury","label":"Fixture: Fury"}""";
+        var toggled = """{"type":"grant","id":"calm","grant":"conditionImmunity","condition":"charmed","whileToggle":{"toggleId":"fury"}}""";
+        var result = DownConvert.Below(CalmWard($"{BiteAttack},{toggle},{toggled}"), 11);
+
+        Assert.False(result.Blocked);
+        Assert.Equal(2, result.Revision.Effects.Count);
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(BelowCodes.EffectUnsupported, change.Code);
+        Assert.Equal(BelowAction.Dropped, change.Action);
+        Assert.Equal("effects[2]", change.Path);
+        Assert.Equal("'Fixture: Calm Ward': its immunity to the charmed condition; the feature stays as text.", change.Message);
+        Assert.All(ContentValidator.Validate(result.Revision, Fixtures.M1Catalog()).Errors, e => Assert.Equal("validate.source-missing", e.Code));
+    }
+
+    [Fact]
+    public void Lowered_condition_immunity_copy_validates_at_11()
+    {
+        var result = DownConvert.Below(CalmWard($"{BiteAttack},{CharmedImmunity}"), 11);
+
+        Assert.Equal(11, result.Revision.SchemaVersion);
+        Assert.DoesNotContain(BelowCodes.ValidationError, result.Changes.Select(c => c.Code));
+        Assert.All(ContentValidator.Validate(result.Revision, Fixtures.M1Catalog()).Errors, e => Assert.Equal("validate.source-missing", e.Code));
+    }
+
+    [Fact]
+    public void Damage_immunity_grant_is_untouched_at_12_to_11()
+    {
+        var resistance = """{"type":"grant","id":"ward","grant":"damageResistance","damageType":"fire"}""";
+        var result = DownConvert.Below(CalmWard($"{BiteAttack},{resistance}"), 11);
+
+        Assert.False(result.Blocked);
+        Assert.Equal(2, result.Revision.Effects.Count);
+        Assert.IsType<GrantEffect>(result.Revision.Effects[1]);
+        Assert.DoesNotContain(result.Changes, c => c.Path == "effects[1]");
+    }
+
+    [Theory]
+    [InlineData("bonus", "speed.climb", "10")]
+    [InlineData("replace", "speed.swim", "30")]
+    [InlineData("set", "speed.climb", "WALK")]
+    [InlineData("bonus", "speed.swim", "-5")]
+    public void Every_modifier_on_climb_or_swim_is_dropped_below_12(string op, string target, string value)
+    {
+        var result = DownConvert.Below(Rev($"{BiteAttack},{Mod(op, target, value)}"), 11);
+
+        Assert.False(result.Blocked);
+        Assert.IsType<AttackEffect>(Assert.Single(result.Revision.Effects));
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(BelowCodes.UnknownTarget, change.Code);
+        Assert.Equal(BelowAction.Dropped, change.Action);
+        Assert.Equal("effects[1]", change.Path);
+        Assert.Equal($"'Compat Steady Hands': its change to '{target}', which the older version has no field for; the copy has no such speed.", change.Message);
+    }
+
+    [Theory]
+    [InlineData("speed.climb")]
+    [InlineData("speed.swim")]
+    public void Restriction_on_climb_speed_blocks_below_12(string field)
+    {
+        var result = DownConvert.Below(Rev($$"""{"type":"restriction","id":"r","field":"{{field}}","maximum":20}"""), 11);
+
+        Assert.True(result.Blocked);
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(BelowCodes.RestrictionLifted, change.Code);
+        Assert.Equal(BelowAction.Blocks, change.Action);
+        Assert.Equal("effects[0]", change.Path);
+    }
+
+    [Fact]
+    public void Replace_fly_with_SPEED_is_dropped()
+    {
+        var result = DownConvert.Below(Rev(Mod("replace", "speed.fly", "SPEED")), 11);
+
+        Assert.False(result.Blocked);
+        Assert.Empty(result.Revision.Effects);
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(BelowAction.Dropped, change.Action);
+        Assert.Equal(BelowCodes.ValueFormula, change.Code);
+        Assert.Equal("effects[0]", change.Path);
+    }
+
+    [Theory]
+    [InlineData("set", "SPEED")]
+    [InlineData("bonus", "-SPEED")]
+    [InlineData("replace", "SPEED - 10")]
+    public void Set_or_negative_SPEED_on_fly_blocks(string op, string value)
+    {
+        var result = DownConvert.Below(Rev(Mod(op, "speed.fly", value)), 11);
+
+        Assert.True(result.Blocked);
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(BelowAction.Blocks, change.Action);
+        Assert.Equal(BelowCodes.ValueFormula, change.Code);
+    }
+
+    [Fact]
+    public void Bonus_fly_plus_SPEED_is_dropped()
+    {
+        var result = DownConvert.Below(Rev(Mod("bonus", "speed.fly", "SPEED + 5")), 11);
+
+        Assert.False(result.Blocked);
+        Assert.Equal(BelowAction.Dropped, Assert.Single(result.Changes).Action);
+    }
+
+    [Fact]
+    public void Lowered_copy_with_checkAbility_climb_and_SPEED_validates_at_11()
+    {
+        var effects = $"{BiteAttack},{Mod("bonus", "speed.climb", "10")},{Mod("replace", "speed.fly", "SPEED")},"
+            + """{"type":"checkAbility","id":"c","target":"skill.athletics","ability":"dex"}""";
+        var result = DownConvert.Below(Rev(effects), 11);
+
+        Assert.False(result.Blocked);
+        Assert.Equal(11, result.Revision.SchemaVersion);
+        Assert.IsType<AttackEffect>(Assert.Single(result.Revision.Effects));
+        Assert.Equal(3, result.Changes.Count);
+        Assert.DoesNotContain(BelowCodes.ValidationError, result.Changes.Select(c => c.Code));
+        Assert.All(ContentValidator.Validate(result.Revision, Fixtures.M1Catalog()).Errors, e => Assert.Equal("validate.source-missing", e.Code));
+    }
+
+    [Fact]
+    public void V11_revision_is_untouched_at_11_to_10_rung_for_these()
+    {
+        var result = DownConvert.Below(Rev(Mod("bonus", "speed.fly", "10"), 11), 10);
+
+        Assert.DoesNotContain(result.Changes, c => c.Message.Contains("climb", StringComparison.Ordinal)
+            || c.Message.Contains("swim", StringComparison.Ordinal) || c.Message.Contains("SPEED", StringComparison.Ordinal));
+        Assert.Equal(BelowCodes.UnknownTarget, Assert.Single(result.Changes).Code);
     }
 }

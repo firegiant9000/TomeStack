@@ -1,0 +1,83 @@
+{
+  "packId": "tomestack-condition-immunity-fixtures",
+  "formatVersion": 1,
+  "notice": "Original TomeStack test fixtures (content v12 G11: condition immunity). Invented; no SRD or third-party rules text.",
+  "sources": [
+    {
+      "id": "6f155000-0000-4000-8000-000000001601",
+      "title": "TomeStack Fixtures: Condition Immunity v12",
+      "publisher": "TomeStack project",
+      "rulesFamilies": ["srd-5.2.1"],
+      "editionVersion": "fixture-1",
+      "license": "Original test fixture",
+      "redistributable": true,
+      "attribution": "Written for TomeStack tests."
+    }
+  ],
+  "revisions": [
+    {
+      "contentId": "6f15c000-0000-4000-8000-000000001601",
+      "revisionId": "6f15e000-0000-4000-8000-000000001601",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Fixture: Storm Temper",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f155000-0000-4000-8000-000000001601", "page": { "start": 1 } },
+      "status": "published",
+      "summary": "A test feature: while the temper is on, immune to the charmed and frightened conditions.",
+      "effects": [
+        { "type": "toggle", "id": "tempest", "toggleId": "tempest", "label": "Storm temper" },
+        { "type": "grant", "id": "storm-charmed", "grant": "conditionImmunity", "condition": "charmed", "whileToggle": { "toggleId": "tempest" } },
+        { "type": "grant", "id": "storm-frightened", "grant": "conditionImmunity", "condition": "frightened", "whileToggle": { "toggleId": "tempest" } }
+      ]
+    },
+    {
+      "contentId": "6f15c000-0000-4000-8000-000000001602",
+      "revisionId": "6f15e000-0000-4000-8000-000000001602",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Fixture: Iron Gut",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f155000-0000-4000-8000-000000001601", "page": { "start": 2 } },
+      "status": "published",
+      "summary": "A test feature: always immune to the poisoned condition.",
+      "effects": [
+        { "type": "grant", "id": "gut-poisoned", "grant": "conditionImmunity", "condition": "poisoned" }
+      ]
+    },
+    {
+      "contentId": "6f15c000-0000-4000-8000-000000001603",
+      "revisionId": "6f15e000-0000-4000-8000-000000001603",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Fixture: Calm Under Fire",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f155000-0000-4000-8000-000000001601", "page": { "start": 3 } },
+      "status": "published",
+      "summary": "A test feature: immune to the frightened condition while the storm temper (another feature) is on.",
+      "effects": [
+        {
+          "type": "grant", "id": "calm-frightened", "grant": "conditionImmunity", "condition": "frightened",
+          "whileToggle": { "contentId": "6f15c000-0000-4000-8000-000000001601", "toggleId": "tempest" }
+        }
+      ]
+    },
+    {
+      "contentId": "6f15c000-0000-4000-8000-000000001604",
+      "revisionId": "6f15e000-0000-4000-8000-000000001604",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Fixture: Cornered Riposte",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "6f155000-0000-4000-8000-000000001601", "page": { "start": 4 } },
+      "status": "published",
+      "summary": "A test response: halve a hit that came from an attack; not while frightened.",
+      "effects": [
+        {
+          "type": "response", "id": "riposte", "responseId": "riposte", "label": "Riposte", "phase": "damageReduction",
+          "trigger": { "from": "attack" }, "share": "half", "unlessCondition": "frightened"
+        }
+      ]
+    }
+  ]
+}

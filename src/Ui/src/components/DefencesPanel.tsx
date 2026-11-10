@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import type { CharacterView, DamageDefence, DamageDefenceValue } from '../api/types';
 import { damageTypeLabel, damageTypes } from './customModel';
+import { conditionLabels } from './conditionLabels';
 import { directSave, type SheetSave } from './sheetSave';
 
 interface Props {
@@ -33,6 +34,7 @@ export function DefencesPanel({ view, onChanged, onError, saveCharacter }: Props
   const persist = saveCharacter ?? directSave(character);
   const own = character.damageDefences ?? [];
   const merged = sheet.damageDefences ?? [];
+  const immunities = sheet.conditionImmunities ?? [];
   const [type, setType] = useState<string>(damageTypes[0]);
   const [kind, setKind] = useState<DamageDefence['kind']>('resistance');
   const heading = useRef<HTMLHeadingElement>(null);
@@ -65,6 +67,19 @@ export function DefencesPanel({ view, onChanged, onError, saveCharacter }: Props
             </li>
           ))}
         </ul>
+      )}
+      {immunities.length > 0 && (
+        <>
+          <h4 id="condition-immunities-heading">Condition immunities</h4>
+          <ul aria-labelledby="condition-immunities-heading">
+            {immunities.map((i) => (
+              <li key={i.condition}>
+                <span className="option-name">{conditionLabels[i.condition] ?? i.condition}</span>
+                <span className="option-source"> ({i.sources.map((s) => s.name).join(', ')})</span>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
       <h4 id="defences-own-heading">Your own</h4>
       {own.length === 0 ? (

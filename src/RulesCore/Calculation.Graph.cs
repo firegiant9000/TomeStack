@@ -126,11 +126,11 @@ public static partial class CharacterCalculator
     }
 
     /// <summary>Kahn's algorithm; ties break by declaration order, so the order is deterministic.</summary>
-    private static List<string> TopologicalOrder(IEnumerable<Modifier> modifiers)
+    private static List<string> TopologicalOrder(IEnumerable<Modifier> modifiers, IEnumerable<(string From, string To, Modifier? Via)> extraEdges)
     {
         var incoming = Specs.ToDictionary(s => s.Id, _ => 0, StringComparer.Ordinal);
         var outgoing = Specs.ToDictionary(s => s.Id, _ => new List<string>(), StringComparer.Ordinal);
-        foreach (var (from, to, _) in Edges(modifiers))
+        foreach (var (from, to, _) in Edges(modifiers).Concat(extraEdges))
         {
             outgoing[from].Add(to);
             incoming[to]++;
