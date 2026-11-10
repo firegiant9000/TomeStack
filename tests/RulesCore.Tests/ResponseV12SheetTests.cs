@@ -57,6 +57,21 @@ public class ResponseV12SheetTests
         Assert.StartsWith("Needs 1", both.UnavailableReason);
     }
 
+    [Theory]
+    [InlineData("paralyzed")]
+    [InlineData("petrified")]
+    [InlineData("stunned")]
+    [InlineData("unconscious")]
+    public void Stunned_counts_as_incapacitated_for_response_unless(string condition)
+    {
+        var guarded = Holder(4, """{"type":"response","id":"i","responseId":"inc","label":"Inc","phase":"damageReduction","amount":"1","unlessCondition":"incapacitated"}""");
+
+        var held = Responses([guarded], [condition]).Single(r => r.ResponseId == "inc");
+
+        Assert.False(held.Available);
+        Assert.Equal("Not while incapacitated", held.UnavailableReason);
+    }
+
     [Fact]
     public void Superseded_response_is_left_off()
     {

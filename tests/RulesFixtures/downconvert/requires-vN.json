@@ -78,7 +78,18 @@
       { "feature": "response.dice", "rule": "below.effect-unsupported" },
       { "feature": "response.unlessCondition", "rule": "below.effect-unsupported" },
       { "feature": "response.supersedes", "rule": "below.effect-unsupported" },
-      { "feature": "response.automatic", "rule": "below.v12-key" }
+      { "feature": "response.automatic", "rule": "below.v12-key" },
+      { "feature": "rollMode.target:attack", "rule": "below.effect-unsupported" },
+      { "feature": "rollMode.target:initiative", "rule": "below.effect-unsupported" },
+      { "feature": "rollMode.target:attacksAgainst", "rule": "below.roll-mode-disadvantage" },
+      { "feature": "rollMode.tags", "rule": "below.effect-unsupported" },
+      { "feature": "rollMode.ability", "rule": "below.effect-unsupported" },
+      { "feature": "rollMode.unlessCondition", "rule": "below.effect-unsupported" },
+      { "feature": "rollMode.prevent", "rule": "below.effect-unsupported" },
+      { "feature": "attackRider.scaledDice", "rule": "below.effect-unsupported" },
+      { "feature": "attackRider.critical", "rule": "below.effect-unsupported" },
+      { "feature": "attackRider.oncePerTurn", "rule": "below.effect-unsupported" },
+      { "feature": "roll.scaledDice", "rule": "below.v12-key" }
     ]
   },
   "character": {

@@ -156,6 +156,12 @@ public sealed record ContentRevision : IJsonOnDeserialized
     /// <summary>G6: the response effect's trigger, share, dice, automatic, unlessCondition and supersedes members. <b>v12</b>, the same version as <see cref="WeaponBonusSchemaVersion"/>.</summary>
     public const int ResponseTriggerSchemaVersion = 12;
 
+    /// <summary>G7: the rollMode effect's attack, initiative and attacksAgainst targets, and its tags, ability, unlessCondition and prevent members. <b>v12</b>, the same version as <see cref="WeaponBonusSchemaVersion"/>.</summary>
+    public const int RollModeTargetsSchemaVersion = 12;
+
+    /// <summary>G1: the attackRider's scaledDice, critical and oncePerTurn members and the roll's scaledDice. <b>v12</b>, the same version as <see cref="WeaponBonusSchemaVersion"/>.</summary>
+    public const int ScaledDiceSchemaVersion = 12;
+
     /// <summary>The content schema version that adds <c>weapon.bonus</c> (MECH-X item 0): <b>v12</b>. A test pins that this is <see cref="PlayMechanicsSchemaVersion"/> plus one.</summary>
     public const int WeaponBonusSchemaVersion = 12;
 

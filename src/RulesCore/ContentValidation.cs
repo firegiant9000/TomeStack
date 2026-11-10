@@ -106,14 +106,34 @@ public static class ContentValidator
         effect.Raw.ValueKind == System.Text.Json.JsonValueKind.Object
         && effect.Raw.EnumerateObject().Any(p => keys.Contains(p.Name, StringComparer.OrdinalIgnoreCase));
 
+    /// <summary>What a content v12 (G7) rollMode target is called in <c>validate.requires-v12</c>; null for a v11 target.</summary>
+    private static string? RollModeTargetPhrase(string? target) => target switch
+    {
+        RollModeEffect.AttackTarget => "a rollMode on attack rolls",
+        RollModeEffect.InitiativeTarget => "a rollMode on initiative",
+        RollModeEffect.AttacksAgainstTarget => "a rollMode on attacks against you",
+        _ => null,
+    };
+
+    private static string? RollModeKeyPhrase(string key) => key.ToLowerInvariant() switch
+    {
+        "tags" => "rollMode tags",
+        "ability" => "a rollMode ability",
+        "unlesscondition" => "a rollMode unlessCondition",
+        "prevent" => "a rollMode prevent",
+        _ => null,
+    };
+
     /// <summary>
-    /// Content v11 (D43): the targets of a <c>rollMode</c>, exactly <c>save.&lt;ability&gt;</c>, <c>skill.&lt;skill&gt;</c> or
+    /// Content v11 (D43): the targets of a <c>rollMode</c>, from v12 (G7) also <c>attack</c>, <c>initiative</c> and <c>attacksAgainst</c>; otherwise exactly <c>save.&lt;ability&gt;</c>, <c>skill.&lt;skill&gt;</c> or
     /// <c>ability.&lt;ability&gt;.check</c> (the ability check is a roll target only, not a sheet field).
     /// </summary>
     internal static bool IsRollModeTarget(string? target)
     {
         if (target is null)
             return false;
+        if (RollModeEffect.IsV12Target(target))
+            return true;
         var abilities = Enum.GetValues<Ability>().Select(FieldIds.Key).ToList();
         if (target.StartsWith("save.", StringComparison.Ordinal))
             return abilities.Contains(target["save.".Length..], StringComparer.Ordinal);
@@ -275,7 +295,14 @@ public static class ContentValidator
                 case UnknownEffect { DeclaredType: ToggleEffect.TypeName or ResourceEffect.TypeName or GrantEffect.TypeName or ToggleGroupEffect.TypeName or UpkeepEffect.TypeName or AttackEffect.TypeName or AttackRiderEffect.TypeName } malformed
                     when revision.SchemaVersion >= (malformed.DeclaredType is ToggleGroupEffect.TypeName or UpkeepEffect.TypeName or AttackEffect.TypeName or AttackRiderEffect.TypeName ? ContentRevision.PlayMechanicsSchemaVersion : ContentRevision.PlayDetailsSchemaVersion):
                     // Content v12 (MECH-X item 1): a toggle or attack that carries a payment (any spelling) needs v12, whatever else is wrong.
-                    if (revision.SchemaVersion >= ContentRevision.PaymentSchemaVersion
+                    // Content v12 (G1): the same for a rider that carries scaledDice, critical or oncePerTurn.
+                    if (malformed.DeclaredType == AttackRiderEffect.TypeName && revision.SchemaVersion >= ContentRevision.ScaledDiceSchemaVersion
+                        && CarriesV11Key(malformed, AttackRiderEffect.V12Keys))
+                    {
+                        NeedV12("an attackRider with scaledDice, critical or oncePerTurn");
+                        needsV11 = true;
+                    }
+                    else if (revision.SchemaVersion >= ContentRevision.PaymentSchemaVersion
                         && ((malformed.DeclaredType == ToggleEffect.TypeName && CarriesV11Key(malformed, ToggleEffect.V12Keys))
                             || (malformed.DeclaredType == AttackEffect.TypeName && CarriesV11Key(malformed, AttackEffect.V12Keys))))
                         NeedV12("a cost payment");
@@ -296,8 +323,8 @@ public static class ContentValidator
                 case UnknownEffect { DeclaredType: RollEffect.TypeName or SpellEffect.TypeName } unreadableV12
                     when revision.SchemaVersion >= ContentRevision.PaymentSchemaVersion
                         && CarriesV11Key(unreadableV12, unreadableV12.DeclaredType == RollEffect.TypeName ? RollEffect.V12Keys : SpellEffect.V12Keys):
-                    NeedV12(unreadableV12.DeclaredType == RollEffect.TypeName ? "a cost payment" : "spell tags");
-                    Error("validate.effect-malformed", $"Effect '{unreadableV12.Id}' has type '{unreadableV12.DeclaredType}' but a value or field that does not read (a payment needs a kind of resource, hitPoints or slot; castsSpell is a content id; tags are a list of keys; or a missing field); fix it before publishing.", unreadableV12.Id);
+                    NeedV12(unreadableV12.DeclaredType == RollEffect.TypeName ? "a roll with a payment, castsSpell or scaledDice" : "spell tags");
+                    Error("validate.effect-malformed", $"Effect '{unreadableV12.Id}' has type '{unreadableV12.DeclaredType}' but a value or field that does not read (a payment needs a kind of resource, hitPoints or slot; castsSpell is a content id; scaledDice needs a count and a die, both formulas; tags are a list of keys; or a missing field); fix it before publishing.", unreadableV12.Id);
                     break;
                 // Content v11 (D43): a modifier or roll whose v11 key does not read (toggleContent that is not an id, a whileToggle
                 // without a toggleId). Published at a lower version it would read back as a modifier or roll that ignores the key and
@@ -319,7 +346,27 @@ public static class ContentValidator
                 // would be an unsupported effect, so it blocks.
                 case UnknownEffect { DeclaredType: RollModeEffect.TypeName } unknownMode when revision.SchemaVersion >= RollModeEffect.SchemaVersion:
                     needsV11 = true;
-                    Error("validate.effect-malformed", $"Effect '{unknownMode.Id}' has type '{unknownMode.DeclaredType}' but a value or field that does not read (its mode must be advantage or disadvantage; it needs a target; against is a list of condition keys; toggleContent is an id); fix it before publishing.", unknownMode.Id);
+                    var v12TargetBelow = false;
+                    if (unknownMode.Raw.ValueKind == System.Text.Json.JsonValueKind.Object)
+                    {
+                        foreach (var p in unknownMode.Raw.EnumerateObject())
+                        {
+                            // Below v12 a v12 target stays untyped (it needs v12); from v12 an unreadable one carrying a v12 key mirrors the response rung.
+                            if (revision.SchemaVersion < ContentRevision.RollModeTargetsSchemaVersion
+                                && string.Equals(p.Name, "target", StringComparison.OrdinalIgnoreCase)
+                                && p.Value.ValueKind == System.Text.Json.JsonValueKind.String
+                                && RollModeTargetPhrase(p.Value.GetString()) is { } phrase)
+                            {
+                                NeedV12(phrase);
+                                v12TargetBelow = true;
+                                break;
+                            }
+                            if (revision.SchemaVersion >= ContentRevision.RollModeTargetsSchemaVersion && RollModeKeyPhrase(p.Name) is { } keyPhrase)
+                                NeedV12(keyPhrase);
+                        }
+                    }
+                    if (!v12TargetBelow)
+                        Error("validate.effect-malformed", $"Effect '{unknownMode.Id}' has type '{unknownMode.DeclaredType}' but a value or field that does not read (its mode must be advantage or disadvantage; it needs a target; against is a list of condition keys; toggleContent is an id); fix it before publishing.", unknownMode.Id);
                     break;
                 // Content v11 (D43): from v11 a response is typed; one that stays unknown did not match the shape (a phase or an outcome
                 // kind that names no member, no responseId, label or phase, a toggle or content that is not an id), so the response would
@@ -587,9 +634,44 @@ public static class ContentValidator
                 case RollModeEffect rollMode:
                     needsV11 = true;
                     if (!IsRollModeTarget(rollMode.Target))
-                        Error("validate.roll-mode-target", $"Roll mode '{rollMode.Id}' targets '{rollMode.Target}'; use save.<ability> (such as save.dex), skill.<skill> (such as skill.stealth) or ability.<ability>.check (such as ability.str.check).", rollMode.Id);
+                        Error("validate.roll-mode-target", $"Roll mode '{rollMode.Id}' targets '{rollMode.Target}'; use save.<ability> (such as save.dex), skill.<skill> (such as skill.stealth), ability.<ability>.check (such as ability.str.check), attack, initiative or attacksAgainst.", rollMode.Id);
+                    if (RollModeTargetPhrase(rollMode.Target) is { } targetPhrase)
+                        NeedV12(targetPhrase);
                     if (rollMode.Mode == RollMode.Normal)
                         Error("validate.roll-mode-mode", $"Roll mode '{rollMode.Id}' has mode normal, which changes nothing; use advantage or disadvantage.", rollMode.Id);
+                    // Content v12 (G7): tags, ability, unlessCondition and prevent.
+                    if (rollMode.Tags is { } modeTags)
+                    {
+                        NeedV12("rollMode tags");
+                        if (rollMode.Target != RollModeEffect.AttackTarget)
+                            Error("validate.roll-mode-tags", $"Roll mode '{rollMode.Id}' has tags but targets '{rollMode.Target}'; tags go only with the attack target.", rollMode.Id);
+                        else if (modeTags.Count == 0 || modeTags.Any(string.IsNullOrWhiteSpace) || modeTags.Distinct(StringComparer.Ordinal).Count() != modeTags.Count)
+                            Error("validate.roll-mode-tags", $"Roll mode '{rollMode.Id}' needs at least one tag, each non-empty and listed once.", rollMode.Id);
+                    }
+                    else if (rollMode.Target == RollModeEffect.AttackTarget)
+                    {
+                        Error("validate.roll-mode-tags", $"Roll mode '{rollMode.Id}' targets attack and needs tags (use all for every attack).", rollMode.Id);
+                    }
+                    if (rollMode.Ability is not null)
+                    {
+                        NeedV12("a rollMode ability");
+                        if (rollMode.Target != RollModeEffect.AttackTarget)
+                            Error("validate.roll-mode-ability", $"Roll mode '{rollMode.Id}' has an ability but targets '{rollMode.Target}'; an ability goes only with the attack target.", rollMode.Id);
+                    }
+                    if (rollMode.UnlessCondition is { } unlessCondition)
+                    {
+                        NeedV12("a rollMode unlessCondition");
+                        if (!ConditionKeys.All.Contains(unlessCondition))
+                            Error("validate.roll-mode-condition", $"Roll mode '{rollMode.Id}' has unlessCondition '{unlessCondition}', which is not a condition key ({string.Join(", ", ConditionKeys.All)}).", rollMode.Id);
+                    }
+                    if (rollMode.Prevent is not null)
+                    {
+                        NeedV12("a rollMode prevent");
+                        if (rollMode.Target != RollModeEffect.AttacksAgainstTarget)
+                            Error("validate.roll-mode-prevent", $"Roll mode '{rollMode.Id}' has prevent but targets '{rollMode.Target}'; prevent goes only with the attacksAgainst target.", rollMode.Id);
+                    }
+                    if (rollMode.Against is not null && rollMode.Target is RollModeEffect.InitiativeTarget or RollModeEffect.AttacksAgainstTarget)
+                        Error("validate.roll-mode-against", $"Roll mode '{rollMode.Id}' targets '{rollMode.Target}', which takes no against list; remove it.", rollMode.Id);
                     if (rollMode.Against is { } against)
                     {
                         if (against.Count == 0)
@@ -628,11 +710,20 @@ public static class ContentValidator
                     break;
                 case RollEffect roll:
                     // Content v11 (D43): a roll may have no dice at all (an action that only spends a cost); it then needs a cost.
-                    if (roll.Dice is null)
+                    if (roll.ScaledDice is { } rollScaled)
+                    {
+                        NeedV12("roll scaledDice");
+                        CheckScaledDice(roll.Id, "Roll", rollScaled, true, roll.Dice is not null);
+                    }
+                    if (roll.Dice is null && roll.ScaledDice is not null)
+                    {
+                        // The dice come from the formulas (content v12).
+                    }
+                    else if (roll.Dice is null)
                     {
                         needsV11 = true;
                         // A roll that casts a spell needs no dice or cost of its own: its dice come from the spell (content v12).
-                        if (roll.Cost is null && roll.CastsSpell is null)
+                        if (!RollEffect.DoesSomethingInV11(false, roll.Cost is not null, roll.CastsSpell is not null))
                             Error("validate.roll-dice-or-cost", $"Roll '{roll.Id}' has neither dice nor a cost, so it does nothing; add dice or a cost.", roll.Id);
                     }
                     else if (!DiceExpression.TryParse(roll.Dice, out _, out var diceError))
@@ -1411,12 +1502,71 @@ public static class ContentValidator
                 CheckToggleReference(whileToggle.ContentId, whileToggle.ToggleId, id, "validate.while-toggle-unknown");
         }
 
+        // Content v12 (G1): a scaledDice's count and die. Formulas go through CheckFormula (so identifiers are gated per version);
+        // a constant count or die is also checked against the limits the evaluator enforces (Decision 2).
+        void CheckScaledDice(string id, string what, ScaledDice scaled, bool dieRequired, bool hasDice)
+        {
+            if (string.IsNullOrWhiteSpace(scaled.Count))
+                Error("validate.scaled-dice", $"{what} '{id}' scaledDice needs a count formula.", id);
+            else
+            {
+                CheckFormula(scaled.Count, id, "scaledDice count");
+                if (int.TryParse(scaled.Count, System.Globalization.NumberStyles.AllowLeadingSign, System.Globalization.CultureInfo.InvariantCulture, out var constantCount)
+                    && constantCount is < 0 or > DiceLimits.MaxDice)
+                    Error("validate.scaled-dice", $"{what} '{id}' scaledDice count {constantCount} must be 0 to {DiceLimits.MaxDice}.", id);
+            }
+            if (scaled.Die is null)
+            {
+                if (dieRequired)
+                    Error("validate.scaled-dice", $"{what} '{id}' scaledDice needs a die formula.", id);
+            }
+            else if (string.IsNullOrWhiteSpace(scaled.Die))
+            {
+                Error("validate.scaled-dice", $"{what} '{id}' scaledDice has an empty die formula.", id);
+            }
+            else
+            {
+                CheckFormula(scaled.Die, id, "scaledDice die");
+                if (int.TryParse(scaled.Die, System.Globalization.NumberStyles.AllowLeadingSign, System.Globalization.CultureInfo.InvariantCulture, out var constantDie)
+                    && !AttackRiderEffect.AllowedDice.Contains(constantDie))
+                    Error("validate.scaled-dice", $"{what} '{id}' scaledDice die {constantDie} must be one of {string.Join(", ", AttackRiderEffect.AllowedDice)}.", id);
+            }
+            if (hasDice)
+                Error("validate.scaled-dice", $"{what} '{id}' has both dice and scaledDice; use one.", id);
+        }
+
         // Content v11 (D43): a rider's shape, dice, formulas, damage type and toggle.
         void CheckRider(AttackRiderEffect rider)
         {
             var id = rider.Id;
-            if (rider.Tags.Count == 0 || (string.IsNullOrWhiteSpace(rider.ToHit) && string.IsNullOrWhiteSpace(rider.Dice) && string.IsNullOrWhiteSpace(rider.DamageBonus)))
-                Error("validate.rider-incomplete", $"Rider '{id}' needs at least one tag and at least one of toHit, dice or damageBonus.", id);
+            if (rider.Tags.Count == 0 || (string.IsNullOrWhiteSpace(rider.ToHit) && string.IsNullOrWhiteSpace(rider.Dice) && rider.ScaledDice is null && string.IsNullOrWhiteSpace(rider.DamageBonus)))
+                Error("validate.rider-incomplete", $"Rider '{id}' needs at least one tag and at least one of toHit, dice, scaledDice or damageBonus.", id);
+            // Content v12 (G1): scaledDice, critical and oncePerTurn.
+            if (rider.ScaledDice is { } scaled)
+            {
+                NeedV12("attackRider scaledDice");
+                CheckScaledDice(id, "Rider", scaled, false, rider.Dice is not null);
+                if (scaled.Die is null && !string.IsNullOrWhiteSpace(rider.StackGroup))
+                    Error("validate.scaled-dice", $"Rider '{id}' has a stackGroup and a scaledDice with no die; the groups compare dice, so name a die.", id);
+            }
+            var hasRiderDice = !string.IsNullOrWhiteSpace(rider.Dice) || rider.ScaledDice is not null;
+            if (rider.Critical is { } critical)
+            {
+                NeedV12("a critical-only attackRider");
+                if (critical)
+                {
+                    if (!hasRiderDice || !string.IsNullOrWhiteSpace(rider.ToHit) || !string.IsNullOrWhiteSpace(rider.DamageBonus)
+                        || !string.IsNullOrWhiteSpace(rider.StackGroup) || rider.OncePerTurn == true)
+                        Error("validate.rider-critical", $"Rider '{id}' is critical-only: it needs dice or scaledDice, and cannot have toHit, damageBonus, a stackGroup or oncePerTurn.", id);
+                }
+            }
+            if (rider.OncePerTurn is { } oncePerTurn)
+            {
+                NeedV12("a once-per-turn attackRider");
+                if (oncePerTurn && (!hasRiderDice || !string.IsNullOrWhiteSpace(rider.ToHit) || !string.IsNullOrWhiteSpace(rider.DamageBonus)
+                    || !string.IsNullOrWhiteSpace(rider.StackGroup)))
+                    Error("validate.rider-once-per-turn", $"Rider '{id}' is once-per-turn: it needs dice or scaledDice, and cannot have toHit, damageBonus or a stackGroup.", id);
+            }
             CheckTags(rider.Tags, id);
             if (rider.Dice is { } dice && !AttackRiderEffect.TryParseDice(dice, out _, out _))
                 Error("validate.rider-dice", $"Rider '{id}' dice '{dice}' must be a count and a die such as 3d8 (1 to {DiceLimits.MaxDice} dice of d4, d6, d8, d10 or d12).", id);

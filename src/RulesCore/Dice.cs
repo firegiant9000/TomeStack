@@ -198,13 +198,18 @@ public sealed record RollProvenance(
 /// Item 2, D32: keep this many highest dice of the single die term (4d6 drop lowest); the dropped dice are recorded
 /// with Kept = false.
 /// </param>
+/// <param name="Undoubled">
+/// Content v12 (G1): a dice expression rolled as written after the formula's own dice, never doubled by a critical hit (a critical-only
+/// rider's dice). Its dice are recorded with FromCritical = true. Null: nothing is added.
+/// </param>
 public sealed record RollRequest(
     string Formula,
     RollMode Mode = RollMode.Normal,
     bool Critical = false,
     IReadOnlyList<RollModifier>? Modifiers = null,
     RollProvenance? Provenance = null,
-    int? KeepHighest = null);
+    int? KeepHighest = null,
+    string? Undoubled = null);
 
 /// <param name="Term">Index of the expression term the die belongs to.</param>
 /// <param name="Kept">False for a die that does not count: dropped by advantage/disadvantage or by KeepHighest.</param>
@@ -330,6 +335,29 @@ public static class DiceRoller
                 dice.Add(new(t, term.Sides, values[d], kept[d], FromCritical: d >= term.Count));
                 if (kept[d])
                     diceTotal += term.Sign * values[d];
+            }
+        }
+
+        if (request.Undoubled is { } undoubled)
+        {
+            if (!DiceExpression.TryParse(undoubled, out var extra, out error))
+                return false;
+            var offset = expression.Terms.Count;
+            for (var t = 0; t < extra!.Terms.Count; t++)
+            {
+                var term = extra.Terms[t];
+                if (!term.IsDice)
+                {
+                    constant += term.Sign * term.Constant;
+                    continue;
+                }
+                // Rolled once, as written; the player's mode does not apply to added dice.
+                for (var d = 0; d < term.Count; d++)
+                {
+                    var value = random.Next(term.Sides);
+                    dice.Add(new(offset + t, term.Sides, value, true, FromCritical: true));
+                    diceTotal += term.Sign * value;
+                }
             }
         }
 

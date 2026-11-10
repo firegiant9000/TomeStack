@@ -37,12 +37,20 @@ public static class CapabilityRegistry
         new(UpkeepEffect.TypeName, null, AutomationStatus.Automatic, "Previewed and confirmed by a turn command, never applied by calculation", "UpkeepContentTests"),
         new(AttackEffect.TypeName, null, AutomationStatus.Automatic, "To hit and damage calculate for the character", "FeatureAttackTests"),
         new(AttackRiderEffect.TypeName, null, AutomationStatus.Automatic, "Adds to the attacks that carry its tags", "FeatureAttackContentTests"),
+        new(AttackRiderEffect.TypeName, "scaledDice", AutomationStatus.Automatic, "The dice count is calculated from a formula for the character", "ScaledDiceV12SheetTests"),
+        new(AttackRiderEffect.TypeName, "critical", AutomationStatus.Automatic, "Its dice are added when the player marks the damage roll as a critical hit, rolled once", "ScaledDiceV12ServiceTests"),
+        new(AttackRiderEffect.TypeName, "oncePerTurn", AutomationStatus.Assisted, "Offered on each damage roll; the player adds it and decides when it applies", "ScaledDiceV12ServiceTests"),
         new(ChoiceEffect.TypeName, null, AutomationStatus.Automatic, "Picked by the player; the selection applies", "ChoiceTests"),
         new(RestrictionEffect.TypeName, null, AutomationStatus.Automatic, "A prerequisite the calculator validates", "RestrictionTests"),
         new(RecoveryEffect.TypeName, null, AutomationStatus.Automatic, "Previewed and confirmed by a rest command", "RestPlannerTests"),
         new(RollEffect.TypeName, null, AutomationStatus.Automatic, "Rolled by the sheet; a named resource is spent by the action command", "ChargingContentTests"),
+        new(RollEffect.TypeName, "scaledDice", AutomationStatus.Automatic, "The dice count is calculated from a formula for the character", "ScaledDiceV12ServiceTests"),
         new(ValueEffect.TypeName, null, AutomationStatus.Automatic, "A named formula other formulas read", "NamedValueTests"),
-        new(RollModeEffect.TypeName, null, AutomationStatus.Automatic, "Advantage or disadvantage on a save, skill or ability check", "RollModeTests"),
+        new(RollModeEffect.TypeName, null, AutomationStatus.Automatic, "Advantage or disadvantage on a save, skill, ability check, initiative, attack roll, or attacks against you", "RollModeTests"),
+        new(RollModeEffect.TypeName, "tags", AutomationStatus.Automatic, "Limits an attack roll mode to the attacks that carry one of its tags", "RollModeV12SheetTests"),
+        new(RollModeEffect.TypeName, "ability", AutomationStatus.Automatic, "Limits an attack roll mode to attacks made with that ability", "RollModeV12SheetTests"),
+        new(RollModeEffect.TypeName, "unlessCondition", AutomationStatus.Automatic, "Left out while the character has the condition", "RollModeV12SheetTests"),
+        new(RollModeEffect.TypeName, "prevent", AutomationStatus.Automatic, "Attacks against the character can't have the mode", "RollModeV12SheetTests"),
         new(RollModeEffect.TypeName, "against", AutomationStatus.Assisted, "Listed with its conditions; the player applies it and it never changes the automatic mode", "RollModeTests"),
         new(ResponseEffect.TypeName, null, AutomationStatus.Automatic, "Offered when damage is taken; the player chooses it and the outcomes apply", "DamageResponseTests"),
         new(ToggleEffect.TypeName, null, AutomationStatus.Automatic, "Gates its own effects", "ToggleAndCostTests"),
@@ -114,6 +122,7 @@ public static class CapabilityRegistry
         var property = Members.GetOrAdd((effect.GetType(), field), key =>
             key.Type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
                 .FirstOrDefault(p => string.Equals(JsonNamingPolicy.CamelCase.ConvertName(p.Name), key.Field, StringComparison.Ordinal)));
-        return property?.GetValue(effect) is not null;
+        // An explicit false (oncePerTurn, critical) is the same as the member being absent: the calculator treats it so.
+        return property?.GetValue(effect) is not (null or false);
     }
 }

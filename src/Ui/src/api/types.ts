@@ -266,12 +266,21 @@ export interface RollModeReason {
   against?: string[];
   /** True when the service applies this reason by itself (an automatic effect with no `against`). */
   automatic: boolean;
+  /** Content v12 (G7): on an `attacksAgainst` reason, attacks against the character can't have `mode`. */
+  prevent?: boolean;
 }
 
 /** The mode the sheet calculates for a field, and every reason listed for it. */
 export interface RollModeSummary {
   automatic: RollMode;
   reasons: RollModeReason[];
+}
+
+/** Content v12 (G7): one attack-mode effect in play, with the tags (and ability) it matches. */
+export interface AttackModeValue {
+  reason: RollModeReason;
+  tags: string[];
+  ability?: Ability;
 }
 
 export type RestPeriod = 'shortRest' | 'longRest';
@@ -471,6 +480,12 @@ export interface RiderValue {
   toHit: number;
   damageBonus: number;
   damageType?: string;
+  /** Content v12 (G1): the dice are added only on a critical damage roll, and are not in the attack's damage. Omitted when false. */
+  critical?: boolean;
+  /** Content v12 (G1): offered on each damage roll for the player to add (`RollTarget.withRiders`); not in the attack's damage. Omitted when false. */
+  oncePerTurn?: boolean;
+  /** Content v12 (G1): the dice for a two-handed roll, only when they differ from `dice`. */
+  versatileDice?: string;
 }
 
 /** SPEC C-02, C-04: an attack with an equipped weapon, or (D43) an attack a feature gives. */
@@ -499,6 +514,8 @@ export interface AttackEntry {
   /** MECH-X item 3: the position of the equipment entry, set only when the weapon is carried as several copies (one row per copy). */
   entryIndex?: number;
   tags?: string[] | null;
+  /** Content v12 (G7): the automatic roll mode of this attack; absent when none, and on a companion attack. */
+  mode?: RollModeSummary;
   /** The attack can stand in for one attack of the Attack action. */
   replacesAttack: boolean;
   riders?: RiderValue[] | null;
@@ -602,6 +619,10 @@ export interface CharacterSheet {
   spellSlots?: SlotValue[];
   pactSlots?: SlotValue;
   attacks?: AttackEntry[];
+  /** Content v12 (G7): the attack-mode effects in play, with the tags (and ability) each matches; absent when none. */
+  attackModes?: AttackModeValue[];
+  /** Content v12 (G7): how attacks against the character roll (`automatic` already applies a prevent); absent when no reason. */
+  attacksAgainst?: RollModeSummary;
   toggles?: ToggleValue[];
   /** Content v11 (D43): the upkeeps the active content declares, for the turn panel and the combat strip; absent when there are none. */
   upkeeps?: UpkeepValue[];
@@ -1068,6 +1089,8 @@ export interface RollTarget {
   entryIndex?: number;
   damage?: boolean;
   versatile?: boolean;
+  /** Content v12 (G1): with a weapon or feature-attack `damage` roll, the once-per-turn riders of that attack the player adds. */
+  withRiders?: { content: ContentReference; effectId: string }[];
   /** One of the character's own hand-typed attacks (`character.customAttacks`): its attack roll, or its damage (`damage`). */
   customAttack?: string;
   /** The entry key of an item whose `regain` dice to roll for its charges (Wave 3 item 25). */
@@ -1934,6 +1957,13 @@ export type Effect =
       against?: string[];
       toggle?: string;
       toggleContent?: string;
+      /** Content v12 (G7): `attack` only: the attack's tags ('all' or any tag) and, optionally, the ability it must use. */
+      tags?: string[];
+      ability?: Ability;
+      /** Content v12 (G7): any target: left out while the character has this condition. */
+      unlessCondition?: string;
+      /** Content v12 (G7): `attacksAgainst` only: attacks against the character can't have `mode`. */
+      prevent?: boolean;
     })
   // Content v11 (D43 S7): a damage-time response. `amount` belongs to a damageReduction or hitPointOutcome response, `when` to a threshold one.
   | (EffectBase & {
@@ -1982,6 +2012,8 @@ export type Effect =
       label: string;
       /** Content v11: a roll may have no dice (an action that only spends a cost); every earlier version requires them. */
       dice?: string;
+      /** Content v12 (G1): dice by formula (`die` required on a roll). Exclusive with `dice`. */
+      scaledDice?: { count: string; die: string };
       resourceId?: string;
       /** Content v5: where the action is listed; absent: "Other". */
       activation?: Activation;
@@ -2039,6 +2071,10 @@ export type Effect =
       tags: string[];
       toHit?: string;
       dice?: string;
+      /** Content v12 (G1): dice by formula; without `die` the attack's own die. Exclusive with `dice`. */
+      scaledDice?: { count: string; die?: string };
+      critical?: boolean;
+      oncePerTurn?: boolean;
       damageBonus?: string;
       damageType?: string;
       toggle?: string;

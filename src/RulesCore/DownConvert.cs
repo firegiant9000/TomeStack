@@ -546,6 +546,28 @@ public static class DownConvert
                         }
                         RemoveKey(effect, "automatic", path, BelowAction.Dropped, BelowCodes.V12Key, $"'{name}': that the response applies itself.", changes);
                         break;
+                    case RollModeEffect.TypeName:
+                        var rollTarget = StringOf(Property(effect, "target"));
+                        var v12Keys = RollModeEffect.V12Keys.Where(k => Member(effect, k) is not null).ToList();
+                        var v12Target = RollModeEffect.IsV12Target(rollTarget);
+                        if (!v12Target && v12Keys is ["prevent"] && Member(effect, "prevent") is JsonValue { } lone
+                            && lone.TryGetValue<bool>(out var lonePrevent) && !lonePrevent)
+                        {
+                            RemoveKey(effect, "prevent", path, BelowAction.Dropped, BelowCodes.V12Key, $"'{name}': that the mode prevents nothing, which says no more than leaving it out.", changes);
+                            break;
+                        }
+                        if (!v12Target && v12Keys.Count == 0)
+                            break;
+                        // Never silently stronger: a mode that helps is dropped (weaker); one that hinders would be left out by the older
+                        // version, which makes the copy stronger, so it blocks.
+                        var advantage = string.Equals(StringOf(Property(effect, "mode")), "advantage", StringComparison.OrdinalIgnoreCase);
+                        var preventTrue = Member(effect, "prevent") is JsonValue pv && pv.TryGetValue<bool>(out var pb) && pb;
+                        // Against the character, a prevent turns the mode around: preventing disadvantage hinders, preventing advantage helps.
+                        var helps = rollTarget == RollModeEffect.AttacksAgainstTarget ? advantage == preventTrue : advantage;
+                        changes.Add(helps
+                            ? new(path, BelowAction.Dropped, BelowCodes.EffectUnsupported, $"'{name}': a roll mode the older version cannot hold (a v12 target or member); the feature stays as text.")
+                            : new(path, BelowAction.Blocks, BelowCodes.RollModeDisadvantage, $"'{name}': a mode that hinders the character; the older version would leave it out."));
+                        continue;
                     case WeaponEffect.TypeName:
                         RemoveKey(effect, "bonus", path, BelowAction.Dropped, BelowCodes.WeaponBonus, $"'{name}': the weapon's bonus to hit and damage.", changes);
                         break;
@@ -555,7 +577,31 @@ public static class DownConvert
                     case ChoiceEffect.TypeName:
                         RemoveKey(effect, "replaceable", path, BelowAction.Dropped, BelowCodes.V12Key, $"'{name}': when a choice may be replaced.", changes);
                         break;
+                    case AttackRiderEffect.TypeName:
+                        // A rider kept without the flag would be stronger (always on, every attack, no scaling), so it is dropped whole.
+                        if (AttackRiderEffect.V12Keys.Any(k => Member(effect, k) is not null))
+                        {
+                            // Dropping a rider that also lowers the attack (a toHit or damageBonus that can be negative) would make the copy stronger.
+                            if (CanLowerAttack("toHit") || CanLowerAttack("damageBonus"))
+                            {
+                                changes.Add(new(path, BelowAction.Blocks, BelowCodes.EffectUnsupported, $"'{name}': a rider with scaled dice, a critical-only or a once-per-turn flag that also lowers the attack; leaving it out would make the older version stronger."));
+                                continue;
+                            }
+                            changes.Add(new(path, BelowAction.Dropped, BelowCodes.EffectUnsupported, $"'{name}': a rider with scaled dice, a critical-only or a once-per-turn flag, which the older version would apply without them."));
+                            continue;
+
+                            bool CanLowerAttack(string key) => Member(effect, key) is not null && !StaticallyNonNegative(StringOf(Member(effect, key)), scope);
+                        }
+                        break;
                     case RollEffect.TypeName:
+                        // A roll whose only payload is the scaled dice would do nothing (v11 refuses it): drop it whole, as weaker.
+                        if (Member(effect, "scaledDice") is not null
+                            && !RollEffect.DoesSomethingInV11(Member(effect, "dice") is not null, Member(effect, "cost") is not null, Member(effect, "castsSpell") is not null))
+                        {
+                            changes.Add(new(path, BelowAction.Dropped, BelowCodes.EffectUnsupported, $"'{name}': a roll whose only dice were scaled, which the older version cannot compute and would refuse as a roll that does nothing."));
+                            continue;
+                        }
+                        RemoveKey(effect, "scaledDice", path, BelowAction.Dropped, BelowCodes.V12Key, $"'{name}': the roll's dice count, which the older version cannot compute; the roll keeps its other parts.", changes);
                         PaymentBelow(effect, path, name, "a roll", changes);
                         RemoveKey(effect, "castsSpell", path, BelowAction.Blocks, BelowCodes.CastsSpell, $"'{name}': the spell a roll casts; the older version would leave the spell out.", changes);
                         break;

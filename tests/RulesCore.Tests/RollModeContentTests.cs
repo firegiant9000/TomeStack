@@ -80,7 +80,6 @@ public class RollModeContentTests
     // ---- validation -------------------------------------------------------------------------------------------------------
 
     [Theory]
-    [InlineData("""{"type":"rollMode","id":"m","target":"initiative","mode":"advantage"}""", "validate.roll-mode-target")]
     [InlineData("""{"type":"rollMode","id":"m","target":"ability.dex.mod","mode":"advantage"}""", "validate.roll-mode-target")]
     [InlineData("""{"type":"rollMode","id":"m","target":"ability.dex.score","mode":"advantage"}""", "validate.roll-mode-target")]
     [InlineData("""{"type":"rollMode","id":"m","target":"skill.nonesuch","mode":"advantage"}""", "validate.roll-mode-target")]
