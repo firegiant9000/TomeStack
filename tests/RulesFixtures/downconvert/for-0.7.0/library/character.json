@@ -28,6 +28,9 @@
   "overrides": [],
   "details": { "backstory": "Compat backstory." },
   "play": {
+    "toggles": [
+      { "contentId": "c1070000-0000-4000-8000-0000000000c1", "toggleId": "surge", "roundsLeft": 3 }
+    ],
     "companions": [
       { "id": "c1070000-0000-4000-8000-0000000000b1", "current": 5, "temporary": 0, "contentId": "c1070000-0000-4000-8000-0000000000c9" }
     ]

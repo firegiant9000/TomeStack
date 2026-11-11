@@ -1,6 +1,6 @@
 {
   "id": "c1070000-0000-4000-8000-0000000000a1",
-  "schemaVersion": 9,
+  "schemaVersion": 10,
   "name": "Compat Hero",
   "rulesFamily": "srd-5.1",
   "level": 1,
@@ -65,7 +65,13 @@
     "inspiration": false,
     "spellSlotsSpent": [],
     "pactSlotsSpent": 0,
-    "toggles": []
+    "toggles": [
+      {
+        "contentId": "c1070000-0000-4000-8000-0000000000c1",
+        "toggleId": "surge",
+        "roundsLeft": 3
+      }
+    ]
   },
   "equipment": [
     {
