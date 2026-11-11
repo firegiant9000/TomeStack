@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 // Item 2: the studio can open on a given source (from the import review), and then names itself by taking focus.
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render as renderPlain, screen, waitFor, within } from '@testing-library/react';
+import type { ReactElement, ReactNode } from 'react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { client } from '../api/client';
 import type { AppInfo, SourceRecord, StudioEntry } from '../api/types';
+import { RulesLabelProvider } from '../rulesLabel';
 import { expectNoAxeViolations } from '../test/axe';
 import { HomebrewStudio } from './HomebrewStudio';
 import { fill } from '../test/fill';
@@ -13,7 +15,10 @@ vi.mock('../api/client', () => ({
   client: { listSources: vi.fn(), contentBySource: vi.fn(), publishManyPreview: vi.fn(), createHomebrewSource: vi.fn(), previewFormula: vi.fn(), listCharacters: vi.fn(), validateRevision: vi.fn(), contentDuplicates: vi.fn() },
 }));
 
-const info = { rulesFamilies: [{ id: 'srd-5.1', displayName: 'SRD 5.1' }] } as unknown as AppInfo;
+const info = { rulesFamilies: [{ id: 'srd-5.1', displayName: 'SRD 5.1', shortLabel: '2014 rules' }] } as unknown as AppInfo;
+// The app renders everything inside RulesLabelProvider, so the player sees the short label, not the id.
+const Labels = ({ children }: { children: ReactNode }) => <RulesLabelProvider families={info.rulesFamilies}>{children}</RulesLabelProvider>;
+const render = (ui: ReactElement) => renderPlain(ui, { wrapper: Labels });
 const homebrew = (id: string, title: string) => ({ id, title, rulesFamilies: ['srd-5.1'], editionVersion: 'homebrew' }) as SourceRecord;
 
 beforeEach(() => {
@@ -133,7 +138,7 @@ it('creating a new source closes the open publish panel and drops the old rows',
   vi.mocked(client.createHomebrewSource).mockResolvedValue(homebrew('c', 'Testy Gamma'));
   vi.mocked(client.listSources).mockResolvedValue([homebrew('a', 'Testy Alpha'), homebrew('b', 'Testy Beta'), homebrew('c', 'Testy Gamma')]);
   await fill(user, screen.getByLabelText('Source title'), 'Testy Gamma');
-  await user.click(screen.getByRole('checkbox', { name: 'SRD 5.1' }));
+  await user.click(screen.getByRole('checkbox', { name: '2014 rules' }));
   await user.click(screen.getByRole('button', { name: 'Create source' }));
 
   await waitFor(() => expect(client.contentBySource).toHaveBeenCalledWith('c'));

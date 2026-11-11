@@ -17,8 +17,8 @@ vi.mock('../api/client', () => ({ client: { saveDraft: vi.fn() } }));
 
 const info = {
   rulesFamilies: [
-    { id: 'srd-5.1', displayName: 'Fixture Older Rules', abilityIncreaseSource: 'species', backgroundGrantsFeat: false },
-    { id: 'srd-5.2.1', displayName: 'Fixture Newer Rules', abilityIncreaseSource: 'background', backgroundGrantsFeat: true },
+    { id: 'srd-5.1', displayName: 'Fixture Older Rules', shortLabel: 'Fixture older rules', abilityIncreaseSource: 'species', backgroundGrantsFeat: false },
+    { id: 'srd-5.2.1', displayName: 'Fixture Newer Rules', shortLabel: 'Fixture newer rules', abilityIncreaseSource: 'background', backgroundGrantsFeat: true },
   ],
   fields: [
     { id: 'skill.athletics', label: 'Athletics' },
@@ -102,23 +102,23 @@ it('older rules: a feature picker, no feat picker, no increase fields, and notes
   expect(screen.getByRole('combobox', { name: 'Feature granted by the background' })).toBeTruthy();
   expect(screen.queryByRole('combobox', { name: 'Feat granted by the background' })).toBeNull();
   expect(screen.queryByRole('group', { name: /Ability score increases/ })).toBeNull();
-  expect(screen.getByText('In Fixture Older Rules, ability increases come from the species.')).toBeTruthy();
-  expect(screen.getByText('In Fixture Older Rules, a background cannot grant a feat.')).toBeTruthy();
+  expect(screen.getByText('In Fixture older rules, ability increases come from the species.')).toBeTruthy();
+  expect(screen.getByText('In Fixture older rules, a background cannot grant a feat.')).toBeTruthy();
 });
 
 it('newer rules: a feat picker and the three-ability increases, no feature picker', () => {
   render(<Harness initial={revisionOf(['srd-5.2.1'])} />);
   expect(screen.getByRole('combobox', { name: 'Feat granted by the background' })).toBeTruthy();
   expect(screen.queryByRole('combobox', { name: 'Feature granted by the background' })).toBeNull();
-  const group = screen.getByRole('group', { name: 'Ability score increases (Fixture Newer Rules)' });
+  const group = screen.getByRole('group', { name: 'Ability score increases (Fixture newer rules)' });
   expect(within(group).getAllByRole('checkbox')).toHaveLength(6);
 });
 
 it('both families: both pickers and the increases, each labelled by the family name', () => {
   render(<Harness initial={revisionOf(['srd-5.1', 'srd-5.2.1'])} />);
-  expect(screen.getByRole('group', { name: 'Feature (Fixture Older Rules)' })).toBeTruthy();
-  expect(screen.getByRole('group', { name: 'Feat (Fixture Newer Rules)' })).toBeTruthy();
-  expect(screen.getByRole('group', { name: 'Ability score increases (Fixture Newer Rules)' })).toBeTruthy();
+  expect(screen.getByRole('group', { name: 'Feature (Fixture older rules)' })).toBeTruthy();
+  expect(screen.getByRole('group', { name: 'Feat (Fixture newer rules)' })).toBeTruthy();
+  expect(screen.getByRole('group', { name: 'Ability score increases (Fixture newer rules)' })).toBeTruthy();
 });
 
 it('ticks skills as grant effects and picks a feature as a grant of that feature', async () => {
@@ -365,7 +365,7 @@ it('R62: a feature or a feat that points at a superseded draft is named, and re-
   expect(latest.effects).toEqual([{ ...grant, content: { contentId: 'f1', revisionId: 'f1-pub' } }]);
   // The pressed button is gone: focus goes to the fieldset's legend and the one polite line says what happened (WCAG 2.4.3, 4.1.3).
   expect(document.activeElement?.tagName).toBe('LEGEND');
-  expect(document.activeElement?.textContent).toBe('Feature (Fixture Older Rules)');
+  expect(document.activeElement?.textContent).toBe('Feature (Fixture older rules)');
   expect(screen.getByText('The feature Fixture Shelter now points at its published version.').getAttribute('aria-live')).toBe('polite');
 });
 
@@ -379,7 +379,7 @@ it('R62: a feat pin at a superseded draft moves focus to the Feat legend and ann
   await user.click(screen.getByRole('button', { name: 'Use the published version of Fixture Boon' }));
   expect(latest.effects).toEqual([{ ...grant, content: { contentId: 't1', revisionId: 't1-pub' } }]);
   expect(document.activeElement?.tagName).toBe('LEGEND');
-  expect(document.activeElement?.textContent).toBe('Feat (Fixture Newer Rules)');
+  expect(document.activeElement?.textContent).toBe('Feat (Fixture newer rules)');
   expect(screen.getByText('The feat Fixture Boon now points at its published version.').getAttribute('aria-live')).toBe('polite');
 });
 

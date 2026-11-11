@@ -212,7 +212,7 @@ export function BackgroundBasicsEditor(props: BackgroundProps) {
     onEffects((current) => setKindGrant(current, kindOf, kind, chosen?.reference, kind));
   }
 
-  const choiceLegend = usesIncreases ? `Ability score increases (${joinNames(increaseFamilies.map((p) => p.displayName))})` : 'Ability score increases';
+  const choiceLegend = usesIncreases ? `Ability score increases (${joinNames(increaseFamilies.map((p) => rulesLabel(p.id)))})` : 'Ability score increases';
 
   return (
     <section aria-labelledby="background-basics-heading" className="effect-editor origin-basics">
@@ -226,7 +226,7 @@ export function BackgroundBasicsEditor(props: BackgroundProps) {
       {(featureFamilies.length > 0 || featureGrant) && (
         <fieldset id="background-basics-feature" tabIndex={-1}>
           <legend ref={featureLegend} tabIndex={-1}>
-            {featureFamilies.length > 0 ? `Feature (${joinNames(featureFamilies.map((p) => p.displayName))})` : 'Feature'}
+            {featureFamilies.length > 0 ? `Feature (${joinNames(featureFamilies.map((p) => rulesLabel(p.id)))})` : 'Feature'}
           </legend>
           <label className="field">
             Feature granted by the background
@@ -270,7 +270,7 @@ export function BackgroundBasicsEditor(props: BackgroundProps) {
       {(featFamilies.length > 0 || featGrant) && (
         <fieldset id="background-basics-feat" tabIndex={-1}>
           <legend ref={featLegend} tabIndex={-1}>
-            {featFamilies.length > 0 ? `Feat (${joinNames(featFamilies.map((p) => p.displayName))})` : 'Feat'}
+            {featFamilies.length > 0 ? `Feat (${joinNames(featFamilies.map((p) => rulesLabel(p.id)))})` : 'Feat'}
           </legend>
           <label className="field">
             Feat granted by the background
@@ -325,7 +325,7 @@ export function BackgroundBasicsEditor(props: BackgroundProps) {
                 : `${leftBehind} old option entries stay in this source; they are no longer offered by this background.`}
             </p>
           )}
-          {!usesIncreases && <p className="warn">These increases are ignored in {joinNames(otherFamilies.map((p) => p.displayName))}.</p>}
+          {!usesIncreases && <p className="warn">These increases are ignored in {joinNames(otherFamilies.map((p) => rulesLabel(p.id)))}.</p>}
         </fieldset>
       )}
       {otherFamilies.map((p) => (

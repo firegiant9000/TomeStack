@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 // The D&D Beyond import steps against a mocked client (the real flow runs in e2e/flow.e2e.tsx). Every value is invented.
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render as renderPlain, screen, waitFor, within } from '@testing-library/react';
+import type { ReactElement, ReactNode } from 'react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { client } from '../../api/client';
 import { TomeStackError } from '../../api/transport';
 import type { DdbPreview, DdbReadResult, MatchRow, RulesFamilyPolicy } from '../../api/types';
+import { RulesLabelProvider } from '../../rulesLabel';
 import { DdbImportPanel } from './DdbImportPanel';
 import { DdbSummaryStep } from './DdbSummaryStep';
 
@@ -92,6 +94,10 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+// The app renders everything inside RulesLabelProvider, so the player sees short labels ("2014 rules"), not ids.
+const Labels = ({ children }: { children: ReactNode }) => <RulesLabelProvider families={families}>{children}</RulesLabelProvider>;
+const render = (ui: ReactElement) => renderPlain(ui, { wrapper: Labels });
+
 function renderPanel() {
   const onCancel = vi.fn();
   const onCreated = vi.fn();
@@ -121,7 +127,7 @@ it('moves focus to the step heading on every step and Cancel discards the token'
   expect(await screen.findByText(/Testy McFixture/)).toBeTruthy();
   await user.click(screen.getByRole('button', { name: 'Next: rules' }));
   await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Rules and campaign' })));
-  expect(within(screen.getByRole('region', { name: 'Rules and campaign' })).getByRole<HTMLInputElement>('radio', { name: /SRD 5\.1/ }).checked).toBe(true);
+  expect(within(screen.getByRole('region', { name: 'Rules and campaign' })).getByRole<HTMLInputElement>('radio', { name: /2014 rules/ }).checked).toBe(true);
   await user.click(screen.getByRole('button', { name: 'Next: matches' }));
   await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Matches' })));
 
@@ -261,7 +267,7 @@ it('clears the campaign when the rules family changes, so later previews do not 
   await user.click(screen.getByRole('button', { name: 'Choose PDF…' }));
   await user.click(await screen.findByRole('button', { name: 'Next: rules' }));
   await user.selectOptions(await screen.findByRole('combobox', { name: /Campaign/ }), 'fixture-campaign');
-  await user.click(screen.getByRole('radio', { name: /SRD 5\.2\.1/ }));
+  await user.click(screen.getByRole('radio', { name: /2024 rules/ }));
   expect(screen.getByRole<HTMLSelectElement>('combobox', { name: /Campaign/ }).value).toBe('');
   await user.click(screen.getByRole('button', { name: 'Next: matches' }));
 
@@ -281,7 +287,7 @@ it('drops the shown preview when the family changes and disables Next while the 
   const pending = deferred<DdbPreview>();
   vi.mocked(client.ddbPreview).mockReturnValueOnce(pending.promise);
   await user.click(screen.getByRole('button', { name: 'Back' }));
-  await user.click(screen.getByRole('radio', { name: /SRD 5\.2\.1/ }));
+  await user.click(screen.getByRole('radio', { name: /2024 rules/ }));
   await user.click(screen.getByRole('button', { name: 'Next: matches' }));
   await screen.findByRole('heading', { name: 'Matches' });
 

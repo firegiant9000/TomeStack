@@ -1,14 +1,20 @@
 // @vitest-environment jsdom
 // The builder's spell picker (D30): the legend's counts say what is recorded, not what the search shows. The client is mocked;
 // names and values are invented.
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render as renderPlain, screen, waitFor, within } from '@testing-library/react';
+import type { ReactElement, ReactNode } from 'react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { client } from '../api/client';
 import { TomeStackError } from '../api/transport';
 import type { Character, CharacterView, ContentOption, FeatureEntry, RulesFamilyPolicy, SpellcastingEntry } from '../api/types';
 import { CharacterBuilder, campaignLabel } from './CharacterBuilder';
+import { RulesLabelProvider } from '../rulesLabel';
 import { fill } from '../test/fill';
+
+// The app renders everything inside RulesLabelProvider, so the player sees short labels ("2014 rules"), not ids.
+const Labels = ({ children }: { children: ReactNode }) => <RulesLabelProvider families={families}>{children}</RulesLabelProvider>;
+const render = (ui: ReactElement) => renderPlain(ui, { wrapper: Labels });
 
 vi.mock('../api/client', () => ({ client: { listCampaigns: vi.fn(), listContent: vi.fn(), draftCounts: vi.fn(), preview: vi.fn(), previewChoice: vi.fn(), createCharacter: vi.fn(), saveCharacter: vi.fn(), rollDice: vi.fn() } }));
 
@@ -592,7 +598,7 @@ it('lists a review of the draft above the choices (D32)', async () => {
   await user.click(screen.getByRole('button', { name: 'Next: choices' }));
   const review = await screen.findByRole('region', { name: 'Review' });
   expect(reviewRow(review, 'Name')).toBe('Fixture New');
-  expect(reviewRow(review, 'Rules')).toBe('SRD 5.1');
+  expect(reviewRow(review, 'Rules')).toBe('2014 rules');
   expect(reviewRow(review, 'Campaign')).toBe('none');
   expect(reviewRow(review, 'Scores')).toBe('Str 15, Dex 14, Con 13, Int 12, Wis 10, Cha 8 (standard array)');
   expect(reviewRow(review, 'Species')).toBe('Fixture Hillfolk');
@@ -616,7 +622,7 @@ it('names the rules family, the campaign and a hand-entered method in the review
   await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
   for (const next of ['Next: species', 'Next: class', 'Next: background', 'Next: choices']) await user.click(await screen.findByRole('button', { name: next }));
   const review = await screen.findByRole('region', { name: 'Review' });
-  expect(reviewRow(review, 'Rules')).toBe('SRD 5.2.1');
+  expect(reviewRow(review, 'Rules')).toBe('2024 rules');
   expect(reviewRow(review, 'Campaign')).toBe('Fixture Campaign');
   expect(reviewRow(review, 'Scores')).toMatch(/\(enter by hand\)$/);
   cleanup();
@@ -869,7 +875,7 @@ it('shows the few-options hint only once the listing has loaded (Task 11 review)
   expect(screen.getByRole('form', { name: 'Species' })).toBeTruthy();
   expect(screen.queryByText(/installed for/)).toBeNull();
   release([content(1, 'species', 'Fixture Hillfolk', 'srd-5.1')]);
-  expect(await screen.findByText(/1 species is installed for SRD 5\.1/)).toBeTruthy();
+  expect(await screen.findByText(/1 species is installed for 2014 rules/)).toBeTruthy();
 });
 
 it('shows no few-options hint after a failed listing', async () => {
@@ -902,7 +908,7 @@ it('says on the class step how many classes are drafts or written for the other 
   await toClassStep(user);
   const hint = await screen.findByText(/2 classes are drafts in the Homebrew studio/);
   expect(hint.textContent).toMatch(/publish them there to use them/);
-  expect(screen.getByText(/1 class is written for SRD 5\.2\.1 only/)).toBeTruthy();
+  expect(screen.getByText(/1 class is written for 2024 rules only/)).toBeTruthy();
   expect(screen.queryByText(/Fixture Other Mage/)).toBeNull();
   expect(hint.querySelector('a, button')).toBeNull(); // R18: text only
 });

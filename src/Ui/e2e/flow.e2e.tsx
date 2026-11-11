@@ -185,7 +185,7 @@ async function createCharacter(
   await waitFor(() => expect(newCharacter.disabled).toBe(false));
   await user.click(newCharacter);
   await user.type(await screen.findByRole('textbox', { name: 'Name' }), opts.name);
-  if (opts.family) await user.click(screen.getByRole('radio', { name: opts.family === 'srd-5.2.1' ? /SRD 5\.2\.1/ : /SRD 5\.1/ }));
+  if (opts.family) await user.click(screen.getByRole('radio', { name: opts.family === 'srd-5.2.1' ? /2024 rules/ : /2014 rules/ }));
   await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
   if (opts.scores) {
     await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
@@ -535,7 +535,7 @@ it('authors a homebrew subclass in the studio, plays it, and reviews an update',
   // A homebrew source for 2024 rules.
   const newSource = await screen.findByRole('form', { name: 'New homebrew source' });
   await user.type(within(newSource).getByRole('textbox', { name: 'Source title' }), 'E2E Homebrew');
-  await user.click(within(newSource).getByRole('checkbox', { name: 'SRD 5.2.1 (2024 rules)' }));
+  await user.click(within(newSource).getByRole('checkbox', { name: '2024 rules' }));
   await user.click(within(newSource).getByRole('button', { name: 'Create source' }));
   await screen.findByRole('heading', { name: 'Content in E2E Homebrew' });
 
@@ -664,7 +664,7 @@ it('authors a +1 weapon in the studio, equips it and rolls it, and "Why?" names 
 
   const newSource = await screen.findByRole('form', { name: 'New homebrew source' });
   await user.type(within(newSource).getByRole('textbox', { name: 'Source title' }), 'E2E Plus Book');
-  await user.click(within(newSource).getByRole('checkbox', { name: 'SRD 5.2.1 (2024 rules)' }));
+  await user.click(within(newSource).getByRole('checkbox', { name: '2024 rules' }));
   await user.click(within(newSource).getByRole('button', { name: 'Create source' }));
   await screen.findByRole('heading', { name: 'Content in E2E Plus Book' });
 
@@ -718,7 +718,7 @@ it('item mods: a published mod attached to one copy changes only that copy\'s at
 
   const newSource = await screen.findByRole('form', { name: 'New homebrew source' });
   await user.type(within(newSource).getByRole('textbox', { name: 'Source title' }), 'E2E Mod Book');
-  await user.click(within(newSource).getByRole('checkbox', { name: 'SRD 5.2.1 (2024 rules)' }));
+  await user.click(within(newSource).getByRole('checkbox', { name: '2024 rules' }));
   await user.click(within(newSource).getByRole('button', { name: 'Create source' }));
   await screen.findByRole('heading', { name: 'Content in E2E Mod Book' });
 
@@ -1687,7 +1687,7 @@ it('shows different allowed content for two campaign profiles, and records a rea
     await user.click(await screen.findByRole('button', { name: 'New campaign' }));
     const form = screen.getByRole('form', { name: 'Campaign' });
     await user.type(within(form).getByRole('textbox', { name: 'Campaign name' }), name);
-    await user.click(within(form).getByRole('radio', { name: /SRD 5\.2\.1/ }));
+    await user.click(within(form).getByRole('radio', { name: /2024 rules/ }));
     for (const source of sources) await user.click(within(form).getByRole('checkbox', { name: source }));
     await user.click(within(form).getByRole('button', { name: 'Save campaign' }));
     await waitFor(() => expect(screen.getByRole('status').textContent).toBe(`Saved the campaign ${name}.`));
@@ -1712,7 +1712,7 @@ it('shows different allowed content for two campaign profiles, and records a rea
   };
 
   // Profile 1: SRD only. The fixture background is listed but not allowed; the SRD one is.
-  await user.selectOptions(screen.getByRole('combobox', { name: 'Campaign' }), 'E2E Strict (srd-5.2.1)');
+  await user.selectOptions(screen.getByRole('combobox', { name: 'Campaign' }), 'E2E Strict (2024 rules)');
   await toBackground();
   await waitFor(() => expect(courierOff()).toBe(true));
   expect(courier().closest('label')!.textContent).toMatch(/not allowed in this campaign/);
@@ -1720,13 +1720,13 @@ it('shows different allowed content for two campaign profiles, and records a rea
 
   // Profile 2: SRD and the 2024 fixtures. The same background is allowed.
   await toRules();
-  await user.selectOptions(screen.getByRole('combobox', { name: 'Campaign' }), 'E2E Open (srd-5.2.1)');
+  await user.selectOptions(screen.getByRole('combobox', { name: 'Campaign' }), 'E2E Open (2024 rules)');
   await toBackground();
   await waitFor(() => expect(courierOff()).toBe(false));
 
   // Back to profile 1, with a deliberate exception: a reason is required before outside content can be picked.
   await toRules();
-  await user.selectOptions(screen.getByRole('combobox', { name: 'Campaign' }), 'E2E Strict (srd-5.2.1)');
+  await user.selectOptions(screen.getByRole('combobox', { name: 'Campaign' }), 'E2E Strict (2024 rules)');
   await toBackground();
   await waitFor(() => expect(courierOff()).toBe(true));
   const sources = screen.getByRole('group', { name: 'Campaign sources' });
@@ -2152,7 +2152,7 @@ it('drops picks that do not fit when the rules family changes, in the builder an
   // Builder: an SRD 5.1 species, then SRD 5.2.1. The 5.1 pick is cleared and no longer listed.
   await user.click(newCharacter);
   await user.type(await screen.findByRole('textbox', { name: 'Name' }), 'E2E Switcher'); // the name is required to leave the Rules step
-  await user.click(screen.getByRole('radio', { name: /SRD 5\.1/ }));
+  await user.click(screen.getByRole('radio', { name: /2014 rules/ }));
   await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
   await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
   await user.click(screen.getByRole('button', { name: 'Next: species' }));
@@ -2163,7 +2163,7 @@ it('drops picks that do not fit when the rules family changes, in the builder an
   expect(halfOrc().checked).toBe(true);
   await user.click(screen.getByRole('button', { name: 'Back' }));
   await user.click(screen.getByRole('button', { name: 'Back' }));
-  await user.click(screen.getByRole('radio', { name: /SRD 5\.2\.1/ }));
+  await user.click(screen.getByRole('radio', { name: /2024 rules/ }));
   await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
   await user.click(screen.getByRole('button', { name: 'Next: species' }));
   // D31: the 5.1 species leaves the list altogether, and the pick is cleared.
@@ -2176,9 +2176,9 @@ it('drops picks that do not fit when the rules family changes, in the builder an
   await user.click(await screen.findByRole('button', { name: 'New campaign' }));
   const form = screen.getByRole('form', { name: 'Campaign' });
   await user.type(within(form).getByRole('textbox', { name: 'Campaign name' }), 'E2E Switched');
-  await user.click(within(form).getByRole('radio', { name: /SRD 5\.1/ }));
+  await user.click(within(form).getByRole('radio', { name: /2014 rules/ }));
   await user.click(within(form).getByRole('checkbox', { name: /^System Reference Document 5\.1/ }));
-  await user.click(within(form).getByRole('radio', { name: /SRD 5\.2\.1/ }));
+  await user.click(within(form).getByRole('radio', { name: /2024 rules/ }));
   await user.click(within(form).getByRole('button', { name: 'Save campaign' }));
   await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Saved the campaign E2E Switched.'));
   const saved = screen.getAllByRole('listitem').find((li) => li.textContent?.startsWith('E2E Switched'))!;
@@ -2575,7 +2575,7 @@ it('adds a homebrew Fighter subclass through the studio and plays it: the Stardu
 
   const newSource = await screen.findByRole('form', { name: 'New homebrew source' });
   await user.type(within(newSource).getByRole('textbox', { name: 'Source title' }), 'E2E Warden Homebrew');
-  await user.click(within(newSource).getByRole('checkbox', { name: 'SRD 5.2.1 (2024 rules)' }));
+  await user.click(within(newSource).getByRole('checkbox', { name: '2024 rules' }));
   await user.click(within(newSource).getByRole('button', { name: 'Create source' }));
   await screen.findByRole('heading', { name: 'Content in E2E Warden Homebrew' });
 
@@ -2662,7 +2662,7 @@ it('authors a class in the studio and builds it at levels 1, 20 and 5/3 with an 
   await user.click(studioButton);
   const newSource = await screen.findByRole('form', { name: 'New homebrew source' });
   await user.type(within(newSource).getByRole('textbox', { name: 'Source title' }), 'E2E Chronicle Homebrew');
-  await user.click(within(newSource).getByRole('checkbox', { name: 'SRD 5.2.1 (2024 rules)' }));
+  await user.click(within(newSource).getByRole('checkbox', { name: '2024 rules' }));
   await user.click(within(newSource).getByRole('button', { name: 'Create source' }));
   await screen.findByRole('heading', { name: 'Content in E2E Chronicle Homebrew' });
 
@@ -2939,7 +2939,7 @@ it('imports a D&D Beyond sheet, resolves a choice, keeps one sheet number as an 
 
   await user.click(screen.getByRole('button', { name: 'Next: rules' }));
   // The 2014-style layout suggests SRD 5.1; the user could pick the other family.
-  expect(screen.getByRole<HTMLInputElement>('radio', { name: /SRD 5\.1/ }).checked).toBe(true);
+  expect(screen.getByRole<HTMLInputElement>('radio', { name: /2014 rules/ }).checked).toBe(true);
   await user.click(screen.getByRole('radio', { name: "Use the character sheet's values" })); // D16h preset
   await user.click(screen.getByRole('button', { name: 'Next: matches' }));
 
@@ -3327,7 +3327,7 @@ it('rolls ability scores through the dice engine and assigns them (D32)', async 
   await waitFor(() => expect(newCharacter.disabled).toBe(false));
   await user.click(newCharacter);
   await user.type(await screen.findByRole('textbox', { name: 'Name' }), 'E2E Rolled');
-  await user.click(screen.getByRole('radio', { name: /SRD 5\.2\.1/ }));
+  await user.click(screen.getByRole('radio', { name: /2024 rules/ }));
   await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
   await user.click(screen.getByRole('radio', { name: 'Roll' }));
   await user.click(screen.getByRole('button', { name: 'Roll six scores (4d6, drop the lowest)' }));

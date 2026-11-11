@@ -217,7 +217,7 @@ export function ImportPanel({ source, hasPdf, onError, onStatus, onOpenStudio }:
           ))}
         </fieldset>
       ) : (
-        <p className="hint">Written for {source.rulesFamilies.map(rulesLabel).join(' and ')} (from the source).</p>
+        <p className="hint">Written for {source.rulesFamilies.map((f) => rulesLabel(f)).join(' and ')} (from the source).</p>
       )}
       {needsAnswer && (
         <p id={hintId} className="hint">

@@ -15,8 +15,8 @@ vi.mock('../api/client', () => ({ client: { saveDraft: vi.fn() } }));
 
 const info = {
   rulesFamilies: [
-    { id: 'srd-5.1', displayName: 'Fixture Older Rules', abilityIncreaseSource: 'species', backgroundGrantsFeat: false },
-    { id: 'srd-5.2.1', displayName: 'Fixture Newer Rules', abilityIncreaseSource: 'background', backgroundGrantsFeat: true },
+    { id: 'srd-5.1', displayName: 'Fixture Older Rules', shortLabel: 'Fixture older rules', abilityIncreaseSource: 'species', backgroundGrantsFeat: false },
+    { id: 'srd-5.2.1', displayName: 'Fixture Newer Rules', shortLabel: 'Fixture newer rules', abilityIncreaseSource: 'background', backgroundGrantsFeat: true },
   ],
   fields: [
     { id: 'skill.athletics', label: 'Athletics' },
@@ -108,21 +108,21 @@ it('older rules: shows ability increases as number fields and writes one bonus m
 it('newer rules: no increase fields, and it says where the increases come from', () => {
   render(<Harness initial={revisionOf(['srd-5.2.1'])} />);
   expect(screen.queryByRole('textbox', { name: 'Strength' })).toBeNull();
-  expect(screen.getByText('In Fixture Newer Rules, ability increases come from the background.')).toBeTruthy();
+  expect(screen.getByText('In Fixture newer rules, ability increases come from the background.')).toBeTruthy();
 });
 
 it('a species for both families shows both behaviours, each labelled by the family name', () => {
   render(<Harness initial={revisionOf(['srd-5.1', 'srd-5.2.1'])} />);
-  const group = screen.getByRole('group', { name: 'Ability score increases (Fixture Older Rules)' });
+  const group = screen.getByRole('group', { name: 'Ability score increases (Fixture older rules)' });
   expect(within(group).getByRole('textbox', { name: 'Wisdom' })).toBeTruthy();
-  expect(screen.getByText('In Fixture Newer Rules, ability increases come from the background.')).toBeTruthy();
+  expect(screen.getByText('In Fixture newer rules, ability increases come from the background.')).toBeTruthy();
 });
 
 it('keeps showing increases that exist when no ticked family uses them, and says they are ignored', () => {
   const increase: Effect = { type: 'modifier', id: 'a', operation: 'bonus', target: 'ability.dex.score', value: '2' };
   render(<Harness initial={revisionOf(['srd-5.2.1'], [increase])} />);
   expect(screen.getByRole('textbox', { name: 'Dexterity' })).toHaveProperty('value', '2');
-  expect(screen.getByText(/ignored in Fixture Newer Rules/)).toBeTruthy();
+  expect(screen.getByText(/ignored in Fixture newer rules/)).toBeTruthy();
 });
 
 it('reads an existing species back: values, skills and traits by name', () => {

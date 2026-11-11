@@ -85,7 +85,7 @@ export function SpeciesBasicsEditor(props: SpeciesProps) {
 
       {showIncreases && (
         <fieldset id="species-basics-increases" tabIndex={-1}>
-          <legend>{withIncreases.length > 0 ? `Ability score increases (${joinNames(withIncreases.map((p) => p.displayName))})` : 'Ability score increases'}</legend>
+          <legend>{withIncreases.length > 0 ? `Ability score increases (${joinNames(withIncreases.map((p) => rulesLabel(p.id)))})` : 'Ability score increases'}</legend>
           <div className="origin-grid">
             {abilities.map(([key, label]) => (
               <div key={key} className="field">
@@ -117,7 +117,7 @@ export function SpeciesBasicsEditor(props: SpeciesProps) {
             ))}
           </div>
           {withIncreases.length === 0 && (
-            <p className="warn">These increases are ignored in {joinNames(without.map((p) => p.displayName))}; tick a family that takes them from the species.</p>
+            <p className="warn">These increases are ignored in {joinNames(without.map((p) => rulesLabel(p.id)))}; tick a family that takes them from the species.</p>
           )}
         </fieldset>
       )}
