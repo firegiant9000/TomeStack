@@ -60,7 +60,7 @@ public class DownConvertCoverageTests
     [Fact]
     public void A_new_schema_version_needs_a_lowering_step_and_requires_vN_entries()
     {
-        Assert.True(Character.CurrentSchemaVersion == 11 && ContentRevision.CurrentSchemaVersion == 12,
+        Assert.True(Character.CurrentSchemaVersion == 11 && ContentRevision.CurrentSchemaVersion == 13,
             "A new schema version needs a lowering step in DownConvert and requires-vN.json entries (then update this pin).");
     }
 }

@@ -100,6 +100,9 @@ internal static class Generators
         [CompanionEffect.TypeName] = CompanionEffect.SchemaVersion,
         [RollFloorEffect.TypeName] = RollFloorEffect.SchemaVersion,
         [CheckAbilityEffect.TypeName] = CheckAbilityEffect.SchemaVersion,
+        [GuideForEffect.TypeName] = GuideForEffect.SchemaVersion,
+        [PrimaryAbilitiesEffect.TypeName] = PrimaryAbilitiesEffect.SchemaVersion,
+        [StartingEquipmentEffect.TypeName] = StartingEquipmentEffect.SchemaVersion,
     };
 
     /// <summary>

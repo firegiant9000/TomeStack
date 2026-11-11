@@ -198,7 +198,7 @@ public class ReplaceableChoiceSchemaTests
     public void Replaceable_schema_version_is_current()
     {
         Assert.Equal(12, ContentRevision.ReplaceableChoiceSchemaVersion);
-        Assert.Equal(ContentRevision.ReplaceableChoiceSchemaVersion, ContentRevision.CurrentSchemaVersion);
+        Assert.Equal(ContentRevision.ReplaceableChoiceSchemaVersion + 1, ContentRevision.CurrentSchemaVersion);
     }
 
     /// <summary>The gotcha of 2026-10-20: the production key list is internal and this project cannot see it, so reflection compares it with the list written out here.</summary>

@@ -153,6 +153,9 @@ public static class DownConvert
         {
             switch (step)
             {
+                case ContentRevision.CreationGuideSchemaVersion:
+                    ContentBelowV13(scope, node, changes);
+                    break;
                 case ContentRevision.WeaponBonusSchemaVersion:
                     ContentBelowV12(scope, node, changes);
                     break;
@@ -496,6 +499,42 @@ public static class DownConvert
                 }
             }
             kept.Add(effect);
+            keptOrigin.Add(scope.Origin[i]);
+        }
+
+        effects.Clear();
+        foreach (var item in kept)
+            effects.Add(item);
+        scope.Origin.Clear();
+        scope.Origin.AddRange(keptOrigin);
+    }
+
+    /// <summary>
+    /// The 13 to 12 step, for now: the creation-guide effects and <c>item.contains</c> are dropped whole (Task 5.4 makes this exact). A
+    /// revision that declares an older version carries them as inert extension data, so it is left as it is.
+    /// </summary>
+    private static void ContentBelowV13(Scope scope, JsonObject node, List<BelowChange> changes)
+    {
+        if (node["effects"] is not JsonArray effects || scope.Revision.SchemaVersion < ContentRevision.CreationGuideSchemaVersion)
+            return;
+        var name = scope.Revision.Name;
+        var kept = new List<JsonNode?>(effects.Count);
+        var keptOrigin = new List<int>(effects.Count);
+        for (var i = 0; i < effects.Count; i++)
+        {
+            var path = $"effects[{scope.Origin[i]}]";
+            if (effects[i] is JsonObject effect)
+            {
+                var type = TypeOf(effect);
+                if (type is GuideForEffect.TypeName or PrimaryAbilitiesEffect.TypeName or StartingEquipmentEffect.TypeName)
+                {
+                    changes.Add(new(path, BelowAction.Dropped, BelowCodes.EffectUnsupported, $"'{name}': a creation guide effect, which the older version cannot hold."));
+                    continue;
+                }
+                if (type == ItemEffect.TypeName)
+                    RemoveKey(effect, "contains", path, BelowAction.Dropped, BelowCodes.EffectUnsupported, $"'{name}': a pack's contents, which the older version cannot hold.", changes);
+            }
+            kept.Add(effects[i]);
             keptOrigin.Add(scope.Origin[i]);
         }
 
