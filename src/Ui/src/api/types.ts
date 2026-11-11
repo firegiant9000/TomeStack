@@ -1203,6 +1203,8 @@ export interface ArchivePreview {
 export interface RulesFamilyPolicy {
   id: RulesFamilyId;
   displayName: string;
+  /** The words a player reads for this rules family: "2014 rules" or "2024 rules". */
+  shortLabel: string;
   abilityIncreaseSource: ContentKind;
   backgroundGrantsFeat: boolean;
   longRestExhaustionNeedsFoodAndDrink: boolean;

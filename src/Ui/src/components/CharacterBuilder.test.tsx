@@ -86,6 +86,7 @@ it('keeps the picker legend counting what is recorded when the search hides the 
 const policy = (id: RulesFamilyPolicy['id'], displayName: string): RulesFamilyPolicy => ({
   id,
   displayName,
+  shortLabel: id === 'srd-5.1' ? '2014 rules' : '2024 rules',
   abilityIncreaseSource: id === 'srd-5.1' ? 'species' : 'background',
   backgroundGrantsFeat: id !== 'srd-5.1',
   longRestExhaustionNeedsFoodAndDrink: id === 'srd-5.1',
