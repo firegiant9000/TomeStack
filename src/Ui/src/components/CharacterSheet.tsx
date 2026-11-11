@@ -15,6 +15,7 @@ import type {
   RollTarget,
   TurnMoment,
   DamageHow,
+  RulesFamilyPolicy,
 } from '../api/types';
 import { companionPrunedText } from '../companionNotice';
 import { downloadBase64 } from '../files';
@@ -352,9 +353,11 @@ interface Props {
   initialTab?: SheetTabId;
   /** D74 R19: true only right after a level-up save; the "What changed" heading takes focus instead of the sheet heading. */
   focusChecklist?: boolean;
+  /** The families from `app.info`; the inspiration checkbox and summary line are named by the character's family policy. */
+  rulesFamilies?: RulesFamilyPolicy[];
 }
 
-export function CharacterSheet({ view, onChanged, onError: reportError, onStatus, onLevelUp, onMakeChoices, onArchiveChanged, initialTab, focusChecklist }: Props) {
+export function CharacterSheet({ view, onChanged, onError: reportError, onStatus, onLevelUp, onMakeChoices, onArchiveChanged, initialTab, focusChecklist, rulesFamilies }: Props) {
   const { character, sheet } = view;
   // D43: `toggle.group-absent` is information (the toggle works as a group of one), not content that failed to apply.
   const notApplied = sheet.diagnostics.filter((d) => d.code !== 'toggle.group-absent');
@@ -936,7 +939,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
         </button>
       </header>
 
-      <SheetSummary view={view} rollMode={rollMode} onRollMode={setRollMode} lastRoll={lastRoll} rollLog={rollLog} act={act} onDamage={openDamage} spellsTab={showSpells}
+      <SheetSummary view={view} rollMode={rollMode} onRollMode={setRollMode} lastRoll={lastRoll} rollLog={rollLog} act={act} onDamage={openDamage} spellsTab={showSpells} rulesFamilies={rulesFamilies}
         onRoll={(f) => roll({ field: f, mode: rollMode })}
         onRollDice={rollDice}
         quickbar={<Quickbar actions={quickActions} busy={quickBusy} run={quickRun} />}
@@ -1130,7 +1133,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
         )}
         {/* Investigation 2026-10-06 item 8: two plain wrappers, side by side at 60rem and up, stacked below it. Visual order is DOM order. */}
         <div className="play-column">
-          <HitPointsPanel view={view} act={act} damageType={damageType} onDamageType={setDamageType} onDamage={openDamage} panelOpen={damaging !== undefined} />
+          <HitPointsPanel view={view} act={act} damageType={damageType} onDamageType={setDamageType} onDamage={openDamage} panelOpen={damaging !== undefined} rulesFamilies={rulesFamilies} />
           <DeathSavesPanel view={view} act={act} roll={roll} lastRoll={lastRoll} />
           <ConcentrationPanel view={view} act={act} roll={roll} />
           <ConditionsPanel view={view} act={act} />

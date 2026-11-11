@@ -1206,6 +1206,8 @@ export interface RulesFamilyPolicy {
   abilityIncreaseSource: ContentKind;
   backgroundGrantsFeat: boolean;
   longRestExhaustionNeedsFoodAndDrink: boolean;
+  /** What the sheet calls the inspiration toggle: "Inspiration" (2014) or "Heroic Inspiration" (2024). */
+  inspirationName: string;
 }
 
 /** BACKLOG B06: a recorded, deliberate use of a pinned revision outside its rules families. */

@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react';
-import type { CharacterView, DerivedValue, PlayAction, RollMode, RollRecord } from '../api/types';
+import type { CharacterView, DerivedValue, PlayAction, RollMode, RollRecord, RulesFamilyPolicy } from '../api/types';
 import { hitDiceText } from '../format';
 import { DiceBox } from './DiceBox';
 import { attacksAgainstText, rollButtonSuffix } from '../rollModes';
-import { inspirationLabel, RollModePicker, RollResult, type RecordSpent } from './PlayPanels';
+import { inspirationLabel } from '../format';
+import { RollModePicker, RollResult, type RecordSpent } from './PlayPanels';
 import { RollLog, type LoggedRoll } from './RollLog';
 import { RollWhy } from './RollWhy';
 
@@ -41,6 +42,8 @@ interface Props {
   hasQuickbar?: boolean;
   /** D73: the sheet's record-spent state, shared with the quickbar; absent, Last roll keeps its own. */
   spent?: RecordSpent;
+  /** The families from `app.info`; the inspiration line is named by the character's family policy. */
+  rulesFamilies?: RulesFamilyPolicy[];
 }
 
 /**
@@ -49,7 +52,7 @@ interface Props {
  * `getByRole` and confuse screen readers). Traces and overrides stay on the field cards (Stats, Spells). An overridden
  * value says so in text (WCAG 1.4.1). The d20 roll mode and the last roll live here so they are reachable from every tab.
  */
-export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, act, onDamage, onRoll, onRollDice, spellsTab = false, quickbar, hasQuickbar = false, spent }: Props) {
+export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, act, onDamage, onRoll, onRollDice, spellsTab = false, quickbar, hasQuickbar = false, spent, rulesFamilies = [] }: Props) {
   const { character, sheet } = view;
   const field = (id: string): DerivedValue | undefined => sheet.fields.find((f) => f.field === id);
   const show = (id: string): string => {
@@ -176,7 +179,7 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, ac
           </div>
         )}
         <div>
-          <dt aria-hidden="true">{inspirationLabel(character.rulesFamily)}</dt>
+          <dt aria-hidden="true">{inspirationLabel(rulesFamilies, character.rulesFamily)}</dt>
           <dd>
             <label className="choice">
               <input
@@ -184,7 +187,7 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, ac
                 checked={play?.inspiration ?? false}
                 onChange={(e) => act({ action: 'setInspiration', amount: e.target.checked ? 1 : 0 })}
               />{' '}
-              {inspirationLabel(character.rulesFamily)}
+              {inspirationLabel(rulesFamilies, character.rulesFamily)}
             </label>
           </dd>
         </div>
