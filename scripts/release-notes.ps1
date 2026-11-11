@@ -12,12 +12,47 @@
 param(
   [Parameter(Mandatory)] [string] $Version,
   [Parameter(Mandatory)] [string] $Commit,
-  [Parameter(Mandatory)] [string] $Output
+  [Parameter(Mandatory)] [string] $Output,
+  [string] $ChangelogPath
 )
 $ErrorActionPreference = 'Stop'
+
+# The release page is not inside the repo, so a link like (decisions/ADR-022.md) in the changelog would resolve against
+# github.com/<owner>/<repo>/releases/... and break. Rewrites every relative markdown link target to the tagged file on GitHub.
+# Left alone: anything with a scheme (https:, mailto:, ftp:), "#anchor" links, and inline code spans. Images get ?raw=true.
+# Targets resolve against docs/ (where CHANGELOG.md lives), so "../README.md" is the repo-root README. Titles are kept.
+function Convert-RelativeLinks([string]$Markdown, [string]$Version) {
+  $blob = "https://github.com/firegiant9000/TomeStack/blob/v$Version/"
+  $pattern = '(?<code>(`+)[^`]*?\1)|(?<img>!?)\[(?<text>[^\]\r\n]*)\]\((?<target>[^)\s<>]+)(?<title>\s+"[^"]*")?\)'
+  $evaluator = [System.Text.RegularExpressions.MatchEvaluator] {
+    param($m)
+    if ($m.Groups['code'].Success) { return $m.Value }
+    $target = $m.Groups['target'].Value
+    if ($target.StartsWith('#') -or $target -match '^[A-Za-z][A-Za-z0-9+.-]*:' -or $target.StartsWith('//')) { return $m.Value }
+    $suffix = ''
+    $cut = $target.IndexOfAny([char[]]'#?')
+    if ($cut -ge 0) { $suffix = $target.Substring($cut); $target = $target.Substring(0, $cut) }
+    $segments = New-Object System.Collections.Generic.List[string]
+    if (-not $target.StartsWith('/')) { $segments.Add('docs') }
+    foreach ($part in $target.Split('/')) {
+      if ($part -eq '' -or $part -eq '.') { continue }
+      if ($part -eq '..') { if ($segments.Count -gt 0) { $segments.RemoveAt($segments.Count - 1) } } else { $segments.Add($part) }
+    }
+    $url = $blob + ($segments -join '/')
+    if ($m.Groups['img'].Value -eq '!') {
+      if ($suffix.StartsWith('?')) { $url += $suffix + '&raw=true' } elseif ($suffix) { $url += '?raw=true' + $suffix } else { $url += '?raw=true' }
+    } else {
+      $url += $suffix
+    }
+    return $m.Groups['img'].Value + '[' + $m.Groups['text'].Value + '](' + $url + $m.Groups['title'].Value + ')'
+  }
+  return [regex]::Replace($Markdown, $pattern, $evaluator)
+}
+
 if ($Commit -cnotmatch '^[0-9a-f]{40}\z') { throw "Commit '$Commit' must be a full 40-character lower-case commit SHA" }
 $root = Split-Path $PSScriptRoot -Parent
-$lines = Get-Content (Join-Path $root 'docs\CHANGELOG.md') -Encoding UTF8
+if (-not $ChangelogPath) { $ChangelogPath = Join-Path $root 'docs\CHANGELOG.md' }
+$lines = Get-Content $ChangelogPath -Encoding UTF8
 $start = -1
 for ($i = 0; $i -lt $lines.Count; $i++) {
   if ($lines[$i] -match "^## $([regex]::Escape($Version))(\s|$)") { $start = $i; break }
@@ -29,6 +64,7 @@ for ($i = $start + 1; $i -lt $lines.Count; $i++) {
 }
 $body = ($lines[($start + 1)..($end - 1)] -join "`n").Trim()
 if (-not $body) { throw "The '## $Version' section of docs/CHANGELOG.md is empty" }
+$body = Convert-RelativeLinks $body $Version
 
 $notes = @"
 $body
