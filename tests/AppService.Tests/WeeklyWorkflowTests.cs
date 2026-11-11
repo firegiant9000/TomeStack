@@ -88,6 +88,14 @@ public sealed partial class WeeklyWorkflowTests
     }
 
     [Fact]
+    public void Calculation_partials_land_in_the_calculation_shard()
+    {
+        var shards = Shards();
+        Assert.True(Selects(shards["calculation"], "Calculation.Attacks.cs"));
+        Assert.False(Selects(shards["rest"], "Calculation.Attacks.cs"));
+    }
+
+    [Fact]
     public void Stryker_shards_cover_every_RulesCore_file()
     {
         var shards = Shards();

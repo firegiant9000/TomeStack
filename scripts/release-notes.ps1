@@ -23,7 +23,7 @@ $ErrorActionPreference = 'Stop'
 # Targets resolve against docs/ (where CHANGELOG.md lives), so "../README.md" is the repo-root README. Titles are kept.
 function Convert-RelativeLinks([string]$Markdown, [string]$Version) {
   $blob = "https://github.com/firegiant9000/TomeStack/blob/v$Version/"
-  $pattern = '(?<code>(`+)[^`]*?\1)|(?<img>!?)\[(?<text>[^\]\r\n]*)\]\((?<target>[^)\s<>]+)(?<title>\s+"[^"]*")?\)'
+  $pattern = '(?<code>(`+)[^`\n]*?\1)|(?<img>!?)\[(?<text>[^\]\r\n]*)\]\((?<target>[^)\s<>]+)(?<title>\s+"[^"]*")?\)'
   $evaluator = [System.Text.RegularExpressions.MatchEvaluator] {
     param($m)
     if ($m.Groups['code'].Success) { return $m.Value }

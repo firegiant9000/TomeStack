@@ -84,9 +84,9 @@ jobs:
           - shard: validation
             mutate: "'**/ContentValidation.cs'"
           - shard: calculation
-            mutate: "'**/Calculation.cs' '**/DownConvert.cs'"
+            mutate: "'**/Calculation*.cs' '**/DownConvert.cs'"
           - shard: rest
-            mutate: "'**/*.cs' '!**/Effects.cs' '!**/ContentValidation.cs' '!**/Calculation.cs' '!**/DownConvert.cs'"
+            mutate: "'**/*.cs' '!**/Effects.cs' '!**/ContentValidation.cs' '!**/Calculation*.cs' '!**/DownConvert.cs'"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -131,7 +131,7 @@ jobs:
               const count = (...names) => statuses.filter((s) => names.includes(s)).length;
               const detected = count("Killed", "Timeout"), undetected = count("Survived", "NoCoverage");
               const score = detected + undetected ? (100 * detected / (detected + undetected)).toFixed(2) : "0";
-              line = `RulesCore mutation score (${process.env.SHARD} shard):${score}% (${detected} detected, ${undetected} undetected, of ${statuses.length} mutants)`;
+              line = `RulesCore mutation score (${process.env.SHARD} shard): ${score}% (${detected} detected, ${undetected} undetected, of ${statuses.length} mutants)`;
             }
             console.log(line);
             fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, line + "\n");
