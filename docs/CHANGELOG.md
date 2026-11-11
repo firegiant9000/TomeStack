@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Changed
+- **Dependencies:** React and React DOM 19.3.0 to 19.3.1 (shipped; [ATTRIBUTION.md](../ATTRIBUTION.md) updated, `scheduler` unchanged). Development-only: `@testing-library/user-event`, `@types/node`, `@vitejs/plugin-react`, ESLint, `globals` and `typescript-eslint` to their latest patch or minor (from dependabot #126). No app behaviour change.
+
 ## 0.8.0 (content v12: rolls, riders, responses and gates; the SRD Barbarian, Rogue and Monk; save for an older TomeStack; every SRD 5.2.1 origin and the other SRD 5.1 races; the Import Lab)
 
 Content schema v12 (D86 to D93, ADR-022) and the MECH-X items (D75, ADR-021); the SRD Barbarian, Rogue and Monk in both rules families, re-authored on v12; every SRD 5.2.1 species, background and feat and the other eight SRD 5.1 races; "Save for an older TomeStack" (D85, ADR-023); the Homebrew Import Lab (D62); "Why?", "Usable now" and "What changed at level N" (D72 to D74); preview at level (D82) and daily copies (D77). The bundled SRD packs change in this release, by new revisions only: a saved character keeps calculating as before until you accept its class update offer.

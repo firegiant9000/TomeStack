@@ -16,12 +16,12 @@ No other third-party rules text is bundled. The test fixtures in `tests/RulesFix
 
 ## Third-party components in the shipped app
 
-Checked on 2026-09-25, again on 2026-10-01 for 0.4.0, on 2026-10-12 for 0.5.0 (no shipped dependency added or changed since 0.4.0), on 2026-10-21 for 0.6.0 (no shipped dependency added or changed since 0.5.0; the lockfile and package references are unchanged), on 2026-10-24 for 0.7.0 (no shipped dependency added or changed since 0.6.0; the only lockfile change is the development-only axe-core), and on 2026-10-27 (the Windows SDK projection replaced by C#/WinRT's embedded one, below), from `npm ls --omit=dev`, `dotnet list src/DesktopShell package --include-transitive` and `dotnet list src/ImportWorker.Host package` (the worker's build-time packages, such as C#/WinRT, do not appear in the shell's list). Development-only tools (Vite, TypeScript, ESLint, Vitest, xUnit and similar) are not shipped and are not listed.
+Checked on 2026-09-25, again on 2026-10-01 for 0.4.0, on 2026-10-12 for 0.5.0 (no shipped dependency added or changed since 0.4.0), on 2026-10-21 for 0.6.0 (no shipped dependency added or changed since 0.5.0; the lockfile and package references are unchanged), on 2026-10-24 for 0.7.0 (no shipped dependency added or changed since 0.6.0; the only lockfile change is the development-only axe-core), on 2026-10-27 (the Windows SDK projection replaced by C#/WinRT's embedded one, below), and on 2026-11-10 (React and React DOM 19.3.0 to 19.3.1; `scheduler` unchanged), from `npm ls --omit=dev`, `dotnet list src/DesktopShell package --include-transitive` and `dotnet list src/ImportWorker.Host package` (the worker's build-time packages, such as C#/WinRT, do not appear in the shell's list). Development-only tools (Vite, TypeScript, ESLint, Vitest, xUnit and similar) are not shipped and are not listed.
 
 | Component | Version | License | Copyright |
 | --- | --- | --- | --- |
-| React (`react`) | 19.3.0 | MIT | Meta Platforms, Inc. and affiliates |
-| React DOM (`react-dom`) | 19.3.0 | MIT | Meta Platforms, Inc. and affiliates |
+| React (`react`) | 19.3.1 | MIT | Meta Platforms, Inc. and affiliates |
+| React DOM (`react-dom`) | 19.3.1 | MIT | Meta Platforms, Inc. and affiliates |
 | `scheduler` (dependency of React DOM) | 0.28.0 | MIT | Meta Platforms, Inc. and affiliates |
 | Microsoft.Web.WebView2 (SDK) | 1.0.4191.47 | BSD-3-Clause (package `LICENSE.txt`) | Microsoft Corporation |
 | Microsoft.Data.Sqlite / .Core | 10.0.12 | MIT | Microsoft Corporation |
