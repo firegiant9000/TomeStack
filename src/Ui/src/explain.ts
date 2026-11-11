@@ -56,7 +56,7 @@ function explainStep(step: TraceEntry, context: StepContext): string {
       if (amount !== undefined) return `Set to ${amount}: ${description}`;
       return context === 'attack' ? description : `${description}: ${result}`;
     case 'override':
-      return `Your override: ${result}`;
+      return `A number you set by hand: ${result}`;
     case 'floor': // G9: a roll floor leaves the field value as it was; the description says what it does
       return description;
     case 'ignored':

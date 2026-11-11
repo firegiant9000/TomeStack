@@ -574,7 +574,7 @@ it('offers a compact view on Play that is remembered as a preference (D20)', asy
   expect(document.documentElement.dataset.compactPlay).toBe('on');
 });
 
-it('marks proficient and expert fields on Stats and lists passive scores and Speed (D24)', () => {
+it('marks proficient and expert fields on Skills and saves and lists passive scores and Speed (D24)', () => {
   const base = view().sheet.fields;
   renderSheet(
     view({
@@ -677,7 +677,7 @@ it('falls back to Play when the requested tab is not offered', () => {
   expect(screen.getByRole('tabpanel', { name: 'Play' })).toBeTruthy();
 });
 
-it('"Report a gap" switches to Notes, pre-fills About and focuses the text, every time it is pressed', async () => {
+it('"Report a gap" switches to Journal, pre-fills About and focuses the text, every time it is pressed', async () => {
   const user = userEvent.setup();
   renderSheet(view());
   await user.click(screen.getByRole('tab', { name: 'Skills and saves' }));
@@ -718,7 +718,7 @@ const withDetails = (details: NonNullable<Character['details']>): CharacterView 
   return { ...v, character: { ...v.character, schemaVersion: 9, details } };
 };
 
-it('puts the Details form on Notes after session notes and gap notes, with no new tab', async () => {
+it('puts the Details form on Journal after session notes and gap notes, with no new tab', async () => {
   const user = userEvent.setup();
   renderSheet(view());
   expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Play', 'Gear', 'Features', 'Skills and saves', 'Journal', 'Manage']);
@@ -741,10 +741,10 @@ it('keeps text typed in the Details form when switching tabs and back', async ()
   expect(within(form).getByRole('button', { name: 'Save details' }).getAttribute('aria-disabled')).toBeNull();
 });
 
-it('shows Languages and Tools read-only on Stats with a link into Details, and nothing when both are empty', async () => {
+it('shows Languages and Tools read-only on Skills and saves with a link into Details, and nothing when both are empty', async () => {
   const user = userEvent.setup();
   renderSheet(view(), 'stats');
-  expect(screen.queryByRole('button', { name: /Edit in Notes/ })).toBeNull();
+  expect(screen.queryByRole('button', { name: /Edit in Journal/ })).toBeNull();
   expect(screen.queryByRole('list', { name: 'Languages' })).toBeNull();
   cleanup();
   renderSheet(withDetails({ alignment: 'Fixture neutral', languages: ['Fixture tongue', 'Fixture signs'] }), 'stats');
@@ -756,7 +756,7 @@ it('shows Languages and Tools read-only on Stats with a link into Details, and n
   await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Details' })));
 });
 
-it('the Stats link moves focus to the Details heading every time, even when Notes is already the remembered tab', async () => {
+it('the Skills and saves link moves focus to the Details heading every time, even when Journal is already the remembered tab', async () => {
   const user = userEvent.setup();
   renderSheet(withDetails({ toolsAndOther: ['Fixture kit'] }), 'stats');
   await user.click(screen.getByRole('button', { name: 'Edit in Journal → Details' }));

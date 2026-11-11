@@ -465,7 +465,7 @@ function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (in
                 setMessage({
                   tone: 'status',
                   text:
-                    `Character created from the character sheet: ${result.overrides} ${result.overrides === 1 ? 'number' : 'numbers'} set by hand,${result.gapNotes} gap note(s).` +
+                    `Character created from the character sheet: ${result.overrides} ${result.overrides === 1 ? 'number' : 'numbers'} set by hand, ${result.gapNotes} gap note(s).` +
                     (result.gapNotesNotStored > 0 ? ` ${result.gapNotesNotStored} more items were not noted: the character's note limit was reached.` : ''),
                 });
               }}

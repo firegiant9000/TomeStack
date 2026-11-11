@@ -2975,7 +2975,7 @@ it('imports a D&D Beyond sheet, resolves a choice, keeps one sheet number as an 
   await waitFor(() => expect(create.disabled).toBe(false));
   await user.click(create);
 
-  await expectStatus(/Character created from the character sheet: 3 numbers set by hand,\d+ gap note\(s\)/);
+  await expectStatus(/Character created from the character sheet: 3 numbers set by hand, \d+ gap note\(s\)/);
   const sheet = await screen.findByRole('article', { name: 'Testy McFixture' });
   expect(summaryValue(sheet, 'Armor Class')).toContain('(set by hand)');
   await openTab(user, sheet, 'Skills and saves');
@@ -3005,7 +3005,7 @@ it('imports the fillable 2014 sheet through the same entry: the layout is named,
   await waitFor(() => expect(create.disabled).toBe(false));
   await user.click(create);
 
-  await expectStatus(/Character created from the character sheet: \d+ numbers? set by hand,\d+ gap note\(s\)/);
+  await expectStatus(/Character created from the character sheet: \d+ numbers? set by hand, \d+ gap note\(s\)/);
   const sheet = await screen.findByRole('article', { name: 'Testy McFixture' });
   await openTab(user, sheet, 'Journal');
   expect(await within(sheet).findByText(/Testy backstory\./)).toBeTruthy();
