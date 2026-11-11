@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 // "Save for an older TomeStack" (D85) in the campaign pack form: the target control, the change region and the confirmation.
 // The client is mocked; values are invented.
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { client } from '../api/client';
 import type { Campaign, CampaignPackPreview, RulesFamilyPolicy } from '../api/types';
 import { blockedHint, confirmLabel, describedBy, exportChange, failedLine, firstRadio, packageTargetsFixture } from '../test/downConversion';
+import { RulesLabelProvider } from '../rulesLabel';
 import { CampaignsPanel } from './CampaignsPanel';
 
 vi.mock('../api/client', () => ({
@@ -53,6 +54,10 @@ beforeEach(() => {
 });
 
 const families = [{ id: 'srd-5.1', displayName: 'SRD 5.1' }] as unknown as RulesFamilyPolicy[];
+const labelled = [
+  { id: 'srd-5.1', displayName: 'SRD 5.1 (2014 rules)', shortLabel: '2014 rules' },
+  { id: 'srd-5.2.1', displayName: 'SRD 5.2.1 (2024 rules)', shortLabel: '2024 rules' },
+] as unknown as RulesFamilyPolicy[];
 
 async function openShare(onError: (e: unknown) => void = () => {}) {
   const user = userEvent.setup();
@@ -62,6 +67,26 @@ async function openShare(onError: (e: unknown) => void = () => {}) {
   return user;
 }
 const save = () => screen.getByRole('button', { name: 'Save campaign pack…' }) as HTMLButtonElement;
+
+it('names the campaign form rules radios and the list tag by short label, with no "Rules family" wording', async () => {
+  const user = userEvent.setup();
+  render(
+    <RulesLabelProvider families={labelled}>
+      <CampaignsPanel rulesFamilies={labelled} onError={() => {}} onStatus={() => {}} />
+    </RulesLabelProvider>,
+  );
+  await screen.findByRole('button', { name: 'Edit Compat Table' });
+  expect(screen.getByRole('listitem').textContent).toContain('2014 rules');
+
+  await user.click(screen.getByRole('button', { name: 'New campaign' }));
+  const form = screen.getByRole('form', { name: 'Campaign' });
+  const group = within(form).getByRole('group', { name: 'Campaign rules' });
+  expect(within(group).getAllByRole('radio').map((r) => r.parentElement?.textContent?.trim())).toEqual(['2014 rules', '2024 rules']);
+  expect(within(group).getByRole('radio', { name: '2014 rules' })).toBeTruthy();
+  expect(within(group).getByRole('radio', { name: '2024 rules' })).toBeTruthy();
+  expect(form.textContent).not.toContain('Rules family');
+  expect(form.textContent).not.toMatch(/srd-5|SRD 5/);
+});
 
 it('re-runs the preview for the chosen release and again without a target for the first choice', async () => {
   const user = await openShare();

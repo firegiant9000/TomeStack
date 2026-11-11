@@ -104,6 +104,13 @@ it('offers one checkbox per family of the source, ticked as the candidate has th
   expect(boxes.map((b) => (b as HTMLInputElement).checked)).toEqual([true, false]);
 });
 
+it('lists the candidate\'s rules in its hint by short label, never an id', async () => {
+  await openDetail(['srd-5.1', 'srd-5.2.1'], checkOf({}));
+  const hint = screen.getByText(/a hint, not a check/).textContent ?? '';
+  expect(hint).toContain('2014 rules, 2024 rules');
+  expect(hint).not.toMatch(/srd-5|SRD 5/);
+});
+
 it('offers only the source families, even for a source with one', async () => {
   vi.mocked(client.candidates).mockResolvedValue(pageOf([detected(['srd-5.1'])]));
   vi.mocked(client.checkCandidate).mockResolvedValue(checkOf({}));

@@ -9,6 +9,7 @@ import { TomeStackError } from '../../api/transport';
 import type { DdbPreview, DdbReadResult, MatchRow, RulesFamilyPolicy } from '../../api/types';
 import { RulesLabelProvider } from '../../rulesLabel';
 import { DdbImportPanel } from './DdbImportPanel';
+import { DdbFamilyStep } from './DdbFamilyStep';
 import { DdbSummaryStep } from './DdbSummaryStep';
 
 vi.mock('../../api/client', () => ({
@@ -670,7 +671,7 @@ it('shows the stub in full on the summary, leaves Publish it unticked and says t
 
   const section = await screen.findByRole('region', { name: 'Homebrew class to create' });
   const text = section.textContent ?? '';
-  for (const part of ['Fixture Tinkerer', 'srd-5.1', 'd8', 'Strength, Constitution', 'Characters imported from sheets']) expect(text).toContain(part);
+  for (const part of ['Fixture Tinkerer', '2014 rules', 'd8', 'Strength, Constitution', 'Characters imported from sheets']) expect(text).toContain(part);
   const publish = within(section).getByRole<HTMLInputElement>('checkbox', { name: 'Publish it' });
   expect(publish.checked).toBe(false);
   expect(within(section).getByRole('note').textContent).toBe('The class is a draft: the character gets nothing from it until you publish it in the studio and accept the update on the character.');
@@ -1211,4 +1212,34 @@ it('does not offer the Not read section for a PDF import', async () => {
   renderPanel();
   await toMatches(user);
   expect(screen.queryByRole('checkbox', { name: /lines that were not read/ })).toBeNull();
+});
+
+// ---- The rules a player reads are the short labels, never ids or display names ----
+
+it('says in the summary note which rules the sheet looks like and which the character uses, by short label', () => {
+  const base = preview(true);
+  render(
+    <DdbSummaryStep
+      family="srd-5.1"
+      suggested="srd-5.2.1"
+      includePlayState={false}
+      onIncludePlayState={vi.fn()}
+      publishClass={false}
+      onPublishClass={vi.fn()}
+      preview={{ ...base, report: { ...base.report, familyMismatch: true } }}
+    />,
+  );
+
+  expect(screen.getByRole('note').textContent).toBe('The sheet looks like 2024 rules; this character uses 2014 rules.');
+});
+
+it('names the family step radios by short label and warns in the same words', () => {
+  render(<DdbFamilyStep rulesFamilies={families} suggested="srd-5.2.1" family="srd-5.1" onFamily={vi.fn()} onCampaign={vi.fn()} numberPreset="sheet" onNumberPreset={vi.fn()} onError={vi.fn()} />);
+
+  const group = screen.getByRole('group', { name: 'Rules' });
+  expect(within(group).getAllByRole('radio').map((r) => r.parentElement?.textContent?.trim())).toEqual(['2014 rules', '2024 rulessuggested by the sheet']);
+  expect(within(group).getByRole('radio', { name: /^2014 rules/ })).toBeTruthy();
+  expect(within(group).getByRole('radio', { name: /^2024 rules/ })).toBeTruthy();
+  expect(group.textContent).not.toMatch(/srd-5|SRD 5/);
+  expect(screen.getByRole('note').textContent).toBe('This looks like a sheet for 2024 rules; names will match 2014 rules content.');
 });

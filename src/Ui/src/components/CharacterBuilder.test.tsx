@@ -496,6 +496,35 @@ it('moves focus to the heading when Back returns to the Rules step (R5, 2.4.3)',
   expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'New character' }));
 });
 
+it('asks "Which rules does your table use?" under the Rules step and names the radios by short label, never an id', async () => {
+  vi.mocked(client.listContent).mockResolvedValue(stepContent());
+  renderCreate();
+
+  const form = screen.getByRole('form', { name: 'Rules' });
+  expect(screen.getByRole('heading', { name: 'Rules' })).toBeTruthy();
+  const group = within(form).getByRole('group', { name: 'Which rules does your table use?' });
+  const radios = within(group).getAllByRole('radio');
+  expect(radios.map((r) => r.getAttribute('value'))).toEqual(['srd-5.1', 'srd-5.2.1']);
+  expect(radios.map((r) => r.parentElement?.textContent?.trim())).toEqual(['2014 rules', '2024 rules']);
+  expect(within(group).getByRole('radio', { name: '2014 rules' })).toBeTruthy();
+  expect(within(group).getByRole('radio', { name: '2024 rules' })).toBeTruthy();
+  expect(form.textContent).not.toMatch(/srd-5|SRD 5/);
+});
+
+it('ends a species option\'s source line with the rules by short label', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listContent).mockResolvedValue(stepContent());
+  renderCreate();
+  await fill(user, screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
+  await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
+  await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
+  await user.click(screen.getByRole('button', { name: 'Next: species' }));
+
+  const radio = await screen.findByRole('radio', { name: /^Fixture Hillfolk/ });
+  expect(radio.parentElement?.querySelector('.option-source')?.textContent).toMatch(/· 2014 rules$/);
+  expect(radio.parentElement?.textContent).not.toMatch(/srd-5|SRD 5/);
+});
+
 it('keeps the species and class picks across Back and forth', async () => {
   const user = userEvent.setup();
   vi.mocked(client.listContent).mockResolvedValue(stepContent());

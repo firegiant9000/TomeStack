@@ -12,7 +12,7 @@ import { HomebrewStudio } from './HomebrewStudio';
 import { fill } from '../test/fill';
 
 vi.mock('../api/client', () => ({
-  client: { listSources: vi.fn(), contentBySource: vi.fn(), publishManyPreview: vi.fn(), createHomebrewSource: vi.fn(), previewFormula: vi.fn(), listCharacters: vi.fn(), validateRevision: vi.fn(), contentDuplicates: vi.fn() },
+  client: { feedback: vi.fn(), listSources: vi.fn(), contentBySource: vi.fn(), publishManyPreview: vi.fn(), createHomebrewSource: vi.fn(), previewFormula: vi.fn(), listCharacters: vi.fn(), validateRevision: vi.fn(), contentDuplicates: vi.fn() },
 }));
 
 const info = { rulesFamilies: [{ id: 'srd-5.1', displayName: 'SRD 5.1', shortLabel: '2014 rules' }] } as unknown as AppInfo;
@@ -25,8 +25,60 @@ beforeEach(() => {
   vi.mocked(client.listSources).mockResolvedValue([homebrew('a', 'Testy Alpha'), homebrew('b', 'Testy Beta')]);
   vi.mocked(client.contentBySource).mockResolvedValue([]);
   vi.mocked(client.contentDuplicates).mockResolvedValue([]);
+  vi.mocked(client.listCharacters).mockResolvedValue([]);
+  vi.mocked(client.previewFormula).mockResolvedValue({ formula: '3', points: [] });
+  vi.mocked(client.validateRevision).mockResolvedValue({ revision: { contentId: 'id-m', revisionId: 'x' }, errors: [], warnings: [], canPublish: true });
 });
 afterEach(cleanup);
+
+// The rules a player reads are the short labels, never ids.
+it('names the rules by short label in the source picker, the new-source checkboxes and the editor\'s Rules legend', async () => {
+  const user = userEvent.setup();
+  const entry = {
+    contentId: 'id-m',
+    name: 'Testy Blade',
+    kind: 'feat',
+    revisions: [],
+    latest: { contentId: 'id-m', revisionId: 'r-m', name: 'Testy Blade', kind: 'feat', status: 'draft', rulesFamilies: ['srd-5.1'], provenance: {}, effects: [] },
+  } as unknown as StudioEntry;
+  vi.mocked(client.contentBySource).mockImplementation((id) => Promise.resolve(id === 'a' ? [entry] : []));
+  render(<HomebrewStudio info={info} onError={() => {}} onStatus={() => {}} />);
+
+  const select = await screen.findByRole<HTMLSelectElement>('combobox', { name: 'Homebrew source' });
+  expect(Array.from(select.options).map((o) => o.textContent)).toEqual(['Testy Alpha (2014 rules)', 'Testy Beta (2014 rules)']);
+  const written = screen.getByRole('group', { name: 'Written for' });
+  expect(within(written).getByRole('checkbox', { name: '2014 rules' })).toBeTruthy();
+  expect(written.textContent).not.toMatch(/srd-5|SRD 5/);
+
+  await user.click(await screen.findByRole('button', { name: 'Edit Testy Blade' }));
+  const rules = screen.getByRole('group', { name: 'Rules' });
+  expect(within(rules).getByRole('checkbox', { name: '2014 rules' })).toHaveProperty('checked', true);
+  expect(rules.textContent).not.toMatch(/srd-5|SRD 5/);
+});
+
+it('puts the short label after a design hint that names a rules family', async () => {
+  const user = userEvent.setup();
+  globalThis.localStorage.setItem('tomestack.designFeedback', 'on');
+  try {
+    const entry = {
+      contentId: 'id-m',
+      name: 'Testy Blade',
+      kind: 'feat',
+      revisions: [],
+      latest: { contentId: 'id-m', revisionId: 'r-m', name: 'Testy Blade', kind: 'feat', status: 'draft', rulesFamilies: ['srd-5.1'], provenance: {}, effects: [] },
+    } as unknown as StudioEntry;
+    vi.mocked(client.contentBySource).mockImplementation((id) => Promise.resolve(id === 'a' ? [entry] : []));
+    vi.mocked(client.feedback).mockResolvedValue([{ code: 'fixture.hint', message: 'Fixture hint.', family: 'srd-5.1' }] as unknown as Awaited<ReturnType<typeof client.feedback>>);
+    render(<HomebrewStudio info={info} onError={() => {}} onStatus={() => {}} />);
+    await user.click(await screen.findByRole('button', { name: 'Edit Testy Blade' }));
+    await user.click(screen.getByRole('button', { name: 'Get design hints' }));
+
+    const region = await screen.findByRole('region', { name: 'Design hints' });
+    expect(within(region).getByRole('listitem').textContent).toBe('Fixture hint. (2014 rules)');
+  } finally {
+    globalThis.localStorage.removeItem('tomestack.designFeedback');
+  }
+});
 
 // Import Lab L6: a library row that looks like another entry says so in words; the other entry may be in another source.
 it('shows "Possible duplicate of {name} ({source})" on the library rows that have a twin', async () => {
