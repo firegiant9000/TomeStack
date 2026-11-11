@@ -547,7 +547,7 @@ it('does not offer Undo once another view is shown, such as a rest result (D23)'
   expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Undo last change' }).disabled).toBe(true);
 });
 
-it('leaves the information-only toggle.group-absent out of "Content not applied" and keeps real diagnostics (D43)', () => {
+it('leaves the information-only toggle.group-absent out of "Needs your attention" and keeps real diagnostics (D43)', () => {
   renderSheet(
     view({
       diagnostics: [
@@ -556,12 +556,12 @@ it('leaves the information-only toggle.group-absent out of "Content not applied"
       ],
     }),
   );
-  expect(screen.getByRole('heading', { name: 'Content not applied' })).toBeTruthy();
+  expect(screen.getByRole('heading', { name: 'Needs your attention' })).toBeTruthy();
   expect(screen.getByText('A formula does not read.')).toBeTruthy();
   expect(screen.queryByText(/group of one/)).toBeNull();
   cleanup();
   renderSheet(view({ diagnostics: [{ code: 'toggle.group-absent', message: 'group of one' }] }));
-  expect(screen.queryByRole('heading', { name: 'Content not applied' })).toBeNull();
+  expect(screen.queryByRole('heading', { name: 'Needs your attention' })).toBeNull();
 });
 
 it('offers a compact view on Play that is remembered as a preference (D20)', async () => {
@@ -612,7 +612,7 @@ it('groups Features by what granted them, then by kind, and drops none (D25)', (
 
 it('offers Spells to a caster, or when a spell field has a value, and opens on Play', () => {
   renderSheet(view());
-  expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Play', 'Inventory', 'Features', 'Stats', 'Notes', 'Manage']);
+  expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Play', 'Gear', 'Features', 'Skills and saves', 'Journal', 'Manage']);
   expect(screen.getByRole('tab', { name: 'Play' }).getAttribute('aria-selected')).toBe('true');
   cleanup();
   renderSheet(view({ spellcasting: [] , spellSlots: [{ level: 1, maximum: 2, spent: 0, remaining: 2, field: 'spellSlots.1' }], fields: [...view().sheet.fields, field('spellSlots.1', 'Level 1 spell slots', 2, 'score')] }));
@@ -642,7 +642,7 @@ it('offers Spells to a caster, or when a spell field has a value, and opens on P
       ],
     }),
   );
-  expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Play', 'Spells', 'Inventory', 'Features', 'Stats', 'Notes', 'Manage']);
+  expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Play', 'Spells', 'Gear', 'Features', 'Skills and saves', 'Journal', 'Manage']);
 });
 
 it('announces a Prepared toggle on a spell removed meanwhile as a polite status, not an error, and keeps focus (H2/R144)', async () => {
@@ -680,18 +680,18 @@ it('falls back to Play when the requested tab is not offered', () => {
 it('"Report a gap" switches to Notes, pre-fills About and focuses the text, every time it is pressed', async () => {
   const user = userEvent.setup();
   renderSheet(view());
-  await user.click(screen.getByRole('tab', { name: 'Stats' }));
+  await user.click(screen.getByRole('tab', { name: 'Skills and saves' }));
   const ac = screen.getByRole('region', { name: /^Armor Class:/ });
   await user.click(within(ac).getByRole('heading'));
   await user.click(within(ac).getByRole('button', { name: 'Report a gap: Armor Class' }));
-  expect(screen.getByRole('tab', { name: 'Notes' }).getAttribute('aria-selected')).toBe('true');
+  expect(screen.getByRole('tab', { name: 'Journal' }).getAttribute('aria-selected')).toBe('true');
   const form = screen.getByRole('form', { name: 'New gap note' });
   const text = within(form).getByRole('textbox', { name: /^What was missing or wrong/ });
   await waitFor(() => expect(document.activeElement).toBe(text));
   expect((within(form).getByRole('combobox', { name: /^About/ }) as HTMLSelectElement).value).toBe('field:armorClass');
 
   // A second report, after leaving Notes and moving focus away, must move focus to the text box again.
-  await user.click(screen.getByRole('tab', { name: 'Stats' }));
+  await user.click(screen.getByRole('tab', { name: 'Skills and saves' }));
   text.blur();
   await user.click(within(screen.getByRole('region', { name: /^Initiative:/ })).getByRole('heading'));
   await user.click(within(screen.getByRole('region', { name: /^Initiative:/ })).getByRole('button', { name: 'Report a gap: Initiative' }));
@@ -702,14 +702,14 @@ it('"Report a gap" switches to Notes, pre-fills About and focuses the text, ever
 it('keeps typed text in the gap note box when switching tabs and back', async () => {
   const user = userEvent.setup();
   renderSheet(view());
-  await user.click(screen.getByRole('tab', { name: 'Notes' }));
+  await user.click(screen.getByRole('tab', { name: 'Journal' }));
   // Choosing Notes by hand keeps focus on the tab (APG); only "Report a gap" moves focus into the text box.
-  expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Notes' }));
+  expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Journal' }));
   const form = screen.getByRole('form', { name: 'New gap note' });
   const text = within(form).getByRole('textbox', { name: /^What was missing or wrong/ }) as HTMLTextAreaElement;
   await user.type(text, 'Fixture draft: the rule text is unclear');
-  await user.click(screen.getByRole('tab', { name: 'Stats' }));
-  await user.click(screen.getByRole('tab', { name: 'Notes' }));
+  await user.click(screen.getByRole('tab', { name: 'Skills and saves' }));
+  await user.click(screen.getByRole('tab', { name: 'Journal' }));
   expect((within(screen.getByRole('form', { name: 'New gap note' })).getByRole('textbox', { name: /^What was missing or wrong/ }) as HTMLTextAreaElement).value).toBe('Fixture draft: the rule text is unclear');
 });
 
@@ -721,9 +721,9 @@ const withDetails = (details: NonNullable<Character['details']>): CharacterView 
 it('puts the Details form on Notes after session notes and gap notes, with no new tab', async () => {
   const user = userEvent.setup();
   renderSheet(view());
-  expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Play', 'Inventory', 'Features', 'Stats', 'Notes', 'Manage']);
-  await user.click(screen.getByRole('tab', { name: 'Notes' }));
-  const panel = screen.getByRole('tabpanel', { name: 'Notes' });
+  expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Play', 'Gear', 'Features', 'Skills and saves', 'Journal', 'Manage']);
+  await user.click(screen.getByRole('tab', { name: 'Journal' }));
+  const panel = screen.getByRole('tabpanel', { name: 'Journal' });
   expect(within(panel).getAllByRole('heading', { level: 3 }).map((h) => h.textContent?.replace(/: \d+ open$/, ''))).toEqual(['Session notes', 'Gap notes', 'Details']);
   expect(within(panel).getByRole('form', { name: 'Details' })).toBeTruthy();
 });
@@ -731,11 +731,11 @@ it('puts the Details form on Notes after session notes and gap notes, with no ne
 it('keeps text typed in the Details form when switching tabs and back', async () => {
   const user = userEvent.setup();
   renderSheet(view());
-  await user.click(screen.getByRole('tab', { name: 'Notes' }));
+  await user.click(screen.getByRole('tab', { name: 'Journal' }));
   await user.type(within(screen.getByRole('form', { name: 'Details' })).getByRole('textbox', { name: 'Alignment' }), 'Fixture draft alignment');
-  await user.click(screen.getByRole('tab', { name: 'Stats' }));
+  await user.click(screen.getByRole('tab', { name: 'Skills and saves' }));
   expect(screen.queryByRole('form', { name: 'Details' })).toBeNull();
-  await user.click(screen.getByRole('tab', { name: 'Notes' }));
+  await user.click(screen.getByRole('tab', { name: 'Journal' }));
   const form = screen.getByRole('form', { name: 'Details' });
   expect((within(form).getByRole('textbox', { name: 'Alignment' }) as HTMLInputElement).value).toBe('Fixture draft alignment');
   expect(within(form).getByRole('button', { name: 'Save details' }).getAttribute('aria-disabled')).toBeNull();
@@ -751,29 +751,29 @@ it('shows Languages and Tools read-only on Stats with a link into Details, and n
   expect(screen.getAllByRole('listitem').map((li) => li.textContent)).toEqual(expect.arrayContaining(['Fixture tongue', 'Fixture signs']));
   expect(within(screen.getByRole('list', { name: 'Languages' })).getAllByRole('listitem')).toHaveLength(2);
   expect(screen.queryByRole('list', { name: 'Tools and other' })).toBeNull(); // an empty list shows nothing
-  await user.click(screen.getByRole('button', { name: 'Edit in Notes → Details' }));
-  expect(screen.getByRole('tab', { name: 'Notes' }).getAttribute('aria-selected')).toBe('true');
+  await user.click(screen.getByRole('button', { name: 'Edit in Journal → Details' }));
+  expect(screen.getByRole('tab', { name: 'Journal' }).getAttribute('aria-selected')).toBe('true');
   await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Details' })));
 });
 
 it('the Stats link moves focus to the Details heading every time, even when Notes is already the remembered tab', async () => {
   const user = userEvent.setup();
   renderSheet(withDetails({ toolsAndOther: ['Fixture kit'] }), 'stats');
-  await user.click(screen.getByRole('button', { name: 'Edit in Notes → Details' }));
+  await user.click(screen.getByRole('button', { name: 'Edit in Journal → Details' }));
   await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Details' })));
-  await user.click(screen.getByRole('tab', { name: 'Stats' }));
+  await user.click(screen.getByRole('tab', { name: 'Skills and saves' }));
   expect(within(screen.getByRole('list', { name: 'Tools and other' })).getAllByRole('listitem')).toHaveLength(1);
-  await user.click(screen.getByRole('button', { name: 'Edit in Notes → Details' }));
+  await user.click(screen.getByRole('button', { name: 'Edit in Journal → Details' }));
   await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Details' })));
 });
 
 it('opens on the remembered tab, and an explicit initialTab wins over it', () => {
   localStorage.setItem('tomestack.sheetTab.fixture-2', 'stats');
   renderSheet(view());
-  expect(screen.getByRole('tab', { name: 'Stats' }).getAttribute('aria-selected')).toBe('true');
+  expect(screen.getByRole('tab', { name: 'Skills and saves' }).getAttribute('aria-selected')).toBe('true');
   cleanup();
   renderSheet(view(), 'notes');
-  expect(screen.getByRole('tab', { name: 'Notes' }).getAttribute('aria-selected')).toBe('true');
+  expect(screen.getByRole('tab', { name: 'Journal' }).getAttribute('aria-selected')).toBe('true');
   expect(localStorage.getItem('tomestack.sheetTab.fixture-2')).toBe('stats'); // opening on a deep link does not rewrite the memory
 });
 
@@ -1625,7 +1625,7 @@ it('shows climb speed when above 0 or overridden', async () => {
   };
   renderSheet(overridden, 'stats');
   await user.click(screen.getByRole('heading', { name: /Swim speed/ }));
-  expect(screen.getByRole('button', { name: /Remove override/ })).toBeTruthy();
+  expect(screen.getByRole('button', { name: /Remove the number I set/ })).toBeTruthy();
 });
 
 it('an override of 0 keeps the fly speed card and its Remove override button', async () => {
@@ -1641,7 +1641,7 @@ it('an override of 0 keeps the fly speed card and its Remove override button', a
   };
   renderSheet(overridden, 'stats');
   await user.click(screen.getByRole('heading', { name: /Fly speed/ }));
-  expect(screen.getByRole('button', { name: /Remove override/ })).toBeTruthy();
+  expect(screen.getByRole('button', { name: /Remove the number I set/ })).toBeTruthy();
 });
 
 it('the player picker says that automatic modes are combined with its choice', () => {
@@ -1876,7 +1876,7 @@ it('sends a save started while a play reply is pending with the play reply\'s up
   vi.mocked(client.saveCharacter).mockImplementation(async (c) => ({ ...v, character: { ...c, updatedAt: '2026-10-03T00:00:09.0000000+00:00' } }));
   renderSheet(v);
   await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' })); // its reply is held
-  await user.click(screen.getByRole('tab', { name: 'Inventory' }));
+  await user.click(screen.getByRole('tab', { name: 'Gear' }));
   const gold = screen.getByRole('spinbutton', { name: 'Gold (gp)' });
   await user.clear(gold);
   await user.type(gold, '20');
@@ -1904,7 +1904,7 @@ it('runs a rest finish in the save queue, so a save started meanwhile names the 
   await waitFor(() => expect(finish.getAttribute('aria-disabled')).toBe('false'));
   await user.click(finish);
   await waitFor(() => expect(client.rest).toHaveBeenCalled());
-  await user.click(screen.getByRole('tab', { name: 'Inventory' }));
+  await user.click(screen.getByRole('tab', { name: 'Gear' }));
   const gold = screen.getByRole('spinbutton', { name: 'Gold (gp)' });
   await user.clear(gold);
   await user.type(gold, '20');

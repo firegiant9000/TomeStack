@@ -432,7 +432,7 @@ it('a feat with automatic advantage rolls two dice on a Dex save, and turning on
   render(<App />);
   await user.click(await screen.findByRole('button', { name: /^E2E Mode Hero/ }));
   const sheet = await screen.findByRole('article', { name: 'E2E Mode Hero' });
-  await openTab(user, sheet, 'Stats');
+  await openTab(user, sheet, 'Skills and saves');
   await user.click(await screen.findByRole('heading', { name: /^Dexterity saving throw: / })); // the card's body is a closed <details>
   const lastRoll = () => screen.getByRole('region', { name: 'Last roll' });
   const diceRolled = () => (lastRoll().textContent!.match(/d20 \d+/g) ?? []).length;
@@ -448,7 +448,7 @@ it('a feat with automatic advantage rolls two dice on a Dex save, and turning on
   const form = await screen.findByRole<HTMLInputElement>('checkbox', { name: /^E2E Heavy Form/ });
   await user.click(form);
   await waitFor(() => expect(form.checked).toBe(true));
-  await openTab(user, sheet, 'Stats');
+  await openTab(user, sheet, 'Skills and saves');
   const cancelled = await screen.findByRole('button', { name: 'Roll Dexterity saving throw (normal: advantage and disadvantage cancel)' });
   await user.click(cancelled);
   await waitFor(() => expect(diceRolled()).toBe(1));

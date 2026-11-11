@@ -725,7 +725,7 @@ function LevelStep(props: {
         )}
         {!atMaximum && (
           <p className="hint">
-            Hit points use the fixed value for each new level. If you rolled, record the total as an override on the sheet.
+            Hit points use the fixed value for each new level. If you rolled, record the total as a number you set by hand on the sheet.
           </p>
         )}
         <div className="actions">

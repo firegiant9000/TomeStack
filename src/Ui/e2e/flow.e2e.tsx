@@ -80,7 +80,7 @@ it('creates a character, shows its traced sheet, overrides, exports and re-impor
   // Sheet with a source-aware trace: Dex 14 + 2 (Fixture Quickfoot, species under 2014 rules) = 16 -> +3
   const sheet = await screen.findByRole('article', { name: 'E2E Pell' });
   await waitFor(() => expect(document.activeElement).toBe(within(sheet).getByRole('heading', { level: 2, name: 'E2E Pell' })));
-  await openTab(user, sheet, 'Stats');
+  await openTab(user, sheet, 'Skills and saves');
   const initiative = within(sheet).getByRole('region', { name: /^Initiative:/ });
   expect(within(initiative).getByRole('heading').textContent).toContain('+3');
   expect(within(sheet).getByRole('heading', { name: /^Dexterity score: 16/ })).toBeTruthy();
@@ -89,13 +89,13 @@ it('creates a character, shows its traced sheet, overrides, exports and re-impor
   expect(within(trace).getByText(/TomeStack Fixtures: 2014 Family, p\. 1/)).toBeTruthy();
 
   // Override (labeled, keeps the computed value)
-  await user.type(within(initiative).getByRole('spinbutton', { name: 'Override value' }), '9');
+  await user.type(within(initiative).getByRole('spinbutton', { name: 'Number to set by hand' }), '9');
   await user.type(within(initiative).getByRole('textbox', { name: 'Reason (optional)' }), 'Table ruling');
-  await user.click(within(initiative).getByRole('button', { name: 'Apply override' }));
-  await waitFor(() => expect(screen.getByRole('heading', { name: /^Initiative:/ }).textContent).toContain('overridden (calculated +3)'));
+  await user.click(within(initiative).getByRole('button', { name: 'Set by hand' }));
+  await waitFor(() => expect(screen.getByRole('heading', { name: /^Initiative:/ }).textContent).toContain('set by hand (calculated +3)'));
 
   // D22: a session note on Notes is the player's journal; the share preview below must not list it.
-  await openTab(user, sheet, 'Notes');
+  await openTab(user, sheet, 'Journal');
   const journal = within(sheet).getByRole('form', { name: 'New session note' });
   await user.type(within(journal).getByRole('textbox', { name: 'Note' }), 'Private session note for the share test.');
   await user.click(within(journal).getByRole('button', { name: 'Save session note' }));
@@ -112,10 +112,10 @@ it('creates a character, shows its traced sheet, overrides, exports and re-impor
   await expectStatus(/Details saved/);
   expect(saveDetails.getAttribute('aria-disabled')).toBe('true'); // nothing differs now
   expect(document.activeElement).toBe(saveDetails); // focus stays on the button
-  await openTab(user, sheet, 'Stats');
+  await openTab(user, sheet, 'Skills and saves');
   expect(within(within(sheet).getByRole('list', { name: 'Languages' })).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['E2E tongue', 'E2E signs']);
-  await user.click(within(sheet).getByRole('button', { name: 'Edit in Notes → Details' }));
-  expect(within(sheet).getByRole('tab', { name: 'Notes' }).getAttribute('aria-selected')).toBe('true');
+  await user.click(within(sheet).getByRole('button', { name: 'Edit in Journal → Details' }));
+  expect(within(sheet).getByRole('tab', { name: 'Journal' }).getAttribute('aria-selected')).toBe('true');
   await waitFor(() => expect(document.activeElement).toBe(within(sheet).getByRole('heading', { name: 'Details' })));
 
   // Export (DevHost has no native dialog: package.saveAs -> unsupported -> download fallback)
@@ -156,8 +156,8 @@ it('creates a character, shows its traced sheet, overrides, exports and re-impor
   const status = await expectStatus(/1 replaced/);
   expect(status.getAttribute('role')).toBe('status');
   expect(status.textContent).toMatch(/backed up to backups\/pre-import-/);
-  await openTab(user, await screen.findByRole('article', { name: 'E2E Pell' }), 'Stats');
-  await waitFor(() => expect(screen.getByRole('heading', { name: /^Initiative:/ }).textContent).toContain('overridden (calculated +3)'));
+  await openTab(user, await screen.findByRole('article', { name: 'E2E Pell' }), 'Skills and saves');
+  await waitFor(() => expect(screen.getByRole('heading', { name: /^Initiative:/ }).textContent).toContain('set by hand (calculated +3)'));
 });
 
 /** Ticks one option of the choice whose legend starts with `legend`. */
@@ -239,7 +239,7 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   await user.click(screen.getByRole('button', { name: 'Create and save' }));
 
   let sheet = await screen.findByRole('article', { name: 'E2E Brenna' });
-  await openTab(user, sheet, 'Stats');
+  await openTab(user, sheet, 'Skills and saves');
   expect(within(sheet).getByRole('heading', { name: /^Strength score: 17/ })).toBeTruthy();
   expect(within(sheet).queryByRole('heading', { name: 'Choices to make' })).toBeNull();
 
@@ -294,7 +294,7 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   // The M1 acceptance values for Brenna (m1-acceptance.md): AC 13, HP 35, Animal Handling +3.
   // The builder waits for the tick's preview before saving, and the saved view opens the sheet; wait for the re-render all the same.
   sheet = await screen.findByRole('article', { name: 'E2E Brenna' });
-  await openTab(user, sheet, 'Stats');
+  await openTab(user, sheet, 'Skills and saves');
   expect(await within(sheet).findByRole('heading', { name: /^Armor Class: 13/ })).toBeTruthy();
   expect(await within(sheet).findByRole('heading', { name: /^Hit point maximum: 35/ })).toBeTruthy();
   expect(await within(sheet).findByRole('heading', { name: /^Animal Handling: \+3/ })).toBeTruthy();
@@ -340,7 +340,7 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
 
   // A d20 test with advantage keeps one die and drops the other.
   await user.click(screen.getByRole('radio', { name: 'Advantage' }));
-  await openTab(user, sheet, 'Stats');
+  await openTab(user, sheet, 'Skills and saves');
   const strSave = screen.getByRole('region', { name: /^Strength saving throw:/ });
   await user.click(within(strSave).getByRole('heading'));
   await user.click(within(strSave).getByRole('button', { name: 'Roll Strength saving throw' }));
@@ -435,7 +435,7 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 35 of 35' })).toBeTruthy());
 
   // Wave 3 item 21 (D19 amended): a resistance recorded by hand on Stats halves typed damage on Play, and Undo puts it all back.
-  await openTab(user, sheet, 'Stats');
+  await openTab(user, sheet, 'Skills and saves');
   const defences = () => screen.getByRole('region', { name: 'Damage resistances, immunities and vulnerabilities' });
   await user.selectOptions(within(defences()).getByRole('combobox', { name: 'Damage type' }), 'slashing');
   await user.click(within(defences()).getByRole('button', { name: 'Add' }));
@@ -455,7 +455,7 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 31 of 35' })).toBeTruthy());
   await user.click(await screen.findByRole('button', { name: 'Undo last change: damage 4' }));
   await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 35 of 35' })).toBeTruthy());
-  await openTab(user, sheet, 'Stats');
+  await openTab(user, sheet, 'Skills and saves');
   await user.click(within(defences()).getByRole('button', { name: 'Remove slashing resistance' }));
   await waitFor(() => expect(screen.queryByRole('list', { name: 'Damage defences the sheet applies' })).toBeNull());
 
@@ -486,19 +486,19 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   await openTab(user, sheet, 'Play');
 
   // M2 item 4: armor replaces Unarmored Defense (13); a shield adds to it. Original fixture equipment.
-  await openTab(user, sheet, 'Inventory');
+  await openTab(user, sheet, 'Gear');
   const equipment = () => screen.getByRole('region', { name: 'Equipment' });
   await waitFor(() => expect(within(equipment()).getByRole('option', { name: /^Fixture Scale Vest/ })).toBeTruthy());
   await user.selectOptions(within(equipment()).getByRole('combobox', { name: 'Add an item' }), within(equipment()).getByRole('option', { name: /^Fixture Scale Vest/ }));
   await user.click(within(equipment()).getByRole('button', { name: 'Add' }));
   await user.click(await within(equipment()).findByRole('checkbox', { name: 'Equip Fixture Scale Vest' }));
   await waitFor(() => expect(summaryValue(sheet, 'Armor Class')).toBe('15')); // 14 + Dex 1
-  await openTab(user, sheet, 'Stats');
+  await openTab(user, sheet, 'Skills and saves');
   const ac = screen.getByRole('region', { name: /^Armor Class:/ });
   await user.click(within(ac).getByRole('heading'));
   expect(within(ac).getByRole('table').textContent).toMatch(/Unarmored Defense.*not used: it applies only while no armor is worn/);
 
-  await openTab(user, sheet, 'Inventory');
+  await openTab(user, sheet, 'Gear');
   await user.selectOptions(within(equipment()).getByRole('combobox', { name: 'Add an item' }), within(equipment()).getByRole('option', { name: /^Fixture Kite Shield/ }));
   await user.click(within(equipment()).getByRole('button', { name: 'Add' }));
   await user.click(await within(equipment()).findByRole('checkbox', { name: 'Equip Fixture Kite Shield' }));
@@ -588,13 +588,13 @@ it('authors a homebrew subclass in the studio, plays it, and reviews an update',
   await pick(user, /^Barbarian: choose 1/, /^Path of the E2E Storm/);
   await user.click(await screen.findByRole('button', { name: 'Save choices' }));
   sheet = await screen.findByRole('article', { name: 'E2E Storm' });
-  await openTab(user, sheet, 'Stats');
+  await openTab(user, sheet, 'Skills and saves');
   expect(within(sheet).getByRole('heading', { name: /^Initiative: \+2/ })).toBeTruthy(); // Dex +1, homebrew +1
   await openTab(user, sheet, 'Play');
   const resources = within(sheet).getByRole('region', { name: 'Resources' });
   expect(within(resources).getByRole('heading', { name: 'Storm charges: 2 of 2' })).toBeTruthy();
   await openTab(user, sheet, 'Features');
-  expect(within(within(sheet).getByRole('region', { name: 'Features' })).getByText('E2E Sky Lore').closest('li')!.textContent).toMatch(/reference only/);
+  expect(within(within(sheet).getByRole('region', { name: 'Features' })).getByText('E2E Sky Lore').closest('li')!.textContent).toMatch(/Text only/);
   await openTab(user, sheet, 'Play');
   await user.click(within(sheet).getByRole('button', { name: 'Roll Storm bolt (1d8 + 2)' }));
   await user.click(await screen.findByRole('button', { name: 'Spend 1 Storm charges (2 left)' }));
@@ -615,7 +615,7 @@ it('authors a homebrew subclass in the studio, plays it, and reviews an update',
   // M3 C7: the sheet offers the new revision too, and nothing changes until the reviewed update is applied.
   await user.click(screen.getByRole('button', { name: /^E2E Storm/ }));
   sheet = await screen.findByRole('article', { name: 'E2E Storm' });
-  await openTab(user, sheet, 'Stats');
+  await openTab(user, sheet, 'Skills and saves');
   expect(within(sheet).getByRole('heading', { name: /^Initiative: \+2/ })).toBeTruthy();
   await openTab(user, sheet, 'Manage');
   const updates = await within(sheet).findByRole('region', { name: 'Updates available' });
@@ -685,7 +685,7 @@ it('authors a +1 weapon in the studio, equips it and rolls it, and "Why?" names 
   // Carry and equip it; both rolls name the weapon bonus under "Why?".
   await user.click(screen.getByRole('button', { name: /^E2E Plus Hero/ }));
   const hero = await screen.findByRole('article', { name: 'E2E Plus Hero' });
-  await openTab(user, hero, 'Inventory');
+  await openTab(user, hero, 'Gear');
   const equipment = () => screen.getByRole('region', { name: 'Equipment' });
   await waitFor(() => expect(within(equipment()).getByRole('option', { name: /^E2E Plus Blade/ })).toBeTruthy());
   await user.selectOptions(within(equipment()).getByRole('combobox', { name: 'Add an item' }), within(equipment()).getByRole('option', { name: /^E2E Plus Blade/ }));
@@ -749,7 +749,7 @@ it('item mods: a published mod attached to one copy changes only that copy\'s at
   // Carry and equip the blade, then attach the mod to a new copy: one plain copy and one modded copy.
   await user.click(screen.getByRole('button', { name: /^E2E Mod Hero/ }));
   const hero = await screen.findByRole('article', { name: 'E2E Mod Hero' });
-  await openTab(user, hero, 'Inventory');
+  await openTab(user, hero, 'Gear');
   const equipment = () => screen.getByRole('region', { name: 'Equipment' });
   await waitFor(() => expect(within(equipment()).getByRole('option', { name: /^E2E Mod Blade/ })).toBeTruthy());
   await user.selectOptions(within(equipment()).getByRole('combobox', { name: 'Add an item' }), within(equipment()).getByRole('option', { name: /^E2E Mod Blade/ }));
@@ -2222,7 +2222,7 @@ it('equips a weapon: the attack uses finesse and proficiency, rolls, and actions
   await user.click(await screen.findByRole('button', { name: 'Create and save' }));
   const blade = await screen.findByRole('article', { name: 'E2E Blade' });
 
-  await openTab(user, blade, 'Inventory');
+  await openTab(user, blade, 'Gear');
   const equipment = () => screen.getByRole('region', { name: 'Equipment' });
   await waitFor(() => expect(within(equipment()).getByRole('option', { name: /^Fixture Needle/ })).toBeTruthy());
   await user.selectOptions(within(equipment()).getByRole('combobox', { name: 'Add an item' }), within(equipment()).getByRole('option', { name: /^Fixture Needle/ }));
@@ -2251,7 +2251,7 @@ it('adds an attack of your own on Inventory, rolls it on Play with advantage, an
   const hero = await screen.findByRole('article', { name: 'E2E Sling' });
 
   // Inventory: an item and an attack of your own. Neither changes a calculation.
-  await openTab(user, hero, 'Inventory');
+  await openTab(user, hero, 'Gear');
   const armorClass = summaryValue(hero, 'Armor Class');
   const items = () => screen.getByRole('region', { name: 'Your own items' });
   await user.click(within(items()).getByRole('button', { name: 'Add an item of your own' }));
@@ -2334,10 +2334,10 @@ it('records a gap note on a field and a feature, resolves one, and deletes one a
   await user.click(await screen.findByRole('button', { name: 'Create and save' }));
   const sheet = await screen.findByRole('article', { name: 'E2E Gaps' });
   const armorClass = summaryValue(sheet, 'Armor Class');
-  await openTab(user, sheet, 'Stats');
+  await openTab(user, sheet, 'Skills and saves');
   const armorClassHeading = screen.getByRole('heading', { name: /^Armor Class:/ }).textContent;
 
-  await openTab(user, sheet, 'Notes');
+  await openTab(user, sheet, 'Journal');
   const gaps = () => screen.getByRole('region', { name: /^Gap notes/ });
   expect(await within(gaps()).findByText('No gap notes yet.')).toBeTruthy();
   const form = within(gaps()).getByRole('form', { name: 'New gap note' });
@@ -2356,7 +2356,7 @@ it('records a gap note on a field and a feature, resolves one, and deletes one a
   await user.click(within(features).getByRole('button', { name: 'Report a gap: Fixture Quickfoot' }));
   expect((about as HTMLSelectElement).selectedOptions[0]!.textContent).toBe('Fixture Quickfoot');
   await waitFor(() => expect(document.activeElement).toBe(text));
-  expect(within(sheet).getByRole('tab', { name: 'Notes' }).getAttribute('aria-selected')).toBe('true');
+  expect(within(sheet).getByRole('tab', { name: 'Journal' }).getAttribute('aria-selected')).toBe('true');
   await user.type(text, 'Speed bonus should apply while unarmored only.');
   await user.click(within(form).getByRole('button', { name: 'Save note' }));
   await waitFor(() => expect(within(gaps()).getByRole('heading').textContent).toBe('Gap notes: 2 open'));
@@ -2366,7 +2366,7 @@ it('records a gap note on a field and a feature, resolves one, and deletes one a
   expect(within(gaps()).getByRole('button', { name: 'Reopen: Armor Class' })).toBeTruthy();
 
   // "Report a gap" on a field works the same way (the field's details hold the button).
-  await openTab(user, sheet, 'Stats');
+  await openTab(user, sheet, 'Skills and saves');
   const armor = within(screen.getByRole('article', { name: 'E2E Gaps' })).getByRole('region', { name: /^Armor Class:/ });
   await user.click(within(armor).getByRole('heading'));
   await user.click(within(armor).getByRole('button', { name: 'Report a gap: Armor Class' }));
@@ -2386,7 +2386,7 @@ it('records a gap note on a field and a feature, resolves one, and deletes one a
   await user.click(within(all).getAllByRole('button', { name: 'Open E2E Gaps' })[0]!);
   await screen.findByRole('article', { name: 'E2E Gaps' });
   // "Open <character>" from the Gap notes screen opens the sheet on Notes.
-  expect(within(screen.getByRole('article', { name: 'E2E Gaps' })).getByRole('tab', { name: 'Notes' }).getAttribute('aria-selected')).toBe('true');
+  expect(within(screen.getByRole('article', { name: 'E2E Gaps' })).getByRole('tab', { name: 'Journal' }).getAttribute('aria-selected')).toBe('true');
   // The reopened sheet loads its notes again; wait for them before using them.
   await within(gaps()).findByText('Speed bonus should apply while unarmored only.');
 
@@ -2401,7 +2401,7 @@ it('records a gap note on a field and a feature, resolves one, and deletes one a
 
   // Notes never change the character's sheet.
   expect(summaryValue(screen.getByRole('article', { name: 'E2E Gaps' }), 'Armor Class')).toBe(armorClass);
-  await openTab(user, screen.getByRole('article', { name: 'E2E Gaps' }), 'Stats');
+  await openTab(user, screen.getByRole('article', { name: 'E2E Gaps' }), 'Skills and saves');
   expect(screen.getByRole('heading', { name: /^Armor Class:/ }).textContent).toBe(armorClassHeading);
 });
 
@@ -2414,7 +2414,7 @@ it('prints a sheet with its license notices, and gap notes only when ticked', as
   await user.click(await screen.findByRole('button', { name: 'Create and save' }));
   const sheet = await screen.findByRole('article', { name: 'E2E Print' });
 
-  await openTab(user, sheet, 'Notes');
+  await openTab(user, sheet, 'Journal');
   const gaps = within(sheet).getByRole('region', { name: /^Gap notes/ });
   const form = within(gaps).getByRole('form', { name: 'New gap note' });
   await user.selectOptions(within(form).getByRole('combobox', { name: /^About/ }), 'Armor Class');
@@ -2621,7 +2621,7 @@ it('adds a homebrew Fighter subclass through the studio and plays it: the Stardu
   await user.click(await screen.findByRole('button', { name: 'Save choices' }));
 
   sheet = await screen.findByRole('article', { name: 'E2E Warden' });
-  await openTab(user, sheet, 'Stats');
+  await openTab(user, sheet, 'Skills and saves');
   expect(within(sheet).getByRole('heading', { name: /^Initiative: \+3/ })).toBeTruthy(); // Dex +2, homebrew +1
   expect(within(sheet).getByRole('heading', { name: /^Attacks per Attack action: 1/ })).toBeTruthy(); // Extra Attack comes at 5
   await openTab(user, sheet, 'Play');
@@ -2748,7 +2748,7 @@ it('authors a class in the studio and builds it at levels 1, 20 and 5/3 with an 
   await pick(user, /^E2E Chronicler: choose 2/, /^E2E Chronicler: Arcana/);
   await user.click(await screen.findByRole('button', { name: 'Create and save' }));
   let sheet = await screen.findByRole('article', { name: 'E2E Scribe' });
-  await openTab(user, sheet, 'Stats');
+  await openTab(user, sheet, 'Skills and saves');
   expect(within(sheet).getByRole('heading', { name: /^History: \+5/ })).toBeTruthy(); // the chosen option grants it: Int +3, PB +2
   await openTab(user, sheet, 'Play');
   expect(within(within(sheet).getByRole('region', { name: 'Resources' })).getByRole('heading', { name: 'Ink: 2 of 2' })).toBeTruthy();
@@ -2783,7 +2783,7 @@ it('authors a class in the studio and builds it at levels 1, 20 and 5/3 with an 
 
   await user.click(await screen.findByRole('button', { name: /^E2E Scribe 20/ }));
   sheet = await screen.findByRole('article', { name: 'E2E Scribe 20' });
-  await openTab(user, sheet, 'Stats');
+  await openTab(user, sheet, 'Skills and saves');
   expect(within(sheet).getByRole('heading', { name: /^Hit point maximum: 143/ })).toBeTruthy(); // 8 + 19 × 5 + 20 × Con 2
   expect(within(sheet).getByRole('heading', { name: /^Initiative: \+2/ })).toBeTruthy(); // Dex +1, the homebrew subclass +1
   await openTab(user, sheet, 'Play');
@@ -2975,11 +2975,11 @@ it('imports a D&D Beyond sheet, resolves a choice, keeps one sheet number as an 
   await waitFor(() => expect(create.disabled).toBe(false));
   await user.click(create);
 
-  await expectStatus(/Character created from the character sheet: 3 override\(s\), \d+ gap note\(s\)/);
+  await expectStatus(/Character created from the character sheet: 3 numbers set by hand,\d+ gap note\(s\)/);
   const sheet = await screen.findByRole('article', { name: 'Testy McFixture' });
-  expect(summaryValue(sheet, 'Armor Class')).toContain('(overridden)');
-  await openTab(user, sheet, 'Stats');
-  expect(within(sheet).getByRole('heading', { name: /^Armor Class:/ }).textContent).toContain('overridden (calculated');
+  expect(summaryValue(sheet, 'Armor Class')).toContain('(set by hand)');
+  await openTab(user, sheet, 'Skills and saves');
+  expect(within(sheet).getByRole('heading', { name: /^Armor Class:/ }).textContent).toContain('set by hand (calculated');
 });
 
 it('imports the fillable 2014 sheet through the same entry: the layout is named, prose lands in session notes and the details fill', async () => {
@@ -3005,9 +3005,9 @@ it('imports the fillable 2014 sheet through the same entry: the layout is named,
   await waitFor(() => expect(create.disabled).toBe(false));
   await user.click(create);
 
-  await expectStatus(/Character created from the character sheet: \d+ override\(s\), \d+ gap note\(s\)/);
+  await expectStatus(/Character created from the character sheet: \d+ numbers? set by hand,\d+ gap note\(s\)/);
   const sheet = await screen.findByRole('article', { name: 'Testy McFixture' });
-  await openTab(user, sheet, 'Notes');
+  await openTab(user, sheet, 'Journal');
   expect(await within(sheet).findByText(/Testy backstory\./)).toBeTruthy();
   expect(within(within(sheet).getByRole('form', { name: 'Details' })).getByRole<HTMLInputElement>('textbox', { name: 'Alignment' }).value).toBe('Fixture Neutral');
 });
@@ -3084,7 +3084,7 @@ it('imports a character from pasted text: the unreadable line is listed and kept
 
   await expectStatus(/Character created from the character sheet/);
   const sheet = await screen.findByRole('article', { name: 'Testy Texter' });
-  await openTab(user, sheet, 'Notes');
+  await openTab(user, sheet, 'Journal');
   expect(await within(sheet).findByText(/Some line the reader cannot place/)).toBeTruthy();
 });
 
@@ -3315,7 +3315,7 @@ it('creates a character with the standard array (D32)', async () => {
   await createCharacter(user, { name: 'E2E Array', family: 'srd-5.2.1', cls: /^Barbarian/ });
   await user.click(await screen.findByRole('button', { name: 'Create and save' }));
   const sheet = await screen.findByRole('article', { name: 'E2E Array' });
-  await openTab(user, sheet, 'Stats');
+  await openTab(user, sheet, 'Skills and saves');
   expect(within(sheet).getByRole('heading', { name: /^Strength score: 15/ })).toBeTruthy();
   expect(within(sheet).getByRole('heading', { name: /^Charisma score: 8/ })).toBeTruthy();
 });
@@ -3361,7 +3361,7 @@ it('rolls ability scores through the dice engine and assigns them (D32)', async 
   await user.click(screen.getByRole('button', { name: 'Next: choices' }));
   await user.click(await screen.findByRole('button', { name: 'Create and save' }));
   const sheet = await screen.findByRole('article', { name: 'E2E Rolled' });
-  await openTab(user, sheet, 'Stats');
+  await openTab(user, sheet, 'Skills and saves');
   // The sheet's base scores are the assigned rolled totals (increases come from content the draft does not pin).
   for (const [label, value] of assigned) expect(within(sheet).getByRole('heading', { name: new RegExp(`^${label} score: ${value}\\b`) })).toBeTruthy();
 });
@@ -3475,7 +3475,7 @@ it('carries two copies of a charged wand that needs attunement: attuning applies
   render(<App />);
   await user.click(await screen.findByRole('button', { name: /^E2E Wand Hero/ }));
   const hero = await screen.findByRole('article', { name: 'E2E Wand Hero' });
-  await openTab(user, hero, 'Inventory');
+  await openTab(user, hero, 'Gear');
   const equipment = () => screen.getByRole('region', { name: 'Equipment' });
   const armorClass = () => Number(/^(\d+)/.exec(summaryValue(hero, 'Armor Class'))![1]);
   const before = armorClass();
@@ -3515,7 +3515,7 @@ it('carries two copies of a charged wand that needs attunement: attuning applies
   await user.click(finish);
 
   await waitFor(() => expect(screen.queryByRole('region', { name: 'Long rest' })).toBeNull());
-  await openTab(user, hero, 'Inventory');
+  await openTab(user, hero, 'Gear');
   await waitFor(() => expect(within(equipment()).getAllByText('3 of 3 charges left')).toHaveLength(2));
 });
 

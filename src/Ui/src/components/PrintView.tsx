@@ -608,7 +608,7 @@ export function PrintView({ view, onError, onClose }: Props) {
 
       {character.overrides.length > 0 && (
         <div>
-          <h4>Overrides</h4>
+          <h4>Numbers set by hand</h4>
           <ul>
             {character.overrides.map((o) => (
               <li key={o.field}>

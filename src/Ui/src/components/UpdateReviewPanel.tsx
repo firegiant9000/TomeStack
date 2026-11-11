@@ -78,7 +78,7 @@ export function UpdateReviewPanel({ characterId, characterName, contentName, fro
           )}
           {review.affectedOverrides.length > 0 && (
             <p className="warn">
-              Your overrides stay: {review.affectedOverrides.map((o) => o.field).join(', ')}. Their calculated values change underneath them.
+              The numbers you set by hand stay: {review.affectedOverrides.map((o) => o.field).join(', ')}. Their calculated values change underneath them.
             </p>
           )}
           {review.unresolvedChoices.length > 0 && (

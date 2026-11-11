@@ -69,7 +69,7 @@ export function DdbSummaryStep({ preview, family, suggested, includePlayState, o
         <dt>Will be created</dt>
         <dd>
           {character.pins.length} pinned, {character.choices.length} choices answered, {character.spells?.length ?? 0} spells,{' '}
-          {character.equipment?.length ?? 0} items, {character.overrides.length} overrides
+          {character.equipment?.length ?? 0} items, {character.overrides.length} {character.overrides.length === 1 ? 'number' : 'numbers'} set by hand
         </dd>
         <dt>Gap notes</dt>
         <dd>{unplaced} items not brought over will be noted as gaps on the character.</dd>

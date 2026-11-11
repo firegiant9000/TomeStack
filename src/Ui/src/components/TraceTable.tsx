@@ -8,7 +8,7 @@ export function describeOrigin(origin: TraceOrigin, rulesLabel: (id: string) => 
     case 'rulesPolicy':
       return `Rules: ${rulesLabel(origin.rulesFamily)}`;
     case 'override':
-      return 'Your override';
+      return 'A number you set by hand';
     case 'content': {
       const page = origin.page ? (origin.page.end && origin.page.end !== origin.page.start ? `, pp. ${origin.page.start}-${origin.page.end}` : `, p. ${origin.page.start}`) : '';
       return `${origin.sourceTitle ?? 'Unknown source'}${page}`;

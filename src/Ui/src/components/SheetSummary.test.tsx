@@ -80,13 +80,13 @@ const dd = (term: string) => within(screen.getByRole('region', { name: 'Summary'
 
 it('names the Spells tab in the rolling hint only when it is offered', () => {
   const { rerender } = render(<SheetSummary view={fixtureView()} rollMode="normal" onRollMode={() => {}} rollLog={[]} act={() => {}} onRoll={() => {}} onRollDice={async () => {}} />);
-  expect(screen.getByText('Rolling never spends anything. Roll a check here; a save, skill or initiative from its field on Stats; or an attack or feature on Play.')).toBeTruthy();
+  expect(screen.getByText('Rolling never spends anything. Roll a check here; a save, skill or initiative from its field on Skills and saves; or an attack or feature on Play.')).toBeTruthy();
   rerender(<SheetSummary view={fixtureView()} rollMode="normal" onRollMode={() => {}} rollLog={[]} act={() => {}} onRoll={() => {}} onRollDice={async () => {}} spellsTab />);
-  expect(screen.getByText('Rolling never spends anything. Roll a check here; a save, skill or initiative from its field on Stats; an attack or feature on Play; or a spell on Spells.')).toBeTruthy();
+  expect(screen.getByText('Rolling never spends anything. Roll a check here; a save, skill or initiative from its field on Skills and saves; an attack or feature on Play; or a spell on Spells.')).toBeTruthy();
   rerender(<SheetSummary view={fixtureView()} rollMode="normal" onRollMode={() => {}} rollLog={[]} act={() => {}} onRoll={() => {}} onRollDice={async () => {}} spellsTab hasQuickbar />);
-  expect(screen.getByText('Rolling from here never spends anything; a quickbar button that says "and spend" rolls and then spends. Roll a check here; a save, skill or initiative from its field on Stats; an attack or feature on Play; or a spell on Spells.')).toBeTruthy();
+  expect(screen.getByText('Rolling from here never spends anything; a quickbar button that says "and spend" rolls and then spends. Roll a check here; a save, skill or initiative from its field on Skills and saves; an attack or feature on Play; or a spell on Spells.')).toBeTruthy();
   rerender(<SheetSummary view={fixtureView()} rollMode="normal" onRollMode={() => {}} rollLog={[]} act={() => {}} onRoll={() => {}} onRollDice={async () => {}} hasQuickbar />);
-  expect(screen.getByText('Rolling from here never spends anything; a quickbar button that says "and spend" rolls and then spends. Roll a check here; a save, skill or initiative from its field on Stats; or an attack or feature on Play.')).toBeTruthy();
+  expect(screen.getByText('Rolling from here never spends anything; a quickbar button that says "and spend" rolls and then spends. Roll a check here; a save, skill or initiative from its field on Skills and saves; or an attack or feature on Play.')).toBeTruthy();
 });
 
 it('lists the core numbers as terms and definitions, with no heading or named region of its own', () => {
@@ -95,7 +95,7 @@ it('lists the core numbers as terms and definitions, with no heading or named re
   expect(within(summary).queryAllByRole('heading')).toHaveLength(0);
   expect(within(summary).getAllByRole('region').map((r) => r.getAttribute('aria-label'))).toEqual(['Last roll']);
   expect(dd('Proficiency bonus')).toBe('+2');
-  expect(dd('Armor Class')).toBe('16 (overridden)');
+  expect(dd('Armor Class')).toBe('16 (set by hand)');
   expect(dd('Initiative')).toBe('+2');
   expect(dd('Speed')).toBe('30 ft.');
   expect(dd('Hit points')).toBe('28 of 35, 5 temporary');
@@ -261,22 +261,22 @@ const strengthDd = () =>
 
 it('marks an overridden ability score in text, and not the modifier', () => {
   render(<SheetSummary view={overriddenView('ability.str.score', 16)} rollMode="normal" onRollMode={() => {}} rollLog={[]} act={() => {}} onRoll={() => {}} onRollDice={async () => {}} />);
-  expect(strengthDd()).toContain('16 (overridden)');
-  expect(strengthDd()).not.toContain('modifier overridden');
+  expect(strengthDd()).toContain('16 (set by hand)');
+  expect(strengthDd()).not.toContain('modifier set by hand');
 });
 
 it('marks an overridden ability modifier in text outside the button, whose name stays the contract', () => {
   render(<SheetSummary view={overriddenView('ability.str.mod', 5)} rollMode="normal" onRollMode={() => {}} rollLog={[]} act={() => {}} onRoll={() => {}} onRollDice={async () => {}} />);
   expect(screen.getByRole('button', { name: 'Roll Strength check (+5)' })).toBeTruthy();
-  expect(strengthDd()).toContain('(modifier overridden)');
-  expect(strengthDd()).not.toContain('16 (overridden)');
+  expect(strengthDd()).toContain('(modifier set by hand)');
+  expect(strengthDd()).not.toContain('16 (set by hand)');
 });
 
 it('marks an overridden hit point maximum in text, before the temporary part', () => {
   const view = overriddenView('hitPoints', 40);
   const overridden = { ...view, sheet: { ...view.sheet, hitPoints: { maximum: 40, current: 28, temporary: 5 } } }; // the sheet carries the overridden maximum
   render(<SheetSummary view={overridden} rollMode="normal" onRollMode={() => {}} rollLog={[]} act={() => {}} onRoll={() => {}} onRollDice={async () => {}} />);
-  expect(dd('Hit points')).toBe('28 of 40 (maximum overridden), 5 temporary');
+  expect(dd('Hit points')).toBe('28 of 40 (maximum set by hand), 5 temporary');
 });
 
 it('styles the six ability roll buttons as buttons, not as link text (investigation 2026-10-05)', () => {
@@ -348,7 +348,7 @@ it('shows attacks against you with prevent wording', () => {
   };
   render(<SheetSummary view={against(mode)} {...plain} />);
   expect(dd('Attacks against you')).toBe("have advantage (Fixture Open Guard, Fixture Soft Spot); can't have disadvantage (Fixture Steady Ward)");
-  expect(dd('Armor Class')).toBe('16 (overridden)'); // the Armor Class value is untouched
+  expect(dd('Armor Class')).toBe('16 (set by hand)'); // the Armor Class value is untouched
 });
 
 it('says have disadvantage, and can not have advantage, with their sources', () => {

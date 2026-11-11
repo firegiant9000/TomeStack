@@ -120,7 +120,7 @@ function FieldCard({ value, labels, onOverride, onRoll, onReportGap }: FieldProp
                 <span className="mark">· {value.mark}</span>
               </>
             )}
-            {value.override && <span className="override-label"> overridden (calculated {display(value, value.computedValue)})</span>}
+            {value.override && <span className="override-label"> set by hand (calculated {display(value, value.computedValue)})</span>}
             {value.warnings.length > 0 && <span className="warning-count"> · {value.warnings.length} warning{value.warnings.length === 1 ? '' : 's'}</span>}
           </h4>
         </summary>
@@ -148,17 +148,17 @@ function FieldCard({ value, labels, onOverride, onRoll, onReportGap }: FieldProp
         )}
         <form className="override" onSubmit={submit}>
           <label className="field">
-            Override value
+            Number to set by hand
             <input type="number" value={overrideValue} onChange={(e) => setOverrideValue(e.target.value)} required />
           </label>
           <label className="field">
             Reason (optional)
             <input value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} />
           </label>
-          <button type="submit">Apply override</button>
+          <button type="submit">Set by hand</button>
           {value.override && (
             <button type="button" onClick={() => onOverride(value.field, undefined)}>
-              Remove override
+              Remove the number I set
             </button>
           )}
         </form>
@@ -466,10 +466,10 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   const tabs: readonly TabSpec<SheetTabId>[] = [
     { id: 'play', label: 'Play' },
     ...(showSpells ? ([{ id: 'spells', label: 'Spells' }] as const) : []),
-    { id: 'inventory', label: 'Inventory' },
+    { id: 'inventory', label: 'Gear' },
     { id: 'features', label: 'Features' },
-    { id: 'stats', label: 'Stats' },
-    { id: 'notes', label: 'Notes' },
+    { id: 'stats', label: 'Skills and saves' },
+    { id: 'notes', label: 'Journal' },
     { id: 'manage', label: 'Manage' },
   ];
   // The sheet is keyed by character, so this runs once per opened character. A deep link wins over the memory.
@@ -1068,7 +1068,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
 
       {notApplied.length > 0 && (
         <section aria-labelledby="diagnostics-heading">
-          <h3 id="diagnostics-heading">Content not applied</h3>
+          <h3 id="diagnostics-heading">Needs your attention</h3>
           <ul className="warnings">
             {notApplied.map((d) => (
               <li key={`${d.code}-${d.content?.revisionId ?? ''}-${d.effectId ?? ''}`}>{d.message}</li>
@@ -1194,7 +1194,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
             {detailList('stats-languages', 'Languages', character.details?.languages)}
             {detailList('stats-tools', 'Tools and other', character.details?.toolsAndOther)}
             <button type="button" onClick={editDetails}>
-              Edit in Notes → Details
+              Edit in Journal → Details
             </button>
           </section>
         )}
