@@ -51,7 +51,7 @@ public sealed class OldReleaseOutcomeTests : IDisposable
         ["v0.7.0"] = "0ffe703149e2bce8747e26bdf915de163151c20b",
     };
 
-    private const string Advice ="Run scripts/old-release-check.ps1 locally and commit the outcome.";
+    private const string Advice = "Run scripts/old-release-check.ps1 locally and commit the outcome.";
 
     /// <summary>Every problem with the committed outcomes of <paramref name="repoRoot"/>; empty when each one matches its goldens.</summary>
     internal static List<string> FindProblems(string repoRoot)
