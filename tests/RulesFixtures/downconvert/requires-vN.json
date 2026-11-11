@@ -117,6 +117,13 @@
       { "feature": "attackRider.critical", "rule": "below.effect-unsupported" },
       { "feature": "attackRider.oncePerTurn", "rule": "below.effect-unsupported" },
       { "feature": "roll.scaledDice", "rule": "below.v12-key" }
+    ],
+    "13": [
+      { "feature": "kind:creationGuide", "rule": "below.effect-unsupported" },
+      { "feature": "guideFor", "rule": "below.effect-unsupported" },
+      { "feature": "primaryAbilities", "rule": "below.effect-unsupported" },
+      { "feature": "startingEquipment", "rule": "below.effect-unsupported" },
+      { "feature": "item.contains", "rule": "below.effect-unsupported" }
     ]
   },
   "character": {

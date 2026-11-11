@@ -18,6 +18,7 @@ public sealed class SchemaCoverageTests
         { "content", 9, 10 },
         { "content", 10, 11 },
         { "content", 11, 12 },
+        { "content", 12, 13 },
         { "character", 8, 9 },
         { "character", 9, 10 },
         { "character", 10, 11 },
