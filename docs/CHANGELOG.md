@@ -4,7 +4,7 @@
 
 ## 0.8.1 (save for 0.7.0, Foundry dnd5e 6.0.6, release and CI hygiene)
 
-A patch on 0.8.0: "Save for an older TomeStack" now offers 0.7.0, and the Foundry export targets dnd5e 6.0.6. The rest is release, CI and documentation work.
+A patch on 0.8.0: "Save for an older TomeStack" now offers 0.7.0, and the Foundry export targets dnd5e 6.0.6. The rest is release, CI and documentation work, plus a development-only `minimatch` override for a moderate advisory.
 
 **Unsigned:** Windows shows "Windows protected your PC" the first time you run `TomeStack.App-win-Setup.exe`. Choose **More info**, then **Run anyway**. Some workplace PCs, and Windows 11 with Smart App Control on, block unsigned apps entirely.
 
