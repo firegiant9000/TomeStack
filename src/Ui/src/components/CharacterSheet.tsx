@@ -60,6 +60,7 @@ import { recordSpend } from '../actionRows';
 import { editPins, readPins, resolvePin, visiblePins, writePins, type Pin, type QuickAction } from '../quickbar';
 import { Quickbar } from './Quickbar';
 import { applyPreferences, compactPlay, setCompactPlay } from '../settings';
+import { useRulesLabel } from '../rulesLabel';
 
 import { assistedNotes, rollButtonSuffix } from '../rollModes';
 
@@ -359,6 +360,7 @@ interface Props {
 
 export function CharacterSheet({ view, onChanged, onError: reportError, onStatus, onLevelUp, onMakeChoices, onArchiveChanged, initialTab, focusChecklist, rulesFamilies }: Props) {
   const { character, sheet } = view;
+  const rulesLabel = useRulesLabel();
   // D43: `toggle.group-absent` is information (the toggle works as a group of one), not content that failed to apply.
   const notApplied = sheet.diagnostics.filter((d) => d.code !== 'toggle.group-absent');
   // R161/R182: one handler for every save path. A save refused as stale (the character changed since this sheet's copy was read)
@@ -902,7 +904,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
         <h2 id="sheet-heading" tabIndex={-1} ref={heading}>
           {character.name}
         </h2>
-        <span className="tag">{character.rulesFamily}</span>
+        <span className="tag">{rulesLabel(character.rulesFamily)}</span>
         <span className="tag">Level {character.level}</span>
         {view.campaign && <span className="tag">Campaign: {view.campaign.name}</span>}
         {/* D29 (owner, 2026-10-07): rests at the top of the sheet, not in Play. */}

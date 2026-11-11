@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { CharacterSummary } from '../api/types';
+import { useRulesLabel } from '../rulesLabel';
 
 interface Props {
   characters: CharacterSummary[];
@@ -19,6 +20,7 @@ const changed = (iso: string) => new Date(iso).toLocaleDateString();
  * Archived characters stay in the sidebar's "Archived" list only (SPEC C-08).
  */
 export function HomePanel({ characters, onOpen, onNew, canCreate, focusOnMount = true }: Props) {
+  const rulesLabel = useRulesLabel();
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     if (focusOnMount) heading.current?.focus();
@@ -40,7 +42,7 @@ export function HomePanel({ characters, onOpen, onNew, canCreate, focusOnMount =
         <ul className="character-cards" aria-label="Characters">
           {active.map((c) => (
             <li key={c.id} className="character-card">
-              <strong>{c.name}</strong> <span className="tag">{c.rulesFamily}</span>
+              <strong>{c.name}</strong> <span className="tag">{rulesLabel(c.rulesFamily)}</span>
               <p className="hint">
                 Level {c.level} · Changed {changed(c.updatedAt)}
               </p>

@@ -3,6 +3,7 @@ import { client } from '../api/client';
 import { TomeStackError } from '../api/transport';
 import type { Campaign, CampaignPackPreview, PreflightReport, RulesFamilyId, RulesFamilyPolicy, SourceRecord } from '../api/types';
 import { downloadBase64 } from '../files';
+import { useRulesLabel } from '../rulesLabel';
 import { ChangeRegion } from './export/ChangeRegion';
 import { ExportConfirmation, hasBlocker, needsConfirmation } from './export/ExportConfirmation';
 import { TargetFieldset } from './export/TargetFieldset';
@@ -147,6 +148,7 @@ function CampaignPackForm({ campaign, onError, onStatus }: { campaign: Campaign 
  * needs a reason (a recorded exception). Profiles never change calculation.
  */
 export function CampaignsPanel({ rulesFamilies, onError, onStatus }: Props) {
+  const rulesLabel = useRulesLabel();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [sources, setSources] = useState<SourceRecord[]>([]);
   const [editing, setEditing] = useState<Campaign>();
@@ -193,7 +195,7 @@ export function CampaignsPanel({ rulesFamilies, onError, onStatus }: Props) {
         <ul className="resources">
           {campaigns.map((c) => (
             <li key={c.id} className="resource">
-              <span className="option-name">{c.name}</span> <span className="tag">{c.rulesFamily}</span>{' '}
+              <span className="option-name">{c.name}</span> <span className="tag">{rulesLabel(c.rulesFamily)}</span>{' '}
               <span className="hint">
                 {c.allowedSources.length} allowed source{c.allowedSources.length === 1 ? '' : 's'}
               </span>{' '}

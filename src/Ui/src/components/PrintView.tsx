@@ -3,6 +3,7 @@ import { flushSync } from 'react-dom';
 import { client } from '../api/client';
 import type { CharacterView, DerivedValue, GapNote, LicenseNotice, TraceOrigin } from '../api/types';
 import { textSize } from '../settings';
+import { useRulesLabel } from '../rulesLabel';
 import { detailRows } from './detailsModel';
 
 const abilities = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const;
@@ -104,6 +105,7 @@ interface Props {
  */
 export function PrintView({ view, onError, onClose }: Props) {
   const { character, sheet } = view;
+  const rulesLabel = useRulesLabel();
   const [includeNotes, setIncludeNotes] = useState(false);
   const [includeSessionNotes, setIncludeSessionNotes] = useState(false);
   const [includeDetails, setIncludeDetails] = useState(false);
@@ -294,7 +296,7 @@ export function PrintView({ view, onError, onClose }: Props) {
       <header>
         <h3 className="print-title">{character.name}</h3>
         <p>
-          {character.rulesFamily} · Level {character.level}
+          {rulesLabel(character.rulesFamily)} · Level {character.level}
           {character.classes.length > 0 &&
             ` · ${character.classes.map((c) => `${classNames.get(c.class.contentId) ?? 'Class'} ${c.level}`).join(' / ')}`}
           {view.campaign && ` · Campaign: ${view.campaign.name}`}
