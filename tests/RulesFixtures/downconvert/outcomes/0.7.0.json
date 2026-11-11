@@ -9,11 +9,11 @@
                    },
                    {
                        "path":  "tests/RulesFixtures/downconvert/for-0.7.0/Compat-Hero-for-0.7.0-personal-backup.tomestack.zip",
-                       "sha256":  "f703b615a8f430afba82a2d9252859d2b5ff8915a4e079a0c81975e40ebe0f17"
+                       "sha256":  "376bd38b315adbab23da780a35d0d228b68b5be91e23c2512f900afd54d945f3"
                    },
                    {
                        "path":  "tests/RulesFixtures/downconvert/for-0.7.0/Compat-Hero-for-0.7.0.tomestack.zip",
-                       "sha256":  "016e5bc0d73f5de9a06a04cce6ac8460465af9cb7dccb17ec637e571ab725224"
+                       "sha256":  "f84d8ab780d5c87dd597b8e8b8aa714530770e274d45f6185cef0c8fc6c460e4"
                    },
                    {
                        "path":  "tests/RulesFixtures/downconvert/for-0.7.0/Compat-Homebrew-A-source-pack-for-0.7.0.tomestack.zip",
@@ -21,7 +21,7 @@
                    },
                    {
                        "path":  "tests/RulesFixtures/downconvert/for-0.7.0/library-backup-for-0.7.0.tomestack.zip",
-                       "sha256":  "583c5fd27b2fdc0e87577674af1c03abc70287291fb3da9d87539b8a790c48a3"
+                       "sha256":  "8e39a50e3a488c1ebbf2dc421cf45dc9af026107b56404f3b41df2ebcf1fd0c2"
                    },
                    {
                        "path":  "tests/RulesFixtures/downconvert/for-0.7.0/expected.json",
