@@ -50,9 +50,6 @@ export interface BackgroundProps extends BasicsProps, PinProps {
   registerBeforeSave: (step: BeforeSave | null) => void;
 }
 
-/** The display name of a rules family, from the app info (never from its id). */
-export const familyName = (info: AppInfo, id: RulesFamilyId): string => info.rulesFamilies.find((f) => f.id === id)?.displayName ?? id;
-
 export const joinNames = (names: string[]): string => (names.length <= 2 ? names.join(' and ') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`);
 
 /** The note and the per-pin button for a grant that points at a superseded draft (R62). The press changes the form only. */

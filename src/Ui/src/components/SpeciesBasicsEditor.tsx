@@ -13,7 +13,8 @@ import {
   speedRange,
   type AbilityKey,
 } from '../entryBasics';
-import { familyName, joinNames, NewFeatureForm, SkillFieldset, StalePin, type SpeciesProps } from './OriginPieces';
+import { useRulesLabel } from '../rulesLabel';
+import { joinNames, NewFeatureForm, SkillFieldset, StalePin, type SpeciesProps } from './OriginPieces';
 
 /**
  * Tester feedback item 12: the parts of a species that need no formula, written as the effects the bundled packs use
@@ -24,6 +25,7 @@ import { familyName, joinNames, NewFeatureForm, SkillFieldset, StalePin, type Sp
  */
 export function SpeciesBasicsEditor(props: SpeciesProps) {
   const { revision, info, onEffects } = props;
+  const rulesLabel = useRulesLabel();
   const effects = revision.effects;
   const policies = revision.rulesFamilies.flatMap((id) => info.rulesFamilies.filter((p) => p.id === id));
   const withIncreases = policies.filter((p) => p.abilityIncreaseSource === 'species');
@@ -121,7 +123,7 @@ export function SpeciesBasicsEditor(props: SpeciesProps) {
       )}
       {without.map((p) => (
         <p key={p.id} className="hint">
-          In {familyName(info, p.id)}, ability increases come from the background.
+          In {rulesLabel(p.id)}, ability increases come from the background.
         </p>
       ))}
 

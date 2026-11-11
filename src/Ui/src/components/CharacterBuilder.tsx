@@ -34,6 +34,7 @@ import {
 } from '../abilityScores';
 import { hadPicks, replaceHint, replaceOffer } from '../replaceable';
 import { matchesSpell } from '../spellSearch';
+import { useRulesLabel } from '../rulesLabel';
 import { shown } from './SandboxPanel';
 import { SpellSearch } from './sheet/SpellSearch';
 
@@ -103,11 +104,12 @@ interface Props {
  */
 type Shown = ContentOption & { outsideCampaign?: boolean; familyOk: boolean };
 
-function sourceLine(option: Shown) {
+function SourceLine({ option }: { option: Shown }) {
+  const rulesLabel = useRulesLabel();
   return (
     <span className="option-source">
       {option.sourceTitle}
-      {option.page ? `, ${option.page}` : ''} · {option.rulesFamilies.join(', ')}
+      {option.page ? `, ${option.page}` : ''} · {option.rulesFamilies.map(rulesLabel).join(', ')}
       {option.outsideCampaign ? ' · not allowed in this campaign' : !option.compatible && ' · not available for this rules family'}
     </span>
   );
@@ -145,7 +147,7 @@ function SinglePick(props: {
               if (option.compatible) props.onChange(option.reference); // inert, not disabled: a reason typed elsewhere can flip this under focus (2.4.3)
             }}
           />
-          <span className="option-name">{option.name}</span> {sourceLine(option)}
+          <span className="option-name">{option.name}</span> <SourceLine option={option} />
         </label>
       ))}
     </fieldset>
@@ -212,6 +214,7 @@ function RulesStep(props: {
 }) {
   const { basics, onChange } = props;
   const policy = props.rulesFamilies.find((f) => f.id === basics.rulesFamily);
+  const rulesLabel = useRulesLabel();
 
   return (
     <StepForm
@@ -241,7 +244,7 @@ function RulesStep(props: {
             <option value="">No campaign</option>
             {props.campaigns.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.name} ({c.rulesFamily})
+                {c.name} ({rulesLabel(c.rulesFamily)})
               </option>
             ))}
           </select>
@@ -249,7 +252,7 @@ function RulesStep(props: {
       )}
 
       <fieldset>
-        <legend>Rules family</legend>
+        <legend>Which rules does your table use?</legend>
         {props.rulesFamilies.map((family) => (
           <label key={family.id} className="choice">
             <input
@@ -634,7 +637,7 @@ function BackgroundStep(props: PickStepProps) {
                     }}
                   />
                   <label htmlFor={id}>
-                    <span className="option-name">{option.name}</span> <span className="tag">{option.kind}</span> {sourceLine(option)}
+                    <span className="option-name">{option.name}</span> <span className="tag">{option.kind}</span> <SourceLine option={option} />
                   </label>
                 </li>
               );
@@ -715,7 +718,7 @@ function LevelStep(props: {
                     if (option.compatible) setTarget(option.reference);
                   }}
                 />
-                {option.name} (new class, level 1) {sourceLine(option)}
+                {option.name} (new class, level 1) <SourceLine option={option} />
               </label>
             ))}
           </fieldset>
@@ -949,7 +952,7 @@ function ChoicePicker(props: {
               />
               <label htmlFor={id}>
                 <span className="option-name">{option?.name ?? `Missing content ${ref.revisionId}`}</span>
-                {option && <> {sourceLine(option)}</>}
+                {option && <> <SourceLine option={option} /></>}
               </label>
             </li>
           );
@@ -1018,7 +1021,7 @@ function SpellPicker(props: {
                   <li key={option.reference.revisionId} className={option.compatible ? '' : 'incompatible'}>
                     <input id={id} type="checkbox" checked={chosen} aria-disabled={(!chosen && !option.compatible) || undefined} onChange={() => toggle(option)} />
                     <label htmlFor={id}>
-                      <span className="option-name">{option.name}</span> {sourceLine(option)}
+                      <span className="option-name">{option.name}</span> <SourceLine option={option} />
                     </label>
                   </li>
                 );

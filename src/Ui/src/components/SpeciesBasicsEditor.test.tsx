@@ -8,6 +8,7 @@ import { client } from '../api/client';
 import type { AppInfo, ContentReference, ContentRevision, Effect, RulesFamilyId, SourceRecord } from '../api/types';
 import { abilityIncreases, skillGrants, type Known } from '../entryBasics';
 import { SpeciesBasicsEditor } from './SpeciesBasicsEditor';
+import { RulesLabelProvider } from '../rulesLabel';
 import { fill } from '../test/fill';
 
 vi.mock('../api/client', () => ({ client: { saveDraft: vi.fn() } }));
@@ -63,6 +64,7 @@ function Harness(props: {
           Untick older rules
         </button>
       )}
+    <RulesLabelProvider families={info.rulesFamilies}>
     <SpeciesBasicsEditor
       newerPublished={props.newerPublished ?? (() => undefined)}
       revision={revision}
@@ -75,6 +77,7 @@ function Harness(props: {
       onProblem={props.onProblem ?? (() => {})}
       onError={() => {}}
     />
+    </RulesLabelProvider>
     </>
   );
 }

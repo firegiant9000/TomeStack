@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { client } from '../api/client';
 import type { ImportResult, PackageItem, PackagePreview, SourceChoice } from '../api/types';
+import { useRulesLabel } from '../rulesLabel';
 
 /**
  * A source whose metadata differs from the local record, or (M6 slice 2) a campaign pack's campaign that differs from
@@ -55,6 +56,7 @@ interface Props {
 
 /** SPEC P-02: the importer shows dependencies and conflicts; nothing is written until the user applies. */
 export function ImportPreview({ fileName, base64, preview, onApplied, onCancel, onError }: Props) {
+  const rulesLabel = useRulesLabel();
   const [applying, setApplying] = useState(false);
   const [choices, setChoices] = useState<Record<string, SourceChoice>>({});
   const [campaignChoices, setCampaignChoices] = useState<Record<string, SourceChoice>>({});
@@ -179,7 +181,7 @@ export function ImportPreview({ fileName, base64, preview, onApplied, onCancel, 
               <li key={`${i.campaignId}-${i.characterId}`}>
                 {i.characterName}:{' '}
                 {i.notAllowed.length > 0 && <>no longer allowed: {i.notAllowed.join(', ')}.</>}
-                {i.rulesFamily && <> The campaign would play {i.rulesFamily}.</>}
+                {i.rulesFamily && <> The campaign would play {rulesLabel(i.rulesFamily)}.</>}
               </li>
             ))}
           </ul>

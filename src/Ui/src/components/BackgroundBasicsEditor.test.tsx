@@ -10,6 +10,7 @@ import type { AppInfo, ContentReference, ContentRevision, Effect, RulesFamilyId,
 import { increaseChoice, increaseOptions, isIncreaseChoice, skillGrants, type Known } from '../entryBasics';
 import { BackgroundBasicsEditor } from './BackgroundBasicsEditor';
 import type { BeforeSave } from './OriginPieces';
+import { RulesLabelProvider } from '../rulesLabel';
 import { fill } from '../test/fill';
 
 vi.mock('../api/client', () => ({ client: { saveDraft: vi.fn() } }));
@@ -59,6 +60,7 @@ function Harness(props: { initial: ContentRevision; known?: Known[]; revisions?:
   });
   const all = [...(props.known ?? [feature, ownFeat, installedFeat, oldFeat]), ...made];
   return (
+    <RulesLabelProvider families={info.rulesFamilies}>
     <BackgroundBasicsEditor
       revision={revision}
       source={source}
@@ -80,6 +82,7 @@ function Harness(props: { initial: ContentRevision; known?: Known[]; revisions?:
       onError={() => {}}
       registerBeforeSave={register}
     />
+    </RulesLabelProvider>
   );
 }
 

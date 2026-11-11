@@ -4,7 +4,7 @@ import { TomeStackError } from '../api/transport';
 import type { ImportJob, ImportSearchHit, RulesFamilyId, SourceRecord, StoredPage } from '../api/types';
 import { readFileAsBase64 } from '../files';
 import { CandidateReviewPanel } from './CandidateReviewPanel';
-import { familyLabel, familyShortName } from './familyLabels';
+import { useRulesLabel } from '../rulesLabel';
 import { failureWords, pageWarningWords } from './importWords';
 
 interface Props {
@@ -42,6 +42,7 @@ function markdownRefusal(error: unknown): unknown {
  * what was found. Nothing here changes content: accepting a candidate creates a draft, which the studio publishes.
  */
 export function ImportPanel({ source, hasPdf, onError, onStatus, onOpenStudio }: Props) {
+  const rulesLabel = useRulesLabel();
   const [jobs, setJobs] = useState<ImportJob[]>([]);
   const [viewing, setViewing] = useState<{ page: number; stored: StoredPage }>();
   const viewer = useRef<HTMLElement>(null);
@@ -211,12 +212,12 @@ export function ImportPanel({ source, hasPdf, onError, onStatus, onOpenStudio }:
                 checked={answer === value}
                 onChange={() => setPicked({ sourceId: source.id, value })}
               />
-              {value === 'both' ? 'Both' : familyLabel(value)}
+              {value === 'both' ? 'Both' : rulesLabel(value)}
             </label>
           ))}
         </fieldset>
       ) : (
-        <p className="hint">Written for {source.rulesFamilies.map(familyShortName).join(' and ')} (from the source).</p>
+        <p className="hint">Written for {source.rulesFamilies.map(rulesLabel).join(' and ')} (from the source).</p>
       )}
       {needsAnswer && (
         <p id={hintId} className="hint">

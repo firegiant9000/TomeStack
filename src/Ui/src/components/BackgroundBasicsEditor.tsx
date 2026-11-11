@@ -14,7 +14,8 @@ import {
   type IncreaseOption,
   type Known,
 } from '../entryBasics';
-import { familyName, joinNames, NewFeatureForm, SkillFieldset, StalePin, type BackgroundProps } from './OriginPieces';
+import { useRulesLabel } from '../rulesLabel';
+import { joinNames, NewFeatureForm, SkillFieldset, StalePin, type BackgroundProps } from './OriginPieces';
 
 const problemField = 'background-increases';
 const words = ['no abilities', 'one', 'two', 'three', 'four', 'five', 'six'];
@@ -38,6 +39,7 @@ const signature = (effects: Effect[]): string =>
  */
 export function BackgroundBasicsEditor(props: BackgroundProps) {
   const { revision, info, onEffects } = props;
+  const rulesLabel = useRulesLabel();
   const effects = revision.effects;
   const policies = revision.rulesFamilies.flatMap((id) => info.rulesFamilies.filter((p) => p.id === id));
   const featureFamilies = policies.filter((p) => !p.backgroundGrantsFeat);
@@ -261,7 +263,7 @@ export function BackgroundBasicsEditor(props: BackgroundProps) {
       )}
       {featureFamilies.map((p) => (
         <p key={p.id} className="hint">
-          In {familyName(info, p.id)}, a background cannot grant a feat.
+          In {rulesLabel(p.id)}, a background cannot grant a feat.
         </p>
       ))}
 
@@ -328,7 +330,7 @@ export function BackgroundBasicsEditor(props: BackgroundProps) {
       )}
       {otherFamilies.map((p) => (
         <p key={p.id} className="hint">
-          In {familyName(info, p.id)}, ability increases come from the species.
+          In {rulesLabel(p.id)}, ability increases come from the species.
         </p>
       ))}
     </section>

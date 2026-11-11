@@ -29,7 +29,7 @@ export function DdbFamilyStep({ rulesFamilies, suggested, family, campaignId, on
   return (
     <>
       <fieldset>
-        <legend>Rules family</legend>
+        <legend>Rules</legend>
         {rulesFamilies.map((f) => (
           <label key={f.id}>
             <input type="radio" name="ddb-family" checked={family === f.id} onChange={() => onFamily(f.id)} /> {f.displayName}

@@ -1,4 +1,5 @@
 import type { DdbPreview, RulesFamilyId } from '../../api/types';
+import { useRulesLabel } from '../../rulesLabel';
 import { abilityNames, notBroughtOverLabels } from './ddbLabels';
 
 interface Props {
@@ -36,6 +37,7 @@ const shownDrafts = 10;
 
 /** Step 5: what will be created and what will not, before the one write. */
 export function DdbSummaryStep({ preview, family, suggested, includePlayState, onIncludePlayState, held = false, publishClass, onPublishClass, publishReferences = false, onPublishReferences, keepNotRead = true, onKeepNotRead }: Props) {
+  const rulesLabel = useRulesLabel();
   if (!preview) return <p className="hint">Preparing the summary…</p>;
   const { character, matches, report } = preview;
   const unplaced = report.notFound + report.noPlace + report.unreadable;
@@ -79,7 +81,7 @@ export function DdbSummaryStep({ preview, family, suggested, includePlayState, o
             <dt>Class</dt>
             <dd>{preview.stub.name}</dd>
             <dt>Rules</dt>
-            <dd>{preview.stub.rulesFamily}</dd>
+            <dd>{rulesLabel(preview.stub.rulesFamily)}</dd>
             <dt>Hit die</dt>
             <dd>d{preview.stub.hitDie}</dd>
             <dt>Saving throws</dt>

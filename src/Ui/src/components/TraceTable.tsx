@@ -1,11 +1,12 @@
 import type { TraceEntry, TraceOrigin } from '../api/types';
+import { useRulesLabel } from '../rulesLabel';
 
-export function describeOrigin(origin: TraceOrigin): string {
+export function describeOrigin(origin: TraceOrigin, rulesLabel: (id: string) => string): string {
   switch (origin.kind) {
     case 'characterChoice':
       return 'Your choice';
     case 'rulesPolicy':
-      return `Rules: ${origin.rulesFamily}`;
+      return `Rules: ${rulesLabel(origin.rulesFamily)}`;
     case 'override':
       return 'Your override';
     case 'content': {
@@ -19,6 +20,7 @@ const signed = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
 
 /** How one number is calculated: a sheet field's trace, or a secondary caster's attack bonus or save DC (M2.1). */
 export function TraceTable({ label, trace, labels }: { label: string; trace: TraceEntry[]; labels: Map<string, string> }) {
+  const rulesLabel = useRulesLabel();
   return (
     <table className="trace">
       <caption>How {label.toLowerCase()} is calculated</caption>
@@ -40,7 +42,7 @@ export function TraceTable({ label, trace, labels }: { label: string; trace: Tra
             <td>{entry.description}</td>
             <td>{entry.amount === undefined ? '' : entry.operation === 'add' ? signed(entry.amount) : entry.amount}</td>
             <td>{entry.result}</td>
-            <td>{describeOrigin(entry.origin)}</td>
+            <td>{describeOrigin(entry.origin, rulesLabel)}</td>
           </tr>
         ))}
       </tbody>
