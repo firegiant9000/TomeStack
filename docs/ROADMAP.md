@@ -2,30 +2,38 @@
 
 **Planning rule:** milestone exit evidence, rather than speculative dates, determines progress. All 20 ideas are approved for the backlog, not promised in MVP.
 
+## Now, next, later
+
+**Status:** 0.8.0 (published 2026-11-10) is the current release. 0.8.1 is the next patch and is not published yet. The dated revision notes that used to sit at the top of this file are in the [CHANGELOG](CHANGELOG.md#roadmap-revision-history-moved-from-roadmapmd).
+
+### Now
+
+- **0.8.1 patch.** The "Save for an older TomeStack" target 0.7.0, the Foundry export pinned to dnd5e 6.0.6, dependency updates and CI hardening. No schema, package format or database change. The list is in the CHANGELOG "Unreleased" section.
+- **Wave 2 evidence.** Built work still needs owner checks on an installed build. The rows are in "Owed owner checks" below. Passed on 0.8.0 on 2026-11-11: the accessibility rows 6, 15, 16, 17 and 68. Still owed: the 0.7.1 to 0.8.0 and 0.8.0 to 0.8.1 upgrades on the real library, the restore drill on a second machine (to be re-run on 0.8.1), the Foundry real-world import (Foundry 14, dnd5e 6.0.6) and the M3 played session.
+
+### Next: 0.9.0
+
+- **Wave 3: first run, navigation and help.** A first-run sample, a clearer way around the app, and in-app help.
+- **Wave 4: engineering.** Down-conversion ("Save for an older TomeStack") keeps to the previous minor release only, from 0.9.0 on (the older targets are dropped). The weekly job and the old-release harness keep proving it.
+- **First signing attempt.** If SignPath Foundation accepts the project, the first signed installer ships in 0.9.0 ([ADR-024](decisions/ADR-024-code-signing.md)). If it has not answered or declines, 0.9.0 ships unsigned.
+
+### Later: 1.0 and beyond
+
+**1.0 means all of these** (owner ruling, 2026-11-11):
+
+1. M3 accepted: the played session is recorded.
+2. A restore drill is on record.
+3. The first-run sample is shipped.
+4. A signed installer, **if SignPath Foundation accepts the project**.
+
+If SignPath declines, 1.0 may ship unsigned. The Microsoft Store (MSIX) route is evaluated separately, as ADR-024 describes. Signing is not a 1.0 blocker.
+
+Beyond 1.0 are the milestones below that are deferred or optional: M7 (Expanded tabletop), the M6 optional work (B09 palette, B11 tags), DM and combat tools (banned for now, R4 and D63) and any M4 follow-up after the third-party PDF run.
+
 ## Revision 2026-09-29: use it first, then prove it (reconciled 2026-09-30, LIVING_SPECS D15)
 
-_This revision sits above the milestone table and changes what happens next, not what was built. Evidence and the repository cleanup plan are in [roadmap-review-2026-09.md](roadmap-review-2026-09.md). The milestone table and the M2.2, M5 and M6 plans below are kept as the record; their rows carry the status tags from R2._
+_The dated notes on this revision (D15 to D63) moved to the [CHANGELOG](CHANGELOG.md#roadmap-revision-history-moved-from-roadmapmd). This revision sits above the milestone table and changes what happens next, not what was built. Evidence and the repository cleanup plan are in [roadmap-review-2026-09.md](roadmap-review-2026-09.md). The milestone table and the M2.2, M5 and M6 plans below are kept as the record; their rows carry the status tags from R2._
 
-_**Reconciled with the owner's direction of 2026-09-30 (LIVING_SPECS D15):** M6 slices 2 to 6 were built on purpose before T2 and are kept. T1, T2 as the gate for M7, content breadth and further studio work, T3 to T6 and the audit findings still apply. What the M6 stack made obsolete is struck through, with the reason. The revision branch held two drafts of this section (T1–T6 and a near copy, U1–U6); this is the one kept, with the few details only U had folded in._
-
-_**2026-10-03 (LIVING_SPECS D17):** the sheet's summary bar and tabs ([features/sheet-layout.md](features/sheet-layout.md), ADR-014) are owner-use polish done during T2. They are not M7 "deeper accessibility/themes" work and do not wait for the T2 gap report._
-
-_**2026-10-05 (LIVING_SPECS D18, ADR-015):** the visual refresh (themes, shell layout, dice display, summary QOL) is owner-use polish done during T2, like D17; it does not wait for the T2 gap report._
-
-_**2026-10-06 (LIVING_SPECS D19–D26):** the owner's UI follow-ups (concentration, compact view, currency, session notes, undo, calculated marks/passives/speed, the Characters home screen, tab glyphs) are owner-use polish done during T2, like D17 and D18, with character schema v8 approved by the owner. They are player-sheet features, not R4's DM or combat tools or content breadth, and do not wait for the T2 gap report._
-
-_**2026-10-07 (LIVING_SPECS D27–D32):** the owner's feedback round (light palette, summary and roll log, rests in the header, spell search, family filtering, the guided builder) is owner-use polish during T2 like D17–D26; it adds no content, no schema and does not wait for the T2 gap report._
-
-_**2026-10-14 (LIVING_SPECS D41):** by owner exception to R4, like D16a, the tester-feedback plan's four waves (guidance and detection; book import to a playable class; characters from a fillable sheet or text; table features) are built before the T2 gap report, and ship as one release before the group's first session. The gap report then ranks what follows. Content breadth beyond what an import or the owner authors stays after T2._
-
-_**2026-10-17 (LIVING_SPECS D43):** by owner exception to R4, like D41, a reusable play-mechanics engine (exclusive toggle groups and overlays with costs from a shared pool; a player-owned round counter with durations, per-turn upkeep and allowances that refresh once per round; assisted damage-time responses and hit-point thresholds; attacks and action details from features) is designed now and built after the tester-feedback waves, for the owner's high-powered homebrew one-shot. It ships in the release after 0.6.0. It adds no DM or VTT tools (no initiative order for other creatures, no positions, no monsters) and no bundled content; the homebrew itself stays in the owner's local source._
-
-_**2026-10-18 (LIVING_SPECS D60; owner ruling):** T2 no longer gates anything. Its hard stop on M7, content breadth, and studio or extension work beyond M5/M6 is waived by the owner. ~~The queue is wave 2, wave 3, the play-mechanics engine (D43, ADR-018), the 0.6.0 freeze (about 2026-11-11, D41), then the Homebrew Import Lab (below).~~ The queue was amended on 2026-10-20 (next note). T2 stays a milestone: the played session and its gap report are still owed. When the report exists, it re-ranks remaining work. Nothing waits for it. R4's other bans stay in force: no DM or combat tools, no plugin execution, no cloud sync or accounts, no cloud infrastructure, no security scanning beyond Dependabot. The statuses of T5, T6 and M4 are refreshed below, and the owner checks still owed are collected in one table ("Owed owner checks")._
-
-_**2026-10-20 (LIVING_SPECS D41 and D60 amended; owner ruling):** there is no feature freeze. 0.6.0 is released when Wave 3 is done, and the session (about 2026-11-11) is context, not a deadline. The play-mechanics engine (D43, ADR-018) ships in the release after 0.6.0. The queue is wave 2, wave 3, 0.6.0, the play-mechanics engine, then the Homebrew Import Lab (below). The lab's scope is narrowed (D62), and DM and combat tools stay banned but are noted for later (D63, under R4). The "Owed owner checks" table is re-checked against the recorded evidence as of 2026-10-20._
-
-_**2026-10-26 (LIVING_SPECS D60 amended; owner ruling):** content breadth (Track 1) is queued: the SRD species, backgrounds and feats off `main` now, then Monk, Rogue and Barbarian after the play-mechanics engine merges. The content-breadth row below reads "queued". SRD 5.2.1's species, backgrounds and feats are the first of it._
-_**2026-10-24:** the play-mechanics engine (D43, slices 1 to 8) is built and integrated for **0.7.0**. Its owner checks (accessibility rows 69 to 85, the rehearsal with the owner's own content on an installed build) are open. Next in the queue: the Homebrew Import Lab._
 
 ### R1. Decision
 
@@ -50,7 +58,7 @@ The rule from LIVING_SPECS D13 stands: everything M5 chose provisionally (templa
 | M7 Expanded tabletop | DEFERRED | Monsters, DM tools, local AI | Nothing in the evidence asks for it. | Unknown | None |
 | Content breadth (species, backgrounds; Barbarian 4 to 20 done as C2-1 and the Rogue 1 to 20 as C2-2 and the Monk 1 to 20 as C2-3, 2026-10-27, fixture-verified; SRD 5.2.1 species, backgrounds and feats bundled 2026-10-26) | ~~DEFERRED until T2~~ QUEUED (no longer gated by T2, D60; ~~not queued~~ queued, D60 amended 2026-10-26) | MVP goal | Already an owner decision; the session decides what is missing. | High if needed | None |
 | Cloud sync, accounts, executable plugin sandbox | CANCELLED | (never planned; recorded to close the question) | Contradicts SPEC and ADR-011 option A. | n/a | n/a |
-| Accessibility owner checks (items 6, 15 to 17 and 18 to 27; the 0.2.2 pass was keyboard only, #24) | OPTIONAL | WCAG AA passes | Do the Narrator pass once with an artifact; do not block milestones on it. | Medium | Small |
+| Accessibility owner checks (items 6, 15 to 17 and 18 to 27; the 0.2.2 pass was keyboard only, #24) | OPTIONAL (items 6, 15, 16, 17 and 68 passed on 0.8.0, 2026-11-11) | WCAG AA passes | Do the Narrator pass once with an artifact; do not block milestones on it. | Medium | Small |
 | ADR-008 pre-release checklist (trademark, REDIST, Velopack notices, signing) | SUPERSEDED by T5 | Before the first installer | Becomes the acceptance list of T5. | High | Release evidence |
 
 ### R3. Milestones
@@ -122,7 +130,7 @@ One downloadable GitHub release built by a tag-triggered release workflow (`rele
 **Acceptance.** A release tag and downloadable installer; the four checklist items closed in writing; one upgrade v(N) → v(N+1) tested and recorded in `m2-acceptance.md` (from 0.3.x, it runs database v6 → v9 and leaves one `tomestack.db.v6.bak`); install verification of M2.2, M5 slice 1 and the M6 screens done on that build.
 
 **Status: released (0.4.0 to 0.8.0 published); not met until the owed checks below are recorded in [features/m2-acceptance.md](features/m2-acceptance.md).**
-- **Published:** 0.4.0 (2026-10-02), 0.5.0 (2026-10-12), 0.6.0 (2026-10-21), 0.7.0 and 0.7.1 (2026-10-27), and 0.8.0 (2026-11-10), unsigned, each with `Setup.exe`, a portable zip and a full package. The checklist below is closed.
+- **Published:** 0.4.0 (2026-10-02), 0.5.0 (2026-10-12), 0.6.0 (2026-10-21), 0.7.0 and 0.7.1 (2026-10-27), and 0.8.0 (2026-11-10), unsigned (signing is planned in [ADR-024](decisions/ADR-024-code-signing.md), not a 1.0 blocker), each with `Setup.exe`, a portable zip and a full package. The checklist below is closed.
 - **Recorded:** the upgrade harness passed on a local pack (2026-10-01, below).
 - **Still owed (owner):**
   - the populated upgrade (the "populated (owner)" row in [features/m2-acceptance.md](features/m2-acceptance.md));
@@ -208,17 +216,17 @@ Each row gets an owner date when it is done, or the word "deferred" with a reaso
 - *automated*: tests cover it;
 - *owner*: an owner record exists.
 
-No row has an owner record yet. Where a row names the 0.6.0 release candidate, the check is planned for that build.
+As of 2026-10-20 no row had an owner record. On 2026-11-11 the owner recorded the accessibility row below as passed on 0.8.0; the other rows are still owed.
 
 | Check | Where it's defined | Evidence recorded (2026-10-20) | Status |
 |---|---|---|---|
-| T2 played session and gap report | T2 above; [features/gap-notes.md](features/gap-notes.md) | Built: gap notes. No session or report recorded | owed (session about 2026-11-11) |
-| T6 restore drill on the current published release | T6 above; [features/restore-drill-procedure.md](features/restore-drill-procedure.md) | Built and automated: the DevHost drill report and compare, `RestoreDrillTests`. No drill record on a second machine | owed (0.6.0 release candidate) |
+| T2 played session and gap report | T2 above; [features/gap-notes.md](features/gap-notes.md) | Built: gap notes. No session or report recorded | owed (the M3 played session; part of the 1.0 definition) |
+| T6 restore drill on the current published release | T6 above; [features/restore-drill-procedure.md](features/restore-drill-procedure.md) | Built and automated: the DevHost drill report and compare, `RestoreDrillTests`. No drill record on a second machine | owed (second machine; to be re-run on 0.8.1) |
 | First paint (cold start, by hand) | T4 above; [performance.md](performance.md) | Method only. The smoke script's start-to-ready time is not first paint | owed (0.6.0 release candidate) |
-| Narrator, 200 %/400 % zoom and High Contrast checks (D17/D18) | [features/accessibility-checklist.md](features/accessibility-checklist.md) | Automated: keyboard flows and 400 % reflow. Checklist items 6, 15, 16, 17 and 21 are still open | owed (0.6.0 release candidate) |
-| Populated upgrade, published to published | T5 above; [features/m2-acceptance.md](features/m2-acceptance.md); [features/release-0.4.0-verification.md](features/release-0.4.0-verification.md) | Automated: `UpgradeTests` and the installer smoke. No populated 0.4.0 → 0.5.0 upgrade recorded | owed (0.5.0 → 0.6.0 release candidate, on a copy of real data) |
+| Narrator, 200 %/400 % zoom and High Contrast checks (D17/D18) | [features/accessibility-checklist.md](features/accessibility-checklist.md) | Automated: keyboard flows and 400 % reflow. Owner record: checklist items 6 (200 %/400 % zoom), 15 and 17 (Narrator), 16 (High Contrast) and 68 (print preview: full sheet, combat card, large print) | **passed on 0.8.0, 2026-11-11, by the owner.** Item 21 and the later panel items stay as the checklist records them |
+| Populated upgrade, published to published | T5 above; [features/m2-acceptance.md](features/m2-acceptance.md); [features/release-0.4.0-verification.md](features/release-0.4.0-verification.md) | Automated: `UpgradeTests` and the installer smoke. No populated upgrade recorded | owed (0.7.1 → 0.8.0 and 0.8.0 → 0.8.1, on the real library) |
 | M4 third-party PDF: confirm the counts and review the candidates | R2 M4 row; [features/m4-acceptance.md](features/m4-acceptance.md) | Automated, counts only: 336 feature candidates, 8 of 8 classes. Spellcasting is proposed for 0 of 8 and not reviewed | owed (closed by the Import Lab's precision/recall table) |
-| Foundry export imported into a real Foundry world | [features/export-adapters.md](features/export-adapters.md); ADR-012 | Automated: golden files. The adapter stays labelled Experimental | owed |
+| Foundry export imported into a real Foundry world | [features/export-adapters.md](features/export-adapters.md); ADR-012 | Automated: golden files. The adapter stays labelled Experimental | owed (Foundry 14, dnd5e 6.0.6) |
 | P18 by-hand panel: a sheet with a `scale` effect lists nothing under "Not understood" (added 2026-10-22) | D69; [features/sheet-play.md](features/sheet-play.md) "What needs you by hand" | Automated: `MechanicsInventoryTests.Scale_effects_are_not_reported_unsupported`, and the panel's own tests. The SRD packs have no `scale` effect, so the check needs homebrew. Passed for now by the owner (2026-10-22), so the panel merged without it | owed |
 | Homebrew Import Lab Phase 0: five timed usability observations (AUD-02) | Homebrew Import Lab above | Not run. The other Phase 0 items are done as untracked working notes | owed (before Lab work starts) |
 
