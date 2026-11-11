@@ -4,7 +4,7 @@
 
 A Windows player can install TomeStack, create and play a level-1-to-20 SRD-based character under either 2014 or 2024 rules, add a structured homebrew subclass or feature, and recover/export their work offline. The product is useful before PDF mechanics interpretation or arbitrary custom base classes exist.
 
-**Current build (0.8.1): the content goal is met; the real-play gate (M3) is not recorded yet.** All twelve SRD classes are bundled at levels 1–20 in both families, each with its SRD subclass, plus the SRD armor table. Species and backgrounds: all nine SRD 5.1 races and the Acolyte, and every SRD 5.2.1 species, background and feat (9, 4 and 17). Anything else comes from the homebrew studio. The M2 checks passed ([features/m2-acceptance.md](features/m2-acceptance.md)); nothing is accepted in real play yet.
+**Current build (0.8.0): the content goal is met; the real-play gate (M3) is not recorded yet.** All twelve SRD classes are bundled at levels 1–20 in both families, each with its SRD subclass, plus the SRD armor table. Species and backgrounds: all nine SRD 5.1 races and the Acolyte, and every SRD 5.2.1 species, background and feat (9, 4 and 17). Anything else comes from the homebrew studio. The M2 checks passed ([features/m2-acceptance.md](features/m2-acceptance.md)); nothing is accepted in real play yet.
 
 ## Committed candidate scope
 

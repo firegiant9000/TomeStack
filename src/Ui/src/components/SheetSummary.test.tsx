@@ -129,6 +129,7 @@ it('names inspiration by family and lists conditions and exhaustion when present
   render(
     <SheetSummary
       view={fixtureView({}, { temporaryHitPoints: 0, resources: [], conditions: ['poisoned', 'prone'], exhaustion: 2, inspiration: true }, 'srd-5.1')}
+      rulesFamilies={policies}
       rollMode="normal"
       onRollMode={() => {}}
       rollLog={[]}

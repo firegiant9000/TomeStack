@@ -461,13 +461,13 @@ export function App() {
               }}
             />
           )}
-          {screen.kind === 'sheet' && (
+          {screen.kind === 'sheet' && info && (
             <CharacterSheet
               key={screen.view.character.id}
               view={screen.view}
               initialTab={screen.tab}
               focusChecklist={screen.levelledUp}
-              rulesFamilies={info?.rulesFamilies}
+              rulesFamilies={info.rulesFamilies}
               onError={onError}
               onLevelUp={() => {
                 setMessage(undefined);
