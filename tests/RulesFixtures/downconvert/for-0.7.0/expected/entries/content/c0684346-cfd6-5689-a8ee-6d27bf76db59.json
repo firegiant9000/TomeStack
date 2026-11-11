@@ -1,0 +1,23 @@
+{
+  "contentId": "c1070000-0000-4000-8000-0000000000c9",
+  "revisionId": "c0684346-cfd6-5689-a8ee-6d27bf76db59",
+  "schemaVersion": 11,
+  "kind": "feature",
+  "name": "Compat Hound Whistle",
+  "rulesFamilies": [
+    "srd-5.1"
+  ],
+  "provenance": {
+    "sourceId": "c1070000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 9
+    }
+  },
+  "status": "published",
+  "summary": "A v12 test feature with a companion card.",
+  "effects": [],
+  "downConvertedFrom": {
+    "revisionId": "c1070000-0000-4000-8000-0000000000e9",
+    "schemaVersion": 12
+  }
+}
