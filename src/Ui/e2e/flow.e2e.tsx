@@ -1132,7 +1132,7 @@ it('exports a character for Foundry VTT and as sheet JSON after a preview, with 
   await user.click(within(panel).getByRole('radio', { name: /Foundry VTT \(dnd5e system\)/ }));
   await user.click(within(panel).getByRole('button', { name: 'Preview export' }));
   const preview = await within(panel).findByRole('region', { name: 'Export preview' });
-  expect(preview.textContent).toMatch(/E2E-VTT-Hero\.foundry-dnd5e\.json.*checked against Foundry VTT 14\.367 with dnd5e 6\.0\.5/);
+  expect(preview.textContent).toMatch(/E2E-VTT-Hero\.foundry-dnd5e\.json.*checked against Foundry VTT 14\.367 with dnd5e 6\.0\.6/);
   expect(preview.textContent).toMatch(/not affiliated with Foundry Gaming LLC/);
   const downloads = vi.mocked(downloadBase64).mock.calls.length;
   await within(panel).findByRole('region', { name: 'Preflight: shared sheet' });
