@@ -6,6 +6,7 @@
 - **Dependencies:** React and React DOM 19.3.0 to 19.3.1 (shipped; [ATTRIBUTION.md](../ATTRIBUTION.md) updated, `scheduler` unchanged). Development-only: `@testing-library/user-event`, `@types/node`, `@vitejs/plugin-react`, ESLint, `globals` and `typescript-eslint` to their latest patch or minor (from dependabot #126). No app behaviour change.
 - **Weekly mutation run:** the Stryker job now runs in four shards (effects, validation, calculation, the rest) with 120 minutes each, so it finishes instead of being cancelled at 60; each shard uploads its own `stryker-report-<shard>` and reports its own score. A test checks that every `src/RulesCore` file belongs to exactly one shard. No app behaviour change.
 - **Release notes:** relative links in the changelog section (`decisions/ADR-022-....md`, `../README.md`, images) now point at the tagged files on GitHub, so they work on the release page; absolute URLs, `#anchors` and `mailto:` links are left alone. `scripts/release-notes.ps1` also takes an optional `-ChangelogPath`, and a test runs it against a temporary changelog. No app behaviour change.
+- **CI and ignore rules:** CI pins every action by commit SHA (version comment kept); `.gitignore` covers env files (`.env*`, except `.env.example`) and signing keys (`*.pfx`, `*.p12`, `*.snk`). No app behaviour change.
 
 ## 0.8.0 (content v12: rolls, riders, responses and gates; the SRD Barbarian, Rogue and Monk; save for an older TomeStack; every SRD 5.2.1 origin and the other SRD 5.1 races; the Import Lab)
 
