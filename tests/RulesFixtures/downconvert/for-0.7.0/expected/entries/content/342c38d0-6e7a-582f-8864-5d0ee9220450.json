@@ -1,0 +1,23 @@
+{
+  "contentId": "c1070000-0000-4000-8000-0000000000c8",
+  "revisionId": "342c38d0-6e7a-582f-8864-5d0ee9220450",
+  "schemaVersion": 11,
+  "kind": "feature",
+  "name": "Compat Echo Mark",
+  "rulesFamilies": [
+    "srd-5.1"
+  ],
+  "provenance": {
+    "sourceId": "c1070000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 8
+    }
+  },
+  "status": "published",
+  "summary": "A v12 test feature with advantage on the character\u0027s attack rolls.",
+  "effects": [],
+  "downConvertedFrom": {
+    "revisionId": "c1070000-0000-4000-8000-0000000000e8",
+    "schemaVersion": 12
+  }
+}

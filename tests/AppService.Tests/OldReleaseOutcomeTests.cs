@@ -43,6 +43,14 @@ public sealed class OldReleaseOutcomeTests : IDisposable
         }
     }
 
+    /// <summary>The full commit each release tag points at; an outcome must record the commit it was run against.</summary>
+    private static readonly Dictionary<string, string> TagCommits = new(StringComparer.Ordinal)
+    {
+        ["v0.5.0"] = "29ac9832e2b6ca6fedce9fa4034bfdea075cd328",
+        ["v0.6.0"] = "6403df5c7e8cdd59bc5284843881904bdc314351",
+        ["v0.7.0"] = "0ffe703149e2bce8747e26bdf915de163151c20b",
+    };
+
     private const string Advice = "Run scripts/old-release-check.ps1 locally and commit the outcome.";
 
     /// <summary>Every problem with the committed outcomes of <paramref name="repoRoot"/>; empty when each one matches its goldens.</summary>
@@ -88,6 +96,11 @@ public sealed class OldReleaseOutcomeTests : IDisposable
                 problems.Add($"{label}: harnessVersion is not 1.");
             if (!doc.TryGetProperty("tag", out var tag) || tag.ValueKind != JsonValueKind.String || tag.GetString() != "v" + target)
                 problems.Add($"{label}: tag is not v{target}.");
+            var commit = doc.TryGetProperty("tagCommit", out var tc) && tc.ValueKind == JsonValueKind.String ? tc.GetString() : null;
+            if (!TagCommits.TryGetValue("v" + target, out var expectedCommit))
+                problems.Add($"{label}: no expected commit is pinned for v{target}; add it to TagCommits in OldReleaseOutcomeTests (git rev-parse v{target}^{{commit}}).");
+            else if (!string.Equals(commit, expectedCommit, StringComparison.OrdinalIgnoreCase))
+                problems.Add($"{label}: tagCommit is {commit ?? "missing"}, expected {expectedCommit} for v{target}.");
 
             var listed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (doc.TryGetProperty("inputs", out var inputs) && inputs.ValueKind == JsonValueKind.Array)
@@ -166,6 +179,32 @@ public sealed class OldReleaseOutcomeTests : IDisposable
         Assert.True(problems.Count == 0, string.Join(" ", problems) + " " + Advice);
     }
 
+    [Fact]
+    public void Every_offered_ladder_row_has_goldens_and_an_outcome()
+    {
+        var root = RepoRoot!;
+        var folder = Path.Combine(root, "tests", "RulesFixtures", "downconvert");
+        var problems = new List<string>();
+        foreach (var row in TomeStack.AppService.Packages.ReleaseLadder.Rows.Where(r => r.OfferedAsTarget))
+        {
+            var release = row.Release.ToString(3);
+            var forDir = Path.Combine(folder, "for-" + release);
+            if (!Directory.Exists(forDir) || Directory.GetFiles(forDir, "*.tomestack.zip").Length == 0)
+                problems.Add($"{release} is offered as a target but has no *.tomestack.zip under {Downconvert}/for-{release}/.");
+            if (!File.Exists(Path.Combine(folder, "outcomes", release + ".json")))
+                problems.Add($"{release} is offered as a target but {Downconvert}/outcomes/{release}.json is missing.");
+        }
+        Assert.True(problems.Count == 0, string.Join(" ", problems) + " An offered row needs goldens and a real-build outcome (scripts/old-release-check.ps1).");
+    }
+
+    [Fact]
+    public void An_outcome_with_the_wrong_tag_commit_is_a_problem()
+    {
+        Build();
+        Rewrite(t => t.Replace(TagCommits["v0.6.0"], "0123456789abcdef0123456789abcdef01234567", StringComparison.Ordinal));
+        Assert.Contains(FindProblems(_root), p => p.Contains("tagCommit"));
+    }
+
     // --- the checker itself, on a temporary tree ---
 
     private readonly string _root = Path.Combine(Path.GetTempPath(), "tomestack-outcome-" + Guid.NewGuid().ToString("N"));
@@ -195,7 +234,7 @@ public sealed class OldReleaseOutcomeTests : IDisposable
             {
                 harnessVersion = 1,
                 tag = "v0.6.0",
-                tagCommit = "0123456789abcdef0123456789abcdef01234567",
+                tagCommit = TagCommits["v0.6.0"],
                 inputs = entries,
                 results = new[] { new { package = "compat-hero.tomestack.zip", status, detail = "" } },
             };

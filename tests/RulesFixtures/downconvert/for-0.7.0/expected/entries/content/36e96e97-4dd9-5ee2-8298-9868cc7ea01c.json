@@ -1,0 +1,36 @@
+{
+  "contentId": "c1070000-0000-4000-8000-0000000000c7",
+  "revisionId": "36e96e97-4dd9-5ee2-8298-9868cc7ea01c",
+  "schemaVersion": 11,
+  "kind": "subclass",
+  "name": "Compat Echo Walker",
+  "rulesFamilies": [
+    "srd-5.1"
+  ],
+  "provenance": {
+    "sourceId": "c1070000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 7
+    }
+  },
+  "status": "published",
+  "summary": "A v12 test subclass that gives one feature.",
+  "effects": [
+    {
+      "type": "grant",
+      "id": "grant-mark",
+      "grant": "content",
+      "content": {
+        "contentId": "c1070000-0000-4000-8000-0000000000c8",
+        "revisionId": "342c38d0-6e7a-582f-8864-5d0ee9220450"
+      },
+      "level": 1,
+      "automation": "automatic",
+      "timing": "always"
+    }
+  ],
+  "downConvertedFrom": {
+    "revisionId": "c1070000-0000-4000-8000-0000000000e7",
+    "schemaVersion": 12
+  }
+}
