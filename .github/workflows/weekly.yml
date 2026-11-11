@@ -68,10 +68,25 @@ jobs:
           # Counts, plus class names and effect ids from one diagnostic (no SRD prose); kept a week, not the default 90 days.
           retention-days: 7
 
-  # Stryker.NET on RulesCore with its unit tests. The score is reported, never enforced.
+  # Stryker.NET on RulesCore with its unit tests, in four shards so each fits its limit. The score is reported, never enforced.
+  # Every src/RulesCore/*.cs file must fall in exactly one shard: `rest` takes everything the others do not
+  # (WeeklyWorkflowTests checks this). Each `mutate` value is one quoted Stryker --mutate glob per entry; `!` excludes.
   stryker:
+    name: stryker (${{ matrix.shard }})
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: effects
+            mutate: "'**/Effects.cs'"
+          - shard: validation
+            mutate: "'**/ContentValidation.cs'"
+          - shard: calculation
+            mutate: "'**/Calculation*.cs' '**/DownConvert.cs'"
+          - shard: rest
+            mutate: "'**/*.cs' '!**/Effects.cs' '!**/ContentValidation.cs' '!**/Calculation*.cs' '!**/DownConvert.cs'"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -88,26 +103,35 @@ jobs:
       # From the test project's folder Stryker builds that project only; the solution needs the UI bundle.
       - name: Mutation test RulesCore
         working-directory: tests/RulesCore.Tests
-        run: >-
-          "$RUNNER_TEMP/tools/dotnet-stryker" --project TomeStack.RulesCore.csproj --configuration Release
-          --reporter Progress --reporter Html --reporter Json --output "$RUNNER_TEMP/stryker" --skip-version-check
+        env:
+          MUTATE: ${{ matrix.mutate }}
+        run: |
+          # The globs come from the matrix, not from the script text; split on spaces with pathname expansion off.
+          set -f
+          args=()
+          for token in $MUTATE; do
+            args+=(--mutate "${token//\'/}")
+          done
+          "$RUNNER_TEMP/tools/dotnet-stryker" --project TomeStack.RulesCore.csproj --configuration Release "${args[@]}" \
+            --reporter Progress --reporter Html --reporter Json --output "$RUNNER_TEMP/stryker" --skip-version-check
 
       # Stryker's score: (killed + timeout) / (killed + timeout + survived + no coverage).
       - name: Mutation score
         if: always()
         env:
           REPORT: ${{ runner.temp }}/stryker/reports/mutation-report.json
+          SHARD: ${{ matrix.shard }}
         run: |
           node -e '
             const fs = require("node:fs");
             const report = process.env.REPORT;
-            let line = "No mutation report was written.";
+            let line = `No mutation report was written (${process.env.SHARD} shard).`;
             if (fs.existsSync(report)) {
               const statuses = Object.values(JSON.parse(fs.readFileSync(report, "utf8")).files).flatMap((f) => f.mutants.map((m) => m.status));
               const count = (...names) => statuses.filter((s) => names.includes(s)).length;
               const detected = count("Killed", "Timeout"), undetected = count("Survived", "NoCoverage");
               const score = detected + undetected ? (100 * detected / (detected + undetected)).toFixed(2) : "0";
-              line = `RulesCore mutation score: ${score}% (${detected} detected, ${undetected} undetected, of ${statuses.length} mutants)`;
+              line = `RulesCore mutation score (${process.env.SHARD} shard): ${score}% (${detected} detected, ${undetected} undetected, of ${statuses.length} mutants)`;
             }
             console.log(line);
             fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, line + "\n");
@@ -117,7 +141,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: stryker-report
+          name: stryker-report-${{ matrix.shard }}
           path: ${{ runner.temp }}/stryker/reports/
           if-no-files-found: warn
 

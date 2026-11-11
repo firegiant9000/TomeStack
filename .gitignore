@@ -14,7 +14,11 @@ src/Ui/dist/
 *.tsbuildinfo
 
 # Local data and secrets
-.env.local
+.env*
+!.env.example
+*.pfx
+*.p12
+*.snk
 *.db
 *.db-wal
 *.db-shm
