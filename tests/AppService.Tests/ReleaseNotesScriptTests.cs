@@ -105,7 +105,7 @@ public sealed class ReleaseNotesScriptTests
         { "[l](../../../x.md)", "[l](" + Blob + "x.md)" },
         { "`[m](a.md)` and [n](b.md)", "`[m](a.md)` and [n](" + Blob + "docs/b.md)" },
         { "[o](a.md) then [p](b.md#q) and ![r](c.png)", "[o](" + Blob + "docs/a.md) then [p](" + Blob + "docs/b.md#q) and ![r](" + Blob + "docs/c.png?raw=true)" },
-        { "an unpaired ` tick\n- [q](a.md)", "an unpaired ` tick\n- [q](" + Blob + "docs/a.md)" },
+        { "an unpaired ` tick\n- [q](a.md) and `x`", "an unpaired ` tick\n- [q](" + Blob + "docs/a.md) and `x`" },
     };
 
     private static void AssertRewritten(string host, string input, string expected)
