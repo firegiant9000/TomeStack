@@ -59,6 +59,15 @@ public static class ContentValidator
     /// <summary>The most companions one revision declares (content v12).</summary>
     private const int MaxCompanionsPerRevision = 10;
 
+    /// <summary>Content v13 (ADR-024): the most picks in a guide's kit, options in a pick, lines in a pack, and the largest quantity of a line.</summary>
+    private const int MaxGuidePicks = 12;
+    private const int MaxGuideOptions = 20;
+    private const int MaxPackLines = 30;
+    private const int MaxGuideQuantity = 999;
+
+    /// <summary>Content v13 (ADR-024): the categories a kit line's <c>anyOf</c> may name.</summary>
+    private static readonly string[] GuideCategories = ["weapon.simple", "weapon.martial", "armor.light", "armor.medium", "armor.heavy", "armor.shield"];
+
     /// <summary>The longest companion label or speed (content v12).</summary>
     private const int MaxCompanionText = 80;
 
@@ -250,6 +259,14 @@ public static class ContentValidator
             needsV12 = true;
             if (!v12Phrases.Contains(phrase))
                 v12Phrases.Add(phrase);
+        }
+        var needsV13 = false; // content v13 (ADR-024): the creationGuide kind, the guide effects, contains
+        var v13Phrases = new List<string>(); // what the v13 features found are called in validate.requires-v13
+        void NeedV13(string phrase)
+        {
+            needsV13 = true;
+            if (!v13Phrases.Contains(phrase))
+                v13Phrases.Add(phrase);
         }
         var upkeeps = 0;
         var responses = 0;
@@ -1030,6 +1047,7 @@ public static class ContentValidator
             Error("validate.spellcasting-duplicate", "A revision declares at most one spellcasting feature.");
         if (revision.Effects.OfType<SpellEffect>().Count() > 1)
             Error("validate.spell-duplicate", "A spell revision declares its spell data once.");
+        CheckGuides();
         if (revision.Effects.OfType<ItemEffect>().Count() > 1)
             Error("validate.item-duplicate", "An item declares its attunement and charges once.");
         if (revision.Effects.OfType<ItemModEffect>().Count() > 1)
@@ -1058,6 +1076,8 @@ public static class ContentValidator
         // Typed v10 details exist only in a v10 revision when read from JSON (below v10 the keys stay extension data); a
         // revision built in code can still declare an older version, and an older build would ignore or refuse them.
         needsV11 |= usedValues.Count > 0;
+        if (needsV13 && revision.SchemaVersion < ContentRevision.CreationGuideSchemaVersion)
+            Error("validate.requires-v13", $"This revision uses content schema v13 features ({string.Join(", ", v13Phrases)}) but declares v{revision.SchemaVersion}; an older build would ignore or refuse them.");
         if (needsV12 && revision.SchemaVersion < ContentRevision.WeaponBonusSchemaVersion)
             Error("validate.requires-v12", $"This revision uses content schema v12 features ({(v12Phrases.Count > 0 ? string.Join(", ", v12Phrases) : "see the keys it carries")}) but declares v{revision.SchemaVersion}; an older build would ignore or refuse them.");
         if (needsV11 && revision.SchemaVersion < ContentRevision.PlayMechanicsSchemaVersion)
@@ -1107,7 +1127,8 @@ public static class ContentValidator
         // The same features as the requires-vN checks above, highest first. Typed effects are covered too: armor (v4),
         // spellcasting, spell and weapon (v5) and toggle (v6) are read as typed only from their version.
         var required =
-            needsV12 ? ContentRevision.WeaponBonusSchemaVersion
+            needsV13 ? ContentRevision.CreationGuideSchemaVersion
+            : needsV12 ? ContentRevision.WeaponBonusSchemaVersion
             : needsV11 || diceLessRoll ? ContentRevision.PlayMechanicsSchemaVersion
             : needsV10 ? ContentRevision.PlayDetailsSchemaVersion
             : needsV9 ? ScaleEffect.SchemaVersion
@@ -1892,6 +1913,124 @@ public static class ContentValidator
         {
             if (level is < Character.MinLevel or > Character.MaxLevel)
                 Error("validate.level", $"Effect '{effectId}' level {level} must be between {Character.MinLevel} and {Character.MaxLevel}.", effectId);
+        }
+
+        // Content v13 (ADR-024): creation guides and packs. A reference names content by id; it must resolve to a published revision of the
+        // wanted kind that shares a rules family with this revision (any revision of it counts, like the other id references).
+        bool PublishedOfFamily(Guid content, Func<ContentRevision, bool> accept) =>
+            local.OfContent(content).Where(r => r.ContentId == content && r.Status == RevisionStatus.Published)
+                .Concat(new[] { catalog.NewestPublished(content) }.OfType<ContentRevision>().Where(r => r.ContentId == content))
+                .Any(r => r.RulesFamilies.Intersect(revision.RulesFamilies).Any() && accept(r));
+
+        static bool IsPack(ContentRevision r) => r.Kind == ContentKind.Item && r.Effects.OfType<ItemEffect>().Any(i => i.Contains is { Count: > 0 });
+
+        static bool GuideQuantityOk(int? quantity) => quantity is null or >= 1 and <= MaxGuideQuantity;
+
+        void CheckPack(ItemEffect item)
+        {
+            if (item.Contains is not { } lines)
+                return;
+            NeedV13("an item with contains");
+            if (lines.Count > MaxPackLines)
+                Error("validate.item-contains", $"Item '{item.Id}' lists {lines.Count} contained lines; the most is {MaxPackLines}.", item.Id);
+            foreach (var (line, index) in lines.Select((l, i) => (l, i + 1)))
+            {
+                if (!GuideQuantityOk(line.Quantity))
+                    Error("validate.item-contains", $"Item '{item.Id}' contained line {index} has quantity {line.Quantity}; it must be 1 to {MaxGuideQuantity}.", item.Id);
+                if (line.Item is not { } contained)
+                    Error("validate.item-contains", $"Item '{item.Id}' contained line {index} names no item.", item.Id);
+                else if (!PublishedOfFamily(contained.ContentId, r => r.Kind == ContentKind.Item))
+                    Error("validate.item-contains", $"Item '{item.Id}' contained line {index} names {contained.ContentId}, which is not a published item of this revision's rules family.", item.Id);
+                else if (PublishedOfFamily(contained.ContentId, IsPack))
+                    Error("validate.item-contains", $"Item '{item.Id}' contained line {index} names a pack; a pack holds items, not other packs.", item.Id);
+            }
+        }
+
+        void CheckKitLine(string id, string where, KitLine line)
+        {
+            var kinds = (line.Item is not null ? 1 : 0) + (line.AnyOf is not null ? 1 : 0) + (line.Coins is not null ? 1 : 0) + (line.Pack is not null ? 1 : 0);
+            if (kinds != 1)
+                Error("validate.guide-picks", $"Equipment {where} has {kinds} kinds of line; each line is exactly one of item, anyOf, coins or pack.", id);
+            if (line.Item is { } item)
+            {
+                if (!PublishedOfFamily(item.ContentId, r => r.Kind == ContentKind.Item))
+                    Error("validate.guide-item", $"Equipment {where} names {item.ContentId}, which is not a published item of this revision's rules family.", id);
+                if (!GuideQuantityOk(line.Quantity))
+                    Error("validate.guide-quantity", $"Equipment {where} has quantity {line.Quantity}; it must be 1 to {MaxGuideQuantity}.", id);
+            }
+            if (line.Pack is { } pack && !PublishedOfFamily(pack.ContentId, IsPack))
+                Error("validate.guide-item", $"Equipment {where} names {pack.ContentId} as a pack, which is not a published item with contents in this revision's rules family.", id);
+            if (line.AnyOf is not null && !GuideCategories.Contains(line.AnyOf, StringComparer.Ordinal))
+                Error("validate.guide-category", $"Equipment {where} has anyOf '{line.AnyOf}'; use one of {string.Join(", ", GuideCategories)}.", id);
+            if (line.Coins is { } coins)
+            {
+                var given = new[] { coins.Cp, coins.Sp, coins.Ep, coins.Gp, coins.Pp }.OfType<int>().ToList();
+                if (given.Count == 0 || given.All(c => c == 0))
+                    Error("validate.guide-coins", $"Equipment {where} is a coins line that gives no coins; give at least one denomination more than 0.", id);
+                if (given.Any(c => c is < 0 or > Currency.MaxCoins))
+                    Error("validate.guide-coins", $"Equipment {where} has coins outside 0 to {Currency.MaxCoins}.", id);
+            }
+        }
+
+        void CheckGuides()
+        {
+            foreach (var effect in revision.Effects)
+            {
+                var isGuide = effect.Type is GuideForEffect.TypeName or PrimaryAbilitiesEffect.TypeName or StartingEquipmentEffect.TypeName;
+                if (isGuide)
+                {
+                    NeedV13($"a {effect.Type} effect");
+                    if (revision.Kind != ContentKind.CreationGuide)
+                        Error("validate.guide-kind", $"Effect '{effect.Id}' is a creation guide effect ({effect.Type}); it belongs on a creationGuide, not {revision.Kind.ToString().ToLowerInvariant()} content.", effect.Id);
+                    if (effect is UnknownEffect && revision.SchemaVersion >= ContentRevision.CreationGuideSchemaVersion)
+                        Error("validate.effect-malformed", $"Effect '{effect.Id}' has type '{effect.Type}' but a value or field that does not read (a missing or misspelled field, or a value of the wrong shape); fix it before publishing.", effect.Id);
+                }
+                else if (revision.Kind == ContentKind.CreationGuide)
+                    Error("validate.guide-kind", $"Effect '{effect.Id}' has type '{effect.Type}', which a creation guide cannot carry; it holds guideFor, primaryAbilities and startingEquipment only.", effect.Id);
+            }
+            if (revision.Kind == ContentKind.CreationGuide)
+            {
+                NeedV13("the creationGuide kind");
+                var targets = revision.Effects.Where(e => e.Type == GuideForEffect.TypeName).ToList();
+                if (targets.Count != 1)
+                    Error("validate.guide-target", $"A creation guide has exactly one guideFor effect; this one has {targets.Count}.");
+            }
+            foreach (var guideFor in revision.Effects.OfType<GuideForEffect>())
+            {
+                if (!PublishedOfFamily(guideFor.Content.ContentId, r => r.Kind is ContentKind.Class or ContentKind.Background))
+                    Error("validate.guide-target", $"Effect '{guideFor.Id}' guides {guideFor.Content.ContentId}, which is not a published class or background of this revision's rules family.", guideFor.Id);
+            }
+            foreach (var primary in revision.Effects.OfType<PrimaryAbilitiesEffect>())
+            {
+                if (primary.Abilities.Count is < 1 or > 2 || primary.Abilities.Any(a => a is null || !CheckAbilityEffect.TryParseAbility(a, out _)) || primary.Abilities.Distinct(StringComparer.Ordinal).Count() != primary.Abilities.Count)
+                    Error("validate.guide-abilities", $"Effect '{primary.Id}' lists {primary.Abilities.Count} primary abilities; list one or two different ones of str, dex, con, int, wis, cha.", primary.Id);
+            }
+            foreach (var kit in revision.Effects.OfType<StartingEquipmentEffect>())
+            {
+                if (kit.Picks.Count > MaxGuidePicks)
+                    Error("validate.guide-picks", $"Effect '{kit.Id}' has {kit.Picks.Count} picks; the most is {MaxGuidePicks}.", kit.Id);
+                foreach (var dup in kit.Picks.GroupBy(p => p.Id, StringComparer.Ordinal).Where(g => g.Count() > 1))
+                    Error("validate.guide-picks", $"Effect '{kit.Id}' uses the pick id '{dup.Key}' more than once.", kit.Id);
+                foreach (var pick in kit.Picks)
+                {
+                    if (pick.Options.Count == 0)
+                        Error("validate.guide-picks", $"Pick '{pick.Id}' of effect '{kit.Id}' has no options.", kit.Id);
+                    if (pick.Options.Count > MaxGuideOptions)
+                        Error("validate.guide-picks", $"Pick '{pick.Id}' of effect '{kit.Id}' has {pick.Options.Count} options; the most is {MaxGuideOptions}.", kit.Id);
+                    foreach (var dup in pick.Options.GroupBy(o => o.Id, StringComparer.Ordinal).Where(g => g.Count() > 1))
+                        Error("validate.guide-picks", $"Pick '{pick.Id}' of effect '{kit.Id}' uses the option id '{dup.Key}' more than once.", kit.Id);
+                    foreach (var option in pick.Options)
+                    {
+                        if (option.RequiresProficiency is { } need
+                            && !((need.StartsWith("weapon.", StringComparison.Ordinal) && need.Length > "weapon.".Length) || (need.StartsWith("armor.", StringComparison.Ordinal) && need.Length > "armor.".Length)))
+                            Error("validate.guide-category", $"Option '{option.Id}' of pick '{pick.Id}' requires proficiency '{need}'; it must be a weapon. or armor. key.", kit.Id);
+                        foreach (var (line, index) in option.Lines.Select((l, i) => (l, i + 1)))
+                            CheckKitLine(kit.Id, $"line {index} of option '{option.Id}' in pick '{pick.Id}'", line);
+                    }
+                }
+            }
+            foreach (var item in revision.Effects.OfType<ItemEffect>())
+                CheckPack(item);
         }
 
         void CheckReference(ContentReference target, string effectId, string what)
