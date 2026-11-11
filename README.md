@@ -128,6 +128,20 @@ gh attestation verify .\TomeStack.App-win-Setup.exe --repo firegiant9000/TomeSta
 - Upgrading keeps your library in place, and a full backup moves it to a new PC; see [Moving your library to a new version or a new PC](docs/features/restore-drill-procedure.md#moving-your-library-to-a-new-version-or-a-new-pc). A file for someone on an older version can be saved for that version; the preview lists what the copy leaves out, and your library is unchanged.
 - 2014 and 2024 rules are separate rules-family IDs, and their differences are explicit policy fields.
 
+## Code signing policy
+
+Releases up to 0.8.x are unsigned. The project has applied to [SignPath Foundation](https://signpath.org) for free code signing for open source projects. SignPath has not answered yet, and the first signed release is targeted for 0.9.0 if the application is accepted. The plan and the alternatives are in [ADR-024](docs/decisions/ADR-024-code-signing.md). If the application is declined, releases stay unsigned.
+
+Once accepted, signed releases carry this line:
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org)
+
+- **Team roles:** committers and reviewers, and approvers, are the repository owner ([firegiant9000](https://github.com/firegiant9000)). Outside contributions are reviewed by the owner before they are merged.
+- **Builds:** released files are built from the source in this repository by the GitHub Actions workflow `release.yml`, which also publishes a build attestation (see "Verify a release" above).
+- **Approval:** every release will need a manual approval before it is signed. The installer and the app files in it are signed in two separate requests.
+- **Accounts:** multi-factor authentication is required for every team member with signing or repository access.
+- **Privacy:** this program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it. There is no update check and no telemetry. Crash details are saved to a log file in your data folder and are never sent.
+
 ## License
 
 TomeStack's code is licensed under the [Apache License 2.0](LICENSE); see also [NOTICE](NOTICE) (LIVING_SPECS D07). Fixture content is original to this project. Third-party components are listed in [ATTRIBUTION.md](ATTRIBUTION.md), and export and license policy is in [ADR-007](docs/decisions/ADR-007-export-package-and-license-policy.md). TomeStack is not affiliated with or endorsed by Wizards of the Coast, Foundry Gaming LLC or Roll20. Export formats name other software only to say which file they write (for example "Foundry VTT (dnd5e system)", [export-adapters.md](docs/features/export-adapters.md)).
