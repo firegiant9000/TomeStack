@@ -102,6 +102,7 @@ A VTT file is meant to leave the machine, to a Foundry server that other people 
 **Settled at slice start:**
 
 - **The pinned pair:** dnd5e 6.0.5 (2026-09-22) with Foundry core 14.367, its declared compatibility minimum (verified 14). Field names were verified against that release's data models (listed in export-adapters.md).
+- **Amended 2026-11-11:** the pin moved to dnd5e 6.0.6 (same core 14.367); no exported field changed (issue #125).
 - **Does Foundry migrate a document from an older system version on import?** Yes, as far as the data models show: each has a `_migrateData` step that runs when Foundry builds a document from its source, and `system.json` names `needsMigrationVersion` 6.0.0. One pin therefore stays importable for as long as the system keeps those migrations; a new pin is still a new schema file, new golden files and a new owner check.
 - **Roll20** was not searched again; it stays deferred by the owner's decision (D14).
 - **As built, where this ADR left a choice:** a flat Armor Class is `ac.flat` with `ac.override` (6.x has no `calc: "flat"`); skill half proficiency (0.5) is never written because TomeStack does not model it; equipped weapons get `damage.base` only when their damage starts with dice; the validators are code (no new dependency in AppService), and the JSON Schemas are checked in the tests.
