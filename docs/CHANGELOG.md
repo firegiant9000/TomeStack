@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Changed
+- **Foundry export pinned to dnd5e 6.0.6 (issue #125):** the exported Actor names dnd5e 6.0.6. No exported field changed. Foundry core is still 14.367. The owner's real-Foundry import check ([export-adapters.md](features/export-adapters.md)) now targets 6.0.6.
 - **Dependencies:** React and React DOM 19.3.0 to 19.3.1 (shipped; [ATTRIBUTION.md](../ATTRIBUTION.md) updated, `scheduler` unchanged). Development-only: `@testing-library/user-event`, `@types/node`, `@vitejs/plugin-react`, ESLint, `globals` and `typescript-eslint` to their latest patch or minor (from dependabot #126). No app behaviour change.
 
 ## 0.8.0 (content v12: rolls, riders, responses and gates; the SRD Barbarian, Rogue and Monk; save for an older TomeStack; every SRD 5.2.1 origin and the other SRD 5.1 races; the Import Lab)

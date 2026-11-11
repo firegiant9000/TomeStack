@@ -12,7 +12,7 @@ namespace TomeStack.AppService.Exports;
 /// records) to one Actor document that the user imports by hand with "Import Data". First-party code; no third-party code
 /// runs, and nothing is sent anywhere. Pinned to a core and system release pair, verified against that release's data
 /// models (module/data/actor/character.mjs, templates/common.mjs, creature.mjs, attributes.mjs, and the class, subclass,
-/// feat, spell and weapon item models, plus shared/damage-field.mjs and uses-field.mjs at tag release-6.0.5). Documented in
+/// feat, spell and weapon item models, plus shared/damage-field.mjs and uses-field.mjs at tag release-6.0.6). Documented in
 /// docs/features/export-adapters.md, with what is lost.
 /// </summary>
 public static partial class FoundryDnd5e
@@ -20,8 +20,8 @@ public static partial class FoundryDnd5e
     public const string Target = "foundry-dnd5e";
     public const string AdapterVersion = "1.0.0";
 
-    /// <summary>The pinned pair: dnd5e 6.0.5 declares compatibility minimum 14.367, verified 14.</summary>
-    public const string SystemVersion = "6.0.5";
+    /// <summary>The pinned pair: dnd5e 6.0.6 declares compatibility minimum 14.367, verified 14.</summary>
+    public const string SystemVersion = "6.0.6";
     public const string CoreVersion = "14.367";
 
     public const string FileSuffix = ".foundry-dnd5e.json";

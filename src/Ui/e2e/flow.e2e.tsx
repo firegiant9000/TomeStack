@@ -1143,7 +1143,7 @@ it('exports a character for Foundry VTT and as sheet JSON after a preview, with 
   expect(foundryName).toBe('E2E-VTT-Hero.foundry-dnd5e.json');
   const actorText = new TextDecoder().decode(bytesOf(foundry64));
   const actor = JSON.parse(actorText) as { type: string; name: string; _stats: { systemVersion: string } };
-  expect([actor.type, actor.name, actor._stats.systemVersion]).toEqual(['character', 'E2E VTT Hero', '6.0.5']);
+  expect([actor.type, actor.name, actor._stats.systemVersion]).toEqual(['character', 'E2E VTT Hero', '6.0.6']);
   expect(actorText.toLowerCase().replaceAll('\\\\', '/').replaceAll('\\', '/')).not.toContain(dataDir);
 
   // The neutral sheet JSON.
