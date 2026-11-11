@@ -4,6 +4,7 @@
 
 ### Changed
 - **Dependencies:** React and React DOM 19.3.0 to 19.3.1 (shipped; [ATTRIBUTION.md](../ATTRIBUTION.md) updated, `scheduler` unchanged). Development-only: `@testing-library/user-event`, `@types/node`, `@vitejs/plugin-react`, ESLint, `globals` and `typescript-eslint` to their latest patch or minor (from dependabot #126). No app behaviour change.
+- **Weekly mutation run:** the Stryker job now runs in four shards (effects, validation, calculation, the rest) with 120 minutes each, so it finishes instead of being cancelled at 60; each shard uploads its own `stryker-report-<shard>` and reports its own score. A test checks that every `src/RulesCore` file belongs to exactly one shard. No app behaviour change.
 
 ## 0.8.0 (content v12: rolls, riders, responses and gates; the SRD Barbarian, Rogue and Monk; save for an older TomeStack; every SRD 5.2.1 origin and the other SRD 5.1 races; the Import Lab)
 
