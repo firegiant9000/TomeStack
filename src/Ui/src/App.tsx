@@ -260,7 +260,7 @@ function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (in
               setScreen({ kind: 'sources' });
             }}
           >
-            Sources
+            Books and PDFs
           </button>
           <button
             type="button"

@@ -22,12 +22,15 @@ const isMarkdown = (job: ImportJob) => job.format === 'markdown';
 const resumable = (job: ImportJob) => !isMarkdown(job) && (job.status === 'cancelled' || job.status === 'failed' || job.status === 'interrupted');
 const importAgain = (job: ImportJob) => isMarkdown(job) && (job.status === 'cancelled' || job.status === 'failed' || job.status === 'interrupted');
 
+/** "1 entry found", "3 entries found". */
+const entriesFound = (count: number) => `${count} ${count === 1 ? 'entry' : 'entries'} found`;
+
 function progress(job: ImportJob): string {
   const scope = isMarkdown(job) ? 'Markdown file' : job.wholeDocument ? 'whole document' : `pages ${job.firstPage}–${job.lastPage ?? job.pageCount ?? '…'}`;
   const counts = `${job.pagesDone} page${job.pagesDone === 1 ? '' : 's'} read${job.pagesFromOcr ? `, ${job.pagesFromOcr} by OCR` : ''}${job.pagesWithoutText ? `, ${job.pagesWithoutText} without text` : ''}${job.pagesFailed ? `, ${job.pagesFailed} unreadable` : ''}`;
   const words = failureWords(job.failureCode, job.failureMessage);
   const failure = words ? ` ${words}` : '';
-  return `${scope}: ${job.status}, ${counts}${job.status === 'completed' ? `, ${job.candidates} candidate${job.candidates === 1 ? '' : 's'}` : ''}.${failure}`;
+  return `${scope}: ${job.status}, ${counts}${job.status === 'completed' ? `, ${entriesFound(job.candidates)}` : ''}.${failure}`;
 }
 
 /** A refused Markdown start, in words when this build knows the code. The service puts its code in the first diagnostic. */
@@ -39,7 +42,7 @@ function markdownRefusal(error: unknown): unknown {
 
 /**
  * M4 D2, D5 (SPEC I-01, I-03): extract a source's PDF as a cancellable, resumable job, search its text, and review
- * what was found. Nothing here changes content: accepting a candidate creates a draft, which the studio publishes.
+ * what was found. Nothing here changes content: keeping an entry with its rules creates a draft, which the studio publishes.
  */
 export function ImportPanel({ source, hasPdf, onError, onStatus, onOpenStudio }: Props) {
   const rulesLabel = useRulesLabel();
@@ -193,11 +196,11 @@ export function ImportPanel({ source, hasPdf, onError, onStatus, onOpenStudio }:
   return (
     <section aria-label={`Read the text of ${source.title}`} className="play-panel">
       <h4>
-        Read the text and find candidates <span className="tag">Experimental</span>
+        Find entries in this PDF <span className="tag">Experimental</span>
       </h4>
       <p className="hint">
         {hasPdf ? 'TomeStack reads the PDF on this computer' : 'TomeStack reads a Markdown file you choose, on this computer,'} and proposes entries for you to review.
-        The text is never exported. Experimental: it has not been proven on a real third-party book yet, so check every candidate against its page. Nothing
+        The text is never exported. Experimental: it has not been proven on a real third-party book yet, so check every entry against its page. Nothing
         becomes a rule until you publish it.
       </p>
       {askFamily ? (
@@ -306,7 +309,7 @@ export function ImportPanel({ source, hasPdf, onError, onStatus, onOpenStudio }:
                 {importAgain(job) && <span className="hint">{failureWords('import.markdown-read-again')}</span>}
                 {job.status === 'completed' && (
                   <button type="button" aria-expanded={reviewing === job.id} onClick={() => setReviewing(reviewing === job.id ? undefined : job.id)}>
-                    Review {job.candidates} candidate{job.candidates === 1 ? '' : 's'}
+                    Review {entriesFound(job.candidates)}
                   </button>
                 )}
                 {/* While any job is under review only the panel's own button shows: it knows about an unsaved edit (ruling R26). */}
