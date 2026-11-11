@@ -130,6 +130,51 @@ public class CreationGuideV13SchemaTests
         Assert.Equal(input, RevisionHashProperties.Write(revision));
     }
 
+    private static string CoinsKit(string coins) =>
+        "{\"type\":\"startingEquipment\",\"id\":\"kit\",\"picks\":[{\"id\":\"p\",\"options\":[{\"id\":\"a\",\"lines\":[{\"coins\":" + coins + "}]}]}]" + Tail + "}";
+
+    [Theory]
+    [InlineData("{\"gp\":0}")]
+    [InlineData("{\"sp\":0,\"gp\":50}")] // known members are written in declaration order (cp, sp, ep, gp, pp), as for every typed record here
+    [InlineData("{}")]
+    public void Kit_line_coins_with_an_explicit_zero_round_trip(string coins)
+    {
+        var input = Doc(13, "creationGuide", CoinsKit(coins));
+        var revision = RevisionHashProperties.Read(input);
+
+        Assert.IsType<StartingEquipmentEffect>(revision.Effects.Single());
+        Assert.Equal(input, RevisionHashProperties.Write(revision));
+    }
+
+    [Fact]
+    public void Kit_line_coins_with_an_unknown_denomination_stay_typed_and_round_trip()
+    {
+        var input = Doc(13, "creationGuide", CoinsKit("{\"gp\":3,\"dc\":4}"));
+        var revision = RevisionHashProperties.Read(input);
+
+        var kit = Assert.IsType<StartingEquipmentEffect>(revision.Effects.Single());
+        Assert.Equal(3, kit.Picks[0].Options[0].Lines[0].Coins!.Gp);
+        Assert.Equal(input, RevisionHashProperties.Write(revision));
+    }
+
+    [Fact]
+    public void Pack_line_without_a_quantity_round_trips()
+    {
+        var input = Doc(13, "item", "{\"type\":\"item\",\"id\":\"item\",\"contains\":[{\"item\":{\"contentId\":\"" + Mace + "\"}}]" + Tail + "}");
+        var revision = RevisionHashProperties.Read(input);
+
+        var line = Assert.Single(Assert.IsType<ItemEffect>(revision.Effects.Single()).Contains!);
+        Assert.Null(line.Quantity);
+        Assert.Equal(input, RevisionHashProperties.Write(revision));
+    }
+
+    [Fact]
+    public void Kit_coins_to_currency_sums_present_members()
+    {
+        Assert.Equal(new Currency(Gp: 50), new KitCoins { Gp = 50 }.ToCurrency());
+        Assert.Equal(new Currency(), new KitCoins().ToCurrency());
+    }
+
     [Fact]
     public void Versions_are_pinned()
     {

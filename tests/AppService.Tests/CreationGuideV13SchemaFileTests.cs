@@ -86,6 +86,7 @@ public class CreationGuideV13SchemaFileTests
     [InlineData("[{\"item\":{\"contentId\":\"" + MaceId + "\"}}]", "")]
     [InlineData("[{\"item\":{\"contentId\":\"" + MaceId + "\"},\"quantity\":2,\"futureMember\":true}]", "")]
     [InlineData("[{\"coins\":{\"cp\":1,\"sp\":2,\"ep\":3,\"gp\":4,\"pp\":5}}]", ",\"requiresProficiency\":\"armor.heavy\",\"futureMember\":1")]
+    [InlineData("[{\"coins\":{\"gp\":0,\"dc\":1}}]", "")]
     public void The_v13_schema_accepts_line_shapes_and_unknown_members(string lines, string optionExtra) =>
         Assert.Equal("", V13("creationGuide", Kit(Pick(lines, optionExtra))));
 
@@ -95,7 +96,6 @@ public class CreationGuideV13SchemaFileTests
     [InlineData("[{\"anyOf\":3}]")]
     [InlineData("[{\"coins\":{\"gp\":-1}}]")]
     [InlineData("[{\"coins\":{\"gp\":1.5}}]")]
-    [InlineData("[{\"coins\":{\"zz\":1}}]")]
     [InlineData("[{\"pack\":\"x\"}]")]
     [InlineData("\"none\"")]
     public void The_v13_schema_refuses_malformed_lines(string lines) => Assert.NotEqual("", V13("creationGuide", Kit(Pick(lines))));

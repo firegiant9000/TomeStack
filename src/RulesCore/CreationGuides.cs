@@ -77,54 +77,35 @@ public sealed record KitOption(string Id, IReadOnlyList<KitLine> Lines, string? 
 /// One line of a kit option; exactly one of <see cref="Item"/> (with an optional <see cref="Quantity"/>), <see cref="AnyOf"/> (a
 /// proficiency key such as <c>weapon.simple</c>), <see cref="Coins"/> or <see cref="Pack"/> is set (validated by a later task).
 /// </summary>
-public sealed record KitLine(GuideTarget? Item = null, int? Quantity = null, string? AnyOf = null,
-    [property: JsonConverter(typeof(SparseCurrencyConverter))] Currency? Coins = null, GuideTarget? Pack = null)
+public sealed record KitLine(GuideTarget? Item = null, int? Quantity = null, string? AnyOf = null, KitCoins? Coins = null, GuideTarget? Pack = null)
 {
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? Extensions { get; init; }
 }
 
-/// <summary>Content schema v13 (ADR-024): one line of a pack, <see cref="ItemEffect.Contains"/>.</summary>
-public sealed record PackLine(GuideTarget Item, int Quantity = 1)
+/// <summary>Content schema v13 (ADR-024): the coins of a kit line. Each denomination is written only when present, so what was written (including an explicit zero) round-trips.</summary>
+public sealed record KitCoins
+{
+    public int? Cp { get; init; }
+
+    public int? Sp { get; init; }
+
+    public int? Ep { get; init; }
+
+    public int? Gp { get; init; }
+
+    public int? Pp { get; init; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? Extensions { get; init; }
+
+    /// <summary>The coins as a <see cref="Currency"/>; an absent denomination counts as 0.</summary>
+    public Currency ToCurrency() => new(Cp ?? 0, Sp ?? 0, Ep ?? 0, Gp ?? 0, Pp ?? 0);
+}
+
+/// <summary>Content schema v13 (ADR-024): one line of a pack, <see cref="ItemEffect.Contains"/>; an absent <see cref="Quantity"/> means 1.</summary>
+public sealed record PackLine(GuideTarget Item, int? Quantity = null)
 {
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? Extensions { get; init; }
-}
-
-/// <summary>
-/// Reads and writes coins as the members present only (<c>{"gp":50}</c>), so a kit line round-trips as written. The default
-/// <see cref="Currency"/> form always writes all five denominations.
-/// </summary>
-internal sealed class SparseCurrencyConverter : JsonConverter<Currency>
-{
-    private static readonly string[] Denominations = ["cp", "sp", "ep", "gp", "pp"];
-
-    public override Currency? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-    {
-        if (reader.TokenType != JsonTokenType.StartObject)
-            throw new JsonException("Coins must be an object.");
-        var counts = new int[5];
-        while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
-        {
-            var member = reader.GetString();
-            var index = Array.FindIndex(Denominations, d => string.Equals(d, member, StringComparison.OrdinalIgnoreCase));
-            reader.Read();
-            if (index < 0)
-                throw new JsonException("Unknown coin kind.");
-            counts[index] = reader.GetInt32();
-        }
-        return new Currency(counts[0], counts[1], counts[2], counts[3], counts[4]);
-    }
-
-    public override void Write(Utf8JsonWriter writer, Currency value, JsonSerializerOptions options)
-    {
-        writer.WriteStartObject();
-        int[] counts = [value.Cp, value.Sp, value.Ep, value.Gp, value.Pp];
-        for (var i = 0; i < counts.Length; i++)
-        {
-            if (counts[i] != 0)
-                writer.WriteNumber(Denominations[i], counts[i]);
-        }
-        writer.WriteEndObject();
-    }
 }
