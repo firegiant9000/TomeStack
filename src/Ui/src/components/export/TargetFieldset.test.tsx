@@ -14,6 +14,7 @@ const targets: PackageTargets = {
   currentRow: '0.8.0',
   previousMinor: '0.7.0',
   targets: [
+    { release: '0.7.0', characterSchema: 10, contentSchema: 11 },
     { release: '0.6.0', characterSchema: 9, contentSchema: 10 },
     { release: '0.5.0', characterSchema: 8, contentSchema: 9 },
   ],
@@ -24,14 +25,14 @@ it('lists the current row first and checks it by default', () => {
   const group = screen.getByRole('group', { name: 'Which TomeStack will open it?' });
   expect(group).toBeTruthy();
   const radios = screen.getAllByRole('radio') as HTMLInputElement[];
-  expect(radios.map((r) => r.labels?.[0]?.textContent)).toEqual(['0.8.0 or newer (everything)', '0.6.0', '0.5.0']);
-  expect(radios.map((r) => r.checked)).toEqual([true, false, false]);
+  expect(radios.map((r) => r.labels?.[0]?.textContent)).toEqual(['0.8.0 or newer (everything)', '0.7.0', '0.6.0', '0.5.0']);
+  expect(radios.map((r) => r.checked)).toEqual([true, false, false, false]);
   expect(new Set(radios.map((r) => r.name)).size).toBe(1);
 });
 
 it('checks the radio for the chosen release', () => {
   render(<TargetFieldset targets={targets} value="0.5.0" onChange={() => {}} />);
-  expect((screen.getAllByRole('radio') as HTMLInputElement[]).map((r) => r.checked)).toEqual([false, false, true]);
+  expect((screen.getAllByRole('radio') as HTMLInputElement[]).map((r) => r.checked)).toEqual([false, false, false, true]);
 });
 
 it('reports the release, and null for the first radio', async () => {

@@ -6,6 +6,7 @@ export const packageTargetsFixture: PackageTargets = {
   currentRow: '0.8.0',
   previousMinor: '0.7.0',
   targets: [
+    { release: '0.7.0', characterSchema: 10, contentSchema: 11 },
     { release: '0.6.0', characterSchema: 9, contentSchema: 10 },
     { release: '0.5.0', characterSchema: 8, contentSchema: 9 },
   ],
