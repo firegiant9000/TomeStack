@@ -105,15 +105,17 @@ public class CreationGuideV13SchemaTests
     }
 
     [Fact]
-    public void Lowering_to_v12_drops_the_guide_effects_and_contains_with_effect_unsupported()
+    public void Lowering_to_v12_drops_a_whole_guide_and_only_the_contains_of_a_pack()
     {
-        var item = "{\"type\":\"item\",\"id\":\"item\",\"contains\":[{\"item\":{\"contentId\":\"" + Mace + "\"},\"quantity\":10}]" + Tail + "}";
-        var revision = RevisionHashProperties.Read(Doc(13, "feature", GuideForJson + "," + PrimaryJson + "," + KitJson + "," + item));
+        var guide = DownConvert.Below(RevisionHashProperties.Read(GuideDoc(13)), 12);
+        Assert.True(guide.Omit);
+        var change = Assert.Single(guide.Changes);
+        Assert.Equal((string.Empty, BelowAction.Dropped, BelowCodes.CreationGuide), (change.Path, change.Action, change.Code));
 
-        var result = DownConvert.Below(revision, 12);
-
-        Assert.Equal(4, result.Changes.Count(c => c.Code == BelowCodes.EffectUnsupported && c.Action == BelowAction.Dropped));
-        var kept = Assert.IsType<ItemEffect>(Assert.Single(result.Revision.Effects));
+        var pack = DownConvert.Below(RevisionHashProperties.Read(Doc(13, "item", PackJson)), 12);
+        Assert.False(pack.Omit);
+        Assert.Equal(BelowCodes.ItemContains, Assert.Single(pack.Changes).Code);
+        var kept = Assert.IsType<ItemEffect>(Assert.Single(pack.Revision.Effects));
         Assert.Null(kept.Contains);
         Assert.False(kept.Extensions?.ContainsKey("contains") ?? false);
     }

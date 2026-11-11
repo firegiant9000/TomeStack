@@ -313,6 +313,9 @@ public static class DownConversion
         var overlay = new OverlayCatalog(catalog, revisions);
         var lowered = new Dictionary<Guid, ContentRevision>();
         var own = new HashSet<Guid>();
+        // Revisions lowering leaves out whole (a creation guide): not written, but their dropped line is kept. Nothing can pin one
+        // (a character holds no guide), so no character is left holding a missing revision.
+        var omitted = new HashSet<Guid>();
 
         // Each revision's own lines are kept apart until the left-out rule has decided, so a left-out revision can swap them for one.
         var linesOf = new Dictionary<Guid, List<ExportChange>>();
@@ -374,6 +377,8 @@ public static class DownConversion
             }
 
             var below = DownConvert.Below(r, target.ContentSchema, overlay);
+            if (below.Omit)
+                omitted.Add(r.RevisionId);
             lowered[r.RevisionId] = below.Revision;
             if (!ReferenceEquals(below.Revision, r))
                 own.Add(r.RevisionId);
@@ -425,8 +430,8 @@ public static class DownConversion
                 changes.AddRange(mine);
             }
         }
-        revisions.RemoveAll(r => leftOut.Contains(r.RevisionId));
-        foreach (var id in leftOut)
+        revisions.RemoveAll(r => leftOut.Contains(r.RevisionId) || omitted.Contains(r.RevisionId));
+        foreach (var id in leftOut.Concat(omitted))
         {
             lowered.Remove(id);
             own.Remove(id);

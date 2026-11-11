@@ -831,6 +831,33 @@ public class DownConversionExportTests
     }
 
     [Fact]
+    public void A_creation_guide_is_left_out_of_the_copy_with_one_listed_change()
+    {
+        var guide = new ContentRevision
+        {
+            ContentId = Guid.Parse("c1000000-0000-4000-8000-0000000000e1"),
+            RevisionId = Guid.Parse("c100e000-0000-4000-8000-0000000000e1"),
+            SchemaVersion = ContentRevision.CreationGuideSchemaVersion,
+            Kind = ContentKind.CreationGuide,
+            Name = "Compat Guide",
+            RulesFamilies = [RulesFamilies.Srd51],
+            Provenance = new(HomebrewId),
+            Status = RevisionStatus.Published,
+            Effects = [new PrimaryAbilitiesEffect { Id = "primary", Abilities = ["wis"] }],
+        };
+        var feature = V11Feature();
+
+        var lowered = LowerFor(Row("0.7.0"), Hero(c => c with { Pins = [FeatureRef] }), guide, feature);
+
+        Assert.False(lowered.Blocked);
+        Assert.Equal(feature.RevisionId, Assert.Single(lowered.Plan.Revisions).RevisionId);
+        var line = Assert.Single(lowered.Changes);
+        Assert.Equal(("dropped", "content", guide.RevisionId, "Compat Guide"), (line.Action, line.Kind, line.Id, line.Name));
+        Assert.Contains("creation guide", line.Message, StringComparison.Ordinal);
+        Assert.Contains(FeatureRef.RevisionId, lowered.Plan.Characters.Single().AllReferences().Select(r => r.RevisionId));
+    }
+
+    [Fact]
     public void Bundled_revision_is_never_lowered()
     {
         var bundled = V11Feature();

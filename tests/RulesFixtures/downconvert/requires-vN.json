@@ -119,11 +119,11 @@
       { "feature": "roll.scaledDice", "rule": "below.v12-key" }
     ],
     "13": [
-      { "feature": "kind:creationGuide", "rule": "below.effect-unsupported" },
+      { "feature": "kind:creationGuide", "rule": "below.creation-guide" },
       { "feature": "guideFor", "rule": "below.effect-unsupported" },
       { "feature": "primaryAbilities", "rule": "below.effect-unsupported" },
       { "feature": "startingEquipment", "rule": "below.effect-unsupported" },
-      { "feature": "item.contains", "rule": "below.effect-unsupported" }
+      { "feature": "item.contains", "rule": "below.item-contains" }
     ]
   },
   "character": {
@@ -148,6 +148,9 @@
       { "feature": "equipment[].mods", "rule": "below.item-mods" },
       { "feature": "equipment[].mods", "rule": "below.item-mod-copies" },
       { "feature": "play.companions[].contentId", "rule": "below.companion-content" }
+    ],
+    "12": [
+      { "feature": "equipment[].kit-gear (written by the kit-expansion task, not by DownConvert.Below)", "rule": "below.gear-as-custom-item" }
     ]
   }
 }

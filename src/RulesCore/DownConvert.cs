@@ -22,6 +22,12 @@ public sealed record CharacterBelow(Character Character, IReadOnlyList<BelowChan
 /// <summary>A content revision lowered to an older schema, with what it lost. <see cref="Revision"/> is always the lowered copy, blocked fields removed too; when <see cref="Blocked"/> the caller must not write it.</summary>
 public sealed record ContentBelow(ContentRevision Revision, IReadOnlyList<BelowChange> Changes)
 {
+    /// <summary>
+    /// True when the whole revision is left out of the older file (a creation guide at target 12): <see cref="Revision"/> is then the input,
+    /// unchanged, and the caller must not write it. The <see cref="Changes"/> hold the one <see cref="BelowAction.Dropped"/> line to show.
+    /// </summary>
+    public bool Omit { get; init; }
+
     public bool Blocked => Changes.Any(c => c.Action == BelowAction.Blocks);
 }
 
@@ -70,6 +76,12 @@ public static class BelowCodes
     public const string ItemModCopies = "below.item-mod-copies";
     public const string CompanionContent = "below.companion-content";
     public const string ValidationError = "below.validation-error";
+    /// <summary>A creation guide (content v13), left out of the older file whole; only a guide advises, so nothing the older version has depends on it.</summary>
+    public const string CreationGuide = "below.creation-guide";
+    /// <summary>A pack's <c>contains</c> list (content v13), which the older version cannot hold; the pack stays as an item.</summary>
+    public const string ItemContains = "below.item-contains";
+    /// <summary>A kit's gear that the older character cannot hold as equipment, kept as custom items instead (written by the kit-expansion step, not by <see cref="DownConvert"/>'s content rung).</summary>
+    public const string GearAsCustomItem = "below.gear-as-custom-item";
 }
 
 /// <summary>
@@ -139,6 +151,12 @@ public static class DownConvert
         ArgumentOutOfRangeException.ThrowIfGreaterThan(revision.SchemaVersion, ContentRevision.CurrentSchemaVersion);
 
         var own = revision.SchemaVersion;
+        // A creation guide only advises (it never changes a calculation), so it is left out whole rather than kept with its effects stripped.
+        if (revision.Kind == ContentKind.CreationGuide && own >= ContentRevision.CreationGuideSchemaVersion && targetContentSchema < ContentRevision.CreationGuideSchemaVersion)
+        {
+            return new ContentBelow(revision, [new BelowChange("", BelowAction.Dropped, BelowCodes.CreationGuide,
+                $"'{revision.Name}': a creation guide, which the older version has no place for; it is left out of the file.")]) { Omit = true };
+        }
         // Parsed case-sensitively (the serializer's own node would be case-insensitive and throw on two spellings of one key); lookups ignore case themselves.
         var node = JsonNode.Parse(JsonSerializer.SerializeToUtf8Bytes(revision, RulesJson.Compact))!.AsObject();
         var changes = new List<BelowChange>();
@@ -510,7 +528,9 @@ public static class DownConvert
     }
 
     /// <summary>
-    /// The 13 to 12 step, for now: the creation-guide effects and <c>item.contains</c> are dropped whole (Task 5.4 makes this exact). A
+    /// The 13 to 12 step. A creation guide never gets here (<see cref="ContentBelow.Omit"/>). A guide effect on any other revision (not valid,
+    /// but lowering must be safe) is dropped on its own (<see cref="BelowCodes.EffectUnsupported"/>), and a pack's <c>contains</c> is removed
+    /// alone (<see cref="BelowCodes.ItemContains"/>), leaving the item. Neither can make the copy stronger, so nothing blocks. A
     /// revision that declares an older version carries them as inert extension data, so it is left as it is.
     /// </summary>
     private static void ContentBelowV13(Scope scope, JsonObject node, List<BelowChange> changes)
@@ -532,7 +552,7 @@ public static class DownConvert
                     continue;
                 }
                 if (type == ItemEffect.TypeName)
-                    RemoveKey(effect, "contains", path, BelowAction.Dropped, BelowCodes.EffectUnsupported, $"'{name}': a pack's contents, which the older version cannot hold.", changes);
+                    RemoveKey(effect, "contains", path, BelowAction.Dropped, BelowCodes.ItemContains, $"'{name}': what a pack contains, which the older version cannot hold; the pack stays as one item.", changes);
             }
             kept.Add(effects[i]);
             keptOrigin.Add(scope.Origin[i]);
