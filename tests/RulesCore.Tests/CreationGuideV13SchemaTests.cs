@@ -105,6 +105,20 @@ public class CreationGuideV13SchemaTests
     }
 
     [Fact]
+    public void Lowering_to_v12_drops_the_guide_effects_and_contains_with_effect_unsupported()
+    {
+        var item = "{\"type\":\"item\",\"id\":\"item\",\"contains\":[{\"item\":{\"contentId\":\"" + Mace + "\"},\"quantity\":10}]" + Tail + "}";
+        var revision = RevisionHashProperties.Read(Doc(13, "feature", GuideForJson + "," + PrimaryJson + "," + KitJson + "," + item));
+
+        var result = DownConvert.Below(revision, 12);
+
+        Assert.Equal(4, result.Changes.Count(c => c.Code == BelowCodes.EffectUnsupported && c.Action == BelowAction.Dropped));
+        var kept = Assert.IsType<ItemEffect>(Assert.Single(result.Revision.Effects));
+        Assert.Null(kept.Contains);
+        Assert.False(kept.Extensions?.ContainsKey("contains") ?? false);
+    }
+
+    [Fact]
     public void V13_unknown_line_member_round_trips()
     {
         var kit = "{\"type\":\"startingEquipment\",\"id\":\"kit\",\"picks\":[{\"id\":\"p\",\"options\":[{\"id\":\"a\",\"lines\":[{\"item\":{\"contentId\":\"" + Mace + "\"},\"quantity\":2,\"futureMember\":{\"a\":1}}]}]}]" + Tail + "}";
