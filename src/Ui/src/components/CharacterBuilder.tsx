@@ -109,7 +109,7 @@ function SourceLine({ option }: { option: Shown }) {
   return (
     <span className="option-source">
       {option.sourceTitle}
-      {option.page ? `, ${option.page}` : ''} · {option.rulesFamilies.map(rulesLabel).join(', ')}
+      {option.page ? `, ${option.page}` : ''} · {option.rulesFamilies.map((f) => rulesLabel(f)).join(', ')}
       {option.outsideCampaign ? ' · not allowed in this campaign' : !option.compatible && ' · not available for this rules family'}
     </span>
   );
@@ -262,7 +262,7 @@ function RulesStep(props: {
               checked={basics.rulesFamily === family.id}
               onChange={() => onChange({ ...basics, rulesFamily: family.id })}
             />
-            {family.displayName} <code>{family.id}</code>
+            {rulesLabel(family.id)}
           </label>
         ))}
         {policy && (
@@ -341,6 +341,7 @@ function ScoresStep(props: {
   onError: (error: unknown) => void;
 }) {
   const { basics, onChange } = props;
+  const rulesLabel = useRulesLabel();
   const method = basics.scoreMethod;
   const pool = poolOf(basics, method);
   const spent = abilityKeys.reduce((sum, k) => sum + pointBuyCostOrZero(basics.scores[k]), 0);
@@ -496,7 +497,7 @@ function ScoresStep(props: {
       <p className="hint">Base scores: {abilities.map(({ key, label }) => `${label.slice(0, 3)} ${shown(key)}`).join(', ')}.</p>
       {props.policy && (
         <p className="hint">
-          Increases from your {props.policy.abilityIncreaseSource} are applied on the sheet ({props.policy.displayName}).
+          Increases from your {props.policy.abilityIncreaseSource} are applied on the sheet ({rulesLabel(props.basics.rulesFamily)}).
         </p>
       )}
     </StepForm>
@@ -519,7 +520,7 @@ function missingHint(one: string, many: string, count: number, missing: Missing,
     <>
       {count <= 1 && (
         <p className="hint">
-          {phrase(count)} installed for {policy.displayName}. More can come from the homebrew studio or a content pack.
+          {phrase(count)} installed for {missing.familyName}. More can come from the homebrew studio or a content pack.
         </p>
       )}
       {missing.drafts > 0 && <p className="hint">{phrase(missing.drafts)} drafts in the Homebrew studio: publish them there to use them.</p>}
@@ -539,6 +540,7 @@ interface Missing {
   /** Published, but written for the other rules family. */
   otherFamily: number;
   otherFamilyName: string;
+  familyName: string;
 }
 
 interface PickStepProps {
@@ -1171,6 +1173,7 @@ function draftOf(basics: Basics, id: string, previous?: Character): Character {
 }
 
 export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, onError }: Props) {
+  const rulesLabel = useRulesLabel();
   const [step, setStep] = useState<Step>(mode.kind === 'create' ? 'rules' : mode.kind === 'levelUp' ? 'level' : 'choices');
   const [basics, setBasics] = useState<Basics>({
     name: '',
@@ -1454,7 +1457,8 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
     drafts: drafts?.family === family ? (drafts.counts[kind] ?? 0) : 0,
     // Distinct content, not revisions; campaign-blocked options stay listed with their reason (P-01), so they are not counted.
     otherFamily: new Set(listed.filter((o) => o.kind === kind && !o.compatible && !o.superseded).map((o) => o.reference.contentId)).size,
-    otherFamilyName: otherFamily?.displayName ?? 'the other rules family',
+    otherFamilyName: otherFamily ? rulesLabel(otherFamily.id) : 'the other rules',
+    familyName: rulesLabel(family),
   });
   const pickProps = { basics, policy, options: pickable, loaded: optionsLoaded, missing, reasonNames, onChange: setBasics, onBack: back, onCancel };
 
@@ -1533,7 +1537,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
             mode.kind === 'create'
               ? {
                   name: basics.name.trim(),
-                  family: policy?.displayName ?? basics.rulesFamily,
+                  family: rulesLabel(basics.rulesFamily),
                   campaign: campaignLabel(basics.campaignId, campaigns, campaignsState),
                   scores: basics.scores,
                   method: scoreMethods.find((m) => m.id === basics.scoreMethod)!.label.toLowerCase(),

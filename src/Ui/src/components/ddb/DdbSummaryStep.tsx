@@ -174,7 +174,7 @@ export function DdbSummaryStep({ preview, family, suggested, includePlayState, o
       )}
       {report.familyMismatch && suggested && family && (
         <p role="note" className="warn">
-          The sheet looks like {suggested} rules; this character uses {family}.
+          The sheet looks like {rulesLabel(suggested)}; this character uses {rulesLabel(family)}.
         </p>
       )}
       {report.sameNameExists && (

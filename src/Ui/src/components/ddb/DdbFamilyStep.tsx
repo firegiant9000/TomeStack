@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { client } from '../../api/client';
 import type { Campaign, RulesFamilyId, RulesFamilyPolicy } from '../../api/types';
+import { useRulesLabel } from '../../rulesLabel';
 import { numberPresetIds, numberPresetLabels, type NumberPreset } from './ddbLabels';
 
 interface Props {
@@ -24,7 +25,7 @@ export function DdbFamilyStep({ rulesFamilies, suggested, family, campaignId, on
   }, [onError]);
 
   const options = campaigns.filter((c) => c.rulesFamily === family);
-  const suggestedName = rulesFamilies.find((f) => f.id === suggested)?.displayName;
+  const rulesLabel = useRulesLabel();
 
   return (
     <>
@@ -32,14 +33,14 @@ export function DdbFamilyStep({ rulesFamilies, suggested, family, campaignId, on
         <legend>Rules</legend>
         {rulesFamilies.map((f) => (
           <label key={f.id}>
-            <input type="radio" name="ddb-family" checked={family === f.id} onChange={() => onFamily(f.id)} /> {f.displayName}
+            <input type="radio" name="ddb-family" checked={family === f.id} onChange={() => onFamily(f.id)} /> {rulesLabel(f.id)}
             {f.id === suggested && <span className="tag">suggested by the sheet</span>}
           </label>
         ))}
       </fieldset>
       {suggested && suggested !== family && (
         <p role="note" className="warn">
-          This looks like a sheet for {suggestedName}; names will match {rulesFamilies.find((f) => f.id === family)?.displayName} content.
+          This looks like a sheet for {rulesLabel(suggested)}; names will match {rulesLabel(family)} content.
         </p>
       )}
       <label>

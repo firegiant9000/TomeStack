@@ -250,7 +250,7 @@ export function CampaignsPanel({ rulesFamilies, onError, onStatus }: Props) {
                     })
                   }
                 />
-                {f.displayName}
+                {rulesLabel(f.id)}
               </label>
             ))}
           </fieldset>

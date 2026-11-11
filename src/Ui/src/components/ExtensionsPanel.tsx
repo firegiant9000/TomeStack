@@ -13,6 +13,7 @@ import type {
   SourceRecord,
 } from '../api/types';
 import { downloadBase64, readFileAsBase64 } from '../files';
+import { useRulesLabel } from '../rulesLabel';
 
 interface Props {
   characters: CharacterSummary[];
@@ -110,6 +111,7 @@ function HookRun({ extension, hook, characters, rulesFamilies, onError, onStatus
   hook: ExtensionHook;
   onDone: () => void;
 } & Props) {
+  const rulesLabel = useRulesLabel();
   const readsSheet = extension.grants.includes('read.sheet');
   const readsContent = extension.grants.includes('read.content');
   const [characterId, setCharacterId] = useState(readsSheet ? (characters[0]?.id ?? '') : '');
@@ -254,7 +256,7 @@ function HookRun({ extension, hook, characters, rulesFamilies, onError, onStatus
             <select value={family} onChange={(e) => (setFamily(e.target.value as RulesFamilyId), setPreview(undefined))}>
               {rulesFamilies.map((f) => (
                 <option key={f.id} value={f.id}>
-                  {f.displayName}
+                  {rulesLabel(f.id)}
                 </option>
               ))}
             </select>

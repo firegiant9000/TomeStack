@@ -761,7 +761,7 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
         Candidate: {candidate.proposedName}
       </h5>
       <p className="hint">
-        {candidate.proposedKind} · {pageText(candidate.page)} · {candidate.rulesFamilies.length > 0 ? candidate.rulesFamilies.join(', ') : 'no rules yet'} · confidence {percent(candidate.confidence)} (a hint, not a
+        {candidate.proposedKind} · {pageText(candidate.page)} · {candidate.rulesFamilies.length > 0 ? candidate.rulesFamilies.map((f) => rulesLabel(f)).join(', ') : 'no rules yet'} · confidence {percent(candidate.confidence)} (a hint, not a
         check) · {statusLabels[stored.status]}
       </p>
       {!casting && (

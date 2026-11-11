@@ -20,6 +20,7 @@ import type {
   StudioEntry,
   ValidationReport,
 } from '../api/types';
+import { useRulesLabel } from '../rulesLabel';
 import { FormulaPreview } from './FormulaPreview';
 import { UpdateReviewPanel } from './UpdateReviewPanel';
 import { ClassBasicsEditor, classBasicElementId, isClassBasic } from './ClassBasicsEditor';
@@ -108,6 +109,7 @@ interface Props {
  * reviewed update.
  */
 export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Props) {
+  const rulesLabel = useRulesLabel();
   const [sources, setSources] = useState<SourceRecord[]>([]);
   // An unknown id falls back to the first source below, as an empty id does.
   const [sourceId, setSourceId] = useState(initialSourceId ?? '');
@@ -320,7 +322,7 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
       <SourcePicker
         sources={sources}
         selected={source}
-        rulesFamilies={info.rulesFamilies.map((f) => ({ id: f.id, label: f.displayName }))}
+        rulesFamilies={info.rulesFamilies.map((f) => ({ id: f.id, label: rulesLabel(f.id) }))}
         onSelect={(id) => {
           // Choosing the source already shown changes nothing (and would not reload, so the rows must stay).
           if (id !== source?.id) {
@@ -615,6 +617,7 @@ function SourcePicker(props: {
   onCreated: (source: SourceRecord) => void;
   onError: (error: unknown) => void;
 }) {
+  const rulesLabel = useRulesLabel();
   const [title, setTitle] = useState('');
   const [families, setFamilies] = useState<RulesFamilyId[]>([]);
 
@@ -639,7 +642,7 @@ function SourcePicker(props: {
           <select value={props.selected?.id ?? ''} onChange={(e) => props.onSelect(e.target.value)}>
             {props.sources.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.title} ({s.rulesFamilies.join(', ')})
+                {s.title} ({s.rulesFamilies.map((f) => rulesLabel(f)).join(', ')})
               </option>
             ))}
           </select>
@@ -714,6 +717,7 @@ function EntryEditor(props: {
   onSuperseded: (name: string) => void;
   onPublished: (result: PublishResult, name: string) => void;
 }) {
+  const rulesLabel = useRulesLabel();
   const [revision, setRevision] = useState<ContentRevision>(props.initial);
   const [report, setReport] = useState<ValidationReport>();
   // The findings belong to the revision they were computed for: any edit makes a new revision object, which hides them.
@@ -1101,7 +1105,7 @@ function EntryEditor(props: {
                 update({ rulesFamilies: revision.rulesFamilies.includes(f) ? revision.rulesFamilies.filter((x) => x !== f) : [...revision.rulesFamilies, f] })
               }
             />
-            {f}
+            {rulesLabel(f)}
           </label>
         ))}
       </fieldset>
@@ -1410,7 +1414,7 @@ function EntryEditor(props: {
                   {hinted.hints.map((h, i) => (
                     <li key={`${h.code}-${h.effectId ?? ''}-${h.family ?? ''}-${i}`}>
                       {h.message}
-                      {h.family && <span className="hint"> ({h.family})</span>}
+                      {h.family && <span className="hint"> ({rulesLabel(h.family)})</span>}
                     </li>
                   ))}
                 </ul>

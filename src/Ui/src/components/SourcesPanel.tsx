@@ -7,6 +7,7 @@ import { ChangeRegion } from './export/ChangeRegion';
 import { ExportConfirmation, hasBlocker, needsConfirmation } from './export/ExportConfirmation';
 import { TargetFieldset } from './export/TargetFieldset';
 import { usePackageTargets } from './export/usePackageTargets';
+import { useRulesLabel } from '../rulesLabel';
 import { ImportPanel } from './ImportPanel';
 import { PreflightPanel } from './PreflightPanel';
 import { canSaveAfter } from './preflightText';
@@ -235,6 +236,7 @@ function SourcePackForm({ sources, onError, onStatus }: { sources: SourceRecord[
  * shows what breaks first and keeps all content.
  */
 export function SourcesPanel({ onError, onStatus, onOpenStudio }: Props & { onOpenStudio: (sourceId: string) => void }) {
+  const rulesLabel = useRulesLabel();
   const [sources, setSources] = useState<SourceRecord[]>([]);
   const [attachments, setAttachments] = useState<Record<string, AttachmentInfo | undefined>>({});
   const [removing, setRemoving] = useState<DetachPreview>();
@@ -340,7 +342,7 @@ export function SourcesPanel({ onError, onStatus, onOpenStudio }: Props & { onOp
               <h3>{source.title}</h3>
               <p className="hint">
                 {source.publisher} · {source.license} · {source.redistributable ? 'may be shared' : 'not shared in exports'} ·{' '}
-                {source.rulesFamilies.join(', ')}
+                {source.rulesFamilies.map((f) => rulesLabel(f)).join(', ')}
               </p>
               {source.editionVersion === 'homebrew' && <p>{sharing(source)}</p>}
               <p>
