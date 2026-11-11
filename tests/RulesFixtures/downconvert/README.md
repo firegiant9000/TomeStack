@@ -7,6 +7,7 @@ Each folder pins what a character export made for an older release writes, byte 
 
 | Folder | Holds |
 |---|---|
+| `for-0.7.0/library/` | "Compat Hero" at character schema v11 with an equipment entry that carries a mod and a content companion's hit points in play, pinning the v11 feature "Compat Steady Hands" (passes through), v12 features and items that cover the drop and warn rows of spec section 2 "Content v12 → v11" that do not block (an item mod, a companion card, a roll floor, an ability swap, a condition immunity, a score bonus with a `cap`, a climb speed, a flying speed that reads SPEED and only adds, a response with only `automatic`, an initiative roll mode, a rider with scaled dice, a roll with scaled dice and a cost, a roll whose only dice are scaled, a `payment` on a roll and a toggle, a weapon `bonus`, spell `tags`, a replaceable choice), the class "Compat Path of Echoes" whose subclass "Compat Echo Walker" grants the v12 feature "Compat Echo Mark" (two cascade copies), and the bundled revision `51e00000-0000-4000-8000-000000000001` (in the 0.7.0 set; written as it is), all under the source "Compat Homebrew A" (`pack.json`). A 0.7.0 copy drops the mods and the content companion's hit points (11 → 10) and the listed effects and keys; nothing blocks. A roll that has both `dice` and `scaledDice` is refused by the validator, so it is not here; the blocking rows (hindering roll modes, `castsSpell`, hit point or slot payments, `notWearing`, a rider that lowers the attack) are not here either, since a block would stop the share. |
 | `for-0.6.0/library/` | "Compat Hero" at character schema v10 with an active toggle that has rounds left, pinning the v9 feature "Compat Steady Hands" (passes through), v11 features that cover every warn row of spec section 2 "Content v11 → v10" that can warn without a counting-up pool (Tide Stance, Calm Waters, Rising Tide, Deep Currents), the class "Compat Path of Tides" whose subclass "Compat Tide Walker" grants the v11 feature "Compat Tide Mark" (two cascade copies), and the bundled revision `51e00000-0000-4000-8000-000000000001` (in the 0.6.0 set; written as it is), all under the source "Compat Homebrew A" (`pack.json`). A 0.6.0 copy drops `roundsLeft` and the listed effects and fields; nothing blocks. "Compat Draw Down" has a roll with `drawsDown: true` on a counting-up pool declared in another content ("Compat Reservoir", not pinned, so its own block does not apply). `resource.counts` and `resourceFull` exist only on a counting-up pool, which blocks, so they are not here. |
 | `for-0.5.0/library/` | "Compat Hero" at character schema v9 with details, a custom item and a fire resistance, pinning v10 revisions with resistance and immunity grants, item charges, a speed bonus and a passive bonus, a v11 revision that goes straight to v9, and the same bundled revision (in the 0.5.0 set). A 0.5.0 copy drops all of these; nothing blocks. |
 | `<folder>/expected/entries/` | Every entry of the package the export writes, under its path in the zip, except the bundled SRD revision and its source: their text lives only in `src/AppService/Content/`, so the test compares those two entries with the store and the manifest's matching `sha256`, `size` and notice text appear as `{bundled}`. |
@@ -26,7 +27,7 @@ Windows test, like the app. Everything else is exact.
 `for-<T>/` holds, beside `library/` and `expected/` (entry goldens), the files lane E opens with the real release T
 (`scripts/old-release-check.ps1`; the owner runs it). All are original test data; every fixture name starts with "Compat".
 
-| File (in `for-0.6.0/`, and the same with `0.5.0` in `for-0.5.0/`) | What it is |
+| File (in `for-0.6.0/`, and the same with `0.7.0` in `for-0.7.0/` and `0.5.0` in `for-0.5.0/`) | What it is |
 |---|---|
 | `Compat-Hero-for-<T>.tomestack.zip` | character share |
 | `Compat-Hero-for-<T>-personal-backup.tomestack.zip` | character backup |
@@ -53,8 +54,8 @@ the character's sheet (`character.get`, the field names the harness emits: `fiel
 the lowered copy keeps (ability scores, a modifier, proficiency bonus, a save, a skill, passive Perception, speed, initiative,
 armor class, hit points), none of which comes from a dropped effect. It sits beside `expected/` (entry goldens); they are separate.
 Two fields depend on lowered content, so an old build that mis-reads a lowered copy fails here: `armorClass` 13 (10 + Dex 2 +
-an always-on bonus of 1 added at test time to a lowered revision: 0.6.0 "Compat Tide Mark", 0.5.0 the v11 revision that goes
-straight to v9) and `hitPoints` 9 (a level-1 class with a d8 hit die: 0.6.0 "Compat Path of Tides", a cascade copy; 0.5.0 a test-time
+an always-on bonus of 1 added at test time to a lowered revision: 0.7.0 "Compat Echo Mark", 0.6.0 "Compat Tide Mark", 0.5.0 the v11 revision that goes
+straight to v9) and `hitPoints` 9 (a level-1 class with a d8 hit die: 0.7.0 "Compat Path of Echoes" and 0.6.0 "Compat Path of Tides", cascade copies; 0.5.0 a test-time
 "Compat Test Class"). If lowering dropped either effect, those would read 12 and 0.
 
 The owner's first `scripts/old-release-check.ps1` run is the real validation of the library backup, which is post-processed
@@ -65,7 +66,7 @@ with packages has no outcome, or when an outcome no longer hashes to the committ
 recommit after regenerating. From the repository root:
 
 ```
-./scripts/old-release-check.ps1 -Tags v0.6.0,v0.5.0 -Inputs 'tests/RulesFixtures/downconvert/for-{target}' -Expected 'tests/RulesFixtures/downconvert/for-{target}' -Out 'tests/RulesFixtures/downconvert/outcomes/{target}.json' -Work "$env:TEMP/old-release-work"
+./scripts/old-release-check.ps1 -Tags v0.7.0,v0.6.0,v0.5.0 -Inputs 'tests/RulesFixtures/downconvert/for-{target}' -Expected 'tests/RulesFixtures/downconvert/for-{target}' -Out 'tests/RulesFixtures/downconvert/outcomes/{target}.json' -Work "$env:TEMP/old-release-work"
 ```
 
 The test produces every zip again and compares entry by entry (names and bytes; the manifest's `appVersion` is neutral, so a

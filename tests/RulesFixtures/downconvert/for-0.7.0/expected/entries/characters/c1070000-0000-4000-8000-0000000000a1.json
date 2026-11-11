@@ -1,0 +1,93 @@
+{
+  "id": "c1070000-0000-4000-8000-0000000000a1",
+  "schemaVersion": 9,
+  "name": "Compat Hero",
+  "rulesFamily": "srd-5.1",
+  "level": 1,
+  "classes": [],
+  "choices": [],
+  "spells": [],
+  "crossFamilyExceptions": [],
+  "campaignExceptions": [],
+  "baseAbilities": {
+    "str": 10,
+    "dex": 14,
+    "con": 12,
+    "int": 10,
+    "wis": 13,
+    "cha": 8
+  },
+  "pins": [
+    {
+      "contentId": "c1070000-0000-4000-8000-0000000000c1",
+      "revisionId": "c1070000-0000-4000-8000-0000000000e1"
+    },
+    {
+      "contentId": "c1070000-0000-4000-8000-0000000000c2",
+      "revisionId": "a924e521-2bf4-57d0-be5c-f70dc5f94b20"
+    },
+    {
+      "contentId": "c1070000-0000-4000-8000-0000000000c3",
+      "revisionId": "95eaa7dc-e962-5300-ac88-529c89705af6"
+    },
+    {
+      "contentId": "c1070000-0000-4000-8000-0000000000c6",
+      "revisionId": "96589f0d-4845-56c1-9dbb-c8926489a398"
+    },
+    {
+      "contentId": "c1070000-0000-4000-8000-0000000000c9",
+      "revisionId": "c0684346-cfd6-5689-a8ee-6d27bf76db59"
+    },
+    {
+      "contentId": "c1070000-0000-4000-8000-0000000000ca",
+      "revisionId": "83410abe-cc27-583f-8fbe-d13a0a61349d"
+    },
+    {
+      "contentId": "c1070000-0000-4000-8000-0000000000cb",
+      "revisionId": "07002c79-7964-5147-a660-03cbf49b11b1"
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000000001",
+      "revisionId": "51e00000-0000-4000-8000-000000000001"
+    }
+  ],
+  "overrides": [],
+  "play": {
+    "temporaryHitPoints": 0,
+    "resources": [],
+    "conditions": [],
+    "exhaustion": 0,
+    "hitDiceSpent": [],
+    "deathSaves": {
+      "successes": 0,
+      "failures": 0
+    },
+    "inspiration": false,
+    "spellSlotsSpent": [],
+    "pactSlotsSpent": 0,
+    "toggles": []
+  },
+  "equipment": [
+    {
+      "item": {
+        "contentId": "c1070000-0000-4000-8000-0000000000c4",
+        "revisionId": "6b4b7da2-453e-5728-b2f0-647c2033b1bc"
+      },
+      "equipped": true,
+      "quantity": 1,
+      "id": "c1070000-0000-4000-8000-0000000000b2"
+    }
+  ],
+  "currency": {
+    "cp": 0,
+    "sp": 0,
+    "ep": 0,
+    "gp": 0,
+    "pp": 0
+  },
+  "notes": [],
+  "details": {
+    "backstory": "Compat backstory."
+  },
+  "updatedAt": "2026-09-24T12:00:00+00:00"
+}
