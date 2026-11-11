@@ -4,7 +4,7 @@
 import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
-import type { Character, CharacterSheet, CharacterView, DerivedValue, FieldOverride, PlayState, RollRecord } from '../api/types';
+import type { Character, CharacterSheet, CharacterView, DerivedValue, FieldOverride, PlayState, RollRecord, RulesFamilyPolicy } from '../api/types';
 import { expectNoAxeViolations } from '../test/axe';
 import { SheetSummary } from './SheetSummary';
 
@@ -35,6 +35,11 @@ const abilityFields = (
   field(`ability.${a}.score`, `${name} score`, score, 'score'),
   field(`ability.${a}.mod`, `${name} modifier`, Math.floor((score - 10) / 2), 'modifier'),
 ]);
+
+const policies = [
+  { id: 'srd-5.1', displayName: 'SRD 5.1 (2014 rules)', inspirationName: 'Inspiration' },
+  { id: 'srd-5.2.1', displayName: 'SRD 5.2.1 (2024 rules)', inspirationName: 'Heroic Inspiration' },
+] as RulesFamilyPolicy[];
 
 function fixtureView(sheetOver: Partial<CharacterSheet> = {}, play?: PlayState, rulesFamily: Character['rulesFamily'] = 'srd-5.2.1'): CharacterView {
   const character: Character = {
@@ -85,7 +90,7 @@ it('names the Spells tab in the rolling hint only when it is offered', () => {
 });
 
 it('lists the core numbers as terms and definitions, with no heading or named region of its own', () => {
-  render(<SheetSummary view={fixtureView()} rollMode="normal" onRollMode={() => {}} rollLog={[]} act={() => {}} onRoll={() => {}} onRollDice={async () => {}} />);
+  render(<SheetSummary view={fixtureView()} rulesFamilies={policies} rollMode="normal" onRollMode={() => {}} rollLog={[]} act={() => {}} onRoll={() => {}} onRollDice={async () => {}} />);
   const summary = screen.getByRole('region', { name: 'Summary' });
   expect(within(summary).queryAllByRole('heading')).toHaveLength(0);
   expect(within(summary).getAllByRole('region').map((r) => r.getAttribute('aria-label'))).toEqual(['Last roll']);
@@ -179,7 +184,7 @@ it('puts the dice box beside the d20 mode, outside the fixed roll strip (item 8)
 it('toggles inspiration from the summary through the play command', async () => {
   const user = userEvent.setup();
   const act = vi.fn();
-  render(<SheetSummary view={fixtureView()} rollMode="normal" onRollMode={() => {}} rollLog={[]} act={act} onRoll={() => {}} onRollDice={async () => {}} />);
+  render(<SheetSummary view={fixtureView()} rulesFamilies={policies} rollMode="normal" onRollMode={() => {}} rollLog={[]} act={act} onRoll={() => {}} onRollDice={async () => {}} />);
   await user.click(screen.getByRole('checkbox', { name: 'Heroic Inspiration' }));
   expect(act).toHaveBeenCalledWith({ action: 'setInspiration', amount: 1 });
 });

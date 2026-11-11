@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Changed
+- **Inspiration label:** the sheet's inspiration checkbox and summary line take their name ("Inspiration" or "Heroic Inspiration") from the rules family policy (`RulesFamilyPolicy.InspirationName`) instead of a family-id check in the UI. No visible change.
 - **Dependencies:** React and React DOM 19.3.0 to 19.3.1 (shipped; [ATTRIBUTION.md](../ATTRIBUTION.md) updated, `scheduler` unchanged). Development-only: `@testing-library/user-event`, `@types/node`, `@vitejs/plugin-react`, ESLint, `globals` and `typescript-eslint` to their latest patch or minor (from dependabot #126). No app behaviour change.
 
 ## 0.8.0 (content v12: rolls, riders, responses and gates; the SRD Barbarian, Rogue and Monk; save for an older TomeStack; every SRD 5.2.1 origin and the other SRD 5.1 races; the Import Lab)

@@ -467,6 +467,7 @@ export function App() {
               view={screen.view}
               initialTab={screen.tab}
               focusChecklist={screen.levelledUp}
+              rulesFamilies={info?.rulesFamilies}
               onError={onError}
               onLevelUp={() => {
                 setMessage(undefined);
