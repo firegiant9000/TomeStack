@@ -1,12 +1,20 @@
 // @vitest-environment jsdom
 // Item 3: a two-family source asks what the book is written for before it is read. Item 2: a finished job offers the studio.
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, render as rtlRender, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ReactElement } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { client } from '../api/client';
 import { TomeStackError } from '../api/transport';
-import type { ImportJob, SourceRecord, StoredPage } from '../api/types';
+import type { ImportJob, RulesFamilyPolicy, SourceRecord, StoredPage } from '../api/types';
+import { RulesLabelProvider } from '../rulesLabel';
 import { ImportPanel } from './ImportPanel';
+
+const policies = [
+  { id: 'srd-5.1', displayName: 'SRD 5.1', shortLabel: '2014 rules' },
+  { id: 'srd-5.2.1', displayName: 'SRD 5.2.1', shortLabel: '2024 rules' },
+] as unknown as RulesFamilyPolicy[];
+const render = (ui: ReactElement) => rtlRender(<RulesLabelProvider families={policies}>{ui}</RulesLabelProvider>);
 
 vi.mock('../api/client', () => ({
   client: {
@@ -48,7 +56,7 @@ it('asks what a two-family book is written for, with no default', async () => {
   await renderPanel(both);
   const group = screen.getByRole('group', { name: 'This book is written for' });
   const radios = within(group).getAllByRole('radio');
-  expect(radios.map((r) => (r as HTMLInputElement).labels?.[0]?.textContent?.trim())).toEqual(['2014 rules (SRD 5.1)', '2024 rules (SRD 5.2.1)', 'Both']);
+  expect(radios.map((r) => (r as HTMLInputElement).labels?.[0]?.textContent?.trim())).toEqual(['2014 rules', '2024 rules', 'Both']);
   expect(radios.map((r) => (r as HTMLInputElement).checked)).toEqual([false, false, false]);
 });
 
@@ -63,7 +71,7 @@ it('holds the Read buttons, with a linked reason, until it is answered', async (
   await user.click(whole);
   expect(client.startImport).not.toHaveBeenCalled();
 
-  await user.click(screen.getByRole('radio', { name: '2014 rules (SRD 5.1)' }));
+  await user.click(screen.getByRole('radio', { name: '2014 rules' }));
   expect(whole.getAttribute('aria-disabled')).toBeNull();
   expect(screen.queryByText('Say what the book is written for.')).toBeNull();
 });
@@ -91,7 +99,7 @@ it('links each panel to its own reason when two sources are listed', async () =>
 
 it('sends the answer with the read', async () => {
   const user = await renderPanel(both);
-  await user.click(screen.getByRole('radio', { name: '2014 rules (SRD 5.1)' }));
+  await user.click(screen.getByRole('radio', { name: '2014 rules' }));
   await user.click(screen.getByRole('button', { name: 'Read the whole document' }));
   expect(client.startImport).toHaveBeenLastCalledWith('src-2', { wholeDocument: true, writtenFor: ['srd-5.1'] });
 
@@ -108,14 +116,14 @@ it('holds Read these pages too, and sends the answer with the range', async () =
   await user.click(pages);
   expect(client.startImport).not.toHaveBeenCalled();
 
-  await user.click(screen.getByRole('radio', { name: '2024 rules (SRD 5.2.1)' }));
+  await user.click(screen.getByRole('radio', { name: '2024 rules' }));
   await user.click(pages);
   expect(client.startImport).toHaveBeenCalledWith('src-2', { firstPage: 2, lastPage: 2, writtenFor: ['srd-5.2.1'] });
 });
 
 it('says a one-family source is written for that family, with no question and no writtenFor', async () => {
   const user = await renderPanel(single);
-  expect(screen.getByText('Written for SRD 5.1 (from the source).')).toBeTruthy();
+  expect(screen.getByText('Written for 2014 rules (from the source).')).toBeTruthy();
   expect(screen.queryByRole('radio')).toBeNull();
   const whole = screen.getByRole('button', { name: 'Read the whole document' });
   expect(whole.getAttribute('aria-disabled')).toBeNull();

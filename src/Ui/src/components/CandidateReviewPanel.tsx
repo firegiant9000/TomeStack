@@ -4,7 +4,7 @@ import { TomeStackError } from '../api/transport';
 import type { CandidateCheck, CandidateFilter, CandidateLinkSummary, CandidatePage, CandidateStatus, ContentKind, DraftCandidate, ImportJob, RulesFamilyId, SourceRecord, StoredCandidate, StoredPage } from '../api/types';
 import { DuplicateChip } from './DuplicateChip';
 import { duplicateOf, useDuplicates } from './duplicates';
-import { familyLabel } from './familyLabels';
+import { useRulesLabel } from '../rulesLabel';
 import { SpellListForm } from './SpellListForm';
 
 interface Props {
@@ -35,7 +35,7 @@ const statusLabels: Record<CandidateStatus, string> = {
 const blockedReasons: Record<string, string> = {
   'candidate.low-confidence': 'has fields the detector is unsure of',
   'candidate.unresolved-reference': 'names something that is neither installed nor imported',
-  'import.family-needed': 'needs a rules family',
+  'import.family-needed': 'needs its rules chosen',
   'import.already-accepted': 'was already accepted from another reading of this document',
   'candidate.validation-failed': 'has problems the check reports',
   'candidate.already-reviewed': 'was already reviewed',
@@ -613,6 +613,7 @@ interface ConfirmTicks {
 
 function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChanged, onDirtyChange, dirtyReasonId, confirmed: remembered, onConfirmedChange }: DetailProps) {
   const candidate = stored.edited ?? stored.candidate;
+  const rulesLabel = useRulesLabel();
   const heading = useRef<HTMLHeadingElement>(null);
   const [name, setName] = useState(candidate.proposedName);
   const [families, setFamilies] = useState<RulesFamilyId[]>(candidate.rulesFamilies.filter((f) => sourceFamilies.includes(f)));
@@ -760,7 +761,7 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
         Candidate: {candidate.proposedName}
       </h5>
       <p className="hint">
-        {candidate.proposedKind} · {pageText(candidate.page)} · {candidate.rulesFamilies.length > 0 ? candidate.rulesFamilies.join(', ') : 'no rules family yet'} · confidence {percent(candidate.confidence)} (a hint, not a
+        {candidate.proposedKind} · {pageText(candidate.page)} · {candidate.rulesFamilies.length > 0 ? candidate.rulesFamilies.join(', ') : 'no rules yet'} · confidence {percent(candidate.confidence)} (a hint, not a
         check) · {statusLabels[stored.status]}
       </p>
       {!casting && (
@@ -860,7 +861,7 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
             </select>
           </label>
           <fieldset>
-            <legend>Rules families</legend>
+            <legend>Rules</legend>
             {sourceFamilies.map((f) => (
               <label key={f} className="choice">
                 <input
@@ -868,7 +869,7 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
                   checked={families.includes(f)}
                   onChange={() => setFamilies(families.includes(f) ? families.filter((x) => x !== f) : [...families, f])}
                 />
-                {familyLabel(f)}
+                {rulesLabel(f)}
               </label>
             ))}
           </fieldset>

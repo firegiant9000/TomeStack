@@ -1091,7 +1091,7 @@ function EntryEditor(props: {
         <input value={revision.name} onChange={(e) => update({ name: e.target.value })} />
       </label>
       <fieldset>
-        <legend>Rules families</legend>
+        <legend>Rules</legend>
         {props.source.rulesFamilies.map((f) => (
           <label key={f} className="choice">
             <input

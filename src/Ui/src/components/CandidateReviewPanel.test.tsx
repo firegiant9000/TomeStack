@@ -1,13 +1,21 @@
 // @vitest-environment jsdom
 // Item 2: the review screen says what happens to an accepted entry and offers the way to the studio.
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render as rtlRender, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ReactElement } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { client } from '../api/client';
 import { TomeStackError } from '../api/transport';
-import type { CandidateCheck, DraftCandidate, ImportJob, SourceRecord, StoredCandidate } from '../api/types';
+import type { CandidateCheck, DraftCandidate, ImportJob, RulesFamilyPolicy, SourceRecord, StoredCandidate } from '../api/types';
+import { RulesLabelProvider } from '../rulesLabel';
 import { expectNoAxeViolations } from '../test/axe';
 import { CandidateReviewPanel } from './CandidateReviewPanel';
+
+const policies = [
+  { id: 'srd-5.1', displayName: 'SRD 5.1', shortLabel: '2014 rules' },
+  { id: 'srd-5.2.1', displayName: 'SRD 5.2.1', shortLabel: '2024 rules' },
+] as unknown as RulesFamilyPolicy[];
+const render = (ui: ReactElement) => rtlRender(<RulesLabelProvider families={policies}>{ui}</RulesLabelProvider>);
 
 vi.mock('../api/client', () => ({
   client: { candidates: vi.fn(), checkCandidate: vi.fn(), editCandidate: vi.fn(), acceptCandidate: vi.fn(), ignoreCandidate: vi.fn(), acceptCandidates: vi.fn(), importedPage: vi.fn(), contentDuplicates: vi.fn() },
@@ -86,13 +94,13 @@ async function openDetail(rulesFamilies: string[], check: CandidateCheck) {
   vi.mocked(client.editCandidate).mockResolvedValue(detected(rulesFamilies));
   renderPanel(vi.fn(), bothSource);
   await userEvent.setup().click(await screen.findByRole('button', { name: 'Testy Coat' }));
-  return screen.findByRole('group', { name: 'Rules families' });
+  return screen.findByRole('group', { name: 'Rules' });
 }
 
 it('offers one checkbox per family of the source, ticked as the candidate has them', async () => {
   const group = await openDetail(['srd-5.1'], checkOf({}));
   const boxes = within(group).getAllByRole('checkbox');
-  expect(boxes.map((b) => (b as HTMLInputElement).labels?.[0]?.textContent?.trim())).toEqual(['2014 rules (SRD 5.1)', '2024 rules (SRD 5.2.1)']);
+  expect(boxes.map((b) => (b as HTMLInputElement).labels?.[0]?.textContent?.trim())).toEqual(['2014 rules', '2024 rules']);
   expect(boxes.map((b) => (b as HTMLInputElement).checked)).toEqual([true, false]);
 });
 
@@ -101,13 +109,13 @@ it('offers only the source families, even for a source with one', async () => {
   vi.mocked(client.checkCandidate).mockResolvedValue(checkOf({}));
   renderPanel(vi.fn(), source);
   await userEvent.setup().click(await screen.findByRole('button', { name: 'Testy Coat' }));
-  expect(within(await screen.findByRole('group', { name: 'Rules families' })).getAllByRole('checkbox')).toHaveLength(1);
+  expect(within(await screen.findByRole('group', { name: 'Rules' })).getAllByRole('checkbox')).toHaveLength(1);
 });
 
 it('saves the ticked families with the edit', async () => {
   const user = userEvent.setup();
   const group = await openDetail([], checkOf({ canAccept: false, canAcceptAsReference: false }));
-  await user.click(within(group).getByRole('checkbox', { name: '2024 rules (SRD 5.2.1)' }));
+  await user.click(within(group).getByRole('checkbox', { name: '2024 rules' }));
   await user.click(screen.getByRole('button', { name: 'Save edit' }));
   expect(client.editCandidate).toHaveBeenCalledWith('cand-1', expect.objectContaining({ rulesFamilies: ['srd-5.2.1'] }));
 });
@@ -192,9 +200,9 @@ it('counts a changed family, text, effects or kind as an edit, and a saved edit 
   render(<CandidateReviewPanel job={job} source={bothSource} onError={() => {}} onStatus={() => {}} onOpenPage={() => {}} onOpenStudio={() => {}} />);
   const studio = await screen.findByRole('button', { name: 'Open Testy Both in the studio' });
   await user.click(screen.getByRole('button', { name: 'Testy Coat' }));
-  const group = await screen.findByRole('group', { name: 'Rules families' });
+  const group = await screen.findByRole('group', { name: 'Rules' });
 
-  await user.click(within(group).getByRole('checkbox', { name: '2024 rules (SRD 5.2.1)' }));
+  await user.click(within(group).getByRole('checkbox', { name: '2024 rules' }));
   expect(studio.getAttribute('aria-disabled')).toBe('true');
 
   vi.mocked(client.candidates).mockResolvedValue(pageOf([{ ...detected(['srd-5.1', 'srd-5.2.1']), updatedAt: '2026-10-14T00:01:00Z' }]));
@@ -663,7 +671,7 @@ it('accepts the selection in bulk, reports the counts, and leaves the blocked ro
   await screen.findByText('1 selected', { selector: '[aria-live="polite"]' });
   expect((screen.getByRole('checkbox', { name: 'Select Testy Item 3' }) as HTMLInputElement).checked).toBe(true);
   const reasons = screen.getByRole('list', { name: 'Not accepted' });
-  expect(within(reasons).getByText(/Testy Item 3/).textContent).toContain('needs a rules family');
+  expect(within(reasons).getByText(/Testy Item 3/).textContent).toContain('needs its rules chosen');
 });
 
 it('accepts as reference with the same selection', async () => {

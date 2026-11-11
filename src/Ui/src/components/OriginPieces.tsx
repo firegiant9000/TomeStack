@@ -105,7 +105,7 @@ export function NewFeatureForm(props: {
   const [text, setText] = useState('');
   const submitting = useRef(false);
   const reasonId = useId();
-  const why = name.trim() === '' ? 'Name the feature first.' : props.families.length === 0 ? 'Tick a rules family first.' : '';
+  const why = name.trim() === '' ? 'Name the feature first.' : props.families.length === 0 ? 'Tick the rules first.' : '';
 
   async function create() {
     if (why || submitting.current) return;
