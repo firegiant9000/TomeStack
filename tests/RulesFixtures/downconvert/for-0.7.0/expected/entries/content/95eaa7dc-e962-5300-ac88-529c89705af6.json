@@ -1,0 +1,53 @@
+{
+  "contentId": "c1070000-0000-4000-8000-0000000000c3",
+  "revisionId": "95eaa7dc-e962-5300-ac88-529c89705af6",
+  "schemaVersion": 11,
+  "kind": "feature",
+  "name": "Compat Sharp Echo",
+  "rulesFamilies": [
+    "srd-5.1"
+  ],
+  "provenance": {
+    "sourceId": "c1070000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 3
+    }
+  },
+  "status": "published",
+  "summary": "A v12 test feature with an initiative edge, a scaled rider, scaled rolls and pool payments.",
+  "effects": [
+    {
+      "type": "resource",
+      "id": "surge",
+      "resourceId": "surge",
+      "label": "Surge",
+      "maximum": "2",
+      "automation": "automatic",
+      "timing": "always"
+    },
+    {
+      "type": "roll",
+      "id": "burst",
+      "rollId": "burst",
+      "label": "Compat burst",
+      "resourceId": "surge",
+      "cost": "1",
+      "automation": "automatic",
+      "timing": "always"
+    },
+    {
+      "type": "toggle",
+      "id": "ring",
+      "toggleId": "ring",
+      "label": "Ringing",
+      "resourceId": "surge",
+      "cost": "1",
+      "automation": "automatic",
+      "timing": "always"
+    }
+  ],
+  "downConvertedFrom": {
+    "revisionId": "c1070000-0000-4000-8000-0000000000e3",
+    "schemaVersion": 12
+  }
+}

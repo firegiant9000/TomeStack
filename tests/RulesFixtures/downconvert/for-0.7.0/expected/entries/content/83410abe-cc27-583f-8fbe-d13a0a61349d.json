@@ -1,0 +1,37 @@
+{
+  "contentId": "c1070000-0000-4000-8000-0000000000ca",
+  "revisionId": "83410abe-cc27-583f-8fbe-d13a0a61349d",
+  "schemaVersion": 11,
+  "kind": "spell",
+  "name": "Compat Spark",
+  "rulesFamilies": [
+    "srd-5.1"
+  ],
+  "provenance": {
+    "sourceId": "c1070000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 10
+    }
+  },
+  "status": "published",
+  "summary": "A v12 test spell with a tag.",
+  "effects": [
+    {
+      "type": "spell",
+      "id": "spark",
+      "level": 1,
+      "concentration": false,
+      "ritual": false,
+      "lists": [
+        "compat"
+      ],
+      "attack": "none",
+      "automation": "automatic",
+      "timing": "always"
+    }
+  ],
+  "downConvertedFrom": {
+    "revisionId": "c1070000-0000-4000-8000-0000000000ea",
+    "schemaVersion": 12
+  }
+}

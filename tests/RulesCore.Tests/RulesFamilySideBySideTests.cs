@@ -191,4 +191,11 @@ public class RulesFamilySideBySideTests
         Assert.Equal((ContentKind.Species, false), (p2014.AbilityIncreaseSource, p2014.BackgroundGrantsFeat));
         Assert.Equal((ContentKind.Background, true), (p2024.AbilityIncreaseSource, p2024.BackgroundGrantsFeat));
     }
+
+    [Fact]
+    public void InspirationName_is_Inspiration_under_2014_and_Heroic_Inspiration_under_2024()
+    {
+        Assert.Equal("Inspiration", RulesFamilies.Get(RulesFamilies.Srd51).InspirationName);
+        Assert.Equal("Heroic Inspiration", RulesFamilies.Get(RulesFamilies.Srd521).InspirationName);
+    }
 }

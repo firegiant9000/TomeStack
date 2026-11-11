@@ -1,0 +1,38 @@
+{
+  "contentId": "c1070000-0000-4000-8000-0000000000cb",
+  "revisionId": "07002c79-7964-5147-a660-03cbf49b11b1",
+  "schemaVersion": 11,
+  "kind": "feature",
+  "name": "Compat Second Thoughts",
+  "rulesFamilies": [
+    "srd-5.1"
+  ],
+  "provenance": {
+    "sourceId": "c1070000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 11
+    }
+  },
+  "status": "published",
+  "summary": "A v12 test feature with a choice that can be replaced.",
+  "effects": [
+    {
+      "type": "choice",
+      "id": "second",
+      "choiceId": "second",
+      "count": 1,
+      "options": [
+        {
+          "contentId": "c1070000-0000-4000-8000-0000000000c1",
+          "revisionId": "c1070000-0000-4000-8000-0000000000e1"
+        }
+      ],
+      "automation": "automatic",
+      "timing": "always"
+    }
+  ],
+  "downConvertedFrom": {
+    "revisionId": "c1070000-0000-4000-8000-0000000000eb",
+    "schemaVersion": 12
+  }
+}

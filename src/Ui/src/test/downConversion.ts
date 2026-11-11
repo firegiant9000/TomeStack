@@ -2,16 +2,17 @@
 import type { ExportChange, PackageTargets } from '../api/types';
 
 export const packageTargetsFixture: PackageTargets = {
-  current: '0.7.1',
-  currentRow: '0.7.0',
-  previousMinor: '0.6.0',
+  current: '0.8.0',
+  currentRow: '0.8.0',
+  previousMinor: '0.7.0',
   targets: [
+    { release: '0.7.0', characterSchema: 10, contentSchema: 11 },
     { release: '0.6.0', characterSchema: 9, contentSchema: 10 },
     { release: '0.5.0', characterSchema: 8, contentSchema: 9 },
   ],
 };
 
-export const firstRadio = '0.7.0 or newer (everything)';
+export const firstRadio = '0.8.0 or newer (everything)';
 export const confirmLabel = 'I understand this copy leaves out the items listed, and my own copy is unchanged';
 export const blockedHint = 'This file is not made while something blocks it.';
 export const failedLine = (target: string) => `Could not check what the copy for TomeStack ${target} leaves out.`;

@@ -2,9 +2,17 @@
 
 ## Unreleased
 
+### Added
+- **Save for an older TomeStack: 0.7.0 (D85, [ADR-023](decisions/ADR-023-down-conversion-export.md)):** "Which TomeStack will open it?" now offers 0.7.0 beside 0.6.0 and 0.5.0, for a character, a source pack, a campaign pack or a full library backup. The copy drops and lists what 0.7.0 cannot hold (content v12 fields and effects, item mods and content companions' hit points), and blocks what would make it stronger, as for the other targets. It was held back from 0.8.0 until a real 0.7.0 build had opened the test copies; that proof is now committed and the weekly job reruns it. No schema, package format or database change. See [package-format.md](features/package-format.md#save-for-an-older-tomestack-d85).
+
 ### Changed
 - **Foundry export pinned to dnd5e 6.0.6 (issue #125):** the exported Actor names dnd5e 6.0.6. No field the export writes changed between the two dnd5e releases. Foundry core is still 14.367. The owner's real-Foundry import check ([export-adapters.md](features/export-adapters.md)) now targets 6.0.6.
+- **Docs:** the README status block and the MVP, ROADMAP and ARCHITECTURE status text now match the published 0.8.0, and the README leads with the calculation trace.
+- **Inspiration label:** the sheet's inspiration checkbox and summary line take their name ("Inspiration" or "Heroic Inspiration") from the rules family policy (`RulesFamilyPolicy.InspirationName`) instead of a family-id check in the UI. No visible change.
 - **Dependencies:** React and React DOM 19.3.0 to 19.3.1 (shipped; [ATTRIBUTION.md](../ATTRIBUTION.md) updated, `scheduler` unchanged). Development-only: `@testing-library/user-event`, `@types/node`, `@vitejs/plugin-react`, ESLint, `globals` and `typescript-eslint` to their latest patch or minor (from dependabot #126). No app behaviour change.
+- **Weekly mutation run:** the Stryker job now runs in four shards (effects, validation, calculation, the rest) with 120 minutes each, so it finishes instead of being cancelled at 60; each shard uploads its own `stryker-report-<shard>` and reports its own score. A test checks that every `src/RulesCore` file belongs to exactly one shard. No app behaviour change.
+- **Release notes:** relative links in the changelog section (`decisions/ADR-022-....md`, `../README.md`, images) now point at the tagged files on GitHub, so they work on the release page; absolute URLs, `#anchors` and `mailto:` links are left alone. `scripts/release-notes.ps1` also takes an optional `-ChangelogPath`, and a test runs it against a temporary changelog. No app behaviour change.
+- **CI and ignore rules:** CI pins every action by commit SHA (version comment kept); `.gitignore` covers env files (`.env*`, except `.env.example`) and signing keys (`*.pfx`, `*.p12`, `*.snk`). No app behaviour change.
 
 ## 0.8.0 (content v12: rolls, riders, responses and gates; the SRD Barbarian, Rogue and Monk; save for an older TomeStack; every SRD 5.2.1 origin and the other SRD 5.1 races; the Import Lab)
 

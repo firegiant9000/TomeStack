@@ -9,7 +9,7 @@ namespace TomeStack.AppService.Tests;
 /// <summary>D85 part 1, lane C1: <c>package.targets</c> and <c>target</c> on the export commands, through the dispatcher.</summary>
 public class DownConversionExportTests
 {
-    private static string UnknownSentence(string target) => $"TomeStack {target} is not a version this export can be made for. Choose one of: 0.6.0, 0.5.0.";
+    private static string UnknownSentence(string target) => $"TomeStack {target} is not a version this export can be made for. Choose one of: 0.7.0, 0.6.0, 0.5.0.";
 
     private static JsonElement Send(CommandDispatcher dispatcher, string command, string payload) =>
         JsonDocument.Parse(dispatcher.Dispatch($$"""{"id":"1","command":"{{command}}","payload":{{payload}}}""")).RootElement.Clone();
@@ -301,13 +301,12 @@ public class DownConversionExportTests
         Assert.Equal("0.7.0", result.GetProperty("previousMinor").GetString());
         var targets = result.GetProperty("targets").EnumerateArray().ToList();
         Assert.Equal(
-            [("0.6.0", 9, 10), ("0.5.0", 8, 9)],
+            [("0.7.0", 10, 11), ("0.6.0", 9, 10), ("0.5.0", 8, 9)],
             targets.Select(t => (t.GetProperty("release").GetString()!, t.GetProperty("characterSchema").GetInt32(), t.GetProperty("contentSchema").GetInt32())));
     }
 
     [Theory]
     [InlineData("0.4.0")]
-    [InlineData("0.7.0")]
     [InlineData("0.7.1")]
     [InlineData("0.8.0")]
     [InlineData("0.6")]
@@ -345,7 +344,7 @@ public class DownConversionExportTests
         var id = SaveCharacter(app);
         var dispatcher = new CommandDispatcher(app.App);
 
-        Assert.Equal("package.target-unknown", ErrorOf(Send(dispatcher, "package.export", $$"""{"characterIds":["{{id}}"],"target":"0.7.0"}""")).Code);
+        Assert.Equal("package.target-unknown", ErrorOf(Send(dispatcher, "package.export", $$"""{"characterIds":["{{id}}"],"target":"0.8.0"}""")).Code);
         Assert.Equal("package.target-unknown", ErrorOf(Send(dispatcher, "package.saveAs", $$"""{"characterIds":["{{id}}"],"target":"0.4.0"}""")).Code);
     }
 

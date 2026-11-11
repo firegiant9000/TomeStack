@@ -461,12 +461,14 @@ export function App() {
               }}
             />
           )}
+          {/* Not gated on info: if app.info fails, the sheet still opens and only the inspiration label falls back. */}
           {screen.kind === 'sheet' && (
             <CharacterSheet
               key={screen.view.character.id}
               view={screen.view}
               initialTab={screen.tab}
               focusChecklist={screen.levelledUp}
+              rulesFamilies={info?.rulesFamilies}
               onError={onError}
               onLevelUp={() => {
                 setMessage(undefined);

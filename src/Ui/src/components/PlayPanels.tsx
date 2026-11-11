@@ -21,12 +21,13 @@ import type {
   RollMode,
   RollRecord,
   RollTarget,
+  RulesFamilyPolicy,
   ToggleValue,
 } from '../api/types';
 import { attackAvailability, dicelessUse, hasDice, poolFor, recordPayment, recordSpend, rollAvailability, toggleAvailability, type Availability } from '../actionRows';
 import { castsText, paying, paymentText } from '../payment';
 import { explainSteps } from '../explain';
-import { hitDiceText, rollBonus } from '../format';
+import { hitDiceText, inspirationLabel, rollBonus } from '../format';
 import { attackPin, customPin, maxPins, pinKey, rollPin, togglePin, weaponTarget, type Pin } from '../quickbar';
 import { assistedNotes, rollButtonSuffix } from '../rollModes';
 import { diceLine, rollKey, rollModeText } from '../rollText';
@@ -35,9 +36,6 @@ import { damageTypeLabel, damageTypes, normalizeDamageType } from './customModel
 import { ExplainList } from './ExplainList';
 import { Pips } from './Pips';
 import { conditionLabels } from './conditionLabels';
-
-/** The one name for the inspiration toggle and its summary line: "Heroic Inspiration" in 5.2.1, "Inspiration" otherwise. */
-export const inspirationLabel = (rulesFamily: string) => (rulesFamily === 'srd-5.2.1' ? 'Heroic Inspiration' : 'Inspiration');
 
 const automationLabels: Record<AutomationStatus, string> = {
   automatic: 'automatic',
@@ -121,9 +119,12 @@ export function HitPointsPanel({
   onDamageType,
   onDamage,
   panelOpen = false,
+  rulesFamilies = [],
 }: {
   view: CharacterView;
   act: Act;
+  /** The families from `app.info`; the inspiration checkbox is named by the character's family policy. */
+  rulesFamilies?: RulesFamilyPolicy[];
   damageType?: string;
   onDamageType?: (type: string) => void;
   /** D43 S7: opens the damage panel (amount, type '' for untyped). Used instead of a one-step damage when the sheet has damage responses. */
@@ -267,7 +268,7 @@ export function HitPointsPanel({
           checked={view.character.play?.inspiration ?? false}
           onChange={(e) => act({ action: 'setInspiration', amount: e.target.checked ? 1 : 0 })}
         />
-        {inspirationLabel(view.character.rulesFamily)}
+        {inspirationLabel(rulesFamilies, view.character.rulesFamily)}
       </label>
     </section>
   );

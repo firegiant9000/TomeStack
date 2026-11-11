@@ -27,11 +27,11 @@ public static class RulesFamilies
         new(Srd51, "SRD 5.1 (2014 rules)", AbilityIncreaseSource: ContentKind.Species, BackgroundGrantsFeat: false, LongRestExhaustionNeedsFoodAndDrink: true,
             LongRestHitDice: HitDiceRecovery.HalfTotal, HitDieHealingMinimum: 0, ShortRestNeedsOneHitPoint: false,
             HalfCasterLevels: CasterLevelRounding.Down, ThirdCasterLevels: CasterLevelRounding.Down, MulticlassSpellSlots: SrdMulticlassSpellSlots,
-            UntrainedShieldGivesArmorClass: true),
+            UntrainedShieldGivesArmorClass: true, InspirationName: "Inspiration"),
         new(Srd521, "SRD 5.2.1 (2024 rules)", AbilityIncreaseSource: ContentKind.Background, BackgroundGrantsFeat: true, LongRestExhaustionNeedsFoodAndDrink: false,
             LongRestHitDice: HitDiceRecovery.All, HitDieHealingMinimum: 1, ShortRestNeedsOneHitPoint: true,
             HalfCasterLevels: CasterLevelRounding.Up, ThirdCasterLevels: CasterLevelRounding.Down, MulticlassSpellSlots: SrdMulticlassSpellSlots,
-            UntrainedShieldGivesArmorClass: false, ConcentrationSaveMaximumDc: 30),
+            UntrainedShieldGivesArmorClass: false, InspirationName: "Heroic Inspiration", ConcentrationSaveMaximumDc: 30),
     ];
 
     public static bool IsKnown(string? id) => All.Any(p => p.Id == id);
@@ -87,6 +87,10 @@ public static class RulesFamilies
 /// Class benefit of a Shield only if you have training with it" (SRD 5.2.1 p. 92). Checked only for a character whose
 /// content records armor training at all (M2.2); older classes record none, and nothing changes for them.
 /// </param>
+/// <param name="InspirationName">
+/// What the sheet calls the inspiration toggle: "Inspiration" under 2014 rules (SRD 5.1), "Heroic Inspiration" under 2024
+/// rules (SRD 5.2.1). A label only; the stored flag and the <c>setInspiration</c> action are the same in both.
+/// </param>
 /// <param name="ConcentrationSaveMaximumDc">
 /// The highest DC of the Constitution saving throw that damage asks of a concentrating character: 30 under 2024 rules
 /// (SRD 5.2.1, Concentration: "up to a maximum DC of 30"); none under 2014 rules (SRD 5.1 sets no ceiling).
@@ -104,6 +108,7 @@ public sealed record RulesFamilyPolicy(
     CasterLevelRounding ThirdCasterLevels,
     IReadOnlyList<IReadOnlyList<int>> MulticlassSpellSlots,
     bool UntrainedShieldGivesArmorClass,
+    string InspirationName,
     int? ConcentrationSaveMaximumDc = null);
 
 /// <summary>How many spent hit dice a long rest gives back (<see cref="RulesFamilyPolicy.LongRestHitDice"/>).</summary>
