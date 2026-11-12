@@ -88,7 +88,7 @@ First step: submit the SignPath application (`signpath.org`, Apply), after addin
 3. **If SignPath declines, stay unsigned** on GitHub, and evaluate the Microsoft Store (option 5) as a free second channel, starting with the `%LOCALAPPDATA%` spike.
 4. **Target: 0.9.0** for the first signed release. 0.8.x stays unsigned.
 
-The status stays "proposed" until SignPath answers; the decision is then recorded here and in [release-checklist.md](../licensing/release-checklist.md#4-code-signing) section 4.
+**Applied 2026-11-12** (the owner submitted the SignPath Foundation application after the README "Code signing policy" section went live). The status stays "proposed" until SignPath answers; the decision is then recorded here and in [release-checklist.md](../licensing/release-checklist.md#4-code-signing) section 4.
 
 ## Sources (read 2026-11-11)
 
