@@ -1110,9 +1110,29 @@ public class DownConversionExportTests
 
         var lowered = LowerGear(hero, "0.6.0", [kept.RevisionId], rope, kept);
 
-        // Nothing is written: the revision the mod points at is still checked against the target, so the file is refused, not dangling.
+        // At this target (character schema below 11) mods do not survive lowering anyway, so this only shows the item is not converted.
+        // The schema-11 test below covers the case the fix exists for: mods that survive.
         Assert.True(lowered.Blocked);
         Assert.Contains(lowered.Changes, c => c.Action == "blocks" && c.Message.Contains("Compat Rope Coil", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Gear_held_as_a_mod_by_a_kept_entry_stays_blocking_where_mods_survive()
+    {
+        var rope = GearItem(1, "Compat Rope Coil");
+        var kept = GearItem(6, "Compat Frame");
+        var ropeRef = new ContentReference(rope.ContentId, rope.RevisionId);
+        var keeper = new EquipmentEntry(new ContentReference(kept.ContentId, kept.RevisionId), false, 1, Guid.NewGuid(), Mods: [ropeRef]);
+        var hero = Hero(c => c with { Equipment = [Held(rope), keeper] });
+        var row = Row("0.6.0") with { CharacterSchema = 11, ContentSchema = 12, BundledRevisionIds = new HashSet<Guid> { kept.RevisionId } };
+
+        var lowered = DownConversion.Lower(new([hero], [rope, kept], [], [], "x.tomestack.zip"), row,
+            id => id == BundledSourceId, _ => "Compat Bundled Pack", new HomebrewCatalog());
+
+        // The rope's content stays blocked: the kept entry's mod still points at its revision, which the file would not carry, so nothing is written.
+        Assert.True(lowered.Blocked);
+        Assert.Contains(lowered.Changes, c => c.Action == "blocks" && c.Message.Contains("Compat Rope Coil", StringComparison.Ordinal));
+        Assert.Contains(lowered.Changes, c => c.Action == "blocks" && c.Kind == "content" && c.Name == "Compat Rope Coil");
     }
 
     [Fact]
