@@ -4,6 +4,7 @@
 
 ### Changed
 - **Docs:** the README "Code signing policy" and [ADR-024](decisions/ADR-024-code-signing.md) record that the SignPath Foundation application was submitted on 2026-11-12. Releases stay unsigned until it is accepted.
+- **Docs (owed checks):** the populated upgrade check is recorded as passed: a copy of a library went through the published 0.8.0 and then 0.8.1 with every count, table and sheet unchanged ([m2-acceptance.md](features/m2-acceptance.md)).
 
 ## 0.8.1 (save for 0.7.0, Foundry dnd5e 6.0.6, release and CI hygiene)
 
