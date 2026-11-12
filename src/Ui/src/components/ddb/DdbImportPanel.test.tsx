@@ -530,7 +530,7 @@ it('titles the import as a sheet or text import (R133) and names the layout it r
   const user = userEvent.setup();
   renderPanel();
 
-  expect(screen.getByRole('heading', { name: 'Import a character (sheet or text)', hidden: true })).toBeTruthy();
+  expect(screen.getByRole('heading', { name: 'From a character sheet (PDF or text)', hidden: true })).toBeTruthy();
   // Step 1's first line names both entries: a fillable sheet PDF, or pasted text or a .txt/.md file.
   expect(screen.getByText(/a fillable character sheet PDF.*pasted text or a \.txt or \.md file/)).toBeTruthy();
   await user.click(screen.getByRole('button', { name: 'Choose PDF…' }));
@@ -674,7 +674,7 @@ it('shows the stub in full on the summary, leaves Publish it unticked and says t
   for (const part of ['Fixture Tinkerer', '2014 rules', 'd8', 'Strength, Constitution', 'Characters imported from sheets']) expect(text).toContain(part);
   const publish = within(section).getByRole<HTMLInputElement>('checkbox', { name: 'Make it available to characters' });
   expect(publish.checked).toBe(false);
-  expect(within(section).getByRole('note').textContent).toBe('The class is a draft: the character gets nothing from it until you publish it in the studio and accept the update on the character.');
+  expect(within(section).getByRole('note').textContent).toBe('The class is a draft: the character gets nothing from it until you make it available to characters in Homebrew and accept the update on the character.');
 
   await user.click(screen.getByRole('button', { name: 'Create character' }));
   await waitFor(() => expect(client.ddbApply).toHaveBeenCalledTimes(1));
@@ -924,7 +924,7 @@ it('lists the reference drafts on the summary with an unticked Publish tick, the
   expect(section.textContent).toContain('and 3 more');
   const tick = within(section).getByRole<HTMLInputElement>('checkbox', { name: 'Make these 13 reference drafts available to characters' });
   expect(tick.checked).toBe(false);
-  expect(within(section).getByRole('note').textContent).toContain('Features are kept as reference content in the studio; the gap notes stay on the character.');
+  expect(within(section).getByRole('note').textContent).toContain('Features are kept as reference content in Homebrew; the gap notes stay on the character.');
 });
 
 it('shows no reference section when the import has no drafts', async () => {

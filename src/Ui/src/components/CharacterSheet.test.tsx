@@ -1138,7 +1138,7 @@ it('says so in plain text when the backup export preview cannot be read (G6)', a
   vi.mocked(client.previewExport).mockRejectedValue(new Error('boom'));
   render(<CharacterSheet view={view()} onChanged={noop} onError={onError} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
   await user.click(screen.getByRole('tab', { name: 'Manage' }));
-  const line = await screen.findByText('Could not check whether this package needs a newer TomeStack.');
+  const line = await screen.findByText('Could not check whether this TomeStack file needs a newer TomeStack.');
   expect(line.closest('[role="status"],[role="alert"]')).toBeNull();
   expect(onError).not.toHaveBeenCalled();
 });
@@ -1167,7 +1167,7 @@ describe('export for an older TomeStack', () => {
     await user.click(screen.getByRole('tab', { name: 'Manage' }));
     return user;
   }
-  const exportButton = () => screen.getByRole('button', { name: 'Export package' }) as HTMLButtonElement;
+  const exportButton = () => screen.getByRole('button', { name: 'Export TomeStack file' }) as HTMLButtonElement;
 
   it('re-runs the preview for the chosen release and again without a target for the first choice', async () => {
     const user = await openManage();

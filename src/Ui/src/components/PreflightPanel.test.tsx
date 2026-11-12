@@ -68,9 +68,9 @@ afterEach(cleanup);
 
 it('says each omitted and blocking row in words, never as a code', async () => {
   vi.mocked(client.packagePreflight).mockResolvedValue(blocked);
-  render(<PreflightPanel kind="package" selection={['ch-1']} label="shared package" onReport={() => {}} onError={() => {}} />);
+  render(<PreflightPanel kind="package" selection={['ch-1']} label="shared TomeStack file" onReport={() => {}} onError={() => {}} />);
 
-  const region = await screen.findByRole('region', { name: 'Preflight: shared package' });
+  const region = await screen.findByRole('region', { name: 'Preflight: shared TomeStack file' });
   expect(vi.mocked(client.packagePreflight)).toHaveBeenCalledWith({ kind: 'package', selection: ['ch-1'] });
   expect(within(region).getByRole('alert').textContent).toMatch(/Borrowed Rules: not marked as your own shareable work/);
   expect(region.textContent).toMatch(/Ink Trick \(Ink Imports\): holds imported material \(from a PDF or a Markdown file\), so it is never shared/);
@@ -125,7 +125,7 @@ it('says in words that the check failed and keeps Save off', async () => {
   vi.mocked(client.packagePreflight).mockRejectedValue(new Error('boom'));
   const onReport = vi.fn();
   const onError = vi.fn();
-  render(<PreflightPanel kind="package" selection={['ch-1']} label="shared package" onReport={onReport} onError={onError} />);
+  render(<PreflightPanel kind="package" selection={['ch-1']} label="shared TomeStack file" onReport={onReport} onError={onError} />);
 
   expect((await screen.findByRole('alert')).textContent).toMatch(/Could not check what may be shared, so Save stays off/);
   expect(screen.queryByText(/Checking what may be shared/)).toBeNull();
@@ -168,16 +168,16 @@ it('the campaign-pack export stays off while the preflight blocks and comes on w
 
   await user.click(await screen.findByRole('button', { name: 'Share Lantern Table…' }));
   const share = await screen.findByRole('region', { name: 'Share Lantern Table' });
-  await within(share).findByRole('region', { name: 'Preflight: campaign pack' });
+  await within(share).findByRole('region', { name: 'Preflight: TomeStack file' });
   expect(vi.mocked(client.packagePreflight)).toHaveBeenCalledWith({ kind: 'campaignPack', selection: ['camp-1'] });
-  expect(within(share).getByRole<HTMLButtonElement>('button', { name: 'Save campaign pack…' }).disabled).toBe(true);
+  expect(within(share).getByRole<HTMLButtonElement>('button', { name: 'Save TomeStack file…' }).disabled).toBe(true);
 
   cleanup();
   vi.mocked(client.packagePreflight).mockResolvedValue(clear);
   render(<CampaignsPanel rulesFamilies={[]} onError={() => {}} onStatus={() => {}} />);
   await user.click(await screen.findByRole('button', { name: 'Share Lantern Table…' }));
   const clearShare = await screen.findByRole('region', { name: 'Share Lantern Table' });
-  await waitFor(() => expect(within(clearShare).getByRole<HTMLButtonElement>('button', { name: 'Save campaign pack…' }).disabled).toBe(false));
+  await waitFor(() => expect(within(clearShare).getByRole<HTMLButtonElement>('button', { name: 'Save TomeStack file…' }).disabled).toBe(false));
 });
 
 it('the campaign-pack share asks again when the campaign is edited and saved while it is open', async () => {
@@ -194,9 +194,9 @@ it('the campaign-pack share asks again when the campaign is edited and saved whi
 
   await user.click(await screen.findByRole('button', { name: 'Share Lantern Table…' }));
   const share = await screen.findByRole('region', { name: 'Share Lantern Table' });
-  await within(share).findByRole('region', { name: 'Preflight: campaign pack' });
+  await within(share).findByRole('region', { name: 'Preflight: TomeStack file' });
   expect(vi.mocked(client.packagePreflight)).toHaveBeenCalledTimes(1);
-  expect(within(share).getByRole<HTMLButtonElement>('button', { name: 'Save campaign pack…' }).disabled).toBe(true);
+  expect(within(share).getByRole<HTMLButtonElement>('button', { name: 'Save TomeStack file…' }).disabled).toBe(true);
 
   // Edit the same campaign while the share form stays open, untick the source and save.
   vi.mocked(client.listCampaigns).mockResolvedValue([after]);
@@ -208,7 +208,7 @@ it('the campaign-pack share asks again when the campaign is edited and saved whi
   await waitFor(() => expect(vi.mocked(client.packagePreflight)).toHaveBeenCalledTimes(2));
   expect(vi.mocked(client.packagePreflight)).toHaveBeenLastCalledWith({ kind: 'campaignPack', selection: ['camp-1'] });
   const again = await screen.findByRole('region', { name: 'Share Lantern Table' });
-  await waitFor(() => expect(within(again).getByRole<HTMLButtonElement>('button', { name: 'Save campaign pack…' }).disabled).toBe(false));
+  await waitFor(() => expect(within(again).getByRole<HTMLButtonElement>('button', { name: 'Save TomeStack file…' }).disabled).toBe(false));
 });
 
 it('a campaign-pack preview that answers late does not overwrite the one asked after the save', async () => {
@@ -249,13 +249,13 @@ it('the character-package export checks a share, and a backup keeps its own rule
   render(<ExportPanel characterId="ch-1" active updatedAt="t1" onError={() => {}} onStatus={() => {}} />);
 
   // A backup is personal: no preflight, and Export is on.
-  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Export package' }).disabled).toBe(false);
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Export TomeStack file' }).disabled).toBe(false);
   expect(vi.mocked(client.packagePreflight)).not.toHaveBeenCalled();
 
   await user.click(screen.getByRole('radio', { name: /Share with someone/ }));
-  await screen.findByRole('region', { name: 'Preflight: shared package' });
+  await screen.findByRole('region', { name: 'Preflight: shared TomeStack file' });
   expect(vi.mocked(client.packagePreflight)).toHaveBeenCalledWith({ kind: 'package', selection: ['ch-1'] });
-  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Export package' }).disabled).toBe(true);
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Export TomeStack file' }).disabled).toBe(true);
 });
 
 it('the sheet export checks a share, and a personal copy keeps its own rule', async () => {

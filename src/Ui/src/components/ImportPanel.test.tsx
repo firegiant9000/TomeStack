@@ -188,16 +188,16 @@ it('shows one studio button while a job is under review: the panel\'s own, not a
   vi.mocked(client.listImports).mockResolvedValue([completed('job-a', 3)]);
   vi.mocked(client.candidates).mockResolvedValue({ items: [], total: 0 });
   const user = await renderPanel(both);
-  expect(await screen.findAllByRole('button', { name: 'Open Testy Both in the studio' })).toHaveLength(1);
+  expect(await screen.findAllByRole('button', { name: 'Open Testy Both in Homebrew' })).toHaveLength(1);
 
   await user.click(screen.getByRole('button', { name: 'Review 3 entries found' }));
   const region = await screen.findByRole('region', { name: 'Entries found in Testy Both' });
-  const buttons = screen.getAllByRole('button', { name: 'Open Testy Both in the studio' });
+  const buttons = screen.getAllByRole('button', { name: 'Open Testy Both in Homebrew' });
   expect(buttons).toHaveLength(1);
   expect(region.contains(buttons[0] ?? null)).toBe(true);
 
   await user.click(screen.getByRole('button', { name: 'Review 3 entries found' })); // closing the review brings the job line's back
-  expect(screen.getAllByRole('button', { name: 'Open Testy Both in the studio' })).toHaveLength(1);
+  expect(screen.getAllByRole('button', { name: 'Open Testy Both in Homebrew' })).toHaveLength(1);
   expect(screen.queryByRole('region', { name: 'Entries found in Testy Both' })).toBeNull();
 });
 
@@ -205,16 +205,16 @@ it('hides every job line\'s studio button while any review is open, so no unsave
   vi.mocked(client.listImports).mockResolvedValue([completed('job-a', 3), completed('job-b', 2)]);
   vi.mocked(client.candidates).mockResolvedValue({ items: [], total: 0 });
   const user = await renderPanel(both);
-  expect(await screen.findAllByRole('button', { name: 'Open Testy Both in the studio' })).toHaveLength(2);
+  expect(await screen.findAllByRole('button', { name: 'Open Testy Both in Homebrew' })).toHaveLength(2);
 
   await user.click(screen.getByRole('button', { name: 'Review 3 entries found' }));
   const region = await screen.findByRole('region', { name: 'Entries found in Testy Both' });
-  const buttons = screen.getAllByRole('button', { name: 'Open Testy Both in the studio' });
+  const buttons = screen.getAllByRole('button', { name: 'Open Testy Both in Homebrew' });
   expect(buttons).toHaveLength(1);
   expect(region.contains(buttons[0] ?? null)).toBe(true);
 
   await user.click(screen.getByRole('button', { name: 'Review 3 entries found' }));
-  expect(screen.getAllByRole('button', { name: 'Open Testy Both in the studio' })).toHaveLength(2);
+  expect(screen.getAllByRole('button', { name: 'Open Testy Both in Homebrew' })).toHaveLength(2);
 });
 
 it.each(['0', '-2', '1.5'])('says the first page is 1 or more for From page "%s", not the last-page text', async (value) => {
@@ -237,8 +237,8 @@ it('offers the studio from a finished job that found candidates, and not from on
   vi.mocked(client.listImports).mockResolvedValue([completed('job-a', 3), completed('job-b', 0)]);
   await renderPanel(both);
   const [withCandidates, withNone] = await screen.findAllByRole('listitem');
-  expect(within(withCandidates!).getByRole('button', { name: 'Open Testy Both in the studio' })).toBeTruthy();
-  expect(within(withNone!).queryByRole('button', { name: 'Open Testy Both in the studio' })).toBeNull();
+  expect(within(withCandidates!).getByRole('button', { name: 'Open Testy Both in Homebrew' })).toBeTruthy();
+  expect(within(withNone!).queryByRole('button', { name: 'Open Testy Both in Homebrew' })).toBeNull();
 });
 
 // ---- Import Lab Task 13 (D67): Markdown import, pages only ----

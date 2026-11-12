@@ -63,10 +63,10 @@ async function openShare(onError: (e: unknown) => void = () => {}) {
   const user = userEvent.setup();
   render(<CampaignsPanel rulesFamilies={families} onError={onError} onStatus={() => {}} />);
   await user.click(await screen.findByRole('button', { name: 'Share Compat Table…' }));
-  await screen.findByRole('region', { name: 'Left out of the campaign pack' });
+  await screen.findByRole('region', { name: 'Left out of the TomeStack file' });
   return user;
 }
-const save = () => screen.getByRole('button', { name: 'Save campaign pack…' }) as HTMLButtonElement;
+const save = () => screen.getByRole('button', { name: 'Save TomeStack file…' }) as HTMLButtonElement;
 
 it('names the campaign form rules radios and the list tag by short label, with no "Rules family" wording', async () => {
   const user = userEvent.setup();
@@ -187,6 +187,6 @@ it('says so plainly, and has no Save, when the preview for a chosen release fail
   const user = await openShare(onError);
   await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
   expect(await screen.findByText(failedLine('0.6.0'))).toBeTruthy();
-  expect(screen.queryByRole('button', { name: 'Save campaign pack…' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Save TomeStack file…' })).toBeNull();
   expect(onError).not.toHaveBeenCalled();
 });

@@ -50,7 +50,7 @@ it('says, always visible and not as a live region, that accepted entries are dra
 it('opens the source in the studio from a named button', async () => {
   const onOpenStudio = renderPanel();
   await screen.findByText('No entries match.');
-  await userEvent.setup().click(screen.getByRole('button', { name: 'Open Testy Tome in the studio' }));
+  await userEvent.setup().click(screen.getByRole('button', { name: 'Open Testy Tome in Homebrew' }));
   expect(onOpenStudio).toHaveBeenCalledExactlyOnceWith('src-1');
 });
 
@@ -177,7 +177,7 @@ it('holds the studio button, with a linked reason, while the open candidate has 
   vi.mocked(client.candidates).mockResolvedValue(pageOf([detected(['srd-5.1'])]));
   vi.mocked(client.checkCandidate).mockResolvedValue(checkOf({}));
   render(<CandidateReviewPanel job={job} source={bothSource} onError={() => {}} onStatus={() => {}} onOpenPage={() => {}} onOpenStudio={onOpenStudio} />);
-  const studio = await screen.findByRole('button', { name: 'Open Testy Both in the studio' });
+  const studio = await screen.findByRole('button', { name: 'Open Testy Both in Homebrew' });
   expect(studio.getAttribute('aria-disabled')).toBeNull();
 
   await user.click(screen.getByRole('button', { name: 'Testy Coat' }));
@@ -205,7 +205,7 @@ it('counts a changed family, text, effects or kind as an edit, and a saved edit 
   vi.mocked(client.checkCandidate).mockResolvedValue(checkOf({}));
   vi.mocked(client.editCandidate).mockResolvedValue(detected(['srd-5.1', 'srd-5.2.1']));
   render(<CandidateReviewPanel job={job} source={bothSource} onError={() => {}} onStatus={() => {}} onOpenPage={() => {}} onOpenStudio={() => {}} />);
-  const studio = await screen.findByRole('button', { name: 'Open Testy Both in the studio' });
+  const studio = await screen.findByRole('button', { name: 'Open Testy Both in Homebrew' });
   await user.click(screen.getByRole('button', { name: 'Testy Coat' }));
   const group = await screen.findByRole('group', { name: 'Rules' });
 
@@ -1093,7 +1093,7 @@ it('says on a class that the ticked effects become automatic and the others stay
 
 it('keeps the reference-only label for other kinds', async () => {
   await openDetail([], checkOf({}));
-  expect(screen.getByLabelText('Proposed effects (JSON; they stay reference-only until you change them in the studio)')).toBeTruthy();
+  expect(screen.getByLabelText('Proposed effects (JSON; they stay reference-only until you change them in Homebrew)')).toBeTruthy();
 });
 
 // R120: an edit carries the token it was opened with; a refused one reloads the candidate and says so.
