@@ -78,11 +78,11 @@ async function openPreview(onError: (e: unknown) => void = () => {}) {
   const user = userEvent.setup();
   render(<SourcesPanel onError={onError} onStatus={() => {}} onOpenStudio={() => {}} />);
   await user.click(await screen.findByRole('checkbox', { name: 'Compat Homebrew A' }));
-  await user.click(screen.getByRole('button', { name: 'Preview pack' }));
-  await screen.findByRole('region', { name: 'Source pack preview' });
+  await user.click(screen.getByRole('button', { name: 'Preview file' }));
+  await screen.findByRole('region', { name: 'TomeStack file preview' });
   return user;
 }
-const save = () => screen.getByRole('button', { name: 'Save pack…' }) as HTMLButtonElement;
+const save = () => screen.getByRole('button', { name: 'Save file…' }) as HTMLButtonElement;
 
 it('re-runs the preview for the chosen release and again without a target for the first choice', async () => {
   const user = await openPreview();
@@ -180,6 +180,6 @@ it('says so plainly, and has no Save, when the preview for a chosen release fail
   const user = await openPreview(onError);
   await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
   expect(await screen.findByText(failedLine('0.6.0'))).toBeTruthy();
-  expect(screen.queryByRole('button', { name: 'Save pack…' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Save file…' })).toBeNull();
   expect(onError).not.toHaveBeenCalled();
 });

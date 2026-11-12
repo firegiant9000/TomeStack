@@ -140,21 +140,21 @@ it('the source-pack export waits for the preflight and stays off while a source 
   vi.mocked(client.packagePreflight).mockResolvedValue(blocked);
   render(<SourcesPanel onError={() => {}} onStatus={() => {}} onOpenStudio={() => {}} />);
 
-  const form = await screen.findByRole('region', { name: 'Share sources as a pack' });
+  const form = await screen.findByRole('region', { name: 'Share sources as a TomeStack file' });
   await user.click(within(form).getByRole('checkbox', { name: 'Lantern Notes' }));
-  await user.click(within(form).getByRole('button', { name: 'Preview pack' }));
-  const preview = await within(form).findByRole('region', { name: 'Source pack preview' });
-  await within(form).findByRole('region', { name: 'Preflight: source pack' });
+  await user.click(within(form).getByRole('button', { name: 'Preview file' }));
+  const preview = await within(form).findByRole('region', { name: 'TomeStack file preview' });
+  await within(form).findByRole('region', { name: 'Preflight: TomeStack file' });
   expect(vi.mocked(client.packagePreflight)).toHaveBeenLastCalledWith({ kind: 'sourcePack', selection: ['src-1'] });
-  expect(within(preview).getByRole<HTMLButtonElement>('button', { name: 'Save pack…' }).disabled).toBe(true);
+  expect(within(preview).getByRole<HTMLButtonElement>('button', { name: 'Save file…' }).disabled).toBe(true);
 
   // Untick and tick again with nothing blocking: Save comes on.
   vi.mocked(client.packagePreflight).mockResolvedValue(clear);
   await user.click(within(form).getByRole('checkbox', { name: 'Lantern Notes' }));
   await user.click(within(form).getByRole('checkbox', { name: 'Lantern Notes' }));
-  await user.click(within(form).getByRole('button', { name: 'Preview pack' }));
-  const again = await within(form).findByRole('region', { name: 'Source pack preview' });
-  await waitFor(() => expect(within(again).getByRole<HTMLButtonElement>('button', { name: 'Save pack…' }).disabled).toBe(false));
+  await user.click(within(form).getByRole('button', { name: 'Preview file' }));
+  const again = await within(form).findByRole('region', { name: 'TomeStack file preview' });
+  await waitFor(() => expect(within(again).getByRole<HTMLButtonElement>('button', { name: 'Save file…' }).disabled).toBe(false));
 });
 
 it('the campaign-pack export stays off while the preflight blocks and comes on when it is clear', async () => {

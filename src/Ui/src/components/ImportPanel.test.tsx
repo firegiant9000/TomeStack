@@ -190,15 +190,15 @@ it('shows one studio button while a job is under review: the panel\'s own, not a
   const user = await renderPanel(both);
   expect(await screen.findAllByRole('button', { name: 'Open Testy Both in the studio' })).toHaveLength(1);
 
-  await user.click(screen.getByRole('button', { name: 'Review 3 candidates' }));
-  const region = await screen.findByRole('region', { name: 'Candidates from Testy Both' });
+  await user.click(screen.getByRole('button', { name: 'Review 3 entries found' }));
+  const region = await screen.findByRole('region', { name: 'Entries found in Testy Both' });
   const buttons = screen.getAllByRole('button', { name: 'Open Testy Both in the studio' });
   expect(buttons).toHaveLength(1);
   expect(region.contains(buttons[0] ?? null)).toBe(true);
 
-  await user.click(screen.getByRole('button', { name: 'Review 3 candidates' })); // closing the review brings the job line's back
+  await user.click(screen.getByRole('button', { name: 'Review 3 entries found' })); // closing the review brings the job line's back
   expect(screen.getAllByRole('button', { name: 'Open Testy Both in the studio' })).toHaveLength(1);
-  expect(screen.queryByRole('region', { name: 'Candidates from Testy Both' })).toBeNull();
+  expect(screen.queryByRole('region', { name: 'Entries found in Testy Both' })).toBeNull();
 });
 
 it('hides every job line\'s studio button while any review is open, so no unsaved edit can be left behind', async () => {
@@ -207,13 +207,13 @@ it('hides every job line\'s studio button while any review is open, so no unsave
   const user = await renderPanel(both);
   expect(await screen.findAllByRole('button', { name: 'Open Testy Both in the studio' })).toHaveLength(2);
 
-  await user.click(screen.getByRole('button', { name: 'Review 3 candidates' }));
-  const region = await screen.findByRole('region', { name: 'Candidates from Testy Both' });
+  await user.click(screen.getByRole('button', { name: 'Review 3 entries found' }));
+  const region = await screen.findByRole('region', { name: 'Entries found in Testy Both' });
   const buttons = screen.getAllByRole('button', { name: 'Open Testy Both in the studio' });
   expect(buttons).toHaveLength(1);
   expect(region.contains(buttons[0] ?? null)).toBe(true);
 
-  await user.click(screen.getByRole('button', { name: 'Review 3 candidates' }));
+  await user.click(screen.getByRole('button', { name: 'Review 3 entries found' }));
   expect(screen.getAllByRole('button', { name: 'Open Testy Both in the studio' })).toHaveLength(2);
 });
 

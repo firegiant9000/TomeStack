@@ -36,14 +36,14 @@ const blockedReasons: Record<string, string> = {
   'candidate.low-confidence': 'has fields the detector is unsure of',
   'candidate.unresolved-reference': 'names something that is neither installed nor imported',
   'import.family-needed': 'needs its rules chosen',
-  'import.already-accepted': 'was already accepted from another reading of this document',
+  'import.already-accepted': 'was already kept from another reading of this document',
   'candidate.validation-failed': 'has problems the check reports',
   'candidate.already-reviewed': 'was already reviewed',
   'candidate.not-found': 'no longer exists',
   'spell-list.not-a-spell': 'is not a spell',
-  'import.class-unconfirmed': 'is a class: open it, tick the hit die and slot table, and accept it on its own',
-  'candidate.linked-changed': 'had a linked feature reviewed while it was being accepted: check it again',
-  'candidate.linked-edited': 'had a linked feature edited while it was being accepted: check it again',
+  'import.class-unconfirmed': 'is a class: open it, tick the hit die and slot table, and keep it on its own',
+  'candidate.linked-changed': 'had a linked feature reviewed while it was being kept: check it again',
+  'candidate.linked-edited': 'had a linked feature edited while it was being kept: check it again',
 };
 
 /** A code this screen does not know yet still reads as words (WCAG 3.3.1), never as the code. */
@@ -72,9 +72,9 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
   const [ticked, setTicked] = useState<string[]>([]);
   const clearedByPage = useRef(false); // a page turn dropped ticks: say so in the same message as the new range
   const [skipped, setSkipped] = useState<{ id: string; name: string; reasons: string[] }[]>([]);
-  const [skippedLabel, setSkippedLabel] = useState<'Not accepted' | 'Not changed'>('Not accepted');
+  const [skippedLabel, setSkippedLabel] = useState<'Not kept' | 'Not changed'>('Not kept');
   const [bulkBusy, setBulkBusy] = useState(false);
-  const [busyText, setBusyText] = useState('Accepting the selected entries…'); // what the bulk action in flight is doing
+  const [busyText, setBusyText] = useState('Keeping the selected entries…'); // what the bulk action in flight is doing
   const [listOpen, setListOpen] = useState(false); // item 10: the "Add to spell list" key form
   const listOpener = useRef<HTMLButtonElement>(null);
   const bulkRunning = useRef(false);
@@ -194,7 +194,7 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
     // A page-range pause still running would change the filter and drop the ticks mid-flight: cancel it, and show the applied range.
     clearTimeout(pageTimer.current);
     setRangeFields({ from: String(filter.firstPage ?? ''), to: String(filter.lastPage ?? '') });
-    setBusyText('Accepting the selected entries…');
+    setBusyText('Keeping the selected entries…');
     setBulkBusy(true);
     try {
       // R134: each id goes with the etag of the row as shown; a stale one refuses the whole batch.
@@ -210,11 +210,11 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
       };
       const blocked = outcome.blocked.length;
       onStatus(
-        `Accepted ${outcome.accepted.length}${blocked > 0 ? `; ${blocked} need review` : ''}.${
+        `Kept ${outcome.accepted.length}${blocked > 0 ? `; ${blocked} need review` : ''}.${
           outcome.accepted.length > 0 ? ' They are drafts in the studio and do nothing until you publish them there.' : ''
         }`,
       );
-      setSkippedLabel('Not accepted');
+      setSkippedLabel('Not kept');
       setSkipped(outcome.blocked.map((b) => ({ id: b.candidateId, name: nameOf(b.candidateId), reasons: b.codes.map(reasonOf) })));
       const stay = outcome.blocked.map((b) => b.candidateId);
       setTicked(stay);
@@ -264,7 +264,7 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
       onStatus(
         `Added the spell list ${outcome.listKey} to ${plural(outcome.updated.length, 'spell', 'spells')}${skippedCount > 0 ? `; ${skippedCount} skipped` : ''}.${
           unchecked > 0 ? ` ${unchecked} ${unchecked === 1 ? 'spell keeps' : 'spells keep'} other proposed lists to check.` : ''
-        }${outcome.updated.length > 0 ? ' Accept them to make drafts; nothing reaches a character until you publish the drafts in the studio.' : ''}`,
+        }${outcome.updated.length > 0 ? ' Keep them to make drafts; nothing reaches a character until you publish the drafts in the studio.' : ''}`,
       );
       setSkippedLabel('Not changed');
       setSkipped(outcome.skipped.map((s) => ({ id: s.candidateId, name: nameOf(s.candidateId), reasons: s.codes.map(reasonOf) })));
@@ -327,7 +327,7 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
       <h5 ref={heading} tabIndex={-1}>
         Entries found in {source.title}
       </h5>
-      <p className="hint">Accepted entries are drafts in the Homebrew studio under {source.title}. Publish them there to use them in the builder.</p>
+      <p className="hint">Kept entries are drafts in the Homebrew studio under {source.title}. Publish them there to use them in the builder.</p>
       <div className="actions">
         {/* aria-disabled, never `disabled`; leaving would silently drop an unsaved edit (ruling R26). */}
         <button
@@ -451,7 +451,7 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
         </div>
       )}
       {pendingShown.length > 0 && (
-        <div className="actions" role="group" aria-label="Accept several at once">
+        <div className="actions" role="group" aria-label="Keep several at once">
           {/* Item 9, D33: the same checks as accepting one at a time; blocked ones are listed, never forced. aria-disabled, as everywhere here. */}
           <button type="button" aria-disabled={held || undefined} aria-describedby={heldReason} onClick={() => !held && tick(pendingShown.map((c) => c.id))}>
             Select the {pendingShown.length} shown
@@ -519,7 +519,7 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
           {skipped.map((s) => (
             <li key={s.id}>
               {s.name}: {s.reasons.join('; ')}.{' '}
-              {skippedLabel === 'Not accepted' ? 'It stays selected; edit it, or keep it as text only.' : 'It stays selected.'}
+              {skippedLabel === 'Not kept' ? 'It stays selected; edit it, or keep it as text only.' : 'It stays selected.'}
             </li>
           ))}
         </ul>
@@ -695,7 +695,7 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
     setEffectsError(undefined);
     try {
       await client.editCandidate(stored.id, { name, kind, rulesFamilies: families, summary, effects: parsed, dismissReferences: dismissed, expected: stored.etag });
-      await onChanged(`Saved your edit of ${name}. Check it again before accepting.`);
+      await onChanged(`Saved your edit of ${name}. Check it again before keeping it.`);
     } catch (error) {
       await reloadIfChanged(error);
     }
@@ -717,7 +717,7 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
     if (error instanceof TomeStackError && (error.code === 'candidate.linked-edited' || error.code === 'candidate.linked-changed')) {
       setCheckRound((n) => n + 1);
       try {
-        await onChanged('A feature this class grants changed while it was being accepted. The check has been refreshed; look it over and accept again.');
+        await onChanged('A feature this class grants changed while it was being kept. The check has been refreshed; look it over and keep it again.');
       } catch (reloadError) {
         onError(reloadError);
       }
@@ -829,14 +829,14 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
         <>
           <h6 id={`linked-${stored.id}`}>Linked features</h6>
           <p className="hint">
-            Keeping the class with its rules also saves the features still to review as drafts, each granted by the class at its level. An installed or already accepted
+            Keeping the class with its rules also saves the features still to review as drafts, each granted by the class at its level. An installed or already kept
             feature is granted as it is; an ignored one is not granted.
           </p>
           <ul aria-labelledby={`linked-${stored.id}`}>
             {linkedRows(linked).map((f) => (
               <li key={f.key}>
                 {f.name}, {f.levels.length === 1 ? 'level' : 'levels'} {f.levels.join(', ')}
-                {f.installed ? ', installed' : f.status === 'ignored' ? ', ignored: not granted' : f.status === 'accepted' || f.status === 'acceptedAsReference' ? ', already accepted' : ''}
+                {f.installed ? ', installed' : f.status === 'ignored' ? ', ignored: not granted' : f.status === 'accepted' || f.status === 'acceptedAsReference' ? ', already kept' : ''}
               </li>
             ))}
           </ul>
@@ -845,7 +845,7 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
 
       {pending && (
         <fieldset>
-          <legend>Edit before accepting</legend>
+          <legend>Edit before keeping</legend>
           <label className="field">
             Name
             <input value={name} onChange={(e) => setName(e.target.value)} />
@@ -879,7 +879,7 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
           </label>
           <label className="field">
             {isClass
-              ? 'Proposed effects (JSON; on accepting the class as a draft, the ones you tick under Confirm what was read are automatic, the others stay reference)'
+              ? 'Proposed effects (JSON; on keeping the class with its rules, the ones you tick under Confirm what was read are automatic, the others stay reference)'
               : 'Proposed effects (JSON; they stay reference-only until you change them in the studio)'}
             <textarea value={effects} onChange={(e) => setEffects(e.target.value)} rows={6} spellCheck={false} />
           </label>
@@ -891,9 +891,9 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
       )}
 
       {check && (
-        <div role="region" aria-label="Check before accepting">
+        <div role="region" aria-label="Check before keeping">
           {check.blockers.length > 0 && (
-            <ul id={blocksId} className="warnings" aria-label="Blocks accepting">
+            <ul id={blocksId} className="warnings" aria-label="Blocks keeping">
               {check.blockers.map((b, i) => (
                 <li key={`${b.code}-${i}`}>{b.message}</li>
               ))}

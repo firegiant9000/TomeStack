@@ -34,7 +34,7 @@ afterEach(() => {
 });
 
 /**
- * A row of the review panel's Candidates list. After a filter or kind change the panel says "No candidates match." until the
+ * A row of the review panel's Entries found list. After a filter or kind change the panel says "No entries match." until the
  * new `import.candidates` reply arrives, so the list itself may not exist yet: the whole lookup is retried, never read once.
  */
 const candidateButton = (panel: () => HTMLElement, name: string) =>
@@ -1498,7 +1498,7 @@ it('accepts two fixture candidates in bulk, publishes both through the studio pa
   await user.click(within(panel()).getByRole('checkbox', { name: 'Select Fixture Keen Watcher' }));
   expect(within(panel()).getByText('2 selected', { selector: '[aria-live="polite"]' })).toBeTruthy();
   await user.click(bulk);
-  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/^Accepted 2\./));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/^Kept 2\./));
   const drafts = (await client.contentBySource(source.id)).filter((e) => e.latest.status === 'draft').map((e) => e.name).sort();
   expect(drafts).toEqual(['Fixture Ember Lance', 'Fixture Keen Watcher']);
 
@@ -1563,7 +1563,7 @@ it('adds the wizard list to a fixture spell candidate in bulk, accepts and publi
   const accept = within(panel()).getByRole('button', { name: 'Keep selected, with their rules' });
   await waitFor(() => expect(accept.getAttribute('aria-disabled')).toBeNull());
   await user.click(accept);
-  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/^Accepted 1\./));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/^Kept 1\./));
 
   await user.click(screen.getByRole('button', { name: 'Homebrew studio' }));
   const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
