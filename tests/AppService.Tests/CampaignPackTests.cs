@@ -55,6 +55,59 @@ public class CampaignPackTests
         return JsonDocument.Parse(new StreamReader(zip.GetEntry(path)!.Open()).ReadToEnd());
     }
 
+    private static readonly Guid OnlyGuideContent = Guid.Parse("c3000000-0000-4000-8000-0000000000e1");
+    private static readonly Guid OnlyGuideRevision = Guid.Parse("c300e000-0000-4000-8000-0000000000e1");
+
+    /// <summary>A source whose only published revision is a creation guide (content schema 13), which a 0.7.0 pack leaves out.</summary>
+    private static SourceRecord GuideOnlySource(TempApp temp, string title)
+    {
+        var source = Homebrew(temp, title, withContent: false);
+        temp.App.Store.AddRevision(new ContentRevision
+        {
+            ContentId = OnlyGuideContent,
+            RevisionId = OnlyGuideRevision,
+            SchemaVersion = ContentRevision.CreationGuideSchemaVersion,
+            Kind = ContentKind.CreationGuide,
+            Name = "Compat Only Guide",
+            RulesFamilies = [RulesFamilies.Srd521],
+            Provenance = new(source.Id),
+            Status = RevisionStatus.Published,
+            Effects = [new PrimaryAbilitiesEffect { Id = "primary", Abilities = ["wis"] }],
+        });
+        return source;
+    }
+
+    [Fact]
+    public void Campaign_pack_for_0_7_0_blocks_a_source_that_holds_only_guides()
+    {
+        using var temp = new TempApp();
+        var guides = GuideOnlySource(temp, "Compat Guides Only");
+        var campaign = Campaign(temp, "Compat Table", guides.Id);
+        var row = ReleaseLadder.Target("0.7.0")!;
+
+        var preview = temp.App.PreviewCampaignPack(campaign.Id, row);
+
+        var blocks = Assert.Single(preview.Changes, c => c.Action == "blocks");
+        Assert.Equal($"'{guides.Title}' has no published content to share yet.", blocks.Message);
+        var thrown = Assert.Throws<AppValidationException>(() => temp.App.ExportCampaignPack(campaign.Id, row, preview.ChangesHash));
+        Assert.Equal(DownConversion.BlockedCode, thrown.Problems[0].Code);
+    }
+
+    [Fact]
+    public void Campaign_pack_for_0_7_0_is_blocked_whole_when_one_of_two_sources_holds_only_guides()
+    {
+        using var temp = new TempApp();
+        var guides = GuideOnlySource(temp, "Compat Guides Only");
+        var normal = Homebrew(temp, "Compat Normal");
+        var campaign = Campaign(temp, "Compat Table", guides.Id, normal.Id);
+        var row = ReleaseLadder.Target("0.7.0")!;
+
+        var preview = temp.App.PreviewCampaignPack(campaign.Id, row);
+
+        Assert.Single(preview.Changes, c => c.Action == "blocks");
+        Assert.Throws<AppValidationException>(() => temp.App.ExportCampaignPack(campaign.Id, row, preview.ChangesHash));
+    }
+
     [Fact]
     public void Campaign_pack_for_0_6_0_leaves_out_a_superseded_blocked_revision()
     {
