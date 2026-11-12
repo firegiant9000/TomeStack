@@ -88,10 +88,10 @@ it('saves drafts, says so through the app status, and opens the publish panel on
   await user.click(screen.getByRole('button', { name: 'Add 2 spells to this list' }));
 
   expect(client.addToSpellList).toHaveBeenCalledExactlyOnceWith(['s1', 's2'], 'wizard');
-  const region = await screen.findByRole('region', { name: 'Publish drafts of Testy Alpha' });
-  expect(within(region).getByRole('checkbox', { name: 'Publish Testy Spark' })).toHaveProperty('checked', true);
-  expect(within(region).queryByRole('checkbox', { name: 'Publish Testy Feat' })).toBeNull(); // not one of the new drafts
-  expect(document.activeElement).toBe(within(region).getByRole('heading', { name: 'Publish drafts of Testy Alpha' }));
+  const region = await screen.findByRole('region', { name: 'Make drafts of Testy Alpha available to characters' });
+  expect(within(region).getByRole('checkbox', { name: 'Make Testy Spark available to characters' })).toHaveProperty('checked', true);
+  expect(within(region).queryByRole('checkbox', { name: 'Make Testy Feat available to characters' })).toBeNull(); // not one of the new drafts
+  expect(document.activeElement).toBe(within(region).getByRole('heading', { name: 'Make drafts of Testy Alpha available to characters' }));
   expect(onStatus).toHaveBeenCalledWith(expect.stringContaining('Saved 1 draft with the spell list wizard; 1 skipped.'));
   expect(onStatus.mock.calls.at(-1)![0]).toContain('Characters keep the spell revisions they recorded');
   const reasons = screen.getByRole('list', { name: 'Not changed' });
@@ -116,7 +116,7 @@ it('opens no publish panel when nothing was saved, and keeps focus on the list b
   await user.click(screen.getByRole('button', { name: 'Add 1 spell to this list' }));
 
   await vi.waitFor(() => expect(screen.queryByRole('combobox', { name: 'Spell list key' })).toBeNull());
-  expect(screen.queryByRole('region', { name: 'Publish drafts of Testy Alpha' })).toBeNull();
+  expect(screen.queryByRole('region', { name: 'Make drafts of Testy Alpha available to characters' })).toBeNull();
   expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Add 1 spell to a spell list…' }));
 });
 
@@ -159,7 +159,7 @@ it('reports the committed result before the reload, so a slow or failed reload c
 
   await vi.waitFor(() => expect(onStatus).toHaveBeenCalledWith(expect.stringContaining('Saved 1 draft with the spell list wizard; 1 skipped.')));
   const reasons = screen.getByRole('list', { name: 'Not changed' });
-  expect(within(reasons).getByText(/Testy Glow/).textContent).toContain('has an unpublished draft; publish or discard it first');
+  expect(within(reasons).getByText(/Testy Glow/).textContent).toContain('has a draft that is not yet available to characters; make it available or discard it first');
   expect(within(reasons).getByText(/Testy Glow/).textContent).not.toContain('already on this list');
   expect(screen.queryByRole('combobox', { name: 'Spell list key' })).toBeNull(); // the form closed
 });
@@ -175,13 +175,13 @@ it('ignores the result when the source was changed during the call (review fix 9
   );
   render(<HomebrewStudio info={info} onError={() => {}} onStatus={onStatus} />);
   await addWizardToSpark(user);
-  await user.selectOptions(await screen.findByRole('combobox', { name: 'Homebrew source' }), 'b');
+  await user.selectOptions(await screen.findByRole('combobox', { name: 'Book or notebook' }), 'b');
   await vi.waitFor(() => expect(screen.getByRole('heading', { name: 'Content in Testy Beta' })).toBeTruthy());
 
   await act(async () => finish(saved));
 
   expect(onStatus).not.toHaveBeenCalled();
-  expect(screen.queryByRole('region', { name: /^Publish drafts of/ })).toBeNull();
+  expect(screen.queryByRole('region', { name: /^Make drafts of/ })).toBeNull();
   expect(screen.queryByRole('list', { name: 'Not changed' })).toBeNull();
 });
 
@@ -200,14 +200,14 @@ it('keeps the result visible and focused after the restricted panel publishes (r
   vi.mocked(client.publishMany).mockResolvedValue({ published: [{ contentId: 's1', revisionId: 'rev-s1-new' }] } as never);
   render(<HomebrewStudio info={info} onError={() => {}} onStatus={() => {}} />);
   await addWizardToSpark(user);
-  const region = await screen.findByRole('region', { name: 'Publish drafts of Testy Alpha' });
-  const publish = await within(region).findByRole('button', { name: 'Publish 1 draft' });
+  const region = await screen.findByRole('region', { name: 'Make drafts of Testy Alpha available to characters' });
+  const publish = await within(region).findByRole('button', { name: 'Make 1 draft available to characters' });
   await vi.waitFor(() => expect(publish.getAttribute('aria-disabled')).toBeNull());
   await user.click(publish);
 
-  const result = await within(region).findByText('Published 1 draft.');
+  const result = await within(region).findByText('Made 1 draft available to characters.');
   expect(document.activeElement).toBe(result); // the panel was not remounted by clearing the restriction
   // The restriction is gone: a later "Publish all drafts" would list every pending draft.
-  await user.click(await screen.findByRole('button', { name: 'Publish all drafts in this source…' }));
-  expect(await screen.findByRole('checkbox', { name: 'Publish Testy Feat' })).toBeTruthy();
+  await user.click(await screen.findByRole('button', { name: 'Make all drafts in this source available to characters…' }));
+  expect(await screen.findByRole('checkbox', { name: 'Make Testy Feat available to characters' })).toBeTruthy();
 });

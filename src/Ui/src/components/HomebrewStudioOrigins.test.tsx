@@ -131,7 +131,7 @@ it('a typed spell list key that was not added blocks Save draft with aria-disabl
   expect(save).toHaveProperty('disabled', false); // never native disabled: it stays focusable
   const reason = document.getElementById(save.getAttribute('aria-describedby') ?? '');
   expect(reason?.textContent).toMatch(/Spell lists: add the typed list key with Add list, or clear it\./);
-  const publish = screen.getByRole('button', { name: 'Publish' });
+  const publish = screen.getByRole('button', { name: 'Make available to characters' });
   expect(publish.getAttribute('aria-disabled')).toBe('true');
   expect(publish).toHaveProperty('disabled', false);
   expect((publish.getAttribute('aria-describedby') ?? '').split(' ')).toContain(save.getAttribute('aria-describedby'));
@@ -176,8 +176,8 @@ it('a 2024 background: saving makes the seven option drafts first, then the back
   const choice = background.effects.find(isIncreaseChoice)!;
   expect(choice.choiceId).toBe('fixture-wanderer-ability-scores');
   expect(choice.options.map((o) => o.revisionId)).toEqual(['rev-1', 'rev-2', 'rev-3', 'rev-4', 'rev-5', 'rev-6', 'rev-7']);
-  await waitFor(() => expect(onStatus).toHaveBeenCalledWith(expect.stringContaining('points at 7 unpublished drafts')));
-  expect(onStatus.mock.calls.at(-1)![0]).toContain('Publish all drafts in this source');
+  await waitFor(() => expect(onStatus).toHaveBeenCalledWith(expect.stringContaining('points at 7 drafts not yet available to characters')));
+  expect(onStatus.mock.calls.at(-1)![0]).toContain('Make all drafts in this source available to characters');
 });
 
 it('R61: Publish for a background that pins drafts works as the service does: it saves the options, then publishes the background', async () => {
@@ -185,11 +185,11 @@ it('R61: Publish for a background that pins drafts works as the service does: it
   onStatus.mockReset();
   vi.mocked(client.publish).mockResolvedValue({ published: { contentId: 'bg', revisionId: 'bg-pub' }, report: { revision: { contentId: 'bg', revisionId: 'bg-pub' }, errors: [], warnings: [], canPublish: true }, affected: [] } as never);
   await newBackgroundWithIncreases(user);
-  await user.click(screen.getByRole('button', { name: 'Publish' }));
+  await user.click(screen.getByRole('button', { name: 'Make available to characters' }));
 
   await waitFor(() => expect(client.saveDraft).toHaveBeenCalledTimes(8));
   await waitFor(() => expect(client.publish).toHaveBeenCalledTimes(1));
-  await waitFor(() => expect(onStatus).toHaveBeenCalledWith('Published Fixture Wanderer.'));
+  await waitFor(() => expect(onStatus).toHaveBeenCalledWith('Made Fixture Wanderer available to characters.'));
 });
 
 it('R61: a background that points at drafts shows a linked, non-blocking note beside Publish and Publish stays available', async () => {
@@ -199,8 +199,8 @@ it('R61: a background that points at drafts shows a linked, non-blocking note be
   await user.click(screen.getByRole('button', { name: 'Save draft' }));
   await waitFor(() => expect(onStatus).toHaveBeenCalled());
 
-  const publish = await screen.findByRole('button', { name: 'Publish' });
-  const note = 'Points at 7 unpublished drafts. Publish all drafts publishes them together and re-points this entry.';
+  const publish = await screen.findByRole('button', { name: 'Make available to characters' });
+  const note = 'Points at 7 drafts not yet available to characters. Making all drafts available makes them available together and re-points this entry.';
   await waitFor(() => {
     const described = (publish.getAttribute('aria-describedby') ?? '').split(' ').map((id) => document.getElementById(id)?.textContent);
     expect(described).toContain(note);
@@ -217,9 +217,9 @@ it('R61: a species that grants a draft trait shows the same note', async () => {
   await user.click(await screen.findByRole('button', { name: 'New species' }));
   await user.selectOptions(await screen.findByRole('combobox', { name: 'Add an existing feature as a trait' }), 'Fixture Keen Senses (draft)');
   await user.click(screen.getByRole('button', { name: 'Add trait' }));
-  const publish = screen.getByRole('button', { name: 'Publish' });
+  const publish = screen.getByRole('button', { name: 'Make available to characters' });
   const described = (publish.getAttribute('aria-describedby') ?? '').split(' ').map((id) => document.getElementById(id)?.textContent);
-  expect(described).toContain('Points at 1 unpublished draft. Publish all drafts publishes it together and re-points this entry.');
+  expect(described).toContain('Points at 1 draft not yet available to characters. Making all drafts available makes it available together and re-points this entry.');
 });
 
 it('R64: Publish all drafts is held with a linked reason while the open editor has unsaved changes, and runs again once they are saved', async () => {
@@ -228,7 +228,7 @@ it('R64: Publish all drafts is held with a linked reason while the open editor h
   await newBackgroundWithIncreases(user);
   await user.click(screen.getByRole('button', { name: 'Save draft' }));
   await waitFor(() => expect(onStatus).toHaveBeenCalled());
-  const publishAll = await screen.findByRole('button', { name: 'Publish all drafts in this source…' });
+  const publishAll = await screen.findByRole('button', { name: 'Make all drafts in this source available to characters…' });
   expect(publishAll.getAttribute('aria-disabled')).toBeNull(); // clean editor: it runs
 
   await user.type(screen.getByRole('textbox', { name: 'Name' }), ' Two');
@@ -237,7 +237,7 @@ it('R64: Publish all drafts is held with a linked reason while the open editor h
   expect(document.getElementById(publishAll.getAttribute('aria-describedby') ?? '')?.textContent).toBe('Save or close the open editor first.');
   publishAll.focus();
   await user.click(publishAll);
-  expect(screen.queryByRole('region', { name: /^Publish drafts of/ })).toBeNull();
+  expect(screen.queryByRole('region', { name: /^Make drafts of/ })).toBeNull();
   expect(document.activeElement).toBe(publishAll);
   expect(screen.getByRole('heading', { name: 'New background' })).toBeTruthy(); // nothing was discarded
 
@@ -259,7 +259,7 @@ it('item 1: once Publish all has published the entry that was saved in the open 
   await waitFor(() => expect(onStatus).toHaveBeenCalled());
   expect(screen.getByRole('heading', { name: 'New background' })).toBeTruthy();
 
-  await user.click(await screen.findByRole('button', { name: 'Publish all drafts in this source…' }));
+  await user.click(await screen.findByRole('button', { name: 'Make all drafts in this source available to characters…' }));
   vi.mocked(client.publishManyPreview).mockImplementation((ids) =>
     Promise.resolve({
       entries: ids.map((id) => ({ draft: { contentId: id, revisionId: saved.find((r) => r.contentId === id)!.revisionId }, name: 'x', kind: 'feature', report: { revision: { contentId: id, revisionId: 'r' }, errors: [], warnings: [], canPublish: true }, findings: [], replacesPublished: false, rePointings: [] })),
@@ -267,7 +267,7 @@ it('item 1: once Publish all has published the entry that was saved in the open 
       canPublish: true,
     } as never),
   );
-  const publishAll = await screen.findByRole('button', { name: 'Publish 8 drafts' }, { timeout: 5000 });
+  const publishAll = await screen.findByRole('button', { name: 'Make 8 drafts available to characters' }, { timeout: 5000 });
   await waitFor(() => expect(publishAll.getAttribute('aria-disabled')).toBeNull(), { timeout: 5000 });
   await user.click(publishAll);
 

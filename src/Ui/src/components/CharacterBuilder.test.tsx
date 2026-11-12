@@ -935,8 +935,8 @@ it('says on the class step how many classes are drafts or written for the other 
     content(2, 'class', 'Fixture Other Mage', 'srd-5.2.1'),
   ]);
   await toClassStep(user);
-  const hint = await screen.findByText(/2 classes are drafts in the Homebrew studio/);
-  expect(hint.textContent).toMatch(/publish them there to use them/);
+  const hint = await screen.findByText(/2 classes are drafts in Homebrew/);
+  expect(hint.textContent).toMatch(/make them available to characters there to use them/);
   expect(screen.getByText(/1 class is written for 2024 rules only/)).toBeTruthy();
   expect(screen.queryByText(/Fixture Other Mage/)).toBeNull();
   expect(hint.querySelector('a, button')).toBeNull(); // R18: text only
@@ -951,7 +951,7 @@ it('shows no missing-content hint while the listing loads', async () => {
   await user.click(nextSpecies());
   await waitFor(() => expect(vi.mocked(client.draftCounts)).toHaveBeenCalled());
   await new Promise((r) => setTimeout(r, 20));
-  expect(screen.queryByText(/drafts in the Homebrew studio|written for/)).toBeNull();
+  expect(screen.queryByText(/drafts in Homebrew|written for/)).toBeNull();
 });
 
 it('shows no missing-content hint after the listing fails', async () => {
@@ -963,7 +963,7 @@ it('shows no missing-content hint after the listing fails', async () => {
   await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
   await user.click(nextSpecies());
   await waitFor(() => expect(onError).toHaveBeenCalled());
-  expect(screen.queryByText(/drafts in the Homebrew studio|written for/)).toBeNull();
+  expect(screen.queryByText(/drafts in Homebrew|written for/)).toBeNull();
 });
 
 it('shows no missing-content line when nothing is hidden, and no draft line or error when the counts fail', async () => {
@@ -974,7 +974,7 @@ it('shows no missing-content line when nothing is hidden, and no draft line or e
   await toClassStep(user, onError);
   await screen.findByRole('radio', { name: /^Fixture Fighter/ });
   await waitFor(() => expect(vi.mocked(client.draftCounts)).toHaveBeenCalled());
-  expect(screen.queryByText(/drafts in the Homebrew studio|written for|installed for/)).toBeNull();
+  expect(screen.queryByText(/drafts in Homebrew|written for|installed for/)).toBeNull();
   expect(onError).not.toHaveBeenCalled();
 });
 

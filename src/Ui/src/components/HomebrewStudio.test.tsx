@@ -44,9 +44,9 @@ it('names the rules by short label in the source picker, the new-source checkbox
   vi.mocked(client.contentBySource).mockImplementation((id) => Promise.resolve(id === 'a' ? [entry] : []));
   render(<HomebrewStudio info={info} onError={() => {}} onStatus={() => {}} />);
 
-  const select = await screen.findByRole<HTMLSelectElement>('combobox', { name: 'Homebrew source' });
+  const select = await screen.findByRole<HTMLSelectElement>('combobox', { name: 'Book or notebook' });
   expect(Array.from(select.options).map((o) => o.textContent)).toEqual(['Testy Alpha (2014 rules)', 'Testy Beta (2014 rules)']);
-  const written = screen.getByRole('group', { name: 'Written for' });
+  const written = screen.getByRole('group', { name: 'Rules it is for' });
   expect(within(written).getByRole('checkbox', { name: '2014 rules' })).toBeTruthy();
   expect(written.textContent).not.toMatch(/srd-5|SRD 5/);
 
@@ -109,24 +109,24 @@ it('shows "Possible duplicate of {name} ({source})" on the library rows that hav
 
 it('opens on the source it was asked for, and takes focus on its heading', async () => {
   render(<HomebrewStudio info={info} initialSourceId="b" onError={() => {}} onStatus={() => {}} />);
-  const select = await screen.findByRole<HTMLSelectElement>('combobox', { name: 'Homebrew source' });
+  const select = await screen.findByRole<HTMLSelectElement>('combobox', { name: 'Book or notebook' });
   await waitFor(() => expect(select.selectedOptions[0]?.textContent).toMatch(/^Testy Beta/));
-  expect(document.activeElement).toBe(screen.getByRole('heading', { level: 2, name: 'Homebrew studio' }));
+  expect(document.activeElement).toBe(screen.getByRole('heading', { level: 2, name: 'Homebrew' }));
 });
 
 it('falls back to the first source when the asked-for one is not there', async () => {
   render(<HomebrewStudio info={info} initialSourceId="gone" onError={() => {}} onStatus={() => {}} />);
-  const select = await screen.findByRole<HTMLSelectElement>('combobox', { name: 'Homebrew source' });
+  const select = await screen.findByRole<HTMLSelectElement>('combobox', { name: 'Book or notebook' });
   expect(select.selectedOptions[0]?.textContent).toMatch(/^Testy Alpha/);
 });
 
 it('leaves focus alone when opened from the sidebar (the sidebar button keeps it)', async () => {
   render(<HomebrewStudio info={info} onError={() => {}} onStatus={() => {}} />);
-  await screen.findByRole('combobox', { name: 'Homebrew source' });
+  await screen.findByRole('combobox', { name: 'Book or notebook' });
   expect(document.activeElement).toBe(document.body);
 });
 
-// Item 9: "Publish all drafts in this source…" opens the named region with the pending drafts of the source.
+// Item 9: "Make all drafts in this source available to characters…" opens the named region with the pending drafts of the source.
 it('offers Publish all drafts only when a draft is pending, and opens the region named for the source', async () => {
   const user = userEvent.setup();
   const revision = (status: 'draft' | 'published', revisionId: string) => ({ contentId: 'c1', revisionId, status, effects: [] }) as unknown as StudioEntry['latest'];
@@ -140,17 +140,17 @@ it('offers Publish all drafts only when a draft is pending, and opens the region
   vi.mocked(client.contentBySource).mockResolvedValue([entry('Testy Done', 'published')]);
   const view = render(<HomebrewStudio info={info} onError={() => {}} onStatus={() => {}} />);
   await screen.findByText('Testy Done');
-  expect(screen.queryByRole('button', { name: 'Publish all drafts in this source…' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Make all drafts in this source available to characters…' })).toBeNull();
   view.unmount();
 
   vi.mocked(client.contentBySource).mockResolvedValue([entry('Testy Done', 'published'), entry('Testy Waiting', 'draft')]);
   vi.mocked(client.publishManyPreview).mockResolvedValue({ entries: [], dependents: [], canPublish: true });
   render(<HomebrewStudio info={info} onError={() => {}} onStatus={() => {}} />);
-  await user.click(await screen.findByRole('button', { name: 'Publish all drafts in this source…' }));
-  const region = screen.getByRole('region', { name: 'Publish drafts of Testy Alpha' });
-  expect(document.activeElement).toBe(within(region).getByRole('heading', { name: 'Publish drafts of Testy Alpha' }));
-  expect(within(region).getByRole('checkbox', { name: 'Publish Testy Waiting' })).toHaveProperty('checked', true);
-  expect(within(region).queryByRole('checkbox', { name: 'Publish Testy Done' })).toBeNull();
+  await user.click(await screen.findByRole('button', { name: 'Make all drafts in this source available to characters…' }));
+  const region = screen.getByRole('region', { name: 'Make drafts of Testy Alpha available to characters' });
+  expect(document.activeElement).toBe(within(region).getByRole('heading', { name: 'Make drafts of Testy Alpha available to characters' }));
+  expect(within(region).getByRole('checkbox', { name: 'Make Testy Waiting available to characters' })).toHaveProperty('checked', true);
+  expect(within(region).queryByRole('checkbox', { name: 'Make Testy Done available to characters' })).toBeNull();
 });
 
 // Fix round 1, item 13: another source never shows the open panel or the old source's rows.
@@ -160,16 +160,16 @@ it('closes the publish panel and drops the old rows when the source changes', as
   vi.mocked(client.contentBySource).mockImplementation((id) => Promise.resolve(id === 'a' ? [draft] : []));
   vi.mocked(client.publishManyPreview).mockResolvedValue({ entries: [], dependents: [], canPublish: true });
   render(<HomebrewStudio info={info} onError={() => {}} onStatus={() => {}} />);
-  await user.click(await screen.findByRole('button', { name: 'Publish all drafts in this source…' }));
-  expect(screen.getByRole('region', { name: 'Publish drafts of Testy Alpha' })).toBeTruthy();
+  await user.click(await screen.findByRole('button', { name: 'Make all drafts in this source available to characters…' }));
+  expect(screen.getByRole('region', { name: 'Make drafts of Testy Alpha available to characters' })).toBeTruthy();
 
   // Hold the new source's rows back: until they arrive the old ones must not be shown.
   let release: (rows: StudioEntry[]) => void = () => {};
   vi.mocked(client.contentBySource).mockImplementation((id) => (id === 'b' ? new Promise((resolve) => (release = resolve)) : Promise.resolve([draft])));
-  await user.selectOptions(screen.getByRole('combobox', { name: 'Homebrew source' }), 'b');
-  expect(screen.queryByRole('region', { name: /^Publish drafts of/ })).toBeNull();
+  await user.selectOptions(screen.getByRole('combobox', { name: 'Book or notebook' }), 'b');
+  expect(screen.queryByRole('region', { name: /^Make drafts of/ })).toBeNull();
   expect(screen.queryByText('Testy Waiting')).toBeNull();
-  expect(screen.queryByRole('button', { name: 'Publish all drafts in this source…' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Make all drafts in this source available to characters…' })).toBeNull();
   release([]);
 });
 
@@ -181,22 +181,22 @@ it('creating a new source closes the open publish panel and drops the old rows',
   vi.mocked(client.contentBySource).mockImplementation((id) => Promise.resolve(id === 'a' ? [draftEntry] : []));
   vi.mocked(client.publishManyPreview).mockResolvedValue({ entries: [], dependents: [], canPublish: true });
   render(<HomebrewStudio info={info} onError={() => {}} onStatus={() => {}} />);
-  await user.click(await screen.findByRole('button', { name: 'Publish all drafts in this source…' }));
-  expect(screen.getByRole('region', { name: 'Publish drafts of Testy Alpha' })).toBeTruthy();
+  await user.click(await screen.findByRole('button', { name: 'Make all drafts in this source available to characters…' }));
+  expect(screen.getByRole('region', { name: 'Make drafts of Testy Alpha available to characters' })).toBeTruthy();
 
   // The new source's rows are slow: until they arrive the old ones must not be shown.
   let release: (rows: StudioEntry[]) => void = () => {};
   vi.mocked(client.contentBySource).mockImplementation((id) => (id === 'c' ? new Promise((resolve) => (release = resolve)) : Promise.resolve([draftEntry])));
   vi.mocked(client.createHomebrewSource).mockResolvedValue(homebrew('c', 'Testy Gamma'));
   vi.mocked(client.listSources).mockResolvedValue([homebrew('a', 'Testy Alpha'), homebrew('b', 'Testy Beta'), homebrew('c', 'Testy Gamma')]);
-  await fill(user, screen.getByLabelText('Source title'), 'Testy Gamma');
+  await fill(user, screen.getByLabelText('Title'), 'Testy Gamma');
   await user.click(screen.getByRole('checkbox', { name: '2014 rules' }));
-  await user.click(screen.getByRole('button', { name: 'Create source' }));
+  await user.click(screen.getByRole('button', { name: 'Create' }));
 
   await waitFor(() => expect(client.contentBySource).toHaveBeenCalledWith('c'));
-  expect(screen.queryByRole('region', { name: /^Publish drafts of/ })).toBeNull();
+  expect(screen.queryByRole('region', { name: /^Make drafts of/ })).toBeNull();
   expect(screen.queryByText('Testy Waiting')).toBeNull();
-  expect(screen.queryByRole('button', { name: 'Publish all drafts in this source…' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Make all drafts in this source available to characters…' })).toBeNull();
   release([]);
 });
 
@@ -206,14 +206,14 @@ it('ignores a slow reload of the old source that lands after a switch', async ()
   vi.mocked(client.contentBySource).mockImplementation((id) => (id === 'a' ? new Promise((resolve) => (releaseA = resolve)) : Promise.resolve([])));
   render(<HomebrewStudio info={info} onError={() => {}} onStatus={() => {}} />);
   await waitFor(() => expect(client.contentBySource).toHaveBeenCalledWith('a'));
-  await user.selectOptions(await screen.findByRole('combobox', { name: 'Homebrew source' }), 'b');
+  await user.selectOptions(await screen.findByRole('combobox', { name: 'Book or notebook' }), 'b');
   await waitFor(() => expect(client.contentBySource).toHaveBeenCalledWith('b'));
 
   releaseA([draftEntry]); // A answers last
   await new Promise((resolve) => setTimeout(resolve, 50));
 
   expect(screen.queryByText('Testy Waiting')).toBeNull();
-  expect(screen.queryByRole('button', { name: 'Publish all drafts in this source…' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Make all drafts in this source available to characters…' })).toBeNull();
 });
 
 it('choosing the source that is already shown keeps its rows', async () => {
@@ -221,7 +221,7 @@ it('choosing the source that is already shown keeps its rows', async () => {
   vi.mocked(client.contentBySource).mockImplementation((id) => Promise.resolve(id === 'a' ? [draftEntry] : []));
   render(<HomebrewStudio info={info} onError={() => {}} onStatus={() => {}} />);
   await screen.findByText('Testy Waiting');
-  await user.selectOptions(screen.getByRole('combobox', { name: 'Homebrew source' }), 'a');
+  await user.selectOptions(screen.getByRole('combobox', { name: 'Book or notebook' }), 'a');
   expect(screen.getByText('Testy Waiting')).toBeTruthy();
 });
 

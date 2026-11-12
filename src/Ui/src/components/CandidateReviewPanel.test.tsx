@@ -41,7 +41,7 @@ function renderPanel(onOpenStudio = vi.fn(), forSource: SourceRecord = source) {
 it('says, always visible and not as a live region, that accepted entries are drafts in the studio', async () => {
   renderPanel();
   await screen.findByText('No entries match.');
-  const line = screen.getByText('Kept entries are drafts in the Homebrew studio under Testy Tome. Publish them there to use them in the builder.');
+  const line = screen.getByText('Kept entries are drafts in Homebrew under Testy Tome. Make them available to characters there to use them in the builder.');
   expect(line.tagName).toBe('P');
   expect(line.className).toBe('hint');
   expect(line.closest('[aria-live], [role="status"], [role="alert"]')).toBeNull();

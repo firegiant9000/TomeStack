@@ -672,7 +672,7 @@ it('shows the stub in full on the summary, leaves Publish it unticked and says t
   const section = await screen.findByRole('region', { name: 'Homebrew class to create' });
   const text = section.textContent ?? '';
   for (const part of ['Fixture Tinkerer', '2014 rules', 'd8', 'Strength, Constitution', 'Characters imported from sheets']) expect(text).toContain(part);
-  const publish = within(section).getByRole<HTMLInputElement>('checkbox', { name: 'Publish it' });
+  const publish = within(section).getByRole<HTMLInputElement>('checkbox', { name: 'Make it available to characters' });
   expect(publish.checked).toBe(false);
   expect(within(section).getByRole('note').textContent).toBe('The class is a draft: the character gets nothing from it until you publish it in the studio and accept the update on the character.');
 
@@ -687,7 +687,7 @@ it('sends publishClass true once Publish it is ticked, and the draft line goes a
   renderPanel();
   await toStubSummary(user);
 
-  await user.click(await screen.findByRole('checkbox', { name: 'Publish it' }));
+  await user.click(await screen.findByRole('checkbox', { name: 'Make it available to characters' }));
   expect(screen.queryByText(/The class is a draft/)).toBeNull();
   await user.click(screen.getByRole('button', { name: 'Create character' }));
 
@@ -701,7 +701,7 @@ it('re-previews when Publish it is toggled (R129) and holds both publish ticks, 
   vi.mocked(client.ddbPreview).mockImplementation(async (request) => stubPreview(wantsStub(request)));
   renderPanel();
   await toStubSummary(user);
-  const tick = await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Publish it' });
+  const tick = await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Make it available to characters' });
   expect(vi.mocked(client.ddbPreview).mock.lastCall?.[0].publishClass).toBe(false);
   expect(tick.getAttribute('aria-disabled')).toBeNull();
 
@@ -710,7 +710,7 @@ it('re-previews when Publish it is toggled (R129) and holds both publish ticks, 
   await user.click(tick);
 
   await waitFor(() => expect(vi.mocked(client.ddbPreview).mock.lastCall?.[0].publishClass).toBe(true));
-  const held = screen.getByRole<HTMLInputElement>('checkbox', { name: 'Publish it' });
+  const held = screen.getByRole<HTMLInputElement>('checkbox', { name: 'Make it available to characters' });
   expect(held.getAttribute('aria-disabled')).toBe('true');
   expect(held.disabled).toBe(false);
   expect(document.getElementById(held.getAttribute('aria-describedby')!)?.textContent).toContain('publish choices wait');
@@ -721,8 +721,8 @@ it('re-previews when Publish it is toggled (R129) and holds both publish ticks, 
   expect(vi.mocked(client.ddbPreview).mock.calls.length).toBe(calls);
 
   pending.resolve(stubPreview(true));
-  await waitFor(() => expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Publish it' }).getAttribute('aria-disabled')).toBeNull());
-  expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Publish it' }).checked).toBe(true);
+  await waitFor(() => expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Make it available to characters' }).getAttribute('aria-disabled')).toBeNull());
+  expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Make it available to characters' }).checked).toBe(true);
 });
 
 it('puts Publish it back to unticked whenever the created class is cleared or chosen again', async () => {
@@ -730,8 +730,8 @@ it('puts Publish it back to unticked whenever the created class is cleared or ch
   vi.mocked(client.ddbPreview).mockImplementation(async (request) => stubPreview(wantsStub(request)));
   renderPanel();
   await toStubSummary(user);
-  await user.click(await screen.findByRole('checkbox', { name: 'Publish it' }));
-  expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Publish it' }).checked).toBe(true);
+  await user.click(await screen.findByRole('checkbox', { name: 'Make it available to characters' }));
+  expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Make it available to characters' }).checked).toBe(true);
 
   await user.click(screen.getByRole('button', { name: 'Back' })); // numbers
   await user.click(screen.getByRole('button', { name: 'Back' })); // matches
@@ -743,7 +743,7 @@ it('puts Publish it back to unticked whenever the created class is cleared or ch
   await user.click(screen.getByRole('button', { name: 'Next: numbers' }));
   await user.click(await screen.findByRole('button', { name: 'Next: summary' }));
 
-  expect((await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Publish it' })).checked).toBe(false);
+  expect((await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Make it available to characters' })).checked).toBe(false);
 });
 
 /** A second, ambiguous class row whose choice decides the stub's hit die: the first candidate leaves d8, the second makes d10. */
@@ -777,8 +777,8 @@ it('puts Publish it back to unticked when another class row changes the hit die 
   vi.mocked(client.ddbPreview).mockImplementation(async (request) => twoClassStubPreview(request));
   renderPanel();
   await toStubSummary(user);
-  await user.click(await screen.findByRole('checkbox', { name: 'Publish it' }));
-  expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Publish it' }).checked).toBe(true);
+  await user.click(await screen.findByRole('checkbox', { name: 'Make it available to characters' }));
+  expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Make it available to characters' }).checked).toBe(true);
 
   await backToMatches(user);
   await user.selectOptions(await screen.findByRole('combobox', { name: 'Match for Fixture Arcanist 2' }), '1'); // d8 becomes d10
@@ -787,7 +787,7 @@ it('puts Publish it back to unticked when another class row changes the hit die 
 
   const section = await screen.findByRole('region', { name: 'Homebrew class to create' });
   expect(section.textContent).toContain('d10');
-  expect(within(section).getByRole<HTMLInputElement>('checkbox', { name: 'Publish it' }).checked).toBe(false);
+  expect(within(section).getByRole<HTMLInputElement>('checkbox', { name: 'Make it available to characters' }).checked).toBe(false);
   await user.click(screen.getByRole('button', { name: 'Create character' }));
   await waitFor(() => expect(client.ddbApply).toHaveBeenCalledTimes(1));
   expect(vi.mocked(client.ddbApply).mock.calls[0]?.[1]).toBe(false);
@@ -798,14 +798,14 @@ it('keeps Publish it as the user set it when a change elsewhere leaves the revie
   vi.mocked(client.ddbPreview).mockImplementation(async (request) => twoClassStubPreview(request));
   renderPanel();
   await toStubSummary(user);
-  await user.click(await screen.findByRole('checkbox', { name: 'Publish it' }));
+  await user.click(await screen.findByRole('checkbox', { name: 'Make it available to characters' }));
 
   await backToMatches(user);
   await user.selectOptions(await screen.findByRole('combobox', { name: 'Match for Fixture Arcanist 2' }), '0'); // still d8
   await waitFor(() => expect(vi.mocked(client.ddbPreview)).toHaveBeenLastCalledWith(expect.objectContaining({ resolutions: [expect.objectContaining({ rowId: 'class:1' })] })));
   await forwardToSummary(user);
 
-  expect((await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Publish it' })).checked).toBe(true);
+  expect((await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Make it available to characters' })).checked).toBe(true);
 });
 
 it('holds Next while the shown preview is not for the current choices, also after a failed re-preview, and a retry frees it', async () => {
@@ -861,7 +861,7 @@ it('frees the publish tick after a failed re-preview (Create stays held) and kee
   });
   renderPanel();
   await toStubSummary(user);
-  const tick = await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Publish it' });
+  const tick = await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Make it available to characters' });
   const slot = document.getElementById('ddb-publish-held-class');
   expect(slot).not.toBeNull(); // the reason's place exists before anything is held
   expect(slot!.textContent).toBe('');
@@ -922,7 +922,7 @@ it('lists the reference drafts on the summary with an unticked Publish tick, the
   expect(section.textContent).toContain('Fixture first line 0.');
   expect(section.textContent).not.toContain('Fixture Knack 10');
   expect(section.textContent).toContain('and 3 more');
-  const tick = within(section).getByRole<HTMLInputElement>('checkbox', { name: 'Publish these 13 reference drafts' });
+  const tick = within(section).getByRole<HTMLInputElement>('checkbox', { name: 'Make these 13 reference drafts available to characters' });
   expect(tick.checked).toBe(false);
   expect(within(section).getByRole('note').textContent).toContain('Features are kept as reference content in the studio; the gap notes stay on the character.');
 });
@@ -943,7 +943,7 @@ it('sends publishReferences true only once the tick is given, and false otherwis
   renderPanel();
   await toStubSummary(user);
 
-  await user.click(await screen.findByRole('checkbox', { name: 'Publish these 2 reference drafts' }));
+  await user.click(await screen.findByRole('checkbox', { name: 'Make these 2 reference drafts available to characters' }));
   await user.click(screen.getByRole('button', { name: 'Create character' }));
 
   await waitFor(() => expect(client.ddbApply).toHaveBeenCalledTimes(1));
@@ -980,7 +980,7 @@ it('sends publishReferences false when the tick is left alone', async () => {
   renderPanel();
   await toStubSummary(user);
 
-  await screen.findByRole('checkbox', { name: 'Publish these 2 reference drafts' });
+  await screen.findByRole('checkbox', { name: 'Make these 2 reference drafts available to characters' });
   await user.click(screen.getByRole('button', { name: 'Create character' }));
 
   await waitFor(() => expect(client.ddbApply).toHaveBeenCalledTimes(1));
@@ -993,13 +993,13 @@ it('puts the reference tick back to unticked when the set of drafts shown change
   renderPanel();
   await toStubSummary(user);
 
-  const tick = await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Publish these 2 reference drafts' });
+  const tick = await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Make these 2 reference drafts available to characters' });
   await user.click(tick);
-  expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Publish these 2 reference drafts' }).checked).toBe(true);
-  expect(document.activeElement).toBe(screen.getByRole('checkbox', { name: 'Publish these 2 reference drafts' }));
+  expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Make these 2 reference drafts available to characters' }).checked).toBe(true);
+  expect(document.activeElement).toBe(screen.getByRole('checkbox', { name: 'Make these 2 reference drafts available to characters' }));
 
   await user.click(screen.getByRole('checkbox', { name: /Bring over current hit points/ }));
-  const changed = await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Publish these 3 reference drafts' });
+  const changed = await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Make these 3 reference drafts available to characters' });
   expect(changed.checked).toBe(false);
 });
 
@@ -1009,7 +1009,7 @@ it('uses the singular for one reference draft', async () => {
   renderPanel();
   await toStubSummary(user);
 
-  expect(await screen.findByRole('checkbox', { name: 'Publish this reference draft' })).toBeTruthy();
+  expect(await screen.findByRole('checkbox', { name: 'Make this reference draft available to characters' })).toBeTruthy();
 });
 
 it('after ddb.references-changed unticks the publish tick, keeps the error and asks for a new preview so the new set is reviewed', async () => {
@@ -1019,7 +1019,7 @@ it('after ddb.references-changed unticks the publish tick, keeps the error and a
   vi.mocked(client.ddbApply).mockRejectedValueOnce(new TomeStackError({ code: 'ddb.references-changed', message: 'Fixture: the drafts changed.' }));
   const { onError } = renderPanel();
   await toStubSummary(user);
-  await user.click(await screen.findByRole('checkbox', { name: 'Publish these 2 reference drafts' }));
+  await user.click(await screen.findByRole('checkbox', { name: 'Make these 2 reference drafts available to characters' }));
   const previews = vi.mocked(client.ddbPreview).mock.calls.length;
   changed = true;
   const pending = deferred<DdbPreview>();
@@ -1031,7 +1031,7 @@ it('after ddb.references-changed unticks the publish tick, keeps the error and a
   expect((onError.mock.calls[0]![0] as TomeStackError).code).toBe('ddb.references-changed');
   await waitFor(() => expect(vi.mocked(client.ddbPreview).mock.calls.length).toBeGreaterThan(previews));
   // R129: while the new set is on its way, the tick is held (aria-disabled, reason linked) and the old set cannot be ticked again.
-  const held = screen.getByRole<HTMLInputElement>('checkbox', { name: 'Publish these 2 reference drafts' });
+  const held = screen.getByRole<HTMLInputElement>('checkbox', { name: 'Make these 2 reference drafts available to characters' });
   expect(held.getAttribute('aria-disabled')).toBe('true');
   expect(held.disabled).toBe(false);
   expect(document.getElementById(held.getAttribute('aria-describedby')!)?.textContent).toContain('publish choices wait');
@@ -1039,7 +1039,7 @@ it('after ddb.references-changed unticks the publish tick, keeps the error and a
   expect(held.checked).toBe(false);
 
   pending.resolve(draftsPreview(3));
-  const tick = await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Publish these 3 reference drafts' });
+  const tick = await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Make these 3 reference drafts available to characters' });
   expect(tick.checked).toBe(false);
   expect(tick.getAttribute('aria-disabled')).toBeNull();
 });
