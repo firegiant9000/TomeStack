@@ -283,6 +283,7 @@ public static class KitExpansion
         var items = new ItemTally(Guid.NewGuid);
         var coins = new long[5];
         var problems = new List<Diagnostic>();
+        var carriedCaps = new HashSet<ContentReference>();
         foreach (var part in parts ?? [])
         {
             if (part is null)
@@ -296,7 +297,13 @@ public static class KitExpansion
             long[] given = [c.Cp, c.Sp, c.Ep, c.Gp, c.Pp];
             for (var i = 0; i < coins.Length; i++)
                 coins[i] += Math.Max(0, given[i]);
-            problems.AddRange(part.Problems ?? []);
+            foreach (var problem in part.Problems ?? [])
+            {
+                // At most one quantity-capped diagnostic per item: the first seen is kept.
+                if (problem is { Code: QuantityCapped, Content: { } capped } && !carriedCaps.Add(capped))
+                    continue;
+                problems.Add(problem);
+            }
         }
         items.ReportCapped(problems);
         var total = Cap(coins, problems);
@@ -362,8 +369,14 @@ public static class KitExpansion
 
         public void ReportCapped(List<Diagnostic> problems)
         {
+            // An item already reported (a part's own diagnostic carried by Merge) is not reported again.
+            var reported = problems.Where(p => p.Code == QuantityCapped && p.Content is not null).Select(p => p.Content!).ToHashSet();
             foreach (var item in _capped)
+            {
+                if (reported.Contains(item))
+                    continue;
                 problems.Add(new(QuantityCapped, $"An item's quantity adds up to more than {EquipmentEntry.MaxQuantity}; it is capped there.", item));
+            }
         }
 
         public IReadOnlyList<EquipmentEntry> ToEntries() => [.. _rows.Select(r => new EquipmentEntry(r.Item, false, (int)r.Quantity, r.Id))];

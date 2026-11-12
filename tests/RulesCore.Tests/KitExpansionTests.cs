@@ -408,6 +408,43 @@ public class KitExpansionTests
     }
 
     [Fact]
+    public void Merge_keeps_one_capped_diagnostic_when_a_part_already_carries_it_and_the_sum_clamps()
+    {
+        var capped = KitExpansion.Expand(Kit(Pick("x", Item(Rope, EquipmentEntry.MaxQuantity + 1))), [], Catalog());
+        var more = KitExpansion.Expand(Kit(Pick("y", Item(Rope, 5))), [], Catalog());
+        Assert.Single(capped.Problems, p => p.Code == "kit.quantity-capped");
+
+        var merged = KitExpansion.Merge(capped, more);
+
+        var only = Assert.Single(merged.Problems, p => p.Code == "kit.quantity-capped");
+        Assert.Equal(Rope, only.Content!.ContentId);
+        Assert.Equal(EquipmentEntry.MaxQuantity, Count(merged, Rope));
+    }
+
+    [Fact]
+    public void Merge_keeps_one_capped_diagnostic_when_two_parts_both_carry_it()
+    {
+        var a = KitExpansion.Expand(Kit(Pick("x", Item(Rope, EquipmentEntry.MaxQuantity + 1))), [], Catalog());
+        var b = KitExpansion.Expand(Kit(Pick("y", Item(Rope, EquipmentEntry.MaxQuantity + 1))), [], Catalog());
+
+        var merged = KitExpansion.Merge(a, b);
+
+        Assert.Single(merged.Problems, p => p.Code == "kit.quantity-capped");
+    }
+
+    [Fact]
+    public void Merge_keeps_capped_diagnostics_for_different_items()
+    {
+        var a = KitExpansion.Expand(Kit(Pick("x", Item(Rope, EquipmentEntry.MaxQuantity + 1))), [], Catalog());
+        var b = KitExpansion.Expand(Kit(Pick("y", Item(Lantern, EquipmentEntry.MaxQuantity + 1))), [], Catalog());
+
+        var merged = KitExpansion.Merge(a, b);
+
+        var ids = merged.Problems.Where(p => p.Code == "kit.quantity-capped").Select(p => p.Content!.ContentId).ToList();
+        Assert.Equal([Rope, Lantern], ids);
+    }
+
+    [Fact]
     public void With_duplicate_choices_for_one_pick_the_first_wins()
     {
         var kit = Kit(new KitPick("x", null, [new KitOption("a", [Item(Rope)]), new KitOption("b", [Item(Lantern)])]));
