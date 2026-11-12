@@ -250,7 +250,7 @@ function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (in
               setScreen({ kind: 'studio' });
             }}
           >
-            Homebrew studio
+            Homebrew
           </button>
           <button
             type="button"

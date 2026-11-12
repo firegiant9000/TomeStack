@@ -102,7 +102,7 @@ function CampaignPackForm({ campaign, onError, onStatus }: { campaign: Campaign 
         <>
           <p>
             {preview.fileName}: {preview.included.length} source{preview.included.length === 1 ? '' : 's'} carried with{' '}
-            {preview.revisions} published revision{preview.revisions === 1 ? '' : 's'}
+            {preview.revisions} available version{preview.revisions === 1 ? '' : 's'}
             {preview.referenced.length > 0 ? `; ${preview.referenced.map((s) => s.title).join(', ')} named, not copied` : ''}.
           </p>
           <ChangeRegion target={target} opensIn={preview.opensIn} causes={preview.opensInCauses} changes={preview.changes} previousMinor={targets?.previousMinor ?? null} />
@@ -187,7 +187,7 @@ export function CampaignsPanel({ rulesFamilies, onError, onStatus }: Props) {
       <h2 id="campaigns-heading">Campaigns</h2>
       <p className="hint">
         A campaign says which rules and sources its characters use. Content from other sources is marked as not allowed; the
-        player can still use it with a reason. Campaigns never change how numbers are calculated.
+        player can still use it if they note why. Campaigns never change how numbers are calculated.
       </p>
       {campaigns.length === 0 ? (
         <p className="hint">No campaigns yet.</p>

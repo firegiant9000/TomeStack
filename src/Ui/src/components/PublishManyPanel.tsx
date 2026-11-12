@@ -125,12 +125,12 @@ export function PublishManyPanel({ source, pending, onError, onClose, onPublishe
 
   const failedReason =
     answer?.code === 'content.publish-too-many'
-      ? `At most ${maxAtOnce} drafts can be published at once. Untick some, then publish the rest afterwards.`
+      ? `At most ${maxAtOnce} drafts can be made available at once. Untick some, then make the rest available afterwards.`
       : answer?.code === 'content.publish-set-changed'
         ? 'The drafts changed after they were listed. The list is being refreshed; check the ticks, then try again.'
         : 'The drafts could not be checked. Untick one and tick it again to check them again.';
   const reason = busy
-    ? 'Publishing…'
+    ? 'Making available…'
     : loading
       ? 'Checking the drafts…'
       : ticked.length === 0
@@ -149,9 +149,9 @@ export function PublishManyPanel({ source, pending, onError, onClose, onPublishe
       : ticked.length === 0
         ? ''
         : !preview
-          ? 'The drafts could not be checked; publishing is held.'
+          ? 'The drafts could not be checked; making them available is held.'
           : errors.length > 0 || !preview.canPublish
-            ? `${plural(errors.length, 'problem', 'problems')}; publishing is held.`
+            ? `${plural(errors.length, 'problem', 'problems')}; making them available is held.`
             : `No problems; ${plural(ticked.length, 'draft', 'drafts')} ready.`;
 
   const allTicked = pending.length > 0 && pending.every((p) => ticks.includes(p.contentId));
@@ -207,7 +207,7 @@ export function PublishManyPanel({ source, pending, onError, onClose, onPublishe
   return (
     <section aria-labelledby={headingId} className="play-panel">
       <h3 id={headingId} tabIndex={-1} ref={heading}>
-        Publish drafts of {source.title}
+        Make drafts of {source.title} available to characters
       </h3>
       <p className="visually-hidden" aria-live="polite">
         {live}
@@ -215,10 +215,10 @@ export function PublishManyPanel({ source, pending, onError, onClose, onPublishe
       {done ? (
         <>
           <p ref={result} tabIndex={-1}>
-            {`Published ${plural(done.drafts, 'draft', 'drafts')}.`}
+            {`Made ${plural(done.drafts, 'draft', 'drafts')} available to characters.`}
           </p>
-          {done.republished > 0 && <p>{plural(done.republished, 'other entry was', 'other entries were')} re-pointed and published again.</p>}
-          <p className="hint">Characters keep their current revisions until you review an update.</p>
+          {done.republished > 0 && <p>{plural(done.republished, 'other entry was', 'other entries were')} re-pointed and made available again.</p>}
+          <p className="hint">Characters keep using the old version until you update them.</p>
           <div className="actions">
             <button type="button" onClick={onClose}>
               Close
@@ -228,10 +228,10 @@ export function PublishManyPanel({ source, pending, onError, onClose, onPublishe
       ) : (
         <>
           <p className="hint">
-            Publishing creates permanent revisions, all or none. Review what will be published, then confirm. Entries that already have a published version
-            start unticked.
+            Making drafts available creates permanent versions, all or none. Review what will be made available, then confirm. Entries that already have an
+            available version start unticked.
           </p>
-          {capped && <p className="hint">The first {maxAtOnce} drafts are ticked; publish them, then the rest.</p>}
+          {capped && <p className="hint">The first {maxAtOnce} drafts are ticked; make them available, then the rest.</p>}
           <div className="actions">
             {/* One button whose name swaps, so focus stays on it (2.4.3). */}
             <button type="button" aria-disabled={busy || undefined} aria-describedby={busy ? reasonId : undefined} onClick={toggleAll}>
@@ -242,7 +242,7 @@ export function PublishManyPanel({ source, pending, onError, onClose, onPublishe
             <caption>Pending drafts in {source.title}</caption>
             <thead>
               <tr>
-                <th scope="col">Publish</th>
+                <th scope="col">Make available</th>
                 <th scope="col">Name</th>
                 <th scope="col">Kind</th>
                 <th scope="col">Problems</th>
@@ -256,7 +256,7 @@ export function PublishManyPanel({ source, pending, onError, onClose, onPublishe
                 return (
                   <tr key={p.contentId}>
                     <td>
-                      <input type="checkbox" aria-label={`Publish ${p.name}`} checked={isTicked} onChange={() => toggle(p.contentId)} />
+                      <input type="checkbox" aria-label={`Make ${p.name} available to characters`} checked={isTicked} onChange={() => toggle(p.contentId)} />
                     </td>
                     <th scope="row">{p.name}</th>
                     <td>{p.kind}</td>
@@ -277,7 +277,7 @@ export function PublishManyPanel({ source, pending, onError, onClose, onPublishe
                     <td>
                       {p.replacesPublished ? (
                         <>
-                          replaces the published version{' '}
+                          replaces the available version{' '}
                           <button type="button" onClick={() => void showChanges(p)}>
                             Show what changes in {p.name}
                           </button>
@@ -299,7 +299,7 @@ export function PublishManyPanel({ source, pending, onError, onClose, onPublishe
             </tbody>
           </table>
           {errors.length > 0 && (
-            <ul className="errors" aria-label="Problems that block publishing">
+            <ul className="errors" aria-label="Problems that block making drafts available">
               {errors.map((e, i) => (
                 <li key={`${e.name}-${i}`}>
                   {e.name}: {e.message}
@@ -309,7 +309,7 @@ export function PublishManyPanel({ source, pending, onError, onClose, onPublishe
           )}
           {rePointed.length > 0 && (
             <>
-              <p>Grants and choices that name something published here are pointed at the published version, and these are published again as new revisions:</p>
+              <p>Grants and choices that name something made available here are pointed at the available version, and these are made available again as new versions:</p>
               <ul aria-label="Re-pointed and republished">
                 {rePointed.map((r) => (
                   <li key={r.dependent.revisionId}>
@@ -320,7 +320,7 @@ export function PublishManyPanel({ source, pending, onError, onClose, onPublishe
                     ]
                       .filter(Boolean)
                       .join(' and ')}{' '}
-                    now point at the published versions.
+                    now point at the available versions.
                   </li>
                 ))}
               </ul>
@@ -328,7 +328,7 @@ export function PublishManyPanel({ source, pending, onError, onClose, onPublishe
           )}
           {preview && preview.dependents.length > 0 && (
             <p className="hint">
-              Also published again because they use something in this batch: {preview.dependents.map((d) => d.name).join(', ')}.
+              Also made available again because they use something in this batch: {preview.dependents.map((d) => d.name).join(', ')}.
             </p>
           )}
           {findings.length > 0 && (
@@ -348,7 +348,7 @@ export function PublishManyPanel({ source, pending, onError, onClose, onPublishe
               aria-describedby={reason ? reasonId : undefined}
               onClick={() => void publish()}
             >
-              Publish {plural(ticked.length, 'draft', 'drafts')}
+              Make {plural(ticked.length, 'draft', 'drafts')} available to characters
             </button>
             <button type="button" onClick={onClose}>
               Cancel
