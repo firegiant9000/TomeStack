@@ -2122,6 +2122,12 @@ public static class ContentValidator
         Check("response outcomes", revision.Effects?.OfType<ResponseEffect>().Any(r => r.Outcomes?.Any(o => o is null) == true) == true);
         Check("item mod modifiers", revision.Effects?.OfType<ItemModEffect>().Any(m => m.Modifiers?.Any(x => x is null) == true) == true);
         Check("roll alsoChange", revision.Effects?.OfType<RollEffect>().Any(r => r.AlsoChange?.Any(a => a is null) == true) == true);
+        Check("starting equipment picks", revision.Effects?.OfType<StartingEquipmentEffect>().Any(k => k.Picks?.Any(p => p is null) == true) == true);
+        Check("starting equipment pick options", revision.Effects?.OfType<StartingEquipmentEffect>().Any(k => k.Picks?.Any(p => p?.Options?.Any(o => o is null) == true) == true) == true);
+        Check("starting equipment option lines", revision.Effects?.OfType<StartingEquipmentEffect>().Any(k => k.Picks?.Any(p => p?.Options?.Any(o => o?.Lines?.Any(l => l is null) == true) == true) == true) == true);
+        Check("primary abilities", revision.Effects?.OfType<PrimaryAbilitiesEffect>().Any(a => a.Abilities?.Any(x => x is null) == true) == true);
+        Check("item contains", revision.Effects?.OfType<ItemEffect>().Any(i => i.Contains?.Any(c => c is null) == true) == true);
+        Check("guideFor content", revision.Effects?.OfType<GuideForEffect>().Any(g => g.Content is null) == true);
         return problems;
     }
 }

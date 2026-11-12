@@ -30,7 +30,7 @@ public sealed record GuideForEffect : Effect
 
     /// <summary>The content id a creation guide revision guides, or null when it is not a guide or has no readable guideFor.</summary>
     public static Guid? TargetOf(ContentRevision revision) =>
-        revision.Kind == ContentKind.CreationGuide ? revision.Effects.OfType<GuideForEffect>().FirstOrDefault()?.Content.ContentId : null;
+        revision.Kind == ContentKind.CreationGuide ? revision.Effects?.OfType<GuideForEffect>().FirstOrDefault()?.Content?.ContentId : null;
 }
 
 /// <summary>Content schema v13 (ADR-024): the abilities a guide recommends putting the highest scores in, by ability key (<c>str</c> to <c>cha</c>). Typed only in a v13 revision.</summary>

@@ -424,4 +424,50 @@ public class CreationGuideV13ValidationTests
         Assert.IsType<UnknownEffect>(revision.Effects.Single());
         AssertError(ContentValidator.Validate(revision, Catalog), "validate.effect-malformed");
     }
+
+    private static ContentRevision ReadGuide(string effectsJson, string kind = "creationGuide") => RevisionHashProperties.Read(
+        "{\"contentId\":\"6a7e1300-0000-4000-8000-000000000101\",\"revisionId\":\"6a7e1300-0000-4000-8000-000000001101\",\"schemaVersion\":13,\"kind\":\"" + kind + "\",\"name\":\"Fixture guide\",\"rulesFamilies\":[\"srd-5.2.1\"],\"provenance\":{\"sourceId\":\"5f0d5210-0000-4000-8000-000000000001\"},\"status\":\"draft\",\"effects\":" + effectsJson + "}");
+
+    [Theory]
+    [InlineData("""[{"type":"startingEquipment","id":"kit","picks":[null]}]""")]
+    [InlineData("""[{"type":"startingEquipment","id":"kit","picks":[{"id":"p","options":[null]}]}]""")]
+    [InlineData("""[{"type":"startingEquipment","id":"kit","picks":[{"id":"p","options":[{"id":"a","lines":[null]}]}]}]""")]
+    [InlineData("""[{"type":"primaryAbilities","id":"primary","abilities":["wis",null]}]""")]
+    public void A_null_entry_in_a_guide_effect_is_a_diagnostic_not_a_crash(string effects)
+    {
+        var revision = ReadGuide(effects);
+
+        var empty = Record.Exception(() => ContentValidator.EmptyEntries(revision));
+        var report = Record.Exception(() => ContentValidator.Validate(revision, Catalog));
+        var target = Record.Exception(() => GuideForEffect.TargetOf(revision));
+
+        Assert.Null(empty);
+        Assert.Null(report);
+        Assert.Null(target);
+        var problems = ContentValidator.EmptyEntries(revision);
+        Assert.Contains(problems, p => p.Code == "validate.empty-entry");
+    }
+
+    [Fact]
+    public void A_null_entry_in_a_pack_is_a_diagnostic_not_a_crash()
+    {
+        var revision = ReadGuide("""[{"type":"item","id":"item","contains":[null]}]""", "item");
+
+        var problems = ContentValidator.EmptyEntries(revision);
+        var report = Record.Exception(() => ContentValidator.Validate(revision, Catalog));
+
+        Assert.Null(report);
+        Assert.Contains(problems, p => p.Code == "validate.empty-entry");
+    }
+
+    [Fact]
+    public void A_null_guide_target_is_rejected_when_read_and_never_crashes()
+    {
+        // The reader (nullable annotations on) refuses a null content, so the effect stays unreadable: malformed, and TargetOf is null.
+        var revision = ReadGuide("""[{"type":"guideFor","id":"for","content":null}]""");
+
+        Assert.IsType<UnknownEffect>(revision.Effects.Single());
+        Assert.Null(GuideForEffect.TargetOf(revision));
+        AssertError(ContentValidator.Validate(revision, Catalog), "validate.effect-malformed");
+    }
 }
