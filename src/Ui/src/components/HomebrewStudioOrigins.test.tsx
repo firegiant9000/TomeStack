@@ -219,7 +219,7 @@ it('R61: a species that grants a draft trait shows the same note', async () => {
   await user.click(screen.getByRole('button', { name: 'Add trait' }));
   const publish = screen.getByRole('button', { name: 'Make available to characters' });
   const described = (publish.getAttribute('aria-describedby') ?? '').split(' ').map((id) => document.getElementById(id)?.textContent);
-  expect(described).toContain('Points at 1 draft not yet available to characters. Making all drafts available makes it available together and re-points this entry.');
+  expect(described).toContain('Points at 1 draft not yet available to characters. Making all drafts available makes it available too and re-points this entry.');
 });
 
 it('R64: Publish all drafts is held with a linked reason while the open editor has unsaved changes, and runs again once they are saved', async () => {

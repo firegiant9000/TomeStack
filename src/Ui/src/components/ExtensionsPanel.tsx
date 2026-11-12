@@ -314,7 +314,7 @@ function HookRun({ extension, hook, characters, rulesFamilies, onError, onStatus
               <ul>
                 {preview.drafts.map((d, i) => (
                   <li key={i}>
-                    {d.name} ({d.kind}){d.errors.length > 0 ? `: ${d.errors.length} problem(s) to fix before publishing` : ''}
+                    {d.name} ({d.kind}){d.errors.length > 0 ? `: ${d.errors.length} problem(s) to fix before you make it available to characters` : ''}
                   </li>
                 ))}
               </ul>

@@ -157,7 +157,7 @@ it('lists what is re-pointed and the dependents that are republished', async () 
   );
   vi.mocked(client.publishManyPreview).mockResolvedValue(previewOf([entryOf(all[0]!)], { dependents: [dependent] }));
   renderPanel(all);
-  const list = await screen.findByRole('list', { name: 'Re-pointed and republished' });
+  const list = await screen.findByRole('list', { name: 'Re-pointed and made available again' });
   expect(within(list).getByText('Testy Class: 2 grants and 1 choice option now point at the available versions.')).toBeTruthy();
 });
 

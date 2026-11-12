@@ -1487,7 +1487,7 @@ function EntryEditor(props: {
       </fieldset>
       <p id="editor-pins" className="hint">
         {pins.length > 0
-          ? `Points at ${pins.length} draft${pins.length === 1 ? '' : 's'} not yet available to characters. Making all drafts available makes ${pins.length === 1 ? 'it' : 'them'} available together and re-points this entry.`
+          ? `Points at ${pins.length} draft${pins.length === 1 ? '' : 's'} not yet available to characters. Making all drafts available makes ${pins.length === 1 ? 'it available too' : 'them available together'} and re-points this entry.`
           : ''}
       </p>
       <p id="editor-blocked" className="hint" aria-live="polite">

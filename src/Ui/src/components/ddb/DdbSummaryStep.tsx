@@ -30,7 +30,7 @@ const shownNotRead = 200;
 
 const classSlot = 'ddb-publish-held-class';
 const referencesSlot = 'ddb-publish-held-references';
-const heldReasonText = 'The summary is being refreshed, so the publish choices wait for it.';
+const heldReasonText = 'The summary is being refreshed, so the choices to make things available wait for it.';
 
 /** How many reference drafts the summary lists before "and N more". */
 const shownDrafts = 10;

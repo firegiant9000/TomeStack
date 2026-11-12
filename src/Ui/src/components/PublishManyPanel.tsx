@@ -310,7 +310,7 @@ export function PublishManyPanel({ source, pending, onError, onClose, onPublishe
           {rePointed.length > 0 && (
             <>
               <p>Grants and choices that name something made available here are pointed at the available version, and these are made available again as new versions:</p>
-              <ul aria-label="Re-pointed and republished">
+              <ul aria-label="Re-pointed and made available again">
                 {rePointed.map((r) => (
                   <li key={r.dependent.revisionId}>
                     {r.dependentName}:{' '}

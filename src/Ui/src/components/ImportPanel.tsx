@@ -201,7 +201,7 @@ export function ImportPanel({ source, hasPdf, onError, onStatus, onOpenStudio }:
       <p className="hint">
         {hasPdf ? 'TomeStack reads the PDF on this computer' : 'TomeStack reads a Markdown file you choose, on this computer,'} and proposes entries for you to review.
         The text is never exported. Experimental: it has not been proven on a real third-party book yet, so check every entry against its page. Nothing
-        becomes a rule until you publish it.
+        becomes a rule until you make it available to characters.
       </p>
       {askFamily ? (
         <fieldset>

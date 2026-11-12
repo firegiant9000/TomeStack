@@ -713,7 +713,7 @@ it('re-previews when Publish it is toggled (R129) and holds both publish ticks, 
   const held = screen.getByRole<HTMLInputElement>('checkbox', { name: 'Make it available to characters' });
   expect(held.getAttribute('aria-disabled')).toBe('true');
   expect(held.disabled).toBe(false);
-  expect(document.getElementById(held.getAttribute('aria-describedby')!)?.textContent).toContain('publish choices wait');
+  expect(document.getElementById(held.getAttribute('aria-describedby')!)?.textContent).toContain('choices to make things available wait');
   expect(document.activeElement).toBe(held);
   const calls = vi.mocked(client.ddbPreview).mock.calls.length;
   await user.click(held); // a click while held changes nothing
@@ -1034,7 +1034,7 @@ it('after ddb.references-changed unticks the publish tick, keeps the error and a
   const held = screen.getByRole<HTMLInputElement>('checkbox', { name: 'Make these 2 reference drafts available to characters' });
   expect(held.getAttribute('aria-disabled')).toBe('true');
   expect(held.disabled).toBe(false);
-  expect(document.getElementById(held.getAttribute('aria-describedby')!)?.textContent).toContain('publish choices wait');
+  expect(document.getElementById(held.getAttribute('aria-describedby')!)?.textContent).toContain('choices to make things available wait');
   await user.click(held);
   expect(held.checked).toBe(false);
 
