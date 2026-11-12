@@ -238,7 +238,7 @@ public class CreationGuideCatalogTests
     [Fact]
     public void Package_guides_answer_for_their_target_and_a_package_retarget_frees_the_old_one()
     {
-        var (origin, source, sage, scout, basePack) = OriginWithTargets();
+        var (origin, source, sage, scout, _) = OriginWithTargets();
         using var _o = origin;
         var first = Publish(origin, Guide(source, "Sage guide", sage.ContentId));
         using var local = new TempApp();
@@ -255,6 +255,5 @@ public class CreationGuideCatalogTests
         local.App.ApplyImport(origin.App.ExportSourcePack([source.Id]).Content);
         Assert.Equal([successor], Catalog(local).GuidesFor(sage.ContentId).Select(r => r.Reference));
         Assert.Equal(first.ContentId, Catalog(local).GuidesFor(scout.ContentId).Single().ContentId);
-        Assert.NotEmpty(basePack);
     }
 }

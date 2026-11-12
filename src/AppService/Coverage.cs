@@ -149,7 +149,9 @@ public static class Coverage
 
         public IEnumerable<ContentRevision> ChoiceExtensions(Guid contentId, string choiceId) => inner.ChoiceExtensions(contentId, choiceId);
 
-        public IReadOnlyList<ContentRevision> GuidesFor(Guid targetContentId) => inner.GuidesFor(targetContentId);
+        // Like NewestPublished: only a guide whose revision is the one Choose picked for its content.
+    public IReadOnlyList<ContentRevision> GuidesFor(Guid targetContentId) =>
+        [.. inner.GuidesFor(targetContentId).Where(g => newest.TryGetValue(g.ContentId, out var chosen) && chosen.RevisionId == g.RevisionId)];
 
         public IEnumerable<ContentRevision> RevisionsOf(Guid contentId) => inner.RevisionsOf(contentId);
 
