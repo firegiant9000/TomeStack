@@ -2781,7 +2781,7 @@ it('authors a class in the studio and builds it at levels 1, 20 and 5/3 with an 
   cleanup();
   render(<App />);
 
-  await user.click(await screen.findByRole('button', { name: /^E2E Scribe 20/ }));
+  await user.click(await screen.findByRole('button', { name: /^E2E Scribe 20 / }));
   sheet = await screen.findByRole('article', { name: 'E2E Scribe 20' });
   await openTab(user, sheet, 'Skills and saves');
   expect(within(sheet).getByRole('heading', { name: /^Hit point maximum: 143/ })).toBeTruthy(); // 8 + 19 × 5 + 20 × Con 2
