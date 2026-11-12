@@ -224,12 +224,12 @@ function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (in
           </button>
           <button
             type="button"
-            title="Package import is for TomeStack .zip files. For a character sheet PDF or text, use Import a character (sheet or text)."
+            title="This is for TomeStack .zip files. For a character sheet PDF or text, use From a character sheet (PDF or text)."
             onClick={() => fileInput.current?.click()}
           >
-            Import package…
+            From a TomeStack file…
           </button>
-          <input ref={fileInput} type="file" accept=".zip" hidden onChange={chooseImport} aria-label="Package file" />
+          <input ref={fileInput} type="file" accept=".zip" hidden onChange={chooseImport} aria-label="TomeStack file" />
           <button
             type="button"
             disabled={!info}
@@ -239,7 +239,7 @@ function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (in
               setScreen({ kind: 'ddb-import' });
             }}
           >
-            Import a character (sheet or text)…
+            From a character sheet (PDF or text)…
           </button>
           <button
             type="button"

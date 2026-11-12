@@ -192,7 +192,7 @@ function HookRun({ extension, hook, characters, rulesFamilies, onError, onStatus
     if (!preview) return;
     try {
       const result = await client.runExtensionImport(preview.token);
-      onStatus(`Created ${result.drafts} draft${result.drafts === 1 ? '' : 's'} in the new source ${result.sourceTitle}. Nothing is active until you publish it in the studio.`);
+      onStatus(`Created ${result.drafts} draft${result.drafts === 1 ? '' : 's'} in the new source ${result.sourceTitle}. Nothing is active until you make it available to characters in Homebrew.`);
       onDone();
     } catch (error) {
       onError(error);

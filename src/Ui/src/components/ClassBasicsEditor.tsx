@@ -144,7 +144,7 @@ export function ClassBasicsEditor(props: {
               )
             }
           />
-          This class has subclasses (they join its choice from the studio)
+          This class has subclasses (they join its choice from Homebrew)
         </label>
         {subclass && (
           <label className="field">

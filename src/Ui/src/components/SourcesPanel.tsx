@@ -59,7 +59,7 @@ function PageImportForm({ source, onError, onStatus }: { source: SourceRecord } 
   async function run(request: { start?: number; end?: number; title?: string; wholeDocument?: boolean }) {
     try {
       const draft = await client.importPages(source.id, request);
-      onStatus(`Draft reference entry "${draft.name}" created. Review and publish it in the studio; until then it does nothing.`);
+      onStatus(`Draft reference entry "${draft.name}" created. Review it and make it available to characters in Homebrew; until then it does nothing.`);
       setFrom('');
       setTo('');
       setTitle('');

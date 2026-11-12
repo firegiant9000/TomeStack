@@ -90,7 +90,7 @@ export function DdbSummaryStep({ preview, family, suggested, includePlayState, o
             <dd>{preview.stub.sourceTitle}, a source that is never shared</dd>
           </dl>
           <p className="hint">
-            The class has only a hit die and saving throws. Add features, spells and proficiencies in the studio. It lives in a source that is never shared,
+            The class has only a hit die and saving throws. Add features, spells and proficiencies in Homebrew. It lives in a source that is never shared,
             so your later work on it cannot be shared or moved; to share your own version, make a new class.
           </p>
           <label>
@@ -100,7 +100,7 @@ export function DdbSummaryStep({ preview, family, suggested, includePlayState, o
           <p role="note">
             {publishClass
               ? 'The class is published with the character, so its hit die and saving throws count now.'
-              : 'The class is a draft: the character gets nothing from it until you publish it in the studio and accept the update on the character.'}
+              : 'The class is a draft: the character gets nothing from it until you make it available to characters in Homebrew and accept the update on the character.'}
           </p>
         </section>
       )}
@@ -122,7 +122,7 @@ export function DdbSummaryStep({ preview, family, suggested, includePlayState, o
           </label>{' '}
           {reason(referencesSlot)}
           <p role="note">
-            They hold a name and a description only, no mechanics. Features are kept as reference content in the studio; the gap notes stay on the
+            They hold a name and a description only, no mechanics. Features are kept as reference content in Homebrew; the gap notes stay on the
             character. Published feats (if any) are pinned on the character.
           </p>
           {preview.referenceNote === 'campaign.source-not-allowed' && (

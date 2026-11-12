@@ -315,7 +315,7 @@ export function ImportPanel({ source, hasPdf, onError, onStatus, onOpenStudio }:
                 {/* While any job is under review only the panel's own button shows: it knows about an unsaved edit (ruling R26). */}
                 {job.status === 'completed' && job.candidates > 0 && reviewing === undefined && (
                   <button type="button" onClick={() => onOpenStudio(source.id)}>
-                    Open {source.title} in the studio
+                    Open {source.title} in Homebrew
                   </button>
                 )}
               </div>

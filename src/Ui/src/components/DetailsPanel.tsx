@@ -163,7 +163,7 @@ export function DetailsPanel({ view, onChanged, onError, onStatus, headingRef, s
         Details
       </h3>
       <p className="hint">
-        Your own words about this character. A share package or backup carries them; a sheet or Foundry export does not. Print them by ticking
+        Your own words about this character. A shared TomeStack file or backup carries them; a sheet or Foundry export does not. Print them by ticking
         &quot;Include details&quot; in the print preview.
       </p>
       <fieldset>

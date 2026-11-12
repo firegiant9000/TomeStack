@@ -110,7 +110,7 @@ function SourceLine({ option }: { option: Shown }) {
     <span className="option-source">
       {option.sourceTitle}
       {option.page ? `, ${option.page}` : ''} · {option.rulesFamilies.map((f) => rulesLabel(f)).join(', ')}
-      {option.outsideCampaign ? ' · not allowed in this campaign' : !option.compatible && ' · not available for this rules family'}
+      {option.outsideCampaign ? ' · not allowed in this campaign' : !option.compatible && ' · not available for these rules'}
     </span>
   );
 }
@@ -520,7 +520,7 @@ function missingHint(one: string, many: string, count: number, missing: Missing,
     <>
       {count <= 1 && (
         <p className="hint">
-          {phrase(count)} installed for {missing.familyName}. More can come from the homebrew studio or a content pack.
+          {phrase(count)} installed for {missing.familyName}. More can come from Homebrew or a TomeStack file.
         </p>
       )}
       {missing.drafts > 0 && <p className="hint">{phrase(missing.drafts)} drafts in Homebrew: make them available to characters there to use them.</p>}
@@ -565,7 +565,7 @@ function SpeciesStep(props: PickStepProps) {
   const hint = reasonHint(props.reasonNames([basics.species]));
   return (
     <StepForm label="Species" next="Next: class" nextDisabled={!!hint} nextHint={hint} onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
-      <p className="hint">Every option shows its source and rules family.</p>
+      <p className="hint">Every option shows its source and the rules it is for.</p>
       <SinglePick legend="Species" name="species" options={list} value={basics.species} onChange={(species) => onChange({ ...basics, species })} />
       {missingHint('species', 'species', list.length, props.missing('species'), props.loaded, props.policy)}
     </StepForm>
@@ -578,7 +578,7 @@ function ClassStep(props: PickStepProps) {
   const list = ofKind(options, 'class');
   return (
     <StepForm label="Class" next="Next: background" nextDisabled={!!hint} nextHint={hint} onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
-      <p className="hint">Every option shows its source and rules family.</p>
+      <p className="hint">Every option shows its source and the rules it is for.</p>
       <SinglePick
         legend="Class (level 1)"
         name="startingClass"
@@ -609,7 +609,7 @@ function BackgroundStep(props: PickStepProps) {
   const hint = reasonHint(props.reasonNames([basics.background, ...basics.other]));
   return (
     <StepForm label="Background" next="Next: choices" nextDisabled={!!hint} nextHint={hint} onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
-      <p className="hint">Every option shows its source and rules family.</p>
+      <p className="hint">Every option shows its source and the rules it is for.</p>
       <SinglePick
         legend="Background"
         name="background"

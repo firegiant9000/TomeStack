@@ -281,7 +281,7 @@ export function ExportPanel({ characterId, active, updatedAt, onError, onStatus 
     <section aria-labelledby="export-heading" className="export-panel">
       <h3 id="export-heading">Export</h3>
       <fieldset>
-        <legend>What is this package for?</legend>
+        <legend>What is this TomeStack file for?</legend>
         <label>
           <input type="radio" name="export-purpose" checked={purpose === 'backup'} onChange={() => choose('backup')} />
           Personal backup of this character: everything it uses, your gap notes too, but no PDFs. Do not share it. (To back up
@@ -297,7 +297,7 @@ export function ExportPanel({ characterId, active, updatedAt, onError, onStatus 
         <ChangeRegion target={target} opensIn={preview.opensIn} causes={preview.opensInCauses} changes={preview.changes} previousMinor={targets?.previousMinor ?? null} />
       )}
       {purpose === 'share' && preview && (
-        <div role="region" aria-label="Left out of the shared package">
+        <div role="region" aria-label="Left out of the shared TomeStack file">
           {preview.omitted.length === 0 ? (
             <p>Nothing is left out: every source this character uses may be shared.</p>
           ) : (
@@ -321,10 +321,10 @@ export function ExportPanel({ characterId, active, updatedAt, onError, onStatus 
           ))}
         </ul>
       )}
-      {backupFailed && purpose === 'backup' && <p>Could not check whether this package needs a newer TomeStack.</p>}
+      {backupFailed && purpose === 'backup' && <p>Could not check whether this TomeStack file needs a newer TomeStack.</p>}
       {targetFailed && <p>Could not check what the copy for TomeStack {target} leaves out.</p>}
       {purpose === 'share' && active && (
-        <PreflightPanel kind="package" selection={[characterId]} label="shared package" refreshKey={updatedAt} onReport={setReport} onError={onError} />
+        <PreflightPanel kind="package" selection={[characterId]} label="shared TomeStack file" refreshKey={updatedAt} onReport={setReport} onError={onError} />
       )}
       <ExportConfirmation changes={preview?.changes} confirmed={confirmed} onConfirmedChange={setConfirmed} hintId={hintId} />
       <button
@@ -333,7 +333,7 @@ export function ExportPanel({ characterId, active, updatedAt, onError, onStatus 
         disabled={exportDisabled || (purpose === 'share' && !canSaveAfter(report))}
         aria-describedby={blocked ? hintId : undefined}
       >
-        Export package
+        Export TomeStack file
       </button>
     </section>
   );

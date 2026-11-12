@@ -338,7 +338,7 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
             if (!dirty) onOpenStudio(source.id);
           }}
         >
-          Open {source.title} in the studio
+          Open {source.title} in Homebrew
         </button>
       </div>
       {dirty && (
@@ -880,7 +880,7 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
           <label className="field">
             {isClass
               ? 'Proposed effects (JSON; on keeping the class with its rules, the ones you tick under Confirm what was read are automatic, the others stay reference)'
-              : 'Proposed effects (JSON; they stay reference-only until you change them in the studio)'}
+              : 'Proposed effects (JSON; they stay reference-only until you change them in Homebrew)'}
             <textarea value={effects} onChange={(e) => setEffects(e.target.value)} rows={6} spellCheck={false} />
           </label>
           {effectsError && <p className="error">{effectsError}</p>}

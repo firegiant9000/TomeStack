@@ -71,14 +71,14 @@ function CampaignPackForm({ campaign, onError, onStatus }: { campaign: Campaign 
   async function save() {
     try {
       const outcome = await client.saveCampaignPackAs(campaign.id, ...downConversion);
-      if (outcome.saved) onStatus(`Saved the campaign pack ${outcome.fileName}.`);
+      if (outcome.saved) onStatus(`Saved the TomeStack file ${outcome.fileName}.`);
     } catch (error) {
       if (error instanceof TomeStackError && error.code === 'unsupported') {
         // Browser development (DevHost) has no native Save dialog: download the pack instead.
         try {
           const exported = await client.exportCampaignPack(campaign.id, ...downConversion);
           downloadBase64(exported.fileName, exported.base64);
-          onStatus(`Downloaded the campaign pack ${exported.fileName}.`);
+          onStatus(`Downloaded the TomeStack file ${exported.fileName}.`);
         } catch (inner) {
           onError(inner);
         }
@@ -90,14 +90,14 @@ function CampaignPackForm({ campaign, onError, onStatus }: { campaign: Campaign 
 
   return (
     <section className="play-panel" aria-label={`Share ${campaign.name}`}>
-      <h3>Share {campaign.name} as a campaign pack</h3>
+      <h3>Share {campaign.name} as a TomeStack file</h3>
       <p className="hint">
-        A campaign pack carries the profile (rules, allowed sources and house rules) and the published content of homebrew
+        A TomeStack file for a campaign carries the profile (rules, allowed sources and house rules) and the published content of homebrew
         you marked as your own work. It never carries characters, gap notes, drafts or PDFs. The SRD is named, not copied.
       </p>
       <TargetFieldset targets={targets} value={target} onChange={chooseTarget} />
       {!preview ? (
-        <p>{previewFailed ? `Could not check what the copy for TomeStack ${target} leaves out.` : 'Checking what the pack would hold…'}</p>
+        <p>{previewFailed ? `Could not check what the copy for TomeStack ${target} leaves out.` : 'Checking what the file would hold…'}</p>
       ) : (
         <>
           <p>
@@ -106,12 +106,12 @@ function CampaignPackForm({ campaign, onError, onStatus }: { campaign: Campaign 
             {preview.referenced.length > 0 ? `; ${preview.referenced.map((s) => s.title).join(', ')} named, not copied` : ''}.
           </p>
           <ChangeRegion target={target} opensIn={preview.opensIn} causes={preview.opensInCauses} changes={preview.changes} previousMinor={targets?.previousMinor ?? null} />
-          <div role="region" aria-label="Left out of the campaign pack">
+          <div role="region" aria-label="Left out of the TomeStack file">
             {preview.leftOut.length === 0 ? (
               <p>Nothing is left out.</p>
             ) : (
               <>
-                <p>These allowed sources are only named; whoever imports the pack needs their own copy:</p>
+                <p>These allowed sources are only named; whoever opens the file needs their own copy:</p>
                 <ul>
                   {preview.leftOut.map((l) => (
                     <li key={l.sourceId}>
@@ -129,11 +129,11 @@ function CampaignPackForm({ campaign, onError, onStatus }: { campaign: Campaign 
               ))}
             </ul>
           )}
-          <PreflightPanel kind="campaignPack" selection={[campaign.id]} label="campaign pack" refreshKey={version} onReport={setReport} onError={onError} />
+          <PreflightPanel kind="campaignPack" selection={[campaign.id]} label="TomeStack file" refreshKey={version} onReport={setReport} onError={onError} />
           <ExportConfirmation changes={preview.changes} confirmed={confirmed} onConfirmedChange={setConfirmed} hintId={hintId} />
           <div className="actions">
             <button type="button" onClick={save} disabled={saveDisabled || !canSaveAfter(report)} aria-describedby={blocked ? hintId : undefined}>
-              Save campaign pack…
+              Save TomeStack file…
             </button>
           </div>
         </>
