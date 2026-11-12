@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { client } from '../../api/client';
 import type { ChoiceSelection, ChoiceStatus, DdbPreview, MatchCandidate, MatchRow, MatchStatus, Resolution, RulesFamilyId, StubOffer } from '../../api/types';
+import { useRulesLabel } from '../../rulesLabel';
 import { kindLabels, kindOrder, noteLabels, statusLabels, stubReasons } from './ddbLabels';
 
 interface Props {
@@ -138,6 +139,7 @@ function Row({
   onClear: (rowId: string) => void;
   onCreateClassRow: (rowId?: string) => void;
 }) {
+  const rulesLabel = useRulesLabel();
   const headerId = `ddb-row-${row.rowId.replaceAll(':', '-')}`;
   // D35: a class row nothing matched may be created as a homebrew class. When it cannot be (no readable hit die, or another
   // row already creates one, R100) the box stays focusable with aria-disabled and its reason linked, not hidden.
@@ -181,7 +183,7 @@ function Row({
         {statusLabels[row.status]}
         {row.note && <span className="hint"> {noteLabels[row.note] ?? row.note}</span>}
       </td>
-      <td>{row.chosen ? `${describe(row.chosen, names)} · ${row.chosen.families.join(', ')}` : row.candidates.length > 1 ? `${row.candidates.length} candidates` : '—'}</td>
+      <td>{row.chosen ? `${describe(row.chosen, names)} · ${row.chosen.families.map((f) => rulesLabel(f)).join(', ')}` : row.candidates.length > 1 ? `${row.candidates.length} candidates` : '—'}</td>
       <td>
         <div role="group" aria-labelledby={headerId}>
           {stubBox}

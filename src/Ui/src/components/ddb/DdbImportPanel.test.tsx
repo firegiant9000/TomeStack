@@ -143,8 +143,12 @@ it('shows Needs a choice rows first under the filter and requires a pick before 
   const { onCreated } = renderPanel();
   await toMatches(user);
 
-  await user.click(screen.getByRole('radio', { name: 'Needs a choice' }));
+  // A matched row names the rules by their short label, never by id.
   const region = screen.getByRole('region', { name: 'Matches' });
+  expect(within(region).getByText('Fixture Quickfoot — Fixture Notes · 2014 rules')).toBeTruthy();
+  expect(region.textContent).not.toMatch(/srd-5\./);
+
+  await user.click(screen.getByRole('radio', { name: 'Needs a choice' }));
   const shown = within(region).getAllByRole('rowheader').map((h) => h.textContent);
   expect(shown).toEqual(['Fixture Veil']);
 

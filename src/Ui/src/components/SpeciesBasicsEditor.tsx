@@ -117,7 +117,7 @@ export function SpeciesBasicsEditor(props: SpeciesProps) {
             ))}
           </div>
           {withIncreases.length === 0 && (
-            <p className="warn">These increases are ignored in {joinNames(without.map((p) => rulesLabel(p.id)))}; tick a family that takes them from the species.</p>
+            <p className="warn">These increases are ignored in {joinNames(without.map((p) => rulesLabel(p.id)))}; tick the rules that take them from the species.</p>
           )}
         </fieldset>
       )}

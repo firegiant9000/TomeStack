@@ -267,7 +267,7 @@ function RulesStep(props: {
         ))}
         {policy && (
           <p className="hint">
-            Ability score increases under this family come from <strong>{policy.abilityIncreaseSource}</strong> content.
+            Ability score increases under these rules come from <strong>{policy.abilityIncreaseSource}</strong> content.
             Backgrounds {policy.backgroundGrantsFeat ? 'can' : 'cannot'} grant a feat.
           </p>
         )}
