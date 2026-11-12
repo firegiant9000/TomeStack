@@ -550,7 +550,7 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
             onStatus(
               pinned === 0
                 ? `Saved a draft of ${name}. Drafts never affect characters.`
-                : `Saved a draft of ${name}. It points at ${together}; "Make all drafts in this source available to characters…" makes ${pinned === 1 ? 'it' : 'them'} available together and re-points it.`,
+                : `Saved a draft of ${name}. It points at ${together}; "Make all drafts in this source available to characters…" makes ${pinned === 1 ? 'it available too' : 'them available together'} and re-points it.`,
             );
           }}
         />
