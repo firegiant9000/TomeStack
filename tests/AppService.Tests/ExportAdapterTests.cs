@@ -8,7 +8,7 @@ namespace TomeStack.AppService.Tests;
 
 /// <summary>
 /// M6 slice 4 (ADR-012, accepted): export adapters. The Foundry VTT dnd5e adapter (pinned to Foundry 14.367 with dnd5e
-/// 6.0.5) and the neutral sheet JSON read only the sheet export model v1, filtered by purpose (ADR-007 item 11). Golden
+/// 6.0.6) and the neutral sheet JSON read only the sheet export model v1, filtered by purpose (ADR-007 item 11). Golden
 /// files are original fixture characters only, so no SRD or third-party text is copied into the repository (SPEC Q-03).
 /// Set TOMESTACK_WRITE_GOLDEN to the tests/AppService.Tests/Golden folder to rewrite them after a deliberate change.
 /// </summary>
@@ -268,7 +268,7 @@ public class ExportAdapterTests
     [Fact]
     public void The_validators_refuse_output_the_target_would_not_read()
     {
-        var actor = JsonNode.Parse("""{"type":"character","name":"x","_stats":{"systemId":"dnd5e","systemVersion":"6.0.5"},"system":{"abilities":{},"attributes":{"hp":{"max":1,"value":1},"ac":{"flat":10}},"skills":{"xyz":{"value":3}},"spells":{"spell10":{"value":1}}},"items":[{"type":"script","name":"x"}]}""")!.AsObject();
+        var actor = JsonNode.Parse("""{"type":"character","name":"x","_stats":{"systemId":"dnd5e","systemVersion":"6.0.6"},"system":{"abilities":{},"attributes":{"hp":{"max":1,"value":1},"ac":{"flat":10}},"skills":{"xyz":{"value":3}},"spells":{"spell10":{"value":1}}},"items":[{"type":"script","name":"x"}]}""")!.AsObject();
         var problems = FoundryDnd5e.Validate(actor);
         Assert.Contains(problems, p => p.StartsWith("abilities.str", StringComparison.Ordinal));
         Assert.Contains(problems, p => p.StartsWith("skills.xyz", StringComparison.Ordinal));
@@ -349,7 +349,7 @@ public class ExportAdapterTests
         using var preview = JsonDocument.Parse(Send("export.preview", new { characterId = character.Id, target = "foundry-dnd5e" }));
         var result = preview.RootElement.GetProperty("result");
         Assert.EndsWith(".foundry-dnd5e.json", result.GetProperty("fileName").GetString(), StringComparison.Ordinal);
-        Assert.Contains("dnd5e 6.0.5", result.GetProperty("targetVersion").GetString(), StringComparison.Ordinal);
+        Assert.Contains("dnd5e 6.0.6", result.GetProperty("targetVersion").GetString(), StringComparison.Ordinal);
         var token = result.GetProperty("token").GetGuid();
         Assert.Contains("\"host.unsupported\"", Send("export.saveAs", new { token }), StringComparison.Ordinal);
         Assert.Contains("\"base64\"", Send("export.download", new { token }), StringComparison.Ordinal);
