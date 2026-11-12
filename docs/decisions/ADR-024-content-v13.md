@@ -1,6 +1,6 @@
 # ADR-024: Content schema v13, creation guides and packs (the engine; no bundled content yet)
 
-Status: **accepted** and built on branch `w3-g5-v13-engine` (owner, 2026-11-11: the wave 3 design, spec 3.6 and Q3, Q3a, Q3b, Q3c; LIVING_SPECS D97 and D98). This change is the engine only: the schema, validation, down-conversion, kit expansion and a catalogue lookup. No bundled guide or gear ships in it.
+Status: **accepted** and built on 2026-11-12 (owner, 2026-11-11: the wave 3 design, spec 3.6 and Q3, Q3a, Q3b, Q3c; LIVING_SPECS D97 and D98). This change is the engine only: the schema, validation, down-conversion, kit expansion and a catalogue lookup. No bundled guide or gear ships in it.
 Date: 2026-11-12
 
 ## Context
@@ -98,6 +98,6 @@ Content schema v12 cannot express this. A guide is advice used only while creati
 - `tests/RulesCore.Tests/CreationGuideV13SchemaTests.cs` (the shape, the version rung, round-trip bytes), `CreationGuideV13ValidationTests.cs` (every code, the caps, the duplicate check) and `KitExpansionTests.cs` (expansion, merge, diagnostics).
 - `tests/RulesCore.Tests/DownConvertV13Tests.cs` (guides left out, `contains` dropped).
 - `tests/AppService.Tests/CreationGuideCatalogTests.cs` (the `GuidesFor` lookup and leaving guides out of listings), `CreationGuideV13SchemaFileTests.cs` (the published JSON schema `docs/schemas/content-revision.v13.schema.json`).
-- `tests/AppService.Tests/DownConversionExportTests.cs` (plain gear as custom items and its limits), `SourcePackTests.cs` and `CampaignPackTests.cs` (a guide-only source blocks), and `ReleaseLadderTests.cs` (content above every row opens in no released version).
+- `tests/AppService.Tests/DownConversionExportTests.cs` (plain gear as custom items and its limits), `SourcePackTests.cs` and `CampaignPackTests.cs` (a guide-only source blocks), and `ReleaseLadderTests.cs` (content one schema version above the current one opens in no released version; schema 13 gets its ladder row with the 0.9.0 release PR, so no ladder row or test is added here).
 
 Related: [ADR-021](ADR-021-mechanics-beyond-d43.md), [ADR-022](ADR-022-content-v12.md), [ADR-023](ADR-023-down-conversion-export.md), LIVING_SPECS D85, D97 and D98. Supersedes: none.
