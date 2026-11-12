@@ -67,7 +67,7 @@ public static class ContentValidator
     private const int MaxGuideQuantity = 999;
 
     /// <summary>Content v13 (ADR-024): the categories a kit line's <c>anyOf</c> may name.</summary>
-    private static readonly string[] GuideCategories = ["weapon.simple", "weapon.martial", "armor.light", "armor.medium", "armor.heavy", "armor.shield"];
+    internal static readonly string[] GuideCategories = ["weapon.simple", "weapon.martial", "armor.light", "armor.medium", "armor.heavy", "armor.shield"];
 
     /// <summary>The longest companion label or speed (content v12).</summary>
     private const int MaxCompanionText = 80;

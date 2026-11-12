@@ -28,7 +28,7 @@ public class ReplaceableChoiceSchemaTests
     private static ContentRevision Read(string json) => RevisionHashProperties.Read(json);
 
     private static ValidationReport ValidateJson(int version, string effects) =>
-        ContentValidator.Validate(Read(Doc(version, J(effects), KnownSource)), Catalog, null);
+        ContentValidator.Validate(Read(Doc(version, J(effects), KnownSource)), Catalog);
 
     /// <summary>A choice as written in a document: its fragment (<c>"key": value</c>) before the count, or after the options.</summary>
     private static string ChoiceJson(string fragment, bool inTheMiddle) =>
@@ -180,16 +180,16 @@ public class ReplaceableChoiceSchemaTests
     {
         var replaceable = new ChoiceReplaceable(ReplaceWindow.LevelUp);
 
-        var at11 = ContentValidator.Validate(Built(11, replaceable), Catalog, null);
+        var at11 = ContentValidator.Validate(Built(11, replaceable), Catalog);
         var message = Assert.Single(at11.Errors, e => e.Code == "validate.requires-v12").Message;
         Assert.Contains("a replaceable choice", message, StringComparison.Ordinal);
 
-        var at12 = ContentValidator.Validate(Built(12, replaceable), Catalog, null);
+        var at12 = ContentValidator.Validate(Built(12, replaceable), Catalog);
         Assert.DoesNotContain(at12.Errors, e => e.Code == "validate.requires-v12");
         Assert.Equal(12, at12.RequiredSchemaVersion);
 
         // Without the key the choice keeps the version it needed before.
-        var without = ContentValidator.Validate(Built(12, null), Catalog, null);
+        var without = ContentValidator.Validate(Built(12, null), Catalog);
         Assert.DoesNotContain(without.Errors, e => e.Code == "validate.requires-v12");
         Assert.True(without.RequiredSchemaVersion < 12);
     }

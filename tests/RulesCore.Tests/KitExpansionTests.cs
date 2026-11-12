@@ -280,6 +280,156 @@ public class KitExpansionTests
     }
 
     [Fact]
+    public void Null_elements_are_skipped_without_throwing()
+    {
+        var pack = Pack.Revisions.Single(r => r.ContentId == Satchel) with
+        {
+            ContentId = C(1399), RevisionId = Guid.NewGuid(), Effects = [new ItemEffect { Id = "item", Contains = [null!, new PackLine(new GuideTarget(Rope))] }],
+        };
+        var catalog = new InMemoryContentCatalog(Pack.Sources, [.. Pack.Revisions, pack]);
+        var kit = Kit(
+            null!,
+            new KitPick("n", null, [null!]),
+            new KitPick("m", null, [null!, new KitOption("a", [Item(Lantern)])]),
+            new KitPick("p", null, [new KitOption("a", [null!, Item(Rope), new KitLine(Pack: new GuideTarget(C(1399)))])]));
+
+        var result = KitExpansion.Expand(kit, [null!, new("m", "a"), new("p", "a")], catalog);
+
+        Assert.Equal(1, Count(result, Lantern));
+        Assert.Equal(2, Count(result, Rope)); // the plain line and the pack's one good line
+        var merged = KitExpansion.Merge(null!, result, null!);
+        Assert.Equal(2, merged.Equipment.Count);
+        Assert.Equal(2, Count(merged, Rope));
+    }
+
+    [Fact]
+    public void A_pack_line_quantity_multiplies_its_contents()
+    {
+        var result = KitExpansion.Expand(Kit(Pick("p", new KitLine(Pack: new GuideTarget(Satchel), Quantity: 2))), [], Catalog());
+
+        Assert.Equal(4, Count(result, Rope)); // 2 x (2 rope)
+        Assert.Equal(2, Count(result, Lantern)); // 2 x (null = 1)
+        Assert.Empty(result.Problems);
+    }
+
+    [Fact]
+    public void A_pack_quantity_product_clamps_to_the_maximum_once()
+    {
+        var result = KitExpansion.Expand(Kit(Pick("p", new KitLine(Pack: new GuideTarget(Satchel), Quantity: int.MaxValue))), [], Catalog());
+
+        Assert.Equal(EquipmentEntry.MaxQuantity, Count(result, Rope));
+        Assert.Equal(EquipmentEntry.MaxQuantity, Count(result, Lantern));
+        Assert.Equal(2, result.Problems.Count(p => p.Code == "kit.quantity-capped"));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-3)]
+    public void A_line_quantity_below_one_skips_the_line_and_keeps_the_rest(int quantity)
+    {
+        var kit = Kit(Pick("x",
+            Item(Rope, quantity),
+            new KitLine(Pack: new GuideTarget(Satchel), Quantity: quantity),
+            new KitLine(AnyOf: "weapon.simple", Quantity: quantity),
+            Item(Lantern)));
+
+        var result = KitExpansion.Expand(kit, [new("x", "a", new Dictionary<int, Guid> { [2] = Cudgel })], Catalog());
+
+        Assert.Equal(3, result.Problems.Count(p => p.Code == "kit.item-unresolved"));
+        Assert.Equal(0, Count(result, Rope));
+        Assert.Equal(0, Count(result, Cudgel));
+        Assert.Equal(1, Count(result, Lantern));
+        Assert.Single(result.Equipment);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void A_contained_quantity_below_one_skips_that_contained_line(int quantity)
+    {
+        var pack = Pack.Revisions.Single(r => r.ContentId == Satchel) with
+        {
+            ContentId = C(1398), RevisionId = Guid.NewGuid(),
+            Effects = [new ItemEffect { Id = "item", Contains = [new PackLine(new GuideTarget(Rope), quantity), new PackLine(new GuideTarget(Lantern), 2)] }],
+        };
+        var catalog = new InMemoryContentCatalog(Pack.Sources, [.. Pack.Revisions, pack]);
+
+        var result = KitExpansion.Expand(Kit(Pick("x", new KitLine(Pack: new GuideTarget(C(1398)), Quantity: 3))), [], catalog);
+
+        AssertCode(result, "kit.item-unresolved");
+        Assert.Equal(0, Count(result, Rope));
+        Assert.Equal(6, Count(result, Lantern));
+        Assert.Single(result.Equipment);
+    }
+
+    [Fact]
+    public void Every_validation_category_is_handled_by_the_kit_category_test()
+    {
+        foreach (var key in ContentValidator.GuideCategories)
+            Assert.True(KitExpansion.CategoryTests.ContainsKey(key), $"KitExpansion does not handle category '{key}'.");
+        Assert.Equal(ContentValidator.GuideCategories.Order(StringComparer.Ordinal), KitExpansion.CategoryTests.Keys.Order(StringComparer.Ordinal));
+        Assert.False(KitExpansion.InCategory(Pack.Revisions.Single(r => r.ContentId == Rope), "weapon.nonsense"));
+    }
+
+    [Fact]
+    public void A_new_id_factory_makes_entry_ids_deterministic()
+    {
+        var counter = 0;
+        Guid Next() => C(9000 + counter++);
+
+        var result = KitExpansion.Expand(Kit(Pick("x", Item(Rope), Item(Lantern), Item(Rope))), [], Catalog(), Next);
+
+        Assert.Equal([C(9000), C(9001)], result.Equipment.Select(e => e.Id!.Value));
+        Assert.Equal(2, counter); // a merged duplicate takes no new id
+        var merged = KitExpansion.Merge(result, KitExpansion.Expand(Kit(Pick("y", Item(Rope))), [], Catalog(), Next));
+        Assert.Equal(C(9000), merged.Equipment.Single(e => e.Item.ContentId == Rope).Id);// the first part's id is kept
+    }
+
+    [Fact]
+    public void A_capped_quantity_is_reported_once_per_item()
+    {
+        var max = EquipmentEntry.MaxQuantity;
+        var result = KitExpansion.Expand(Kit(Pick("x", Item(Rope, max), Item(Rope, max), Item(Rope, 5), Item(Lantern, max))), [], Catalog());
+
+        var capped = Assert.Single(result.Problems, p => p.Code == "kit.quantity-capped");
+        Assert.Equal(Rope, capped.Content!.ContentId);
+        Assert.Equal(max, Count(result, Rope));
+        Assert.Equal(max, Count(result, Lantern));
+    }
+
+    [Fact]
+    public void Merge_reports_a_capped_quantity_once_per_item()
+    {
+        var full = KitExpansion.Expand(Kit(Pick("x", Item(Rope, EquipmentEntry.MaxQuantity))), [], Catalog());
+
+        var merged = KitExpansion.Merge(full, full, full);
+
+        Assert.Single(merged.Problems, p => p.Code == "kit.quantity-capped");
+    }
+
+    [Fact]
+    public void With_duplicate_choices_for_one_pick_the_first_wins()
+    {
+        var kit = Kit(new KitPick("x", null, [new KitOption("a", [Item(Rope)]), new KitOption("b", [Item(Lantern)])]));
+
+        var result = KitExpansion.Expand(kit, [new("x", "b"), new("x", "a")], Catalog());
+
+        Assert.Equal(1, Count(result, Lantern));
+        Assert.Equal(0, Count(result, Rope));
+    }
+
+    [Fact]
+    public void With_duplicate_option_ids_the_first_wins()
+    {
+        var kit = Kit(new KitPick("x", null, [new KitOption("a", [Item(Rope)]), new KitOption("a", [Item(Lantern)])]));
+
+        var result = KitExpansion.Expand(kit, [new("x", "a")], Catalog());
+
+        Assert.Equal(1, Count(result, Rope));
+        Assert.Equal(0, Count(result, Lantern));
+    }
+
+    [Fact]
     public void Merge_sums_items_and_coins_and_joins_problems()
     {
         var one = KitExpansion.Expand(Kit(Pick("x", Item(Rope, 2), Item(Guid.NewGuid()), new KitLine(Coins: new KitCoins { Gp = 10 }))), [], Catalog());

@@ -128,10 +128,18 @@ public static class KitExpansion
     public const string AnyOfMismatch = "kit.any-of-mismatch";
     public const string CoinsCapped = "kit.coins-capped";
 
-    public static KitResult Expand(StartingEquipmentEffect kit, IReadOnlyList<KitChoice> choices, IContentCatalog catalog)
+    public const string QuantityCapped = "kit.quantity-capped";
+
+    /// <summary>
+    /// Expands <paramref name="kit"/> for the given choices. Validated content is the expected input; on anything else the work and the
+    /// result are bounded only by the content given (nothing is trusted, but nothing is limited either). The first choice for a pick and
+    /// the first option with an id win. A quantity below 1 skips its line with <see cref="ItemUnresolved"/>. <paramref name="newId"/>
+    /// makes the new entry ids (default <see cref="Guid.NewGuid"/>); pass a counter to make them deterministic.
+    /// </summary>
+    public static KitResult Expand(StartingEquipmentEffect kit, IReadOnlyList<KitChoice> choices, IContentCatalog catalog, Func<Guid>? newId = null)
     {
         var resolved = new Dictionary<Guid, ContentRevision?>();
-        var items = new ItemTally();
+        var items = new ItemTally(newId ?? Guid.NewGuid);
         var coins = new long[5];
         var problems = new List<Diagnostic>();
 
@@ -155,17 +163,29 @@ public static class KitExpansion
             return null;
         }
 
+        // A quantity below 1 can only come from unvalidated content: the line is skipped, not rounded up.
+        bool Positive(int? quantity, string where, out long amount)
+        {
+            amount = quantity ?? 1;
+            if (amount >= 1)
+                return true;
+            problems.Add(new(ItemUnresolved, $"{where} has a quantity of {amount}; it must be at least 1."));
+            return false;
+        }
+
         foreach (var pick in kit.Picks ?? [])
         {
+            if (pick is null)
+                continue;
             var options = pick.Options ?? [];
             if (options.Count == 0)
                 continue;
             // requiresProficiency on an option is not enforced here: the builder decides what to offer.
-            var choice = (choices ?? []).FirstOrDefault(c => string.Equals(c.PickId, pick.Id, StringComparison.Ordinal));
+            var choice = (choices ?? []).FirstOrDefault(c => c is not null && string.Equals(c.PickId, pick.Id, StringComparison.Ordinal));
             KitOption? option;
             if (choice is not null)
             {
-                option = options.FirstOrDefault(o => string.Equals(o.Id, choice.OptionId, StringComparison.Ordinal));
+                option = options.FirstOrDefault(o => o is not null && string.Equals(o.Id, choice.OptionId, StringComparison.Ordinal));
                 if (option is null)
                 {
                     problems.Add(new(ChoiceMissing, $"Pick '{pick.Id}' has no option '{choice.OptionId}'."));
@@ -182,15 +202,19 @@ public static class KitExpansion
                 continue;
             }
 
+            if (option is null)
+                continue;
             var lines = option.Lines ?? [];
             for (var index = 0; index < lines.Count; index++)
             {
                 var line = lines[index];
+                if (line is null)
+                    continue;
                 var where = $"Pick '{pick.Id}' option '{option.Id}' line {index + 1}";
                 if (line.Item is { } target)
                 {
-                    if (ResolveItem(target.ContentId, where) is { } item)
-                        items.Add(item.Reference, line.Quantity ?? 1);
+                    if (Positive(line.Quantity, where, out var amount) && ResolveItem(target.ContentId, where) is { } item)
+                        items.Add(item.Reference, amount);
                 }
                 else if (line.AnyOf is { } category)
                 {
@@ -199,10 +223,10 @@ public static class KitExpansion
                         problems.Add(new(ChoiceMissing, $"{where} needs an item of category {category}."));
                         continue;
                     }
-                    if (ResolveItem(chosen, where) is not { } item)
+                    if (!Positive(line.Quantity, where, out var amount) || ResolveItem(chosen, where) is not { } item)
                         continue;
                     if (InCategory(item, category))
-                        items.Add(item.Reference, line.Quantity ?? 1);
+                        items.Add(item.Reference, amount);
                     else
                         problems.Add(new(AnyOfMismatch, $"{where}: {item.Name} is not in category {category}.", item.Reference));
                 }
@@ -214,6 +238,8 @@ public static class KitExpansion
                 }
                 else if (line.Pack is { } packTarget)
                 {
+                    if (!Positive(line.Quantity, where, out var lineAmount))
+                        continue;
                     var pack = Resolve(packTarget.ContentId);
                     var contains = pack is { Kind: ContentKind.Item } ? pack.Effects.OfType<ItemEffect>().Select(e => e.Contains).FirstOrDefault(c => c is { Count: > 0 }) : null;
                     if (pack is null || contains is null)
@@ -229,37 +255,46 @@ public static class KitExpansion
                             problems.Add(new(ItemUnresolved, $"{where}: {pack.Name} lists an item that cannot be given."));
                             continue;
                         }
+                        if (!Positive(packLine.Quantity, $"{where}: {pack.Name}", out var innerAmount))
+                            continue;
                         if (ResolveItem(innerTarget.ContentId, where) is not { } inner)
                             continue;
                         if (IsPack(inner))
                             problems.Add(new(ItemUnresolved, $"{where}: {pack.Name} holds {inner.Name}, a pack; packs are not nested.", inner.Reference));
                         else
-                            items.Add(inner.Reference, packLine.Quantity ?? 1);
+                            items.Add(inner.Reference, lineAmount * innerAmount); // both are int-sized, so the product fits a long
                     }
                 }
             }
         }
 
+        items.ReportCapped(problems);
         var total = Cap(coins, problems);
         return new(items.ToEntries(), total, problems);
     }
 
-    /// <summary>Combines results (a class kit and a background kit): equal items merge, coins sum, problems follow in order. Sums clamp like <see cref="Expand"/>.</summary>
+    /// <summary>Combines results (a class kit and a background kit): equal items merge (the first part's entry id is kept), coins sum, problems follow in order. Sums clamp like <see cref="Expand"/>; a null part is skipped.</summary>
     public static KitResult Merge(params KitResult[] parts)
     {
-        var items = new ItemTally();
+        var items = new ItemTally(Guid.NewGuid);
         var coins = new long[5];
         var problems = new List<Diagnostic>();
         foreach (var part in parts ?? [])
         {
-            foreach (var entry in part.Equipment)
-                items.Add(entry.Item, entry.Quantity, entry.Id);
+            if (part is null)
+                continue;
+            foreach (var entry in part.Equipment ?? [])
+            {
+                if (entry is not null && entry.Quantity >= 1)
+                    items.Add(entry.Item, entry.Quantity, entry.Id);
+            }
             var c = part.Coins;
             long[] given = [c.Cp, c.Sp, c.Ep, c.Gp, c.Pp];
             for (var i = 0; i < coins.Length; i++)
                 coins[i] += Math.Max(0, given[i]);
-            problems.AddRange(part.Problems);
+            problems.AddRange(part.Problems ?? []);
         }
+        items.ReportCapped(problems);
         var total = Cap(coins, problems);
         return new(items.ToEntries(), total, problems);
     }
@@ -274,31 +309,57 @@ public static class KitExpansion
 
     private static bool IsPack(ContentRevision item) => item.Effects.OfType<ItemEffect>().Any(i => i.Contains is { Count: > 0 });
 
-    // A weapon's or armor's own category (the same enums the attack and armor calculations use). A key outside the six matches nothing.
-    private static bool InCategory(ContentRevision item, string category) => category switch
+    // A weapon's or armor's own category (the same enums the attack and armor calculations use). A key outside these matches nothing.
+    // The keys must stay equal to ContentValidator.GuideCategories (a test enforces it).
+    internal static readonly IReadOnlyDictionary<string, Func<ContentRevision, bool>> CategoryTests = new Dictionary<string, Func<ContentRevision, bool>>(StringComparer.Ordinal)
     {
-        "weapon.simple" => item.Effects.OfType<WeaponEffect>().Any(w => w.Category == WeaponCategory.Simple),
-        "weapon.martial" => item.Effects.OfType<WeaponEffect>().Any(w => w.Category == WeaponCategory.Martial),
-        "armor.light" => item.Effects.OfType<ArmorEffect>().Any(a => a.Category == ArmorCategory.Light),
-        "armor.medium" => item.Effects.OfType<ArmorEffect>().Any(a => a.Category == ArmorCategory.Medium),
-        "armor.heavy" => item.Effects.OfType<ArmorEffect>().Any(a => a.Category == ArmorCategory.Heavy),
-        "armor.shield" => item.Effects.OfType<ArmorEffect>().Any(a => a.Category == ArmorCategory.Shield),
-        _ => false,
+        ["weapon.simple"] = item => item.Effects.OfType<WeaponEffect>().Any(w => w.Category == WeaponCategory.Simple),
+        ["weapon.martial"] = item => item.Effects.OfType<WeaponEffect>().Any(w => w.Category == WeaponCategory.Martial),
+        ["armor.light"] = item => item.Effects.OfType<ArmorEffect>().Any(a => a.Category == ArmorCategory.Light),
+        ["armor.medium"] = item => item.Effects.OfType<ArmorEffect>().Any(a => a.Category == ArmorCategory.Medium),
+        ["armor.heavy"] = item => item.Effects.OfType<ArmorEffect>().Any(a => a.Category == ArmorCategory.Heavy),
+        ["armor.shield"] = item => item.Effects.OfType<ArmorEffect>().Any(a => a.Category == ArmorCategory.Shield),
     };
 
-    /// <summary>Equal items (same pinned revision) in first-seen order; quantities are summed in long arithmetic and clamped to <see cref="EquipmentEntry.MaxQuantity"/>.</summary>
-    private sealed class ItemTally
+    internal static bool InCategory(ContentRevision item, string category) => CategoryTests.TryGetValue(category, out var test) && test(item);
+
+    /// <summary>Equal items (same pinned revision) in first-seen order; quantities are summed in long arithmetic and clamped to <see cref="EquipmentEntry.MaxQuantity"/> (each capped item is reported once).</summary>
+    private sealed class ItemTally(Func<Guid> newId)
     {
         private readonly List<(ContentReference Item, Guid Id, long Quantity)> _rows = [];
+        private readonly Dictionary<ContentReference, int> _index = [];
+        private readonly List<ContentReference> _capped = [];
+        private readonly HashSet<ContentReference> _cappedSet = [];
 
-        public void Add(ContentReference item, int quantity, Guid? id = null)
+        public void Add(ContentReference item, long quantity, Guid? id = null)
         {
-            var amount = Math.Clamp((long)quantity, 1, EquipmentEntry.MaxQuantity);
-            var at = _rows.FindIndex(r => r.Item == item);
-            if (at < 0)
-                _rows.Add((item, id ?? Guid.NewGuid(), amount));
-            else
-                _rows[at] = _rows[at] with { Quantity = Math.Min(_rows[at].Quantity + amount, EquipmentEntry.MaxQuantity) };
+            if (quantity < 1)
+                return;
+            if (quantity > EquipmentEntry.MaxQuantity)
+                MarkCapped(item);
+            var amount = Math.Min(quantity, EquipmentEntry.MaxQuantity);
+            if (!_index.TryGetValue(item, out var at))
+            {
+                _index[item] = _rows.Count;
+                _rows.Add((item, id ?? newId(), amount));
+                return;
+            }
+            var sum = _rows[at].Quantity + amount;
+            if (sum > EquipmentEntry.MaxQuantity)
+                MarkCapped(item);
+            _rows[at] = _rows[at] with { Quantity = Math.Min(sum, EquipmentEntry.MaxQuantity) };
+        }
+
+        private void MarkCapped(ContentReference item)
+        {
+            if (_cappedSet.Add(item))
+                _capped.Add(item);
+        }
+
+        public void ReportCapped(List<Diagnostic> problems)
+        {
+            foreach (var item in _capped)
+                problems.Add(new(QuantityCapped, $"An item's quantity adds up to more than {EquipmentEntry.MaxQuantity}; it is capped there.", item));
         }
 
         public IReadOnlyList<EquipmentEntry> ToEntries() => [.. _rows.Select(r => new EquipmentEntry(r.Item, false, (int)r.Quantity, r.Id))];
