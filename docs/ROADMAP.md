@@ -15,7 +15,7 @@
 
 - **Wave 3: first run, navigation and help.** A first-run sample, a clearer way around the app, and in-app help.
 - **Wave 4: engineering.** Down-conversion ("Save for an older TomeStack") keeps to the previous minor release only, from 0.9.0 on (the older targets are dropped). The weekly job and the old-release harness keep proving it.
-- **First signing attempt.** If SignPath Foundation accepts the project, the first signed installer ships in 0.9.0 ([ADR-024](decisions/ADR-024-code-signing.md)). If it has not answered or declines, 0.9.0 ships unsigned.
+- **First signing attempt.** If SignPath Foundation accepts the project, the first signed installer ships in 0.9.0 ([ADR-025](decisions/ADR-025-code-signing.md)). If it has not answered or declines, 0.9.0 ships unsigned.
 
 ### Later: 1.0 and beyond
 
@@ -26,7 +26,7 @@
 3. The first-run sample is shipped.
 4. A signed installer, **if SignPath Foundation accepts the project**.
 
-If SignPath declines, 1.0 may ship unsigned. The Microsoft Store (MSIX) route is evaluated separately, as ADR-024 describes. Signing is not a 1.0 blocker.
+If SignPath declines, 1.0 may ship unsigned. The Microsoft Store (MSIX) route is evaluated separately, as ADR-025 describes. Signing is not a 1.0 blocker.
 
 Beyond 1.0 are the milestones below that are deferred or optional: M7 (Expanded tabletop), the M6 optional work (B09 palette, B11 tags), DM and combat tools (banned for now, R4 and D63) and any M4 follow-up after the third-party PDF run.
 
@@ -130,7 +130,7 @@ One downloadable GitHub release built by a tag-triggered release workflow (`rele
 **Acceptance.** A release tag and downloadable installer; the four checklist items closed in writing; one upgrade v(N) → v(N+1) tested and recorded in `m2-acceptance.md` (from 0.3.x, it runs database v6 → v9 and leaves one `tomestack.db.v6.bak`); install verification of M2.2, M5 slice 1 and the M6 screens done on that build.
 
 **Status: released (0.4.0 to 0.8.1 published); not met until the owed checks below are recorded in [features/m2-acceptance.md](features/m2-acceptance.md).**
-- **Published:** 0.4.0 (2026-10-02), 0.5.0 (2026-10-12), 0.6.0 (2026-10-21), 0.7.0 and 0.7.1 (2026-10-27), 0.8.0 (2026-11-10) and 0.8.1 (2026-11-12), unsigned (signing is planned in [ADR-024](decisions/ADR-024-code-signing.md), not a 1.0 blocker), each with `Setup.exe`, a portable zip and a full package. The checklist below is closed.
+- **Published:** 0.4.0 (2026-10-02), 0.5.0 (2026-10-12), 0.6.0 (2026-10-21), 0.7.0 and 0.7.1 (2026-10-27), 0.8.0 (2026-11-10) and 0.8.1 (2026-11-12), unsigned (signing is planned in [ADR-025](decisions/ADR-025-code-signing.md), not a 1.0 blocker), each with `Setup.exe`, a portable zip and a full package. The checklist below is closed.
 - **Recorded:** the upgrade harness passed on a local pack (2026-10-01, below).
 - **Still owed (owner):**
   - the populated upgrade (the "populated (owner)" row in [features/m2-acceptance.md](features/m2-acceptance.md));

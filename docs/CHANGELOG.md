@@ -3,7 +3,8 @@
 ## Unreleased
 
 ### Changed
-- **Docs:** the README "Code signing policy" and [ADR-024](decisions/ADR-024-code-signing.md) record that the SignPath Foundation application was submitted on 2026-11-12. Releases stay unsigned until it is accepted.
+- **Docs (ADR numbering):** the code signing record is now [ADR-025](decisions/ADR-025-code-signing.md) (it was ADR-024), so content schema v13 keeps ADR-024. The ADR index notes the change.
+- **Docs:** the README "Code signing policy" and [ADR-025](decisions/ADR-025-code-signing.md) record that the SignPath Foundation application was submitted on 2026-11-12. Releases stay unsigned until it is accepted.
 - **Docs (owed checks):** the populated upgrade check is recorded as passed: a copy of a library went through the published 0.8.0 and then 0.8.1 with every count, table and sheet unchanged ([m2-acceptance.md](features/m2-acceptance.md)).
 
 ## 0.8.1 (save for 0.7.0, Foundry dnd5e 6.0.6, release and CI hygiene)
@@ -18,7 +19,7 @@ A patch on 0.8.0: "Save for an older TomeStack" now offers 0.7.0, and the Foundr
 - **Save for an older TomeStack: 0.7.0 (D85, [ADR-023](decisions/ADR-023-down-conversion-export.md)):** "Which TomeStack will open it?" now offers 0.7.0 beside 0.6.0 and 0.5.0, for a character, a source pack, a campaign pack or a full library backup. The copy drops and lists what 0.7.0 cannot hold (content v12 fields and effects, item mods and content companions' hit points), and blocks what would make it stronger, as for the other targets. It was held back from 0.8.0 until a real 0.7.0 build had opened the test copies; that proof is now committed and the weekly job reruns it. No schema, package format or database change. See [package-format.md](features/package-format.md#save-for-an-older-tomestack-d85).
 
 ### Changed
-- **Docs (code signing, roadmap, decisions):** ADR-024 proposes code signing through SignPath Foundation, and the README has the "Code signing policy" section their terms require (releases stay unsigned until they accept; the first signed release is targeted for 0.9.0). The ROADMAP is now now/next/later and defines 1.0; its dated revision notes moved to the bottom of this file. `docs/decisions/README.md` indexes the ADRs. The owner's passes on 0.8.0 for accessibility items 6, 15, 16, 17 and 68 (2026-11-11) are recorded. No app behaviour change.
+- **Docs (code signing, roadmap, decisions):** ADR-024 (renumbered [ADR-025](decisions/ADR-025-code-signing.md) after 0.8.1) proposes code signing through SignPath Foundation, and the README has the "Code signing policy" section their terms require (releases stay unsigned until they accept; the first signed release is targeted for 0.9.0). The ROADMAP is now now/next/later and defines 1.0; its dated revision notes moved to the bottom of this file. `docs/decisions/README.md` indexes the ADRs. The owner's passes on 0.8.0 for accessibility items 6, 15, 16, 17 and 68 (2026-11-11) are recorded. No app behaviour change.
 - **Foundry export pinned to dnd5e 6.0.6 (issue #125):** the exported Actor names dnd5e 6.0.6. No field the export writes changed between the two dnd5e releases. Foundry core is still 14.367. The owner's real-Foundry import check ([export-adapters.md](features/export-adapters.md)) now targets 6.0.6.
 - **Docs:** the README status block and the MVP, ROADMAP and ARCHITECTURE status text now match the published 0.8.0, and the README leads with the calculation trace.
 - **Inspiration label:** the sheet's inspiration checkbox and summary line take their name ("Inspiration" or "Heroic Inspiration") from the rules family policy (`RulesFamilyPolicy.InspirationName`) instead of a family-id check in the UI. No visible change.

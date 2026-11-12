@@ -27,9 +27,11 @@ One row per architecture decision record. The status is the first words of each 
 | [021](ADR-021-mechanics-beyond-d43.md) | Mechanics beyond the play-mechanics engine (MECH-X) | accepted |
 | [022](ADR-022-content-v12.md) | Content schema v12, one slice at a time | accepted |
 | [023](ADR-023-down-conversion-export.md) | Save for an older TomeStack (down-conversion export) | accepted |
-| [024](ADR-024-code-signing.md) | Code signing for the installer | **proposed** (waiting for SignPath Foundation) |
+| 024 | Content schema v13 (reserved for Wave 3, PR #160) | not yet merged |
+| [025](ADR-025-code-signing.md) | Code signing for the installer | **proposed** (waiting for SignPath Foundation) |
 
 ## Numbering gaps
 
 - **ADR-019 was never used.** The number was reserved during parallel work and no record was written under it. It is not reissued.
+- **ADR-025 was ADR-024.** Code signing was merged as ADR-024 while the content schema v13 record (PR #160) already held that number on its branch. Code signing was renumbered to ADR-025 on 2026-11-12; the 0.8.1 release notes still say ADR-024.
 - **D-row numbers skip.** The D-rows in [LIVING_SPECS](../LIVING_SPECS.md#pending-product-decisions) are reserved in blocks by parallel lanes (for example D43 to D49 for the play-mechanics plan, with D46 to D49 unused, and D60 to D69 for the Homebrew Import Lab, with D65 unused and D68 without a row). An unused reservation is not reissued, so a missing number is not a lost decision.
