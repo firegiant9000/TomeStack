@@ -4,12 +4,12 @@
 
 ## Now, next, later
 
-**Status:** 0.8.0 (published 2026-11-10) is the current release. The dated revision notes that used to sit at the top of this file are in the [CHANGELOG](CHANGELOG.md#roadmap-revision-history-moved-from-roadmapmd).
+**Status:** 0.8.1 (published 2026-11-11) is the current release. The dated revision notes that used to sit at the top of this file are in the [CHANGELOG](CHANGELOG.md#roadmap-revision-history-moved-from-roadmapmd).
 
 ### Now
 
-- **The next patch.** The "Save for an older TomeStack" target 0.7.0, the Foundry export pinned to dnd5e 6.0.6, dependency updates and CI hardening. No schema, package format or database change. The list is in the CHANGELOG "Unreleased" section.
-- **Wave 2 evidence.** Built work still needs owner checks on an installed build. The rows are in "Owed owner checks" below. Passed on 0.8.0 on 2026-11-11: the accessibility rows 6, 15, 16, 17 and 68. Still owed: the 0.7.1 to 0.8.0 upgrade and the upgrade to the next patch on the real library, the restore drill on a second machine (to be re-run on the next patch), the Foundry real-world import (Foundry 14, dnd5e 6.0.6) and the M3 played session.
+- **0.8.1, just shipped.** The "Save for an older TomeStack" target 0.7.0, the Foundry export pinned to dnd5e 6.0.6, dependency updates and CI hardening. No schema, package format or database change. The list is in the CHANGELOG `## 0.8.1` section.
+- **Wave 2 evidence.** Built work still needs owner checks on an installed build. The rows are in "Owed owner checks" below. Passed on 0.8.0 on 2026-11-11: the accessibility rows 6, 15, 16, 17 and 68. Still owed: the 0.7.1 to 0.8.0 and 0.8.0 to 0.8.1 upgrades on the real library, the restore drill on a second machine (to be re-run on 0.8.1), the Foundry real-world import (Foundry 14, dnd5e 6.0.6) and the M3 played session.
 
 ### Next: 0.9.0
 
@@ -129,8 +129,8 @@ One downloadable GitHub release built by a tag-triggered release workflow (`rele
 
 **Acceptance.** A release tag and downloadable installer; the four checklist items closed in writing; one upgrade v(N) → v(N+1) tested and recorded in `m2-acceptance.md` (from 0.3.x, it runs database v6 → v9 and leaves one `tomestack.db.v6.bak`); install verification of M2.2, M5 slice 1 and the M6 screens done on that build.
 
-**Status: released (0.4.0 to 0.8.0 published); not met until the owed checks below are recorded in [features/m2-acceptance.md](features/m2-acceptance.md).**
-- **Published:** 0.4.0 (2026-10-02), 0.5.0 (2026-10-12), 0.6.0 (2026-10-21), 0.7.0 and 0.7.1 (2026-10-27), and 0.8.0 (2026-11-10), unsigned (signing is planned in [ADR-024](decisions/ADR-024-code-signing.md), not a 1.0 blocker), each with `Setup.exe`, a portable zip and a full package. The checklist below is closed.
+**Status: released (0.4.0 to 0.8.1 published); not met until the owed checks below are recorded in [features/m2-acceptance.md](features/m2-acceptance.md).**
+- **Published:** 0.4.0 (2026-10-02), 0.5.0 (2026-10-12), 0.6.0 (2026-10-21), 0.7.0 and 0.7.1 (2026-10-27), 0.8.0 (2026-11-10) and 0.8.1 (2026-11-11), unsigned (signing is planned in [ADR-024](decisions/ADR-024-code-signing.md), not a 1.0 blocker), each with `Setup.exe`, a portable zip and a full package. The checklist below is closed.
 - **Recorded:** the upgrade harness passed on a local pack (2026-10-01, below).
 - **Still owed (owner):**
   - the populated upgrade (the "populated (owner)" row in [features/m2-acceptance.md](features/m2-acceptance.md));
@@ -221,10 +221,10 @@ As of 2026-10-20 no row had an owner record. On 2026-11-11 the owner recorded th
 | Check | Where it's defined | Evidence recorded (2026-10-20) | Status |
 |---|---|---|---|
 | T2 played session and gap report | T2 above; [features/gap-notes.md](features/gap-notes.md) | Built: gap notes. No session or report recorded | owed (the M3 played session; part of the 1.0 definition) |
-| T6 restore drill on the current published release | T6 above; [features/restore-drill-procedure.md](features/restore-drill-procedure.md) | Built and automated: the DevHost drill report and compare, `RestoreDrillTests`. No drill record on a second machine | owed (second machine; to be re-run on the next patch) |
+| T6 restore drill on the current published release | T6 above; [features/restore-drill-procedure.md](features/restore-drill-procedure.md) | Built and automated: the DevHost drill report and compare, `RestoreDrillTests`. No drill record on a second machine | owed (second machine; to be re-run on 0.8.1) |
 | First paint (cold start, by hand) | T4 above; [performance.md](performance.md) | Method only. The smoke script's start-to-ready time is not first paint | owed (0.6.0 release candidate) |
 | Narrator, 200 %/400 % zoom and High Contrast checks (D17/D18) | [features/accessibility-checklist.md](features/accessibility-checklist.md) | Automated: keyboard flows and 400 % reflow. Owner record: checklist items 6 (200 %/400 % zoom), 15 and 17 (Narrator), 16 (High Contrast) and 68 (print preview: full sheet, combat card, large print) | **passed on 0.8.0, 2026-11-11, by the owner.** Item 21 and the later panel items stay as the checklist records them |
-| Populated upgrade, published to published | T5 above; [features/m2-acceptance.md](features/m2-acceptance.md); [features/release-0.4.0-verification.md](features/release-0.4.0-verification.md) | Automated: `UpgradeTests` and the installer smoke. No populated upgrade recorded | owed (0.7.1 → 0.8.0, and 0.8.0 → the next patch, on the real library) |
+| Populated upgrade, published to published | T5 above; [features/m2-acceptance.md](features/m2-acceptance.md); [features/release-0.4.0-verification.md](features/release-0.4.0-verification.md) | Automated: `UpgradeTests` and the installer smoke. No populated upgrade recorded | owed (0.7.1 → 0.8.0 and 0.8.0 → 0.8.1, on the real library) |
 | M4 third-party PDF: confirm the counts and review the candidates | R2 M4 row; [features/m4-acceptance.md](features/m4-acceptance.md) | Automated, counts only: 336 feature candidates, 8 of 8 classes. Spellcasting is proposed for 0 of 8 and not reviewed | owed (closed by the Import Lab's precision/recall table) |
 | Foundry export imported into a real Foundry world | [features/export-adapters.md](features/export-adapters.md); ADR-012 | Automated: golden files. The adapter stays labelled Experimental | owed (Foundry 14, dnd5e 6.0.6) |
 | P18 by-hand panel: a sheet with a `scale` effect lists nothing under "Not understood" (added 2026-10-22) | D69; [features/sheet-play.md](features/sheet-play.md) "What needs you by hand" | Automated: `MechanicsInventoryTests.Scale_effects_are_not_reported_unsupported`, and the panel's own tests. The SRD packs have no `scale` effect, so the check needs homebrew. Passed for now by the owner (2026-10-22), so the panel merged without it | owed |

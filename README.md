@@ -2,7 +2,7 @@
 
 **Every number explains itself.** A local-first Windows character sheet for 5E-compatible play and homebrew: tap any value to see the rule, the source page and the choice behind it. It works offline, with no account.
 
-> **Status: v0.8.0**, an unsigned installer on the [Releases page](https://github.com/firegiant9000/TomeStack/releases) (Windows asks you to confirm the first run). What each release added is in the [CHANGELOG](docs/CHANGELOG.md).
+> **Status: v0.8.1**, an unsigned installer on the [Releases page](https://github.com/firegiant9000/TomeStack/releases) (Windows asks you to confirm the first run). What each release added is in the [CHANGELOG](docs/CHANGELOG.md).
 
 ![The Strength score expanded on a character sheet: a table traces the value from the chosen base score of 15, plus 2 from the Soldier background's ability score choice, to 17, citing System Reference Document 5.2.1, page 83](docs/media/calculation-trace.png)
 
