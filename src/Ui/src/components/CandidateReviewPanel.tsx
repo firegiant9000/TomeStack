@@ -211,7 +211,7 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
       const blocked = outcome.blocked.length;
       onStatus(
         `Kept ${outcome.accepted.length}${blocked > 0 ? `; ${blocked} need review` : ''}.${
-          outcome.accepted.length > 0 ? ' They are drafts in the studio and do nothing until you publish them there.' : ''
+          outcome.accepted.length > 0 ? ' They are drafts in Homebrew and do nothing until you make them available to characters there.' : ''
         }`,
       );
       setSkippedLabel('Not kept');
@@ -264,7 +264,7 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
       onStatus(
         `Added the spell list ${outcome.listKey} to ${plural(outcome.updated.length, 'spell', 'spells')}${skippedCount > 0 ? `; ${skippedCount} skipped` : ''}.${
           unchecked > 0 ? ` ${unchecked} ${unchecked === 1 ? 'spell keeps' : 'spells keep'} other proposed lists to check.` : ''
-        }${outcome.updated.length > 0 ? ' Keep them to make drafts; nothing reaches a character until you publish the drafts in the studio.' : ''}`,
+        }${outcome.updated.length > 0 ? ' Keep them to make drafts; nothing reaches a character until you make the drafts available to characters in Homebrew.' : ''}`,
       );
       setSkippedLabel('Not changed');
       setSkipped(outcome.skipped.map((s) => ({ id: s.candidateId, name: nameOf(s.candidateId), reasons: s.codes.map(reasonOf) })));
@@ -732,7 +732,7 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
       await (isClass && !asReference ? client.acceptCandidate(stored.id, false, stored.etag, confirmedIds) : client.acceptCandidate(stored.id, asReference, stored.etag));
       const alongside = isClass && !asReference && linkedCount > 0 ? ` granting ${plural(linkedCount, 'feature', 'features')}` : '';
       await onChanged(
-        `${candidate.proposedName} is now a draft${asReference ? ' reference entry' : ''}${alongside} in the studio. It does nothing until you publish it there.`,
+        `${candidate.proposedName} is now a draft${asReference ? ' reference entry' : ''}${alongside} in Homebrew. It does nothing until you make it available to characters there.`,
       );
     } catch (error) {
       await reloadIfChanged(error);

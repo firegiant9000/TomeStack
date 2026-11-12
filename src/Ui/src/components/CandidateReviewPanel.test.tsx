@@ -1049,7 +1049,7 @@ it('says a class is accepted granting only the linked features that are granted,
   await user.click(screen.getByRole('checkbox', { name: 'Confirm the spell slot table' }));
   await user.click(screen.getByRole('button', { name: 'Keep, with its rules' }));
   await vi.waitFor(() => expect(onStatus).toHaveBeenCalled());
-  expect(onStatus.mock.calls[0]?.[0]).toMatch(/^Testy Lamplighter is now a draft granting 2 features in the studio\./);
+  expect(onStatus.mock.calls[0]?.[0]).toMatch(/^Testy Lamplighter is now a draft granting 2 features in Homebrew\./);
 });
 
 // Item 12.

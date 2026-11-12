@@ -1227,7 +1227,7 @@ it('D60 gate: a Markdown class is reviewed, accepted with its confirm tick and p
   await user.click(await waitFor(() => within(details()).getByRole('checkbox', { name: /^Confirm the hit die/ })));
   await waitFor(() => expect(within(details()).getByRole('button', { name: 'Keep, with its rules' }).getAttribute('aria-disabled')).toBeNull());
   await user.click(within(details()).getByRole('button', { name: 'Keep, with its rules' }));
-  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Placeholder is now a draft granting 10 features in the studio/));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Placeholder is now a draft granting 10 features in Homebrew/));
   const drafts = await client.contentBySource(source.id);
   expect(drafts).toHaveLength(11);
   expect(drafts.every((e) => e.latest.status === 'draft')).toBe(true);
@@ -1310,7 +1310,7 @@ it('reads the fixture PDF, reviews its candidates, and publishes an accepted one
   const acceptEmber = within(ember).getByRole('button', { name: 'Keep, with its rules' });
   await waitFor(() => expect(acceptEmber.getAttribute('aria-disabled')).toBeNull());
   await user.click(acceptEmber);
-  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Fixture Ember Lance is now a draft in the studio/));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Fixture Ember Lance is now a draft in Homebrew/));
   // It left the "to review" list with its details, so focus goes back to the list (WCAG 2.4.3).
   await waitFor(() => expect(document.activeElement).toBe(within(panel()).getByRole('heading', { name: 'Entries found in E2E Grimoire' })));
   // The review says what happens next and offers the studio (item 2); the flow below still goes by the sidebar.
@@ -1398,7 +1398,7 @@ it('imports a fixture class: the table is checked, the hit die and slots are con
   await user.click(within(again).getByRole('checkbox', { name: 'Confirm the spell slot table' }));
   await waitFor(() => expect(accept.getAttribute('aria-disabled')).toBeNull());
   await user.click(accept);
-  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Fixture Lamplighter is now a draft granting \d+ features in the studio/));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Fixture Lamplighter is now a draft granting \d+ features in Homebrew/));
   const granting = Number(/granting (\d+) features/.exec(screen.getByRole('status').textContent ?? '')![1]);
 
   const entries = await client.contentBySource(source.id);
