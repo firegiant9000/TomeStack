@@ -8,7 +8,7 @@ import type { ReactElement } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { client } from './api/client';
-import type { AppInfo, Campaign, Character, CharacterView, DerivedValue, ImportJob, RulesFamilyPolicy, SourceRecord, StudioEntry } from './api/types';
+import type { AppInfo, Campaign, Character, CharacterView, CandidateCheck, DerivedValue, DraftCandidate, ImportJob, RulesFamilyPolicy, SourceRecord, StoredCandidate, StudioEntry } from './api/types';
 import { CampaignsPanel } from './components/CampaignsPanel';
 import { CharacterBuilder } from './components/CharacterBuilder';
 import { CharacterSheet } from './components/CharacterSheet';
@@ -43,6 +43,7 @@ vi.mock('./api/client', () => ({
     validateRevision: vi.fn(),
     publishManyPreview: vi.fn(),
     sourcePackPreview: vi.fn(),
+    checkCandidate: vi.fn(),
     campaignPackPreview: vi.fn(),
   },
 }));
@@ -73,7 +74,7 @@ const character: Character = {
   name: 'Fixture Wren',
   rulesFamily: 'srd-5.1',
   level: 1,
-  classes: [],
+  classes: [{ class: { contentId: 'fixture-class', revisionId: 'fixture-class-r1' }, level: 1 }],
   choices: [],
   crossFamilyExceptions: [],
   baseAbilities: { str: 10, dex: 12, con: 10, int: 14, wis: 10, cha: 10 },
@@ -96,14 +97,25 @@ const view: CharacterView = {
       { ...field('spellAttack', 'Spell attack bonus', 3, 'modifier'), computedValue: 0, override: { field: 'spellAttack', value: 3 } },
     ],
     hitPoints: { maximum: 8, current: 8, temporary: 0 },
+    features: [
+      {
+        content: { contentId: 'fixture-class', revisionId: 'fixture-class-r1' },
+        name: 'Fixture Scout',
+        kind: 'class',
+        origin: { kind: 'content', rulesFamily: 'srd-5.1' },
+        automation: 'assisted',
+        diagnostics: [],
+        effects: [{ id: 'scout-text', type: 'text', automation: 'reference', text: 'Fixture text for the scout.', available: true }],
+      },
+    ],
   },
 };
 
-const homebrewSource = { id: 'fixture-notebook', title: 'Fixture Notebook', publisher: 'Fixture Press', rulesFamilies: ['srd-5.1', 'srd-5.2.1'], editionVersion: 'homebrew', license: 'own work', redistributable: true, origin: 'local' } as SourceRecord;
+const homebrewSource = { id: 'fixture-notebook', title: 'Fixture Notebook', publisher: 'Fixture Press', rulesFamilies: ['srd-5.1', 'srd-5.2.1'], editionVersion: 'homebrew', license: 'own work', redistributable: true, origin: 'local', shareConfirmedAt: '2026-10-01T00:00:00Z' } as SourceRecord;
 const bookSource = { id: 'fixture-tome', title: 'Fixture Tome', publisher: 'Fixture Press', rulesFamilies: ['srd-5.1'], editionVersion: '1st', license: 'own copy', redistributable: false, origin: 'local' } as SourceRecord;
-const revision = (status: 'draft' | 'published', revisionId: string) => ({ contentId: `fixture-${status}`, revisionId, name: `Fixture ${status}`, kind: 'feat', status, rulesFamilies: ['srd-5.1'], provenance: { sourceId: 'fixture-notebook' }, effects: [] });
+const revision = (status: 'draft' | 'published', revisionId: string, contentId = `fixture-${status}`) => ({ contentId, revisionId, name: `Fixture ${status}`, kind: 'feat', status, rulesFamilies: ['srd-5.1'], provenance: { sourceId: 'fixture-notebook' }, effects: [] });
 const draftEntry = { contentId: 'fixture-draft', name: 'Fixture draft', kind: 'feat', revisions: [revision('draft', 'r1')], latest: revision('draft', 'r1') } as unknown as StudioEntry;
-const publishedEntry = { contentId: 'fixture-published', name: 'Fixture published', kind: 'feat', revisions: [revision('published', 'r1'), revision('draft', 'r2')], latest: revision('draft', 'r2'), latestPublished: revision('published', 'r1') } as unknown as StudioEntry;
+const publishedEntry = { contentId: 'fixture-published', name: 'Fixture published', kind: 'feat', revisions: [revision('published', 'r1'), revision('draft', 'r2', 'fixture-published')], latest: revision('draft', 'r2', 'fixture-published'), latestPublished: revision('published', 'r1') } as unknown as StudioEntry;
 const job = { id: 'job-a', sourceId: 'fixture-notebook', firstPage: 1, wholeDocument: true, status: 'completed', pagesDone: 6, pagesFailed: 0, pagesFromOcr: 0, pagesWithoutText: 0, candidates: 3 } as ImportJob;
 const campaign: Campaign = { id: 'fixture-table', name: 'Fixture Table', rulesFamily: 'srd-5.2.1', allowedSources: ['fixture-notebook'] };
 
@@ -123,7 +135,56 @@ beforeEach(() => {
   vi.mocked(client.packagePreflight).mockResolvedValue({ included: [], omitted: [], blocking: [], notices: [] });
   vi.mocked(client.listSources).mockResolvedValue([homebrewSource, bookSource]);
   vi.mocked(client.listImports).mockImplementation(async (id) => (id === 'fixture-notebook' ? [job] : []));
-  vi.mocked(client.candidates).mockResolvedValue({ items: [], total: 0 });
+  const found = (n: number, name: string): StoredCandidate => ({
+    id: `fixture-cand-${n}`,
+    jobId: 'job-a',
+    status: 'pending',
+    etag: `etag-${n}`,
+    updatedAt: '2026-10-14T00:00:00Z',
+    candidate: {
+      id: `fixture-cand-${n}`,
+      sourceId: 'fixture-notebook',
+      page: { start: n },
+      excerpt: `${name} 11`,
+      proposedKind: 'item',
+      proposedName: name,
+      rulesFamilies: ['srd-5.1'],
+      proposedEffects: [],
+      confidence: 0.85,
+      uncertainties: [],
+      unresolvedReferences: [],
+      fields: {},
+      lowConfidenceFields: [],
+    } as DraftCandidate,
+  });
+  vi.mocked(client.candidates).mockResolvedValue({ items: [found(1, 'Fixture Coat'), found(2, 'Fixture Lantern')], total: 2 });
+  vi.mocked(client.checkCandidate).mockResolvedValue({
+    candidateId: 'fixture-cand-1',
+    report: { errors: [], warnings: [], canPublish: true } as unknown as CandidateCheck['report'],
+    dependencies: [],
+    blockers: [],
+    canAccept: true,
+    canAcceptAsReference: true,
+  });
+  vi.mocked(client.sourcePackPreview).mockResolvedValue({ fileName: 'fixture-notebook.tomestack.zip', sources: [{ sourceId: 'fixture-notebook', title: 'Fixture Notebook', publisher: 'Fixture Press', license: 'own work', redistributable: true }], revisions: 2, drafts: 1, warnings: [] });
+  vi.mocked(client.campaignPackPreview).mockResolvedValue({
+    fileName: 'fixture-table.tomestack-campaign.zip',
+    campaignId: 'fixture-table',
+    name: 'Fixture Table',
+    rulesFamily: 'srd-5.2.1',
+    included: [{ sourceId: 'fixture-notebook', title: 'Fixture Notebook', publisher: 'Fixture Press', license: 'own work', redistributable: true }],
+    referenced: [{ sourceId: 'fixture-srd', title: 'Fixture Reference Rules', publisher: 'Fixture Press', license: 'open license', redistributable: true }],
+    leftOut: [{ sourceId: 'fixture-tome', title: 'Fixture Tome', publisher: 'Fixture Press', license: 'own copy', reason: { code: 'preflight.not-redistributable', message: 'not marked as your own shareable work' } }],
+    revisions: 2,
+    warnings: [],
+  });
+  const reference = { contentId: 'fixture-draft', revisionId: 'r1' };
+  const checked = { errors: [], warnings: [], canPublish: true } as unknown as CandidateCheck['report'];
+  vi.mocked(client.publishManyPreview).mockResolvedValue({
+    entries: [{ draft: reference, name: 'Fixture draft', kind: 'feat', report: checked, findings: [], replacesPublished: false, rePointings: [{ dependent: { contentId: 'fixture-other', revisionId: 'r1' }, dependentName: 'Fixture other', grantsMoved: 1, optionsMoved: 0 }] }],
+    dependents: [],
+    canPublish: true,
+  });
   vi.mocked(client.contentBySource).mockImplementation(async (id) => (id === 'fixture-notebook' ? [draftEntry, publishedEntry] : []));
   vi.mocked(client.contentDuplicates).mockResolvedValue([]);
   vi.mocked(client.feedback).mockResolvedValue([]);
@@ -148,7 +209,47 @@ it.each(sheetTabIds)('character sheet, %s tab', async (tab: SheetTabId) => {
   const selected = screen.getByRole('tab', { selected: true });
   expect(selected.textContent?.length).toBeGreaterThan(0);
   expect(container.querySelector('[role="tabpanel"]')?.textContent?.length).toBeGreaterThan(0);
-  await new Promise((r) => setTimeout(r, 20)); // let a tab's own fetches land
+  // One element only this tab shows, so the scan never runs before the tab's own content has landed.
+  const specific: Record<SheetTabId, () => Promise<unknown>> = {
+    play: () => screen.findByRole('checkbox', { name: /Compact view/ }),
+    spells: () => screen.findByRole('heading', { name: 'Spellcasting' }),
+    inventory: () => screen.findByRole('heading', { name: 'Equipment' }),
+    features: async () => {
+      await screen.findByRole('heading', { name: 'Things to remember yourself' });
+      return screen.findAllByText('Fixture Scout');
+    },
+    stats: async () => {
+      await screen.findByRole('heading', { name: 'Abilities' });
+      return screen.findAllByText(/set by hand \(calculated/);
+    },
+    notes: () => screen.findByRole('heading', { name: 'Session notes' }),
+    manage: () => screen.findByRole('heading', { name: 'Export' }),
+  };
+  expect(await specific[tab]()).toBeTruthy();
+  expectPlainWords(container);
+});
+
+it('character sheet, manage tab, sharing the character', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.previewExport).mockResolvedValue({
+    purpose: 'share',
+    fileName: 'fixture-wren.tomestack.zip',
+    characters: ['fixture-wording'],
+    included: [],
+    omitted: [{ sourceId: 'fixture-tome', title: 'Fixture Tome', publisher: 'Fixture Press', license: 'own copy', revisions: [{ reference: { contentId: 'fixture-boots', revisionId: 'r1' }, name: 'Fixture Boots', characters: ['fixture-wording'] }] }],
+    gapNotes: 0,
+  });
+  vi.mocked(client.packagePreflight).mockResolvedValue({
+    included: [{ contentId: 'fixture-lamp', revisionId: 'r1', name: 'Fixture Lamp', sourceName: 'Fixture Notebook', redistributable: true, origin: 'local' }],
+    omitted: [{ contentId: 'fixture-boots', revisionId: 'r1', name: 'Fixture Boots', sourceName: 'Fixture Tome', redistributable: false, origin: 'local', reason: 'preflight.not-redistributable' }],
+    blocking: [],
+    notices: ['Fixture Notebook, Fixture Press, own work'],
+  });
+  const { container } = render(labelled(<CharacterSheet view={view} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} initialTab="manage" rulesFamilies={families} />));
+  await user.click(await screen.findByRole('radio', { name: /^Share with someone/ }));
+  expect(await screen.findByRole('region', { name: 'Left out of the shared TomeStack file' })).toBeTruthy();
+  expect(await screen.findByRole('region', { name: 'Preflight: shared TomeStack file' })).toBeTruthy();
+  await screen.findByText(/Left out: 1\./);
   expectPlainWords(container);
 });
 
@@ -168,6 +269,17 @@ it('Books and PDFs, with a book import to review', async () => {
   expectPlainWords(container);
   await user.click(screen.getByRole('button', { name: 'Review 3 entries found' }));
   expect(await screen.findByRole('region', { name: 'Entries found in Fixture Notebook' })).toBeTruthy();
+  await user.click(await screen.findByRole('button', { name: 'Fixture Coat' }));
+  expect(await screen.findByRole('button', { name: 'Keep, with its rules' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Keep as text only' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Fixture Lantern' })).toBeTruthy();
+  expectPlainWords(container);
+  // Sharing the notebook as a TomeStack file: the preview, with its preflight.
+  await user.click(screen.getByRole('checkbox', { name: 'Fixture Notebook' }));
+  await user.click(screen.getByRole('button', { name: 'Preview file' }));
+  expect(await screen.findByRole('region', { name: 'TomeStack file preview' })).toBeTruthy();
+  await screen.findByText(/2 published versions/);
+  expect(await screen.findByRole('region', { name: 'Preflight: TomeStack file' })).toBeTruthy();
   expectPlainWords(container);
 });
 
@@ -181,11 +293,29 @@ it('Homebrew, with a draft and a published entry', async () => {
   await user.click(draftEdit);
   await screen.findByRole('group', { name: 'Rules' });
   expectPlainWords(container);
+  // The published entry has two versions, so its editor holds the compare panel.
+  await user.click(screen.getByRole('button', { name: 'Edit Fixture published' }));
+  expect((await screen.findAllByRole('option', { name: /^Version 1 \(published/ })).length).toBeGreaterThan(0);
+  expect(screen.getByRole('heading', { name: 'Compare versions' })).toBeTruthy();
+  expect(screen.getAllByRole('option', { name: 'The version on screen (unsaved)' }).length).toBeGreaterThan(0);
+  expectPlainWords(container);
+  // Making every draft available: the bulk panel with its preview.
+  await user.click(screen.getByRole('button', { name: 'Make all drafts in this source available to characters…' }));
+  expect(await screen.findByRole('heading', { name: 'Make drafts of Fixture Notebook available to characters' })).toBeTruthy();
+  await waitFor(() => expect(client.publishManyPreview).toHaveBeenCalled());
+  await screen.findByText(/No problems; 1 draft ready\./, undefined, { timeout: 3000 });
+  expectPlainWords(container);
 });
 
-it('Campaigns', async () => {
+it('Campaigns, with the share form', async () => {
+  const user = userEvent.setup();
   const { container } = render(labelled(<CampaignsPanel rulesFamilies={families} onError={noop} onStatus={noop} />));
   expect(await screen.findByRole('button', { name: 'Edit Fixture Table' })).toBeTruthy();
-  expect(await screen.findByRole('button', { name: 'Share Fixture Table…' })).toBeTruthy();
+  const share = await screen.findByRole('button', { name: 'Share Fixture Table…' });
+  expectPlainWords(container);
+  await user.click(share);
+  expect(await screen.findByRole('region', { name: 'Left out of the TomeStack file' })).toBeTruthy();
+  await screen.findByText(/carried with/);
+  expect(await screen.findByRole('region', { name: 'Preflight: TomeStack file' })).toBeTruthy();
   expectPlainWords(container);
 });
