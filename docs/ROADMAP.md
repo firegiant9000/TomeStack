@@ -4,7 +4,7 @@
 
 ## Now, next, later
 
-**Status:** 0.8.1 (published 2026-11-11) is the current release. The dated revision notes that used to sit at the top of this file are in the [CHANGELOG](CHANGELOG.md#roadmap-revision-history-moved-from-roadmapmd).
+**Status:** 0.8.1 (published 2026-11-12) is the current release. The dated revision notes that used to sit at the top of this file are in the [CHANGELOG](CHANGELOG.md#roadmap-revision-history-moved-from-roadmapmd).
 
 ### Now
 
@@ -130,7 +130,7 @@ One downloadable GitHub release built by a tag-triggered release workflow (`rele
 **Acceptance.** A release tag and downloadable installer; the four checklist items closed in writing; one upgrade v(N) → v(N+1) tested and recorded in `m2-acceptance.md` (from 0.3.x, it runs database v6 → v9 and leaves one `tomestack.db.v6.bak`); install verification of M2.2, M5 slice 1 and the M6 screens done on that build.
 
 **Status: released (0.4.0 to 0.8.1 published); not met until the owed checks below are recorded in [features/m2-acceptance.md](features/m2-acceptance.md).**
-- **Published:** 0.4.0 (2026-10-02), 0.5.0 (2026-10-12), 0.6.0 (2026-10-21), 0.7.0 and 0.7.1 (2026-10-27), 0.8.0 (2026-11-10) and 0.8.1 (2026-11-11), unsigned (signing is planned in [ADR-024](decisions/ADR-024-code-signing.md), not a 1.0 blocker), each with `Setup.exe`, a portable zip and a full package. The checklist below is closed.
+- **Published:** 0.4.0 (2026-10-02), 0.5.0 (2026-10-12), 0.6.0 (2026-10-21), 0.7.0 and 0.7.1 (2026-10-27), 0.8.0 (2026-11-10) and 0.8.1 (2026-11-12), unsigned (signing is planned in [ADR-024](decisions/ADR-024-code-signing.md), not a 1.0 blocker), each with `Setup.exe`, a portable zip and a full package. The checklist below is closed.
 - **Recorded:** the upgrade harness passed on a local pack (2026-10-01, below).
 - **Still owed (owner):**
   - the populated upgrade (the "populated (owner)" row in [features/m2-acceptance.md](features/m2-acceptance.md));
