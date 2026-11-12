@@ -283,6 +283,8 @@ public static class DownConversion
 
         public IEnumerable<ContentRevision> ChoiceExtensions(Guid contentId, string choiceId) => inner.ChoiceExtensions(contentId, choiceId);
 
+        public IReadOnlyList<ContentRevision> GuidesFor(Guid targetContentId) => inner.GuidesFor(targetContentId);
+
         public IEnumerable<ContentRevision> RevisionsOf(Guid contentId) => inner.RevisionsOf(contentId);
 
         public ContentRevision? NewestPublished(Guid contentId) => inner.NewestPublished(contentId);

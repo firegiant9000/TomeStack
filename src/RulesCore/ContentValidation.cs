@@ -22,6 +22,10 @@ internal sealed class ValidationBatch(IReadOnlyDictionary<ContentReference, Cont
 
     /// <summary>The batch's revisions of one content, in batch order.</summary>
     public IEnumerable<ContentRevision> OfContent(Guid contentId) => (_byContent ??= byReference.Values.ToLookup(r => r.ContentId))[contentId];
+
+    /// <summary>The newest published revision (batch order) of each content id in the batch that has one.</summary>
+    public IEnumerable<ContentRevision> Published() =>
+        byReference.Values.Where(r => r.Status == RevisionStatus.Published).GroupBy(r => r.ContentId).Select(g => g.Last());
 }
 
 /// <summary>
@@ -2020,6 +2024,19 @@ public static class ContentValidator
             {
                 if (guideFor.Content.ContentId == revision.ContentId || !PublishedOfFamily(guideFor.Content.ContentId, r => r.Kind is ContentKind.Class or ContentKind.Background))
                     Error("validate.guide-target", $"Effect '{guideFor.Id}' guides {guideFor.Content.ContentId}, which is not a published class or background of this revision's rules family.", guideFor.Id);
+            }
+            // One guide per target: on publish, another guide content id that (in its newest published revision, the batch's
+            // first) guides the same target in a shared rules family is a duplicate. A new revision of this same guide is fine.
+            // Like the other guide checks it reads the revision as it would publish: Publish validates the draft, so no status gate here
+            // (only the rivals must be published).
+            if (revision.Kind == ContentKind.CreationGuide && GuideForEffect.TargetOf(revision) is { } guided)
+            {
+                var stored = catalog.GuidesFor(guided).Where(g => g.ContentId != revision.ContentId).ToDictionary(g => g.ContentId);
+                var current = new Dictionary<Guid, ContentRevision>(stored);
+                foreach (var batched in local.Published().Where(r => r.Kind == ContentKind.CreationGuide && r.ContentId != revision.ContentId))
+                    current[batched.ContentId] = batched; // the batch's later revision answers for the id, even if it retargets
+                if (current.Values.Any(g => GuideForEffect.TargetOf(g) == guided && g.RulesFamilies.Intersect(revision.RulesFamilies).Any()))
+                    Error("validate.guide-duplicate", $"A published creation guide already guides {guided}; a target has one guide. Publish a new revision of that guide instead.");
             }
             foreach (var primary in revision.Effects.OfType<PrimaryAbilitiesEffect>())
             {

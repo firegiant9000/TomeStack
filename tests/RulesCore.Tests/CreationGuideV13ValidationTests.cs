@@ -381,6 +381,8 @@ public class CreationGuideV13ValidationTests
 
         public IEnumerable<ContentRevision> RevisionsOf(Guid contentId) => inner.RevisionsOf(contentId);
 
+        public IReadOnlyList<ContentRevision> GuidesFor(Guid targetContentId) => inner.GuidesFor(targetContentId);
+
         public ContentRevision? NewestPublished(Guid contentId)
         {
             Lookups[contentId] = Lookups.GetValueOrDefault(contentId) + 1;
