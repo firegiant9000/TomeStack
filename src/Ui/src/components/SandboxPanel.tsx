@@ -68,7 +68,7 @@ export function SandboxPanel(props: { revision: ContentRevision; prepare: (r: Co
     <section aria-labelledby="sandbox-heading" className="effect-editor">
       <h4 id="sandbox-heading">Try it</h4>
       <p className="hint">
-        Calculates this {revision.kind} as if it were published, on a copy that is never saved. Your characters keep using published revisions.
+        Calculates this {revision.kind} as if it were published, on a copy that is never saved. Your characters keep using published versions.
       </p>
       <label className="field">
         Try it on

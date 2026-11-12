@@ -523,7 +523,7 @@ function missingHint(one: string, many: string, count: number, missing: Missing,
           {phrase(count)} installed for {missing.familyName}. More can come from the homebrew studio or a content pack.
         </p>
       )}
-      {missing.drafts > 0 && <p className="hint">{phrase(missing.drafts)} drafts in the Homebrew studio: publish them there to use them.</p>}
+      {missing.drafts > 0 && <p className="hint">{phrase(missing.drafts)} drafts in Homebrew: make them available to characters there to use them.</p>}
       {missing.otherFamily > 0 && (
         <p className="hint">
           {phrase(missing.otherFamily)} written for {missing.otherFamilyName} only.

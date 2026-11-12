@@ -297,7 +297,7 @@ export function BackgroundBasicsEditor(props: BackgroundProps) {
           <legend>{choiceLegend}</legend>
           <p id={increaseId} className="hint">
             Tick the three abilities this background lists. A character then chooses +2 to one and +1 to another, or +1 to all three. When you save, this
-            makes those seven options as feature drafts in this source; publish them together with the background.
+            makes those seven options as feature drafts in this source; make them available to characters together with the background.
           </p>
           <div className="origin-grid">
             {abilities.map(([key, name]) => (

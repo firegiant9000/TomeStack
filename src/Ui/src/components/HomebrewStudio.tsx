@@ -345,7 +345,7 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
           setNotChanged([]);
           setEntries([]);
           setSourceId(created.id);
-          onStatus(`Created the homebrew source ${created.title}.`);
+          onStatus(`Created ${created.title}.`);
         }}
         onError={onError}
       />
@@ -635,7 +635,7 @@ function SourcePicker(props: {
 
   return (
     <section aria-labelledby="sources-heading">
-      <h3 id="sources-heading">Homebrew sources</h3>
+      <h3 id="sources-heading">Books and notebooks</h3>
       {props.sources.length > 0 && (
         <label className="field">
           Book or notebook
@@ -648,9 +648,9 @@ function SourcePicker(props: {
           </select>
         </label>
       )}
-      <form className="inline-form" onSubmit={create} aria-label="New homebrew source">
+      <form className="inline-form" onSubmit={create} aria-label="New book or notebook">
         <label className="field">
-          Source title
+          Title
           <input value={title} onChange={(e) => setTitle(e.target.value)} required />
         </label>
         <fieldset>
@@ -667,10 +667,10 @@ function SourcePicker(props: {
           ))}
         </fieldset>
         <button type="submit" disabled={families.length === 0}>
-          Create source
+          Create
         </button>
       </form>
-      <p className="hint">Homebrew sources are personal: a shared export leaves them out.</p>
+      <p className="hint">Books and notebooks are personal: a shared export leaves them out.</p>
     </section>
   );
 }

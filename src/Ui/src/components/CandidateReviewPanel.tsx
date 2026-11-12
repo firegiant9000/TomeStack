@@ -327,7 +327,7 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
       <h5 ref={heading} tabIndex={-1}>
         Entries found in {source.title}
       </h5>
-      <p className="hint">Kept entries are drafts in the Homebrew studio under {source.title}. Publish them there to use them in the builder.</p>
+      <p className="hint">Kept entries are drafts in Homebrew under {source.title}. Make them available to characters there to use them in the builder.</p>
       <div className="actions">
         {/* aria-disabled, never `disabled`; leaving would silently drop an unsaved edit (ruling R26). */}
         <button

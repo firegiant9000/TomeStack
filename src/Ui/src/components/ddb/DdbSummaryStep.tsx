@@ -94,7 +94,7 @@ export function DdbSummaryStep({ preview, family, suggested, includePlayState, o
             so your later work on it cannot be shared or moved; to share your own version, make a new class.
           </p>
           <label>
-            <input type="checkbox" checked={publishClass} {...heldProps(classSlot)} onChange={(e) => !held && onPublishClass(e.target.checked)} /> Publish it
+            <input type="checkbox" checked={publishClass} {...heldProps(classSlot)} onChange={(e) => !held && onPublishClass(e.target.checked)} /> Make it available to characters
           </label>{' '}
           {reason(classSlot)}
           <p role="note">
@@ -118,7 +118,7 @@ export function DdbSummaryStep({ preview, family, suggested, includePlayState, o
           </ul>
           <label>
             <input type="checkbox" checked={publishReferences} {...heldProps(referencesSlot)} onChange={(e) => !held && onPublishReferences?.(e.target.checked)} />{' '}
-            {drafts.length === 1 ? 'Publish this reference draft' : `Publish these ${drafts.length} reference drafts`}
+            {drafts.length === 1 ? 'Make this reference draft available to characters' : `Make these ${drafts.length} reference drafts available to characters`}
           </label>{' '}
           {reason(referencesSlot)}
           <p role="note">

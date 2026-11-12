@@ -346,7 +346,7 @@ function SkillChoice(props: {
             Create skill choice
           </button>
           <p id="skill-choice-why" className="hint">
-            {why || 'This publishes one feature per skill in this source, named after the class (existing ones are reused), and offers them.'}
+            {why || 'This makes one feature per skill available to characters in this source, named after the class (existing ones are reused), and offers them.'}
           </p>
         </>
       )}

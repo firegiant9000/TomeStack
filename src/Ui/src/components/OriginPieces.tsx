@@ -127,7 +127,7 @@ export function NewFeatureForm(props: {
       props.onCreated({ contentId: reference.contentId, name: trimmed, kind: 'feature', reference, draft: true, own: true });
       setName('');
       setText('');
-      props.onDone(`Saved a draft of the feature ${trimmed} and added it. Publish it together with this entry.`);
+      props.onDone(`Saved a draft of the feature ${trimmed} and added it. Make it available to characters together with this entry.`);
     } catch (error) {
       props.onError(error);
     } finally {
