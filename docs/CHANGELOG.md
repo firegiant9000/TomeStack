@@ -2,13 +2,26 @@
 
 ## Unreleased
 
+### Changed
+- **Docs:** the README "Code signing policy" and [ADR-024](decisions/ADR-024-code-signing.md) record that the SignPath Foundation application was submitted on 2026-11-12. Releases stay unsigned until it is accepted.
+- **Plainer words on screen (D99):** the rules a character or book follows now read "2014 rules" and "2024 rules" instead of an id. A shared file is a "TomeStack file", and the studio is "Homebrew".
+- **Plainer words on screen (D99), continued:** content has "versions", not "revisions". Book imports show "entries found", not "candidates". A number you changed by hand is "a number you set by hand", not an "override". The text a screen reader reads uses the same words.
+- **Wording check:** a UI test (`wording.test.tsx`) renders the main screens and fails if an id or one of the old words comes back. Ids, file formats, diagnostics codes and exported JSON keep their names.
+
+## 0.8.1 (save for 0.7.0, Foundry dnd5e 6.0.6, release and CI hygiene)
+
+A patch on 0.8.0: "Save for an older TomeStack" now offers 0.7.0, and the Foundry export targets dnd5e 6.0.6. The rest is release, CI and documentation work, plus a development-only `minimatch` override for a moderate advisory.
+
+**Unsigned:** Windows shows "Windows protected your PC" the first time you run `TomeStack.App-win-Setup.exe`. Choose **More info**, then **Run anyway**. Some workplace PCs, and Windows 11 with Smart App Control on, block unsigned apps entirely.
+
+**Updating from 0.8.0:** download the newer `Setup.exe` and run it; TomeStack never checks for updates and makes no network calls. On first start, 0.8.1 copies the database once (`tomestack.db.app-0.8.0-to-0.8.1.bak`). There is no database, schema, content or package change: 0.8.0 and 0.8.1 open the same folder and the same packages. Updating from 0.7.x, the [0.8.0 notes](CHANGELOG.md) apply too: back up first.
+
 ### Added
 - **Save for an older TomeStack: 0.7.0 (D85, [ADR-023](decisions/ADR-023-down-conversion-export.md)):** "Which TomeStack will open it?" now offers 0.7.0 beside 0.6.0 and 0.5.0, for a character, a source pack, a campaign pack or a full library backup. The copy drops and lists what 0.7.0 cannot hold (content v12 fields and effects, item mods and content companions' hit points), and blocks what would make it stronger, as for the other targets. It was held back from 0.8.0 until a real 0.7.0 build had opened the test copies; that proof is now committed and the weekly job reruns it. No schema, package format or database change. See [package-format.md](features/package-format.md#save-for-an-older-tomestack-d85).
 
 ### Changed
-- **Plainer words on screen (D99):** the rules a character or book follows now read "2014 rules" and "2024 rules" instead of an id. A shared file is a "TomeStack file", and the studio is "Homebrew".
-- **Plainer words on screen (D99), continued:** content has "versions", not "revisions". Book imports show "entries found", not "candidates". A number you changed by hand is "a number you set by hand", not an "override". The text a screen reader reads uses the same words.
-- **Wording check:** a UI test (`wording.test.tsx`) renders the main screens and fails if an id or one of the old words comes back. Ids, file formats, diagnostics codes and exported JSON keep their names.
+- **Docs (code signing, roadmap, decisions):** ADR-024 proposes code signing through SignPath Foundation, and the README has the "Code signing policy" section their terms require (releases stay unsigned until they accept; the first signed release is targeted for 0.9.0). The ROADMAP is now now/next/later and defines 1.0; its dated revision notes moved to the bottom of this file. `docs/decisions/README.md` indexes the ADRs. The owner's passes on 0.8.0 for accessibility items 6, 15, 16, 17 and 68 (2026-11-11) are recorded. No app behaviour change.
+- **Foundry export pinned to dnd5e 6.0.6 (issue #125):** the exported Actor names dnd5e 6.0.6. No field the export writes changed between the two dnd5e releases. Foundry core is still 14.367. The owner's real-Foundry import check ([export-adapters.md](features/export-adapters.md)) now targets 6.0.6.
 - **Docs:** the README status block and the MVP, ROADMAP and ARCHITECTURE status text now match the published 0.8.0, and the README leads with the calculation trace.
 - **Inspiration label:** the sheet's inspiration checkbox and summary line take their name ("Inspiration" or "Heroic Inspiration") from the rules family policy (`RulesFamilyPolicy.InspirationName`) instead of a family-id check in the UI. No visible change.
 - **Dependencies:** React and React DOM 19.3.0 to 19.3.1 (shipped; [ATTRIBUTION.md](../ATTRIBUTION.md) updated, `scheduler` unchanged). Development-only: `@testing-library/user-event`, `@types/node`, `@vitejs/plugin-react`, ESLint, `globals` and `typescript-eslint` to their latest patch or minor (from dependabot #126). No app behaviour change.
@@ -767,3 +780,31 @@ The build handed over after M2 items 1–7 (ADR-008: PATCH for a build given to 
 - **Content schema v3 (ADR-003):** adds `grant.level`, `choice.level`, the `hitDie` effect, and the `armorClass` and `hitPoints` targets. v2 revisions are **not** upcast (v2 is a subset of v3), so stored hashes are unchanged and no database migration is needed. v1 still upcasts to v2. Builds that know only v2 refuse v3 revisions.
 - Exports now also include content that included content grants (for example class features or a background's feat), so the receiving machine calculates the same sheet. Before, a granted revision that the receiver lacked showed as missing.
 - **Package format v3 (ADR-007):** the manifest adds `purpose` (`backup` / `share`) and `omitted[]`. v1 and v2 packages import as backups. Older builds refuse v3. Export file names change: a backup is `<name>-personal-backup.tomestack.zip`.
+
+## ROADMAP revision history (moved from ROADMAP.md)
+
+These dated notes sat at the top of [ROADMAP.md](ROADMAP.md) under "Revision 2026-09-29". They are kept here as the record; ROADMAP now shows the current plan as now, next and later.
+
+_This revision sits above the milestone table and changes what happens next, not what was built. Evidence and the repository cleanup plan are in [roadmap-review-2026-09.md](roadmap-review-2026-09.md). The milestone table and the M2.2, M5 and M6 plans below are kept as the record; their rows carry the status tags from R2._
+
+_**Reconciled with the owner's direction of 2026-09-30 (LIVING_SPECS D15):** M6 slices 2 to 6 were built on purpose before T2 and are kept. T1, T2 as the gate for M7, content breadth and further studio work, T3 to T6 and the audit findings still apply. What the M6 stack made obsolete is struck through, with the reason. The revision branch held two drafts of this section (T1–T6 and a near copy, U1–U6); this is the one kept, with the few details only U had folded in._
+
+_**2026-10-03 (LIVING_SPECS D17):** the sheet's summary bar and tabs ([features/sheet-layout.md](features/sheet-layout.md), ADR-014) are owner-use polish done during T2. They are not M7 "deeper accessibility/themes" work and do not wait for the T2 gap report._
+
+_**2026-10-05 (LIVING_SPECS D18, ADR-015):** the visual refresh (themes, shell layout, dice display, summary QOL) is owner-use polish done during T2, like D17; it does not wait for the T2 gap report._
+
+_**2026-10-06 (LIVING_SPECS D19–D26):** the owner's UI follow-ups (concentration, compact view, currency, session notes, undo, calculated marks/passives/speed, the Characters home screen, tab glyphs) are owner-use polish done during T2, like D17 and D18, with character schema v8 approved by the owner. They are player-sheet features, not R4's DM or combat tools or content breadth, and do not wait for the T2 gap report._
+
+_**2026-10-07 (LIVING_SPECS D27–D32):** the owner's feedback round (light palette, summary and roll log, rests in the header, spell search, family filtering, the guided builder) is owner-use polish during T2 like D17–D26; it adds no content, no schema and does not wait for the T2 gap report._
+
+_**2026-10-14 (LIVING_SPECS D41):** by owner exception to R4, like D16a, the tester-feedback plan's four waves (guidance and detection; book import to a playable class; characters from a fillable sheet or text; table features) are built before the T2 gap report, and ship as one release before the group's first session. The gap report then ranks what follows. Content breadth beyond what an import or the owner authors stays after T2._
+
+_**2026-10-17 (LIVING_SPECS D43):** by owner exception to R4, like D41, a reusable play-mechanics engine (exclusive toggle groups and overlays with costs from a shared pool; a player-owned round counter with durations, per-turn upkeep and allowances that refresh once per round; assisted damage-time responses and hit-point thresholds; attacks and action details from features) is designed now and built after the tester-feedback waves, for the owner's high-powered homebrew one-shot. It ships in the release after 0.6.0. It adds no DM or VTT tools (no initiative order for other creatures, no positions, no monsters) and no bundled content; the homebrew itself stays in the owner's local source._
+
+_**2026-10-18 (LIVING_SPECS D60; owner ruling):** T2 no longer gates anything. Its hard stop on M7, content breadth, and studio or extension work beyond M5/M6 is waived by the owner. ~~The queue is wave 2, wave 3, the play-mechanics engine (D43, ADR-018), the 0.6.0 freeze (about 2026-11-11, D41), then the Homebrew Import Lab (below).~~ The queue was amended on 2026-10-20 (next note). T2 stays a milestone: the played session and its gap report are still owed. When the report exists, it re-ranks remaining work. Nothing waits for it. R4's other bans stay in force: no DM or combat tools, no plugin execution, no cloud sync or accounts, no cloud infrastructure, no security scanning beyond Dependabot. The statuses of T5, T6 and M4 are refreshed below, and the owner checks still owed are collected in one table ("Owed owner checks")._
+
+_**2026-10-20 (LIVING_SPECS D41 and D60 amended; owner ruling):** there is no feature freeze. 0.6.0 is released when Wave 3 is done, and the session (about 2026-11-11) is context, not a deadline. The play-mechanics engine (D43, ADR-018) ships in the release after 0.6.0. The queue is wave 2, wave 3, 0.6.0, the play-mechanics engine, then the Homebrew Import Lab (below). The lab's scope is narrowed (D62), and DM and combat tools stay banned but are noted for later (D63, under R4). The "Owed owner checks" table is re-checked against the recorded evidence as of 2026-10-20._
+
+_**2026-10-26 (LIVING_SPECS D60 amended; owner ruling):** content breadth (Track 1) is queued: the SRD species, backgrounds and feats off `main` now, then Monk, Rogue and Barbarian after the play-mechanics engine merges. The content-breadth row below reads "queued". SRD 5.2.1's species, backgrounds and feats are the first of it._
+
+_**2026-10-24:** the play-mechanics engine (D43, slices 1 to 8) is built and integrated for **0.7.0**. Its owner checks (accessibility rows 69 to 85, the rehearsal with the owner's own content on an installed build) are open. Next in the queue: the Homebrew Import Lab._

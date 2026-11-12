@@ -2,12 +2,21 @@
 
 The four items ADR-008 left open before the first published installer (LIVING_SPECS D08), closed in writing for **0.4.0** on 2026-10-01. Re-check each one for every later release, and record the result here.
 
-| # | Item | Result for 0.4.0 | Result for 0.5.0 (2026-10-12) | Result for 0.6.0 (2026-10-21) | Result for 0.7.0 (2026-10-24) | Result for 0.8.0 (2026-11-10) |
-|---|---|---|---|---|---|---|
-| 1 | Trademark | **Pass.** No D&D mark in the product | **Pass, with a recorded exception.** The name and branding carry no mark; the importer names "D&D Beyond" only to say which sheet it reads, with a non-affiliation line (owner, 2026-10-12; see [0.5.0 re-check](#050-re-check-2026-10-12)) | **Pass, same exception.** No new kind of use (see [0.6.0 re-check](#060-re-check-2026-10-21)) | **Pass, same exception.** No new use (see [0.7.0 re-check](#070-re-check-2026-10-24)) | **Pass, same exception.** No new use (see [0.8.0 re-check](#080-re-check-2026-11-10)) |
-| 2 | Windows SDK binaries (OCR) | **Done.** Allowed to ship; the owner accepted the license's conditions (option (a), 2026-10-02) and the end-user terms were in that release's `ATTRIBUTION.md` | **Unchanged.** Same package and DLLs as 0.4.0 | **Unchanged.** Same package and DLLs as 0.5.0 | **Unchanged.** Same package and DLLs as 0.6.0 | **None ship** (option (b), 2026-10-27); the generated projection is the license's permitted use (owner, 2026-11-04) |
-| 3 | Velopack `Setup.exe` / `Update.exe` notices | **Done.** Generated and installed | **Unchanged.** Same Velopack version (1.2.161); the notices file stands | **Unchanged.** Same Velopack version (1.2.161) | **Unchanged.** Same Velopack version (1.2.161) | **Unchanged.** Same Velopack version (1.2.161) |
-| 4 | Code signing | **Decided: unsigned** (owner, 2026-10-01) | **Unsigned**, as decided | **Unsigned**, as decided | **Unsigned**, as decided | **Unsigned**, as decided |
+| # | Item | Result for 0.4.0 | Result for 0.5.0 (2026-10-12) | Result for 0.6.0 (2026-10-21) | Result for 0.7.0 (2026-10-24) | Result for 0.8.0 (2026-11-10) | Result for 0.8.1 (2026-11-11) |
+|---|---|---|---|---|---|---|---|
+| 1 | Trademark | **Pass.** No D&D mark in the product | **Pass, with a recorded exception.** The name and branding carry no mark; the importer names "D&D Beyond" only to say which sheet it reads, with a non-affiliation line (owner, 2026-10-12; see [0.5.0 re-check](#050-re-check-2026-10-12)) | **Pass, same exception.** No new kind of use (see [0.6.0 re-check](#060-re-check-2026-10-21)) | **Pass, same exception.** No new use (see [0.7.0 re-check](#070-re-check-2026-10-24)) | **Pass, same exception.** No new use (see [0.8.0 re-check](#080-re-check-2026-11-10)) | **Pass, same exception.** No new use (see [0.8.1 re-check](#081-re-check-2026-11-11)) |
+| 2 | Windows SDK binaries (OCR) | **Done.** Allowed to ship; the owner accepted the license's conditions (option (a), 2026-10-02) and the end-user terms were in that release's `ATTRIBUTION.md` | **Unchanged.** Same package and DLLs as 0.4.0 | **Unchanged.** Same package and DLLs as 0.5.0 | **Unchanged.** Same package and DLLs as 0.6.0 | **None ship** (option (b), 2026-10-27); the generated projection is the license's permitted use (owner, 2026-11-04) | **None ship**, unchanged |
+| 3 | Velopack `Setup.exe` / `Update.exe` notices | **Done.** Generated and installed | **Unchanged.** Same Velopack version (1.2.161); the notices file stands | **Unchanged.** Same Velopack version (1.2.161) | **Unchanged.** Same Velopack version (1.2.161) | **Unchanged.** Same Velopack version (1.2.161) | **Unchanged.** Same Velopack version (1.2.161) |
+| 4 | Code signing | **Decided: unsigned** (owner, 2026-10-01) | **Unsigned**, as decided | **Unsigned**, as decided | **Unsigned**, as decided | **Unsigned**, as decided | **Unsigned**, as decided |
+
+## 0.8.1 re-check (2026-11-11)
+
+Over the changes since the `v0.8.0` tag. A patch: `git diff v0.8.0 HEAD -- src/AppService/Content` is empty, and `ReleaseLadder` gains no row (0.8.1 reads the 0.8.0 row; the 0.7.0 row is now offered as a "Save for an older TomeStack" target).
+
+- **Dependencies:** shipped, only React and React DOM 19.3.0 → 19.3.1 (`scheduler` unchanged; `ATTRIBUTION.md` updated in #150). Development-only: `@testing-library/user-event`, `@types/node`, `@vitejs/plugin-react`, ESLint, `globals`, `typescript-eslint`, and `minimatch` 11.0.7 through an npm `overrides` entry (#154, Dependabot alert #1). `Directory.Packages.props` and `.config/dotnet-tools.json` are unchanged, so every NuGet package and `vpk` 1.2.161 are as in 0.8.0. Workflows: `ci.yml` and `weekly.yml` pin every action by commit SHA, and the weekly Stryker job runs in four shards; `release.yml` is unchanged. `scripts/release-notes.ps1` rewrites relative changelog links to tagged GitHub URLs.
+- **`npm audit --omit=dev`: 0.**
+- **Trademark:** the same search as 0.8.0, over the lines added since `v0.8.0` in `src/` (excluding the SRD packs): no new "D&D", "Wizards of the Coast", "Dungeons", "fifth edition" or "5e". The Foundry export still names the `dnd5e` system id (now 6.0.6), as in §1. Product name, window title, installer title, exe metadata and README tagline unchanged.
+- **Weekly workflow:** a manual run on `main` after #152 (four Stryker shards) is the first with the new layout; its result is recorded on #152.
 
 ## 0.8.0 re-check (2026-11-10)
 

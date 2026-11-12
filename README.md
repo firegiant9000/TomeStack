@@ -2,7 +2,7 @@
 
 **Every number explains itself.** A local-first Windows character sheet for 5E-compatible play and homebrew: tap any value to see the rule, the source page and the choice behind it. It works offline, with no account.
 
-> **Status: v0.8.0**, an unsigned installer on the [Releases page](https://github.com/firegiant9000/TomeStack/releases) (Windows asks you to confirm the first run). What each release added is in the [CHANGELOG](docs/CHANGELOG.md).
+> **Status: v0.8.1**, an unsigned installer on the [Releases page](https://github.com/firegiant9000/TomeStack/releases) (Windows asks you to confirm the first run). What each release added is in the [CHANGELOG](docs/CHANGELOG.md).
 
 ![The Strength score expanded on a character sheet: a table traces the value from the chosen base score of 15, plus 2 from the Soldier background's ability score choice, to 17, citing System Reference Document 5.2.1, page 83](docs/media/calculation-trace.png)
 
@@ -127,6 +127,20 @@ gh attestation verify .\TomeStack.App-win-Setup.exe --repo firegiant9000/TomeSta
 - One TomeStack per data folder: a second launch brings the open window forward.
 - Upgrading keeps your library in place, and a full backup moves it to a new PC; see [Moving your library to a new version or a new PC](docs/features/restore-drill-procedure.md#moving-your-library-to-a-new-version-or-a-new-pc). A file for someone on an older version can be saved for that version; the preview lists what the copy leaves out, and your library is unchanged.
 - 2014 and 2024 rules are separate rules-family IDs, and their differences are explicit policy fields.
+
+## Code signing policy
+
+Releases up to 0.8.x are unsigned. The project applied to [SignPath Foundation](https://signpath.org) for free code signing for open source projects on 2026-11-12 and is waiting for their answer. The first signed release is targeted for 0.9.0 if the application is accepted. The plan and the alternatives are in [ADR-024](docs/decisions/ADR-024-code-signing.md). If the application is declined, releases stay unsigned.
+
+Once accepted, signed releases carry this line:
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org)
+
+- **Team roles:** committers and reviewers, and approvers, are the repository owner ([firegiant9000](https://github.com/firegiant9000)). Outside contributions are reviewed by the owner before they are merged.
+- **Builds:** released files are built from the source in this repository by the GitHub Actions workflow `release.yml`, which also publishes a build attestation (see "Verify a release" above).
+- **Approval:** every release will need a manual approval before it is signed. The installer and the app files in it are signed in two separate requests.
+- **Accounts:** multi-factor authentication is required for every team member with signing or repository access.
+- **Privacy:** this program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it. There is no update check and no telemetry. Crash details are saved to a log file in your data folder and are never sent.
 
 ## License
 
