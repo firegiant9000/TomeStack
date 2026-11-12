@@ -364,8 +364,8 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   // Features list their automation status.
   await openTab(user, sheet, 'Features');
   const features = screen.getByRole('region', { name: 'Features' });
-  // C2-1: the new Barbarian's Danger Sense is an automatic Dexterity-save advantage (it was reference text before).
-  expect(within(features).getByText('Danger Sense').closest('li')!.textContent).toMatch(/automatic/);
+  // C2-1: the new Barbarian's Danger Sense is a worked-out Dexterity-save advantage (it was reference text before).
+  expect(within(features).getByText('Danger Sense').closest('li')!.textContent).toMatch(/Worked out for you/);
 
   // M2 item 3, long rest (D01): preview first, cancel changes nothing, then confirm.
   await openTab(user, sheet, 'Play');
@@ -1219,7 +1219,7 @@ it('D60 gate: a Markdown class is reviewed, accepted with its confirm tick and p
   await within(reader()).findByRole('region', { name: 'Entries found in E2E Gate Book' });
   await user.selectOptions(within(panel()).getByRole('combobox', { name: 'Kind' }), 'class');
   await user.click(await candidateButton(panel, 'Placeholder'));
-  const details = () => within(panel()).getByRole('region', { name: 'Entry:Placeholder' });
+  const details = () => within(panel()).getByRole('region', { name: 'Entry: Placeholder' });
   await waitFor(() => expect(within(details()).getByRole('region', { name: 'Check before keeping' })).toBeTruthy());
 
   // Keep stays held until the hit die is confirmed against the page; the proficiencies are left as reference.
@@ -1295,14 +1295,14 @@ it('reads the fixture PDF, reviews its candidates, and publishes an accepted one
   await within(reader()).findByRole('region', { name: 'Entries found in E2E Grimoire' });
   await waitFor(() => expect(within(list()).getAllByRole('listitem')).toHaveLength(19));
   const kind = within(panel()).getByRole('combobox', { name: 'Kind' });
-  const detail = (name: string) => within(panel()).findByRole('region', { name: `Entry:${name}` });
+  const detail = (name: string) => within(panel()).findByRole('region', { name: `Entry: ${name}` });
 
   // A clean spell: excerpt, page, what was read; the check passes; keeping makes a draft.
   await user.selectOptions(kind, 'spell');
   await waitFor(() => expect(within(list()).getAllByRole('listitem')).toHaveLength(2));
   await user.click(await candidateButton(panel, 'Fixture Ember Lance')); // a slow PDF worker may still be filling the list
   const ember = await detail('Fixture Ember Lance');
-  await waitFor(() => expect(document.activeElement).toBe(within(ember).getByRole('heading', { name: 'Entry:Fixture Ember Lance' })));
+  await waitFor(() => expect(document.activeElement).toBe(within(ember).getByRole('heading', { name: 'Entry: Fixture Ember Lance' })));
   expect(within(ember).getByRole('figure').textContent).toMatch(/Excerpt from p\. 2.*Fixture Ember Lance.*3d6 Fire/s);
   expect(ember.querySelector('dl[aria-label="What was read"]')!.textContent).toMatch(/level2schoolevocationcastingtimeAction/);
   await user.click(within(ember).getByRole('button', { name: 'Open page 2' }));
@@ -1376,7 +1376,7 @@ it('imports a fixture class: the table is checked, the hit die and slots are con
   await within(reader()).findByRole('region', { name: 'Entries found in E2E Class Book' });
   await user.selectOptions(within(panel()).getByRole('combobox', { name: 'Kind' }), 'class');
   await user.click(await candidateButton(panel, 'Fixture Lamplighter'));
-  const lamplighter = await within(panel()).findByRole('region', { name: 'Entry:Fixture Lamplighter' });
+  const lamplighter = await within(panel()).findByRole('region', { name: 'Entry: Fixture Lamplighter' });
 
   // The slot table and the linked features are on screen to check against the page.
   const table = await within(lamplighter).findByRole('table', { name: 'Spell slots by class level, as read from the page' });
@@ -1389,8 +1389,8 @@ it('imports a fixture class: the table is checked, the hit die and slots are con
   await user.click(within(lamplighter).getByRole('button', { name: 'Save edit' }));
   await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Saved your edit of Fixture Lamplighter/));
   // The details are rebuilt from the saved edit, and checked again.
-  await waitFor(() => expect(within(panel()).getByRole('region', { name: 'Entry:Fixture Lamplighter' })).not.toBe(lamplighter));
-  const again = within(panel()).getByRole('region', { name: 'Entry:Fixture Lamplighter' });
+  await waitFor(() => expect(within(panel()).getByRole('region', { name: 'Entry: Fixture Lamplighter' })).not.toBe(lamplighter));
+  const again = within(panel()).getByRole('region', { name: 'Entry: Fixture Lamplighter' });
   await waitFor(() => expect(within(again).getByRole('region', { name: 'Check before keeping' }).textContent).not.toMatch(/unsure/));
   const accept = within(again).getByRole('button', { name: 'Keep, with its rules' });
   expect(accept.getAttribute('aria-disabled')).toBe('true');
@@ -1427,7 +1427,7 @@ it('selects a proposed effect of a fixture class and sees its lines highlighted 
   await within(reader()).findByRole('region', { name: 'Entries found in E2E Span Book' });
   await user.selectOptions(within(panel()).getByRole('combobox', { name: 'Kind' }), 'class');
   await user.click(await candidateButton(panel, 'Fixture Lamplighter'));
-  const lamplighter = await within(panel()).findByRole('region', { name: 'Entry:Fixture Lamplighter' });
+  const lamplighter = await within(panel()).findByRole('region', { name: 'Entry: Fixture Lamplighter' });
 
   // Before a choice the whole excerpt shows, as always.
   expect(lamplighter.querySelector('pre.excerpt')).not.toBeNull();
