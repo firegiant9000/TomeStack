@@ -45,7 +45,7 @@ public sealed partial class PackageService
     /// D85: a pack's revisions lowered for <paramref name="target"/>, or null without one. A pack carries no characters, so a
     /// superseded revision whose blocker nothing written needs is left out (<see cref="DownConversion.Superseded"/>); the newest never is.
     /// </summary>
-    private LoweredPlan? LowerPack(List<ContentRevision> revisions, string fileName, LadderRow? target, IReadOnlyList<SourceRecord>? sources = null)
+    private LoweredPlan? LowerPack(List<ContentRevision> revisions, string fileName, LadderRow? target, IReadOnlyList<SourceRecord> sources)
     {
         if (target is null)
             return null;
@@ -58,7 +58,7 @@ public sealed partial class PackageService
         var changes = lowered.Changes;
         var blocked = lowered.Blocked;
         // A source that lowering left with no revision would be an empty source in the pack, which no reader accepts: block, as the reader does.
-        foreach (var source in sources ?? [])
+        foreach (var source in sources)
         {
             if (revisions.Any(r => r.Provenance.SourceId == source.Id) && !written.Any(r => r.Provenance.SourceId == source.Id))
             {
