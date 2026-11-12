@@ -97,6 +97,46 @@ public class DownConvertV13Tests
         Assert.IsType<ItemEffect>(Assert.Single(result.Revision.Effects));
     }
 
+    [Theory]
+    [InlineData(GuideFor, "effects[0]")]
+    [InlineData(Kit, "effects[0]")]
+    public void A_guide_only_effect_on_another_kind_is_dropped_with_its_own_code(string effect, string path)
+    {
+        var result = DownConvert.Below(Rev(effect + "," + PackAlone, ContentKind.Item), 12);
+
+        Assert.False(result.Omit);
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(BelowAction.Dropped, change.Action);
+        Assert.Equal(BelowCodes.EffectUnsupported, change.Code);
+        Assert.Equal(path, change.Path);
+        Assert.IsType<ItemEffect>(Assert.Single(result.Revision.Effects));
+    }
+
+    [Fact]
+    public void A_v13_pack_lowers_across_two_rungs_to_11()
+    {
+        var result = DownConvert.Below(Rev(Pack, ContentKind.Item), 11);
+
+        Assert.False(result.Omit);
+        Assert.False(result.Blocked);
+        Assert.Equal(BelowCodes.ItemContains, Assert.Single(result.Changes).Code);
+        Assert.Equal(11, result.Revision.SchemaVersion);
+        Assert.Equal(Written(Rev(PackAlone, ContentKind.Item, 11)), Written(result.Revision));
+    }
+
+    [Theory]
+    [InlineData(12)]
+    [InlineData(11)]
+    public void A_guide_is_omitted_by_kind_whatever_schema_it_declares(int declared)
+    {
+        var guide = Rev(GuideFor, ContentKind.CreationGuide, declared);
+
+        var result = DownConvert.Below(guide, declared - 1);
+
+        Assert.True(result.Omit);
+        Assert.Equal(BelowCodes.CreationGuide, Assert.Single(result.Changes).Code);
+    }
+
     [Fact]
     public void The_lowered_pack_validates_at_the_target()
     {

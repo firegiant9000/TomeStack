@@ -31,7 +31,7 @@ public sealed partial class PackageService
     public SourcePackPreview PreviewSourcePack(IReadOnlyList<Guid> sourceIds, LadderRow? target = null)
     {
         var plan = PlanSourcePack(sourceIds);
-        var lowered = LowerPack(plan.Revisions, plan.FileName, target);
+        var lowered = LowerPack(plan.Revisions, plan.FileName, target, plan.Sources);
         var (revisions, fileName) = lowered is null ? (plan.Revisions, plan.FileName) : (lowered.Plan.Revisions, lowered.Plan.FileName);
         var opens = NewerBuild.Evaluate(revisions, [], 0, [], BundledPackTitle(revisions));
         var warnings = lowered is null ? plan.Warnings : plan.WarningsFor(revisions); // D85: over what the lowered pack writes
@@ -45,7 +45,7 @@ public sealed partial class PackageService
     /// D85: a pack's revisions lowered for <paramref name="target"/>, or null without one. A pack carries no characters, so a
     /// superseded revision whose blocker nothing written needs is left out (<see cref="DownConversion.Superseded"/>); the newest never is.
     /// </summary>
-    private LoweredPlan? LowerPack(List<ContentRevision> revisions, string fileName, LadderRow? target)
+    private LoweredPlan? LowerPack(List<ContentRevision> revisions, string fileName, LadderRow? target, IReadOnlyList<SourceRecord>? sources = null)
     {
         if (target is null)
             return null;
@@ -54,7 +54,20 @@ public sealed partial class PackageService
         var superseded = DownConversion.Superseded(revisions);
         var lowered = DownConversion.Lower(new ExportPlan([], [.. revisions, .. bundled], [], [], fileName), target, _bundledSources.Contains,
             id => store.FindSource(id)?.Title ?? "", store, r => _bundledRevisions.Contains(r.RevisionId) || superseded(r));
-        return lowered with { Plan = lowered.Plan with { Revisions = [.. lowered.Plan.Revisions.Where(r => !_bundledRevisions.Contains(r.RevisionId))] } };
+        var written = lowered.Plan.Revisions.Where(r => !_bundledRevisions.Contains(r.RevisionId)).ToList();
+        var changes = lowered.Changes;
+        var blocked = lowered.Blocked;
+        // A source that lowering left with no revision would be an empty source in the pack, which no reader accepts: block, as the reader does.
+        foreach (var source in sources ?? [])
+        {
+            if (revisions.Any(r => r.Provenance.SourceId == source.Id) && !written.Any(r => r.Provenance.SourceId == source.Id))
+            {
+                changes = [.. changes, new ExportChange($"sources/{source.Id:D}.json", "source", source.Id, source.Title, source.Title, "blocks", DownConversion.BlockedCode,
+                    $"'{source.Title}' has no published content to share yet.")];
+                blocked = true;
+            }
+        }
+        return lowered with { Plan = lowered.Plan with { Revisions = written }, Changes = changes, ChangesHash = DownConversion.HashChanges(changes), Blocked = blocked };
     }
 
     /// <summary>A blocked plan, or a save whose <paramref name="changesHash"/> is not the list that was previewed, writes nothing (spec section 7).</summary>
@@ -70,7 +83,7 @@ public sealed partial class PackageService
     public ExportResult ExportSourcePack(IReadOnlyList<Guid> sourceIds, LadderRow? target = null, string? changesHash = null)
     {
         var plan = PlanSourcePack(sourceIds);
-        if (LowerPack(plan.Revisions, plan.FileName, target) is { } lowered)
+        if (LowerPack(plan.Revisions, plan.FileName, target, plan.Sources) is { } lowered)
         {
             RequireConfirmed(lowered, changesHash);
             plan = plan with { Revisions = lowered.Plan.Revisions, FileName = lowered.Plan.FileName };

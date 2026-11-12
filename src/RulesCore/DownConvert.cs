@@ -152,7 +152,7 @@ public static class DownConvert
 
         var own = revision.SchemaVersion;
         // A creation guide only advises (it never changes a calculation), so it is left out whole rather than kept with its effects stripped.
-        if (revision.Kind == ContentKind.CreationGuide && own >= ContentRevision.CreationGuideSchemaVersion && targetContentSchema < ContentRevision.CreationGuideSchemaVersion)
+        if (revision.Kind == ContentKind.CreationGuide && targetContentSchema < ContentRevision.CreationGuideSchemaVersion)
         {
             return new ContentBelow(revision, [new BelowChange("", BelowAction.Dropped, BelowCodes.CreationGuide,
                 $"'{revision.Name}': a creation guide, which the older version has no place for; it is left out of the file.")]) { Omit = true };

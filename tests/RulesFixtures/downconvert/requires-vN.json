@@ -148,9 +148,6 @@
       { "feature": "equipment[].mods", "rule": "below.item-mods" },
       { "feature": "equipment[].mods", "rule": "below.item-mod-copies" },
       { "feature": "play.companions[].contentId", "rule": "below.companion-content" }
-    ],
-    "12": [
-      { "feature": "equipment[].kit-gear (written by the kit-expansion task, not by DownConvert.Below)", "rule": "below.gear-as-custom-item" }
     ]
   }
 }
