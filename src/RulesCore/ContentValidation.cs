@@ -59,10 +59,11 @@ public static class ContentValidator
     /// <summary>The most companions one revision declares (content v12).</summary>
     private const int MaxCompanionsPerRevision = 10;
 
-    /// <summary>Content v13 (ADR-024): the most picks in a guide's kit, options in a pick, lines in a pack, and the largest quantity of a line.</summary>
+    /// <summary>Content v13 (ADR-024): the most picks in a guide's kit, options in a pick, lines in an option or a pack, and the largest quantity of a line.</summary>
     private const int MaxGuidePicks = 12;
     private const int MaxGuideOptions = 20;
     private const int MaxPackLines = 30;
+    private const int MaxGuideLines = 30;
     private const int MaxGuideQuantity = 999;
 
     /// <summary>Content v13 (ADR-024): the categories a kit line's <c>anyOf</c> may name.</summary>
@@ -262,6 +263,7 @@ public static class ContentValidator
         }
         var needsV13 = false; // content v13 (ADR-024): the creationGuide kind, the guide effects, contains
         var v13Phrases = new List<string>(); // what the v13 features found are called in validate.requires-v13
+        var resolved = new Dictionary<Guid, ContentRevision?>(); // v13 reference memo: one resolution per content id for this call
         void NeedV13(string phrase)
         {
             needsV13 = true;
@@ -1917,10 +1919,19 @@ public static class ContentValidator
 
         // Content v13 (ADR-024): creation guides and packs. A reference names content by id; it must resolve to a published revision of the
         // wanted kind that shares a rules family with this revision (any revision of it counts, like the other id references).
-        bool PublishedOfFamily(Guid content, Func<ContentRevision, bool> accept) =>
-            local.OfContent(content).Where(r => r.ContentId == content && r.Status == RevisionStatus.Published)
-                .Concat(new[] { catalog.NewestPublished(content) }.OfType<ContentRevision>().Where(r => r.ContentId == content))
-                .Any(r => r.RulesFamilies.Intersect(revision.RulesFamilies).Any() && accept(r));
+        // One revision answers for a content id: the batch's newest published one (batch order, like the catalogue's "last stored"),
+        // else the catalogue's newest published. It is resolved at most once per validation call (the memo is local to this call).
+        bool PublishedOfFamily(Guid content, Func<ContentRevision, bool> accept)
+        {
+            if (!resolved.TryGetValue(content, out var found))
+            {
+                found = local.OfContent(content).LastOrDefault(r => r.ContentId == content && r.Status == RevisionStatus.Published);
+                if (found is null && catalog.NewestPublished(content) is { } newest && newest.ContentId == content)
+                    found = newest;
+                resolved[content] = found;
+            }
+            return found is not null && found.RulesFamilies.Intersect(revision.RulesFamilies).Any() && accept(found);
+        }
 
         static bool IsPack(ContentRevision r) => r.Kind == ContentKind.Item && r.Effects.OfType<ItemEffect>().Any(i => i.Contains is { Count: > 0 });
 
@@ -1932,13 +1943,18 @@ public static class ContentValidator
                 return;
             NeedV13("an item with contains");
             if (lines.Count > MaxPackLines)
+            {
                 Error("validate.item-contains", $"Item '{item.Id}' lists {lines.Count} contained lines; the most is {MaxPackLines}.", item.Id);
+                return; // an oversized list is not walked: no per-line errors or lookups
+            }
             foreach (var (line, index) in lines.Select((l, i) => (l, i + 1)))
             {
                 if (!GuideQuantityOk(line.Quantity))
                     Error("validate.item-contains", $"Item '{item.Id}' contained line {index} has quantity {line.Quantity}; it must be 1 to {MaxGuideQuantity}.", item.Id);
                 if (line.Item is not { } contained)
                     Error("validate.item-contains", $"Item '{item.Id}' contained line {index} names no item.", item.Id);
+                else if (contained.ContentId == revision.ContentId)
+                    Error("validate.item-contains", $"Item '{item.Id}' contained line {index} names this item itself; a pack cannot contain itself.", item.Id);
                 else if (!PublishedOfFamily(contained.ContentId, r => r.Kind == ContentKind.Item))
                     Error("validate.item-contains", $"Item '{item.Id}' contained line {index} names {contained.ContentId}, which is not a published item of this revision's rules family.", item.Id);
                 else if (PublishedOfFamily(contained.ContentId, IsPack))
@@ -1953,17 +1969,18 @@ public static class ContentValidator
                 Error("validate.guide-picks", $"Equipment {where} has {kinds} kinds of line; each line is exactly one of item, anyOf, coins or pack.", id);
             if (line.Item is { } item)
             {
-                if (!PublishedOfFamily(item.ContentId, r => r.Kind == ContentKind.Item))
+                if (item.ContentId == revision.ContentId || !PublishedOfFamily(item.ContentId, r => r.Kind == ContentKind.Item))
                     Error("validate.guide-item", $"Equipment {where} names {item.ContentId}, which is not a published item of this revision's rules family.", id);
                 if (!GuideQuantityOk(line.Quantity))
                     Error("validate.guide-quantity", $"Equipment {where} has quantity {line.Quantity}; it must be 1 to {MaxGuideQuantity}.", id);
             }
-            if (line.Pack is { } pack && !PublishedOfFamily(pack.ContentId, IsPack))
+            if (line.Pack is { } pack && (pack.ContentId == revision.ContentId || !PublishedOfFamily(pack.ContentId, IsPack)))
                 Error("validate.guide-item", $"Equipment {where} names {pack.ContentId} as a pack, which is not a published item with contents in this revision's rules family.", id);
             if (line.AnyOf is not null && !GuideCategories.Contains(line.AnyOf, StringComparer.Ordinal))
                 Error("validate.guide-category", $"Equipment {where} has anyOf '{line.AnyOf}'; use one of {string.Join(", ", GuideCategories)}.", id);
             if (line.Coins is { } coins)
             {
+                // Coins summed across lines are not validated here; the kit-expansion consumer clamps the total.
                 var given = new[] { coins.Cp, coins.Sp, coins.Ep, coins.Gp, coins.Pp }.OfType<int>().ToList();
                 if (given.Count == 0 || given.All(c => c == 0))
                     Error("validate.guide-coins", $"Equipment {where} is a coins line that gives no coins; give at least one denomination more than 0.", id);
@@ -1977,6 +1994,10 @@ public static class ContentValidator
             foreach (var effect in revision.Effects)
             {
                 var isGuide = effect.Type is GuideForEffect.TypeName or PrimaryAbilitiesEffect.TypeName or StartingEquipmentEffect.TypeName;
+                // Older hand-written content is never newly refused: below v13 an untyped guide-named effect keeps the generic
+                // unsupported-effect warning (as for rollFloor, itemMod, companion).
+                if (isGuide && effect is UnknownEffect && revision.SchemaVersion < ContentRevision.CreationGuideSchemaVersion)
+                    continue;
                 if (isGuide)
                 {
                     NeedV13($"a {effect.Type} effect");
@@ -1997,7 +2018,7 @@ public static class ContentValidator
             }
             foreach (var guideFor in revision.Effects.OfType<GuideForEffect>())
             {
-                if (!PublishedOfFamily(guideFor.Content.ContentId, r => r.Kind is ContentKind.Class or ContentKind.Background))
+                if (guideFor.Content.ContentId == revision.ContentId || !PublishedOfFamily(guideFor.Content.ContentId, r => r.Kind is ContentKind.Class or ContentKind.Background))
                     Error("validate.guide-target", $"Effect '{guideFor.Id}' guides {guideFor.Content.ContentId}, which is not a published class or background of this revision's rules family.", guideFor.Id);
             }
             foreach (var primary in revision.Effects.OfType<PrimaryAbilitiesEffect>())
@@ -2007,8 +2028,12 @@ public static class ContentValidator
             }
             foreach (var kit in revision.Effects.OfType<StartingEquipmentEffect>())
             {
+                // A list over its cap is reported once and not walked (no per-element errors or lookups); in-bounds parts are still checked.
                 if (kit.Picks.Count > MaxGuidePicks)
+                {
                     Error("validate.guide-picks", $"Effect '{kit.Id}' has {kit.Picks.Count} picks; the most is {MaxGuidePicks}.", kit.Id);
+                    continue;
+                }
                 foreach (var dup in kit.Picks.GroupBy(p => p.Id, StringComparer.Ordinal).Where(g => g.Count() > 1))
                     Error("validate.guide-picks", $"Effect '{kit.Id}' uses the pick id '{dup.Key}' more than once.", kit.Id);
                 foreach (var pick in kit.Picks)
@@ -2016,7 +2041,10 @@ public static class ContentValidator
                     if (pick.Options.Count == 0)
                         Error("validate.guide-picks", $"Pick '{pick.Id}' of effect '{kit.Id}' has no options.", kit.Id);
                     if (pick.Options.Count > MaxGuideOptions)
+                    {
                         Error("validate.guide-picks", $"Pick '{pick.Id}' of effect '{kit.Id}' has {pick.Options.Count} options; the most is {MaxGuideOptions}.", kit.Id);
+                        continue;
+                    }
                     foreach (var dup in pick.Options.GroupBy(o => o.Id, StringComparer.Ordinal).Where(g => g.Count() > 1))
                         Error("validate.guide-picks", $"Pick '{pick.Id}' of effect '{kit.Id}' uses the option id '{dup.Key}' more than once.", kit.Id);
                     foreach (var option in pick.Options)
@@ -2024,6 +2052,11 @@ public static class ContentValidator
                         if (option.RequiresProficiency is { } need
                             && !((need.StartsWith("weapon.", StringComparison.Ordinal) && need.Length > "weapon.".Length) || (need.StartsWith("armor.", StringComparison.Ordinal) && need.Length > "armor.".Length)))
                             Error("validate.guide-category", $"Option '{option.Id}' of pick '{pick.Id}' requires proficiency '{need}'; it must be a weapon. or armor. key.", kit.Id);
+                        if (option.Lines.Count > MaxGuideLines)
+                        {
+                            Error("validate.guide-picks", $"Option '{option.Id}' of pick '{pick.Id}' has {option.Lines.Count} lines; the most is {MaxGuideLines}.", kit.Id);
+                            continue;
+                        }
                         foreach (var (line, index) in option.Lines.Select((l, i) => (l, i + 1)))
                             CheckKitLine(kit.Id, $"line {index} of option '{option.Id}' in pick '{pick.Id}'", line);
                     }

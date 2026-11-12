@@ -298,6 +298,122 @@ public class CreationGuideV13ValidationTests
         Assert.Equal(13, report.RequiredSchemaVersion);
     }
 
+    private static string Json(int version, string kind, string effect) =>
+        "{\"contentId\":\"6a7e1300-0000-4000-8000-000000000102\",\"revisionId\":\"6a7e1300-0000-4000-8000-000000001102\",\"schemaVersion\":" + version
+        + ",\"kind\":\"" + kind + "\",\"name\":\"Fixture older\",\"rulesFamilies\":[\"srd-5.2.1\"],\"provenance\":{\"sourceId\":\"5f0d5210-0000-4000-8000-000000000001\"},\"status\":\"draft\",\"effects\":[" + effect + "]}";
+
+    [Fact]
+    public void A_v12_revision_with_an_untyped_guide_named_effect_is_only_warned()
+    {
+        var revision = RevisionHashProperties.Read(Json(12, "feature", "{\"type\":\"startingEquipment\",\"id\":\"x\",\"text\":\"Fixture note\"}"));
+        Assert.IsType<UnknownEffect>(revision.Effects.Single());
+        var report = ContentValidator.Validate(revision, Catalog);
+        Assert.Empty(report.Errors);
+        Assert.Contains(report.Warnings, w => w.Code == "validate.effect-unsupported" && w.EffectId == "x");
+    }
+
+    [Fact]
+    public void A_v11_revision_with_an_untyped_guide_for_effect_is_only_warned()
+    {
+        var revision = RevisionHashProperties.Read(Json(11, "feature", "{\"type\":\"guideFor\",\"id\":\"g\",\"note\":\"Fixture note\"}"));
+        var report = ContentValidator.Validate(revision, Catalog);
+        Assert.Empty(report.Errors);
+        Assert.Contains(report.Warnings, w => w.Code == "validate.effect-unsupported" && w.EffectId == "g");
+    }
+
+    [Fact]
+    public void A_typed_guide_effect_on_a_v13_non_guide_revision_is_refused_by_kind()
+    {
+        var report = ContentValidator.Validate(Rev(Id(61), ContentKind.Feature, status: RevisionStatus.Draft, effects: [Primary("str")]), Catalog);
+        AssertError(report, "validate.guide-kind");
+        AssertNoCode(report, "validate.requires-v13");
+    }
+
+    [Fact]
+    public void A_pack_that_contains_itself_is_refused()
+    {
+        var published = Rev(Id(52), ContentKind.Item);
+        var catalog = new InMemoryContentCatalog(Fixtures.Pack().Sources, [published]);
+        var next = Rev(Id(52), ContentKind.Item, status: RevisionStatus.Draft, effects: [new ItemEffect { Id = "item", Contains = [new PackLine(T(Id(52)))] }]) with { RevisionId = Id(2052) };
+        AssertError(ContentValidator.Validate(next, catalog), "validate.item-contains");
+    }
+
+    [Fact]
+    public void A_guide_that_targets_itself_is_refused()
+    {
+        var self = Rev(GuideContentId, ContentKind.CreationGuide);
+        var catalog = new InMemoryContentCatalog(Fixtures.Pack().Sources, [self]);
+        AssertError(ContentValidator.Validate(Guide(13, For(GuideContentId)), catalog), "validate.guide-target");
+        AssertError(ContentValidator.Validate(Guide(13, For(), Kit(Item(GuideContentId))), catalog), "validate.guide-item");
+        AssertError(ContentValidator.Validate(Guide(13, For(), Kit(new KitLine(Pack: T(GuideContentId)))), catalog), "validate.guide-item");
+    }
+
+    [Fact]
+    public void An_option_with_more_than_30_lines_is_refused_with_one_error()
+    {
+        var lines = Enumerable.Range(0, 31).Select(_ => new KitLine()).ToArray(); // each would be a per-line error if walked
+        var report = ValidateGuide(Kit(lines));
+        var error = Assert.Single(report.Errors, e => e.Code == "validate.guide-picks");
+        Assert.Contains("31 lines", error.Message, StringComparison.Ordinal);
+        Assert.Single(report.Errors);
+    }
+
+    [Fact]
+    public void An_oversized_pick_list_reports_one_error_and_no_per_pick_errors()
+    {
+        var picks = Enumerable.Range(0, 13).Select(_ => new KitPick("same", null, [])).ToArray(); // duplicate ids and no options if walked
+        var report = ValidateGuide(Kit(picks));
+        Assert.Single(report.Errors);
+        AssertError(report, "validate.guide-picks");
+    }
+
+    [Fact]
+    public void An_oversized_contains_list_reports_one_error() =>
+        Assert.Single(ValidateItem([.. Enumerable.Range(0, 31).Select(_ => new PackLine(T(Id(999)), 0))]).Errors);
+
+    private sealed class CountingCatalog(IContentCatalog inner) : IContentCatalog
+    {
+        public Dictionary<Guid, int> Lookups { get; } = [];
+
+        public ContentRevision? FindRevision(ContentReference reference) => inner.FindRevision(reference);
+
+        public SourceRecord? FindSource(Guid sourceId) => inner.FindSource(sourceId);
+
+        public IEnumerable<ContentRevision> RevisionsOf(Guid contentId) => inner.RevisionsOf(contentId);
+
+        public ContentRevision? NewestPublished(Guid contentId)
+        {
+            Lookups[contentId] = Lookups.GetValueOrDefault(contentId) + 1;
+            return inner.NewestPublished(contentId);
+        }
+    }
+
+    [Fact]
+    public void Each_referenced_item_is_resolved_once()
+    {
+        var counting = new CountingCatalog(Catalog);
+        var lines = Enumerable.Range(0, 20).Select(_ => Item()).ToArray();
+        var report = ContentValidator.Validate(Guide(13, For(), Kit(lines)), counting);
+        Assert.Empty(report.Errors);
+        Assert.Equal(1, counting.Lookups[MaceId]);
+    }
+
+    [Fact]
+    public void A_superseded_pack_revision_does_not_satisfy_a_pack_line()
+    {
+        var older = Rev(Id(53), ContentKind.Item, effects: [new ItemEffect { Id = "item", Contains = [new PackLine(T(MaceId))] }]) with { RevisionId = Id(2053) };
+        var newer = Rev(Id(53), ContentKind.Item) with { RevisionId = Id(2054) };
+        var report = ContentValidator.Validate(Guide(13, For(), Kit(new KitLine(Pack: T(Id(53))))), Catalog, [older, newer]);
+        AssertError(report, "validate.guide-item");
+    }
+
+    [Fact]
+    public void A_draft_target_is_refused()
+    {
+        var draft = Rev(Id(54), ContentKind.Class, status: RevisionStatus.Draft);
+        AssertError(ContentValidator.Validate(Guide(13, For(Id(54))), Catalog, [draft]), "validate.guide-target");
+    }
+
     [Fact]
     public void An_unreadable_guide_effect_in_a_v13_revision_is_malformed()
     {
