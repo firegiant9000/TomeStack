@@ -80,7 +80,7 @@ public static class BelowCodes
     public const string CreationGuide = "below.creation-guide";
     /// <summary>A pack's <c>contains</c> list (content v13), which the older version cannot hold; the pack stays as an item.</summary>
     public const string ItemContains = "below.item-contains";
-    /// <summary>A kit's gear that the older character cannot hold as equipment, kept as custom items instead (written by the kit-expansion step, not by <see cref="DownConvert"/>'s content rung).</summary>
+    /// <summary>Plain gear (an equipment entry) whose item the older release does not ship, kept as a custom item instead. Written by the export service (<c>DownConversion</c>), not by <see cref="DownConvert"/>'s content rung.</summary>
     public const string GearAsCustomItem = "below.gear-as-custom-item";
 }
 

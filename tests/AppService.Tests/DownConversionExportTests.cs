@@ -955,6 +955,150 @@ public class DownConversionExportTests
         Assert.Equal(before, Snapshot(app));
     }
 
+    // ---- Task 5.7: plain gear the target lacks becomes a custom item (Q3c, D98) ----------------------------------------------
+
+    private static ContentRevision GearItem(int n, string name, params Effect[] effects) => new()
+    {
+        ContentId = Guid.Parse($"c1000000-0000-4000-8000-{n:D12}"),
+        RevisionId = Guid.Parse($"c100e000-0000-4000-8000-{n:D12}"),
+        SchemaVersion = ContentRevision.CurrentSchemaVersion,
+        Kind = ContentKind.Item,
+        Name = name,
+        RulesFamilies = [RulesFamilies.Srd51],
+        Provenance = new(BundledSourceId),
+        Status = RevisionStatus.Published,
+        Effects = effects,
+    };
+
+    private static EquipmentEntry Held(ContentRevision item, int quantity = 1, bool equipped = false, Guid? id = null) =>
+        new(new ContentReference(item.ContentId, item.RevisionId), equipped, quantity, id ?? Guid.NewGuid());
+
+    private static LoweredPlan LowerGear(Character hero, string release, HashSet<Guid>? inSet, params ContentRevision[] revisions) =>
+        DownConversion.Lower(new([hero], [.. revisions], [], [], "x.tomestack.zip"), Row(release) with { BundledRevisionIds = inSet ?? [] },
+            id => id == BundledSourceId, _ => "Compat Bundled Pack", new HomebrewCatalog());
+
+    [Fact]
+    public void Gear_outside_the_set_becomes_a_custom_item_with_its_name_and_quantity()
+    {
+        var rope = GearItem(1, "Compat Rope Coil");
+        var entryId = Guid.Parse("c1000000-0000-4000-8000-00000000ee01");
+        var hero = Hero(c => c with { Equipment = [Held(rope, 3, equipped: true, id: entryId)] });
+
+        var lowered = LowerGear(hero, "0.6.0", null, rope);
+
+        Assert.False(lowered.Blocked);
+        var item = Assert.Single(lowered.Plan.Characters[0].CustomItems!);
+        Assert.Equal(new CustomItem(DownConversion.Uuid5(DownConversion.Namespace, $"gear:{entryId:D}"), "Compat Rope Coil", 3, null, false), item);
+        Assert.Empty(lowered.Plan.Characters[0].Equipment);
+        Assert.Empty(lowered.Plan.Revisions);
+        var change = Assert.Single(lowered.Changes);
+        Assert.Equal(("dropped", DownConversion.DropsCode, "character"), (change.Action, change.Code, change.Kind));
+        Assert.Contains("'Compat Rope Coil'", change.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_pack_with_contents_becomes_one_custom_item_named_after_the_pack()
+    {
+        var pack = GearItem(2, "Compat Wayfarer Pack", new ItemEffect { Id = "item", Contains = [new PackLine(new GuideTarget(Guid.NewGuid()), 10)] });
+        var hero = Hero(c => c with { Equipment = [Held(pack)] });
+
+        var lowered = LowerGear(hero, "0.6.0", null, pack);
+
+        Assert.False(lowered.Blocked);
+        var item = Assert.Single(lowered.Plan.Characters[0].CustomItems!);
+        Assert.Equal(("Compat Wayfarer Pack", 1), (item.Name, item.Quantity));
+    }
+
+    [Fact]
+    public void An_item_in_the_set_is_left_alone()
+    {
+        var rope = GearItem(1, "Compat Rope Coil");
+        var hero = Hero(c => c with { Equipment = [Held(rope)] });
+
+        var lowered = LowerGear(hero, "0.6.0", [rope.RevisionId], rope);
+
+        Assert.False(lowered.Blocked);
+        Assert.Empty(lowered.Changes);
+        Assert.Single(lowered.Plan.Characters[0].Equipment);
+        Assert.Null(lowered.Plan.Characters[0].CustomItems);
+    }
+
+    [Fact]
+    public void A_weapon_a_charged_item_and_an_attuned_item_outside_the_set_still_block()
+    {
+        var sword = GearItem(3, "Compat Blade", new WeaponEffect { Id = "weapon", WeaponKey = "compat-blade", Category = WeaponCategory.Simple, Attack = WeaponAttack.Melee, Damage = "1d6", DamageType = "slashing" });
+        var wand = GearItem(4, "Compat Wand", new ItemEffect { Id = "item", Charges = new ItemCharges { Max = 3 } });
+        var ring = GearItem(5, "Compat Ring", new ItemEffect { Id = "item", RequiresAttunement = true });
+        foreach (var item in new[] { sword, wand, ring })
+        {
+            var lowered = LowerGear(Hero(c => c with { Equipment = [Held(item)] }), "0.6.0", null, item);
+
+            Assert.True(lowered.Blocked, item.Name);
+            Assert.Null(lowered.Plan.Characters[0].CustomItems);
+            Assert.All(lowered.Changes, c => Assert.Equal("blocks", c.Action));
+        }
+    }
+
+    [Theory]
+    [InlineData(49, true)]
+    [InlineData(50, true)]
+    [InlineData(51, false)]
+    public void The_custom_item_limit_counts_existing_and_converted_items(int total, bool passes)
+    {
+        var rope = GearItem(1, "Compat Rope Coil");
+        var existing = Enumerable.Range(0, total - 1).Select(i => new CustomItem(Guid.NewGuid(), $"Compat Thing {i}", 1, null, false)).ToList();
+        var hero = Hero(c => c with { Equipment = [Held(rope)], CustomItems = existing });
+
+        var lowered = LowerGear(hero, "0.6.0", null, rope);
+
+        Assert.Equal(!passes, lowered.Blocked);
+        if (passes)
+            Assert.Equal(total, lowered.Plan.Characters[0].CustomItems!.Count);
+        else
+            Assert.Contains(lowered.Changes, c => c.Action == "blocks" && c.Kind == "character" && c.Message.Contains("a character can keep 50", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Lowering_twice_gives_the_same_custom_item_and_the_same_list()
+    {
+        var rope = GearItem(1, "Compat Rope Coil");
+        var hero = Hero(c => c with { Equipment = [Held(rope, 2)] });
+
+        var first = LowerGear(hero, "0.6.0", null, rope);
+        var second = LowerGear(hero, "0.6.0", null, rope);
+
+        Assert.Equal(first.Plan.Characters[0].CustomItems, second.Plan.Characters[0].CustomItems);
+        Assert.Equal(first.ChangesHash, second.ChangesHash);
+    }
+
+    [Fact]
+    public void A_custom_item_id_that_is_already_taken_gets_another_id()
+    {
+        var rope = GearItem(1, "Compat Rope Coil");
+        var entryId = Guid.Parse("c1000000-0000-4000-8000-00000000ee02");
+        var taken = DownConversion.Uuid5(DownConversion.Namespace, $"gear:{entryId:D}");
+        var hero = Hero(c => c with { Equipment = [Held(rope, id: entryId)], CustomItems = [new CustomItem(taken, "Compat Thing", 1, null, false)] });
+
+        var lowered = LowerGear(hero, "0.6.0", null, rope);
+
+        Assert.False(lowered.Blocked);
+        var items = lowered.Plan.Characters[0].CustomItems!;
+        Assert.Equal(2, items.Count);
+        Assert.Equal(2, items.Select(i => i.Id).Distinct().Count());
+    }
+
+    [Fact]
+    public void Gear_that_is_also_granted_by_written_content_still_blocks()
+    {
+        var rope = GearItem(1, "Compat Rope Coil");
+        var granting = CompatGranting(Guid.Parse("c100e000-0000-4000-8000-0000000000d1"), "Compat Granter", new ContentReference(rope.ContentId, rope.RevisionId), blocker: false) with { Provenance = new(HomebrewId) };
+        var hero = Hero(c => c with { Equipment = [Held(rope)] });
+
+        var lowered = LowerGear(hero, "0.6.0", null, rope, granting);
+
+        Assert.True(lowered.Blocked);
+    }
+
     // ---- C2-5: the way back (guarded re-pin on import) ---------------------------------------------------------------------
 
     private const string RepinnedSentence = "'Compat Steady Hands': re-pinned to your original revision (the file held a copy made for 0.6.0).";

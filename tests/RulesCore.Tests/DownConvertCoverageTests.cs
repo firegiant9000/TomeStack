@@ -46,8 +46,7 @@ public class DownConvertCoverageTests
             Assert.True(known.Contains(entry.Rule!), $"{entry.Group} v{entry.Version} '{entry.Feature}' names unknown code '{entry.Rule}'.");
 
         var used = entries.Where(e => e.Rule is not null).Select(e => e.Rule!).ToHashSet();
-        // Task 5.7 adds the real requires-vN entry for below.gear-as-custom-item and removes this exemption.
-        foreach (var code in known.Where(c => c != "below.validation-error" && c != "below.gear-as-custom-item"))
+        foreach (var code in known.Where(c => c != "below.validation-error"))
             Assert.True(used.Contains(code), $"No requires-vN entry maps to '{code}'.");
 
         foreach (var entry in entries.Where(e => e.Rule is null))

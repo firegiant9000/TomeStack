@@ -123,7 +123,8 @@
       { "feature": "guideFor", "rule": "below.effect-unsupported" },
       { "feature": "primaryAbilities", "rule": "below.effect-unsupported" },
       { "feature": "startingEquipment", "rule": "below.effect-unsupported" },
-      { "feature": "item.contains", "rule": "below.item-contains" }
+      { "feature": "item.contains", "rule": "below.item-contains" },
+      { "feature": "item.contains", "rule": "below.gear-as-custom-item" }
     ]
   },
   "character": {
