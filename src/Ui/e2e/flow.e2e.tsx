@@ -528,22 +528,22 @@ it('authors a homebrew subclass in the studio, plays it, and reviews an update',
     ],
   });
   render(<App />);
-  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew' });
   await waitFor(() => expect(studioButton.disabled).toBe(false));
   await user.click(studioButton);
 
   // A homebrew source for 2024 rules.
-  const newSource = await screen.findByRole('form', { name: 'New homebrew source' });
-  await user.type(within(newSource).getByRole('textbox', { name: 'Source title' }), 'E2E Homebrew');
+  const newSource = await screen.findByRole('form', { name: 'New book or notebook' });
+  await user.type(within(newSource).getByRole('textbox', { name: 'Title' }), 'E2E Homebrew');
   await user.click(within(newSource).getByRole('checkbox', { name: '2024 rules' }));
-  await user.click(within(newSource).getByRole('button', { name: 'Create source' }));
+  await user.click(within(newSource).getByRole('button', { name: 'Create' }));
   await screen.findByRole('heading', { name: 'Content in E2E Homebrew' });
 
   const editor = () => screen.getByRole('region', { name: /^New |^Edit / });
   const rule = (name: RegExp) => within(editor()).getByRole('group', { name });
   async function publish(name: string) {
-    await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
-    await waitFor(() => expect(screen.getByRole('status').textContent).toBe(`Published ${name}.`));
+    await user.click(within(editor()).getByRole('button', { name: 'Make available to characters' }));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe(`Made ${name} available to characters.`));
   }
 
   // Feature 1: a class resource, its long-rest recovery, and a limited-use action that spends it.
@@ -569,7 +569,7 @@ it('authors a homebrew subclass in the studio, plays it, and reviews an update',
   // The subclass: offered in the SRD Barbarian's subclass choice, a modifier, and both features at level 3.
   await user.click(screen.getByRole('button', { name: 'New subclass' }));
   await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'Path of the E2E Storm');
-  const offered = within(editor()).getByRole('combobox', { name: 'Offered in the choice' });
+  const offered = within(editor()).getByRole('combobox', { name: 'Subclass of' });
   await waitFor(() => expect(within(offered).getByRole('option', { name: /^Barbarian: Level 3: Barbarian Subclass/ })).toBeTruthy());
   await user.selectOptions(offered, within(offered).getByRole('option', { name: /^Barbarian: Level 3: Barbarian Subclass/ }));
   await user.click(within(editor()).getByRole('button', { name: 'Add modifier' })); // default: Initiative +1
@@ -578,7 +578,7 @@ it('authors a homebrew subclass in the studio, plays it, and reviews an update',
   await user.click(within(editor()).getByRole('button', { name: 'Grant a feature' }));
   await user.selectOptions(within(rule(/^Rule 3: Granted feature/)).getByRole('combobox', { name: 'Feature' }), 'E2E Sky Lore (published)');
   await user.click(within(editor()).getByRole('button', { name: 'Check' }));
-  expect(await within(editor()).findByText('No problems found. It can be published.')).toBeTruthy();
+  expect(await within(editor()).findByText('No problems found. It can be made available to characters.')).toBeTruthy();
   await publish('Path of the E2E Storm');
 
   // Play it: the homebrew subclass is an option of the SRD choice.
@@ -601,9 +601,9 @@ it('authors a homebrew subclass in the studio, plays it, and reviews an update',
   await waitFor(() => expect(within(screen.getByRole('region', { name: 'Resources' })).getByRole('heading', { name: 'Storm charges: 1 of 2' })).toBeTruthy());
 
   // Republish with +3 initiative: the character keeps +2 until the reviewed update is applied.
-  await user.click(screen.getByRole('button', { name: 'Homebrew studio' }));
+  await user.click(screen.getByRole('button', { name: 'Homebrew' }));
   // The studio opens on the first source, and the other e2e file creates its own source in the same DevHost: pick ours.
-  const ownSource = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  const ownSource = await screen.findByRole('combobox', { name: 'Book or notebook' });
   await user.selectOptions(ownSource, within(ownSource).getByRole('option', { name: /^E2E Homebrew/ }));
   await user.click(await screen.findByRole('button', { name: 'Edit Path of the E2E Storm' }));
   const modifier = rule(/^Rule 1: Modifier/);
@@ -634,8 +634,8 @@ it('authors a homebrew subclass in the studio, plays it, and reviews an update',
   expect(remaining().getByRole('button', { name: 'Review update: Barbarian' })).toBeTruthy(); // still only offered
 
   // Import Lab (D62 L1): the studio's Coverage view for this source counts what the engine does with the rules just authored.
-  await user.click(screen.getByRole('button', { name: 'Homebrew studio' }));
-  const coverageSource = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  await user.click(screen.getByRole('button', { name: 'Homebrew' }));
+  const coverageSource = await screen.findByRole('combobox', { name: 'Book or notebook' });
   await user.selectOptions(coverageSource, within(coverageSource).getByRole('option', { name: /^E2E Homebrew/ }));
   const coverage = await screen.findByRole('region', { name: 'Coverage' });
   const totals = await within(coverage).findByText(/^\d+ automatic · \d+ by hand \(assisted\) · \d+ reference · \d+ not understood$/);
@@ -658,14 +658,14 @@ it('authors a +1 weapon in the studio, equips it and rolls it, and "Why?" names 
   const user = userEvent.setup();
   await client.createCharacter({ name: 'E2E Plus Hero', rulesFamily: 'srd-5.2.1', baseAbilities: { str: 14, dex: 12, con: 12, int: 10, wis: 10, cha: 10 }, pins: [] });
   render(<App />);
-  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew' });
   await waitFor(() => expect(studioButton.disabled).toBe(false));
   await user.click(studioButton);
 
-  const newSource = await screen.findByRole('form', { name: 'New homebrew source' });
-  await user.type(within(newSource).getByRole('textbox', { name: 'Source title' }), 'E2E Plus Book');
+  const newSource = await screen.findByRole('form', { name: 'New book or notebook' });
+  await user.type(within(newSource).getByRole('textbox', { name: 'Title' }), 'E2E Plus Book');
   await user.click(within(newSource).getByRole('checkbox', { name: '2024 rules' }));
-  await user.click(within(newSource).getByRole('button', { name: 'Create source' }));
+  await user.click(within(newSource).getByRole('button', { name: 'Create' }));
   await screen.findByRole('heading', { name: 'Content in E2E Plus Book' });
 
   const editor = () => screen.getByRole('region', { name: /^New |^Edit / });
@@ -679,8 +679,8 @@ it('authors a +1 weapon in the studio, equips it and rolls it, and "Why?" names 
   await user.clear(weapon.getByRole('textbox', { name: /^Damage type/ }));
   await user.type(weapon.getByRole('textbox', { name: /^Damage type/ }), 'slashing');
   await user.type(weapon.getByRole('textbox', { name: /^Bonus/ }), '1');
-  await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
-  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Published E2E Plus Blade.'));
+  await user.click(within(editor()).getByRole('button', { name: 'Make available to characters' }));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Made E2E Plus Blade available to characters.'));
 
   // Carry and equip it; both rolls name the weapon bonus under "Why?".
   await user.click(screen.getByRole('button', { name: /^E2E Plus Hero/ }));
@@ -712,14 +712,14 @@ it('item mods: a published mod attached to one copy changes only that copy\'s at
   const user = userEvent.setup();
   await client.createCharacter({ name: 'E2E Mod Hero', rulesFamily: 'srd-5.2.1', baseAbilities: { str: 14, dex: 12, con: 12, int: 10, wis: 10, cha: 10 }, pins: [] });
   render(<App />);
-  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew' });
   await waitFor(() => expect(studioButton.disabled).toBe(false));
   await user.click(studioButton);
 
-  const newSource = await screen.findByRole('form', { name: 'New homebrew source' });
-  await user.type(within(newSource).getByRole('textbox', { name: 'Source title' }), 'E2E Mod Book');
+  const newSource = await screen.findByRole('form', { name: 'New book or notebook' });
+  await user.type(within(newSource).getByRole('textbox', { name: 'Title' }), 'E2E Mod Book');
   await user.click(within(newSource).getByRole('checkbox', { name: '2024 rules' }));
-  await user.click(within(newSource).getByRole('button', { name: 'Create source' }));
+  await user.click(within(newSource).getByRole('button', { name: 'Create' }));
   await screen.findByRole('heading', { name: 'Content in E2E Mod Book' });
 
   // The host: a plain blade. The mod: item content with an item mod effect (applies to a weapon, +2).
@@ -733,8 +733,8 @@ it('item mods: a published mod attached to one copy changes only that copy\'s at
   await user.type(weapon.getByRole('textbox', { name: /^Damage \(/ }), '1d6');
   await user.clear(weapon.getByRole('textbox', { name: /^Damage type/ }));
   await user.type(weapon.getByRole('textbox', { name: /^Damage type/ }), 'slashing');
-  await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
-  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Published E2E Mod Blade.'));
+  await user.click(within(editor()).getByRole('button', { name: 'Make available to characters' }));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Made E2E Mod Blade available to characters.'));
 
   await user.click(screen.getByRole('button', { name: 'New item' }));
   await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Keen Rune');
@@ -743,8 +743,8 @@ it('item mods: a published mod attached to one copy changes only that copy\'s at
   expect((mod.getByRole('combobox', { name: 'Applies to' }) as HTMLSelectElement).value).toBe('weapon');
   await user.clear(mod.getByRole('textbox', { name: /^Bonus/ }));
   await user.type(mod.getByRole('textbox', { name: /^Bonus/ }), '2');
-  await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
-  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Published E2E Keen Rune.'));
+  await user.click(within(editor()).getByRole('button', { name: 'Make available to characters' }));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Made E2E Keen Rune available to characters.'));
 
   // Carry and equip the blade, then attach the mod to a new copy: one plain copy and one modded copy.
   await user.click(screen.getByRole('button', { name: /^E2E Mod Hero/ }));
@@ -806,8 +806,8 @@ it('content companions: a published feature\'s companion is a card with its own 
   await user.type(companion.getByRole('textbox', { name: 'Hit point maximum formula' }), '20');
   await user.click(companion.getByRole('checkbox', { name: 'Fixture Bite' }));
   await user.click(companion.getByRole('checkbox', { name: 'Fixture Charges' }));
-  await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
-  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Published Fixture Warden Bond.'));
+  await user.click(within(editor()).getByRole('button', { name: 'Make available to characters' }));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Made Fixture Warden Bond available to characters.'));
 
   // The server stored a v12 revision with the companion and both lists.
   const published = (await newestOf(source.id, 'Fixture Warden Bond'))!;
@@ -1234,16 +1234,16 @@ it('D60 gate: a Markdown class is reviewed, accepted with its confirm tick and p
   expect(drafts.find((e) => e.name === 'Placeholder')!.latest.effects.find((e) => e.type === 'hitDie')!.automation).toBe('automatic');
 
   // Publish all drafts of the source through the studio panel.
-  await user.click(screen.getByRole('button', { name: 'Homebrew studio' }));
-  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  await user.click(screen.getByRole('button', { name: 'Homebrew' }));
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Book or notebook' });
   await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Gate Book/ })).toBeTruthy());
   await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Gate Book/ }));
-  await user.click(await screen.findByRole('button', { name: 'Publish all drafts in this source…' }));
-  const region = screen.getByRole('region', { name: 'Publish drafts of E2E Gate Book' });
-  const publish = await within(region).findByRole('button', { name: 'Publish 11 drafts' });
+  await user.click(await screen.findByRole('button', { name: 'Make all drafts in this source available to characters…' }));
+  const region = screen.getByRole('region', { name: 'Make drafts of E2E Gate Book available to characters' });
+  const publish = await within(region).findByRole('button', { name: 'Make 11 drafts available to characters' });
   await waitFor(() => expect(publish.getAttribute('aria-disabled')).toBeNull());
   await user.click(publish);
-  await within(region).findByText('Published 11 drafts.');
+  await within(region).findByText('Made 11 drafts available to characters.');
   expect((await client.contentBySource(source.id)).every((e) => e.latest.status === 'published')).toBe(true);
 
   // Coverage: the totals the fixture plants, and the features whose text sounds like a mechanic are flagged for hand play.
@@ -1349,15 +1349,15 @@ it('reads the fixture PDF, reviews its candidates, and publishes an accepted one
   ]);
   expect(entries.find((e) => e.name === 'Fixture Keen Watcher')!.latest.effects.every((e) => e.automation === 'reference')).toBe(true);
 
-  const studio = screen.getByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  const studio = screen.getByRole<HTMLButtonElement>('button', { name: 'Homebrew' });
   await user.click(studio);
-  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Book or notebook' });
   await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Grimoire/ })).toBeTruthy());
   await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Grimoire/ }));
   await user.click(await screen.findByRole('button', { name: 'Edit Fixture Keen Watcher' }));
   const editor = screen.getByRole('region', { name: /^Edit Fixture Keen Watcher/ });
-  await user.click(within(editor).getByRole('button', { name: 'Publish' }));
-  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Published Fixture Keen Watcher.'));
+  await user.click(within(editor).getByRole('button', { name: 'Make available to characters' }));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Made Fixture Keen Watcher available to characters.'));
   expect((await client.contentBySource(source.id)).find((e) => e.name === 'Fixture Keen Watcher')!.latest.status).toBe('published');
 });
 
@@ -1502,22 +1502,22 @@ it('accepts two fixture candidates in bulk, publishes both through the studio pa
   const drafts = (await client.contentBySource(source.id)).filter((e) => e.latest.status === 'draft').map((e) => e.name).sort();
   expect(drafts).toEqual(['Fixture Ember Lance', 'Fixture Keen Watcher']);
 
-  await user.click(screen.getByRole('button', { name: 'Homebrew studio' }));
-  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  await user.click(screen.getByRole('button', { name: 'Homebrew' }));
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Book or notebook' });
   await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Bulk Book/ })).toBeTruthy());
   await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Bulk Book/ }));
-  await user.click(await screen.findByRole('button', { name: 'Publish all drafts in this source…' }));
-  const region = screen.getByRole('region', { name: 'Publish drafts of E2E Bulk Book' });
-  await waitFor(() => expect(document.activeElement).toBe(within(region).getByRole('heading', { name: 'Publish drafts of E2E Bulk Book' })));
-  const publish = await within(region).findByRole('button', { name: 'Publish 2 drafts' });
+  await user.click(await screen.findByRole('button', { name: 'Make all drafts in this source available to characters…' }));
+  const region = screen.getByRole('region', { name: 'Make drafts of E2E Bulk Book available to characters' });
+  await waitFor(() => expect(document.activeElement).toBe(within(region).getByRole('heading', { name: 'Make drafts of E2E Bulk Book available to characters' })));
+  const publish = await within(region).findByRole('button', { name: 'Make 2 drafts available to characters' });
   await waitFor(() => expect(publish.getAttribute('aria-disabled')).toBeNull());
   await user.click(publish);
 
-  const result = await within(region).findByText('Published 2 drafts.');
+  const result = await within(region).findByText('Made 2 drafts available to characters.');
   await waitFor(() => expect(document.activeElement).toBe(result)); // an effect moves focus to the result, so it can land after the text
   expect((await client.contentBySource(source.id)).map((e) => e.latest.status)).toEqual(['published', 'published']);
   // A second press would find nothing pending: the button is gone with the drafts.
-  await waitFor(() => expect(screen.queryByRole('button', { name: 'Publish all drafts in this source…' })).toBeNull());
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Make all drafts in this source available to characters…' })).toBeNull());
   expect((await client.listContent('srd-5.2.1')).some((o) => o.name === 'Fixture Ember Lance')).toBe(true);
 });
 
@@ -1565,16 +1565,16 @@ it('adds the wizard list to a fixture spell candidate in bulk, accepts and publi
   await user.click(accept);
   await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/^Kept 1\./));
 
-  await user.click(screen.getByRole('button', { name: 'Homebrew studio' }));
-  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  await user.click(screen.getByRole('button', { name: 'Homebrew' }));
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Book or notebook' });
   await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Lists Book/ })).toBeTruthy());
   await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Lists Book/ }));
-  await user.click(await screen.findByRole('button', { name: 'Publish all drafts in this source…' }));
-  const region = screen.getByRole('region', { name: 'Publish drafts of E2E Lists Book' });
-  const publish = await within(region).findByRole('button', { name: 'Publish 1 draft' });
+  await user.click(await screen.findByRole('button', { name: 'Make all drafts in this source available to characters…' }));
+  const region = screen.getByRole('region', { name: 'Make drafts of E2E Lists Book available to characters' });
+  const publish = await within(region).findByRole('button', { name: 'Make 1 draft available to characters' });
   await waitFor(() => expect(publish.getAttribute('aria-disabled')).toBeNull());
   await user.click(publish);
-  await within(region).findByText('Published 1 draft.');
+  await within(region).findByText('Made 1 draft available to characters.');
 
   // The published spell is on the wizard list, so the builder offers it to a wizard.
   const keys = await client.spellListKeys();
@@ -1588,10 +1588,10 @@ it('adds the wizard list to a fixture spell candidate in bulk, accepts and publi
 /** Opens the studio on the named homebrew source (item 12 flows). */
 async function openStudioOn(user: ReturnType<typeof userEvent.setup>, title: string) {
   render(<App />);
-  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew' });
   await waitFor(() => expect(studioButton.disabled).toBe(false));
   await user.click(studioButton);
-  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Book or notebook' });
   await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: new RegExp(`^${title}`) })).toBeTruthy());
   await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: new RegExp(`^${title}`) }));
   await screen.findByRole('heading', { name: `Content in ${title}` });
@@ -1610,7 +1610,7 @@ it('authors a species with a Strength increase and a skill in the studio, publis
   await user.type(within(editor()).getByRole('textbox', { name: 'Strength' }), '2');
   await user.click(within(editor()).getByRole('checkbox', { name: 'Athletics' }));
   await user.type(within(editor()).getByRole('textbox', { name: 'Speed (feet)' }), '25'); // items 12, 24
-  await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
+  await user.click(within(editor()).getByRole('button', { name: 'Make available to characters' }));
   await waitFor(async () => expect((await newestOf(source.id, 'E2E Folk'))?.status).toBe('published'));
   // The speed is a content v10 replace modifier, so publishing it writes a v10 revision.
   const published = (await newestOf(source.id, 'E2E Folk'))!;
@@ -1637,17 +1637,17 @@ it('authors a newer-rules background with three ability increases: the option fe
   expect(entries.filter((e) => e.kind === 'feature' && e.name.startsWith('E2E Wanderer Ability Scores'))).toHaveLength(7);
 
   // R61: Publish is not held; a linked note says the entry points at drafts and that Publish all publishes them together.
-  const publish = await within(editor()).findByRole('button', { name: 'Publish' });
+  const publish = await within(editor()).findByRole('button', { name: 'Make available to characters' });
   await waitFor(() => expect(publish.getAttribute('aria-disabled')).toBeNull());
   const note = document.getElementById('editor-pins');
-  expect(note?.textContent).toBe('Points at 7 unpublished drafts. Publish all drafts publishes them together and re-points this entry.');
+  expect(note?.textContent).toBe('Points at 7 drafts not yet available to characters. Making all drafts available makes them available together and re-points this entry.');
   expect((publish.getAttribute('aria-describedby') ?? '').split(' ')).toContain('editor-pins');
-  await user.click(await screen.findByRole('button', { name: 'Publish all drafts in this source…' }));
-  const region = screen.getByRole('region', { name: 'Publish drafts of E2E Wanderer Book' });
-  const publishAll = await within(region).findByRole('button', { name: 'Publish 8 drafts' });
+  await user.click(await screen.findByRole('button', { name: 'Make all drafts in this source available to characters…' }));
+  const region = screen.getByRole('region', { name: 'Make drafts of E2E Wanderer Book available to characters' });
+  const publishAll = await within(region).findByRole('button', { name: 'Make 8 drafts available to characters' });
   await waitFor(() => expect(publishAll.getAttribute('aria-disabled')).toBeNull());
   await user.click(publishAll);
-  await within(region).findByText('Published 8 drafts.');
+  await within(region).findByText('Made 8 drafts available to characters.');
   expect((await newestOf(source.id, 'E2E Wanderer'))?.status).toBe('published');
   // The open editor showed the superseded draft: it closes with a status instead of saving over the published version.
   await waitFor(() => expect(screen.queryByRole('region', { name: /^New |^Edit / })).toBeNull());
@@ -1669,7 +1669,7 @@ it('authors a cantrip on a new spell list in the studio, publishes it, and the l
   await user.type(within(editor()).getByRole('combobox', { name: 'Add a spell list' }), 'E2E Spark List');
   expect(within(editor()).getByText('Saved as: e2e-spark-list')).toBeTruthy();
   await user.click(within(editor()).getByRole('button', { name: 'Add list' }));
-  await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
+  await user.click(within(editor()).getByRole('button', { name: 'Make available to characters' }));
   await waitFor(async () => expect((await newestOf(source.id, 'E2E Spark'))?.status).toBe('published'));
 
   const keys = await client.spellListKeys();
@@ -1748,10 +1748,10 @@ it('keeps a resource linked to its recovery when the resource is renamed in the 
   const user = userEvent.setup();
   await client.createHomebrewSource('E2E Renames', ['srd-5.2.1']);
   render(<App />);
-  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew' });
   await waitFor(() => expect(studioButton.disabled).toBe(false));
   await user.click(studioButton);
-  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Book or notebook' });
   await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Renames/ })).toBeTruthy());
   await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Renames/ }));
   await screen.findByRole('heading', { name: 'Content in E2E Renames' });
@@ -1775,10 +1775,10 @@ it('finds a problem in a source with the debugger, shows its rule, and clears it
   const user = userEvent.setup();
   await client.createHomebrewSource('E2E Debugger', ['srd-5.2.1']);
   render(<App />);
-  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew' });
   await waitFor(() => expect(studioButton.disabled).toBe(false));
   await user.click(studioButton);
-  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Book or notebook' });
   await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Debugger/ })).toBeTruthy());
   await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Debugger/ }));
   await screen.findByRole('heading', { name: 'Content in E2E Debugger' });
@@ -1821,10 +1821,10 @@ it('tries a draft class at a chosen level on a blank character without saving an
   await client.createHomebrewSource('E2E Sandbox', ['srd-5.2.1']);
   const charactersBefore = (await client.listCharacters()).length;
   render(<App />);
-  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew' });
   await waitFor(() => expect(studioButton.disabled).toBe(false));
   await user.click(studioButton);
-  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Book or notebook' });
   await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Sandbox/ })).toBeTruthy());
   await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Sandbox/ }));
   await screen.findByRole('heading', { name: 'Content in E2E Sandbox' });
@@ -1867,10 +1867,10 @@ it('compares the published revision with the unsaved one by rules, text and on a
   const hero = await client.createCharacter({ name: 'E2E Diff Hero', rulesFamily: 'srd-5.2.1', baseAbilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, pins: [published] });
 
   render(<App />);
-  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew' });
   await waitFor(() => expect(studioButton.disabled).toBe(false));
   await user.click(studioButton);
-  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Book or notebook' });
   await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Diffs/ })).toBeTruthy());
   await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Diffs/ }));
   await user.click(await screen.findByRole('button', { name: 'Edit E2E Diff Feat' }));
@@ -1929,10 +1929,10 @@ it('shows an entry\'s relationships as a keyboard tree and jumps from a node to 
   await client.publish(draft);
 
   render(<App />);
-  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew' });
   await waitFor(() => expect(studioButton.disabled).toBe(false));
   await user.click(studioButton);
-  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Book or notebook' });
   await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Trees/ })).toBeTruthy());
   await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Trees/ }));
   await user.click(await screen.findByRole('button', { name: 'Edit E2E Tree Feature' }));
@@ -1986,10 +1986,10 @@ it('starts homebrew from a template as an unsaved draft, publishes a stance, and
   const user = userEvent.setup();
   const source = await client.createHomebrewSource('E2E Templates', ['srd-5.2.1']);
   render(<App />);
-  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew' });
   await waitFor(() => expect(studioButton.disabled).toBe(false));
   await user.click(studioButton);
-  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Book or notebook' });
   await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Templates/ })).toBeTruthy());
   await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Templates/ }));
   await screen.findByRole('heading', { name: 'Content in E2E Templates' });
@@ -2004,8 +2004,8 @@ it('starts homebrew from a template as an unsaved draft, publishes a stance, and
   await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Stance');
   await user.click(within(editor()).getByRole('button', { name: 'Check' }));
   expect((await within(editor()).findByRole('region', { name: 'Check results' })).textContent).toMatch(/No problems found/);
-  await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
-  await expectStatus(/Published E2E Stance/);
+  await user.click(within(editor()).getByRole('button', { name: 'Make available to characters' }));
+  await expectStatus(/Made E2E Stance available to characters/);
 
   // The class skeleton: its hit die, saves and subclass choice are set; its improvement slots block publishing until filled.
   await user.selectOptions(screen.getByRole('combobox', { name: 'Start from a template' }), 'A class skeleton');
@@ -2043,10 +2043,10 @@ it('shows design feedback only once it is switched on, as hints that do not bloc
   const user = userEvent.setup();
   await client.createHomebrewSource('E2E Feedback', ['srd-5.2.1']);
   render(<App />);
-  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew' });
   await waitFor(() => expect(studioButton.disabled).toBe(false));
   await user.click(studioButton);
-  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Book or notebook' });
   await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Feedback/ })).toBeTruthy());
   await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Feedback/ }));
   await screen.findByRole('heading', { name: 'Content in E2E Feedback' });
@@ -2070,7 +2070,7 @@ it('shows design feedback only once it is switched on, as hints that do not bloc
     // The choice is remembered for next time (this machine only): a fresh studio starts with it on.
     cleanup();
     render(<App />);
-    const again = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+    const again = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew' });
     await waitFor(() => expect(again.disabled).toBe(false));
     await user.click(again);
     expect((await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Show design feedback' })).checked).toBe(true);
@@ -2569,21 +2569,21 @@ it('adds a homebrew Fighter subclass through the studio and plays it: the Stardu
     ],
   });
   render(<App />);
-  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew' });
   await waitFor(() => expect(studioButton.disabled).toBe(false));
   await user.click(studioButton);
 
-  const newSource = await screen.findByRole('form', { name: 'New homebrew source' });
-  await user.type(within(newSource).getByRole('textbox', { name: 'Source title' }), 'E2E Warden Homebrew');
+  const newSource = await screen.findByRole('form', { name: 'New book or notebook' });
+  await user.type(within(newSource).getByRole('textbox', { name: 'Title' }), 'E2E Warden Homebrew');
   await user.click(within(newSource).getByRole('checkbox', { name: '2024 rules' }));
-  await user.click(within(newSource).getByRole('button', { name: 'Create source' }));
+  await user.click(within(newSource).getByRole('button', { name: 'Create' }));
   await screen.findByRole('heading', { name: 'Content in E2E Warden Homebrew' });
 
   const editor = () => screen.getByRole('region', { name: /^New |^Edit / });
   const rule = (name: RegExp) => within(editor()).getByRole('group', { name });
   async function publish(name: string) {
-    await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
-    await waitFor(() => expect(screen.getByRole('status').textContent).toBe(`Published ${name}.`));
+    await user.click(within(editor()).getByRole('button', { name: 'Make available to characters' }));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe(`Made ${name} available to characters.`));
   }
 
   // A limited-use feature: a resource, its recovery and a roll that spends it.
@@ -2603,7 +2603,7 @@ it('adds a homebrew Fighter subclass through the studio and plays it: the Stardu
   // The subclass joins the SRD Fighter's level-3 choice, with a modifier and the feature.
   await user.click(screen.getByRole('button', { name: 'New subclass' }));
   await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Starward Warden');
-  const offered = within(editor()).getByRole('combobox', { name: 'Offered in the choice' });
+  const offered = within(editor()).getByRole('combobox', { name: 'Subclass of' });
   await waitFor(() => expect(within(offered).getByRole('option', { name: /^Fighter: Level 3: Fighter Subclass/ })).toBeTruthy());
   await user.selectOptions(offered, within(offered).getByRole('option', { name: /^Fighter: Level 3: Fighter Subclass/ }));
   await user.click(within(editor()).getByRole('button', { name: 'Add modifier' })); // default: Initiative +1
@@ -2657,13 +2657,13 @@ it('authors a class in the studio and builds it at levels 1, 20 and 5/3 with an 
   // own table (two thirds). Tables are invented for testing.
   const user = userEvent.setup();
   render(<App />);
-  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew' });
   await waitFor(() => expect(studioButton.disabled).toBe(false));
   await user.click(studioButton);
-  const newSource = await screen.findByRole('form', { name: 'New homebrew source' });
-  await user.type(within(newSource).getByRole('textbox', { name: 'Source title' }), 'E2E Chronicle Homebrew');
+  const newSource = await screen.findByRole('form', { name: 'New book or notebook' });
+  await user.type(within(newSource).getByRole('textbox', { name: 'Title' }), 'E2E Chronicle Homebrew');
   await user.click(within(newSource).getByRole('checkbox', { name: '2024 rules' }));
-  await user.click(within(newSource).getByRole('button', { name: 'Create source' }));
+  await user.click(within(newSource).getByRole('button', { name: 'Create' }));
   await screen.findByRole('heading', { name: 'Content in E2E Chronicle Homebrew' });
 
   const editor = () => screen.getByRole('region', { name: /^New |^Edit / });
@@ -2729,18 +2729,18 @@ it('authors a class in the studio and builds it at levels 1, 20 and 5/3 with an 
   await user.clear(share);
   await user.type(share, '0, 1, 2, 2, 3, 4, 4, 5, 6, 6, 7, 8, 8, 9, 10, 10, 11, 12, 12, 13');
 
-  await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
-  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Published E2E Chronicler.'));
+  await user.click(within(editor()).getByRole('button', { name: 'Make available to characters' }));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Made E2E Chronicler available to characters.'));
 
   // A homebrew subclass joins the new class's subclass choice, which declares no options of its own.
   await user.click(screen.getByRole('button', { name: 'New subclass' }));
   await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Order of Quills');
-  const offered = within(editor()).getByRole('combobox', { name: 'Offered in the choice' });
+  const offered = within(editor()).getByRole('combobox', { name: 'Subclass of' });
   await waitFor(() => expect(within(offered).getByRole('option', { name: 'E2E Chronicler: Choose a subclass' })).toBeTruthy());
   await user.selectOptions(offered, 'E2E Chronicler: Choose a subclass');
   await user.click(within(editor()).getByRole('button', { name: 'Add modifier' })); // default: Initiative +1
-  await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
-  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Published E2E Order of Quills.'));
+  await user.click(within(editor()).getByRole('button', { name: 'Make available to characters' }));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Made E2E Order of Quills available to characters.'));
 
   // Level 1 in the builder: the class is offered like any other, with its skill choice.
   await createCharacter(user, { name: 'E2E Scribe', family: 'srd-5.2.1', scores: { Intelligence: 16 }, cls: /^E2E Chronicler/ });
@@ -2892,7 +2892,7 @@ async function cancelAtSummary(user: ReturnType<typeof userEvent.setup>) {
   const { unmount } = render(<App />);
   await toDdbSummary(user);
   const section = await screen.findByRole('region', { name: 'Reference drafts' });
-  await user.click(within(section).getByRole('checkbox', { name: /^Publish these \d+ reference drafts$/ }));
+  await user.click(within(section).getByRole('checkbox', { name: /^Make these \d+ reference drafts available to characters$/ }));
 
   await user.click(screen.getByRole('button', { name: 'Cancel' }));
 
@@ -2915,7 +2915,7 @@ it('Cancel writes no reference drafts; a fresh import lists them unticked and pu
   const section = await screen.findByRole('region', { name: 'Reference drafts' });
   expect(section.textContent).toContain('Fixture Steady Breath');
   expect(section.textContent).toContain('An invented line of fixture description.');
-  const tick = within(section).getByRole<HTMLInputElement>('checkbox', { name: /^Publish these \d+ reference drafts$/ });
+  const tick = within(section).getByRole<HTMLInputElement>('checkbox', { name: /^Make these \d+ reference drafts available to characters$/ });
   expect(tick.checked).toBe(false);
   expect(within(section).getByRole('note').textContent).toContain('Features are kept as reference content in the studio; the gap notes stay on the character.');
   expect((await client.listContent('srd-5.1')).some((o) => o.name === 'Fixture Steady Breath')).toBe(false);
@@ -3151,7 +3151,7 @@ it('creates a draft homebrew class from an uninstalled class, leaves Publish it 
   await nextWhenReady(user, 'Next: summary');
   const stub = await screen.findByRole('region', { name: 'Homebrew class to create' });
   for (const text of ['Fixture Tinkerer', 'd8', 'Strength', 'Characters imported from sheets']) expect(stub.textContent).toContain(text);
-  expect(within(stub).getByRole<HTMLInputElement>('checkbox', { name: 'Publish it' }).checked).toBe(false);
+  expect(within(stub).getByRole<HTMLInputElement>('checkbox', { name: 'Make it available to characters' }).checked).toBe(false);
   expect(within(stub).getByRole('note').textContent).toBe('The class is a draft: the character gets nothing from it until you publish it in the studio and accept the update on the character.');
 
   const create = await screen.findByRole<HTMLButtonElement>('button', { name: 'Create character' });
