@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.8.1 (save for 0.7.0, Foundry dnd5e 6.0.6, release and CI hygiene)
+
+A patch on 0.8.0: "Save for an older TomeStack" now offers 0.7.0, and the Foundry export targets dnd5e 6.0.6. The rest is release, CI and documentation work, plus a development-only `minimatch` override for a moderate advisory.
+
+**Unsigned:** Windows shows "Windows protected your PC" the first time you run `TomeStack.App-win-Setup.exe`. Choose **More info**, then **Run anyway**. Some workplace PCs, and Windows 11 with Smart App Control on, block unsigned apps entirely.
+
+**Updating from 0.8.0:** download the newer `Setup.exe` and run it; TomeStack never checks for updates and makes no network calls. On first start, 0.8.1 copies the database once (`tomestack.db.app-0.8.0-to-0.8.1.bak`). There is no database, schema, content or package change: 0.8.0 and 0.8.1 open the same folder and the same packages. Updating from 0.7.x, the [0.8.0 notes](CHANGELOG.md) apply too: back up first.
+
 ### Added
 - **Save for an older TomeStack: 0.7.0 (D85, [ADR-023](decisions/ADR-023-down-conversion-export.md)):** "Which TomeStack will open it?" now offers 0.7.0 beside 0.6.0 and 0.5.0, for a character, a source pack, a campaign pack or a full library backup. The copy drops and lists what 0.7.0 cannot hold (content v12 fields and effects, item mods and content companions' hit points), and blocks what would make it stronger, as for the other targets. It was held back from 0.8.0 until a real 0.7.0 build had opened the test copies; that proof is now committed and the weekly job reruns it. No schema, package format or database change. See [package-format.md](features/package-format.md#save-for-an-older-tomestack-d85).
 
