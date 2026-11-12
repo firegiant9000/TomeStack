@@ -123,7 +123,7 @@ it('holds Read these pages too, and sends the answer with the range', async () =
 
 it('says a one-family source is written for that family, with no question and no writtenFor', async () => {
   const user = await renderPanel(single);
-  expect(screen.getByText('Written for 2014 rules (from the source).')).toBeTruthy();
+  expect(screen.getByText('Rules it is for: 2014 rules (from the source).')).toBeTruthy();
   expect(screen.queryByRole('radio')).toBeNull();
   const whole = screen.getByRole('button', { name: 'Read the whole document' });
   expect(whole.getAttribute('aria-disabled')).toBeNull();

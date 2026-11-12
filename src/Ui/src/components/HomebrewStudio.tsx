@@ -572,7 +572,7 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
                       {a.name} ({a.role}
                       {a.via ? `, granted by ${a.via}` : ''}){' '}
                       {a.role === 'grant' ? (
-                        <span className="hint">Make a new version of {a.via} that grants this one available to characters, then update that.</span>
+                        <span className="hint">Make a new version of {a.via} that grants this one, make it available to characters, then update that.</span>
                       ) : (
                         <button type="button" onClick={() => setReviewing({ affected: a, to: published.result.published, name: published.name })}>
                           Review update for {a.name}
