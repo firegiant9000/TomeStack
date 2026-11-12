@@ -141,9 +141,11 @@ public static class DownConversion
         var changes = new List<ExportChange>();
         var gearConverted = new HashSet<Guid>();
         var gearBlocked = new HashSet<Guid>();
+        var afterGear = new List<Character>(plan.Characters.Count);
         foreach (var character in plan.Characters)
         {
             var gear = GearAsCustomItems(character, plan, target, isBundledSource, catalog, gearConverted, gearBlocked);
+            afterGear.Add(gear.Character);
             var below = DownConvert.Below(gear.Character, target.CharacterSchema);
             characters.Add(below.Character);
             var entry = $"characters/{character.Id:D}.json";
@@ -166,7 +168,8 @@ public static class DownConversion
         gearConverted.ExceptWith(gearBlocked);
         if (gearConverted.Count > 0)
         {
-            var held = plan.Characters.SelectMany(c => HeldReferences(c with { Equipment = [] })).Select(r => r.RevisionId).ToHashSet();
+            // Each character after its conversion: only the converted entries are gone, so the kept entries and their mods still count.
+            var held = afterGear.SelectMany(HeldReferences).Select(r => r.RevisionId).ToHashSet();
             gearConverted.ExceptWith(held);
             gearConverted.ExceptWith(plan.Revisions.SelectMany(RefsOf));
         }
@@ -306,8 +309,8 @@ public static class DownConversion
             ? $"'{name}': {existing.Count + plain.Count} custom items would be needed for gear TomeStack {release} does not have, and a character can keep {Character.MaxCustomItems}. Remove some custom items or gear, then export."
             : plain.FirstOrDefault(p => p.Entry.Quantity is < 1 or > EquipmentEntry.MaxQuantity) is { Item: { } big }
                 ? $"'{name}': the quantity of '{big.Name}' cannot be kept as a custom item. Change it to between 1 and {EquipmentEntry.MaxQuantity}, then export."
-                : plain.FirstOrDefault(p => p.Item.Name.Length is < 1 or > Character.MaxName) is { Item: { } tooLong }
-                    ? $"'{tooLong.Name}': the name is too long to keep as a custom item (at most {Character.MaxName} characters), so it cannot be copied into the file."
+                : plain.FirstOrDefault(p => string.IsNullOrWhiteSpace(p.Item.Name) || p.Item.Name.Length > Character.MaxName) is { Item: { } tooLong }
+                    ? $"'{name}': the name '{tooLong.Name}' cannot be kept as a custom item (it must have 1 to {Character.MaxName} characters and not be blank), so it cannot be copied into the file."
                     : null;
         if (problem is not null)
         {
@@ -321,7 +324,8 @@ public static class DownConversion
         var added = new List<CustomItem>();
         foreach (var (entry, item) in plain)
         {
-            var key = entry.Id?.ToString("D") ?? item.RevisionId.ToString("D");
+            // An entry without an id is keyed by its place in the list, so two of the same item never depend on the :2 suffix order.
+            var key = entry.Id?.ToString("D") ?? FormattableString.Invariant($"{item.RevisionId:D}@{character.Equipment.ToList().FindIndex(e => ReferenceEquals(e, entry))}");
             var id = Uuid5(Namespace, GearIdPrefix + key);
             for (var n = 2; !used.Add(id); n++)
                 id = Uuid5(Namespace, FormattableString.Invariant($"{GearIdPrefix}{key}:{n}"));

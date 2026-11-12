@@ -1099,6 +1099,146 @@ public class DownConversionExportTests
         Assert.True(lowered.Blocked);
     }
 
+    [Fact]
+    public void Gear_held_as_a_mod_by_a_kept_entry_stays_blocking()
+    {
+        var rope = GearItem(1, "Compat Rope Coil");
+        var kept = GearItem(6, "Compat Frame");
+        var ropeRef = new ContentReference(rope.ContentId, rope.RevisionId);
+        var keeper = new EquipmentEntry(new ContentReference(kept.ContentId, kept.RevisionId), false, 1, Guid.NewGuid(), Mods: [ropeRef]);
+        var hero = Hero(c => c with { Equipment = [Held(rope), keeper] });
+
+        var lowered = LowerGear(hero, "0.6.0", [kept.RevisionId], rope, kept);
+
+        // Nothing is written: the revision the mod points at is still checked against the target, so the file is refused, not dangling.
+        Assert.True(lowered.Blocked);
+        Assert.Contains(lowered.Changes, c => c.Action == "blocks" && c.Message.Contains("Compat Rope Coil", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_blank_content_name_is_not_converted_and_blocks()
+    {
+        var blank = GearItem(7, "   ");
+        var hero = Hero(c => c with { Equipment = [Held(blank)] });
+
+        var lowered = LowerGear(hero, "0.6.0", null, blank);
+
+        Assert.True(lowered.Blocked);
+        Assert.Null(lowered.Plan.Characters[0].CustomItems);
+        Assert.Single(lowered.Plan.Characters[0].Equipment);
+        Assert.Contains(lowered.Changes, c => c.Action == "blocks" && c.Message.Contains("cannot be kept as a custom item", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Two_entries_without_an_id_for_one_item_get_two_stable_ids()
+    {
+        var rope = GearItem(1, "Compat Rope Coil");
+        var ropeRef = new ContentReference(rope.ContentId, rope.RevisionId);
+        var hero = Hero(c => c with { Equipment = [new EquipmentEntry(ropeRef, false, 1, null), new EquipmentEntry(ropeRef, false, 2, null)] });
+
+        var first = LowerGear(hero, "0.6.0", null, rope).Plan.Characters[0].CustomItems!;
+        var second = LowerGear(hero, "0.6.0", null, rope).Plan.Characters[0].CustomItems!;
+
+        Assert.Equal(2, first.Select(i => i.Id).Distinct().Count());
+        Assert.Equal(first, second);
+    }
+
+    [Fact]
+    public void An_unconverted_entry_of_the_same_item_in_another_character_keeps_the_block()
+    {
+        var rope = GearItem(1, "Compat Rope Coil");
+        var ropeRef = new ContentReference(rope.ContentId, rope.RevisionId);
+        var first = Hero(c => c with { Equipment = [Held(rope)] });
+        var second = Hero(c => c with { Id = Guid.NewGuid(), Equipment = [new EquipmentEntry(ropeRef, Attuned: true)] });
+
+        var lowered = DownConversion.Lower(new([first, second], [rope], [], [], "x.tomestack.zip"), Row("0.6.0") with { BundledRevisionIds = new HashSet<Guid>() },
+            id => id == BundledSourceId, _ => "Compat Bundled Pack", new HomebrewCatalog());
+
+        Assert.True(lowered.Blocked);
+    }
+
+    [Fact]
+    public void A_target_below_character_schema_9_still_blocks_plain_gear()
+    {
+        var rope = GearItem(1, "Compat Rope Coil");
+        var hero = Hero(c => c with { Equipment = [Held(rope)] });
+
+        var lowered = LowerGear(hero, "0.5.0", null, rope);
+
+        Assert.True(Row("0.5.0").CharacterSchema < Character.DetailsSchemaVersion);
+        Assert.True(lowered.Blocked);
+        Assert.Null(lowered.Plan.Characters[0].CustomItems);
+    }
+
+    [Theory]
+    [InlineData("attuned")]
+    [InlineData("charges-spent")]
+    [InlineData("item-charges")]
+    [InlineData("item-attunement")]
+    public void Entry_state_and_item_effects_each_keep_the_block(string which)
+    {
+        var plain = GearItem(1, "Compat Rope Coil");
+        var item = which switch
+        {
+            "item-charges" => GearItem(4, "Compat Wand", new ItemEffect { Id = "item", Charges = new ItemCharges { Max = 3 } }),
+            "item-attunement" => GearItem(5, "Compat Ring", new ItemEffect { Id = "item", RequiresAttunement = true }),
+            _ => plain,
+        };
+        var entry = which switch
+        {
+            "attuned" => Held(item) with { Attuned = true },
+            "charges-spent" => Held(item) with { ChargesSpent = 1 },
+            _ => Held(item),
+        };
+
+        var lowered = LowerGear(Hero(c => c with { Equipment = [entry] }), "0.6.0", null, item);
+
+        Assert.True(lowered.Blocked);
+        Assert.Null(lowered.Plan.Characters[0].CustomItems);
+        Assert.Single(lowered.Plan.Characters[0].Equipment);
+    }
+
+    [Fact]
+    public void A_quantity_a_custom_item_cannot_hold_blocks_and_is_not_changed()
+    {
+        var rope = GearItem(1, "Compat Rope Coil");
+        var hero = Hero(c => c with { Equipment = [Held(rope, EquipmentEntry.MaxQuantity + 1)] });
+
+        var lowered = LowerGear(hero, "0.6.0", null, rope);
+
+        Assert.True(lowered.Blocked);
+        Assert.Null(lowered.Plan.Characters[0].CustomItems);
+        Assert.Equal(EquipmentEntry.MaxQuantity + 1, Assert.Single(lowered.Plan.Characters[0].Equipment).Quantity);
+    }
+
+    [Fact]
+    public void A_whole_export_writes_the_custom_item_and_no_equipment_entry_or_pin_for_the_converted_gear()
+    {
+        using var app = new TempApp();
+        var rope = GearItem(1, "Compat Rope Coil");
+        app.App.Store.UpsertSource(new SourceRecord { Id = BundledSourceId, Title = "Compat Bundled Pack", Publisher = "Compat", RulesFamilies = [RulesFamilies.Srd51], EditionVersion = "1", License = "test", Redistributable = true });
+        app.App.Store.AddRevision(rope);
+        var id = Save(app, c => c with { Equipment = [Held(rope, 2)] });
+        var packages = new PackageService(app.App.Store, TimeProvider.System, Path.Combine(app.App.DataDirectory, PackageService.BackupFolderName));
+        packages.SetBundledSources(new HashSet<Guid> { BundledSourceId });
+        var row = Row("0.6.0") with { BundledRevisionIds = new HashSet<Guid>() };
+
+        var preview = packages.PreviewExport([id], ExportPurpose.Share, row);
+        var bytes = packages.Export([id], ExportPurpose.Share, row, preview.ChangesHash).Content;
+
+        var character = Entry(bytes, $"characters/{id:D}.json");
+        var custom = Assert.Single(character.GetProperty("customItems").EnumerateArray());
+        Assert.Equal("Compat Rope Coil", custom.GetProperty("name").GetString());
+        Assert.Equal(2, custom.GetProperty("quantity").GetInt32());
+        Assert.True(!character.TryGetProperty("equipment", out var equipment) || equipment.GetArrayLength() == 0);
+        using var zip = new System.IO.Compression.ZipArchive(new MemoryStream(bytes));
+        foreach (var entry in zip.Entries)
+        {
+            using var reader = new StreamReader(entry.Open());
+            Assert.DoesNotContain(rope.RevisionId.ToString("D"), reader.ReadToEnd(), StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
     // ---- C2-5: the way back (guarded re-pin on import) ---------------------------------------------------------------------
 
     private const string RepinnedSentence = "'Compat Steady Hands': re-pinned to your original revision (the file held a copy made for 0.6.0).";
