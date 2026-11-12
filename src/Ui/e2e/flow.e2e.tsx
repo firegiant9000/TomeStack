@@ -120,21 +120,21 @@ it('creates a character, shows its traced sheet, overrides, exports and re-impor
 
   // Export (DevHost has no native dialog: package.saveAs -> unsupported -> download fallback)
   await openTab(user, sheet, 'Manage');
-  await user.click(screen.getByRole('button', { name: 'Export package' }));
+  await user.click(screen.getByRole('button', { name: 'Export TomeStack file' }));
   await waitFor(() => expect(downloadBase64).toHaveBeenCalledTimes(1));
   const [fileName, base64] = vi.mocked(downloadBase64).mock.calls[0]!;
   expect(fileName).toBe('E2E-Pell-personal-backup.tomestack.zip'); // default purpose: personal backup (ADR-007)
 
   // Share: the preview says what is left out (nothing here: the fixture sources may be shared), then exports.
   await user.click(screen.getByRole('radio', { name: /Share with someone/ }));
-  const leftOut = await screen.findByRole('region', { name: 'Left out of the shared package' });
+  const leftOut = await screen.findByRole('region', { name: 'Left out of the shared TomeStack file' });
   expect(leftOut.textContent).toMatch(/Nothing is left out/);
   expect(leftOut.textContent).not.toMatch(/session note/i);
   // L5: the one sharing rule's list is there, and Export waits for it.
-  const shareCheck = await screen.findByRole('region', { name: 'Preflight: shared package' });
+  const shareCheck = await screen.findByRole('region', { name: 'Preflight: shared TomeStack file' });
   expect(shareCheck.textContent).toMatch(/Nothing is left out/);
-  await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Export package' }).disabled).toBe(false));
-  await user.click(screen.getByRole('button', { name: 'Export package' }));
+  await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Export TomeStack file' }).disabled).toBe(false));
+  await user.click(screen.getByRole('button', { name: 'Export TomeStack file' }));
   await waitFor(() => expect(downloadBase64).toHaveBeenCalledTimes(2));
   expect(vi.mocked(downloadBase64).mock.calls[1]![0]).toBe('E2E-Pell.tomestack.zip');
   // D36 in the files themselves: the backup holds the details and the journal; the share keeps the details and drops the journal.
@@ -148,7 +148,7 @@ it('creates a character, shows its traced sheet, overrides, exports and re-impor
 
   // Import: preview first, then apply. The character already exists, so the local copy is backed up.
   const file = new File([bytesOf(base64)], fileName, { type: 'application/zip' });
-  await user.upload(screen.getByLabelText('Package file'), file);
+  await user.upload(screen.getByLabelText('TomeStack file'), file);
   const preview = await screen.findByRole('region', { name: `Import ${fileName}` });
   expect(within(preview).getByText(/already exists and will be replaced/)).toBeTruthy();
   await user.click(within(preview).getByRole('button', { name: 'Apply import' }));
@@ -969,9 +969,9 @@ it('marks a source as shareable after confirming it is your own work, saves a so
   expect(fileName).toBe('E2E-Own-Notes-source-pack.tomestack.zip');
 
   // Importing it: the preview says what a source pack is; here everything is already installed.
-  await user.upload(screen.getByLabelText('Package file'), new File([bytesOf(base64)], fileName, { type: 'application/zip' }));
+  await user.upload(screen.getByLabelText('TomeStack file'), new File([bytesOf(base64)], fileName, { type: 'application/zip' }));
   const importing = await screen.findByRole('region', { name: `Import ${fileName}` });
-  expect(within(importing).getByText(/This is a source pack\. Its sender stated that each source is their own work/)).toBeTruthy();
+  expect(within(importing).getByText(/This TomeStack file holds sources\. Its sender stated that each source is their own work/)).toBeTruthy();
   await user.click(within(importing).getByRole('button', { name: 'Apply import' }));
   await expectStatus(/unchanged/);
 
@@ -1021,27 +1021,27 @@ it('shares a campaign as a campaign pack that names what it leaves out, and impo
   await user.click(campaignsButton);
   await user.click(await screen.findByRole('button', { name: 'Share E2E Harbor Table…' }));
   const share = await screen.findByRole('region', { name: 'Share E2E Harbor Table' });
-  await waitFor(() => expect(share.textContent).toMatch(/1 source carried with 1 published revision; System Reference Document 5\.2\.1 named, not copied/));
+  await waitFor(() => expect(share.textContent).toMatch(/1 source carried with 1 available version; System Reference Document 5\.2\.1 named, not copied/));
   // The guard: homebrew you did not mark as your own shareable work is only named.
-  const leftOut = within(share).getByRole('region', { name: 'Left out of the campaign pack' });
+  const leftOut = within(share).getByRole('region', { name: 'Left out of the TomeStack file' });
   expect(leftOut.textContent).toMatch(/E2E Secret Notes .*not marked as shareable/);
 
   // DevHost has no Save dialog, so it downloads.
   // L5: the preflight names the same source in words, and Save waits for it.
-  const campaignCheck = await within(share).findByRole('region', { name: 'Preflight: campaign pack' });
+  const campaignCheck = await within(share).findByRole('region', { name: 'Preflight: TomeStack file' });
   expect(campaignCheck.textContent).toMatch(/E2E Secret Notes.*not marked as your own shareable work/);
-  await waitFor(() => expect(within(share).getByRole<HTMLButtonElement>('button', { name: 'Save campaign pack…' }).disabled).toBe(false));
+  await waitFor(() => expect(within(share).getByRole<HTMLButtonElement>('button', { name: 'Save TomeStack file…' }).disabled).toBe(false));
   const downloads = vi.mocked(downloadBase64).mock.calls.length;
-  await user.click(within(share).getByRole('button', { name: 'Save campaign pack…' }));
+  await user.click(within(share).getByRole('button', { name: 'Save TomeStack file…' }));
   await waitFor(() => expect(vi.mocked(downloadBase64).mock.calls.length).toBe(downloads + 1));
   const [fileName, base64] = vi.mocked(downloadBase64).mock.calls[downloads]!;
   expect(fileName).toBe('E2E-Harbor-Table-campaign-pack.tomestack.zip');
 
   // Here the campaign changes after the pack was made; importing it asks which version to keep.
   await client.saveCampaign({ ...campaign, name: 'E2E Harbor Table (local)', allowedSources: ['52500000-0000-4000-8000-000000000001', harbor.id] });
-  await user.upload(screen.getByLabelText('Package file'), new File([bytesOf(base64)], fileName, { type: 'application/zip' }));
+  await user.upload(screen.getByLabelText('TomeStack file'), new File([bytesOf(base64)], fileName, { type: 'application/zip' }));
   const importing = await screen.findByRole('region', { name: `Import ${fileName}` });
-  expect(within(importing).getByText(/This is a campaign pack/)).toBeTruthy();
+  expect(within(importing).getByText(/This TomeStack file holds a campaign/)).toBeTruthy();
   const apply = within(importing).getByRole<HTMLButtonElement>('button', { name: 'Apply import' });
   expect(apply.disabled).toBe(true);
   const decision = within(importing).getByRole('group', { name: 'Campaign “E2E Harbor Table” differs from yours' });
@@ -1314,7 +1314,7 @@ it('reads the fixture PDF, reviews its candidates, and publishes an accepted one
   // It left the "to review" list with its details, so focus goes back to the list (WCAG 2.4.3).
   await waitFor(() => expect(document.activeElement).toBe(within(panel()).getByRole('heading', { name: 'Entries found in E2E Grimoire' })));
   // The review says what happens next and offers the studio (item 2); the flow below still goes by the sidebar.
-  expect(within(panel()).getByRole('button', { name: 'Open E2E Grimoire in the studio' })).toBeTruthy();
+  expect(within(panel()).getByRole('button', { name: 'Open E2E Grimoire in Homebrew' })).toBeTruthy();
 
   // Ignore the other spell.
   await user.click(await candidateButton(panel, 'Fixture Frost Veil'));
@@ -1883,7 +1883,7 @@ it('compares the published revision with the unsaved one by rules, text and on a
   await user.clear(value);
   await user.type(value, '3');
 
-  const panel = within(editor()).getByRole('region', { name: 'Compare revisions' });
+  const panel = within(editor()).getByRole('region', { name: 'Compare versions' });
   await user.click(await within(panel).findByRole('checkbox', { name: 'E2E Diff Hero' })); // the character list loads after the panel opens
   await user.click(within(panel).getByRole('button', { name: 'Compare' }));
   const results = await within(panel).findByRole('region', { name: 'Comparison results' });
@@ -1900,11 +1900,11 @@ it('compares the published revision with the unsaved one by rules, text and on a
   await user.click(within(editor()).getByRole('button', { name: 'Close editor' }));
   await user.click(screen.getByRole('button', { name: 'New feat' }));
   const fresh = () => screen.getByRole('region', { name: /^New / });
-  expect(within(fresh()).queryByRole('region', { name: 'Compare revisions' })).toBeNull();
+  expect(within(fresh()).queryByRole('region', { name: 'Compare versions' })).toBeNull();
   await user.type(within(fresh()).getByRole('textbox', { name: 'Name' }), 'E2E Fresh Feat');
   await user.click(within(fresh()).getByRole('button', { name: 'Save draft' }));
   await expectStatus(/Saved a draft of E2E Fresh Feat/);
-  const freshPanel = await within(fresh()).findByRole('region', { name: 'Compare revisions' });
+  const freshPanel = await within(fresh()).findByRole('region', { name: 'Compare versions' });
   await user.click(within(freshPanel).getByRole('button', { name: 'Compare' }));
   expect((await within(freshPanel).findByRole('region', { name: 'Comparison results' })).textContent).toMatch(/The rules are the same/);
 });
@@ -2205,7 +2205,7 @@ it('reaches the primary actions by keyboard alone', async () => {
   for (let i = 0; i < 200 && document.activeElement !== newCharacter; i++) await user.tab();
   expect(document.activeElement).toBe(newCharacter);
   await user.tab();
-  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Import package…' }));
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'From a TomeStack file…' }));
 
   await user.keyboard('{Shift>}{Tab}{/Shift}{Enter}');
   expect(await screen.findByRole('heading', { name: 'New character' })).toBeTruthy();
@@ -2852,7 +2852,7 @@ it('archives a character after a preview, lists it apart, and brings it back (SP
 const ddbSheet = () => readFileSync(resolve(process.cwd(), '../../tests/RulesFixtures/pdf/fixture-ddb-sheet.pdf'));
 
 async function startDdbImport(user: ReturnType<typeof userEvent.setup>) {
-  const start = await screen.findByRole<HTMLButtonElement>('button', { name: 'Import a character (sheet or text)…' });
+  const start = await screen.findByRole<HTMLButtonElement>('button', { name: 'From a character sheet (PDF or text)…' });
   await waitFor(() => expect(start.disabled).toBe(false));
   await user.click(start);
 }
@@ -2917,7 +2917,7 @@ it('Cancel writes no reference drafts; a fresh import lists them unticked and pu
   expect(section.textContent).toContain('An invented line of fixture description.');
   const tick = within(section).getByRole<HTMLInputElement>('checkbox', { name: /^Make these \d+ reference drafts available to characters$/ });
   expect(tick.checked).toBe(false);
-  expect(within(section).getByRole('note').textContent).toContain('Features are kept as reference content in the studio; the gap notes stay on the character.');
+  expect(within(section).getByRole('note').textContent).toContain('Features are kept as reference content in Homebrew; the gap notes stay on the character.');
   expect((await client.listContent('srd-5.1')).some((o) => o.name === 'Fixture Steady Breath')).toBe(false);
 
   await user.click(tick);
@@ -3152,7 +3152,7 @@ it('creates a draft homebrew class from an uninstalled class, leaves Publish it 
   const stub = await screen.findByRole('region', { name: 'Homebrew class to create' });
   for (const text of ['Fixture Tinkerer', 'd8', 'Strength', 'Characters imported from sheets']) expect(stub.textContent).toContain(text);
   expect(within(stub).getByRole<HTMLInputElement>('checkbox', { name: 'Make it available to characters' }).checked).toBe(false);
-  expect(within(stub).getByRole('note').textContent).toBe('The class is a draft: the character gets nothing from it until you publish it in the studio and accept the update on the character.');
+  expect(within(stub).getByRole('note').textContent).toBe('The class is a draft: the character gets nothing from it until you make it available to characters in Homebrew and accept the update on the character.');
 
   const create = await screen.findByRole<HTMLButtonElement>('button', { name: 'Create character' });
   await waitFor(() => expect(create.disabled).toBe(false));
