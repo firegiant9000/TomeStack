@@ -1220,9 +1220,9 @@ it('D60 gate: a Markdown class is reviewed, accepted with its confirm tick and p
   await user.selectOptions(within(panel()).getByRole('combobox', { name: 'Kind' }), 'class');
   await user.click(await candidateButton(panel, 'Placeholder'));
   const details = () => within(panel()).getByRole('region', { name: 'Entry:Placeholder' });
-  await waitFor(() => expect(within(details()).getByRole('region', { name: 'Check before accepting' })).toBeTruthy());
+  await waitFor(() => expect(within(details()).getByRole('region', { name: 'Check before keeping' })).toBeTruthy());
 
-  // Accept stays held until the hit die is confirmed against the page; the proficiencies are left as reference.
+  // Keep stays held until the hit die is confirmed against the page; the proficiencies are left as reference.
   await waitFor(() => expect(within(details()).getByRole('button', { name: 'Keep, with its rules' }).getAttribute('aria-disabled')).toBe('true'));
   await user.click(await waitFor(() => within(details()).getByRole('checkbox', { name: /^Confirm the hit die/ })));
   await waitFor(() => expect(within(details()).getByRole('button', { name: 'Keep, with its rules' }).getAttribute('aria-disabled')).toBeNull());
@@ -1297,7 +1297,7 @@ it('reads the fixture PDF, reviews its candidates, and publishes an accepted one
   const kind = within(panel()).getByRole('combobox', { name: 'Kind' });
   const detail = (name: string) => within(panel()).findByRole('region', { name: `Entry:${name}` });
 
-  // A clean spell: excerpt, page, what was read; the check passes; accepting makes a draft.
+  // A clean spell: excerpt, page, what was read; the check passes; keeping makes a draft.
   await user.selectOptions(kind, 'spell');
   await waitFor(() => expect(within(list()).getAllByRole('listitem')).toHaveLength(2));
   await user.click(await candidateButton(panel, 'Fixture Ember Lance')); // a slow PDF worker may still be filling the list
@@ -1326,12 +1326,12 @@ it('reads the fixture PDF, reviews its candidates, and publishes an accepted one
   await user.click(await candidateButton(panel, 'Fixture Stormcall'));
   const stormcall = await detail('Fixture Stormcall');
   expect(within(within(stormcall).getByRole('group', { name: 'Unresolved references' })).getByRole('checkbox', { name: 'Dismiss Fixture Thunder Word' })).toBeTruthy();
-  await within(stormcall).findByRole('list', { name: 'Blocks accepting' });
+  await within(stormcall).findByRole('list', { name: 'Blocks keeping' });
   expect(within(stormcall).getByRole('button', { name: 'Keep, with its rules' }).getAttribute('aria-disabled')).toBe('true');
   await user.click(within(stormcall).getByRole('button', { name: 'Keep as text only' }));
   await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Fixture Stormcall is now a draft reference entry/));
 
-  // The feat: accepted as a draft, then published in the studio, which validates it again.
+  // The feat: kept as a draft, then published in the studio, which validates it again.
   await user.selectOptions(kind, 'feat');
   await user.click(await candidateButton(panel, 'Fixture Keen Watcher'));
   const feat = await detail('Fixture Keen Watcher');
@@ -1385,13 +1385,13 @@ it('imports a fixture class: the table is checked, the hit die and slots are con
   const linked = await within(lamplighter).findByRole('list', { name: 'Linked features' });
   await waitFor(() => expect(within(linked).getAllByRole('listitem').length).toBeGreaterThan(3));
 
-  // The spell list name is the detector's guess: saving the edit settles it. Accept stays held until the confirmations are ticked.
+  // The spell list name is the detector's guess: saving the edit settles it. Keep stays held until the confirmations are ticked.
   await user.click(within(lamplighter).getByRole('button', { name: 'Save edit' }));
   await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Saved your edit of Fixture Lamplighter/));
   // The details are rebuilt from the saved edit, and checked again.
   await waitFor(() => expect(within(panel()).getByRole('region', { name: 'Entry:Fixture Lamplighter' })).not.toBe(lamplighter));
   const again = within(panel()).getByRole('region', { name: 'Entry:Fixture Lamplighter' });
-  await waitFor(() => expect(within(again).getByRole('region', { name: 'Check before accepting' }).textContent).not.toMatch(/unsure/));
+  await waitFor(() => expect(within(again).getByRole('region', { name: 'Check before keeping' }).textContent).not.toMatch(/unsure/));
   const accept = within(again).getByRole('button', { name: 'Keep, with its rules' });
   expect(accept.getAttribute('aria-disabled')).toBe('true');
   await user.click(within(again).getByRole('checkbox', { name: /^Confirm the hit die/ }));
@@ -1557,7 +1557,7 @@ it('adds the wizard list to a fixture spell candidate in bulk, accepts and publi
   const lists = (stored.edited ?? stored.candidate).proposedEffects.flatMap((e) => (e.type === 'spell' ? (e.lists as string[]) : []));
   expect(lists).toContain('wizard');
 
-  // Accept it as a draft (the bulk button), then publish through the studio panel.
+  // Keep it as a draft (the bulk button), then publish through the studio panel.
   const row = within(panel()).getByRole<HTMLInputElement>('checkbox', { name: 'Select Fixture Ember Lance' });
   if (!row.checked) await user.click(row);
   const accept = within(panel()).getByRole('button', { name: 'Keep selected, with their rules' });
