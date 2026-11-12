@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Changed
+- **Docs:** the README "Code signing policy" and [ADR-024](decisions/ADR-024-code-signing.md) record that the SignPath Foundation application was submitted on 2026-11-12. Releases stay unsigned until it is accepted.
+
 ## 0.8.1 (save for 0.7.0, Foundry dnd5e 6.0.6, release and CI hygiene)
 
 A patch on 0.8.0: "Save for an older TomeStack" now offers 0.7.0, and the Foundry export targets dnd5e 6.0.6. The rest is release, CI and documentation work, plus a development-only `minimatch` override for a moderate advisory.
