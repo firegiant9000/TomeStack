@@ -524,6 +524,9 @@ public class DownConversionExportTests
         {
             Id = sourceId, Title = "Compat Homebrew A", Publisher = "", RulesFamilies = [RulesFamilies.Srd51], EditionVersion = "", License = "", Redistributable = true,
         };
+
+        // Knows no revisions, so it holds no guides.
+        public IReadOnlyList<ContentRevision> GuidesFor(Guid targetContentId) => [];
     }
 
     private sealed class EmptyCatalog : IContentCatalog
@@ -531,6 +534,9 @@ public class DownConversionExportTests
         public ContentRevision? FindRevision(ContentReference reference) => null;
 
         public SourceRecord? FindSource(Guid sourceId) => null;
+
+        // Empty catalogue: no guides.
+        public IReadOnlyList<ContentRevision> GuidesFor(Guid targetContentId) => [];
     }
 
     /// <summary>A v11 feature whose fly-speed bonus a v10 reader has no field for, so lowering drops it.</summary>

@@ -214,6 +214,9 @@ public static class DownConvert
         public ContentRevision? FindRevision(ContentReference reference) => null;
 
         public SourceRecord? FindSource(Guid sourceId) => sourceId == source.Id ? source : null;
+
+        // Validates a lone copy, not a duplicate check against other guides, so there is nothing to compare with.
+        public IReadOnlyList<ContentRevision> GuidesFor(Guid targetContentId) => [];
     }
 
     private static void ValidateAtTarget(ContentRevision copy, IContentCatalog? catalog, List<int> origin, List<BelowChange> changes)

@@ -84,8 +84,9 @@ public static class Coverage
 
         bool InScope(ContentRevision r) =>
             (request.SourceId is null || r.Provenance.SourceId == request.SourceId) && (home is null || r.Provenance.SourceId == home);
-        var inScope = chosen.Values.Where(InScope).ToList();
-        var draftScope = drafts.Values.Where(InScope).ToList();
+        // A creation guide is a walkthrough, not a feature to place or count, so it gets no row (published or draft).
+        var inScope = chosen.Values.Where(r => r.Kind != ContentKind.CreationGuide && InScope(r)).ToList();
+        var draftScope = drafts.Values.Where(r => r.Kind != ContentKind.CreationGuide && InScope(r)).ToList();
         // Drafts are listed beside the published rows and never counted: the walk sees the published revisions only (the latest of
         // each content, so a subclass that dropped its extendsChoice no longer joins the class); validation sees everything.
         var walkCatalog = new InMemoryContentCatalog([], chosen.Values);

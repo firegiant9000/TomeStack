@@ -23,7 +23,7 @@ public interface IContentCatalog
     /// Content v13 (ADR-024): the published creation guides whose guideFor names <paramref name="targetContentId"/>, the newest published
     /// revision of each guide content id (a guide whose newest revision names another target no longer counts here). Published only.
     /// </summary>
-    IReadOnlyList<ContentRevision> GuidesFor(Guid targetContentId) => [];
+    IReadOnlyList<ContentRevision> GuidesFor(Guid targetContentId);
 }
 
 public sealed record Diagnostic(string Code, string Message, ContentReference? Content = null, string? EffectId = null);
