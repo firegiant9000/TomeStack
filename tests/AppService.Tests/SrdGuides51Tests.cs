@@ -77,23 +77,191 @@ public class SrdGuides51Tests
         }
     }
 
+    // Expands every option of every pick of the guide (the other picks at their first option): no problems and some equipment.
+    private static void AssertEveryOptionExpands(ContentRevision guide)
+    {
+        var kit = Kit(guide);
+        foreach (var pick in kit.Picks)
+        {
+            foreach (var option in pick.Options)
+            {
+                var choices = kit.Picks.Select(p => p == pick ? new KitChoice(p.Id, option.Id, AnyOfFor(option)) : new KitChoice(p.Id, p.Options[0].Id, AnyOfFor(p.Options[0]))).ToList();
+                var result = KitExpansion.Expand(kit, choices, Catalog);
+                Assert.True(result.Problems.Count == 0, $"{guide.Name} {pick.Id}/{option.Id}: {string.Join("; ", result.Problems.Select(p => p.Message))}");
+                Assert.NotEmpty(result.Equipment);
+            }
+        }
+    }
+
     [Fact]
     public void Every_option_of_every_pick_expands_without_problems()
     {
         foreach (var guide in Guides.Revisions)
+            AssertEveryOptionExpands(guide);
+    }
+
+    // Row: guide, pick, option, expected lines "qty Name" joined by "; ", Acolyte gold. "pack:Name" stands for that pack's contents
+    // (pinned in SrdGear51Tests); "any:weapon.simple" or "any:weapon.martial" for the weapon the test supplies for that anyOf line.
+    public static TheoryData<string, string, string, string, int> OptionRows()
+    {
+        var rows = new TheoryData<string, string, string, string, int>();
+        void Row(string guide, string pick, string option, string lines, int gp = 0) => rows.Add(guide, pick, option, lines, gp);
+        void Each(string guide, string pick, params string[] names)
         {
-            var kit = Kit(guide);
-            foreach (var pick in kit.Picks)
+            for (var i = 0; i < names.Length; i++)
+                Row(guide, pick, ((char)('a' + i)).ToString(), "1 " + names[i]);
+        }
+        const string Simple = "1 any:weapon.simple";
+        const string Martial = "1 any:weapon.martial";
+        string[] arcane = ["Component pouch", "Arcane focus (crystal)", "Arcane focus (orb)", "Arcane focus (rod)", "Arcane focus (staff)", "Arcane focus (wand)"];
+        string[] symbols = ["Holy symbol (amulet)", "Holy symbol (emblem)", "Holy symbol (reliquary)"];
+
+        Row("Barbarian", "melee", "a", "1 Greataxe");
+        Row("Barbarian", "melee", "b", Martial);
+        Row("Barbarian", "second", "a", "2 Handaxe");
+        Row("Barbarian", "second", "b", Simple);
+        Row("Barbarian", "gear", "a", "1 pack:Explorer's pack; 4 Javelin");
+
+        Row("Bard", "weapon", "a", "1 Rapier");
+        Row("Bard", "weapon", "b", "1 Longsword");
+        Row("Bard", "weapon", "c", Simple);
+        Row("Bard", "pack", "a", "1 pack:Diplomat's pack");
+        Row("Bard", "pack", "b", "1 pack:Entertainer's pack");
+        Each("Bard", "instrument", "Lute", "Bagpipes", "Drum", "Dulcimer", "Flute", "Horn", "Lyre", "Pan flute", "Shawm", "Viol");
+        Row("Bard", "armor", "a", "1 Leather; 1 Dagger");
+
+        Row("Cleric", "weapon", "a", "1 Mace");
+        Row("Cleric", "weapon", "b", "1 Warhammer");
+        Row("Cleric", "armor", "a", "1 Scale mail");
+        Row("Cleric", "armor", "b", "1 Leather");
+        Row("Cleric", "armor", "c", "1 Chain mail");
+        Row("Cleric", "ranged", "a", "1 Crossbow, light; 20 Crossbow bolt");
+        Row("Cleric", "ranged", "b", Simple);
+        Row("Cleric", "pack", "a", "1 pack:Priest's pack");
+        Row("Cleric", "pack", "b", "1 pack:Explorer's pack");
+        Row("Cleric", "shield", "a", "1 Shield");
+        Each("Cleric", "symbol", symbols);
+
+        Row("Druid", "shield", "a", "1 Shield");
+        Row("Druid", "shield", "b", Simple);
+        Row("Druid", "melee", "a", "1 Scimitar");
+        Row("Druid", "melee", "b", Simple);
+        Row("Druid", "gear", "a", "1 Leather; 1 pack:Explorer's pack");
+        Each("Druid", "focus", "Druidic focus (sprig of mistletoe)", "Druidic focus (totem)", "Druidic focus (wooden staff)", "Druidic focus (yew wand)");
+
+        Row("Fighter", "armor", "a", "1 Chain mail");
+        Row("Fighter", "armor", "b", "1 Leather; 1 Longbow; 20 Arrow");
+        Row("Fighter", "weapons", "a", Martial + "; 1 Shield");
+        Row("Fighter", "weapons", "b", "2 any:weapon.martial");
+        Row("Fighter", "ranged", "a", "1 Crossbow, light; 20 Crossbow bolt");
+        Row("Fighter", "ranged", "b", "2 Handaxe");
+        Row("Fighter", "pack", "a", "1 pack:Dungeoneer's pack");
+        Row("Fighter", "pack", "b", "1 pack:Explorer's pack");
+
+        Row("Monk", "weapon", "a", "1 Shortsword");
+        Row("Monk", "weapon", "b", Simple);
+        Row("Monk", "pack", "a", "1 pack:Dungeoneer's pack");
+        Row("Monk", "pack", "b", "1 pack:Explorer's pack");
+        Row("Monk", "darts", "a", "10 Dart");
+
+        Row("Paladin", "weapons", "a", Martial + "; 1 Shield");
+        Row("Paladin", "weapons", "b", "2 any:weapon.martial");
+        Row("Paladin", "second", "a", "5 Javelin");
+        Row("Paladin", "second", "b", Simple);
+        Row("Paladin", "pack", "a", "1 pack:Priest's pack");
+        Row("Paladin", "pack", "b", "1 pack:Explorer's pack");
+        Row("Paladin", "armor", "a", "1 Chain mail");
+        Each("Paladin", "symbol", symbols);
+
+        Row("Ranger", "armor", "a", "1 Scale mail");
+        Row("Ranger", "armor", "b", "1 Leather");
+        Row("Ranger", "weapons", "a", "2 Shortsword");
+        Row("Ranger", "weapons", "b", "2 any:weapon.simple");
+        Row("Ranger", "pack", "a", "1 pack:Dungeoneer's pack");
+        Row("Ranger", "pack", "b", "1 pack:Explorer's pack");
+        Row("Ranger", "bow", "a", "1 Longbow; 1 Quiver; 20 Arrow");
+
+        Row("Rogue", "weapon", "a", "1 Rapier");
+        Row("Rogue", "weapon", "b", "1 Shortsword");
+        Row("Rogue", "ranged", "a", "1 Shortbow; 1 Quiver; 20 Arrow");
+        Row("Rogue", "ranged", "b", "1 Shortsword");
+        Row("Rogue", "pack", "a", "1 pack:Burglar's pack");
+        Row("Rogue", "pack", "b", "1 pack:Dungeoneer's pack");
+        Row("Rogue", "pack", "c", "1 pack:Explorer's pack");
+        Row("Rogue", "gear", "a", "1 Leather; 2 Dagger; 1 Thieves' tools");
+
+        foreach (var caster in new[] { "Sorcerer", "Warlock" })
+        {
+            Row(caster, "ranged", "a", "1 Crossbow, light; 20 Crossbow bolt");
+            Row(caster, "ranged", "b", Simple);
+            Each(caster, "focus", arcane);
+        }
+        Row("Sorcerer", "pack", "a", "1 pack:Dungeoneer's pack");
+        Row("Sorcerer", "pack", "b", "1 pack:Explorer's pack");
+        Row("Sorcerer", "daggers", "a", "2 Dagger");
+
+        Row("Warlock", "pack", "a", "1 pack:Scholar's pack");
+        Row("Warlock", "pack", "b", "1 pack:Dungeoneer's pack");
+        Row("Warlock", "gear", "a", "1 Leather; " + Simple + "; 2 Dagger");
+
+        Row("Wizard", "weapon", "a", "1 Quarterstaff");
+        Row("Wizard", "weapon", "b", "1 Dagger");
+        Each("Wizard", "focus", arcane);
+        Row("Wizard", "pack", "a", "1 pack:Scholar's pack");
+        Row("Wizard", "pack", "b", "1 pack:Explorer's pack");
+        Row("Wizard", "book", "a", "1 Spellbook");
+
+        Each("Acolyte", "symbol", symbols);
+        Each("Acolyte", "devotion", "Prayer book", "Prayer wheel");
+        Row("Acolyte", "gear", "a", "5 Incense stick; 1 Vestments; 1 Clothes, common; 1 Pouch", 15);
+        return rows;
+    }
+
+    [Theory]
+    [MemberData(nameof(OptionRows))]
+    public void Each_option_expands_to_exactly_the_SRD_items_and_quantities(string target, string pickId, string optionId, string lines, int gp)
+    {
+        var guide = Assert.Single(Catalog.GuidesFor(
+            All.SelectMany(p => p.Revisions).First(r => r.Name == target && r.Kind is ContentKind.Class or ContentKind.Background && r.RulesFamilies.Contains("srd-5.1")).ContentId));
+        var kit = Kit(guide);
+        var pick = kit.Picks.Single(p => p.Id == pickId);
+        var option = pick.Options.Single(o => o.Id == optionId);
+
+        // Expand this one option alone.
+        var single = kit with { Picks = [pick with { Options = [option] }] };
+        var result = KitExpansion.Expand(single, [new KitChoice(pickId, optionId, AnyOfFor(option))], Catalog);
+
+        Assert.Empty(result.Problems);
+        var byRevision = All.SelectMany(p => p.Revisions).ToDictionary(r => r.RevisionId, r => r.Name);
+        var byContent = All.SelectMany(p => p.Revisions).DistinctBy(r => r.ContentId).ToDictionary(r => r.ContentId, r => r.Name);
+        var anyOf = AnyOfFor(option);
+        var actual = new SortedDictionary<string, int>(StringComparer.Ordinal);
+        foreach (var e in result.Equipment)
+            actual[byRevision[e.Item.RevisionId]] = actual.GetValueOrDefault(byRevision[e.Item.RevisionId]) + e.Quantity;
+
+        var expected = new SortedDictionary<string, int>(StringComparer.Ordinal);
+        void Add(string name, int quantity) => expected[name] = expected.GetValueOrDefault(name) + quantity;
+        var anyOfNames = new Dictionary<string, string>();
+        foreach (var (index, id) in anyOf ?? [])
+            anyOfNames[option.Lines[index].AnyOf!] = byContent[id];
+        foreach (var part in lines.Split("; "))
+        {
+            var (qty, what) = (int.Parse(part[..part.IndexOf(' ')]), part[(part.IndexOf(' ') + 1)..]);
+            if (what.StartsWith("pack:", StringComparison.Ordinal))
             {
-                foreach (var option in pick.Options)
-                {
-                    var choices = kit.Picks.Select(p => p == pick ? new KitChoice(p.Id, option.Id, AnyOfFor(option)) : new KitChoice(p.Id, p.Options[0].Id, AnyOfFor(p.Options[0]))).ToList();
-                    var result = KitExpansion.Expand(kit, choices, Catalog);
-                    Assert.True(result.Problems.Count == 0, $"{guide.Name} {pick.Id}/{option.Id}: {string.Join("; ", result.Problems.Select(p => p.Message))}");
-                    Assert.NotEmpty(result.Equipment);
-                }
+                var pack = All.SelectMany(p => p.Revisions).Single(r => r.Name == what[5..]).Effects.OfType<ItemEffect>().Single().Contains!;
+                foreach (var line in pack)
+                    Add(byContent[line.Item!.ContentId], qty * (line.Quantity ?? 1));
+            }
+            else
+            {
+                Add(what.StartsWith("any:", StringComparison.Ordinal) ? anyOfNames[what[4..]] : what, qty);
             }
         }
+
+        Assert.Equal(expected, actual);
+        Assert.Equal(new Currency { Gp = gp }, result.Coins);
+        Assert.All(result.Equipment, e => Assert.False(e.Equipped));
     }
 
     [Fact]
@@ -166,17 +334,7 @@ public class SrdGuides51Tests
         Assert.Equal(13, published.Count);
         foreach (var target in published)
         {
-            var guide = Assert.Single(Catalog.GuidesFor(target.ContentId));
-            var kit = Kit(guide);
-            foreach (var pick in kit.Picks)
-            {
-                foreach (var option in pick.Options)
-                {
-                    var choices = kit.Picks.Select(p => p == pick ? new KitChoice(p.Id, option.Id, AnyOfFor(option)) : new KitChoice(p.Id, p.Options[0].Id, AnyOfFor(p.Options[0]))).ToList();
-                    var result = KitExpansion.Expand(kit, choices, Catalog);
-                    Assert.True(result.Problems.Count == 0, $"{target.Name} {pick.Id}/{option.Id}: {string.Join("; ", result.Problems.Select(p => p.Message))}");
-                }
-            }
+            AssertEveryOptionExpands(Assert.Single(Catalog.GuidesFor(target.ContentId)));
         }
         var acolyte = Kit(Catalog.GuidesFor(Guid.Parse("51c00000-0000-4000-8000-000000000002")).Single());
         var coins = KitExpansion.Expand(acolyte, acolyte.Picks.Select(p => new KitChoice(p.Id, "a")).ToList(), Catalog).Coins;

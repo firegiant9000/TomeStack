@@ -78,6 +78,9 @@ public class SrdGear51Tests
         Assert.Equal("1 Backpack; 1 Ball bearings (bag of 1,000); 1 String (10 feet); 1 Bell; 5 Candle; 1 Crowbar; 1 Hammer; 10 Piton; 1 Lantern, hooded; 2 Oil (flask); 5 Rations (1 day); 1 Tinderbox; 1 Waterskin; 1 Rope, hempen (50 feet)", Contents("Burglar's pack"));
         Assert.Equal("1 Backpack; 1 Crowbar; 1 Hammer; 10 Piton; 10 Torch; 1 Tinderbox; 10 Rations (1 day); 1 Waterskin; 1 Rope, hempen (50 feet)", Contents("Dungeoneer's pack"));
         Assert.Equal("1 Backpack; 1 Bedroll; 1 Mess kit; 1 Tinderbox; 10 Torch; 10 Rations (1 day); 1 Waterskin; 1 Rope, hempen (50 feet)", Contents("Explorer's pack"));
+        Assert.Equal("1 Chest; 2 Case, map or scroll; 1 Clothes, fine; 1 Ink (1 ounce bottle); 1 Ink pen; 1 Lamp; 2 Oil (flask); 5 Paper (one sheet); 1 Perfume (vial); 1 Sealing wax; 1 Soap", Contents("Diplomat's pack"));
+        Assert.Equal("1 Backpack; 1 Bedroll; 2 Clothes, costume; 5 Candle; 5 Rations (1 day); 1 Waterskin; 1 Disguise kit", Contents("Entertainer's pack"));
+        Assert.Equal("1 Backpack; 1 Blanket; 10 Candle; 1 Tinderbox; 1 Alms box; 2 Incense (block); 1 Censer; 1 Vestments; 2 Rations (1 day); 1 Waterskin", Contents("Priest's pack"));
         Assert.Equal("1 Backpack; 1 Book; 1 Ink (1 ounce bottle); 1 Ink pen; 10 Parchment (one sheet); 1 Sand (little bag); 1 Knife, small", Contents("Scholar's pack"));
     }
 
