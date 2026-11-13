@@ -85,12 +85,12 @@ const Ticks = ({ count, noun }: { count: number; noun: string }) =>
     </>
   );
 
-/** Source and page only: never a file name or path (ADR-005, ADR-007). */
 /** A level with no slots is not a slot level the character has (same filter as the Spells panel). */
 function shownSlots(sheet: CharacterView['sheet']) {
   return (sheet.spellSlots ?? []).filter((s) => s.maximum > 0);
 }
 
+/** Source and page only: never a file name or path (ADR-005, ADR-007). */
 function cite(origin: TraceOrigin): string {
   if (origin.kind !== 'content') return '';
   const page = origin.page ? (origin.page.end && origin.page.end !== origin.page.start ? `, pp. ${origin.page.start}-${origin.page.end}` : `, p. ${origin.page.start}`) : '';

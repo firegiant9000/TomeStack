@@ -20,8 +20,15 @@ afterEach(cleanup);
 
 /** Waits until the status line says `text` (the line stays on screen, so a plain find would see the previous message). */
 async function expectStatus(text: RegExp): Promise<HTMLElement> {
-  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(text));
-  return screen.getByRole('status');
+  await waitFor(() => expect(appStatus().textContent).toMatch(text));
+  return appStatus();
+}
+
+/** The app's status line; on a sheet the "Last roll" is a second `role="status"` node (D96), so exclude it by name. */
+function appStatus(): HTMLElement {
+  const lines = screen.getAllByRole('status').filter((el) => el.getAttribute('aria-label') !== 'Last roll');
+  if (lines.length !== 1) throw new Error(`Expected one status line, found ${lines.length}.`);
+  return lines[0]!;
 }
 
 /** Activates one tab of a character sheet (ADR-014); inactive panels are hidden. A no-op when it is already selected. */

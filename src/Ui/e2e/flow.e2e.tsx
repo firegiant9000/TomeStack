@@ -49,8 +49,18 @@ function bytesOf(base64: string): Uint8Array<ArrayBuffer> {
  * once with the previous message (lint forbids it here).
  */
 async function expectStatus(text: RegExp): Promise<HTMLElement> {
-  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(text));
-  return screen.getByRole('status');
+  await waitFor(() => expect(appStatus().textContent).toMatch(text));
+  return appStatus();
+}
+
+/**
+ * The app's status line. On a sheet the "Last roll" is a second `role="status"` node (D96), so a plain
+ * `getByRole('status')` finds two; this excludes it by name and expects exactly one line left.
+ */
+function appStatus(): HTMLElement {
+  const lines = screen.getAllByRole('status').filter((el) => el.getAttribute('aria-label') !== 'Last roll');
+  if (lines.length !== 1) throw new Error(`Expected one status line, found ${lines.length}.`);
+  return lines[0]!;
 }
 
 /**
@@ -546,7 +556,7 @@ it('authors a homebrew subclass in the studio, plays it, and reviews an update',
   const rule = (name: RegExp) => within(editor()).getByRole('group', { name });
   async function publish(name: string) {
     await user.click(within(editor()).getByRole('button', { name: 'Make available to characters' }));
-    await waitFor(() => expect(screen.getByRole('status').textContent).toBe(`Made ${name} available to characters.`));
+    await waitFor(() => expect(appStatus().textContent).toBe(`Made ${name} available to characters.`));
   }
 
   // Feature 1: a class resource, its long-rest recovery, and a limited-use action that spends it.
@@ -630,7 +640,7 @@ it('authors a homebrew subclass in the studio, plays it, and reviews an update',
   const values = await within(review).findByRole('table', { name: 'Calculated values that change' });
   expect(values.textContent).toMatch(/Initiative24/);
   await user.click(within(review).getByRole('button', { name: 'Apply update' }));
-  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Updated E2E Storm: Path of the E2E Storm/));
+  await waitFor(() => expect(appStatus().textContent).toMatch(/Updated E2E Storm: Path of the E2E Storm/));
   await waitFor(() => expect(summaryValue(screen.getByRole('article', { name: 'E2E Storm' }), 'Initiative')).toBe('+4'));
   const remaining = () => within(within(screen.getByRole('article', { name: 'E2E Storm' })).getByRole('region', { name: 'Updates available' }));
   await waitFor(() => expect(remaining().queryByRole('button', { name: 'Review update: Path of the E2E Storm' })).toBeNull());
@@ -683,7 +693,7 @@ it('authors a +1 weapon in the studio, equips it and rolls it, and "Why?" names 
   await user.type(weapon.getByRole('textbox', { name: /^Damage type/ }), 'slashing');
   await user.type(weapon.getByRole('textbox', { name: /^Bonus/ }), '1');
   await user.click(within(editor()).getByRole('button', { name: 'Make available to characters' }));
-  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Made E2E Plus Blade available to characters.'));
+  await waitFor(() => expect(appStatus().textContent).toBe('Made E2E Plus Blade available to characters.'));
 
   // Carry and equip it; both rolls name the weapon bonus under "Why?".
   await user.click(screen.getByRole('button', { name: /^E2E Plus Hero/ }));
@@ -737,7 +747,7 @@ it('item mods: a published mod attached to one copy changes only that copy\'s at
   await user.clear(weapon.getByRole('textbox', { name: /^Damage type/ }));
   await user.type(weapon.getByRole('textbox', { name: /^Damage type/ }), 'slashing');
   await user.click(within(editor()).getByRole('button', { name: 'Make available to characters' }));
-  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Made E2E Mod Blade available to characters.'));
+  await waitFor(() => expect(appStatus().textContent).toBe('Made E2E Mod Blade available to characters.'));
 
   await user.click(screen.getByRole('button', { name: 'New item' }));
   await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Keen Rune');
@@ -747,7 +757,7 @@ it('item mods: a published mod attached to one copy changes only that copy\'s at
   await user.clear(mod.getByRole('textbox', { name: /^Bonus/ }));
   await user.type(mod.getByRole('textbox', { name: /^Bonus/ }), '2');
   await user.click(within(editor()).getByRole('button', { name: 'Make available to characters' }));
-  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Made E2E Keen Rune available to characters.'));
+  await waitFor(() => expect(appStatus().textContent).toBe('Made E2E Keen Rune available to characters.'));
 
   // Carry and equip the blade, then attach the mod to a new copy: one plain copy and one modded copy.
   await user.click(screen.getByRole('button', { name: /^E2E Mod Hero/ }));
@@ -810,7 +820,7 @@ it('content companions: a published feature\'s companion is a card with its own 
   await user.click(companion.getByRole('checkbox', { name: 'Fixture Bite' }));
   await user.click(companion.getByRole('checkbox', { name: 'Fixture Charges' }));
   await user.click(within(editor()).getByRole('button', { name: 'Make available to characters' }));
-  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Made Fixture Warden Bond available to characters.'));
+  await waitFor(() => expect(appStatus().textContent).toBe('Made Fixture Warden Bond available to characters.'));
 
   // The server stored a v12 revision with the companion and both lists.
   const published = (await newestOf(source.id, 'Fixture Warden Bond'))!;
@@ -1230,7 +1240,7 @@ it('D60 gate: a Markdown class is reviewed, accepted with its confirm tick and p
   await user.click(await waitFor(() => within(details()).getByRole('checkbox', { name: /^Confirm the hit die/ })));
   await waitFor(() => expect(within(details()).getByRole('button', { name: 'Keep, with its rules' }).getAttribute('aria-disabled')).toBeNull());
   await user.click(within(details()).getByRole('button', { name: 'Keep, with its rules' }));
-  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Placeholder is now a draft granting 10 features in Homebrew/));
+  await waitFor(() => expect(appStatus().textContent).toMatch(/Placeholder is now a draft granting 10 features in Homebrew/));
   const drafts = await client.contentBySource(source.id);
   expect(drafts).toHaveLength(11);
   expect(drafts.every((e) => e.latest.status === 'draft')).toBe(true);
@@ -1313,7 +1323,7 @@ it('reads the fixture PDF, reviews its candidates, and publishes an accepted one
   const acceptEmber = within(ember).getByRole('button', { name: 'Keep, with its rules' });
   await waitFor(() => expect(acceptEmber.getAttribute('aria-disabled')).toBeNull());
   await user.click(acceptEmber);
-  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Fixture Ember Lance is now a draft in Homebrew/));
+  await waitFor(() => expect(appStatus().textContent).toMatch(/Fixture Ember Lance is now a draft in Homebrew/));
   // It left the "to review" list with its details, so focus goes back to the list (WCAG 2.4.3).
   await waitFor(() => expect(document.activeElement).toBe(within(panel()).getByRole('heading', { name: 'Entries found in E2E Grimoire' })));
   // The review says what happens next and offers the studio (item 2); the flow below still goes by the sidebar.
@@ -1322,7 +1332,7 @@ it('reads the fixture PDF, reviews its candidates, and publishes an accepted one
   // Ignore the other spell.
   await user.click(await candidateButton(panel, 'Fixture Frost Veil'));
   await user.click(within(await detail('Fixture Frost Veil')).getByRole('button', { name: 'Ignore' }));
-  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Ignored Fixture Frost Veil/));
+  await waitFor(() => expect(appStatus().textContent).toMatch(/Ignored Fixture Frost Veil/));
 
   // An unresolved reference blocks "Keep, with its rules"; "Keep as text only" keeps the text and page only.
   await user.selectOptions(kind, 'feature');
@@ -1332,7 +1342,7 @@ it('reads the fixture PDF, reviews its candidates, and publishes an accepted one
   await within(stormcall).findByRole('list', { name: 'Blocks keeping' });
   expect(within(stormcall).getByRole('button', { name: 'Keep, with its rules' }).getAttribute('aria-disabled')).toBe('true');
   await user.click(within(stormcall).getByRole('button', { name: 'Keep as text only' }));
-  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Fixture Stormcall is now a draft reference entry/));
+  await waitFor(() => expect(appStatus().textContent).toMatch(/Fixture Stormcall is now a draft reference entry/));
 
   // The feat: kept as a draft, then published in the studio, which validates it again.
   await user.selectOptions(kind, 'feat');
@@ -1341,7 +1351,7 @@ it('reads the fixture PDF, reviews its candidates, and publishes an accepted one
   const acceptFeat = within(feat).getByRole('button', { name: 'Keep, with its rules' });
   await waitFor(() => expect(acceptFeat.getAttribute('aria-disabled')).toBeNull());
   await user.click(acceptFeat);
-  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Fixture Keen Watcher is now a draft/));
+  await waitFor(() => expect(appStatus().textContent).toMatch(/Fixture Keen Watcher is now a draft/));
 
   // Only drafts exist: nothing is active until it is published.
   const entries = await client.contentBySource(source.id);
@@ -1360,7 +1370,7 @@ it('reads the fixture PDF, reviews its candidates, and publishes an accepted one
   await user.click(await screen.findByRole('button', { name: 'Edit Fixture Keen Watcher' }));
   const editor = screen.getByRole('region', { name: /^Edit Fixture Keen Watcher/ });
   await user.click(within(editor).getByRole('button', { name: 'Make available to characters' }));
-  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Made Fixture Keen Watcher available to characters.'));
+  await waitFor(() => expect(appStatus().textContent).toBe('Made Fixture Keen Watcher available to characters.'));
   expect((await client.contentBySource(source.id)).find((e) => e.name === 'Fixture Keen Watcher')!.latest.status).toBe('published');
 });
 
@@ -1390,7 +1400,7 @@ it('imports a fixture class: the table is checked, the hit die and slots are con
 
   // The spell list name is the detector's guess: saving the edit settles it. Keep stays held until the confirmations are ticked.
   await user.click(within(lamplighter).getByRole('button', { name: 'Save edit' }));
-  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Saved your edit of Fixture Lamplighter/));
+  await waitFor(() => expect(appStatus().textContent).toMatch(/Saved your edit of Fixture Lamplighter/));
   // The details are rebuilt from the saved edit, and checked again.
   await waitFor(() => expect(within(panel()).getByRole('region', { name: 'Entry: Fixture Lamplighter' })).not.toBe(lamplighter));
   const again = within(panel()).getByRole('region', { name: 'Entry: Fixture Lamplighter' });
@@ -1401,8 +1411,8 @@ it('imports a fixture class: the table is checked, the hit die and slots are con
   await user.click(within(again).getByRole('checkbox', { name: 'Confirm the spell slot table' }));
   await waitFor(() => expect(accept.getAttribute('aria-disabled')).toBeNull());
   await user.click(accept);
-  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Fixture Lamplighter is now a draft granting \d+ features in Homebrew/));
-  const granting = Number(/granting (\d+) features/.exec(screen.getByRole('status').textContent ?? '')![1]);
+  await waitFor(() => expect(appStatus().textContent).toMatch(/Fixture Lamplighter is now a draft granting \d+ features in Homebrew/));
+  const granting = Number(/granting (\d+) features/.exec(appStatus().textContent ?? '')![1]);
 
   const entries = await client.contentBySource(source.id);
   const cls = entries.find((e) => e.name === 'Fixture Lamplighter')!;
@@ -1501,7 +1511,7 @@ it('accepts two fixture candidates in bulk, publishes both through the studio pa
   await user.click(within(panel()).getByRole('checkbox', { name: 'Select Fixture Keen Watcher' }));
   expect(within(panel()).getByText('2 selected', { selector: '[aria-live="polite"]' })).toBeTruthy();
   await user.click(bulk);
-  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/^Kept 2\./));
+  await waitFor(() => expect(appStatus().textContent).toMatch(/^Kept 2\./));
   const drafts = (await client.contentBySource(source.id)).filter((e) => e.latest.status === 'draft').map((e) => e.name).sort();
   expect(drafts).toEqual(['Fixture Ember Lance', 'Fixture Keen Watcher']);
 
@@ -1555,7 +1565,7 @@ it('adds the wizard list to a fixture spell candidate in bulk, accepts and publi
   await user.type(key, ' Wizard');
   expect(within(panel()).getByText('Saved as: wizard')).toBeTruthy();
   await user.click(within(panel()).getByRole('button', { name: 'Add 1 spell to this list' }));
-  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/^Added the spell list wizard to 1 spell/));
+  await waitFor(() => expect(appStatus().textContent).toMatch(/^Added the spell list wizard to 1 spell/));
   const stored = (await client.candidates(job!.id, { kind: 'spell' })).items.find((c) => c.id === ember.id)!;
   const lists = (stored.edited ?? stored.candidate).proposedEffects.flatMap((e) => (e.type === 'spell' ? (e.lists as string[]) : []));
   expect(lists).toContain('wizard');
@@ -1566,7 +1576,7 @@ it('adds the wizard list to a fixture spell candidate in bulk, accepts and publi
   const accept = within(panel()).getByRole('button', { name: 'Keep selected, with their rules' });
   await waitFor(() => expect(accept.getAttribute('aria-disabled')).toBeNull());
   await user.click(accept);
-  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/^Kept 1\./));
+  await waitFor(() => expect(appStatus().textContent).toMatch(/^Kept 1\./));
 
   await user.click(screen.getByRole('button', { name: 'Homebrew' }));
   const sourceSelect = await screen.findByRole('combobox', { name: 'Book or notebook' });
@@ -1693,7 +1703,7 @@ it('shows different allowed content for two campaign profiles, and records a rea
     await user.click(within(form).getByRole('radio', { name: /2024 rules/ }));
     for (const source of sources) await user.click(within(form).getByRole('checkbox', { name: source }));
     await user.click(within(form).getByRole('button', { name: 'Save campaign' }));
-    await waitFor(() => expect(screen.getByRole('status').textContent).toBe(`Saved the campaign ${name}.`));
+    await waitFor(() => expect(appStatus().textContent).toBe(`Saved the campaign ${name}.`));
   }
   await createCampaign('E2E Strict', [/^System Reference Document 5\.2\.1/]);
   await createCampaign('E2E Open', [/^System Reference Document 5\.2\.1/, /^TomeStack Fixtures: 2024 Family/]);
@@ -2183,7 +2193,7 @@ it('drops picks that do not fit when the rules family changes, in the builder an
   await user.click(within(form).getByRole('checkbox', { name: /^System Reference Document 5\.1/ }));
   await user.click(within(form).getByRole('radio', { name: /2024 rules/ }));
   await user.click(within(form).getByRole('button', { name: 'Save campaign' }));
-  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Saved the campaign E2E Switched.'));
+  await waitFor(() => expect(appStatus().textContent).toBe('Saved the campaign E2E Switched.'));
   const saved = screen.getAllByRole('listitem').find((li) => li.textContent?.startsWith('E2E Switched'))!;
   expect(saved.textContent).toMatch(/0 allowed sources/);
 });
@@ -2350,7 +2360,7 @@ it('records a gap note on a field and a feature, resolves one, and deletes one a
   await user.selectOptions(about, within(about).getByRole('option', { name: 'Armor Class' }));
   await user.type(text, 'The table grants a cover bonus here.');
   await user.click(within(form).getByRole('button', { name: 'Save note' }));
-  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Gap note saved for Armor Class.'));
+  await waitFor(() => expect(appStatus().textContent).toBe('Gap note saved for Armor Class.'));
   expect(within(gaps()).getByText('The table grants a cover bonus here.')).toBeTruthy();
 
   // M3 C5: "Report a gap" on a feature pre-fills the picker and moves focus to the note's text.
@@ -2627,7 +2637,7 @@ it('adds a homebrew Fighter subclass through the studio and plays it: the Stardu
   const rule = (name: RegExp) => within(editor()).getByRole('group', { name });
   async function publish(name: string) {
     await user.click(within(editor()).getByRole('button', { name: 'Make available to characters' }));
-    await waitFor(() => expect(screen.getByRole('status').textContent).toBe(`Made ${name} available to characters.`));
+    await waitFor(() => expect(appStatus().textContent).toBe(`Made ${name} available to characters.`));
   }
 
   // A limited-use feature: a resource, its recovery and a roll that spends it.
@@ -2774,7 +2784,7 @@ it('authors a class in the studio and builds it at levels 1, 20 and 5/3 with an 
   await user.type(share, '0, 1, 2, 2, 3, 4, 4, 5, 6, 6, 7, 8, 8, 9, 10, 10, 11, 12, 12, 13');
 
   await user.click(within(editor()).getByRole('button', { name: 'Make available to characters' }));
-  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Made E2E Chronicler available to characters.'));
+  await waitFor(() => expect(appStatus().textContent).toBe('Made E2E Chronicler available to characters.'));
 
   // A homebrew subclass joins the new class's subclass choice, which declares no options of its own.
   await user.click(screen.getByRole('button', { name: 'New subclass' }));
@@ -2784,7 +2794,7 @@ it('authors a class in the studio and builds it at levels 1, 20 and 5/3 with an 
   await user.selectOptions(offered, 'E2E Chronicler: Choose a subclass');
   await user.click(within(editor()).getByRole('button', { name: 'Add modifier' })); // default: Initiative +1
   await user.click(within(editor()).getByRole('button', { name: 'Make available to characters' }));
-  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Made E2E Order of Quills available to characters.'));
+  await waitFor(() => expect(appStatus().textContent).toBe('Made E2E Order of Quills available to characters.'));
 
   // Level 1 in the builder: the class is offered like any other, with its skill choice.
   await createCharacter(user, { name: 'E2E Scribe', family: 'srd-5.2.1', scores: { Intelligence: 16 }, cls: /^E2E Chronicler/ });
