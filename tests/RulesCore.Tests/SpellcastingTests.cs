@@ -257,6 +257,31 @@ public class SpellcastingTests
     }
 
     [Fact]
+    public void A_bad_slot_table_is_reported_in_plain_words()
+    {
+        var (m0, m1, spells) = (Fixtures.Pack(), Fixtures.M1Pack(), Fixtures.SpellPack());
+        var revisions = new List<ContentRevision>([.. m0.Revisions, .. m1.Revisions, .. spells.Revisions]);
+        var arcanist = revisions.Single(r => r.Reference == Fixtures.Arcanist);
+        var spellcasting = arcanist.Effects.OfType<SpellcastingEffect>().Single();
+        revisions[revisions.IndexOf(arcanist)] = arcanist with { Effects = [arcanist.Effects[0], spellcasting with { Slots = spellcasting.Slots.Take(5).ToList() }] };
+        var catalog = new InMemoryContentCatalog([.. m0.Sources, .. m1.Sources, .. spells.Sources], revisions);
+
+        var sheet = CharacterCalculator.Calculate(Caster(RulesFamilies.Srd521, [], null, new ClassLevel(Fixtures.Arcanist, 1)), catalog);
+
+        var message = Assert.Single(sheet.Diagnostics, d => d.Code == "spellcasting.table-invalid").Message;
+        ServiceWordingTests.AssertPlain(message, ["Fixture Arcanist", "the slot table needs"]);
+    }
+
+    [Fact]
+    public void A_spell_of_a_caster_with_no_spellcasting_is_named_in_the_message()
+    {
+        var sheet = Sheet(Caster(RulesFamilies.Srd521, [Arcane(Fixtures.FrostRing)], null, new ClassLevel(Fixtures.Warden, 1)));
+
+        var message = Assert.Single(sheet.Diagnostics, d => d.Code == "spells.caster-missing").Message;
+        ServiceWordingTests.AssertPlain(message, ["Spell '", "is recorded for a caster that gives this character no spellcasting"]);
+    }
+
+    [Fact]
     public void Spells_are_references_of_the_character_but_never_active_content()
     {
         var character = Caster(RulesFamilies.Srd521, [Arcane(Fixtures.FrostRing)], null, new ClassLevel(Fixtures.Arcanist, 1));

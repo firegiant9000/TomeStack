@@ -50,7 +50,7 @@ public static partial class CharacterCalculator
         if (effect.SpellsTable is not null && effect.SpellsFormula is not null)
             return "give the number of spells as a table or a formula, not both";
         if (string.IsNullOrWhiteSpace(effect.SpellList))
-            return "a spell list key is required";
+            return "a spell list name is required";
         return null;
     }
 
@@ -155,7 +155,9 @@ public static partial class CharacterCalculator
         }
         var casterIds = casters.Select(c => c.Content.Revision.ContentId).ToHashSet();
         foreach (var orphan in character.Spells.Where(s => !casterIds.Contains(s.Caster)))
-            diagnostics.Add(new("spells.caster-missing", $"A spell is recorded for a caster that gives this character no spellcasting; it is not listed.", orphan.Spell));
+            diagnostics.Add(new("spells.caster-missing", catalog.FindRevision(orphan.Spell)?.Name is { } spellName
+                ? $"Spell '{spellName}' is recorded for a caster that gives this character no spellcasting; it is not listed."
+                : "A spell is recorded for a caster that gives this character no spellcasting; it is not listed.", orphan.Spell));
         return entries;
     }
 

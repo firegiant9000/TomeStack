@@ -143,7 +143,20 @@ public class CompanionCalculationTests
         Assert.Contains(sheet.Diagnostics, d => d.Code == "companion.out-of-range" && d.Message.Contains("armor class"));
         Assert.Contains(sheet.Diagnostics, d => d.Code == "companion.out-of-range" && d.Message.Contains("hit point maximum"));
         foreach (var d in sheet.Diagnostics.Where(d => d.Code == "companion.out-of-range"))
-            ServiceWordingTests.AssertPlain(d.Message, ["Fixture Wild Bond", "has a companion whose"], "'wild'");
+            ServiceWordingTests.AssertPlain(d.Message, ["Fixture Wild Bond", "companion 'Fixture wild': its"], "'wild'");
+    }
+
+    [Fact]
+    public void Two_companions_give_two_distinguishable_messages()
+    {
+        var feature = Feature("Fixture Twin Bond", 3, Companion("left", 3, armorClass: "99"), Companion("right", 4, armorClass: "99"));
+
+        var sheet = Sheet(With(Handler(), feature), feature);
+
+        var messages = sheet.Diagnostics.Where(d => d.Code == "companion.out-of-range").Select(d => d.Message).ToList();
+        Assert.Equal(2, messages.Count);
+        Assert.Single(messages, m => m.Contains("companion 'Fixture left'", StringComparison.Ordinal));
+        Assert.Single(messages, m => m.Contains("companion 'Fixture right'", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -159,7 +172,7 @@ public class CompanionCalculationTests
         var sheet = Sheet(With(Handler(), odd), odd);
 
         Assert.Equal(1, Count(sheet, "companion.missing-part"));
-        ServiceWordingTests.AssertPlain(sheet.Diagnostics.Single(d => d.Code == "companion.missing-part").Message, ["Fixture Odd Bond", "has a companion that lists attack"], "'odd'");
+        ServiceWordingTests.AssertPlain(sheet.Diagnostics.Single(d => d.Code == "companion.missing-part").Message, ["Fixture Odd Bond", "companion 'Fixture odd' lists the attack 'Reference bite'"], "'odd'", "'ref-bite'");
         Assert.DoesNotContain(sheet.Attacks!, a => a.EffectId == "ref-bite");
         Assert.NotNull(sheet.Companions!.Single(c => c.EffectId == "odd"));
     }
@@ -172,7 +185,7 @@ public class CompanionCalculationTests
         var sheet = Sheet(With(Handler(), odd), odd);
 
         Assert.Equal(1, Count(sheet, "companion.missing-part"));
-        ServiceWordingTests.AssertPlain(sheet.Diagnostics.Single(d => d.Code == "companion.missing-part").Message, ["Fixture Odd Bond", "has a companion that lists pool"], "'odd'");
+        ServiceWordingTests.AssertPlain(sheet.Diagnostics.Single(d => d.Code == "companion.missing-part").Message, ["Fixture Odd Bond", "companion 'Fixture odd' lists a pool,"], "'odd'", "'nowhere'");
     }
 
     [Fact]

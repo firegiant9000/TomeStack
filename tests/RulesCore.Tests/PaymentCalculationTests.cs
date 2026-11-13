@@ -190,6 +190,24 @@ public class PaymentCalculationTests
     }
 
     [Fact]
+    public void An_unknown_family_id_stays_in_the_message()
+    {
+        var sheet = Sheet(Caster(), Rite(12), Spark(family: "srd-9"));
+
+        var message = Assert.Single(sheet.Diagnostics, d => d.Code == "spells.unusable").Message;
+        ServiceWordingTests.AssertPlainKeeping(message, ["srd-9"], ["is written for 'srd-9' (rules this app does not know), not the 2024 rules"]);
+    }
+
+    [Fact]
+    public void A_mixed_family_list_names_the_known_one_and_keeps_the_unknown_id()
+    {
+        var sheet = Sheet(Caster(), Rite(12), Spark(family: "srd-5.1") with { RulesFamilies = ["srd-5.1", "srd-9"] });
+
+        var message = Assert.Single(sheet.Diagnostics, d => d.Code == "spells.unusable").Message;
+        ServiceWordingTests.AssertPlainKeeping(message, ["srd-9"], ["the 2014 rules", "not the 2024 rules"]);
+    }
+
+    [Fact]
     public void A_missing_spell_is_not_cast()
     {
         var sheet = Sheet(Caster(), Rite(12));

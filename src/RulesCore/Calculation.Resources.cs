@@ -143,7 +143,7 @@ public static partial class CharacterCalculator
                     }
                     var clamped = Math.Clamp(value, low, high);
                     if (clamped != value)
-                        Warn(new("companion.out-of-range", $"'{revision.Name}' has a companion whose {what.ToLowerInvariant()} {value} is outside {low} to {high} and was set to {clamped}.", revision.Reference, effect.Id));
+                        Warn(new("companion.out-of-range", $"'{revision.Name}' companion '{effect.Label}': its {what.ToLowerInvariant()} {value} is outside {low} to {high} and was set to {clamped}.", revision.Reference, effect.Id));
                     trace.Add(new(1, "derive", $"{what} from {source}", value, clamped, origin, null, inputs.Count > 0 ? inputs : null));
                     return clamped;
                 }
@@ -165,7 +165,7 @@ public static partial class CharacterCalculator
                         }
                     }
                     if (!found)
-                        Warn(new("companion.missing-part", $"'{revision.Name}' has a companion that lists attack '{id}', which is not on the sheet.", revision.Reference, effect.Id));
+                        Warn(new("companion.missing-part", $"'{revision.Name}' companion '{effect.Label}' lists {(revision.Effects.OfType<AttackEffect>().FirstOrDefault(a => a.Id == id)?.Label is { } attackLabel ? $"the attack '{attackLabel}'" : "an attack")}, which is not on the sheet.", revision.Reference, effect.Id));
                 }
                 foreach (var id in resourceIds)
                 {
@@ -179,7 +179,7 @@ public static partial class CharacterCalculator
                         }
                     }
                     if (!found)
-                        Warn(new("companion.missing-part", $"'{revision.Name}' has a companion that lists pool '{id}', which is not on the sheet.", revision.Reference, effect.Id));
+                        Warn(new("companion.missing-part", $"'{revision.Name}' companion '{effect.Label}' lists {(revision.Effects.OfType<ResourceEffect>().FirstOrDefault(r => r.Id == id)?.Label is { } poolLabel ? $"the pool '{poolLabel}'" : "a pool")}, which is not on the sheet.", revision.Reference, effect.Id));
                 }
 
                 var recorded = character.Play.Companions?.FirstOrDefault(p => p.ContentId == revision.ContentId && p.Id == effect.CompanionId);
