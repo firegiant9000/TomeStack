@@ -1136,6 +1136,53 @@ public class DownConversionExportTests
     }
 
     [Fact]
+    public void A_blocked_preview_lists_a_held_rope_once_as_a_custom_item_when_something_else_blocks()
+    {
+        var rope = GearItem(1, "Compat Rope Coil");
+        var sword = GearItem(3, "Compat Blade", new WeaponEffect { Id = "weapon", WeaponKey = "compat-blade", Category = WeaponCategory.Simple, Attack = WeaponAttack.Melee, Damage = "1d6", DamageType = "slashing" });
+        var hero = Hero(c => c with { Equipment = [Held(rope), Held(sword)] });
+
+        var lowered = LowerGear(hero, "0.6.0", null, rope, sword);
+
+        Assert.True(lowered.Blocked);
+        var line = Assert.Single(lowered.Changes, c => c.Message.Contains("Compat Rope Coil", StringComparison.Ordinal) || c.Name == "Compat Rope Coil");
+        Assert.Equal("dropped", line.Action);
+    }
+
+    [Fact]
+    public void A_blocked_preview_lists_a_held_rope_once_as_blocking_when_the_rope_itself_blocks()
+    {
+        var rope = GearItem(1, "Compat Rope Coil");
+        var kept = GearItem(6, "Compat Frame");
+        var ropeRef = new ContentReference(rope.ContentId, rope.RevisionId);
+        var keeper = new EquipmentEntry(new ContentReference(kept.ContentId, kept.RevisionId), false, 1, Guid.NewGuid(), Mods: [ropeRef]);
+        var hero = Hero(c => c with { Equipment = [Held(rope), keeper] });
+        var row = Row("0.6.0") with { CharacterSchema = 11, ContentSchema = 12, BundledRevisionIds = new HashSet<Guid> { kept.RevisionId } };
+
+        var lowered = DownConversion.Lower(new([hero], [rope, kept], [], [], "x.tomestack.zip"), row,
+            id => id == BundledSourceId, _ => "Compat Bundled Pack", new HomebrewCatalog());
+
+        Assert.True(lowered.Blocked);
+        var line = Assert.Single(lowered.Changes, c => c.Message.Contains("Compat Rope Coil", StringComparison.Ordinal) || c.Name == "Compat Rope Coil");
+        Assert.Equal("blocks", line.Action);
+    }
+
+    [Fact]
+    public void A_blocked_preview_lists_an_item_converted_in_one_character_and_held_in_another_once()
+    {
+        var rope = GearItem(1, "Compat Rope Coil");
+        var ropeRef = new ContentReference(rope.ContentId, rope.RevisionId);
+        var first = Hero(c => c with { Equipment = [Held(rope)] });
+        var second = Hero(c => c with { Id = Guid.NewGuid(), Name = "Second Hero", Equipment = [new EquipmentEntry(ropeRef, Attuned: true)] });
+
+        var lowered = DownConversion.Lower(new([first, second], [rope], [], [], "x.tomestack.zip"), Row("0.6.0") with { BundledRevisionIds = new HashSet<Guid>() },
+            id => id == BundledSourceId, _ => "Compat Bundled Pack", new HomebrewCatalog());
+
+        Assert.True(lowered.Blocked);
+        Assert.DoesNotContain(lowered.Changes, c => c.Action == "dropped" && c.Message.Contains("becomes a custom item", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void A_blank_content_name_is_not_converted_and_blocks()
     {
         var blank = GearItem(7, "   ");
