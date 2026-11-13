@@ -3,7 +3,7 @@ using TomeStack.RulesCore;
 namespace TomeStack.AppService.Tests;
 
 /// <summary>
-/// Wave 3 G6 (task 6.2): the first six 2014-rules class creation guides (Barbarian, Bard, Cleric, Druid, Fighter, Monk).
+/// Wave 3 G6 (tasks 6.2 and 6.3): the 2014-rules creation guides, one per class (all twelve) plus the Acolyte background.
 /// Names, quantities and ability keys only.
 /// </summary>
 public class SrdGuides51Tests
@@ -262,6 +262,26 @@ public class SrdGuides51Tests
         Assert.Equal(expected, actual);
         Assert.Equal(new Currency { Gp = gp }, result.Coins);
         Assert.All(result.Equipment, e => Assert.False(e.Equipped));
+
+        // A same-named 5.2.1 item must not pass: every resolved revision belongs to the 2014 rules.
+        var byRevisionRow = All.SelectMany(p => p.Revisions).ToDictionary(r => r.RevisionId);
+        Assert.All(result.Equipment, e => Assert.Contains("srd-5.1", byRevisionRow[e.Item.RevisionId].RulesFamilies));
+    }
+
+    [Fact]
+    public void Option_rows_cover_every_pick_and_option_of_every_srd_5_1_guide_exactly()
+    {
+        var rows = OptionRows().Select(r => ((string)r[0], (string)r[1], (string)r[2])).ToList();
+        Assert.Equal(rows.Count, rows.Distinct().Count());
+
+        var targets = All.SelectMany(p => p.Revisions)
+            .Where(r => r.Status == RevisionStatus.Published && r.RulesFamilies.Contains("srd-5.1") && r.Kind is ContentKind.Class or ContentKind.Background)
+            .DistinctBy(r => r.ContentId);
+        var actual = targets
+            .SelectMany(t => Kit(Assert.Single(Catalog.GuidesFor(t.ContentId))).Picks.SelectMany(p => p.Options.Select(o => (t.Name, p.Id, o.Id))))
+            .ToList();
+
+        Assert.Equal(actual.Order(), rows.Order());
     }
 
     [Fact]
