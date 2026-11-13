@@ -45,8 +45,7 @@ import { RestPanel } from './RestPanel';
 import { logged, rollLogLimit, type LoggedRoll } from './RollLog';
 import { SheetSummary } from './SheetSummary';
 import { SpellsPanel } from './SpellsPanel';
-import { ExplainList } from './ExplainList';
-import { TraceTable } from './TraceTable';
+import { FieldWhy } from './sheet/FieldWhy';
 import { UpdatesPanel } from './UpdatesPanel';
 import { VttExportPanel } from './VttExportPanel';
 import { ByHandPanel } from './ByHandPanel';
@@ -137,15 +136,7 @@ function FieldCard({ value, labels, onOverride, onRoll, onReportGap }: FieldProp
             ))}
           </ul>
         )}
-        <ExplainList label={value.label} steps={value.trace} />
-        <TraceTable label={value.label} trace={value.trace} labels={labels} />
-        {value.warnings.length > 0 && (
-          <ul className="warnings" aria-label={`${value.label} warnings`}>
-            {value.warnings.map((w) => (
-              <li key={`${w.code}-${w.content?.revisionId ?? ''}-${w.effectId ?? ''}`}>{w.message}</li>
-            ))}
-          </ul>
-        )}
+        <FieldWhy field={value} label={value.label} labels={labels} />
         <form className="override" onSubmit={submit}>
           <label className="field">
             Number to set by hand
