@@ -27,7 +27,7 @@ One row per architecture decision record. The status is the first words of each 
 | [021](ADR-021-mechanics-beyond-d43.md) | Mechanics beyond the play-mechanics engine (MECH-X) | accepted |
 | [022](ADR-022-content-v12.md) | Content schema v12, one slice at a time | accepted |
 | [023](ADR-023-down-conversion-export.md) | Save for an older TomeStack (down-conversion export) | accepted |
-| 024 | Content schema v13 (reserved for Wave 3, PR #160) | not yet merged |
+| [024](ADR-024-content-v13.md) | Content schema v13, creation guides and packs (the engine) | accepted |
 | [025](ADR-025-code-signing.md) | Code signing for the installer | **proposed** (waiting for SignPath Foundation) |
 
 ## Numbering gaps
