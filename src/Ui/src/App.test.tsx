@@ -102,6 +102,15 @@ it('shows the rules family id before app.info arrives, then the label the servic
   expect((await within(list).findAllByText('2014 rules')).length).toBe(2);
 });
 
+it('the document title names the place: the home screen, then an opened sheet', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  const list = await screen.findByRole('navigation', { name: 'Main' });
+  await waitFor(() => expect(document.title).toBe('Your characters – TomeStack'));
+  await user.click(within(list).getByRole('button', { name: /Fixture Avery/ }));
+  await waitFor(() => expect(document.title).toBe('Fixture Avery – TomeStack'));
+});
+
 it('Cancel from a level-up shows the character as it is now, not as it was when the builder opened (carry 1)', async () => {
   const user = userEvent.setup();
   render(<App />);

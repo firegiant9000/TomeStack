@@ -12,6 +12,7 @@ import { companionPrunedText } from './companionNotice';
 import { readFileAsBase64 } from './files';
 import { isTypingTarget } from './keys';
 import { diffLevelUp, dismissChecklist, writeChecklist } from './levelUpChecklist';
+import { windowTitle } from './placeTitle';
 import { noticeText } from './replaceable';
 import { RulesLabelProvider, useRulesLabel } from './rulesLabel';
 import { applyPreferences, setSidebarCollapsed, sidebarCollapsed } from './settings';
@@ -29,7 +30,7 @@ const HomebrewStudio = lazy(() => import('./components/HomebrewStudio').then((m)
 const ImportPreview = lazy(() => import('./components/ImportPreview').then((m) => ({ default: m.ImportPreview })));
 const SourcesPanel = lazy(() => import('./components/SourcesPanel').then((m) => ({ default: m.SourcesPanel })));
 
-type Screen =
+export type Screen =
   | { kind: 'home'; focus?: boolean } // focus: false only for the start screen (the first Tab must reach the header)
   | { kind: 'builder'; mode: BuilderMode }
   | { kind: 'studio'; sourceId?: string }
@@ -37,7 +38,8 @@ type Screen =
   | { kind: 'campaigns' }
   | { kind: 'gaps' }
   | { kind: 'backups' }
-  | { kind: 'add'; start?: 'import' }  | { kind: 'settings' }
+  | { kind: 'add'; start?: 'import' } // start: 'import' opens the chooser on its import choices
+  | { kind: 'settings' }
   | { kind: 'ddb-import' }
   | { kind: 'sheet'; view: CharacterView; tab?: SheetTabId; levelledUp?: true }
   | { kind: 'import'; fileName: string; base64: string; preview: PackagePreview };
@@ -121,6 +123,9 @@ function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (in
   useEffect(() => {
     openSeq.current.next();
   }, [screen.kind]);
+  useEffect(() => {
+    document.title = windowTitle(screen); // the shell mirrors this to the window title
+  }, [screen]);
   async function open(id: string, tab?: SheetTabId) {
     const request = openSeq.current.next();
     try {
