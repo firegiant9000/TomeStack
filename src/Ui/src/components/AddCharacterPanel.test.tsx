@@ -70,6 +70,13 @@ it('canCreate false disables Make a new one with a visible reason, other choices
   expect(screen.getByText(/still loading/i)).toBeTruthy();
   const make = screen.getByRole('radio', { name: 'Make a new one' }) as HTMLInputElement;
   expect(make.disabled).toBe(true);
+  const sheet = screen.getByRole('radio', { name: 'From a character sheet (PDF or text)' }) as HTMLInputElement;
+  expect(sheet.disabled).toBe(true);
+  const reason = screen.getByText(/still loading/i);
+  expect(reason.id).not.toBe('');
+  for (const radio of [make, sheet]) {
+    expect((radio.getAttribute('aria-describedby') ?? '').split(' ')).toContain(reason.id);
+  }
   await user.click(screen.getByRole('button', { name: 'Continue' }));
   expect(handlers.onFileImport).toHaveBeenCalledTimes(1);
   expect(handlers.onNew).not.toHaveBeenCalled();
