@@ -49,6 +49,7 @@ public sealed class OldReleaseOutcomeTests : IDisposable
         ["v0.5.0"] = "29ac9832e2b6ca6fedce9fa4034bfdea075cd328",
         ["v0.6.0"] = "6403df5c7e8cdd59bc5284843881904bdc314351",
         ["v0.7.0"] = "0ffe703149e2bce8747e26bdf915de163151c20b",
+        ["v0.8.0"] = "0752782fbb5290497b147c9fdf369cccaddc8851",
     };
 
     private const string Advice = "Run scripts/old-release-check.ps1 locally and commit the outcome.";
