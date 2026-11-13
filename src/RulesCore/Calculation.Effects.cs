@@ -611,7 +611,7 @@ public static partial class CharacterCalculator
                         : $", from {origin.ToString().ToLowerInvariant()} content via {parent.Kind.ToString().ToLowerInvariant()} '{parent.Name}'";
                     warnings[effect.Target].Add(new(
                         "policy.ability-increase-source",
-                        $"'{revision.Name}' ({revision.Kind}{via}) cannot change ability scores under the {policy.ShortLabel}; only {policy.AbilityIncreaseSource} content can. The effect is ignored.",
+                        $"'{revision.Name}' ({revision.Kind.ToString().ToLowerInvariant()}{via}) cannot change ability scores under the {policy.ShortLabel}; only {policy.AbilityIncreaseSource.ToString().ToLowerInvariant()} content can. The effect is ignored.",
                         revision.Reference,
                         effect.Id));
                     continue;

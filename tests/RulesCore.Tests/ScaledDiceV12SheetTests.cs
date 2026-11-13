@@ -96,6 +96,36 @@ public class ScaledDiceV12SheetTests
     }
 
     [Fact]
+    public void Two_bad_riders_on_one_item_give_two_diagnostics_without_rider_ids()
+    {
+        var reference = Fixtures.KindledMode;
+        ContentPack[] packs = [Fixtures.Pack(), Fixtures.M1Pack(), Fixtures.SpellPack(), Fixtures.CombatPack(), Fixtures.EffectsPack(), Fixtures.MulticlassPack(), Fixtures.FormsPack(), Fixtures.TurnsPack(), Fixtures.FeatureAttacksPack()];
+        var revisions = packs.SelectMany(p => p.Revisions)
+            .Select(r => r.Reference == reference
+                ? r with
+                {
+                    SchemaVersion = Math.Max(r.SchemaVersion, 12),
+                    Effects = [.. r.Effects.SelectMany(e => e is AttackRiderEffect rider
+                        ? new Effect[]
+                        {
+                            rider with { Id = "rider-alpha-id", Dice = null, StackGroup = null, Tags = ["unarmed"], ScaledDice = new("NOPE", "6") },
+                            rider with { Id = "rider-beta-id", Dice = null, StackGroup = null, Tags = ["unarmed"], ScaledDice = new("NOPE", "6") },
+                        }
+                        : [e])],
+                }
+                : r)
+            .ToList();
+        var catalog = new InMemoryContentCatalog([.. packs.SelectMany(p => p.Sources)], [.. revisions]);
+
+        var sheet = Sheet(Adept(5, Kindled), catalog);
+
+        var diagnostics = sheet.Diagnostics.Where(d => d.Code == "rider.dice-invalid").ToList();
+        Assert.Equal(["rider-alpha-id", "rider-beta-id"], diagnostics.Select(d => d.EffectId).Order(StringComparer.Ordinal));
+        foreach (var d in diagnostics)
+            ServiceWordingTests.AssertPlain(d.Message, ["has an attack extra that is left out"], "rider-alpha-id", "rider-beta-id");
+    }
+
+    [Fact]
     public void A_missing_count_leaves_the_rider_out_without_throwing()
     {
         var sheet = Sheet(Adept(5, Kindled), ScaledRider(new(null!, "6")));

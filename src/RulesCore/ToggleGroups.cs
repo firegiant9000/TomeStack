@@ -92,7 +92,7 @@ public static class ToggleGroups
             {
                 diagnostics.Add(new(
                     "toggle.group-conflict",
-                    $"Group '{group}' has {primaries.Count} primaries on; only '{kept!.Toggle.ToggleId}' applies, so '{dropped.Toggle.ToggleId}' does not.",
+                    $"'{kept!.Toggle.Label}' and '{dropped.Toggle.Label}' are both on in the same group; only '{kept.Toggle.Label}' applies, so '{dropped.Toggle.Label}' does not.",
                     dropped.Reference, dropped.Toggle.Id));
             }
 
@@ -112,8 +112,8 @@ public static class ToggleGroups
                     diagnostics.Add(new(
                         "toggle.overlay-not-allowed",
                         kept is null
-                            ? $"Overlay '{overlay.Toggle.ToggleId}' is not allowed with no form on in group '{group}', so it does not apply."
-                            : $"Overlay '{overlay.Toggle.ToggleId}' is not allowed with '{kept.Toggle.ToggleId}' in group '{group}', so it does not apply.",
+                            ? $"'{overlay.Toggle.Label}' is not allowed with no form on, so it does not apply."
+                            : $"'{overlay.Toggle.Label}' is not allowed with '{kept.Toggle.Label}', so it does not apply.",
                         overlay.Reference, overlay.Toggle.Id));
                 }
             }
