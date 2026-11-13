@@ -160,7 +160,7 @@ beforeEach(() => {
   vi.mocked(client.candidates).mockResolvedValue({ items: [found(1, 'Fixture Coat'), found(2, 'Fixture Lantern')], total: 2 });
   vi.mocked(client.checkCandidate).mockResolvedValue({
     candidateId: 'fixture-cand-1',
-    report: { errors: [], warnings: [], canPublish: true } as unknown as CandidateCheck['report'],
+    report: { errors: [], warnings: [], requiredSchemaVersion: 12, canPublish: true } as unknown as CandidateCheck['report'],
     dependencies: [],
     blockers: [],
     canAccept: true,
@@ -179,7 +179,7 @@ beforeEach(() => {
     warnings: [],
   });
   const reference = { contentId: 'fixture-draft', revisionId: 'r1' };
-  const checked = { errors: [], warnings: [], canPublish: true } as unknown as CandidateCheck['report'];
+  const checked = { errors: [], warnings: [], requiredSchemaVersion: 12, canPublish: true } as unknown as CandidateCheck['report'];
   vi.mocked(client.publishManyPreview).mockResolvedValue({
     entries: [{ draft: reference, name: 'Fixture draft', kind: 'feat', report: checked, findings: [], replacesPublished: false, rePointings: [{ dependent: { contentId: 'fixture-other', revisionId: 'r1' }, dependentName: 'Fixture other', grantsMoved: 1, optionsMoved: 0 }] }],
     dependents: [],
@@ -189,7 +189,7 @@ beforeEach(() => {
   vi.mocked(client.contentDuplicates).mockResolvedValue([]);
   vi.mocked(client.feedback).mockResolvedValue([]);
   vi.mocked(client.previewFormula).mockResolvedValue({ formula: '3', points: [] });
-  vi.mocked(client.validateRevision).mockResolvedValue({ revision: { contentId: 'fixture-draft', revisionId: 'r1' }, errors: [], warnings: [], canPublish: true });
+  vi.mocked(client.validateRevision).mockResolvedValue({ revision: { contentId: 'fixture-draft', revisionId: 'r1' }, errors: [], warnings: [], requiredSchemaVersion: 12, canPublish: true });
 });
 afterEach(() => {
   cleanup();

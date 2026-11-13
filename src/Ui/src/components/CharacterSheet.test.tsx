@@ -129,7 +129,7 @@ it('shows the applied state and keeps focus when a later undo step fails (D23)',
   const { v, damaged, onChanged } = undoHarness();
   const first = { ...v, sheet: { ...v.sheet, hitPoints: { maximum: 8, current: 5, temporary: 0 } } };
   const onError = vi.fn();
-  const play = { temporaryHitPoints: 0, resources: [], conditions: [], exhaustion: 0 };
+  const play = { temporaryHitPoints: 0, resources: [], conditions: [], exhaustion: 0, spellSlotsSpent: [], pactSlotsSpent: 0 };
   const before = { ...v, character: { ...v.character, play: { ...play, concentration: { spell: { contentId: 's', revisionId: 'r' }, name: 'Fixture Ward' } } } };
   const after = { ...damaged, character: { ...v.character, play } };
   vi.mocked(client.play).mockResolvedValueOnce(after).mockResolvedValueOnce(first).mockRejectedValueOnce(new Error('play.spell-not-prepared'));
@@ -243,7 +243,7 @@ it('the service\'s Undo is disabled while a play change is in flight, so it cann
 const upkeepValue = { content: { contentId: 'c1', revisionId: 'r1' }, effectId: 'e-up', toggleId: 'iron', at: 'turnStart', resourceContent: 'c1', resourceId: 'breath', change: 'spend', amount: 2, all: false, ifShort: 'ask', label: 'Iron upkeep' };
 const combatView = (round?: number, over: Partial<CharacterView> = {}, stamp = '2026-10-03T00:00:00Z'): CharacterView => {
   const v = view({ upkeeps: [upkeepValue] as never });
-  const play = round === undefined ? undefined : { temporaryHitPoints: 0, resources: [], conditions: [], exhaustion: 0, encounter: { round } };
+  const play = round === undefined ? undefined : { temporaryHitPoints: 0, resources: [], conditions: [], exhaustion: 0, spellSlotsSpent: [], pactSlotsSpent: 0, encounter: { round } };
   return { ...v, character: { ...v.character, updatedAt: stamp, play }, ...over };
 };
 
@@ -1868,7 +1868,7 @@ it('sends a save started while a play reply is pending with the play reply\'s up
   const hit = pending();
   const played: CharacterView = {
     ...v,
-    character: { ...v.character, updatedAt: '2026-10-03T00:00:05.5000000+00:00', play: { temporaryHitPoints: 3, resources: [], conditions: [], exhaustion: 0 } },
+    character: { ...v.character, updatedAt: '2026-10-03T00:00:05.5000000+00:00', play: { temporaryHitPoints: 3, resources: [], conditions: [], exhaustion: 0, spellSlotsSpent: [], pactSlotsSpent: 0 } },
   };
   vi.mocked(client.play).mockReset();
   vi.mocked(client.play).mockReturnValueOnce(hit.promise);

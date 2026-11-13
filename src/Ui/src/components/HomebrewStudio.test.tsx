@@ -27,7 +27,7 @@ beforeEach(() => {
   vi.mocked(client.contentDuplicates).mockResolvedValue([]);
   vi.mocked(client.listCharacters).mockResolvedValue([]);
   vi.mocked(client.previewFormula).mockResolvedValue({ formula: '3', points: [] });
-  vi.mocked(client.validateRevision).mockResolvedValue({ revision: { contentId: 'id-m', revisionId: 'x' }, errors: [], warnings: [], canPublish: true });
+  vi.mocked(client.validateRevision).mockResolvedValue({ revision: { contentId: 'id-m', revisionId: 'x' }, errors: [], warnings: [], requiredSchemaVersion: 12, canPublish: true });
 });
 afterEach(cleanup);
 
@@ -297,7 +297,7 @@ async function openFormDraft(user: ReturnType<typeof userEvent.setup>) {
   vi.mocked(client.contentBySource).mockImplementation((id) => Promise.resolve(id === 'a' ? [entry] : []));
   vi.mocked(client.listCharacters).mockResolvedValue([]);
   vi.mocked(client.previewFormula).mockResolvedValue({ formula: '3', points: [] });
-  vi.mocked(client.validateRevision).mockResolvedValue({ revision: { contentId: 'id-f', revisionId: 'x' }, errors: [], warnings: [], canPublish: true });
+  vi.mocked(client.validateRevision).mockResolvedValue({ revision: { contentId: 'id-f', revisionId: 'x' }, errors: [], warnings: [], requiredSchemaVersion: 12, canPublish: true });
   render(<HomebrewStudio info={info} onError={() => {}} onStatus={() => {}} />);
   await user.click(await screen.findByRole('button', { name: 'Edit Testy Forms' }));
   const rule = (name: RegExp) => within(screen.getByRole('group', { name }));
@@ -350,7 +350,7 @@ async function openUpkeepDraft(user: ReturnType<typeof userEvent.setup>, extra: 
   vi.mocked(client.contentBySource).mockImplementation((id) => Promise.resolve(id === 'a' ? [entry] : []));
   vi.mocked(client.listCharacters).mockResolvedValue([]);
   vi.mocked(client.previewFormula).mockResolvedValue({ formula: '3', points: [] });
-  vi.mocked(client.validateRevision).mockResolvedValue({ revision: { contentId: 'id-u', revisionId: 'x' }, errors: [], warnings: [], canPublish: true });
+  vi.mocked(client.validateRevision).mockResolvedValue({ revision: { contentId: 'id-u', revisionId: 'x' }, errors: [], warnings: [], requiredSchemaVersion: 12, canPublish: true });
   render(<HomebrewStudio info={info} onError={() => {}} onStatus={() => {}} />);
   await user.click(await screen.findByRole('button', { name: 'Edit Testy Upkeep' }));
   const rule = (name: RegExp) => within(screen.getByRole('group', { name }));

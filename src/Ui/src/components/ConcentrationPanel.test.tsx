@@ -16,7 +16,7 @@ function view(play?: Partial<PlayState>): CharacterView {
     character: {
       id: 'fixture-3', schemaVersion: 8, name: 'Fixture Caster', rulesFamily: 'srd-5.2.1', level: 3, classes: [], choices: [], crossFamilyExceptions: [],
       baseAbilities: { str: 8, dex: 14, con: 12, int: 16, wis: 10, cha: 10 }, pins: [], overrides: [], updatedAt: '2026-10-06T00:00:00Z',
-      play: play ? { temporaryHitPoints: 0, resources: [], conditions: [], exhaustion: 0, ...play } : undefined,
+      play: play ? { temporaryHitPoints: 0, resources: [], conditions: [], exhaustion: 0, spellSlotsSpent: [], pactSlotsSpent: 0, ...play } : undefined,
     },
     sheet: { characterId: 'fixture-3', rulesFamily: 'srd-5.2.1', diagnostics: [], fields: [], hitPoints: { maximum: 20, current: 13, temporary: 0 } },
   };
