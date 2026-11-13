@@ -198,4 +198,11 @@ public class RulesFamilySideBySideTests
         Assert.Equal("Inspiration", RulesFamilies.Get(RulesFamilies.Srd51).InspirationName);
         Assert.Equal("Heroic Inspiration", RulesFamilies.Get(RulesFamilies.Srd521).InspirationName);
     }
+
+    [Fact]
+    public void ShortLabel_is_the_player_wording()
+    {
+        Assert.Equal("2014 rules", RulesFamilies.Get(RulesFamilies.Srd51).ShortLabel);
+        Assert.Equal("2024 rules", RulesFamilies.Get(RulesFamilies.Srd521).ShortLabel);
+    }
 }

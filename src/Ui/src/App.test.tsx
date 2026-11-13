@@ -85,6 +85,23 @@ afterEach(() => {
   localStorage.clear();
 });
 
+it('shows the rules family id before app.info arrives, then the label the service sent', async () => {
+  let resolveInfo: (value: Awaited<ReturnType<typeof client.info>>) => void = () => {};
+  vi.mocked(client.info).mockReturnValue(new Promise((resolve) => (resolveInfo = resolve)));
+  render(<App />);
+  const list = await screen.findByRole('navigation', { name: 'Characters' });
+  await within(list).findAllByText('srd-5.1');
+  expect(within(list).queryByText('2014 rules')).toBeNull();
+  resolveInfo({
+    version: 'test',
+    schemaVersion: 1,
+    rulesFamilies: [{ id: 'srd-5.1', displayName: 'SRD 5.1', shortLabel: '2014 rules' } as never],
+    warnings: [],
+    fields: [],
+  });
+  expect((await within(list).findAllByText('2014 rules')).length).toBe(2);
+});
+
 it('Cancel from a level-up shows the character as it is now, not as it was when the builder opened (carry 1)', async () => {
   const user = userEvent.setup();
   render(<App />);

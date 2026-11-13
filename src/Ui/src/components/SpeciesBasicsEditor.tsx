@@ -13,7 +13,8 @@ import {
   speedRange,
   type AbilityKey,
 } from '../entryBasics';
-import { familyName, joinNames, NewFeatureForm, SkillFieldset, StalePin, type SpeciesProps } from './OriginPieces';
+import { useRulesLabel } from '../rulesLabel';
+import { joinNames, NewFeatureForm, SkillFieldset, StalePin, type SpeciesProps } from './OriginPieces';
 
 /**
  * Tester feedback item 12: the parts of a species that need no formula, written as the effects the bundled packs use
@@ -24,6 +25,7 @@ import { familyName, joinNames, NewFeatureForm, SkillFieldset, StalePin, type Sp
  */
 export function SpeciesBasicsEditor(props: SpeciesProps) {
   const { revision, info, onEffects } = props;
+  const rulesLabel = useRulesLabel();
   const effects = revision.effects;
   const policies = revision.rulesFamilies.flatMap((id) => info.rulesFamilies.filter((p) => p.id === id));
   const withIncreases = policies.filter((p) => p.abilityIncreaseSource === 'species');
@@ -83,7 +85,7 @@ export function SpeciesBasicsEditor(props: SpeciesProps) {
 
       {showIncreases && (
         <fieldset id="species-basics-increases" tabIndex={-1}>
-          <legend>{withIncreases.length > 0 ? `Ability score increases (${joinNames(withIncreases.map((p) => p.displayName))})` : 'Ability score increases'}</legend>
+          <legend>{withIncreases.length > 0 ? `Ability score increases (${joinNames(withIncreases.map((p) => rulesLabel(p.id)))})` : 'Ability score increases'}</legend>
           <div className="origin-grid">
             {abilities.map(([key, label]) => (
               <div key={key} className="field">
@@ -115,13 +117,13 @@ export function SpeciesBasicsEditor(props: SpeciesProps) {
             ))}
           </div>
           {withIncreases.length === 0 && (
-            <p className="warn">These increases are ignored in {joinNames(without.map((p) => p.displayName))}; tick a family that takes them from the species.</p>
+            <p className="warn">These increases are ignored in {joinNames(without.map((p) => rulesLabel(p.id)))}; tick the rules that take them from the species.</p>
           )}
         </fieldset>
       )}
       {without.map((p) => (
         <p key={p.id} className="hint">
-          In {familyName(info, p.id)}, ability increases come from the background.
+          In {rulesLabel(p.id)}, ability increases come from the background.
         </p>
       ))}
 

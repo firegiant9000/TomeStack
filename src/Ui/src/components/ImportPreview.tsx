@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { client } from '../api/client';
 import type { ImportResult, PackageItem, PackagePreview, SourceChoice } from '../api/types';
+import { useRulesLabel } from '../rulesLabel';
 
 /**
  * A source whose metadata differs from the local record, or (M6 slice 2) a campaign pack's campaign that differs from
@@ -19,7 +20,7 @@ export function SourceDecision({ item, choice, onChoose }: { item: PackageItem; 
           <tr>
             <th scope="col">Field</th>
             <th scope="col">Your local version</th>
-            <th scope="col">In the package</th>
+            <th scope="col">In the TomeStack file</th>
           </tr>
         </thead>
         <tbody>
@@ -55,6 +56,7 @@ interface Props {
 
 /** SPEC P-02: the importer shows dependencies and conflicts; nothing is written until the user applies. */
 export function ImportPreview({ fileName, base64, preview, onApplied, onCancel, onError }: Props) {
+  const rulesLabel = useRulesLabel();
   const [applying, setApplying] = useState(false);
   const [choices, setChoices] = useState<Record<string, SourceChoice>>({});
   const [campaignChoices, setCampaignChoices] = useState<Record<string, SourceChoice>>({});
@@ -82,7 +84,7 @@ export function ImportPreview({ fileName, base64, preview, onApplied, onCancel, 
 
       {preview.errors.length > 0 && (
         <div role="alert">
-          <h3>This package cannot be imported</h3>
+          <h3>This TomeStack file cannot be opened</h3>
           <ul className="errors">
             {preview.errors.map((e, i) => (
               <li key={i}>{e.message}</li>
@@ -93,7 +95,7 @@ export function ImportPreview({ fileName, base64, preview, onApplied, onCancel, 
 
       {preview.items.length > 0 && (
         <table>
-          <caption>Package contents</caption>
+          <caption>What is in the TomeStack file</caption>
           <thead>
             <tr>
               <th scope="col">Type</th>
@@ -137,14 +139,14 @@ export function ImportPreview({ fileName, base64, preview, onApplied, onCancel, 
           <p className="hint">{preview.manifest.attachmentPolicy}</p>
           {preview.manifest.scope === 'source' && (
             <p>
-              This is a source pack. Its sender stated that each source is their own work; TomeStack cannot check that. The
+              This TomeStack file holds sources. Its sender stated that each source is their own work; TomeStack cannot check that. The
               sources are recorded as received from someone else, so you cannot mark them as your own. A copy of your
               library is saved in the backups folder before anything changes.
             </p>
           )}
           {preview.manifest.scope === 'campaign' && (
             <p>
-              This is a campaign pack: a campaign profile and the homebrew its sender marked as their own work. It carries no
+              This TomeStack file holds a campaign: a campaign profile and the homebrew its sender marked as their own work. It carries no
               characters. Sources that were not the sender&apos;s to share are only named: the campaign waits for them until
               you install them yourself. If the import changes anything, a copy of your library is saved in the backups folder
               first.
@@ -179,7 +181,7 @@ export function ImportPreview({ fileName, base64, preview, onApplied, onCancel, 
               <li key={`${i.campaignId}-${i.characterId}`}>
                 {i.characterName}:{' '}
                 {i.notAllowed.length > 0 && <>no longer allowed: {i.notAllowed.join(', ')}.</>}
-                {i.rulesFamily && <> The campaign would play {i.rulesFamily}.</>}
+                {i.rulesFamily && <> The campaign would play {rulesLabel(i.rulesFamily)}.</>}
               </li>
             ))}
           </ul>

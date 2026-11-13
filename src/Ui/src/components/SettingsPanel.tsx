@@ -201,7 +201,7 @@ export function SettingsPanel({ info, onError }: { info?: AppInfo; onError?: (er
       </dl>
 
       <h3>About</h3>
-      <p className="hint">Settings are kept in this app's own storage on this computer and are in no backup or package.</p>
+      <p className="hint">Settings are kept in this app's own storage on this computer and are in no backup or TomeStack file.</p>
       {info && (
         <p className="hint">
           TomeStack {info.version}, data schema {info.schemaVersion}. Offline: your library stays in this computer's data folder.
