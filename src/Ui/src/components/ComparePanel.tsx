@@ -47,7 +47,7 @@ export function ComparePanel(props: { entry?: StudioEntry; unsaved: ContentRevis
   // The chosen "From", or, when it is not (or no longer) one of the stored revisions, the newest published one or the
   // first: an entry saved for the first time while the editor is open has revisions only from then on (review fix).
   const from = stored.find((r) => r.revisionId === fromId) ?? stored.find((r) => r.revisionId === entry?.latestPublished?.revisionId) ?? stored[0]!;
-  const label = (r: ContentRevision, i: number) => `Revision ${i + 1} (${r.status}${r.revisionId === entry?.latestPublished?.revisionId ? ', newest published' : ''})`;
+  const label = (r: ContentRevision, i: number) => `Version ${i + 1} (${r.status}${r.revisionId === entry?.latestPublished?.revisionId ? ', newest published' : ''})`;
   const levelProblem = level !== '' && !(/^\d+$/.test(level) && Number(level) >= 1 && Number(level) <= 20) ? 'The level must be a whole number from 1 to 20.' : undefined;
   const toStored = stored.find((r) => r.revisionId === toId);
   // Characters that can take the comparison: one whose family either revision supports (the unsaved draft's families
@@ -82,8 +82,8 @@ export function ComparePanel(props: { entry?: StudioEntry; unsaved: ContentRevis
   const shown = result?.key === key ? result.comparison : undefined;
   return (
     <section aria-labelledby="compare-heading" className="effect-editor">
-      <h4 id="compare-heading">Compare revisions</h4>
-      <p className="hint">Nothing is saved or applied: characters keep their revision until you review and apply an update.</p>
+      <h4 id="compare-heading">Compare versions</h4>
+      <p className="hint">Nothing is saved or applied: characters keep their version until you review and apply an update.</p>
       <label className="field">
         From
         <select value={from.revisionId} onChange={(e) => setFromId(e.target.value)}>
@@ -97,7 +97,7 @@ export function ComparePanel(props: { entry?: StudioEntry; unsaved: ContentRevis
       <label className="field">
         To
         <select value={toId} onChange={(e) => setToId(e.target.value)}>
-          <option value={unsavedKey}>The revision on screen (unsaved)</option>
+          <option value={unsavedKey}>The version on screen (unsaved)</option>
           {stored.map((r, i) => (
             <option key={r.revisionId} value={r.revisionId}>
               {label(r, i)}
@@ -155,7 +155,7 @@ export function ComparePanel(props: { entry?: StudioEntry; unsaved: ContentRevis
           <MechanicsDiffTable mechanics={shown.mechanics} />
           {shown.text.length === 0 ? <p>The texts are the same.</p> : shown.text.map((t) => <TextDiff key={t.where} change={t} />)}
           {shown.runs.map((run, i) => (
-            <section key={`${run.characterId ?? 'blank'}-${i}`} aria-label={`${run.name} with each revision`}>
+            <section key={`${run.characterId ?? 'blank'}-${i}`} aria-label={`${run.name} with each version`}>
               <h5>{run.name}</h5>
               {run.problems.length > 0 ? (
                 <p className="warn">Not run: {run.problems.map((p) => p.message).join(' ')}</p>

@@ -24,7 +24,7 @@ export function DebugFindings(props: {
       ) : (
         <>
           <p>
-            {plural(report.errors, 'error')}, {plural(report.warnings, 'warning')} and {plural(notes, 'note')}. Errors block publishing;
+            {plural(report.errors, 'error')}, {plural(report.warnings, 'warning')} and {plural(notes, 'note')}. Errors block making it available to characters;
             warnings and notes explain what will not work as it may seem.
           </p>
           <ul>

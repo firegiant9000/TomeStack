@@ -71,7 +71,7 @@ it('the roll mode editor writes target, mode, against and toggle', async () => {
   expect(r.getByRole('option', { name: 'Sleight of Hand' })).toBeTruthy();
   // No Normal mode is offered.
   expect(r.queryByRole('option', { name: /normal/i })).toBeNull();
-  expect(blocked('Publish')).toBe(false);
+  expect(blocked('Make available to characters')).toBe(false);
 });
 
 it('clearing every condition removes against', async () => {
@@ -91,21 +91,21 @@ it('the roll mode editor blocks Publish on an unknown condition key', async () =
   const mode: Raw = { type: 'rollMode', id: 'rollMode-1', target: 'save.wis', mode: 'advantage', against: ['charmed', 'testyCondition'] };
   const { rule } = await openDraft(user, [mode]);
   const r = rule(/^Rule 1: Roll mode/);
-  expect(blocked('Publish')).toBe(true);
+  expect(blocked('Make available to characters')).toBe(true);
   expect(blocked('Save draft')).toBe(true);
   expect(r.getByText(/testyCondition/)).toBeTruthy();
   // Unchecking the unknown key fixes it.
   await user.click(r.getByRole('checkbox', { name: 'testyCondition' }));
-  expect(blocked('Publish')).toBe(false);
+  expect(blocked('Make available to characters')).toBe(false);
 });
 
 it('the roll mode editor blocks Publish on an unknown target', async () => {
   const user = userEvent.setup();
   const mode: Raw = { type: 'rollMode', id: 'rollMode-1', target: 'save.testy', mode: 'advantage' };
   const { rule } = await openDraft(user, [mode]);
-  expect(blocked('Publish')).toBe(true);
+  expect(blocked('Make available to characters')).toBe(true);
   await user.selectOptions(rule(/^Rule 1: Roll mode/).getByRole('combobox', { name: 'Applies to' }), 'save.con');
-  expect(blocked('Publish')).toBe(false);
+  expect(blocked('Make available to characters')).toBe(false);
 });
 
 // Content v12 (G7): the combat targets.
@@ -131,9 +131,9 @@ it('edits attack target with tags and ability', async () => {
   expect(sent.unlessCondition).toBeUndefined();
   // No tags blocks publishing.
   await user.clear(r.getByRole('textbox', { name: 'Attack tags' }));
-  expect(blocked('Publish')).toBe(true);
+  expect(blocked('Make available to characters')).toBe(true);
   await user.type(r.getByRole('textbox', { name: 'Attack tags' }), 'all');
-  expect(blocked('Publish')).toBe(false);
+  expect(blocked('Make available to characters')).toBe(false);
 });
 
 it('edits attacks against you with prevent and unless', async () => {
@@ -185,7 +185,7 @@ it('keeps unknown members across an edit', async () => {
   // The stored values the selects cannot offer are shown, not dropped, and block publishing until fixed.
   expect(r.getByRole('option', { name: 'testyAbility (removed)' })).toBeTruthy();
   expect(r.getByRole('option', { name: 'testyCondition (removed)' })).toBeTruthy();
-  expect(blocked('Publish')).toBe(true);
+  expect(blocked('Make available to characters')).toBe(true);
   await user.selectOptions(r.getByRole('combobox', { name: 'Mode' }), 'disadvantage');
   expect((await checked()).effect('rollMode-1')).toMatchObject({ mode: 'disadvantage', tags: ['melee'], ability: 'testyAbility', unlessCondition: 'testyCondition', futureMember: { keep: true } });
 });
@@ -196,13 +196,13 @@ it('reports and clears a member that doesn\'t apply to the target', async () => 
   const b: Raw = { type: 'rollMode', id: 'rollMode-2', target: 'save.dex', mode: 'advantage', ability: 'dex' };
   const c: Raw = { type: 'rollMode', id: 'rollMode-3', target: 'attack', mode: 'advantage', tags: ['all'], prevent: true };
   const { rule, checked } = await openDraft(user, [a, b, c]);
-  expect(blocked('Publish')).toBe(true);
+  expect(blocked('Make available to characters')).toBe(true);
   await user.click(rule(/^Rule 1: Roll mode/).getByRole('button', { name: 'Remove against' }));
-  expect(blocked('Publish')).toBe(true);
+  expect(blocked('Make available to characters')).toBe(true);
   await user.click(rule(/^Rule 2: Roll mode/).getByRole('button', { name: 'Remove ability' }));
-  expect(blocked('Publish')).toBe(true);
+  expect(blocked('Make available to characters')).toBe(true);
   await user.click(rule(/^Rule 3: Roll mode/).getByRole('button', { name: 'Remove prevent' }));
-  expect(blocked('Publish')).toBe(false);
+  expect(blocked('Make available to characters')).toBe(false);
   const done = await checked();
   expect(done.effect('rollMode-1').against).toBeUndefined();
   expect(done.effect('rollMode-2').ability).toBeUndefined();
@@ -213,9 +213,9 @@ it('reports stored tags that are blank or repeated', async () => {
   const user = userEvent.setup();
   const mode: Raw = { type: 'rollMode', id: 'rollMode-1', target: 'attack', mode: 'advantage', tags: ['melee', 'melee', ' '] };
   const { rule, checked } = await openDraft(user, [mode]);
-  expect(blocked('Publish')).toBe(true);
+  expect(blocked('Make available to characters')).toBe(true);
   await user.type(rule(/^Rule 1: Roll mode/).getByRole('textbox', { name: 'Attack tags' }), 'x');
-  expect(blocked('Publish')).toBe(false);
+  expect(blocked('Make available to characters')).toBe(false);
   expect((await checked()).effect('rollMode-1').tags).toEqual(['melee', 'x']);
 });
 

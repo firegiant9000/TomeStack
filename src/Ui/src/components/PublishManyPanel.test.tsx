@@ -72,8 +72,8 @@ it('opens a named region whose heading has focus, with a captioned table of the 
   const all = [pendingOf(1), pendingOf(2, true)];
   echoPreview(all);
   renderPanel(all);
-  const region = await screen.findByRole('region', { name: 'Publish drafts of Testy Tome' });
-  expect(document.activeElement).toBe(within(region).getByRole('heading', { name: 'Publish drafts of Testy Tome' }));
+  const region = await screen.findByRole('region', { name: 'Make drafts of Testy Tome available to characters' });
+  expect(document.activeElement).toBe(within(region).getByRole('heading', { name: 'Make drafts of Testy Tome available to characters' }));
   const table = within(region).getByRole('table', { name: 'Pending drafts in Testy Tome' });
   expect(within(table).getAllByRole('row')).toHaveLength(3);
   expect(within(table).getByRole('columnheader', { name: 'Problems' })).toBeTruthy();
@@ -83,19 +83,19 @@ it('ticks only never-published drafts, and previews exactly the ticked ones', as
   const all = [pendingOf(1), pendingOf(2, true)];
   echoPreview(all);
   renderPanel(all);
-  const first = (await screen.findByRole('checkbox', { name: 'Publish Testy Entry 1' })) as HTMLInputElement;
-  const second = screen.getByRole('checkbox', { name: 'Publish Testy Entry 2' }) as HTMLInputElement;
+  const first = (await screen.findByRole('checkbox', { name: 'Make Testy Entry 1 available to characters' })) as HTMLInputElement;
+  const second = screen.getByRole('checkbox', { name: 'Make Testy Entry 2 available to characters' }) as HTMLInputElement;
   expect([first.checked, second.checked]).toEqual([true, false]);
-  expect(screen.getByText('replaces the published version')).toBeTruthy();
+  expect(screen.getByText('replaces the available version')).toBeTruthy();
   await vi.waitFor(() => expect(client.publishManyPreview).toHaveBeenLastCalledWith(['c1']));
-  expect(await screen.findByRole('button', { name: 'Publish 1 draft' })).toBeTruthy();
+  expect(await screen.findByRole('button', { name: 'Make 1 draft available to characters' })).toBeTruthy();
 });
 
 it('ticks the drafts that replace a published version too when asked to (the spell-list add)', async () => {
   const all = [pendingOf(1), pendingOf(2, true)];
   echoPreview(all);
   render(<PublishManyPanel source={source} pending={all} tickAll onError={() => {}} onClose={onClose} onPublished={onPublished} onReload={onReload} />);
-  const second = (await screen.findByRole('checkbox', { name: 'Publish Testy Entry 2' })) as HTMLInputElement;
+  const second = (await screen.findByRole('checkbox', { name: 'Make Testy Entry 2 available to characters' })) as HTMLInputElement;
   expect(second.checked).toBe(true);
   await vi.waitFor(() => expect(client.publishManyPreview).toHaveBeenLastCalledWith(['c1', 'c2']));
 });
@@ -105,13 +105,13 @@ it('previews again when a tick changes, and holds the button with a reason at no
   const all = [pendingOf(1), pendingOf(2, true)];
   echoPreview(all);
   renderPanel(all);
-  await user.click(await screen.findByRole('checkbox', { name: 'Publish Testy Entry 2' }));
+  await user.click(await screen.findByRole('checkbox', { name: 'Make Testy Entry 2 available to characters' }));
   await vi.waitFor(() => expect(client.publishManyPreview).toHaveBeenLastCalledWith(['c1', 'c2']));
-  expect(await screen.findByRole('button', { name: 'Publish 2 drafts' })).toBeTruthy();
+  expect(await screen.findByRole('button', { name: 'Make 2 drafts available to characters' })).toBeTruthy();
 
-  await user.click(screen.getByRole('checkbox', { name: 'Publish Testy Entry 1' }));
-  await user.click(screen.getByRole('checkbox', { name: 'Publish Testy Entry 2' }));
-  const button = screen.getByRole('button', { name: 'Publish 0 drafts' });
+  await user.click(screen.getByRole('checkbox', { name: 'Make Testy Entry 1 available to characters' }));
+  await user.click(screen.getByRole('checkbox', { name: 'Make Testy Entry 2 available to characters' }));
+  const button = screen.getByRole('button', { name: 'Make 0 drafts available to characters' });
   expect(held(button)).toBe(true);
   expect(document.getElementById(button.getAttribute('aria-describedby') ?? '')?.textContent).toBe('Tick at least one draft.');
 });
@@ -121,7 +121,7 @@ it('holds the publish button while the preview loads', async () => {
   let finish: (p: PublishManyPreview) => void = () => {};
   vi.mocked(client.publishManyPreview).mockReturnValue(new Promise((resolve) => (finish = resolve)));
   renderPanel(all);
-  const button = await screen.findByRole('button', { name: 'Publish 1 draft' });
+  const button = await screen.findByRole('button', { name: 'Make 1 draft available to characters' });
   expect(held(button)).toBe(true);
   expect(button).toHaveProperty('disabled', false);
   expect(document.getElementById(button.getAttribute('aria-describedby') ?? '')?.textContent).toBe('Checking the drafts…');
@@ -140,8 +140,8 @@ it('refuses while any error exists, naming it, and sends nothing', async () => {
     ]),
   );
   renderPanel(all);
-  const button = await screen.findByRole('button', { name: 'Publish 2 drafts' });
-  const list = await screen.findByRole('list', { name: 'Problems that block publishing' });
+  const button = await screen.findByRole('button', { name: 'Make 2 drafts available to characters' });
+  const list = await screen.findByRole('list', { name: 'Problems that block making drafts available' });
   expect(within(list).getByText('Testy Entry 2: The dice are not valid.')).toBeTruthy();
   await vi.waitFor(() => expect(held(button)).toBe(true));
   expect(button.getAttribute('aria-describedby')).toBe('publish-many-reason');
@@ -157,8 +157,8 @@ it('lists what is re-pointed and the dependents that are republished', async () 
   );
   vi.mocked(client.publishManyPreview).mockResolvedValue(previewOf([entryOf(all[0]!)], { dependents: [dependent] }));
   renderPanel(all);
-  const list = await screen.findByRole('list', { name: 'Re-pointed and republished' });
-  expect(within(list).getByText('Testy Class: 2 grants and 1 choice option now point at the published versions.')).toBeTruthy();
+  const list = await screen.findByRole('list', { name: 'Re-pointed and made available again' });
+  expect(within(list).getByText('Testy Class: 2 grants and 1 choice option now point at the available versions.')).toBeTruthy();
 });
 
 it('publishes the ticked ids with their pending revision ids, ignores a second press, and puts focus on the result', async () => {
@@ -168,7 +168,7 @@ it('publishes the ticked ids with their pending revision ids, ignores a second p
   let finish: (value: { published: never[] }) => void = () => {};
   vi.mocked(client.publishMany).mockReturnValue(new Promise((resolve) => (finish = resolve)));
   renderPanel(all);
-  const button = await screen.findByRole('button', { name: 'Publish 2 drafts' });
+  const button = await screen.findByRole('button', { name: 'Make 2 drafts available to characters' });
   await vi.waitFor(() => expect(held(button)).toBe(false));
 
   await user.click(button);
@@ -176,7 +176,7 @@ it('publishes the ticked ids with their pending revision ids, ignores a second p
 
   expect(client.publishMany).toHaveBeenCalledExactlyOnceWith(['c1', 'c3'], ['d1', 'd3'], {});
   await act(async () => finish({ published: [] }));
-  const result = await screen.findByText('Published 2 drafts.');
+  const result = await screen.findByText('Made 2 drafts available to characters.');
   expect(document.activeElement).toBe(result);
   expect(result.getAttribute('role')).toBeNull(); // the app has the one role=status
   expect(onPublished).toHaveBeenCalledExactlyOnceWith(2);
@@ -189,7 +189,7 @@ it('sends the dependents the preview returned, as content id to revision id', as
   vi.mocked(client.publishManyPreview).mockResolvedValue(previewOf([entryOf(all[0]!)], { dependents: [dependent, entryOf(pendingOf(8))] }));
   vi.mocked(client.publishMany).mockResolvedValue({ published: [] });
   renderPanel(all);
-  const button = await screen.findByRole('button', { name: 'Publish 1 draft' });
+  const button = await screen.findByRole('button', { name: 'Make 1 draft available to characters' });
   await vi.waitFor(() => expect(held(button)).toBe(false));
 
   await user.click(button);
@@ -235,7 +235,7 @@ it('says how many problems hold publishing', async () => {
     previewOf([entryOf(all[0]!), entryOf(all[1]!, { report: { revision: all[1]!.draft, errors: [bad, bad], warnings: [], requiredSchemaVersion: 12, canPublish: false } })]),
   );
   renderPanel(all);
-  await vi.waitFor(() => expect(liveNote()?.textContent).toBe('2 problems; publishing is held.'));
+  await vi.waitFor(() => expect(liveNote()?.textContent).toBe('2 problems; making them available is held.'));
 });
 
 it('waits for the ticking to pause before it previews', async () => {
@@ -244,8 +244,8 @@ it('waits for the ticking to pause before it previews', async () => {
   echoPreview(all);
   renderPanel(all);
   await vi.waitFor(() => expect(client.publishManyPreview).toHaveBeenCalledTimes(1));
-  await user.click(screen.getByRole('checkbox', { name: 'Publish Testy Entry 2' }));
-  await user.click(screen.getByRole('checkbox', { name: 'Publish Testy Entry 3' }));
+  await user.click(screen.getByRole('checkbox', { name: 'Make Testy Entry 2 available to characters' }));
+  await user.click(screen.getByRole('checkbox', { name: 'Make Testy Entry 3 available to characters' }));
   expect(client.publishManyPreview).toHaveBeenCalledTimes(1);
   await vi.waitFor(() => expect(client.publishManyPreview).toHaveBeenCalledTimes(2));
   expect(client.publishManyPreview).toHaveBeenLastCalledWith(['c1', 'c2', 'c3']);
@@ -269,23 +269,23 @@ it('ticks at most 500 drafts to begin with and says so', async () => {
   const all = Array.from({ length: 501 }, (_, i) => pendingOf(i + 1));
   echoPreview(all);
   renderPanel(all);
-  expect(screen.getByText('The first 500 drafts are ticked; publish them, then the rest.')).toBeTruthy();
+  expect(screen.getByText('The first 500 drafts are ticked; make them available, then the rest.')).toBeTruthy();
   await vi.waitFor(() => expect(client.publishManyPreview).toHaveBeenCalledTimes(1));
   expect(vi.mocked(client.publishManyPreview).mock.calls[0]![0]).toHaveLength(500);
-  expect(await screen.findByRole('button', { name: 'Publish 500 drafts' })).toBeTruthy();
+  expect(await screen.findByRole('button', { name: 'Make 500 drafts available to characters' })).toBeTruthy();
 });
 
 it('gives the too-many and set-changed refusals their own reasons', async () => {
   const all = [pendingOf(1)];
   vi.mocked(client.publishManyPreview).mockRejectedValue(refusal('content.publish-too-many'));
   const first = renderPanel(all);
-  const button = await screen.findByRole('button', { name: 'Publish 1 draft' });
-  await vi.waitFor(() => expect(reasonText(button)).toBe('At most 500 drafts can be published at once. Untick some, then publish the rest afterwards.'));
+  const button = await screen.findByRole('button', { name: 'Make 1 draft available to characters' });
+  await vi.waitFor(() => expect(reasonText(button)).toBe('At most 500 drafts can be made available at once. Untick some, then make the rest available afterwards.'));
   first.unmount();
 
   vi.mocked(client.publishManyPreview).mockRejectedValue(refusal('content.publish-set-changed'));
   renderPanel(all);
-  const again = await screen.findByRole('button', { name: 'Publish 1 draft' });
+  const again = await screen.findByRole('button', { name: 'Make 1 draft available to characters' });
   await vi.waitFor(() => expect(reasonText(again)).toBe('The drafts changed after they were listed. The list is being refreshed; check the ticks, then try again.'));
   expect(onReload).toHaveBeenCalled();
 });
@@ -296,13 +296,13 @@ it('clears the stale preview, previews again and reloads the studio after a refu
   echoPreview(all);
   vi.mocked(client.publishMany).mockRejectedValue(refusal('content.publish-set-changed'));
   renderPanel(all);
-  const button = await screen.findByRole('button', { name: 'Publish 1 draft' });
+  const button = await screen.findByRole('button', { name: 'Make 1 draft available to characters' });
   await vi.waitFor(() => expect(held(button)).toBe(false));
   await user.click(button);
   await vi.waitFor(() => expect(client.publishManyPreview).toHaveBeenCalledTimes(2));
   expect(onReload).toHaveBeenCalled();
   expect(onPublished).not.toHaveBeenCalled();
-  await vi.waitFor(() => expect(held(screen.getByRole('button', { name: 'Publish 1 draft' }))).toBe(false));
+  await vi.waitFor(() => expect(held(screen.getByRole('button', { name: 'Make 1 draft available to characters' }))).toBe(false));
 });
 
 it('links "Publishing…" as the reason while the publish is in flight', async () => {
@@ -311,9 +311,9 @@ it('links "Publishing…" as the reason while the publish is in flight', async (
   echoPreview(all);
   vi.mocked(client.publishMany).mockReturnValue(new Promise(() => {}));
   renderPanel(all);
-  const button = await screen.findByRole('button', { name: 'Publish 1 draft' });
+  const button = await screen.findByRole('button', { name: 'Make 1 draft available to characters' });
   await vi.waitFor(() => expect(held(button)).toBe(false));
   await user.click(button);
   expect(held(button)).toBe(true);
-  expect(reasonText(button)).toBe('Publishing…');
+  expect(reasonText(button)).toBe('Making available…');
 });

@@ -216,7 +216,8 @@ public sealed partial class TomeStackApp : IDisposable
         if (campaignId is { } id)
             allowed = (_store.FindCampaign(id) ?? throw new AppValidationException([new("campaign.not-found", $"Campaign {id} does not exist.")])).AllowedSources.ToHashSet();
         var sources = _store.ListSources().ToDictionary(s => s.Id);
-        var published = _store.ListRevisionsInOrder().Where(r => r.Status == RevisionStatus.Published).ToList();
+        // Creation guides are served by content.guides, never as a pickable option (content v13).
+        var published = _store.ListRevisionsInOrder().Where(r => r.Status == RevisionStatus.Published && r.Kind != ContentKind.CreationGuide).ToList();
         // SPEC I-06: the newest published revision of each content is what new picks get; older ones stay listed (saved
         // characters still pin them and show their names) but are marked, so pickers offer only the newest.
         var newest = published.GroupBy(r => r.ContentId).ToDictionary(g => g.Key, g => Packages.DownConversion.Newest(g)!.RevisionId);

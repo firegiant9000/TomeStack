@@ -170,6 +170,9 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
     /// <summary>Published choice extensions by the choice they extend; null until read or after a change (see <see cref="ChoiceExtensions"/>).</summary>
     private Dictionary<ChoiceExtension, ContentRevision[]>? _choiceExtensions;
 
+    /// <summary>Published guides by the content they guide; null until read or after a change (see <see cref="GuidesFor"/>).</summary>
+    private Dictionary<Guid, IReadOnlyList<ContentRevision>>? _guides;
+
     public SqliteStore(string databasePath)
         : this(databasePath, Migrations)
     {
@@ -228,6 +231,7 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
             catch
             {
                 _choiceExtensions = null; // it may hold a revision the rollback removes
+                _guides = null;
                 throw;
             }
             finally
@@ -745,6 +749,7 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
                 ("$hash", hash),
                 ("$json", json));
             _choiceExtensions = null;
+            _guides = null;
             return true;
         }
     }
@@ -779,6 +784,29 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
                     .ToDictionary(g => g.Key, g => g.ToArray());
             }
             return _choiceExtensions.TryGetValue(new(contentId, choiceId), out var extensions) ? extensions : [];
+        }
+    }
+
+    /// <summary>
+    /// Published creation guides for one class or background (content v13): the newest published revision of each guide content id
+    /// (insertion order, never a down-converted copy while an unmarked one exists, like <see cref="NewestPublished"/>) whose guideFor
+    /// names the target. Kept in memory like <see cref="ChoiceExtensions"/> and dropped on the same events.
+    /// </summary>
+    public IReadOnlyList<ContentRevision> GuidesFor(Guid targetContentId)
+    {
+        lock (_gate)
+        {
+            if (_guides is null)
+            {
+                _guides = Query<ContentRevision>("SELECT json FROM content_revisions WHERE status = 'Published' AND json LIKE '%\"guideFor\"%' ORDER BY rowid;")
+                    .Where(r => r.Kind == ContentKind.CreationGuide)
+                    .GroupBy(r => r.ContentId)
+                    .Select(g => Packages.DownConversion.Newest([.. g])!)
+                    .Where(r => GuideForEffect.TargetOf(r) is not null)
+                    .GroupBy(r => GuideForEffect.TargetOf(r)!.Value)
+                    .ToDictionary(g => g.Key, g => (IReadOnlyList<ContentRevision>)[.. g]);
+            }
+            return _guides.TryGetValue(targetContentId, out var guides) ? guides : [];
         }
     }
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { client } from '../../api/client';
 import type { Campaign, RulesFamilyId, RulesFamilyPolicy } from '../../api/types';
+import { useRulesLabel } from '../../rulesLabel';
 import { numberPresetIds, numberPresetLabels, type NumberPreset } from './ddbLabels';
 
 interface Props {
@@ -24,22 +25,22 @@ export function DdbFamilyStep({ rulesFamilies, suggested, family, campaignId, on
   }, [onError]);
 
   const options = campaigns.filter((c) => c.rulesFamily === family);
-  const suggestedName = rulesFamilies.find((f) => f.id === suggested)?.displayName;
+  const rulesLabel = useRulesLabel();
 
   return (
     <>
       <fieldset>
-        <legend>Rules family</legend>
+        <legend>Rules</legend>
         {rulesFamilies.map((f) => (
           <label key={f.id}>
-            <input type="radio" name="ddb-family" checked={family === f.id} onChange={() => onFamily(f.id)} /> {f.displayName}
+            <input type="radio" name="ddb-family" checked={family === f.id} onChange={() => onFamily(f.id)} /> {rulesLabel(f.id)}
             {f.id === suggested && <span className="tag">suggested by the sheet</span>}
           </label>
         ))}
       </fieldset>
       {suggested && suggested !== family && (
         <p role="note" className="warn">
-          This looks like a sheet for {suggestedName}; names will match {rulesFamilies.find((f) => f.id === family)?.displayName} content.
+          This looks like a sheet for {rulesLabel(suggested)}; names will match {rulesLabel(family)} content.
         </p>
       )}
       <label>
@@ -61,7 +62,7 @@ export function DdbFamilyStep({ rulesFamilies, suggested, family, campaignId, on
             <input type="radio" name="ddb-number-preset" checked={numberPreset === preset} onChange={() => onNumberPreset(preset)} /> {numberPresetLabels[preset]}
           </label>
         ))}
-        <p className="hint">Pre-fills the Numbers step; you can still change any row there. The sheet's values become overrides that say where they came from (for example "Imported from D&amp;D Beyond", "Imported from the character sheet" or "Imported from text"). Speed starts as the sheet's number either way, because some bundled species carry no speed (the SRD 5.1 Half-Orc and most SRD 5.2.1 species), so TomeStack's is a 30-foot placeholder unless the species' content sets one.</p>
+        <p className="hint">Pre-fills the Numbers step; you can still change any row there. The sheet's values become numbers you set by hand, each saying where they came from (for example "Imported from D&amp;D Beyond", "Imported from the character sheet" or "Imported from text"). Speed starts as the sheet's number either way, because some bundled species carry no speed (the SRD 5.1 Half-Orc and most SRD 5.2.1 species), so TomeStack's is a 30-foot placeholder unless the species' content sets one.</p>
       </fieldset>
     </>
   );

@@ -1,12 +1,15 @@
 // @vitest-environment jsdom
 // The D&D Beyond import steps against a mocked client (the real flow runs in e2e/flow.e2e.tsx). Every value is invented.
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render as renderPlain, screen, waitFor, within } from '@testing-library/react';
+import type { ReactElement, ReactNode } from 'react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { client } from '../../api/client';
 import { TomeStackError } from '../../api/transport';
 import type { DdbPreview, DdbReadResult, MatchRow, RulesFamilyPolicy } from '../../api/types';
+import { RulesLabelProvider } from '../../rulesLabel';
 import { DdbImportPanel } from './DdbImportPanel';
+import { DdbFamilyStep } from './DdbFamilyStep';
 import { DdbSummaryStep } from './DdbSummaryStep';
 
 vi.mock('../../api/client', () => ({
@@ -23,8 +26,8 @@ vi.mock('../../api/client', () => ({
 }));
 
 const families: RulesFamilyPolicy[] = [
-  { id: 'srd-5.1', displayName: 'SRD 5.1 (2014 rules)', abilityIncreaseSource: 'species', backgroundGrantsFeat: false, longRestExhaustionNeedsFoodAndDrink: true, inspirationName: 'Inspiration', longRestHitDice: 'halfTotal', hitDieHealingMinimum: 1, halfCasterLevels: 'down', multiclassSpellSlots: [] },
-  { id: 'srd-5.2.1', displayName: 'SRD 5.2.1 (2024 rules)', abilityIncreaseSource: 'background', backgroundGrantsFeat: true, longRestExhaustionNeedsFoodAndDrink: false, inspirationName: 'Heroic Inspiration', longRestHitDice: 'halfTotal', hitDieHealingMinimum: 1, halfCasterLevels: 'down', multiclassSpellSlots: [] },
+  { id: 'srd-5.1', displayName: 'SRD 5.1 (2014 rules)', shortLabel: '2014 rules', abilityIncreaseSource: 'species', backgroundGrantsFeat: false, longRestExhaustionNeedsFoodAndDrink: true, inspirationName: 'Inspiration', longRestHitDice: 'halfTotal', hitDieHealingMinimum: 0, halfCasterLevels: 'down', multiclassSpellSlots: [] },
+  { id: 'srd-5.2.1', displayName: 'SRD 5.2.1 (2024 rules)', shortLabel: '2024 rules', abilityIncreaseSource: 'background', backgroundGrantsFeat: true, longRestExhaustionNeedsFoodAndDrink: false, inspirationName: 'Heroic Inspiration', longRestHitDice: 'all', hitDieHealingMinimum: 1, halfCasterLevels: 'up', multiclassSpellSlots: [] },
 ];
 
 const read: DdbReadResult = {
@@ -92,6 +95,10 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+// The app renders everything inside RulesLabelProvider, so the player sees short labels ("2014 rules"), not ids.
+const Labels = ({ children }: { children: ReactNode }) => <RulesLabelProvider families={families}>{children}</RulesLabelProvider>;
+const render = (ui: ReactElement) => renderPlain(ui, { wrapper: Labels });
+
 function renderPanel() {
   const onCancel = vi.fn();
   const onCreated = vi.fn();
@@ -121,7 +128,7 @@ it('moves focus to the step heading on every step and Cancel discards the token'
   expect(await screen.findByText(/Testy McFixture/)).toBeTruthy();
   await user.click(screen.getByRole('button', { name: 'Next: rules' }));
   await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Rules and campaign' })));
-  expect(within(screen.getByRole('region', { name: 'Rules and campaign' })).getByRole<HTMLInputElement>('radio', { name: /SRD 5\.1/ }).checked).toBe(true);
+  expect(within(screen.getByRole('region', { name: 'Rules and campaign' })).getByRole<HTMLInputElement>('radio', { name: /2014 rules/ }).checked).toBe(true);
   await user.click(screen.getByRole('button', { name: 'Next: matches' }));
   await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Matches' })));
 
@@ -136,8 +143,12 @@ it('shows Needs a choice rows first under the filter and requires a pick before 
   const { onCreated } = renderPanel();
   await toMatches(user);
 
-  await user.click(screen.getByRole('radio', { name: 'Needs a choice' }));
+  // A matched row names the rules by their short label, never by id.
   const region = screen.getByRole('region', { name: 'Matches' });
+  expect(within(region).getByText('Fixture Quickfoot — Fixture Notes · 2014 rules')).toBeTruthy();
+  expect(region.textContent).not.toMatch(/srd-5\./);
+
+  await user.click(screen.getByRole('radio', { name: 'Needs a choice' }));
   const shown = within(region).getAllByRole('rowheader').map((h) => h.textContent);
   expect(shown).toEqual(['Fixture Veil']);
 
@@ -261,7 +272,7 @@ it('clears the campaign when the rules family changes, so later previews do not 
   await user.click(screen.getByRole('button', { name: 'Choose PDF…' }));
   await user.click(await screen.findByRole('button', { name: 'Next: rules' }));
   await user.selectOptions(await screen.findByRole('combobox', { name: /Campaign/ }), 'fixture-campaign');
-  await user.click(screen.getByRole('radio', { name: /SRD 5\.2\.1/ }));
+  await user.click(screen.getByRole('radio', { name: /2024 rules/ }));
   expect(screen.getByRole<HTMLSelectElement>('combobox', { name: /Campaign/ }).value).toBe('');
   await user.click(screen.getByRole('button', { name: 'Next: matches' }));
 
@@ -281,7 +292,7 @@ it('drops the shown preview when the family changes and disables Next while the 
   const pending = deferred<DdbPreview>();
   vi.mocked(client.ddbPreview).mockReturnValueOnce(pending.promise);
   await user.click(screen.getByRole('button', { name: 'Back' }));
-  await user.click(screen.getByRole('radio', { name: /SRD 5\.2\.1/ }));
+  await user.click(screen.getByRole('radio', { name: /2024 rules/ }));
   await user.click(screen.getByRole('button', { name: 'Next: matches' }));
   await screen.findByRole('heading', { name: 'Matches' });
 
@@ -523,7 +534,7 @@ it('titles the import as a sheet or text import (R133) and names the layout it r
   const user = userEvent.setup();
   renderPanel();
 
-  expect(screen.getByRole('heading', { name: 'Import a character (sheet or text)', hidden: true })).toBeTruthy();
+  expect(screen.getByRole('heading', { name: 'From a character sheet (PDF or text)', hidden: true })).toBeTruthy();
   // Step 1's first line names both entries: a fillable sheet PDF, or pasted text or a .txt/.md file.
   expect(screen.getByText(/a fillable character sheet PDF.*pasted text or a \.txt or \.md file/)).toBeTruthy();
   await user.click(screen.getByRole('button', { name: 'Choose PDF…' }));
@@ -664,10 +675,10 @@ it('shows the stub in full on the summary, leaves Publish it unticked and says t
 
   const section = await screen.findByRole('region', { name: 'Homebrew class to create' });
   const text = section.textContent ?? '';
-  for (const part of ['Fixture Tinkerer', 'srd-5.1', 'd8', 'Strength, Constitution', 'Characters imported from sheets']) expect(text).toContain(part);
-  const publish = within(section).getByRole<HTMLInputElement>('checkbox', { name: 'Publish it' });
+  for (const part of ['Fixture Tinkerer', '2014 rules', 'd8', 'Strength, Constitution', 'Characters imported from sheets']) expect(text).toContain(part);
+  const publish = within(section).getByRole<HTMLInputElement>('checkbox', { name: 'Make it available to characters' });
   expect(publish.checked).toBe(false);
-  expect(within(section).getByRole('note').textContent).toBe('The class is a draft: the character gets nothing from it until you publish it in the studio and accept the update on the character.');
+  expect(within(section).getByRole('note').textContent).toBe('The class is a draft: the character gets nothing from it until you make it available to characters in Homebrew and accept the update on the character.');
 
   await user.click(screen.getByRole('button', { name: 'Create character' }));
   await waitFor(() => expect(client.ddbApply).toHaveBeenCalledTimes(1));
@@ -680,7 +691,7 @@ it('sends publishClass true once Publish it is ticked, and the draft line goes a
   renderPanel();
   await toStubSummary(user);
 
-  await user.click(await screen.findByRole('checkbox', { name: 'Publish it' }));
+  await user.click(await screen.findByRole('checkbox', { name: 'Make it available to characters' }));
   expect(screen.queryByText(/The class is a draft/)).toBeNull();
   await user.click(screen.getByRole('button', { name: 'Create character' }));
 
@@ -694,7 +705,7 @@ it('re-previews when Publish it is toggled (R129) and holds both publish ticks, 
   vi.mocked(client.ddbPreview).mockImplementation(async (request) => stubPreview(wantsStub(request)));
   renderPanel();
   await toStubSummary(user);
-  const tick = await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Publish it' });
+  const tick = await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Make it available to characters' });
   expect(vi.mocked(client.ddbPreview).mock.lastCall?.[0].publishClass).toBe(false);
   expect(tick.getAttribute('aria-disabled')).toBeNull();
 
@@ -703,10 +714,10 @@ it('re-previews when Publish it is toggled (R129) and holds both publish ticks, 
   await user.click(tick);
 
   await waitFor(() => expect(vi.mocked(client.ddbPreview).mock.lastCall?.[0].publishClass).toBe(true));
-  const held = screen.getByRole<HTMLInputElement>('checkbox', { name: 'Publish it' });
+  const held = screen.getByRole<HTMLInputElement>('checkbox', { name: 'Make it available to characters' });
   expect(held.getAttribute('aria-disabled')).toBe('true');
   expect(held.disabled).toBe(false);
-  expect(document.getElementById(held.getAttribute('aria-describedby')!)?.textContent).toContain('publish choices wait');
+  expect(document.getElementById(held.getAttribute('aria-describedby')!)?.textContent).toContain('choices to make things available wait');
   expect(document.activeElement).toBe(held);
   const calls = vi.mocked(client.ddbPreview).mock.calls.length;
   await user.click(held); // a click while held changes nothing
@@ -714,8 +725,8 @@ it('re-previews when Publish it is toggled (R129) and holds both publish ticks, 
   expect(vi.mocked(client.ddbPreview).mock.calls.length).toBe(calls);
 
   pending.resolve(stubPreview(true));
-  await waitFor(() => expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Publish it' }).getAttribute('aria-disabled')).toBeNull());
-  expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Publish it' }).checked).toBe(true);
+  await waitFor(() => expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Make it available to characters' }).getAttribute('aria-disabled')).toBeNull());
+  expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Make it available to characters' }).checked).toBe(true);
 });
 
 it('puts Publish it back to unticked whenever the created class is cleared or chosen again', async () => {
@@ -723,8 +734,8 @@ it('puts Publish it back to unticked whenever the created class is cleared or ch
   vi.mocked(client.ddbPreview).mockImplementation(async (request) => stubPreview(wantsStub(request)));
   renderPanel();
   await toStubSummary(user);
-  await user.click(await screen.findByRole('checkbox', { name: 'Publish it' }));
-  expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Publish it' }).checked).toBe(true);
+  await user.click(await screen.findByRole('checkbox', { name: 'Make it available to characters' }));
+  expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Make it available to characters' }).checked).toBe(true);
 
   await user.click(screen.getByRole('button', { name: 'Back' })); // numbers
   await user.click(screen.getByRole('button', { name: 'Back' })); // matches
@@ -736,7 +747,7 @@ it('puts Publish it back to unticked whenever the created class is cleared or ch
   await user.click(screen.getByRole('button', { name: 'Next: numbers' }));
   await user.click(await screen.findByRole('button', { name: 'Next: summary' }));
 
-  expect((await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Publish it' })).checked).toBe(false);
+  expect((await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Make it available to characters' })).checked).toBe(false);
 });
 
 /** A second, ambiguous class row whose choice decides the stub's hit die: the first candidate leaves d8, the second makes d10. */
@@ -770,8 +781,8 @@ it('puts Publish it back to unticked when another class row changes the hit die 
   vi.mocked(client.ddbPreview).mockImplementation(async (request) => twoClassStubPreview(request));
   renderPanel();
   await toStubSummary(user);
-  await user.click(await screen.findByRole('checkbox', { name: 'Publish it' }));
-  expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Publish it' }).checked).toBe(true);
+  await user.click(await screen.findByRole('checkbox', { name: 'Make it available to characters' }));
+  expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Make it available to characters' }).checked).toBe(true);
 
   await backToMatches(user);
   await user.selectOptions(await screen.findByRole('combobox', { name: 'Match for Fixture Arcanist 2' }), '1'); // d8 becomes d10
@@ -780,7 +791,7 @@ it('puts Publish it back to unticked when another class row changes the hit die 
 
   const section = await screen.findByRole('region', { name: 'Homebrew class to create' });
   expect(section.textContent).toContain('d10');
-  expect(within(section).getByRole<HTMLInputElement>('checkbox', { name: 'Publish it' }).checked).toBe(false);
+  expect(within(section).getByRole<HTMLInputElement>('checkbox', { name: 'Make it available to characters' }).checked).toBe(false);
   await user.click(screen.getByRole('button', { name: 'Create character' }));
   await waitFor(() => expect(client.ddbApply).toHaveBeenCalledTimes(1));
   expect(vi.mocked(client.ddbApply).mock.calls[0]?.[1]).toBe(false);
@@ -791,14 +802,14 @@ it('keeps Publish it as the user set it when a change elsewhere leaves the revie
   vi.mocked(client.ddbPreview).mockImplementation(async (request) => twoClassStubPreview(request));
   renderPanel();
   await toStubSummary(user);
-  await user.click(await screen.findByRole('checkbox', { name: 'Publish it' }));
+  await user.click(await screen.findByRole('checkbox', { name: 'Make it available to characters' }));
 
   await backToMatches(user);
   await user.selectOptions(await screen.findByRole('combobox', { name: 'Match for Fixture Arcanist 2' }), '0'); // still d8
   await waitFor(() => expect(vi.mocked(client.ddbPreview)).toHaveBeenLastCalledWith(expect.objectContaining({ resolutions: [expect.objectContaining({ rowId: 'class:1' })] })));
   await forwardToSummary(user);
 
-  expect((await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Publish it' })).checked).toBe(true);
+  expect((await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Make it available to characters' })).checked).toBe(true);
 });
 
 it('holds Next while the shown preview is not for the current choices, also after a failed re-preview, and a retry frees it', async () => {
@@ -854,7 +865,7 @@ it('frees the publish tick after a failed re-preview (Create stays held) and kee
   });
   renderPanel();
   await toStubSummary(user);
-  const tick = await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Publish it' });
+  const tick = await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Make it available to characters' });
   const slot = document.getElementById('ddb-publish-held-class');
   expect(slot).not.toBeNull(); // the reason's place exists before anything is held
   expect(slot!.textContent).toBe('');
@@ -915,9 +926,9 @@ it('lists the reference drafts on the summary with an unticked Publish tick, the
   expect(section.textContent).toContain('Fixture first line 0.');
   expect(section.textContent).not.toContain('Fixture Knack 10');
   expect(section.textContent).toContain('and 3 more');
-  const tick = within(section).getByRole<HTMLInputElement>('checkbox', { name: 'Publish these 13 reference drafts' });
+  const tick = within(section).getByRole<HTMLInputElement>('checkbox', { name: 'Make these 13 reference drafts available to characters' });
   expect(tick.checked).toBe(false);
-  expect(within(section).getByRole('note').textContent).toContain('Features are kept as reference content in the studio; the gap notes stay on the character.');
+  expect(within(section).getByRole('note').textContent).toContain('Features are kept as reference content in Homebrew; the gap notes stay on the character.');
 });
 
 it('shows no reference section when the import has no drafts', async () => {
@@ -936,7 +947,7 @@ it('sends publishReferences true only once the tick is given, and false otherwis
   renderPanel();
   await toStubSummary(user);
 
-  await user.click(await screen.findByRole('checkbox', { name: 'Publish these 2 reference drafts' }));
+  await user.click(await screen.findByRole('checkbox', { name: 'Make these 2 reference drafts available to characters' }));
   await user.click(screen.getByRole('button', { name: 'Create character' }));
 
   await waitFor(() => expect(client.ddbApply).toHaveBeenCalledTimes(1));
@@ -973,7 +984,7 @@ it('sends publishReferences false when the tick is left alone', async () => {
   renderPanel();
   await toStubSummary(user);
 
-  await screen.findByRole('checkbox', { name: 'Publish these 2 reference drafts' });
+  await screen.findByRole('checkbox', { name: 'Make these 2 reference drafts available to characters' });
   await user.click(screen.getByRole('button', { name: 'Create character' }));
 
   await waitFor(() => expect(client.ddbApply).toHaveBeenCalledTimes(1));
@@ -986,13 +997,13 @@ it('puts the reference tick back to unticked when the set of drafts shown change
   renderPanel();
   await toStubSummary(user);
 
-  const tick = await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Publish these 2 reference drafts' });
+  const tick = await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Make these 2 reference drafts available to characters' });
   await user.click(tick);
-  expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Publish these 2 reference drafts' }).checked).toBe(true);
-  expect(document.activeElement).toBe(screen.getByRole('checkbox', { name: 'Publish these 2 reference drafts' }));
+  expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Make these 2 reference drafts available to characters' }).checked).toBe(true);
+  expect(document.activeElement).toBe(screen.getByRole('checkbox', { name: 'Make these 2 reference drafts available to characters' }));
 
   await user.click(screen.getByRole('checkbox', { name: /Bring over current hit points/ }));
-  const changed = await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Publish these 3 reference drafts' });
+  const changed = await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Make these 3 reference drafts available to characters' });
   expect(changed.checked).toBe(false);
 });
 
@@ -1002,7 +1013,7 @@ it('uses the singular for one reference draft', async () => {
   renderPanel();
   await toStubSummary(user);
 
-  expect(await screen.findByRole('checkbox', { name: 'Publish this reference draft' })).toBeTruthy();
+  expect(await screen.findByRole('checkbox', { name: 'Make this reference draft available to characters' })).toBeTruthy();
 });
 
 it('after ddb.references-changed unticks the publish tick, keeps the error and asks for a new preview so the new set is reviewed', async () => {
@@ -1012,7 +1023,7 @@ it('after ddb.references-changed unticks the publish tick, keeps the error and a
   vi.mocked(client.ddbApply).mockRejectedValueOnce(new TomeStackError({ code: 'ddb.references-changed', message: 'Fixture: the drafts changed.' }));
   const { onError } = renderPanel();
   await toStubSummary(user);
-  await user.click(await screen.findByRole('checkbox', { name: 'Publish these 2 reference drafts' }));
+  await user.click(await screen.findByRole('checkbox', { name: 'Make these 2 reference drafts available to characters' }));
   const previews = vi.mocked(client.ddbPreview).mock.calls.length;
   changed = true;
   const pending = deferred<DdbPreview>();
@@ -1024,15 +1035,15 @@ it('after ddb.references-changed unticks the publish tick, keeps the error and a
   expect((onError.mock.calls[0]![0] as TomeStackError).code).toBe('ddb.references-changed');
   await waitFor(() => expect(vi.mocked(client.ddbPreview).mock.calls.length).toBeGreaterThan(previews));
   // R129: while the new set is on its way, the tick is held (aria-disabled, reason linked) and the old set cannot be ticked again.
-  const held = screen.getByRole<HTMLInputElement>('checkbox', { name: 'Publish these 2 reference drafts' });
+  const held = screen.getByRole<HTMLInputElement>('checkbox', { name: 'Make these 2 reference drafts available to characters' });
   expect(held.getAttribute('aria-disabled')).toBe('true');
   expect(held.disabled).toBe(false);
-  expect(document.getElementById(held.getAttribute('aria-describedby')!)?.textContent).toContain('publish choices wait');
+  expect(document.getElementById(held.getAttribute('aria-describedby')!)?.textContent).toContain('choices to make things available wait');
   await user.click(held);
   expect(held.checked).toBe(false);
 
   pending.resolve(draftsPreview(3));
-  const tick = await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Publish these 3 reference drafts' });
+  const tick = await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Make these 3 reference drafts available to characters' });
   expect(tick.checked).toBe(false);
   expect(tick.getAttribute('aria-disabled')).toBeNull();
 });
@@ -1205,4 +1216,34 @@ it('does not offer the Not read section for a PDF import', async () => {
   renderPanel();
   await toMatches(user);
   expect(screen.queryByRole('checkbox', { name: /lines that were not read/ })).toBeNull();
+});
+
+// ---- The rules a player reads are the short labels, never ids or display names ----
+
+it('says in the summary note which rules the sheet looks like and which the character uses, by short label', () => {
+  const base = preview(true);
+  render(
+    <DdbSummaryStep
+      family="srd-5.1"
+      suggested="srd-5.2.1"
+      includePlayState={false}
+      onIncludePlayState={vi.fn()}
+      publishClass={false}
+      onPublishClass={vi.fn()}
+      preview={{ ...base, report: { ...base.report, familyMismatch: true } }}
+    />,
+  );
+
+  expect(screen.getByRole('note').textContent).toBe('The sheet looks like 2024 rules; this character uses 2014 rules.');
+});
+
+it('names the family step radios by short label and warns in the same words', () => {
+  render(<DdbFamilyStep rulesFamilies={families} suggested="srd-5.2.1" family="srd-5.1" onFamily={vi.fn()} onCampaign={vi.fn()} numberPreset="sheet" onNumberPreset={vi.fn()} onError={vi.fn()} />);
+
+  const group = screen.getByRole('group', { name: 'Rules' });
+  expect(within(group).getAllByRole('radio').map((r) => r.parentElement?.textContent?.trim())).toEqual(['2014 rules', '2024 rulessuggested by the sheet']);
+  expect(within(group).getByRole('radio', { name: /^2014 rules/ })).toBeTruthy();
+  expect(within(group).getByRole('radio', { name: /^2024 rules/ })).toBeTruthy();
+  expect(group.textContent).not.toMatch(/srd-5|SRD 5/);
+  expect(screen.getByRole('note').textContent).toBe('This looks like a sheet for 2024 rules; names will match 2014 rules content.');
 });

@@ -25,4 +25,11 @@ public sealed class InMemoryContentCatalog(IEnumerable<SourceRecord> sources, IE
         _revisions.Values.Where(r => r.Status == RevisionStatus.Published && r.ExtendsChoice == new ChoiceExtension(contentId, choiceId));
 
     public IEnumerable<ContentRevision> RevisionsOf(Guid contentId) => _revisions.Values.Where(r => r.ContentId == contentId);
+
+    public IReadOnlyList<ContentRevision> GuidesFor(Guid targetContentId) =>
+        [.. _revisions.Values
+            .Where(r => r.Status == RevisionStatus.Published && r.Kind == ContentKind.CreationGuide)
+            .GroupBy(r => r.ContentId)
+            .Select(g => g.Last())
+            .Where(r => GuideForEffect.TargetOf(r) == targetContentId)];
 }

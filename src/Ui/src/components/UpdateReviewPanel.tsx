@@ -49,7 +49,7 @@ export function UpdateReviewPanel({ characterId, characterName, contentName, fro
         {title}
       </h3>
       {!review ? (
-        <p className="hint">Comparing the revisions…</p>
+        <p className="hint">Comparing the versions…</p>
       ) : (
         <>
           <MechanicsDiffTable mechanics={review.mechanics} />
@@ -78,7 +78,7 @@ export function UpdateReviewPanel({ characterId, characterName, contentName, fro
           )}
           {review.affectedOverrides.length > 0 && (
             <p className="warn">
-              Your overrides stay: {review.affectedOverrides.map((o) => o.field).join(', ')}. Their calculated values change underneath them.
+              The numbers you set by hand stay: {review.affectedOverrides.map((o) => o.field).join(', ')}. Their calculated values change underneath them.
             </p>
           )}
           {review.unresolvedChoices.length > 0 && (
@@ -98,7 +98,7 @@ export function UpdateReviewPanel({ characterId, characterName, contentName, fro
           Apply update
         </button>
         <button type="button" onClick={onCancel}>
-          Keep the current revision
+          Keep the current version
         </button>
       </div>
     </section>

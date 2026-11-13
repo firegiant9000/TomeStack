@@ -1432,7 +1432,16 @@ public sealed record ItemEffect : Effect
 
     public ItemCharges? Charges { get; init; }
 
-    internal static Effect FromUnknown(UnknownEffect unknown) => VersionedEffects.Typed<ItemEffect>(unknown);
+    /// <summary>Content schema v13 (ADR-024): what a pack holds, one line per item. Typed only in a v13 revision; below v13 the key stays extension data.</summary>
+    public IReadOnlyList<PackLine>? Contains { get; init; }
+
+    /// <summary>The members read only from content schema v13.</summary>
+    internal static readonly string[] V13Keys = ["contains"];
+
+    /// <summary>Typed by the revision (see <see cref="VersionedEffects.ByName"/>): the v13 key only from v13.</summary>
+    internal static Effect FromUnknown(UnknownEffect unknown, int schemaVersion) => schemaVersion >= ContentRevision.CreationGuideSchemaVersion
+        ? VersionedEffects.Typed<ItemEffect>(unknown)
+        : VersionedEffects.TypedWithout<ItemEffect>(unknown, V13Keys);
 }
 
 /// <summary>
@@ -1854,7 +1863,7 @@ internal static class VersionedEffects
             [WeaponEffect.TypeName] = (SpellcastingEffect.SchemaVersion, WeaponEffect.FromUnknown),
             [ToggleEffect.TypeName] = (ToggleEffect.SchemaVersion, ToggleEffect.FromUnknown),
             [ScaleEffect.TypeName] = (ScaleEffect.SchemaVersion, (u, _) => ScaleEffect.FromUnknown(u)),
-            [ItemEffect.TypeName] = (ItemEffect.SchemaVersion, (u, _) => ItemEffect.FromUnknown(u)),
+            [ItemEffect.TypeName] = (ItemEffect.SchemaVersion, ItemEffect.FromUnknown),
             [ToggleGroupEffect.TypeName] = (ToggleGroupEffect.SchemaVersion, (u, _) => ToggleGroupEffect.FromUnknown(u)),
             [UpkeepEffect.TypeName] = (UpkeepEffect.SchemaVersion, (u, _) => UpkeepEffect.FromUnknown(u)),
             [AttackEffect.TypeName] = (AttackEffect.SchemaVersion, AttackEffect.FromUnknown),
@@ -1876,6 +1885,9 @@ internal static class VersionedEffects
             [CheckAbilityEffect.TypeName] = (CheckAbilityEffect.SchemaVersion, (u, v) => CheckAbilityEffect.FromUnknown(u, v)),
             [ItemModEffect.TypeName] = (ItemModEffect.SchemaVersion, (u, _) => ItemModEffect.FromUnknown(u)),
             [CompanionEffect.TypeName] = (CompanionEffect.SchemaVersion, (u, _) => CompanionEffect.FromUnknown(u)),
+            [GuideForEffect.TypeName] = (GuideForEffect.SchemaVersion, (u, _) => GuideForEffect.FromUnknown(u)),
+            [PrimaryAbilitiesEffect.TypeName] = (PrimaryAbilitiesEffect.SchemaVersion, (u, _) => PrimaryAbilitiesEffect.FromUnknown(u)),
+            [StartingEquipmentEffect.TypeName] = (StartingEquipmentEffect.SchemaVersion, (u, _) => StartingEquipmentEffect.FromUnknown(u)),
         };
 
     /// <summary>
@@ -2054,7 +2066,7 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
                 RollEffect.TypeName => element.Deserialize<RollEffect>(options),
                 HitDieEffect.TypeName => element.Deserialize<HitDieEffect>(options),
                 // Typed only in revisions of their schema version (ContentRevision.OnDeserialized); older ones keep them as written.
-                ArmorEffect.TypeName or SpellcastingEffect.TypeName or SpellEffect.TypeName or WeaponEffect.TypeName or ToggleEffect.TypeName or ScaleEffect.TypeName or ItemEffect.TypeName or ToggleGroupEffect.TypeName or UpkeepEffect.TypeName or AttackEffect.TypeName or AttackRiderEffect.TypeName or ValueEffect.TypeName or RollModeEffect.TypeName or RollFloorEffect.TypeName or CheckAbilityEffect.TypeName or ResponseEffect.TypeName or ItemModEffect.TypeName or CompanionEffect.TypeName => UnknownEffect.From(element),
+                ArmorEffect.TypeName or SpellcastingEffect.TypeName or SpellEffect.TypeName or WeaponEffect.TypeName or ToggleEffect.TypeName or ScaleEffect.TypeName or ItemEffect.TypeName or ToggleGroupEffect.TypeName or UpkeepEffect.TypeName or AttackEffect.TypeName or AttackRiderEffect.TypeName or ValueEffect.TypeName or RollModeEffect.TypeName or RollFloorEffect.TypeName or CheckAbilityEffect.TypeName or ResponseEffect.TypeName or ItemModEffect.TypeName or CompanionEffect.TypeName or GuideForEffect.TypeName or PrimaryAbilitiesEffect.TypeName or StartingEquipmentEffect.TypeName => UnknownEffect.From(element),
                 LegacyAbilityScoreIncrease or LegacyInitiativeBonus => FromSchemaVersion1(element, type, options),
                 _ => UnknownEffect.From(element),
             } ?? UnknownEffect.From(element);

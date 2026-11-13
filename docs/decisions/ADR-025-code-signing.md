@@ -1,4 +1,4 @@
-# ADR-024: Code signing for the installer
+# ADR-025: Code signing for the installer
 
 Status: **proposed** (research only; the owner decides, no money spent). Supersedes nothing: the 2026-10-01 "unsigned" ruling in [release-checklist.md](../licensing/release-checklist.md#4-code-signing) stands until the owner rules.
 Date: 2026-11-11

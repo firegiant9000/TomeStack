@@ -61,7 +61,7 @@ dotnet test TomeStack.slnx -c Release
 npm run test:e2e --prefix src/Ui       # UI flow against the real DevHost (needs the Release build above)
 ```
 
-CI runs the same steps on `windows-latest` ([.github/workflows/ci.yml](.github/workflows/ci.yml)).
+CI runs these steps as parallel jobs on `windows-latest` (`ui-build`, `ui-test`, `dotnet`, `gui`); the required `build-test` check is an aggregate job on `ubuntu-latest` that passes only if all four succeed ([.github/workflows/ci.yml](.github/workflows/ci.yml)).
 
 Performance: the measured baseline (a level-20 multiclass sheet, a 500-revision pack import, every SRD formula, update reviews across 100 characters) and how to run the benchmarks are in [docs/performance.md](docs/performance.md).
 
@@ -130,7 +130,7 @@ gh attestation verify .\TomeStack.App-win-Setup.exe --repo firegiant9000/TomeSta
 
 ## Code signing policy
 
-Releases up to 0.8.x are unsigned. The project applied to [SignPath Foundation](https://signpath.org) for free code signing for open source projects on 2026-11-12 and is waiting for their answer. The first signed release is targeted for 0.9.0 if the application is accepted. The plan and the alternatives are in [ADR-024](docs/decisions/ADR-024-code-signing.md). If the application is declined, releases stay unsigned.
+Releases up to 0.8.x are unsigned. The project applied to [SignPath Foundation](https://signpath.org) for free code signing for open source projects on 2026-11-12 and is waiting for their answer. The first signed release is targeted for 0.9.0 if the application is accepted. The plan and the alternatives are in [ADR-025](docs/decisions/ADR-025-code-signing.md). If the application is declined, releases stay unsigned.
 
 Once accepted, signed releases carry this line:
 

@@ -79,7 +79,7 @@ it('says everything is calculated when nothing is listed', async () => {
   vi.mocked(client.characterMechanics).mockResolvedValue(report([mech('Fixture Calc', 'modifier', 'automatic')]));
   render(<ByHandPanel characterId="char-1" sheet={sheetOf('char-1', [plain])} active />);
   expect(await screen.findByText('Everything on this sheet is calculated.')).toBeTruthy();
-  expect(screen.getByRole('heading', { name: "TomeStack won't do these for you" })).toBeTruthy();
+  expect(screen.getByRole('heading', { name: "Things to remember yourself" })).toBeTruthy();
 });
 
 it('has the intro, lists as ul, a consistent heading level and no live region', async () => {
@@ -87,7 +87,7 @@ it('has the intro, lists as ul, a consistent heading level and no live region', 
   const { container } = render(<ByHandPanel characterId="char-1" sheet={sheet} active />);
   await screen.findByRole('heading', { name: 'Partly automatic' });
   expect(screen.getByText('TomeStack never acts on its own; these need you.')).toBeTruthy();
-  expect(screen.getByRole('heading', { name: "TomeStack won't do these for you" }).tagName).toBe('H3');
+  expect(screen.getByRole('heading', { name: "Things to remember yourself" }).tagName).toBe('H3');
   expect(screen.getByRole('heading', { name: 'Partly automatic' }).tagName).toBe('H4');
   expect(container.querySelectorAll('ul').length).toBe(2);
   expect(container.querySelector('[aria-live], [role="status"], [role="alert"], output')).toBeNull();
@@ -98,7 +98,7 @@ it('Shows_a_plain_line_when_the_report_fails', async () => {
   vi.mocked(client.characterMechanics).mockRejectedValue(new Error('boom'));
   render(<ByHandPanel characterId="char-1" sheet={sheet} active />);
   expect(await screen.findByText("Couldn't list what needs you by hand.")).toBeTruthy();
-  expect(screen.getByRole('heading', { name: "TomeStack won't do these for you" })).toBeTruthy();
+  expect(screen.getByRole('heading', { name: "Things to remember yourself" })).toBeTruthy();
   expect(screen.queryByRole('heading', { name: 'Spend by hand' })).toBeNull();
   expect(screen.queryByText('Everything on this sheet is calculated.')).toBeNull();
 });
