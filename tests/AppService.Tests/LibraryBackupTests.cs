@@ -91,7 +91,7 @@ public class LibraryBackupTests
         var published = Publish(app.App, fly);
         var fixture = TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json");
         var character = app.App.SaveCharacter(fixture with { Pins = [.. fixture.Pins, published] }).Character.Id;
-        var row = ReleaseLadder.Target("0.6.0")!;
+        var row = ReleaseLadder.Row("0.6.0")!;
         var hash = app.App.PreviewLibraryBackup(row).ChangesHash;
         var path = TempFile();
         try
@@ -131,7 +131,7 @@ public class LibraryBackupTests
     /// <summary>A backup made for 0.6.0 of the library as it is now, in a temp file the caller deletes.</summary>
     private static string LoweredBackup(TomeStackApp app)
     {
-        var row = ReleaseLadder.Target("0.6.0")!;
+        var row = ReleaseLadder.Row("0.6.0")!;
         var hash = app.PreviewLibraryBackup(row).ChangesHash;
         var path = TempFile();
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -223,7 +223,7 @@ public class LibraryBackupTests
         var published = Publish(app.App, fly);
         var fixture = TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json");
         app.App.SaveCharacter(fixture with { Pins = [.. fixture.Pins, published] });
-        var row = ReleaseLadder.Target("0.6.0")!;
+        var row = ReleaseLadder.Row("0.6.0")!;
         var hash = app.App.PreviewLibraryBackup(row).ChangesHash;
         var path = TempFile();
         try
@@ -968,7 +968,7 @@ public class LibraryBackupTests
 
     // ---- D85 part 2 (C2-4): the full backup saved for an older TomeStack ----
 
-    private static LadderRow For060 => ReleaseLadder.Target("0.6.0")!;
+    private static LadderRow For060 => ReleaseLadder.Row("0.6.0")!;
 
     /// <summary>The 0.6.0 row with every bundled revision of this build in its set, so a character's SRD pins never block these tests.</summary>
     private static LadderRow With060Bundled() =>

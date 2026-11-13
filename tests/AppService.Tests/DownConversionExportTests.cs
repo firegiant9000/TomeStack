@@ -93,7 +93,7 @@ public class DownConversionExportTests
         Assert.Equal("0.6.0", result.GetProperty("target").GetString());
 
         var plan = new PackageService.ExportPlan([Hero(RunningEncounter) with { Id = id }], [], [], [], "x.tomestack.zip");
-        var lowered = DownConversion.Lower(plan, ReleaseLadder.Target("0.6.0")!, _ => false, _ => "", new EmptyCatalog());
+        var lowered = DownConversion.Lower(plan, ReleaseLadder.Row("0.6.0")!, _ => false, _ => "", new EmptyCatalog());
         Assert.True(lowered.Blocked);
     }
 
@@ -576,7 +576,7 @@ public class DownConversionExportTests
     private static LoweredPlan LowerFor(LadderRow row, Character hero, params ContentRevision[] revisions) =>
         DownConversion.Lower(new([hero], [.. revisions], [], [], "x.tomestack.zip"), row, id => false, _ => "Compat Homebrew A", new HomebrewCatalog());
 
-    private static LadderRow Row(string release) => ReleaseLadder.Target(release)!;
+    private static LadderRow Row(string release) => ReleaseLadder.Row(release)!;
 
     [Fact]
     public void Lower_copies_a_v11_feature_with_marker_and_new_id()

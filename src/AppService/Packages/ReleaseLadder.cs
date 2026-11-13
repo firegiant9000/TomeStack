@@ -70,6 +70,20 @@ public static class ReleaseLadder
     public static LadderRow? Target(string? release) =>
         Rows.FirstOrDefault(r => r.OfferedAsTarget && string.Equals(r.Release.ToString(3), release, StringComparison.Ordinal));
 
+    /// <summary>The row whose release is exactly <paramref name="release"/> ("0.6.0"), offered as a target or not; null when there is none.</summary>
+    internal static LadderRow? Row(string release) =>
+        Rows.FirstOrDefault(r => string.Equals(r.Release.ToString(3), release, StringComparison.Ordinal));
+
+    /// <summary>The offered rows older than the build's own (major, minor), newest first.</summary>
+    public static IReadOnlyList<LadderRow> OfferedFor(string buildVersion)
+    {
+        var build = new Version(buildVersion);
+        return Rows
+            .Where(r => r.OfferedAsTarget && (r.Release.Major, r.Release.Minor).CompareTo((build.Major, build.Minor)) < 0)
+            .Reverse()
+            .ToList();
+    }
+
     /// <summary>
     /// The first row that reads everything the file would hold: every character and revision within its maxima,
     /// <paramref name="gapNoteSchema"/> within its gap note maximum (0 when there are no gap notes), and every bundled

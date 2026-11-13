@@ -230,6 +230,22 @@ public class ReleaseLadderTests
     }
 
     [Fact]
+    public void Row_finds_any_row_offered_or_not()
+    {
+        Assert.False(ReleaseLadder.Row("0.4.0")!.OfferedAsTarget);
+        Assert.NotNull(ReleaseLadder.Row("0.8.0"));
+        Assert.Null(ReleaseLadder.Row("0.8.1"));
+        Assert.Null(ReleaseLadder.Row("9.9.9"));
+    }
+
+    [Fact]
+    public void OfferedFor_never_lists_the_builds_own_minor()
+    {
+        Assert.Equal(["0.7.0", "0.6.0", "0.5.0"], ReleaseLadder.OfferedFor("0.8.1").Select(r => r.Release.ToString(3)));
+        Assert.Equal(["0.6.0", "0.5.0"], ReleaseLadder.OfferedFor("0.7.1").Select(r => r.Release.ToString(3)));
+    }
+
+    [Fact]
     public void CurrentRowOrLast_falls_back_to_the_last_row_for_a_version_with_no_row()
     {
         Assert.Equal(ReleaseLadder.Rows[^1], ReleaseLadder.CurrentRowOrLast("0.9.0"));

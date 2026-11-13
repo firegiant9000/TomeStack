@@ -336,7 +336,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         };
     }
 
-    private static IEnumerable<LadderRow> OfferedTargets() => ReleaseLadder.Rows.Where(r => r.OfferedAsTarget).Reverse();
+    private static IEnumerable<LadderRow> OfferedTargets() => ReleaseLadder.OfferedFor(AppVersionStamp.CurrentVersion);
 
     /// <summary>The offered row for <paramref name="target"/>; null when there is no target; an error for any other string.</summary>
     private static LadderRow? ResolveTarget(string? target)

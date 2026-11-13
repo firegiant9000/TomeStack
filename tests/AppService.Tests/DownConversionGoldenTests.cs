@@ -227,7 +227,7 @@ public class DownConversionGoldenTests
             Add("package.sourcePackPreview", "package.sourcePackExport", $$"""{"sourceIds":["{{sourceId}}"],"target":"{{target}}"}""");
             Add("package.campaignPackPreview", "package.campaignPackExport", $$"""{"campaignId":"{{campaign.Id}}","target":"{{target}}"}""");
 
-            var row = ReleaseLadder.Target(target)!;
+            var row = ReleaseLadder.Row(target)!;
             using var backup = new MemoryStream();
             app.App.WriteLibraryBackup(backup, row, app.App.PreviewLibraryBackup(row).ChangesHash);
             zips[$"library-backup-for-{target}.tomestack.zip"] = KeepOnlySource(backup.ToArray(), sourceId); // the harness restores files named library-backup*
