@@ -465,7 +465,7 @@ section[aria-labelledby='builder-heading'] button[aria-disabled='true'] { backgr
    beside the word (never icon-only, D26). */
 button.roll { display: inline-flex; align-items: center; gap: 0.35em; background: var(--bg); border: 1px solid var(--accent); border-radius: 4px; color: var(--accent); padding: 0.1rem 0.5rem; min-height: 1.5rem; font-size: var(--text-sm); }
 button.roll:hover { background: var(--accent); color: var(--bg); }
-.sheet-summary button.roll::before { content: ''; display: inline-block; width: 0.75em; height: 0.75em; background: currentColor; clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); }
+:is(.sheet-summary, .summary-abilities) button.roll::before { content: ''; display: inline-block; width: 0.75em; height: 0.75em; background: currentColor; clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); }
 .sheet-summary .roll-mode { display: flex; flex-wrap: wrap; align-items: center; padding: 0; border: none; margin: 0; }
 .sheet-summary .roll-mode legend { float: left; padding: 0; margin-right: 0.75rem; font-weight: 600; font-size: 0.9rem; color: var(--muted); }
 .sheet-summary .roll-mode .choice { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.15rem 0.6rem; border: 1px solid var(--line-strong); margin-left: -1px; }
@@ -507,6 +507,7 @@ button.roll:hover { background: var(--accent); color: var(--bg); }
   .content > .messages, .content > :not(.messages, .sheet), article.sheet > .print-sheet, article.sheet > .sheet-body { margin-right: 0; }
   .app[data-sidebar='collapsed'] :is(.content > .messages, .content > :not(.messages, .sheet), article.sheet > .sheet-body, article.sheet > .print-sheet) { margin-left: 0; }
   article.sheet > .sheet-header, article.sheet > .sheet-summary, article.sheet > .rest-sheet { padding: 0; margin: 0 0 var(--space-3); }
+  article.sheet > .summary-abilities { margin: 0 0 var(--space-3); }
   article.sheet > p.hint { padding: 0; margin: 0 0 var(--space-3); }
 }
 
@@ -525,6 +526,7 @@ button.roll:hover { background: var(--accent); color: var(--bg); }
   html:is([data-text-size='150'], [data-text-size='175'], [data-text-size='200']) :is(.content > .messages, .content > :not(.messages, .sheet), article.sheet > .print-sheet, article.sheet > .sheet-body) { margin-right: 0; margin-left: 0; }
   html:is([data-text-size='150'], [data-text-size='175'], [data-text-size='200']) :is(article.sheet > .sheet-header, article.sheet > .sheet-summary, article.sheet > .rest-sheet) { padding: 0; margin: 0 0 var(--space-3); }
   html:is([data-text-size='150'], [data-text-size='175'], [data-text-size='200']) article.sheet > p.hint { padding: 0; margin: 0 0 var(--space-3); }
+  html:is([data-text-size='150'], [data-text-size='175'], [data-text-size='200']) article.sheet > .summary-abilities { margin: 0 0 var(--space-3); }
 }
 
 /* M4 D5: import review. The excerpt keeps the PDF's line breaks. */
@@ -593,7 +595,8 @@ dl.review-list dd { overflow-wrap: anywhere; }
   .sheet-summary { display: block; }
   .status-bar { position: static; }
   article.sheet > p.hint { margin: 0; padding: 0; }
-  .sheet-summary dl > div { border: none; padding: 0; }
+  .sheet-summary dl > div, .summary-abilities > div { border: none; padding: 0; }
+  article.sheet > .summary-abilities { margin: 0; }
   .print-feature, tr { break-inside: avoid; }
   .combat-page { width: auto; font-size: inherit !important; }
   .combat-scroll { overflow: visible; }
@@ -633,7 +636,7 @@ dl.review-list dd { overflow-wrap: anywhere; }
 @media (forced-colors: active) {
   .tabs [role='tab']::before { forced-color-adjust: none; border-color: CanvasText; }
   /* currentColor tracks ButtonText, and HighlightText on hover (a CanvasText glyph nearly vanishes on Highlight). */
-  .sheet-summary button.roll::before { forced-color-adjust: none; background: currentColor; }
+  :is(.sheet-summary, .summary-abilities) button.roll::before { forced-color-adjust: none; background: currentColor; }
   #sheet-tab-play::before, #sheet-tab-notes::before { background: CanvasText; }
   .die { forced-color-adjust: none; background: CanvasText; color: Canvas; }
   .dice:has(.die[data-kept='false']) .die[data-kept='true'][data-sides='20'], .die[data-critical='true'] { background: Highlight; color: HighlightText; }
