@@ -179,7 +179,7 @@ public class DownConversionExportTests
 
         var preview = Result(Send(dispatcher, "package.exportPreview", Payload(id, "0.8.0", purpose: purpose)));
         Assert.Equal(expected, preview.GetProperty("fileName").GetString());
-        var export = Result(Send(dispatcher, "package.export", Payload(id, "0.8.0",preview.GetProperty("changesHash").GetString(), purpose)));
+        var export = Result(Send(dispatcher, "package.export", Payload(id, "0.8.0", preview.GetProperty("changesHash").GetString(), purpose)));
         Assert.Equal(expected, export.GetProperty("fileName").GetString());
     }
 
@@ -459,7 +459,7 @@ public class DownConversionExportTests
         foreach (var (command, body) in packs)
         {
             Assert.Equal("package.target-unknown", ErrorOf(Send(dispatcher, command, body.Replace("TARGET", "0.4.0", StringComparison.Ordinal))).Code);
-            Assert.Equal("package.target-changed", ErrorOf(Send(dispatcher, command, body.Replace("TARGET", "0.8.0",StringComparison.Ordinal))).Code);
+            Assert.Equal("package.target-changed", ErrorOf(Send(dispatcher, command, body.Replace("TARGET", "0.8.0", StringComparison.Ordinal))).Code);
         }
         Assert.Equal(0, host.Opened);
     }
