@@ -9,6 +9,7 @@ import type { BuilderMode } from './components/CharacterBuilder';
 import { CharacterSheet } from './components/CharacterSheet';
 import { HomePanel } from './components/HomePanel';
 import { companionPrunedText } from './companionNotice';
+import { closeOnEscape } from './escape';
 import { readFileAsBase64 } from './files';
 import { isTypingTarget } from './keys';
 import { diffLevelUp, dismissChecklist, writeChecklist } from './levelUpChecklist';
@@ -68,18 +69,33 @@ function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (in
   const [collapsed, setCollapsed] = useState(sidebarCollapsed);
   const sidebar = useRef<HTMLElement>(null);
   const sidebarToggle = useRef<HTMLButtonElement>(null);
+  // Narrow window: a sheet starts with the sidebar hidden (the saved preference is not written); the home screen shows it
+  // again. Adjusted during render when the screen kind changes, so no effect sets state.
+  const [narrowHidden, setNarrowHidden] = useState(false);
+  const [lastKind, setLastKind] = useState(screen.kind);
+  if (lastKind !== screen.kind) {
+    setLastKind(screen.kind);
+    if (screen.kind === 'sheet') {
+      if (typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 60rem)').matches) setNarrowHidden(true);
+    } else if (screen.kind === 'home') {
+      setNarrowHidden(false);
+    }
+  }
+  const hidden = collapsed || narrowHidden;
 
   // ADR-015: the sidebar can be hidden. WCAG 2.4.3 / 2.4.11: hiding it while focus is inside moves focus to the toggle.
   // F7: no side effects inside a state updater (StrictMode runs updaters twice); the nav's own `hidden` is the current state.
   const toggleSidebar = useCallback(() => {
     const hiding = !(sidebar.current?.hidden ?? false);
     if (hiding && sidebar.current?.contains(document.activeElement)) sidebarToggle.current?.focus();
+    setNarrowHidden(false); // an explicit choice from here on
     setSidebarCollapsed(hiding);
     setCollapsed(hiding);
   }, []);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
+      if (closeOnEscape(event)) return;
       if (!event.ctrlKey || event.altKey || event.metaKey || (event.code !== 'KeyB' && event.key.toLowerCase() !== 'b')) return; // physical B too: other layouts give another character
       if (isTypingTarget(event.target)) return; // text entry keeps Ctrl+B
       event.preventDefault();
@@ -180,19 +196,19 @@ function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (in
   }
 
   return (
-    <div className="app" data-sidebar={collapsed ? 'collapsed' : undefined}>
+    <div className="app" data-sidebar={hidden ? 'collapsed' : undefined}>
       <header className="app-header">
         <button
           type="button"
           className="sidebar-toggle"
           ref={sidebarToggle}
-          aria-expanded={!collapsed}
+          aria-expanded={!hidden}
           aria-controls="sidebar"
           aria-keyshortcuts="Control+B"
-          title={collapsed ? 'Show sidebar (Ctrl+B)' : 'Hide sidebar (Ctrl+B)'}
+          title={hidden ? 'Show sidebar (Ctrl+B)' : 'Hide sidebar (Ctrl+B)'}
           onClick={toggleSidebar}
         >
-          {collapsed ? 'Show sidebar' : 'Hide sidebar'}
+          {hidden ? 'Show sidebar' : 'Hide sidebar'}
         </button>
         {/* Spec 3.1: the window title area is a way home when the sidebar has no "All characters" (fewer than two). */}
         <div className="brand-wrap">
@@ -209,7 +225,7 @@ function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (in
       </header>
 
       {/* Owner (2026-10-12): the header's "Hide sidebar" is the only close control; the sidebar has none of its own. */}
-      <nav id="sidebar" className="sidebar" aria-label="Main" ref={sidebar} hidden={collapsed}>
+      <nav id="sidebar" className="sidebar" aria-label="Main" ref={sidebar} hidden={hidden}>
         {/* Always available: the file import needs no rules families; the chooser disables only what does. */}
         <button type="button" className="add-character" aria-current={screen.kind === 'add' ? 'page' : undefined} onClick={() => go({ kind: 'add' })}>
           + Add a character

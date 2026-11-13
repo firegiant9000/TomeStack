@@ -637,3 +637,48 @@ it('the brand button returns home with one character: sheet, Settings, brand, li
   expect(await screen.findByRole('region', { name: 'Your characters' })).toBeTruthy();
   expect(within(nav).getAllByRole('button').filter((b) => b.getAttribute('aria-current') === 'page')).toHaveLength(0);
 });
+
+it('Esc on the builder leaves the draft and the screen alone', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  await startNew(user);
+  const name = await screen.findByRole('textbox', { name: 'Name' });
+  await user.type(name, 'Fixture New');
+  await user.keyboard('{Escape}');
+  expect((screen.getByRole('textbox', { name: 'Name' }) as HTMLInputElement).value).toBe('Fixture New');
+});
+
+it('Esc closes the open Archived disclosure in the sidebar and returns focus to its summary', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listCharacters).mockResolvedValue([
+    summary('fixture-a', 'Fixture Avery'),
+    { ...summary('fixture-b', 'Fixture Blake'), archivedAt: '2026-01-01T00:00:00Z' } as CharacterSummary,
+  ]);
+  render(<App />);
+  const nav = await screen.findByRole('navigation', { name: 'Main' });
+  await user.click(await within(nav).findByText(/Archived \(1\)/));
+  const link = await within(nav).findByRole('button', { name: /Fixture Blake/ });
+  link.focus();
+  await user.keyboard('{Escape}');
+  expect(nav.querySelector('details')!.open).toBe(false);
+  expect(document.activeElement).toBe(nav.querySelector('summary'));
+});
+
+it('on a narrow window a sheet starts with the sidebar hidden (nothing saved) and home shows it again', async () => {
+  const user = userEvent.setup();
+  const original = window.matchMedia;
+  window.matchMedia = ((query: string) => ({ matches: true, media: query, addEventListener() {}, removeEventListener() {} })) as never;
+  try {
+    render(<App />);
+    const nav = await screen.findByRole('navigation', { name: 'Main' });
+    await user.click(await within(nav).findByRole('button', { name: /Fixture Avery/ }));
+    await screen.findByRole('article', { name: 'Fixture Avery' });
+    await waitFor(() => expect(nav.hidden).toBe(true));
+    expect(screen.getByRole('button', { name: /Show sidebar/ })).toBeTruthy();
+    expect(localStorage.getItem('tomestack.sidebar')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'TomeStack, your characters' }));
+    await waitFor(() => expect(nav.hidden).toBe(false));
+  } finally {
+    window.matchMedia = original;
+  }
+});
