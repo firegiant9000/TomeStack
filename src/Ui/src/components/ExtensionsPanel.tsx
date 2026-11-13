@@ -45,7 +45,7 @@ function InstallReview({ fileName, preview, onInstalled, onCancel, onError }: {
 
   return (
     <section className="play-panel" aria-labelledby="extension-review-heading">
-      <h2 id="extension-review-heading">Install {manifest?.name ?? fileName}?</h2>
+      <h3 id="extension-review-heading">Install {manifest?.name ?? fileName}?</h3>
       {preview.errors.length > 0 && (
         <div role="alert">
           <p>This extension cannot be installed:</p>
@@ -69,7 +69,7 @@ function InstallReview({ fileName, preview, onInstalled, onCancel, onError }: {
               {preview.update.permissionsAdded.length > 0 && ` New permissions: ${preview.update.permissionsAdded.join(', ')}.`}
             </p>
           )}
-          <h3>What it can do</h3>
+          <h4>What it can do</h4>
           <ul>
             {manifest.hooks.map((h) => (
               <li key={h.id}>{h.label}</li>

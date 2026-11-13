@@ -821,12 +821,12 @@ function LevelPreview(props: { from: number; draftAt: (level: number) => Charact
       </fieldset>
       {shownView && sheet && (
         <div role="region" aria-labelledby="preview-level-heading">
-          <h3 id="preview-level-heading">Preview at level {shownView.level}</h3>
+          <h2 id="preview-level-heading">Preview at level {shownView.level}</h2>
           <p className="hint">
             An unsaved copy. Nothing is saved, and Next: choices still gains one level.
           </p>
           {open > 0 && <p className="hint">{open === 1 ? '1 choice is' : `${open} choices are`} open on this copy; you make them as you level up.</p>}
-          <h4>Values</h4>
+          <h3>Values</h3>
           <ul>
             {sheet.fields
               .filter((f) => shown.includes(f.field) && (f.field !== 'spellSaveDc' || (sheet.spellcasting ?? []).length > 0))
@@ -846,7 +846,7 @@ function LevelPreview(props: { from: number; draftAt: (level: number) => Charact
               </li>
             ))}
           </ul>
-          <h4>Features</h4>
+          <h3>Features</h3>
           <ul>
             {(sheet.features ?? []).map((f) => (
               <li key={f.content.revisionId}>{f.name}</li>
@@ -854,7 +854,7 @@ function LevelPreview(props: { from: number; draftAt: (level: number) => Charact
           </ul>
           {sheet.diagnostics.length > 0 && (
             <>
-              <h4>Problems</h4>
+              <h3>Problems</h3>
               <ul>
                 {sheet.diagnostics.map((d, i) => (
                   <li key={`d-${d.code}-${i}`} className="warn">

@@ -428,11 +428,11 @@ export function ConditionsPanel({ view, act }: { view: CharacterView; act: Act }
   );
 }
 
-export function ResourceCard({ resource, act, level = 4 }: { resource: ResourceValue; act: Act; level?: 4 | 5 }) {
+export function ResourceCard({ resource, act, level = 3 }: { resource: ResourceValue; act: Act; level?: 3 | 4 }) {
   const key = { contentId: resource.content.contentId, resourceId: resource.resourceId };
   const tracked = resource.current !== undefined && resource.maximum !== undefined;
   const headingId = `resource-${resource.content.revisionId}-${resource.resourceId}`;
-  const Heading = level === 4 ? 'h4' : 'h5';
+  const Heading = level === 3 ? 'h3' : 'h4';
   // D43 slice 3: the amount box spends the chosen number in one confirmed change (1 up to what is left); "Spend 1" stays for one click.
   const [amount, setAmount] = useState('1');
   const chosen = Number(amount);
@@ -550,7 +550,7 @@ export function ResourcesPanel({ view, act }: { view: CharacterView; act: Act })
   if (resources.length === 0) return null;
   // Wave 3 item 22 (R157): a resource with an activation sits under the same group headings as the actions; the rest are listed as before.
   const ungrouped = resources.filter((r) => !r.activation);
-  const card = (resource: ResourceValue, level?: 4 | 5) => (
+  const card = (resource: ResourceValue, level?: 3 | 4) => (
     <ResourceCard key={`${resource.content.revisionId}-${resource.resourceId}`} resource={resource} act={act} level={level} />
   );
   return (
@@ -563,7 +563,7 @@ export function ResourcesPanel({ view, act }: { view: CharacterView; act: Act })
         return (
           <section key={key} aria-labelledby={`resources-${key}`}>
             <h3 id={`resources-${key}`}>{title}</h3>
-            <ul className="resources">{group.map((resource) => card(resource, 5))}</ul>
+            <ul className="resources">{group.map((resource) => card(resource, 4))}</ul>
           </section>
         );
       })}

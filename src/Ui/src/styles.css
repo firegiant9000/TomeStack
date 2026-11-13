@@ -152,11 +152,12 @@ body { margin: 0; background: var(--bg); color: var(--fg); }
 .app-header .brand-wrap { margin: 0; font-size: var(--text-xl); font-weight: bold; }
 /* Each screen's own h1 names the place, so the app title is not a heading: it is a button (it opens the home list) with the title look. */
 /* Headings moved up one level when each screen got its one h1: keep the sizes the screens were designed with (the old h2..h5 defaults). */
-.app h1 { font-size: 1.5em; margin: 0.83em 0; }
-.app h2:not(.sidebar-heading) { font-size: 1.17em; }
-.app h3 { font-size: 1em; }
-.app h4 { font-size: 0.83em; }
-.app h5 { font-size: 0.67em; }
+/* Wrapped in :where() so these defaults have zero specificity and never outrank a component rule such as .print-title. */
+:where(.app h1) { font-size: 1.5em; margin: 0.83em 0; }
+:where(.app h2:not(.sidebar-heading)) { font-size: 1.17em; }
+:where(.app h3) { font-size: 1em; }
+:where(.app h4) { font-size: 0.83em; }
+:where(.app h5) { font-size: 0.67em; }
 .app-header .brand { all: unset; cursor: pointer; font: inherit; color: inherit; border-radius: 0.25rem; }
 .app-header .brand:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 /* The toggle is first (the hamburger convention; DOM order = visual order, WCAG 1.3.2), then the brand button. */
@@ -330,7 +331,7 @@ span.warn { color: var(--warn); }
 .conditions .choice:has(:checked) input { accent-color: var(--bg); }
 .resources, .features { list-style: none; padding: 0; margin: 0; }
 .resource, .feature { padding: 0.35rem 0; border-bottom: 1px solid var(--line); }
-.resource h3 { margin: 0; font-size: var(--text-md); font-variant-numeric: tabular-nums; }
+.resource h3, .resource h4 { margin: 0; font-size: var(--text-md); font-variant-numeric: tabular-nums; }
 /* Wave 3 item 25: an item's charges on Inventory. The row wraps (400% reflow); each button is at least 24 CSS px (WCAG 2.5.8). */
 .charges { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-1); min-width: 0; }
 .charges button { min-height: 1.5rem; min-width: 1.5rem; max-width: 100%; overflow-wrap: anywhere; }

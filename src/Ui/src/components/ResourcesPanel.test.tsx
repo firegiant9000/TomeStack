@@ -3,6 +3,7 @@
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, expect, it } from 'vitest';
 import type { CharacterView } from '../api/types';
+import { expectContinuousOutline } from '../test/outline';
 import { ResourcesPanel } from './PlayPanels';
 
 afterEach(cleanup);
@@ -30,6 +31,14 @@ it('groups resources under Action, Bonus action and Reaction, and lists those wi
   }
   expect(within(within(panel).getByRole('region', { name: 'Reactions' })).queryByRole('heading', { name: /Testy plain/ })).toBeNull();
   expect(within(panel).getByRole('heading', { name: /^Testy plain: 2 of 2/ })).toBeTruthy();
+});
+
+it('keeps the heading outline continuous: Resources h2, ungrouped cards h3, grouped cards h4 under their h3', () => {
+  const v = view([resource('plain'), resource('swing', { activation: 'action' })]);
+  render(<ResourcesPanel view={v} act={() => {}} />);
+  expectContinuousOutline(document.body, 1);
+  expect(screen.getByRole('heading', { name: /^Testy plain:/ }).tagName).toBe('H3');
+  expect(screen.getByRole('heading', { name: /^Testy swing:/ }).tagName).toBe('H4');
 });
 
 it('a resource with a trace shows its sentences under a closed "Why?" (D72 X04)', () => {

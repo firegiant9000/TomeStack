@@ -240,7 +240,7 @@ export function CompanionsPanel({ view, act, roll, rollMode = 'normal', onChange
           {pools.length > 0 && (
             <ul className="resources">
               {pools.map((resource) => (
-                <ResourceCard key={`${resource.content.revisionId}-${resource.resourceId}`} resource={resource} act={act} level={5} />
+                <ResourceCard key={`${resource.content.revisionId}-${resource.resourceId}`} resource={resource} act={act} level={4} />
               ))}
             </ul>
           )}

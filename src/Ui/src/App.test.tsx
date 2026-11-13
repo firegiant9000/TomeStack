@@ -9,6 +9,7 @@ import { client } from './api/client';
 import type { Character, CharacterSummary, CharacterView, ChoiceStatus } from './api/types';
 import { diffLevelUp, writeChecklist } from './levelUpChecklist';
 import { noticeText } from './replaceable';
+import { expectContinuousOutline } from './test/outline';
 
 // The real module, except that diffLevelUp is a spy (it throws once in the A3 test).
 vi.mock('./levelUpChecklist', async (importOriginal) => {
@@ -119,6 +120,17 @@ it('the document title names the place: the home screen, then an opened sheet', 
   await waitFor(() => expect(document.title).toBe('Fixture Avery – TomeStack'));
 });
 
+it('on home, the brand button moves focus to the home heading', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  await screen.findByRole('navigation', { name: 'Main' });
+  const heading = await screen.findByRole('heading', { level: 1, name: 'Your characters' });
+  expect(document.activeElement).not.toBe(heading);
+  await user.click(screen.getByRole('button', { name: 'TomeStack, your characters' }));
+  expect(document.activeElement).toBe(heading);
+  expect(heading.id).toBe('home-heading');
+});
+
 it('navigating to a screen that is not a sheet updates the document title (Settings)', async () => {
   const user = userEvent.setup();
   render(<App />);
@@ -147,6 +159,7 @@ it('Every_screen_has_one_h1_matching_the_title', async () => {
     await waitFor(() => {
       const h1s = within(main()).getAllByRole('heading', { level: 1, hidden: true });
       expect(h1s.map((h) => h.textContent)).toEqual([place]);
+      expectContinuousOutline(main());
     });
   };
   const sidebar = (name: string | RegExp) => user.click(within(nav).getByRole('button', { name }));
