@@ -66,7 +66,7 @@ A second layout, read by the same parser, steps and commands behind the one entr
 
 ### Flow (the UI)
 
-"Import a character (sheet or text)…" sits in the Characters sidebar (`App.tsx`), next to "Import package…"; the import's title is the same without the ellipsis, and step 1's first line names a fillable sheet PDF, or pasted text or a .txt or .md file (R133). The package button's help text says: "Package import is for TomeStack .zip files. For a character sheet PDF or text, use Import a character (sheet or text)." This fixes the confusion that started this spec.
+The entry is the sidebar's "+ Add a character" button, then the option "From a character sheet (PDF or text)" and Continue (`AddCharacterPanel.tsx`, D94); the import's title is "From a character sheet (PDF or text)", and step 1's first line names a fillable sheet PDF, or pasted text or a .txt or .md file (R133). A TomeStack .zip is a different option on the same screen ("From a TomeStack file"), which keeps the two imports apart: this fixes the confusion that started this spec.
 
 A step view, not a modal. Each step can go back, and **Cancel at any step writes nothing** (SPEC C-07): it sends `ddb.discard` and returns to the character list.
 

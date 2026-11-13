@@ -30,7 +30,7 @@ The pack records your statement that the sources are your own work, and when you
 
 ## 4. What your friend does
 
-They choose **Import package…** and pick the file. The preview shows your sources and content, your statement (which TomeStack cannot verify), and the license. A copy of their library is saved before anything changes. After the import, the sources are recorded as **received**: they can use the content, share characters that use it, but never mark it as their own work or put it in their own source packs.
+They choose **+ Add a character**, then **From a TomeStack file**, then **Continue**, and pick the file. The preview shows your sources and content, your statement (which TomeStack cannot verify), and the license. A copy of their library is saved before anything changes. After the import, the sources are recorded as **received**: they can use the content, share characters that use it, but never mark it as their own work or put it in their own source packs.
 
 ## When something is refused
 
