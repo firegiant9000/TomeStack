@@ -107,7 +107,7 @@ public sealed partial class TomeStackApp
         outcome = plan.Result.Outcome;
         notices = rolls.Count == 0
             ? null
-            : [.. rolls.Select(r => new Diagnostic("damage.roll-offered", $"{PlainNames.Cap(PlainNames.Roll(r.Label))} is offered.", r.Content, r.EffectId))];
+            : [.. rolls.Select(r => new Diagnostic("damage.roll-offered", $"{PlainNames.Cap(PlainNames.Roll(r.Label == r.RollId ? null : r.Label))} is offered.", r.Content, r.EffectId))];
         return applied;
     }
 
