@@ -85,7 +85,7 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, ac
   // is the page's scroll-padding-top (focus never lands under the sticky bar) and is 0 when the bar is static.
   useLayoutEffect(() => {
     const bar = barRef.current;
-    if (!bar || typeof ResizeObserver === 'undefined') return;
+    if (!bar) return;
     const root = document.documentElement;
     const measure = () => {
       const height = bar.getBoundingClientRect().height;
@@ -96,11 +96,12 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, ac
       else bar.removeAttribute('data-tall');
     };
     measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(bar);
+    // Without ResizeObserver the bar is measured once and on window resize (the listener stays either way).
+    const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(measure);
+    observer?.observe(bar);
     window.addEventListener('resize', measure);
     return () => {
-      observer.disconnect();
+      observer?.disconnect();
       window.removeEventListener('resize', measure);
       root.style.removeProperty('--status-bar-height');
       root.style.removeProperty('--status-bar-pin');

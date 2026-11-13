@@ -649,6 +649,21 @@ it('--status-bar-pin is the height while pinned and 0px while tall; --status-bar
   expect(rootVar('--status-bar-pin')).toBe('0px');
 });
 
+it('without ResizeObserver the bar is still measured once and on window resize', () => {
+  vi.stubGlobal('ResizeObserver', undefined);
+  vi.stubGlobal('innerHeight', 600);
+  const heightSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect');
+  heightSpy.mockReturnValue({ height: 120 } as DOMRect);
+  render(<SheetSummary view={fixtureView()} {...plain} />);
+  expect(rootVar('--status-bar-height')).toBe('120px');
+  expect(rootVar('--status-bar-pin')).toBe('120px');
+  heightSpy.mockReturnValue({ height: 300 } as DOMRect);
+  act(() => {
+    window.dispatchEvent(new Event('resize'));
+  });
+  expect(statusBar().hasAttribute('data-tall')).toBe(true);
+});
+
 it('a window resize re-evaluates data-tall even when the bar itself did not resize, and the listener goes on unmount', () => {
   stubObserver(150, 600);
   const { unmount } = render(<SheetSummary view={fixtureView()} {...plain} />);
