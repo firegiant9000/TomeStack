@@ -268,11 +268,11 @@ public sealed record Character
             return empty;
         var problems = new List<Diagnostic>();
         if (SchemaVersion is < 1 or > CurrentSchemaVersion)
-            problems.Add(new("character.schema-unsupported", $"Character data uses schema v{SchemaVersion}; this version of TomeStack supports v1 to v{CurrentSchemaVersion}. Update TomeStack to open it."));
+            problems.Add(new("character.schema-unsupported", $"Character data uses file version {SchemaVersion}; this version of TomeStack reads file versions 1 to {CurrentSchemaVersion}. Update TomeStack to open it."));
         if (string.IsNullOrWhiteSpace(Name))
             problems.Add(new("character.name-required", "Character name is required."));
         if (!RulesFamilies.IsKnown(RulesFamily))
-            problems.Add(new("character.rules-family-unknown", $"Rules family '{RulesFamily}' is not supported."));
+            problems.Add(new("character.rules-family-unknown", $"'{RulesFamily}' is not a set of rules this app knows."));
         if (Level is < MinLevel or > MaxLevel)
             problems.Add(new("character.level-out-of-range", $"Level {Level} must be between {MinLevel} and {MaxLevel}."));
         foreach (var entry in Classes.Where(c => c.Level is < MinLevel or > MaxLevel))
@@ -288,7 +288,7 @@ public sealed record Character
         foreach (var choice in Choices.Where(c => string.IsNullOrWhiteSpace(c.ChoiceId)))
             problems.Add(new("character.choice-id-required", "A recorded choice needs the id of the choice it answers.", choice.Source));
         foreach (var duplicate in Choices.GroupBy(c => (c.Source, c.ChoiceId)).Where(g => g.Count() > 1))
-            problems.Add(new("character.choice-duplicate", $"Choice '{duplicate.Key.ChoiceId}' is recorded more than once; record all selections in one entry.", duplicate.Key.Source));
+            problems.Add(new("character.choice-duplicate", "A choice is saved more than once; keep all picks in one entry.", duplicate.Key.Source));
         foreach (var exception in CrossFamilyExceptions.Where(e => string.IsNullOrWhiteSpace(e.Reason)))
             problems.Add(new("character.exception-reason-required", "A cross-family exception needs a reason.", exception.Content));
         foreach (var exception in CampaignExceptions.Where(e => string.IsNullOrWhiteSpace(e.Reason)))

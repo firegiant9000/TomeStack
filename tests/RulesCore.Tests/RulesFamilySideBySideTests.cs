@@ -60,7 +60,8 @@ public class RulesFamilySideBySideTests
         var warning = Assert.Single(rook.Diagnostics, d => d.Code == "content.cross-family-exception");
         Assert.Equal(Fixtures.KeenSenses2014, warning.Content);
         Assert.Contains("Table ruling", warning.Message, StringComparison.Ordinal);
-        Assert.Contains("SRD 5.2.1 (2024 rules)", warning.Message, StringComparison.Ordinal);
+        Assert.Contains("It follows the 2024 rules", warning.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("srd-5", warning.Message, StringComparison.Ordinal);
         Assert.DoesNotContain(rook.Diagnostics, d => d.Code == "content.rules-family-mismatch");
 
         // The 2014 entry's +1 Stealth applies; its species Dex increase does not, because 2024 policy governs.
