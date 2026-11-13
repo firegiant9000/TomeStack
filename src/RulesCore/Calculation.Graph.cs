@@ -41,11 +41,11 @@ public static partial class CharacterCalculator
         foreach (var modifier in cyclic)
         {
             var members = component.Where(c => c.Value == component[modifier.Effect.Target]).Select(c => c.Key).OrderBy(f => SpecIndex[f]).ToList();
-            var cycle = members.Count > 1 ? string.Join(" → ", [.. members, members[0]]) : $"{modifier.Effect.Target} → {modifier.Effect.Target}";
+            var cycle = members.Count > 1 ? string.Join(" → ", [.. members.Select(FieldLabel), FieldLabel(members[0])]) : $"{FieldLabel(modifier.Effect.Target)} → {FieldLabel(modifier.Effect.Target)}";
             var revision = modifier.Content.Revision;
             var diagnostic = new Diagnostic(
                 "effect.dependency-cycle",
-                $"'{revision.Name}' effect '{modifier.Effect.Id}' is disabled: its formula '{modifier.Formula.Source}' reads {string.Join(", ", modifier.ReadsFields)}, which depends on {modifier.Effect.Target} (cycle: {cycle}).",
+                $"'{revision.Name}' has an effect that is turned off: its formula '{modifier.Formula.Source}' reads {string.Join(", ", modifier.ReadsFields.Select(FieldLabel))}, which depends on {FieldLabel(modifier.Effect.Target)} (loop: {cycle}).",
                 revision.Reference,
                 modifier.Effect.Id);
             diagnostics.Add(diagnostic);

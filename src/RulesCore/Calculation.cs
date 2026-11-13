@@ -657,7 +657,7 @@ public static partial class CharacterCalculator
                 {
                     yield return new(
                         "effect.unknown-target",
-                        $"'{revision.Name}' restriction '{restriction.Id}' checks '{restriction.Field}', which is not a calculated field; the content is not applied.",
+                        $"'{revision.Name}' requirement checks '{restriction.Field}', which is not something the sheet calculates; the content is not applied.",
                         revision.Reference, restriction.Id);
                     continue;
                 }
@@ -666,7 +666,7 @@ public static partial class CharacterCalculator
                     // As in an older build, where the field is not a content target: the content is not applied.
                     yield return new(
                         "effect.character-only-field",
-                        $"'{revision.Name}' restriction '{restriction.Id}' checks '{restriction.Field}', which content may not target yet; the content is not applied.",
+                        $"'{revision.Name}' requirement checks '{FieldLabel(restriction.Field)}', which content may not use yet; the content is not applied.",
                         revision.Reference, restriction.Id);
                     continue;
                 }
@@ -675,7 +675,7 @@ public static partial class CharacterCalculator
                     // As in an older build, where the field does not exist: the content is not applied.
                     yield return new(
                         "effect.schema-field-ignored",
-                        $"'{revision.Name}' restriction '{restriction.Id}' checks '{restriction.Field}', a content schema v8 field, but the revision declares v{revision.SchemaVersion}; the content is not applied.",
+                        $"'{revision.Name}' requirement checks {FieldLabel(restriction.Field)}, which needs file version 8, but this entry is file version {revision.SchemaVersion}; the content is not applied.",
                         revision.Reference, restriction.Id);
                     continue;
                 }
@@ -717,7 +717,7 @@ public static partial class CharacterCalculator
             {
                 diagnostics.Add(new(
                     "effect.unsupported",
-                    $"'{item.Revision.Name}' effect '{effect.Id}' of type '{effect.Type}' is not automated; its text is kept for reference.",
+                    $"'{item.Revision.Name}' has an effect of type '{effect.Type}' that is not automated; its text is kept for reference.",
                     item.Revision.Reference,
                     effect.Id));
             }

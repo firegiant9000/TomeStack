@@ -65,7 +65,7 @@ public class ClassLevelTests
         var initiative = Sheet(With() with { Pins = [Fixtures.WardenStride] }).Field(FieldIds.Initiative);
 
         Assert.Equal(2, initiative.Value);
-        Assert.Contains(initiative.Warnings, w => w.EffectId == "stride-init" && w.Message.Contains("formula.value-unavailable", StringComparison.Ordinal));
+        Assert.Contains(initiative.Warnings, w => w.EffectId == "stride-init" && w.Message.Contains("is not available for this character yet", StringComparison.Ordinal));
         Assert.Equal(AutomationStatus.Assisted, initiative.Automation);
     }
 

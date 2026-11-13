@@ -116,7 +116,9 @@ public class FieldGraphTests
 
         var diagnostic = Assert.Single(sheet.Diagnostics, d => d.Code == "effect.dependency-cycle");
         Assert.Equal(("self", loop.Reference), (diagnostic.EffectId, diagnostic.Content));
-        Assert.Contains("ability.dex.mod → ability.dex.mod", diagnostic.Message, StringComparison.Ordinal);
+        Assert.Contains(" → ", diagnostic.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("ability.dex", diagnostic.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("'self'", diagnostic.Message, StringComparison.Ordinal);
         Assert.Equal(3, sheet.Field(FieldIds.Modifier(Ability.Dex)).Value);
         Assert.Equal(4 + 1, sheet.Field(FieldIds.Initiative).Value);
     }
@@ -129,7 +131,8 @@ public class FieldGraphTests
         var sheet = Sheet(Fixtures.Srd51Character(), loop);
 
         var diagnostic = Assert.Single(sheet.Diagnostics, d => d.Code == "effect.dependency-cycle");
-        Assert.Contains("ability.dex.score → ability.dex.mod → ability.dex.score", diagnostic.Message, StringComparison.Ordinal);
+        Assert.Contains(" → ", diagnostic.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("ability.dex", diagnostic.Message, StringComparison.Ordinal);
         Assert.Contains(sheet.Field(FieldIds.Score(Ability.Dex)).Warnings, w => w.Code == "effect.dependency-cycle");
         Assert.Equal(17, sheet.Field(FieldIds.Score(Ability.Dex)).Value);
         Assert.Equal(4, sheet.Field(FieldIds.Initiative).Value);
@@ -257,7 +260,7 @@ public class FieldGraphTests
 
         var initiative = sheet.Field(FieldIds.Initiative);
         Assert.Equal(4, initiative.Value);
-        Assert.Contains(initiative.Warnings, w => w.EffectId == "scaling" && w.Message.Contains("formula.value-unavailable", StringComparison.Ordinal));
+        Assert.Contains(initiative.Warnings, w => w.EffectId == "scaling" && w.Message.Contains("is not available for this character yet", StringComparison.Ordinal));
         Assert.Equal(["bad-grant", "nowhere"], sheet.Diagnostics.Where(d => d.Code == "effect.unknown-target").Select(d => d.EffectId).Order());
     }
 

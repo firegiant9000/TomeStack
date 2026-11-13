@@ -211,6 +211,25 @@ public partial class ServiceWordingTests
     }
 
     [Fact]
+    public void A_formula_that_cannot_be_read_is_reported_without_the_effect_id_or_error_code()
+    {
+        var odd = ChoiceTests.Homebrew(60, ContentKind.Feat,
+            new ModifierEffect { Id = "bad-id", Operation = ModifierOperation.Bonus, Target = FieldIds.Initiative, Value = "PB; DROP TABLE" });
+
+        var warning = Assert.Single(Pinned(odd).Field(FieldIds.Initiative).Warnings, w => w.Code == "effect.invalid-formula");
+        AssertPlain(warning.Message, ["Fixture Homebrew 60", "has an effect that is turned off", "is not allowed in a formula"], "bad-id", "formula.invalid", "(formula");
+    }
+
+    [Fact]
+    public void A_formula_loop_names_the_fields_by_their_labels()
+    {
+        var loop = ChoiceTests.Homebrew(61, ContentKind.Feat,
+            new ModifierEffect { Id = "self-id", Operation = ModifierOperation.Bonus, Target = FieldIds.Modifier(Ability.Dex), Value = "DEX.MOD" });
+
+        AssertPlain(Message(Pinned(loop), "effect.dependency-cycle"), ["Fixture Homebrew 61", "has an effect that is turned off", "loop:", " → "], "self-id", "ability.dex");
+    }
+
+    [Fact]
     public void A_toggle_of_other_content_that_is_not_active_is_reported_without_ids()
     {
         var other = Guid.NewGuid();

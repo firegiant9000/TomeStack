@@ -356,11 +356,11 @@ public static partial class CharacterCalculator
         if (attack.Abilities.Count == 0)
             invalid = "The attack lists no ability.";
         else if (!dieOk)
-            invalid = $"The die formula '{attack.Damage.Die}' could not be evaluated: {dieFailure!.Message}";
+            invalid = $"The die formula '{attack.Damage.Die}' could not be worked out: {dieFailure!.Message}";
         else if (!AttackRiderEffect.AllowedDice.Contains(die))
             invalid = $"d{die} is not a die this app rolls (d4, d6, d8, d10 or d12).";
         else if (!countOk)
-            invalid = $"The dice count formula '{attack.Damage.Count}' could not be evaluated: {countFailure!.Message}";
+            invalid = $"The dice count formula '{attack.Damage.Count}' could not be worked out: {countFailure!.Message}";
         else if (count < 1 || count > DiceLimits.MaxDice)
             invalid = $"A dice count of {count} is outside 1 to {DiceLimits.MaxDice}.";
         var damageBonus = mod;
@@ -372,7 +372,7 @@ public static partial class CharacterCalculator
             }
             else
             {
-                invalid = $"The damage bonus formula '{bonusSource}' could not be evaluated: {bonusFailure!.Message}";
+                invalid = $"The damage bonus formula '{bonusSource}' could not be worked out: {bonusFailure!.Message}";
                 diagnostics.Add(InvalidFormula(revision, attack, bonusFailure));
             }
         }

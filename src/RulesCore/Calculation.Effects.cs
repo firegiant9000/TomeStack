@@ -704,7 +704,7 @@ public static partial class CharacterCalculator
     private static string KindText(ContentKind kind) => kind == ContentKind.CreationGuide ? "creation guide" : kind.ToString().ToLowerInvariant();
 
     private static Diagnostic V8FieldIgnored(ContentRevision revision, Effect effect, string field) =>
-        new("effect.schema-field-ignored", $"'{revision.Name}' has an effect that uses {field}, which needs file version 8, but this entry is file version {revision.SchemaVersion}; it is ignored.", revision.Reference, effect.Id);
+        new("effect.schema-field-ignored", $"'{revision.Name}' has an effect that uses {FieldLabel(field)}, which needs file version 8, but this entry is file version {revision.SchemaVersion}; it is ignored.", revision.Reference, effect.Id);
 
     /// <param name="unseenArmor">
     /// Armor training grants that apply to the character but that the calculator cannot apply (assisted, reference or

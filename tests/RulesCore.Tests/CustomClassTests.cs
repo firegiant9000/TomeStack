@@ -148,7 +148,7 @@ public class CustomClassTests
             // The feature pinned on its own belongs to no class, so its SCALE.ink is unavailable.
             var character = Chronicler(family, classes: []) with { Pins = [Fixtures.ChroniclerMarginalia], Choices = [] };
             var sheet = Sheet(character);
-            Assert.Contains(sheet.Field(FieldIds.Initiative).Warnings, w => w.Code == "effect.invalid-formula" && w.Message.Contains("formula.value-unavailable", StringComparison.Ordinal));
+            Assert.Contains(sheet.Field(FieldIds.Initiative).Warnings, w => w.Code == "effect.invalid-formula" && w.Message.Contains("is not available for this character yet", StringComparison.Ordinal));
             Assert.Equal(1, sheet.Field(FieldIds.Initiative).Value);
         }
     }
@@ -191,7 +191,7 @@ public class CustomClassTests
 
             var ink = sheet.Resources!.Single(r => r.ResourceId == "ink");
             Assert.Null(ink.Maximum);
-            Assert.Contains(ink.Warnings, w => w.Message.Contains("formula.unknown-identifier", StringComparison.Ordinal));
+            Assert.Contains(ink.Warnings, w => w.Message.Contains("is not a known value", StringComparison.Ordinal));
             // Every other formula site is gated the same way (review fix): recovery amount, roll bonus, modifier value and
             // spellsFormula read no SCALE either.
             Assert.Null(ink.Recoveries.Single(r => r.On == RestPeriod.ShortRest).Value);
