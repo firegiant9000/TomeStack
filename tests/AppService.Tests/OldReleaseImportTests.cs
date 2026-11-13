@@ -17,7 +17,7 @@ namespace TomeStack.AppService.Tests;
 /// </summary>
 public sealed class OldReleaseImportTests : IDisposable
 {
-    public static TheoryData<string> Releases => new() { "v0.4.0", "v0.5.0", "v0.6.0", "v0.7.0" };
+    public static TheoryData<string> Releases => new() { "v0.4.0", "v0.5.0", "v0.6.0", "v0.7.0", "v0.8.1" };
 
     private static readonly DateTimeOffset Now = new(2026, 10, 28, 12, 0, 0, TimeSpan.Zero);
 
@@ -191,7 +191,16 @@ public sealed class OldReleaseImportTests : IDisposable
         }
 
         var appCopies = Directory.GetFiles(directory, "tomestack.db.app-*.bak");
-        Assert.Single(appCopies); // the copy to go back to the release it came from
+        // A same-version open takes no copy; 0.9.0's bump turns v0.8.1 into the older-release branch.
+        var releaseVersion = Version.Parse(release.TrimStart('v'));
+        if (releaseVersion < Version.Parse(AppVersionStamp.CurrentVersion))
+        {
+            Assert.Single(appCopies); // the copy to go back to the release it came from
+        }
+        else
+        {
+            Assert.Empty(appCopies);
+        }
         Assert.Equal(AppVersionStamp.CurrentVersion, File.ReadAllText(Path.Combine(directory, AppVersionStamp.FileName)).Trim());
     }
 
