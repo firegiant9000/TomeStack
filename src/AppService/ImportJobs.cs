@@ -181,7 +181,7 @@ public sealed partial class TomeStackApp
             return null;
         var writtenFor = asked.Distinct(StringComparer.Ordinal).ToArray();
         if (writtenFor.Length == 0 || writtenFor.Any(f => !RulesFamilies.IsKnown(f) || !source.RulesFamilies.Contains(f)))
-            throw new AppValidationException([new("import.family-not-in-source", $"The book can only be written for families the source declares ({string.Join(", ", source.RulesFamilies)}).")]);
+            throw new AppValidationException([new("import.family-not-in-source", $"The book can only be written for the rules its source covers ({string.Join(", ", source.RulesFamilies.Select(PlainNames.Family))}).")]);
         return writtenFor;
     }
 

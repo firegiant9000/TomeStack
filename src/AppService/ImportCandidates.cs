@@ -302,7 +302,7 @@ public sealed partial class TomeStackApp
             throw new AppValidationException([new("candidate.family-invalid", "Choose the 2014 rules, the 2024 rules or both.")]);
         var sourceFamilies = _store.FindSource(ImportStatus(stored.JobId).SourceId)?.RulesFamilies ?? [];
         if (families.Any(f => !sourceFamilies.Contains(f)))
-            throw new AppValidationException([new("import.family-not-in-source", $"An entry found can only be written for the rules its source covers ({string.Join(", ", sourceFamilies.Select(f => RulesFamilies.IsKnown(f) ? "the " + RulesFamilies.Get(f).ShortLabel : f))}).")]);
+            throw new AppValidationException([new("import.family-not-in-source", $"An entry found can only be written for the rules its source covers ({string.Join(", ", sourceFamilies.Select(PlainNames.Family))}).")]);
         var summary = request.Summary ?? current.Summary;
         if (summary is { Length: > 20_000 })
             throw new AppValidationException([new("candidate.summary-too-long", "The text has at most 20,000 characters.")]);
@@ -835,7 +835,7 @@ public sealed partial class TomeStackApp
     }
 
     private StoredCandidate FindCandidateOrThrow(Guid candidateId) =>
-        _store.FindImportCandidate(candidateId) ?? throw new AppValidationException([new("candidate.not-found", "That entry found does not exist.")]);
+        _store.FindImportCandidate(candidateId) ?? throw new AppValidationException([new("candidate.not-found", "That entry does not exist.")]);
 
     private static void RequirePending(StoredCandidate stored)
     {

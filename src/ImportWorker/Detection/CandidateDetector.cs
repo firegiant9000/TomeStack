@@ -324,13 +324,8 @@ public static partial class CandidateDetector
         return (context.SourceFamilies, [$"The layout looks like {LayoutLabel(layout)}, which is outside the rules this reading is for; those rules are used."]);
     }
 
-    /// <summary>Plain words for a layout id in player-visible text; an id that is not one of the two known stays as it is.</summary>
-    private static string LayoutLabel(string layout) => layout switch
-    {
-        "srd-5.1" => "the 2014 rules",
-        "srd-5.2.1" => "the 2024 rules",
-        _ => layout,
-    };
+    /// <summary>Plain words for a layout id in player-visible text (RulesCore's label); an id the app does not know stays as it is.</summary>
+    private static string LayoutLabel(string layout) => RulesFamilies.IsKnown(layout) ? "the " + RulesFamilies.Get(layout).ShortLabel : layout;
 
     /// <summary>
     /// 2026-10-14 item 3: a layout-neutral kind (armour rows, class tables) takes the context's family when there is one.

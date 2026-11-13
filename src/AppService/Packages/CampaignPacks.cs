@@ -183,15 +183,10 @@ public sealed partial class PackageService
     /// </summary>
     private List<FieldChange> CampaignChanges(Campaign local, Campaign imported, IReadOnlyDictionary<Guid, SourceRecord> packSources)
     {
-        string Titles(IEnumerable<Guid> ids)
-        {
-            var unknown = 0; // two sources nobody can name must not read as one
-            return string.Join(", ", ids
-                .Select(id => packSources.GetValueOrDefault(id)?.Title ?? store.FindSource(id)?.Title ?? $"an unknown source ({++unknown})")
-                .Order(StringComparer.Ordinal));
-        }
+        string Titles(IEnumerable<Guid> ids) =>
+            PlainNames.SourceTitles(ids.Select(id => packSources.GetValueOrDefault(id)?.Title ?? store.FindSource(id)?.Title));
         // Display only (the preview table); the families compared below are the raw ids, never these labels (D99).
-        static string FamilyLabel(string id) => RulesFamilies.IsKnown(id) ? "the " + RulesFamilies.Get(id).ShortLabel : id;
+        static string FamilyLabel(string id) => PlainNames.Family(id);
         var changes = new List<FieldChange>();
         if (local.Name != imported.Name)
             changes.Add(new("name", local.Name, imported.Name));

@@ -17,6 +17,22 @@ internal static class PlainNames
     public static string Pool(IReadOnlyList<ResourceValue>? pools, Guid contentId, string? resourceId) =>
         Of(pools?.FirstOrDefault(r => r.Content.ContentId == contentId && r.ResourceId == resourceId)?.Label, "that pool");
 
+    /// <summary>A known rules family as "the 2014 rules" / "the 2024 rules"; an id this app does not know stays as typed.</summary>
+    public static string Family(string id) => RulesFamilies.IsKnown(id) ? "the " + RulesFamilies.Get(id).ShortLabel : id;
+
+    /// <summary>
+    /// Source titles in order, for a list the player reads. A source nobody can name (null) is "an unknown source"; when there are
+    /// two or more, they are numbered so they do not read as one.
+    /// </summary>
+    public static string SourceTitles(IEnumerable<string?> titles)
+    {
+        var list = titles.ToList();
+        var unknown = list.Count(t => t is null);
+        var seen = 0;
+        var named = list.Select(t => t ?? (unknown == 1 ? "an unknown source" : $"an unknown source ({++seen})")).ToList();
+        return string.Join(", ", named.Order(StringComparer.Ordinal));
+    }
+
     /// <summary>Capitalises the first letter, for a name that starts a sentence.</summary>
     public static string Cap(string text) => text.Length == 0 ? text : char.ToUpperInvariant(text[0]) + text[1..];
 }
