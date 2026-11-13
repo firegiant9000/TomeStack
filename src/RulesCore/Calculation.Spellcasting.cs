@@ -50,7 +50,7 @@ public static partial class CharacterCalculator
         if (effect.SpellsTable is not null && effect.SpellsFormula is not null)
             return "give the number of spells as a table or a formula, not both";
         if (string.IsNullOrWhiteSpace(effect.SpellList))
-            return "a spell list name is required";
+            return "a spell list key is required";
         return null;
     }
 
@@ -186,9 +186,9 @@ public static partial class CharacterCalculator
             origin, diagnostics, SpellTagsOf(revision, data));
     }
 
-    /// <summary>"Spell Name is not published" for a spell the library has; "A spell is not available ..." (no id) for one it has not (D99).</summary>
+    /// <summary>"Spell 'Name' is not published" for a spell the library has; "A spell is not available ..." (no id) for one it has not (D99).</summary>
     private static string SpellSubject(ContentRevision? revision, string refused) =>
-        revision is null ? "A spell is not available (it may be missing from your library)" : $"Spell {revision.Name} {refused}";
+        revision is null ? "A spell is not available (it may be missing from your library)" : $"Spell '{revision.Name}' {refused}";
 
     /// <summary>Why a revision cannot be used as a spell for a character of <paramref name="rulesFamily"/> ("is not published", ...), or null when it can. Shared by recorded spells and <c>castsSpell</c>.</summary>
     private static string? SpellRefusal(ContentRevision? revision, string rulesFamily) =>

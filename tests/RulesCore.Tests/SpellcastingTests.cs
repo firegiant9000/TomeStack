@@ -282,6 +282,16 @@ public class SpellcastingTests
     }
 
     [Fact]
+    public void A_missing_spell_of_a_caster_with_no_spellcasting_is_unnamed_and_has_no_ids()
+    {
+        var gone = new ContentReference(Guid.NewGuid(), Guid.NewGuid());
+        var sheet = Sheet(Caster(RulesFamilies.Srd521, [Arcane(gone)], null, new ClassLevel(Fixtures.Warden, 1)));
+
+        var message = Assert.Single(sheet.Diagnostics, d => d.Code == "spells.caster-missing").Message;
+        Assert.Equal("A spell is recorded for a caster that gives this character no spellcasting; it is not listed.", message);
+    }
+
+    [Fact]
     public void Spells_are_references_of_the_character_but_never_active_content()
     {
         var character = Caster(RulesFamilies.Srd521, [Arcane(Fixtures.FrostRing)], null, new ClassLevel(Fixtures.Arcanist, 1));

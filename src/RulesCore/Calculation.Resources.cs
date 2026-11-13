@@ -179,7 +179,7 @@ public static partial class CharacterCalculator
                         }
                     }
                     if (!found)
-                        Warn(new("companion.missing-part", $"'{revision.Name}' companion '{effect.Label}' lists {(revision.Effects.OfType<ResourceEffect>().FirstOrDefault(r => r.Id == id)?.Label is { } poolLabel ? $"the pool '{poolLabel}'" : "a pool")}, which is not on the sheet.", revision.Reference, effect.Id));
+                        Warn(new("companion.missing-part", $"'{revision.Name}' companion '{effect.Label}' lists {(revision.Effects.OfType<ResourceEffect>().FirstOrDefault(r => r.ResourceId == id)?.Label is { } poolLabel ? $"the pool '{poolLabel}'" : "a pool")}, which is not on the sheet.", revision.Reference, effect.Id));
                 }
 
                 var recorded = character.Play.Companions?.FirstOrDefault(p => p.ContentId == revision.ContentId && p.Id == effect.CompanionId);
