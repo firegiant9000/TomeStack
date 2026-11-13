@@ -1290,8 +1290,8 @@ public class LibraryBackupTests
         StoreCompat(temp.App, id => [Compat(id, 1)]);
         var dispatcher = new CommandDispatcher(temp.App);
 
-        var valid = Ok(dispatcher, "library.backupPreview", new { target = "0.6.0" });
-        Assert.Equal("0.6.0", valid.GetProperty("target").GetString());
+        var valid = Ok(dispatcher, "library.backupPreview", new { target = "0.8.0" });
+        Assert.Equal("0.8.0", valid.GetProperty("target").GetString());
         Assert.False(string.IsNullOrEmpty(valid.GetProperty("changesHash").GetString()));
         Assert.Equal("package.target-unknown", ErrorCode(dispatcher, "library.backupPreview", new { target = "0.4.0" }));
 
@@ -1306,9 +1306,9 @@ public class LibraryBackupTests
         {
             var host = new CommandDispatcher(temp.App, host: new DialogHost(path, null));
             Assert.Equal("package.target-unknown", ErrorCode(host, "library.backupSaveAs", new { target = "0.4.0" }));
-            Assert.Equal("package.target-changed", ErrorCode(host, "library.backupSaveAs", new { target = "0.6.0" }));
+            Assert.Equal("package.target-changed", ErrorCode(host, "library.backupSaveAs", new { target = "0.8.0" }));
             Assert.False(File.Exists(path));
-            Assert.True(Ok(host, "library.backupSaveAs", new { target = "0.6.0", changesHash = valid.GetProperty("changesHash").GetString() }).GetProperty("saved").GetBoolean());
+            Assert.True(Ok(host, "library.backupSaveAs", new { target = "0.8.0", changesHash = valid.GetProperty("changesHash").GetString() }).GetProperty("saved").GetBoolean());
             Assert.True(File.Exists(path));
         }
         finally

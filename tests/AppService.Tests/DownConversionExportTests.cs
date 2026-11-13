@@ -114,6 +114,8 @@ public class DownConversionExportTests
 
         var refused = Assert.Throws<AppValidationException>(() => app.App.ExportCharacters([id], ExportPurpose.Share, row, hash));
 
+        // The app-level export refuses before any bytes exist, so there is nothing for a save dialog to write.
+        // The dispatcher opens its dialog only after this call; no 0.8.0 case blocks, so it is not reachable by target string.
         Assert.Equal("package.target-blocked", refused.Code);
         Assert.Equal(before, Snapshot(app));
     }

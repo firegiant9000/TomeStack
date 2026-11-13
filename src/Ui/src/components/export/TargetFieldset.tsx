@@ -26,6 +26,7 @@ export function TargetFieldset({ targets, value, onChange }: Props) {
           {t.release}
         </label>
       ))}
+      <p className="hint">Only the version before this one is listed. To open the file in an older TomeStack, update that TomeStack first.</p>
     </fieldset>
   );
 }

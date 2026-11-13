@@ -46,11 +46,20 @@ it('reports the release, and null for the first radio', async () => {
   expect(onChange).toHaveBeenLastCalledWith(null);
 });
 
+const hint = 'Only the version before this one is listed. To open the file in an older TomeStack, update that TomeStack first.';
+
+it('explains that only the previous version is listed', () => {
+  render(<TargetFieldset targets={targets} value={null} onChange={() => {}} />);
+  expect(screen.getByText(hint)).toBeTruthy();
+});
+
 it('renders nothing without targets', () => {
   const { container, rerender } = render(<TargetFieldset targets={null} value={null} onChange={() => {}} />);
   expect(container.firstChild).toBeNull();
+  expect(screen.queryByText(hint)).toBeNull();
   rerender(<TargetFieldset targets={{ ...targets, targets: [] }} value={null} onChange={() => {}} />);
   expect(container.firstChild).toBeNull();
+  expect(screen.queryByText(hint)).toBeNull();
 });
 
 it('has no axe violations', async () => {
