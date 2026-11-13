@@ -172,7 +172,7 @@ it('creates a character, shows its traced sheet, overrides, exports and re-impor
   // Import: preview first, then apply. The character already exists, so the local copy is backed up.
   const file = new File([bytesOf(base64)], fileName, { type: 'application/zip' });
   await user.upload(screen.getByLabelText('TomeStack file'), file);
-  const preview = await screen.findByRole('region', { name: `Import ${fileName}` });
+  const preview = await screen.findByRole('region', { name: 'Import a TomeStack file' });
   expect(within(preview).getByText(/already exists and will be replaced/)).toBeTruthy();
   await user.click(within(preview).getByRole('button', { name: 'Apply import' }));
 
@@ -990,7 +990,7 @@ it('marks a source as shareable after confirming it is your own work, saves a so
 
   // Importing it: the preview says what a source pack is; here everything is already installed.
   await user.upload(screen.getByLabelText('TomeStack file'), new File([bytesOf(base64)], fileName, { type: 'application/zip' }));
-  const importing = await screen.findByRole('region', { name: `Import ${fileName}` });
+  const importing = await screen.findByRole('region', { name: 'Import a TomeStack file' });
   expect(within(importing).getByText(/This TomeStack file holds sources\. Its sender stated that each source is their own work/)).toBeTruthy();
   await user.click(within(importing).getByRole('button', { name: 'Apply import' }));
   await expectStatus(/unchanged/);
@@ -1060,7 +1060,7 @@ it('shares a campaign as a campaign pack that names what it leaves out, and impo
   // Here the campaign changes after the pack was made; importing it asks which version to keep.
   await client.saveCampaign({ ...campaign, name: 'E2E Harbor Table (local)', allowedSources: ['52500000-0000-4000-8000-000000000001', harbor.id] });
   await user.upload(screen.getByLabelText('TomeStack file'), new File([bytesOf(base64)], fileName, { type: 'application/zip' }));
-  const importing = await screen.findByRole('region', { name: `Import ${fileName}` });
+  const importing = await screen.findByRole('region', { name: 'Import a TomeStack file' });
   expect(within(importing).getByText(/This TomeStack file holds a campaign/)).toBeTruthy();
   const apply = within(importing).getByRole<HTMLButtonElement>('button', { name: 'Apply import' });
   expect(apply.disabled).toBe(true);
