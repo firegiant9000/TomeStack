@@ -128,7 +128,7 @@ it('has no axe violations in the summary bar with a roll result', async () => {
 it('names inspiration by family and lists conditions and exhaustion when present', () => {
   render(
     <SheetSummary
-      view={fixtureView({}, { temporaryHitPoints: 0, resources: [], conditions: ['poisoned', 'prone'], exhaustion: 2, inspiration: true }, 'srd-5.1')}
+      view={fixtureView({}, { temporaryHitPoints: 0, resources: [], conditions: ['poisoned', 'prone'], exhaustion: 2, spellSlotsSpent: [], pactSlotsSpent: 0, inspiration: true }, 'srd-5.1')}
       rulesFamilies={policies}
       rollMode="normal"
       onRollMode={() => {}}

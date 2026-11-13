@@ -1787,6 +1787,9 @@ function EffectEditor(props: {
     companion: 'Companion',
     attack: 'Attack',
     attackRider: 'Attack rider',
+    guideFor: 'Guide subject',
+    primaryAbilities: 'Primary abilities',
+    startingEquipment: 'Starting equipment',
   };
   const toggles = props.toggles;
   const toggleChoices = { own: toggles, others: props.otherToggles };

@@ -26,8 +26,8 @@ vi.mock('../../api/client', () => ({
 }));
 
 const families: RulesFamilyPolicy[] = [
-  { id: 'srd-5.1', displayName: 'SRD 5.1 (2014 rules)', shortLabel: '2014 rules', abilityIncreaseSource: 'species', backgroundGrantsFeat: false, longRestExhaustionNeedsFoodAndDrink: true, inspirationName: 'Inspiration' },
-  { id: 'srd-5.2.1', displayName: 'SRD 5.2.1 (2024 rules)', shortLabel: '2024 rules', abilityIncreaseSource: 'background', backgroundGrantsFeat: true, longRestExhaustionNeedsFoodAndDrink: false, inspirationName: 'Heroic Inspiration' },
+  { id: 'srd-5.1', displayName: 'SRD 5.1 (2014 rules)', shortLabel: '2014 rules', abilityIncreaseSource: 'species', backgroundGrantsFeat: false, longRestExhaustionNeedsFoodAndDrink: true, inspirationName: 'Inspiration', longRestHitDice: 'halfTotal', hitDieHealingMinimum: 0, halfCasterLevels: 'down', multiclassSpellSlots: [] },
+  { id: 'srd-5.2.1', displayName: 'SRD 5.2.1 (2024 rules)', shortLabel: '2024 rules', abilityIncreaseSource: 'background', backgroundGrantsFeat: true, longRestExhaustionNeedsFoodAndDrink: false, inspirationName: 'Heroic Inspiration', longRestHitDice: 'all', hitDieHealingMinimum: 1, halfCasterLevels: 'up', multiclassSpellSlots: [] },
 ];
 
 const read: DdbReadResult = {
