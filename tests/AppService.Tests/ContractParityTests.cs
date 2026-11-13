@@ -97,7 +97,7 @@ public sealed partial class ContractParityTests
     {
         ["campaign.delete"] = "private helper returns object (anonymous result)",
         ["content.diagnose"] = "private helper returns object",
-        ["content.sandbox"] = "private helper returns object",
+        ["content.sandbox"] = "private helper returns an anonymous object; its View, Draft and Changes types are walked via character.get (CharacterView), content.publish (ContentReference) and content.compare (FieldDelta)",
         ["content.validate"] = "private helper returns object",
         ["ddb.discard"] = "anonymous object { discarded }",
         ["ddb.read"] = "private helper returns object",
@@ -109,7 +109,7 @@ public sealed partial class ContractParityTests
         ["extension.runExport"] = "private helper returns object",
         ["gap.delete"] = "private helper returns object",
         ["library.backupSaveAs"] = "private helper returns object",
-        ["library.restoreChoose"] = "private helper returns object",
+        ["library.restoreChoose"] = "private helper returns an anonymous object; its PackagePreview is walked via package.preview",
         ["package.apply"] = "private helper returns object",
         ["package.campaignPackExport"] = "private helper returns object",
         ["package.export"] = "private helper returns object",
