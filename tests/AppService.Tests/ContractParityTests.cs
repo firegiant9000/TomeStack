@@ -316,12 +316,16 @@ public sealed partial class ContractParityTests
             .ToList();
     }
 
+    /// <summary>
+    /// Limitation: only properties that some sample populates are compared, because RulesJson.Compact omits defaults;
+    /// a converter-written name that no sample sets goes unchecked.
+    /// </summary>
     [Fact]
     public void Converter_output_names_match_the_walked_shape_and_ts()
     {
         var walk = Analyse();
         var effects = RealEffects();
-        Assert.NotEmpty(effects);
+        Assert.True(effects.Count(e => e is ModifierEffect) > 1, "The real samples are too thin to compare anything.");
         var problems = ConverterOutputProblems(typeof(Effect), effects, walk.Walk, t => TsFieldsOf(walk, t));
         Assert.True(problems.Count == 0, "Effect converter output drifted from the walked shape or TS type:\n" + string.Join("\n", problems));
     }
@@ -330,7 +334,7 @@ public sealed partial class ContractParityTests
     public void Every_concrete_effect_subtype_is_sampled_and_has_a_type_name()
     {
         var walk = Analyse();
-        var gaps = ConcreteSubtypeGaps(typeof(Effect), walk.Walk,RealEffects().Select(e => e.GetType()).ToHashSet());
+        var gaps = ConcreteSubtypeGaps(typeof(Effect), walk.Walk, RealEffects().Select(e => e.GetType()).ToHashSet());
         Assert.True(gaps.Count == 0, "Effect subtypes the converter parity test cannot cover (add a TypeName, or a fixture that uses it):\n" + string.Join("\n", gaps));
     }
 
@@ -348,7 +352,9 @@ public sealed partial class ContractParityTests
         Assert.True(unlisted.Count == 0, "A property-level [JsonConverter] on an effect is not in PropertyConverterElements: " + string.Join(", ", unlisted));
         foreach (var ((owner, property), element) in PropertyConverterElements)
         {
-            Assert.Contains(effects, e => e.GetType() == owner); // a sample must exist, or the check below is vacuous
+            // A sample must populate the property, or the check below is vacuous.
+            Assert.Contains(effects, e => e.GetType() == owner
+                && owner.GetProperty(property)!.GetValue(e) is System.Collections.ICollection { Count: > 0 });
             var allowed = walk.Shapes[element].ToHashSet();
             if (TsFieldsOf(walk, element) is { } ts) allowed.IntersectWith(ts);
             var problems = NestedOutputProblems(effects, owner, property, allowed, RulesJson.Compact);
@@ -363,6 +369,31 @@ public sealed partial class ContractParityTests
         Assert.Contains("extra", probeWalk.Shapes[typeof(ConvDerived)]);
         var problems = ConverterOutputProblems(typeof(ConvBase), [new ConvDerived { Extra = 1 }], probeWalk, _ => null);
         Assert.Contains(problems, p => p.Contains("renamed", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Converter_probe_reports_a_name_the_ts_type_lacks()
+    {
+        var probeWalk = WalkAll([typeof(ConvBase)]);
+        // "renamed" is in a (pretend) walked shape but TS only has "type": only the TS half can report it.
+        var shapeWithRenamed = new Walk(
+            new Dictionary<Type, IReadOnlyList<string>> { [typeof(ConvDerived)] = ["kind", "renamed"] },
+            probeWalk.Subtypes, probeWalk.ListedOpaque, probeWalk.Unlisted);
+        var problems = ConverterOutputProblems(typeof(ConvBase), [new ConvDerived { Extra = 1 }], shapeWithRenamed,
+            _ => new HashSet<string> { "type" });
+        Assert.DoesNotContain(problems, p => p.Contains("not in the walked shape", StringComparison.Ordinal));
+        Assert.Contains(problems, p => p.Contains("renamed", StringComparison.Ordinal) && p.Contains("not in the TS type", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Property_converter_probe_reports_a_nested_name_the_ts_type_lacks()
+    {
+        var shape = new HashSet<string> { "kept", "renamed" };
+        var ts = new HashSet<string> { "kept" };
+        var allowed = shape.ToHashSet();
+        allowed.IntersectWith(ts);
+        var problems = NestedOutputProblems([new ConvHolder { Items = [new ConvItem { Kept = 1 }] }], typeof(ConvHolder), nameof(ConvHolder.Items), allowed, RulesJson.Compact);
+        Assert.Contains("renamed", Assert.Single(problems), StringComparison.Ordinal);
     }
 
     [Fact]
