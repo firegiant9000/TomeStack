@@ -16,6 +16,8 @@
     <NuGetAudit>true</NuGetAudit>
     <NuGetAuditMode>all</NuGetAuditMode>
     <NuGetAuditLevel>low</NuGetAuditLevel>
+    <!-- NU1900 (vulnerability data source unreachable) stays a warning so a nuget.org blip does not fail CI; NU1901-NU1904 (advisories) stay errors. -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);NU1900</WarningsNotAsErrors>
   </PropertyGroup>
   <PropertyGroup Condition="'$(CI)' == 'true'">
     <RestoreLockedMode>true</RestoreLockedMode>

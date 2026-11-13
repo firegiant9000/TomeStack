@@ -33,8 +33,27 @@ public sealed class SupplyChainPolicyTests
         Assert.Equal("all", Single("NuGetAuditMode").Value);
         Assert.Equal("low", Single("NuGetAuditLevel").Value);
 
+        Assert.Contains("NU1900", Single("WarningsNotAsErrors").Value.Split(';'));
+
         var group = Single("RestoreLockedMode").Parent!;
         Assert.Equal("'$(CI)' == 'true'", (string?)group.Attribute("Condition") ?? (string?)Single("RestoreLockedMode").Attribute("Condition"));
+    }
+
+    /// <summary>
+    /// The installer publishes with <c>-r win-x64</c>, which restores the whole project graph with that runtime. Without
+    /// <c>&lt;RuntimeIdentifiers&gt;win-x64</c> in each project, the lock file has no runtime and locked restore fails with NU1004.
+    /// </summary>
+    [Theory]
+    [InlineData("src/RulesCore/TomeStack.RulesCore.csproj")]
+    [InlineData("src/ImportWorker/TomeStack.ImportWorker.csproj")]
+    [InlineData("src/AppService/TomeStack.AppService.csproj")]
+    [InlineData("src/ImportWorker.Host/TomeStack.ImportWorker.Host.csproj")]
+    [InlineData("src/DesktopShell/TomeStack.DesktopShell.csproj")]
+    public void Publish_graph_projects_declare_the_win_x64_runtime_identifier(string project)
+    {
+        var doc = XDocument.Load(Path.Combine(RepoRoot, project));
+        var ids = doc.Descendants("RuntimeIdentifiers").SelectMany(e => e.Value.Split(';'));
+        Assert.Contains("win-x64", ids);
     }
 
     [Fact]
