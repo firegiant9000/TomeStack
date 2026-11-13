@@ -44,7 +44,7 @@ export const noteLabels: Record<string, string> = {
   'resolution.not-found': 'Your earlier pick is no longer available (a newer version, or another kind); pick again.',
   'character.spells-too-many': 'Past the 500 spells a character can hold.',
   'character.class-duplicate': 'The same class is listed twice.',
-  'stub.created': 'A homebrew class is created for it (a draft until you publish it).',
+  'stub.created': 'A homebrew class is created for it (a draft until you make it available to characters).',
 };
 
 /** D35 / R100: why a class TomeStack lacks cannot be created from the sheet. */

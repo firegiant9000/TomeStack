@@ -1,13 +1,21 @@
 // @vitest-environment jsdom
 // Item 2: the review screen says what happens to an accepted entry and offers the way to the studio.
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render as rtlRender, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ReactElement } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { client } from '../api/client';
 import { TomeStackError } from '../api/transport';
-import type { CandidateCheck, DraftCandidate, ImportJob, SourceRecord, StoredCandidate } from '../api/types';
+import type { CandidateCheck, DraftCandidate, ImportJob, RulesFamilyPolicy, SourceRecord, StoredCandidate } from '../api/types';
+import { RulesLabelProvider } from '../rulesLabel';
 import { expectNoAxeViolations } from '../test/axe';
 import { CandidateReviewPanel } from './CandidateReviewPanel';
+
+const policies = [
+  { id: 'srd-5.1', displayName: 'SRD 5.1', shortLabel: '2014 rules' },
+  { id: 'srd-5.2.1', displayName: 'SRD 5.2.1', shortLabel: '2024 rules' },
+] as unknown as RulesFamilyPolicy[];
+const render = (ui: ReactElement) => rtlRender(<RulesLabelProvider families={policies}>{ui}</RulesLabelProvider>);
 
 vi.mock('../api/client', () => ({
   client: { candidates: vi.fn(), checkCandidate: vi.fn(), editCandidate: vi.fn(), acceptCandidate: vi.fn(), ignoreCandidate: vi.fn(), acceptCandidates: vi.fn(), importedPage: vi.fn(), contentDuplicates: vi.fn() },
@@ -32,8 +40,8 @@ function renderPanel(onOpenStudio = vi.fn(), forSource: SourceRecord = source) {
 
 it('says, always visible and not as a live region, that accepted entries are drafts in the studio', async () => {
   renderPanel();
-  await screen.findByText('No candidates match.');
-  const line = screen.getByText('Accepted entries are drafts in the Homebrew studio under Testy Tome. Publish them there to use them in the builder.');
+  await screen.findByText('No entries match.');
+  const line = screen.getByText('Kept entries are drafts in Homebrew under Testy Tome. Make them available to characters there to use them in the builder.');
   expect(line.tagName).toBe('P');
   expect(line.className).toBe('hint');
   expect(line.closest('[aria-live], [role="status"], [role="alert"]')).toBeNull();
@@ -41,8 +49,8 @@ it('says, always visible and not as a live region, that accepted entries are dra
 
 it('opens the source in the studio from a named button', async () => {
   const onOpenStudio = renderPanel();
-  await screen.findByText('No candidates match.');
-  await userEvent.setup().click(screen.getByRole('button', { name: 'Open Testy Tome in the studio' }));
+  await screen.findByText('No entries match.');
+  await userEvent.setup().click(screen.getByRole('button', { name: 'Open Testy Tome in Homebrew' }));
   expect(onOpenStudio).toHaveBeenCalledExactlyOnceWith('src-1');
 });
 
@@ -86,14 +94,21 @@ async function openDetail(rulesFamilies: string[], check: CandidateCheck) {
   vi.mocked(client.editCandidate).mockResolvedValue(detected(rulesFamilies));
   renderPanel(vi.fn(), bothSource);
   await userEvent.setup().click(await screen.findByRole('button', { name: 'Testy Coat' }));
-  return screen.findByRole('group', { name: 'Rules families' });
+  return screen.findByRole('group', { name: 'Rules' });
 }
 
 it('offers one checkbox per family of the source, ticked as the candidate has them', async () => {
   const group = await openDetail(['srd-5.1'], checkOf({}));
   const boxes = within(group).getAllByRole('checkbox');
-  expect(boxes.map((b) => (b as HTMLInputElement).labels?.[0]?.textContent?.trim())).toEqual(['2014 rules (SRD 5.1)', '2024 rules (SRD 5.2.1)']);
+  expect(boxes.map((b) => (b as HTMLInputElement).labels?.[0]?.textContent?.trim())).toEqual(['2014 rules', '2024 rules']);
   expect(boxes.map((b) => (b as HTMLInputElement).checked)).toEqual([true, false]);
+});
+
+it('lists the candidate\'s rules in its hint by short label, never an id', async () => {
+  await openDetail(['srd-5.1', 'srd-5.2.1'], checkOf({}));
+  const hint = screen.getByText(/a hint, not a check/).textContent ?? '';
+  expect(hint).toContain('2014 rules, 2024 rules');
+  expect(hint).not.toMatch(/srd-5|SRD 5/);
 });
 
 it('offers only the source families, even for a source with one', async () => {
@@ -101,13 +116,13 @@ it('offers only the source families, even for a source with one', async () => {
   vi.mocked(client.checkCandidate).mockResolvedValue(checkOf({}));
   renderPanel(vi.fn(), source);
   await userEvent.setup().click(await screen.findByRole('button', { name: 'Testy Coat' }));
-  expect(within(await screen.findByRole('group', { name: 'Rules families' })).getAllByRole('checkbox')).toHaveLength(1);
+  expect(within(await screen.findByRole('group', { name: 'Rules' })).getAllByRole('checkbox')).toHaveLength(1);
 });
 
 it('saves the ticked families with the edit', async () => {
   const user = userEvent.setup();
   const group = await openDetail([], checkOf({ canAccept: false, canAcceptAsReference: false }));
-  await user.click(within(group).getByRole('checkbox', { name: '2024 rules (SRD 5.2.1)' }));
+  await user.click(within(group).getByRole('checkbox', { name: '2024 rules' }));
   await user.click(screen.getByRole('button', { name: 'Save edit' }));
   expect(client.editCandidate).toHaveBeenCalledWith('cand-1', expect.objectContaining({ rulesFamilies: ['srd-5.2.1'] }));
 });
@@ -123,9 +138,9 @@ it('still saves with no family ticked, and Accept shows the servers reason', asy
     }),
   );
   expect(within(group).getAllByRole('checkbox').map((b) => (b as HTMLInputElement).checked)).toEqual([false, false]);
-  await screen.findByRole('list', { name: 'Blocks accepting' });
+  await screen.findByRole('list', { name: 'Blocks keeping' });
   expect(screen.getByText('Say which rules family this entry is written for.')).toBeTruthy();
-  expect(screen.getByRole('button', { name: 'Accept as a draft' }).getAttribute('aria-disabled')).toBe('true');
+  expect(screen.getByRole('button', { name: 'Keep, with its rules' }).getAttribute('aria-disabled')).toBe('true');
   await user.click(screen.getByRole('button', { name: 'Save edit' }));
   expect(client.editCandidate).toHaveBeenCalledWith('cand-1', expect.objectContaining({ rulesFamilies: [] }));
 });
@@ -141,9 +156,9 @@ it('keeps a blocked Accept focusable, refuses the press, and links the visible r
       blockers: [{ code: 'import.family-needed', message: 'Say which rules family this entry is written for.' }],
     }),
   );
-  const list = await screen.findByRole('list', { name: 'Blocks accepting' });
+  const list = await screen.findByRole('list', { name: 'Blocks keeping' });
   expect(list.id).not.toBe('');
-  for (const name of ['Accept as a draft', 'Accept as reference']) {
+  for (const name of ['Keep, with its rules', 'Keep as text only']) {
     const button = screen.getByRole('button', { name });
     expect(button).toHaveProperty('disabled', false);
     expect(button.getAttribute('aria-disabled')).toBe('true');
@@ -162,7 +177,7 @@ it('holds the studio button, with a linked reason, while the open candidate has 
   vi.mocked(client.candidates).mockResolvedValue(pageOf([detected(['srd-5.1'])]));
   vi.mocked(client.checkCandidate).mockResolvedValue(checkOf({}));
   render(<CandidateReviewPanel job={job} source={bothSource} onError={() => {}} onStatus={() => {}} onOpenPage={() => {}} onOpenStudio={onOpenStudio} />);
-  const studio = await screen.findByRole('button', { name: 'Open Testy Both in the studio' });
+  const studio = await screen.findByRole('button', { name: 'Open Testy Both in Homebrew' });
   expect(studio.getAttribute('aria-disabled')).toBeNull();
 
   await user.click(screen.getByRole('button', { name: 'Testy Coat' }));
@@ -190,11 +205,11 @@ it('counts a changed family, text, effects or kind as an edit, and a saved edit 
   vi.mocked(client.checkCandidate).mockResolvedValue(checkOf({}));
   vi.mocked(client.editCandidate).mockResolvedValue(detected(['srd-5.1', 'srd-5.2.1']));
   render(<CandidateReviewPanel job={job} source={bothSource} onError={() => {}} onStatus={() => {}} onOpenPage={() => {}} onOpenStudio={() => {}} />);
-  const studio = await screen.findByRole('button', { name: 'Open Testy Both in the studio' });
+  const studio = await screen.findByRole('button', { name: 'Open Testy Both in Homebrew' });
   await user.click(screen.getByRole('button', { name: 'Testy Coat' }));
-  const group = await screen.findByRole('group', { name: 'Rules families' });
+  const group = await screen.findByRole('group', { name: 'Rules' });
 
-  await user.click(within(group).getByRole('checkbox', { name: '2024 rules (SRD 5.2.1)' }));
+  await user.click(within(group).getByRole('checkbox', { name: '2024 rules' }));
   expect(studio.getAttribute('aria-disabled')).toBe('true');
 
   vi.mocked(client.candidates).mockResolvedValue(pageOf([{ ...detected(['srd-5.1', 'srd-5.2.1']), updatedAt: '2026-10-14T00:01:00Z' }]));
@@ -229,7 +244,7 @@ it('pages at 50 with Previous 50 and Next 50, held (not disabled) at the ends', 
   const next = await screen.findByRole('button', { name: 'Next 50' });
   const previous = screen.getByRole('button', { name: 'Previous 50' });
   expect(vi.mocked(client.candidates)).toHaveBeenLastCalledWith('job-1', { status: 'pending' }, { offset: 0, limit: 50 });
-  expect(within(screen.getByRole('list', { name: 'Candidates' })).getAllByRole('listitem')).toHaveLength(50);
+  expect(within(screen.getByRole('list', { name: 'Entries found' })).getAllByRole('listitem')).toHaveLength(50);
   expect([held(previous), held(next)]).toEqual([true, false]);
   expect(previous).toHaveProperty('disabled', false);
 
@@ -243,7 +258,7 @@ it('pages at 50 with Previous 50 and Next 50, held (not disabled) at the ends', 
 
   await user.click(next);
   await screen.findByRole('button', { name: 'Testy Item 101' });
-  expect(within(screen.getByRole('list', { name: 'Candidates' })).getAllByRole('listitem')).toHaveLength(20);
+  expect(within(screen.getByRole('list', { name: 'Entries found' })).getAllByRole('listitem')).toHaveLength(20);
   expect([held(previous), held(next)]).toEqual([false, true]);
   expect(document.activeElement).toBe(next); // focus stays on the control that was pressed
 
@@ -289,9 +304,9 @@ it('says in plain text above the list that detection kept only the first 5,000 o
       onOpenStudio={() => {}}
     />,
   );
-  const list = await screen.findByRole('list', { name: 'Candidates' });
+  const list = await screen.findByRole('list', { name: 'Entries found' });
   for (const text of [
-    'Showing the first 5,000 candidates; read fewer pages at a time to see the rest.',
+    'Showing the first 5,000 entries found; read fewer pages at a time to see the rest.',
     'Detection stopped before page 812; read pages 812 on as a range to detect them.',
   ]) {
     const notice = screen.getByText(text);
@@ -304,7 +319,7 @@ it('says in plain text above the list that detection kept only the first 5,000 o
 it('shows no truncation notice for an ordinary job', async () => {
   longList(3);
   renderPanel(vi.fn(), bothSource);
-  await screen.findByRole('list', { name: 'Candidates' });
+  await screen.findByRole('list', { name: 'Entries found' });
   expect(screen.queryByText(/first 5,000/)).toBeNull();
   expect(screen.queryByText(/Detection stopped/)).toBeNull();
 });
@@ -437,7 +452,7 @@ it('keeps focus on the filter after one that drops the open candidate is undone'
   const kind = within(screen.getByRole('group', { name: 'Show' })).getByLabelText('Kind');
 
   await user.selectOptions(kind, 'spell');
-  await screen.findByText('No candidates match.');
+  await screen.findByText('No entries match.');
   await user.selectOptions(kind, '');
   await screen.findByRole('button', { name: 'Testy Item 1' });
 
@@ -521,11 +536,11 @@ it('moves back a page, with focus on the heading, when the only candidate on the
   renderPanel(vi.fn(), bothSource);
   await user.click(await screen.findByRole('button', { name: 'Next 50' }));
   await user.click(await screen.findByRole('button', { name: 'Testy Item 51' }));
-  await user.click(await screen.findByRole('button', { name: 'Accept as a draft' }));
+  await user.click(await screen.findByRole('button', { name: 'Keep, with its rules' }));
 
   await screen.findByRole('button', { name: 'Testy Item 50' });
   expect(screen.getByText('1–50 of 50')).toBeTruthy();
-  expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Candidates from Testy Both' }));
+  expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Entries found in Testy Both' }));
 });
 
 it('shows the newest filter result when two requests answer out of order', async () => {
@@ -629,12 +644,12 @@ it('holds the bulk buttons with a linked reason until something is selected', as
   const user = userEvent.setup();
   longList(3);
   renderPanel(vi.fn(), bothSource);
-  const drafts = await screen.findByRole('button', { name: 'Accept selected as drafts' });
-  const reference = screen.getByRole('button', { name: 'Accept selected as reference' });
+  const drafts = await screen.findByRole('button', { name: 'Keep selected, with their rules' });
+  const reference = screen.getByRole('button', { name: 'Keep selected as text only' });
   for (const button of [drafts, reference]) {
     expect(held(button)).toBe(true);
     expect(button).toHaveProperty('disabled', false);
-    expect(document.getElementById(button.getAttribute('aria-describedby') ?? '')?.textContent).toBe('Select at least one candidate first.');
+    expect(document.getElementById(button.getAttribute('aria-describedby') ?? '')?.textContent).toBe('Select at least one entry first.');
     await user.click(button);
   }
   expect(client.acceptCandidates).not.toHaveBeenCalled();
@@ -656,14 +671,14 @@ it('accepts the selection in bulk, reports the counts, and leaves the blocked ro
   const everything = vi.mocked(client.candidates).getMockImplementation()!;
   vi.mocked(client.candidates).mockImplementation((id, f, p) => everything(id, f, p).then((page) => ({ items: page.items.filter((c) => c.id === 'cand-3'), total: 1 })));
 
-  await user.click(screen.getByRole('button', { name: 'Accept selected as drafts' }));
+  await user.click(screen.getByRole('button', { name: 'Keep selected, with their rules' }));
 
   expect(client.acceptCandidates).toHaveBeenCalledExactlyOnceWith(['cand-1', 'cand-2', 'cand-3'], false, { 'cand-1': 'etag-1', 'cand-2': 'etag-2', 'cand-3': 'etag-3' });
-  await vi.waitFor(() => expect(onStatus).toHaveBeenCalledWith(expect.stringMatching(/^Accepted 2; 1 need review\./)));
+  await vi.waitFor(() => expect(onStatus).toHaveBeenCalledWith(expect.stringMatching(/^Kept 2; 1 need review\./)));
   await screen.findByText('1 selected', { selector: '[aria-live="polite"]' });
   expect((screen.getByRole('checkbox', { name: 'Select Testy Item 3' }) as HTMLInputElement).checked).toBe(true);
-  const reasons = screen.getByRole('list', { name: 'Not accepted' });
-  expect(within(reasons).getByText(/Testy Item 3/).textContent).toContain('needs a rules family');
+  const reasons = screen.getByRole('list', { name: 'Not kept' });
+  expect(within(reasons).getByText(/Testy Item 3/).textContent).toContain('needs its rules chosen');
 });
 
 it('accepts as reference with the same selection', async () => {
@@ -672,7 +687,7 @@ it('accepts as reference with the same selection', async () => {
   vi.mocked(client.acceptCandidates).mockResolvedValue({ accepted: [numbered(1)], blocked: [] });
   renderPanel(vi.fn(), bothSource);
   await user.click(await screen.findByRole('checkbox', { name: 'Select Testy Item 1' }));
-  await user.click(screen.getByRole('button', { name: 'Accept selected as reference' }));
+  await user.click(screen.getByRole('button', { name: 'Keep selected as text only' }));
   expect(client.acceptCandidates).toHaveBeenLastCalledWith(['cand-1'], true, { 'cand-1': 'etag-1' });
 });
 
@@ -684,10 +699,10 @@ it('reloads and clears the selection when a bulk accept is refused as changed, s
   render(<CandidateReviewPanel job={job} source={bothSource} onError={onError} onStatus={() => {}} onOpenPage={() => {}} onOpenStudio={() => {}} />);
   await user.click(await screen.findByRole('button', { name: 'Select the 3 shown' }));
   const calls = vi.mocked(client.candidates).mock.calls.length;
-  const button = screen.getByRole('button', { name: 'Accept selected as drafts' });
+  const button = screen.getByRole('button', { name: 'Keep selected, with their rules' });
   await user.click(button);
 
-  await screen.findByText('Some selected candidates changed; the selection was cleared.', { selector: '[aria-live="polite"]' });
+  await screen.findByText('Some selected entries changed; the selection was cleared.', { selector: '[aria-live="polite"]' });
   expect(onError).not.toHaveBeenCalled(); // a refusal to act on, not an error to show
   expect(vi.mocked(client.candidates).mock.calls.length).toBeGreaterThan(calls); // the list was reloaded, for fresh tokens
   expect(screen.getAllByRole('checkbox', { name: /^Select Testy Item / }).some((b) => (b as HTMLInputElement).checked)).toBe(false);
@@ -702,10 +717,10 @@ it('ignores a second press while a bulk accept is in flight', async () => {
   vi.mocked(client.acceptCandidates).mockReturnValue(new Promise((resolve) => (finish = resolve)));
   renderPanel(vi.fn(), bothSource);
   await user.click(await screen.findByRole('button', { name: 'Select the 2 shown' }));
-  const button = screen.getByRole('button', { name: 'Accept selected as drafts' });
+  const button = screen.getByRole('button', { name: 'Keep selected, with their rules' });
   await user.click(button);
   await user.click(button);
-  await user.click(screen.getByRole('button', { name: 'Accept selected as reference' }));
+  await user.click(screen.getByRole('button', { name: 'Keep selected as text only' }));
   expect(client.acceptCandidates).toHaveBeenCalledTimes(1);
   await act(async () => finish({ accepted: [], blocked: [] }));
 });
@@ -720,7 +735,7 @@ it('holds the checkboxes and bulk buttons while the open candidate has an unsave
   expect(box.getAttribute('aria-describedby')).toBe(reason.id);
   await user.click(box);
   expect((box as HTMLInputElement).checked).toBe(false);
-  for (const name of ['Select the 50 shown', 'Accept selected as drafts', 'Accept selected as reference']) {
+  for (const name of ['Select the 50 shown', 'Keep selected, with their rules', 'Keep selected as text only']) {
     const button = screen.getByRole('button', { name });
     expect(held(button)).toBe(true);
     expect(button.getAttribute('aria-describedby')).toBe(reason.id);
@@ -739,14 +754,14 @@ it('holds paging and the filters, with a linked reason, while a bulk accept is i
   vi.mocked(client.acceptCandidates).mockReturnValue(new Promise((resolve) => (finish = resolve)));
   renderPanel(vi.fn(), bothSource);
   await user.click(await screen.findByRole('button', { name: 'Select the 50 shown' }));
-  await user.click(screen.getByRole('button', { name: 'Accept selected as drafts' }));
+  await user.click(screen.getByRole('button', { name: 'Keep selected, with their rules' }));
   const calls = vi.mocked(client.candidates).mock.calls.length;
 
   const next = screen.getByRole('button', { name: 'Next 50' });
   const kind = screen.getByLabelText('Kind');
   for (const control of [next, kind, screen.getByRole('button', { name: 'Select the 50 shown' }), screen.getByRole('checkbox', { name: 'Select Testy Item 1' })]) {
     expect(held(control)).toBe(true);
-    expect(document.getElementById(control.getAttribute('aria-describedby') ?? '')?.textContent).toBe('Accepting the selected candidates…');
+    expect(document.getElementById(control.getAttribute('aria-describedby') ?? '')?.textContent).toBe('Keeping the selected entries…');
   }
   await user.click(next);
   await user.selectOptions(kind, 'spell');
@@ -780,7 +795,7 @@ it('a page-range pause that is still running does not fire during a bulk accept'
   await user.click(await screen.findByRole('button', { name: 'Select the 50 shown' }));
   const from = screen.getByLabelText('From page') as HTMLInputElement;
   fireEvent.change(from, { target: { value: '75' } }); // the 300 ms pause starts
-  await user.click(screen.getByRole('button', { name: 'Accept selected as drafts' }));
+  await user.click(screen.getByRole('button', { name: 'Keep selected, with their rules' }));
   const calls = vi.mocked(client.candidates).mock.calls.length;
 
   await new Promise((resolve) => setTimeout(resolve, 450));
@@ -820,7 +835,7 @@ async function openClass(check: CandidateCheck = checkOf({})) {
   vi.mocked(client.acceptCandidate).mockResolvedValue(lamp());
   renderPanel(vi.fn(), source);
   await userEvent.setup().click(await screen.findByRole('button', { name: 'Testy Lamplighter' }));
-  await screen.findByRole('heading', { name: 'Candidate: Testy Lamplighter' });
+  await screen.findByRole('heading', { name: 'Entry: Testy Lamplighter' });
 }
 
 it('shows the slot table with a caption and headers, and Open page beside it', async () => {
@@ -833,17 +848,17 @@ it('shows the slot table with a caption and headers, and Open page beside it', a
   expect(screen.getAllByRole('button', { name: 'Open page 4' })).toHaveLength(1);
 });
 
-it('holds Accept as a draft, with a visible reason, until the hit die and slot table are ticked, and sends what was ticked', async () => {
+it('holds Keep, with its rules, with a visible reason, until the hit die and slot table are ticked, and sends what was ticked', async () => {
   const user = userEvent.setup();
   await openClass();
-  const accept = await screen.findByRole('button', { name: 'Accept as a draft' });
+  const accept = await screen.findByRole('button', { name: 'Keep, with its rules' });
   const hit = screen.getByRole('checkbox', { name: 'Confirm the hit die, d8' }) as HTMLInputElement;
   const slots = screen.getByRole('checkbox', { name: 'Confirm the spell slot table' }) as HTMLInputElement;
   expect([hit.checked, slots.checked]).toEqual([false, false]);
   expect(accept.getAttribute('aria-disabled')).toBe('true');
   expect(accept.hasAttribute('disabled')).toBe(false);
   const reason = document.getElementById(accept.getAttribute('aria-describedby')!)!;
-  expect(reason.textContent).toBe('Confirm the hit die and the spell slot table to accept the class as a draft.');
+  expect(reason.textContent).toBe('Confirm the hit die and the spell slot table to keep the class with its rules.');
 
   accept.focus();
   await user.click(accept);
@@ -851,7 +866,7 @@ it('holds Accept as a draft, with a visible reason, until the hit die and slot t
   expect(document.activeElement).toBe(accept);
 
   await user.click(hit);
-  expect(document.getElementById(accept.getAttribute('aria-describedby')!)!.textContent).toBe('Confirm the spell slot table to accept the class as a draft.');
+  expect(document.getElementById(accept.getAttribute('aria-describedby')!)!.textContent).toBe('Confirm the spell slot table to keep the class with its rules.');
   await user.click(slots);
   expect(accept.getAttribute('aria-disabled')).toBeNull();
   await user.click(accept);
@@ -861,7 +876,7 @@ it('holds Accept as a draft, with a visible reason, until the hit die and slot t
 it('accepts a class as reference without any confirmation, and sends none', async () => {
   const user = userEvent.setup();
   await openClass();
-  await user.click(await screen.findByRole('button', { name: 'Accept as reference' }));
+  await user.click(await screen.findByRole('button', { name: 'Keep as text only' }));
   expect(client.acceptCandidate).toHaveBeenCalledExactlyOnceWith('cand-1', true, 'etag-1');
 });
 
@@ -898,7 +913,7 @@ async function openStored(rows: { current: StoredCandidate }, check: CandidateCh
   vi.mocked(client.acceptCandidate).mockResolvedValue(rows.current);
   renderPanel(vi.fn(), source);
   await userEvent.setup().click(await screen.findByRole('button', { name: (rows.current.edited ?? rows.current.candidate).proposedName }));
-  await screen.findByRole('heading', { name: `Candidate: ${(rows.current.edited ?? rows.current.candidate).proposedName}` });
+  await screen.findByRole('heading', { name: `Entry: ${(rows.current.edited ?? rows.current.candidate).proposedName}` });
 }
 
 // Item 8.
@@ -919,7 +934,7 @@ it('offers one unticked Confirm checkbox per proposed effect, named by it, and s
   expect(boxes.every((b) => !b.checked)).toBe(true);
   expect(boxes.every((b) => b.closest('label')?.className === 'choice')).toBe(true);
 
-  const accept = screen.getByRole('button', { name: 'Accept as a draft' });
+  const accept = screen.getByRole('button', { name: 'Keep, with its rules' });
   await user.click(screen.getByRole('checkbox', { name: 'Confirm the Wisdom saving throw proficiency' }));
   expect(accept.getAttribute('aria-disabled')).toBe('true'); // the hold stays on the hit die and slot table
   await user.click(screen.getByRole('checkbox', { name: 'Confirm the hit die, d8' }));
@@ -946,7 +961,7 @@ it('treats a candidate edited into a class as a class', async () => {
   expect(await screen.findByRole('group', { name: 'Confirm what was read' })).toBeTruthy();
   await user.click(screen.getByRole('checkbox', { name: 'Confirm the hit die, d8' }));
   await user.click(screen.getByRole('checkbox', { name: 'Confirm the spell slot table' }));
-  await user.click(screen.getByRole('button', { name: 'Accept as a draft' }));
+  await user.click(screen.getByRole('button', { name: 'Keep, with its rules' }));
   expect(client.acceptCandidate).toHaveBeenCalledExactlyOnceWith('cand-1', false, 'etag-1', ['hit-die', 'spellcasting']);
 });
 
@@ -954,7 +969,7 @@ it('treats a class edited into another kind as that kind', async () => {
   const user = userEvent.setup();
   const stored = fullLamp();
   await openStored({ current: { ...stored, edited: { ...stored.candidate, proposedKind: 'feature' } } });
-  const accept = await screen.findByRole('button', { name: 'Accept as a draft' });
+  const accept = await screen.findByRole('button', { name: 'Keep, with its rules' });
   expect(screen.queryByRole('group', { name: 'Confirm what was read' })).toBeNull();
   await vi.waitFor(() => expect(accept.getAttribute('aria-disabled')).toBeNull());
   await user.click(accept);
@@ -974,9 +989,9 @@ it('explains a class held back from a bulk accept in words, and never shows a co
       { candidateId: 'cand-2', codes: ['candidate.some-future-code'] },
     ],
   });
-  await user.click(screen.getByRole('button', { name: 'Accept selected as drafts' }));
-  const reasons = await screen.findByRole('list', { name: 'Not accepted' });
-  expect(within(reasons).getByText(/Testy Item 1/).textContent).toContain('is a class: open it, tick the hit die and slot table, and accept it on its own');
+  await user.click(screen.getByRole('button', { name: 'Keep selected, with their rules' }));
+  const reasons = await screen.findByRole('list', { name: 'Not kept' });
+  expect(within(reasons).getByText(/Testy Item 1/).textContent).toContain('is a class: open it, tick the hit die and slot table, and keep it on its own');
   expect(within(reasons).getByText(/Testy Item 2/).textContent).toContain('was held back by a check: open it to see why');
   expect(reasons.textContent).not.toMatch(/[a-z]+\.[a-z-]+/);
 });
@@ -995,7 +1010,7 @@ it('lists the linked features the check returns, with installed and ignored ones
   expect(within(list).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
     'Testy Glow, level 1',
     'Testy Spark, level 2, installed',
-    'Testy Beacon, levels 3, 5, already accepted',
+    'Testy Beacon, levels 3, 5, already kept',
     'Testy Dim, level 4, ignored: not granted',
   ]);
   expect(screen.getByText('1 linked feature is ignored and will not be granted.')).toBeTruthy();
@@ -1032,9 +1047,9 @@ it('says a class is accepted granting only the linked features that are granted,
   await screen.findByRole('list', { name: 'Linked features' });
   await user.click(screen.getByRole('checkbox', { name: 'Confirm the hit die, d8' }));
   await user.click(screen.getByRole('checkbox', { name: 'Confirm the spell slot table' }));
-  await user.click(screen.getByRole('button', { name: 'Accept as a draft' }));
+  await user.click(screen.getByRole('button', { name: 'Keep, with its rules' }));
   await vi.waitFor(() => expect(onStatus).toHaveBeenCalled());
-  expect(onStatus.mock.calls[0]?.[0]).toMatch(/^Testy Lamplighter is now a draft granting 2 features in the studio\./);
+  expect(onStatus.mock.calls[0]?.[0]).toMatch(/^Testy Lamplighter is now a draft granting 2 features in Homebrew\./);
 });
 
 // Item 12.
@@ -1055,7 +1070,7 @@ it('clears the ticks when a saved edit changes the effects, and keeps them when 
   await user.clear(name);
   await user.type(name, 'Testy Lantern');
   await user.click(screen.getByRole('button', { name: 'Save edit' }));
-  await screen.findByRole('heading', { name: 'Candidate: Testy Lantern' });
+  await screen.findByRole('heading', { name: 'Entry: Testy Lantern' });
   expect((screen.getByRole('checkbox', { name: 'Confirm the hit die, d8' }) as HTMLInputElement).checked).toBe(true);
   expect((screen.getByRole('checkbox', { name: 'Confirm the spell slot table' }) as HTMLInputElement).checked).toBe(true);
 
@@ -1072,13 +1087,13 @@ it('clears the ticks when a saved edit changes the effects, and keeps them when 
 it('says on a class that the ticked effects become automatic and the others stay reference', async () => {
   await openStored({ current: lamp() });
   expect(
-    await screen.findByLabelText('Proposed effects (JSON; on accepting the class as a draft, the ones you tick under Confirm what was read are automatic, the others stay reference)'),
+    await screen.findByLabelText('Proposed effects (JSON; on keeping the class with its rules, the ones you tick under Confirm what was read are automatic, the others stay reference)'),
   ).toBeTruthy();
 });
 
 it('keeps the reference-only label for other kinds', async () => {
   await openDetail([], checkOf({}));
-  expect(screen.getByLabelText('Proposed effects (JSON; they stay reference-only until you change them in the studio)')).toBeTruthy();
+  expect(screen.getByLabelText('Proposed effects (JSON; they stay reference-only until you change them in Homebrew)')).toBeTruthy();
 });
 
 // R120: an edit carries the token it was opened with; a refused one reloads the candidate and says so.
@@ -1106,16 +1121,16 @@ it('reloads the candidate and says it changed when the edit is refused, without 
   render(<CandidateReviewPanel job={job} source={bothSource} onError={onError} onStatus={onStatus} onOpenPage={() => {}} onOpenStudio={() => {}} />);
   await user.click(await screen.findByRole('button', { name: 'Testy Coat' }));
   await user.click(await screen.findByRole('button', { name: 'Save edit' }));
-  await waitFor(() => expect(onStatus).toHaveBeenCalledWith('This candidate changed since you opened it. It has been reloaded.'));
+  await waitFor(() => expect(onStatus).toHaveBeenCalledWith('This entry changed since you opened it. It has been reloaded.'));
   expect(onError).not.toHaveBeenCalled();
   expect(vi.mocked(client.candidates).mock.calls.length).toBe(2);
   // The editor is still there, on the reloaded candidate, and focus is inside it.
-  const heading = await screen.findByRole('heading', { name: 'Candidate: Testy Coat' });
+  const heading = await screen.findByRole('heading', { name: 'Entry: Testy Coat' });
   await waitFor(() => expect(heading.closest('section')?.contains(document.activeElement)).toBe(true));
 });
 
 // R134: accept and ignore carry the opened candidate's token too.
-it('sends the opened candidates token with Accept as reference and with Ignore', async () => {
+it('sends the opened candidates token with Keep as text only and with Ignore', async () => {
   const user = userEvent.setup();
   vi.mocked(client.acceptCandidate).mockReset();
   vi.mocked(client.ignoreCandidate).mockReset();
@@ -1125,14 +1140,14 @@ it('sends the opened candidates token with Accept as reference and with Ignore',
   vi.mocked(client.ignoreCandidate).mockResolvedValue(detected(['srd-5.1']));
   renderPanel(vi.fn(), bothSource);
   await user.click(await screen.findByRole('button', { name: 'Testy Coat' }));
-  await user.click(await screen.findByRole('button', { name: 'Accept as reference' }));
+  await user.click(await screen.findByRole('button', { name: 'Keep as text only' }));
   await waitFor(() => expect(client.acceptCandidate).toHaveBeenCalledExactlyOnceWith('cand-1', true, 'token-1'));
   await user.click(await screen.findByRole('button', { name: 'Ignore' }));
   await waitFor(() => expect(client.ignoreCandidate).toHaveBeenCalledExactlyOnceWith('cand-1', 'token-1'));
 });
 
 it.each([
-  ['Accept as a draft', 'acceptCandidate'],
+  ['Keep, with its rules', 'acceptCandidate'],
   ['Ignore', 'ignoreCandidate'],
 ] as const)('reloads the candidate and says it changed when %s is refused, without reporting an error', async (button, method) => {
   const user = userEvent.setup();
@@ -1146,10 +1161,10 @@ it.each([
   render(<CandidateReviewPanel job={job} source={bothSource} onError={onError} onStatus={onStatus} onOpenPage={() => {}} onOpenStudio={() => {}} />);
   await user.click(await screen.findByRole('button', { name: 'Testy Coat' }));
   await user.click(await screen.findByRole('button', { name: button }));
-  await waitFor(() => expect(onStatus).toHaveBeenCalledWith('This candidate changed since you opened it. It has been reloaded.'));
+  await waitFor(() => expect(onStatus).toHaveBeenCalledWith('This entry changed since you opened it. It has been reloaded.'));
   expect(onError).not.toHaveBeenCalled();
   expect(vi.mocked(client.candidates).mock.calls.length).toBe(2);
-  const heading = await screen.findByRole('heading', { name: 'Candidate: Testy Coat' });
+  const heading = await screen.findByRole('heading', { name: 'Entry: Testy Coat' });
   await waitFor(() => expect(heading.closest('section')?.contains(document.activeElement)).toBe(true));
 });
 
@@ -1170,15 +1185,15 @@ it.each(['candidate.linked-edited', 'candidate.linked-changed'])('asks for the c
   await user.click(screen.getByRole('checkbox', { name: 'Confirm the spell slot table' }));
   await waitFor(() => expect(vi.mocked(client.checkCandidate)).toHaveBeenCalledTimes(1));
 
-  await user.click(screen.getByRole('button', { name: 'Accept as a draft' }));
+  await user.click(screen.getByRole('button', { name: 'Keep, with its rules' }));
 
   await waitFor(() => expect(vi.mocked(client.checkCandidate)).toHaveBeenCalledTimes(2));
-  expect(onStatus).toHaveBeenCalledWith('A feature this class grants changed while it was being accepted. The check has been refreshed; look it over and accept again.');
+  expect(onStatus).toHaveBeenCalledWith('A feature this class grants changed while it was being kept. The check has been refreshed; look it over and keep it again.');
   expect(onError).not.toHaveBeenCalled();
 });
 
 // R134: accept and ignore act on the stored candidate, so they are held, like selecting another one, while the form differs from it.
-it('holds Accept as a draft, Accept as reference and Ignore, with a linked reason, while the open candidate has an unsaved edit', async () => {
+it('holds Keep, with its rules, Keep as text only and Ignore, with a linked reason, while the open candidate has an unsaved edit', async () => {
   const user = userEvent.setup();
   vi.mocked(client.acceptCandidate).mockReset();
   vi.mocked(client.ignoreCandidate).mockReset();
@@ -1189,7 +1204,7 @@ it('holds Accept as a draft, Accept as reference and Ignore, with a linked reaso
   renderPanel(vi.fn(), bothSource);
   await user.click(await screen.findByRole('button', { name: 'Testy Coat' }));
   const name = await screen.findByLabelText('Name');
-  const buttons = ['Accept as a draft', 'Accept as reference', 'Ignore'].map((label) => screen.getByRole('button', { name: label }));
+  const buttons = ['Keep, with its rules', 'Keep as text only', 'Ignore'].map((label) => screen.getByRole('button', { name: label }));
   await waitFor(() => expect(held(buttons[0]!)).toBe(false));
   await user.type(name, ' II');
   const reason = await screen.findByText('Save or undo your edit first.');

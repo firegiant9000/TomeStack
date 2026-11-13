@@ -1,0 +1,142 @@
+{
+  "packId": "tomestack-kit-fixtures",
+  "formatVersion": 1,
+  "notice": "Original TomeStack test fixtures (content v13 kit expansion). Invented; no SRD or third-party rules text.",
+  "sources": [
+    {
+      "id": "7a135000-0000-4000-8000-000000001301",
+      "title": "TomeStack Fixtures: Kits v13",
+      "publisher": "TomeStack project",
+      "rulesFamilies": ["srd-5.2.1"],
+      "editionVersion": "fixture-1",
+      "license": "Original test fixture",
+      "redistributable": true,
+      "attribution": "Written for TomeStack tests."
+    }
+  ],
+  "revisions": [
+    {
+      "contentId": "7a13c000-0000-4000-8000-000000001301",
+      "revisionId": "7a13e000-0000-4000-8000-000000001301",
+      "schemaVersion": 5,
+      "kind": "item",
+      "name": "Fixture: Gnarlwood Cudgel",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "7a135000-0000-4000-8000-000000001301", "page": { "start": 1 } },
+      "status": "published",
+      "summary": "A simple test weapon.",
+      "effects": [
+        { "type": "weapon", "id": "cudgel-weapon", "category": "simple", "attack": "melee", "damage": "1d6", "damageType": "bludgeoning", "weaponKey": "gnarlwood-cudgel" }
+      ]
+    },
+    {
+      "contentId": "7a13c000-0000-4000-8000-000000001302",
+      "revisionId": "7a13e000-0000-4000-8000-000000001302",
+      "schemaVersion": 5,
+      "kind": "item",
+      "name": "Fixture: Tidewrought Glaive",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "7a135000-0000-4000-8000-000000001301", "page": { "start": 2 } },
+      "status": "published",
+      "summary": "A martial test weapon.",
+      "effects": [
+        { "type": "weapon", "id": "glaive-weapon", "category": "martial", "attack": "melee", "damage": "1d10", "damageType": "slashing", "weaponKey": "tidewrought-glaive" }
+      ]
+    },
+    {
+      "contentId": "7a13c000-0000-4000-8000-000000001303",
+      "revisionId": "7a13e000-0000-4000-8000-000000001303",
+      "schemaVersion": 1,
+      "kind": "item",
+      "name": "Fixture: Spindle Rope",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "7a135000-0000-4000-8000-000000001301", "page": { "start": 3 } },
+      "status": "published",
+      "summary": "Plain test gear.",
+      "effects": []
+    },
+    {
+      "contentId": "7a13c000-0000-4000-8000-000000001304",
+      "revisionId": "7a13e000-0000-4000-8000-000000001304",
+      "schemaVersion": 1,
+      "kind": "item",
+      "name": "Fixture: Ember Lantern",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "7a135000-0000-4000-8000-000000001301", "page": { "start": 4 } },
+      "status": "published",
+      "summary": "Plain test gear.",
+      "effects": []
+    },
+    {
+      "contentId": "7a13c000-0000-4000-8000-000000001305",
+      "revisionId": "7a13e000-0000-4000-8000-000000001305",
+      "schemaVersion": 13,
+      "kind": "item",
+      "name": "Fixture: Wayfarer's Satchel",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "7a135000-0000-4000-8000-000000001301", "page": { "start": 5 } },
+      "status": "published",
+      "summary": "A test pack: two ropes and a lantern.",
+      "effects": [
+        {
+          "type": "item",
+          "id": "satchel-item",
+          "contains": [
+            { "item": { "contentId": "7a13c000-0000-4000-8000-000000001303" }, "quantity": 2 },
+            { "item": { "contentId": "7a13c000-0000-4000-8000-000000001304" } }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "7a13c000-0000-4000-8000-000000001306",
+      "revisionId": "7a13e000-0000-4000-8000-000000001306",
+      "schemaVersion": 13,
+      "kind": "creationGuide",
+      "name": "Fixture: Wanderer Kit",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "7a135000-0000-4000-8000-000000001301", "page": { "start": 6 } },
+      "status": "published",
+      "summary": "A test kit with four picks.",
+      "effects": [
+        { "type": "guideFor", "id": "for", "content": { "contentId": "7a13c000-0000-4000-8000-000000001399" } },
+        {
+          "type": "startingEquipment",
+          "id": "kit",
+          "picks": [
+            {
+              "id": "weapon",
+              "label": "Weapon",
+              "options": [
+                { "id": "a", "lines": [ { "item": { "contentId": "7a13c000-0000-4000-8000-000000001301" } } ] },
+                { "id": "b", "lines": [ { "anyOf": "weapon.martial" } ] }
+              ]
+            },
+            {
+              "id": "pack",
+              "label": "Pack",
+              "options": [
+                { "id": "a", "lines": [ { "pack": { "contentId": "7a13c000-0000-4000-8000-000000001305" } } ] }
+              ]
+            },
+            {
+              "id": "rope",
+              "label": "Rope",
+              "options": [
+                { "id": "a", "lines": [ { "item": { "contentId": "7a13c000-0000-4000-8000-000000001303" }, "quantity": 3 } ] }
+              ]
+            },
+            {
+              "id": "funds",
+              "label": "Funds",
+              "options": [
+                { "id": "a", "lines": [ { "coins": { "gp": 50 } } ] },
+                { "id": "b", "lines": [ { "item": { "contentId": "7a13c000-0000-4000-8000-000000001304" } } ] }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

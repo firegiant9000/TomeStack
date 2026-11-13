@@ -97,6 +97,9 @@ public static class Duplicates
         var library = new List<Entry>();
         foreach (var revision in published.Values)
         {
+            // A guide is a walkthrough, not rules to compare; two guides for one target are refused by validate.guide-duplicate.
+            if (revision.Kind == ContentKind.CreationGuide)
+                continue;
             // With a job and a source, the library side is that source; with a source alone, a group is kept below when it touches it.
             if (request.JobId is not null && request.SourceId is { } only && revision.Provenance.SourceId != only)
                 continue;

@@ -81,7 +81,7 @@ it('the roll editor edits activation, cost, variable cost, the pool, bonus, save
   await user.type(r.getByRole('textbox', { name: /^Targets/ }), 'Each creature in the line');
   await user.type(r.getByRole('textbox', { name: /^Extra dice for each extra point/ }), '1d6');
   await user.type(r.getByRole('textbox', { name: /^Most extra points/ }), '3');
-  expect(blocked('Publish')).toBe(false);
+  expect(blocked('Make available to characters')).toBe(false);
   expect((await checked()).effect('roll-2')).toMatchObject({
     dice: '2d6', activation: 'reaction', resourceId: 'focus', cost: '2', bonus: 'PB', save: { ability: 'dex', dc: '8 + PB + WIS.MOD' },
     area: { shape: 'line', size: 100, width: 5 }, range: 'Self', targets: 'Each creature in the line', perUnit: { dice: '1d6', maxUnits: 3 },
@@ -92,12 +92,12 @@ it('the roll editor edits activation, cost, variable cost, the pool, bonus, save
   await user.type(size, '0');
   expect(size.getAttribute('aria-invalid')).toBe('true');
   expect(document.getElementById(size.getAttribute('aria-describedby')!)!.textContent).toMatch(/whole number from 1 to 1000/);
-  expect(blocked('Publish')).toBe(true);
+  expect(blocked('Make available to characters')).toBe(true);
   expect(blocked('Save draft')).toBe(true);
   expect(((await checked()).effect('roll-2') as { area: { size: number } }).area.size).toBe(100);
   await user.clear(size);
   await user.type(size, '60');
-  expect(blocked('Publish')).toBe(false);
+  expect(blocked('Make available to characters')).toBe(false);
   // Many typed fields: it passes alone but ran past the default 5 s under full-suite load (UX close and MECH-X item 1 gates).
 }, 20_000);
 
@@ -212,7 +212,7 @@ it('a stored value that does not parse blocks Save and Publish on load, before a
   const bad: Raw = { ...burst, area: { shape: 'sphere', size: 5000 }, resourceId: 'focus', cost: '1', perUnit: { dice: '1d20', maxUnits: 500 } };
   const { rule } = await openDraft(user, [focus, bad]);
   expect(blocked('Save draft')).toBe(true);
-  expect(blocked('Publish')).toBe(true);
+  expect(blocked('Make available to characters')).toBe(true);
   const r = rule(/^Rule 2: Roll or action/);
   expect(r.getByRole('textbox', { name: /^Area size/ }).getAttribute('aria-invalid')).toBe('true');
   expect(r.getByRole('textbox', { name: /^Extra dice/ }).getAttribute('aria-invalid')).toBe('true');
@@ -334,7 +334,7 @@ it('removing a pool drops the alsoChange rows that name it, and a stored drawsDo
 
   const stored = await openDraft(user, [focus, { ...gather, drawsDown: true }]);
   expect(blocked('Save draft')).toBe(true);
-  expect(blocked('Publish')).toBe(true);
+  expect(blocked('Make available to characters')).toBe(true);
   const box = stored.rule(/^Rule 2: Roll or action/).getByRole('checkbox', { name: /^Draws down built-up charge/ });
   expect(box.getAttribute('aria-invalid')).toBe('true');
 });

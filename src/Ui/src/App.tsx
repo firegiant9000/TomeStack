@@ -12,6 +12,7 @@ import { readFileAsBase64 } from './files';
 import { isTypingTarget } from './keys';
 import { diffLevelUp, dismissChecklist, writeChecklist } from './levelUpChecklist';
 import { noticeText } from './replaceable';
+import { RulesLabelProvider, useRulesLabel } from './rulesLabel';
 import { applyPreferences, setSidebarCollapsed, sidebarCollapsed } from './settings';
 import type { SheetTabId } from './sheetTab';
 
@@ -51,6 +52,14 @@ function describeError(error: unknown): string {
 
 export function App() {
   const [info, setInfo] = useState<AppInfo>();
+  return (
+    <RulesLabelProvider families={info?.rulesFamilies}>
+      <AppContent info={info} setInfo={setInfo} />
+    </RulesLabelProvider>
+  );
+}
+
+function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (info: AppInfo) => void }) {
   const [characters, setCharacters] = useState<CharacterSummary[]>([]);
   const [screen, setScreen] = useState<Screen>({ kind: 'home', focus: false });
   const [message, setMessage] = useState<{ tone: 'error' | 'status'; text: string }>();
@@ -87,7 +96,7 @@ export function App() {
   useEffect(() => {
     applyPreferences(); // ADR-015 §4: every preference is an html[data-*] attribute the CSS keys on
     Promise.all([client.info().then(setInfo), client.listCharacters().then(setCharacters)]).catch(onError);
-  }, [onError]);
+  }, [onError, setInfo]);
 
   // Only the latest open applies: two quick opens can be answered out of order.
   // R40: every "New character" mounts a fresh builder, so a draft that is being saved is never offered again.
@@ -127,6 +136,7 @@ export function App() {
 
   const active = characters.filter((c) => !c.archivedAt);
   const archived = characters.filter((c) => c.archivedAt);
+  const rulesLabel = useRulesLabel();
   const characterLink = (c: CharacterSummary) => (
     <li key={c.id}>
       <button
@@ -135,7 +145,7 @@ export function App() {
         aria-current={screen.kind === 'sheet' && screen.view.character.id === c.id ? 'page' : undefined}
         onClick={() => open(c.id)}
       >
-        {c.name} <span className="tag">{c.rulesFamily}</span>
+        {c.name} <span className="tag">{rulesLabel(c.rulesFamily)}</span>
       </button>
     </li>
   );
@@ -214,12 +224,12 @@ export function App() {
           </button>
           <button
             type="button"
-            title="Package import is for TomeStack .zip files. For a character sheet PDF or text, use Import a character (sheet or text)."
+            title="This is for TomeStack .zip files. For a character sheet PDF or text, use From a character sheet (PDF or text)."
             onClick={() => fileInput.current?.click()}
           >
-            Import package…
+            From a TomeStack file…
           </button>
-          <input ref={fileInput} type="file" accept=".zip" hidden onChange={chooseImport} aria-label="Package file" />
+          <input ref={fileInput} type="file" accept=".zip" hidden onChange={chooseImport} aria-label="TomeStack file" />
           <button
             type="button"
             disabled={!info}
@@ -229,7 +239,7 @@ export function App() {
               setScreen({ kind: 'ddb-import' });
             }}
           >
-            Import a character (sheet or text)…
+            From a character sheet (PDF or text)…
           </button>
           <button
             type="button"
@@ -240,7 +250,7 @@ export function App() {
               setScreen({ kind: 'studio' });
             }}
           >
-            Homebrew studio
+            Homebrew
           </button>
           <button
             type="button"
@@ -250,7 +260,7 @@ export function App() {
               setScreen({ kind: 'sources' });
             }}
           >
-            Sources
+            Books and PDFs
           </button>
           <button
             type="button"
@@ -455,7 +465,7 @@ export function App() {
                 setMessage({
                   tone: 'status',
                   text:
-                    `Character created from the character sheet: ${result.overrides} override(s), ${result.gapNotes} gap note(s).` +
+                    `Character created from the character sheet: ${result.overrides} ${result.overrides === 1 ? 'number' : 'numbers'} set by hand, ${result.gapNotes} gap note(s).` +
                     (result.gapNotesNotStored > 0 ? ` ${result.gapNotesNotStored} more items were not noted: the character's note limit was reached.` : ''),
                 });
               }}

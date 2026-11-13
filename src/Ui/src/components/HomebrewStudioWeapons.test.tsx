@@ -112,14 +112,14 @@ it.each([
   expect(field.getAttribute('aria-invalid')).toBe('true');
   expect(document.getElementById(field.getAttribute('aria-describedby')!)!.textContent).toBeTruthy();
   expect(blocked('Save draft')).toBe(true);
-  expect(blocked('Publish')).toBe(true);
+  expect(blocked('Make available to characters')).toBe(true);
   expect(document.getElementById('editor-blocked')!.textContent).toMatch(/Fix the marked field before saving/);
   await user.clear(field);
   if (before) await user.type(field, before);
   else await user.type(field, '1');
   expect(field.hasAttribute('aria-invalid')).toBe(false);
   expect(blocked('Save draft')).toBe(false);
-  expect(blocked('Publish')).toBe(false);
+  expect(blocked('Make available to characters')).toBe(false);
 });
 
 it('keeps fields it does not edit, in their order', async () => {
@@ -142,7 +142,7 @@ it('a stored legal weapon does not block Save', async () => {
   const user = userEvent.setup();
   await openDraft(user, [{ ...blade, damage: '1d8+1', versatile: 'd10', range: 'reach', bonus: '2' }]);
   expect(blocked('Save draft')).toBe(false);
-  expect(blocked('Publish')).toBe(false);
+  expect(blocked('Make available to characters')).toBe(false);
 });
 
 it('an unreadable weapon shows a notice, not fields, and can still be removed', async () => {
@@ -162,7 +162,7 @@ it('a stored non-number bonus shows as it is and blocks', async () => {
   expect(bonus.value).toBe('x');
   expect(bonus.getAttribute('aria-invalid')).toBe('true');
   expect(blocked('Save draft')).toBe(true);
-  expect(blocked('Publish')).toBe(true);
+  expect(blocked('Make available to characters')).toBe(true);
 });
 
 it.each(['', '  ', ' 2', '1.5', '11'])('a stored string bonus %j the service cannot read shows as it is and blocks', async (stored) => {
@@ -172,7 +172,7 @@ it.each(['', '  ', ' 2', '1.5', '11'])('a stored string bonus %j the service can
   expect(bonus.value).toBe(stored);
   expect(bonus.getAttribute('aria-invalid')).toBe('true');
   expect(blocked('Save draft')).toBe(true);
-  expect(blocked('Publish')).toBe(true);
+  expect(blocked('Make available to characters')).toBe(true);
   // Clearing what is there to nothing is a way out once something was typed.
   await user.type(bonus, '3');
   await user.clear(bonus);

@@ -26,7 +26,7 @@ export function DdbNumbersStep({ preview, numbers, onChange, equipMatched, onEqu
       </label>
       <p className="hint">
         The sheet does not mark what is equipped: this equips every matched weapon, the first armour and the first shield. It changes Armor Class, so it
-        sits here, before you compare numbers. Check Inventory afterwards.
+        sits here, before you compare numbers. Check Gear afterwards.
       </p>
       <p>
         {differences === 0 ? 'Every number the sheet shows matches TomeStack.' : `${differences} of ${preview.comparison.length} numbers differ.`} Speed and

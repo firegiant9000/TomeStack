@@ -35,7 +35,7 @@ it("opens a Markdown job's candidate page in the app by the job's hash, even whe
   render(<ImportPanel source={source} hasPdf onError={() => {}} onStatus={() => {}} onOpenStudio={() => {}} />);
   const user = userEvent.setup();
 
-  await user.click(await screen.findByRole('button', { name: 'Review 2 candidates' }));
+  await user.click(await screen.findByRole('button', { name: 'Review 2 entries found' }));
   await user.click(await screen.findByRole('button', { name: 'Open page 3' }));
 
   expect(client.importedPage).toHaveBeenCalledWith('src-1', 3, 'abc123');

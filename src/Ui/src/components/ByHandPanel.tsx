@@ -113,7 +113,7 @@ export function ByHandPanel({ characterId, sheet, active }: { characterId: strin
 
   return (
     <section aria-labelledby="by-hand-heading" className="play-panel">
-      <h3 id="by-hand-heading">TomeStack won't do these for you</h3>
+      <h3 id="by-hand-heading">Things to remember yourself</h3>
       {failed ? (
         <p className="hint">Couldn't list what needs you by hand.</p>
       ) : loading ? (
