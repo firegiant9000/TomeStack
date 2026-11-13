@@ -53,9 +53,9 @@ export function DefencesPanel({ view, onChanged, onError, saveCharacter }: Props
 
   return (
     <section aria-labelledby="defences-heading" className="field-group defences">
-      <h3 id="defences-heading" tabIndex={-1} ref={heading}>
+      <h2 id="defences-heading" tabIndex={-1} ref={heading}>
         Damage resistances, immunities and vulnerabilities
-      </h3>
+      </h2>
       {merged.length === 0 ? (
         <p className="hint">None. Typed damage on the Play tab is taken in full.</p>
       ) : (
@@ -70,7 +70,7 @@ export function DefencesPanel({ view, onChanged, onError, saveCharacter }: Props
       )}
       {immunities.length > 0 && (
         <>
-          <h4 id="condition-immunities-heading">Condition immunities</h4>
+          <h3 id="condition-immunities-heading">Condition immunities</h3>
           <ul aria-labelledby="condition-immunities-heading">
             {immunities.map((i) => (
               <li key={i.condition}>
@@ -81,7 +81,7 @@ export function DefencesPanel({ view, onChanged, onError, saveCharacter }: Props
           </ul>
         </>
       )}
-      <h4 id="defences-own-heading">Your own</h4>
+      <h3 id="defences-own-heading">Your own</h3>
       {own.length === 0 ? (
         <p className="hint">Nothing recorded by hand. Resistances from content you use are listed above.</p>
       ) : (

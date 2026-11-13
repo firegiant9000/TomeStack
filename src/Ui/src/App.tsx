@@ -2,15 +2,18 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ChangeEv
 import { client } from './api/client';
 import { TomeStackError } from './api/transport';
 import type { AppInfo, CharacterSummary, CharacterView, PackagePreview } from './api/types';
+import { AddCharacterPanel } from './components/AddCharacterPanel';
 import { AllGapNotesPanel } from './components/AllGapNotesPanel';
 import { SettingsPanel } from './components/SettingsPanel';
 import type { BuilderMode } from './components/CharacterBuilder';
 import { CharacterSheet } from './components/CharacterSheet';
 import { HomePanel } from './components/HomePanel';
 import { companionPrunedText } from './companionNotice';
+import { closeOnEscape } from './escape';
 import { readFileAsBase64 } from './files';
 import { isTypingTarget } from './keys';
 import { diffLevelUp, dismissChecklist, writeChecklist } from './levelUpChecklist';
+import { windowTitle } from './placeTitle';
 import { noticeText } from './replaceable';
 import { RulesLabelProvider, useRulesLabel } from './rulesLabel';
 import { applyPreferences, setSidebarCollapsed, sidebarCollapsed } from './settings';
@@ -24,12 +27,11 @@ const BackupsPanel = lazy(() => import('./components/BackupsPanel').then((m) => 
 const CampaignsPanel = lazy(() => import('./components/CampaignsPanel').then((m) => ({ default: m.CampaignsPanel })));
 const CharacterBuilder = lazy(() => import('./components/CharacterBuilder').then((m) => ({ default: m.CharacterBuilder })));
 const DdbImportPanel = lazy(() => import('./components/ddb/DdbImportPanel').then((m) => ({ default: m.DdbImportPanel })));
-const ExtensionsPanel = lazy(() => import('./components/ExtensionsPanel').then((m) => ({ default: m.ExtensionsPanel })));
 const HomebrewStudio = lazy(() => import('./components/HomebrewStudio').then((m) => ({ default: m.HomebrewStudio })));
 const ImportPreview = lazy(() => import('./components/ImportPreview').then((m) => ({ default: m.ImportPreview })));
 const SourcesPanel = lazy(() => import('./components/SourcesPanel').then((m) => ({ default: m.SourcesPanel })));
 
-type Screen =
+export type Screen =
   | { kind: 'home'; focus?: boolean } // focus: false only for the start screen (the first Tab must reach the header)
   | { kind: 'builder'; mode: BuilderMode }
   | { kind: 'studio'; sourceId?: string }
@@ -37,7 +39,7 @@ type Screen =
   | { kind: 'campaigns' }
   | { kind: 'gaps' }
   | { kind: 'backups' }
-  | { kind: 'extensions' }
+  | { kind: 'add'; start?: 'import' } // start: 'import' opens the chooser on its import choices
   | { kind: 'settings' }
   | { kind: 'ddb-import' }
   | { kind: 'sheet'; view: CharacterView; tab?: SheetTabId; levelledUp?: true }
@@ -67,18 +69,33 @@ function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (in
   const [collapsed, setCollapsed] = useState(sidebarCollapsed);
   const sidebar = useRef<HTMLElement>(null);
   const sidebarToggle = useRef<HTMLButtonElement>(null);
+  // Narrow window: a sheet starts with the sidebar hidden (the saved preference is not written); the home screen shows it
+  // again. Adjusted during render when the screen kind changes, so no effect sets state.
+  const [narrowHidden, setNarrowHidden] = useState(false);
+  const [lastKind, setLastKind] = useState(screen.kind);
+  if (lastKind !== screen.kind) {
+    setLastKind(screen.kind);
+    if (screen.kind === 'sheet') {
+      if (typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 60rem)').matches) setNarrowHidden(true);
+    } else if (screen.kind === 'home') {
+      setNarrowHidden(false);
+    }
+  }
+  const hidden = collapsed || narrowHidden;
 
   // ADR-015: the sidebar can be hidden. WCAG 2.4.3 / 2.4.11: hiding it while focus is inside moves focus to the toggle.
   // F7: no side effects inside a state updater (StrictMode runs updaters twice); the nav's own `hidden` is the current state.
   const toggleSidebar = useCallback(() => {
     const hiding = !(sidebar.current?.hidden ?? false);
     if (hiding && sidebar.current?.contains(document.activeElement)) sidebarToggle.current?.focus();
+    setNarrowHidden(false); // an explicit choice from here on
     setSidebarCollapsed(hiding);
     setCollapsed(hiding);
   }, []);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
+      if (closeOnEscape(event)) return;
       if (!event.ctrlKey || event.altKey || event.metaKey || (event.code !== 'KeyB' && event.key.toLowerCase() !== 'b')) return; // physical B too: other layouts give another character
       if (isTypingTarget(event.target)) return; // text entry keeps Ctrl+B
       event.preventDefault();
@@ -122,6 +139,9 @@ function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (in
   useEffect(() => {
     openSeq.current.next();
   }, [screen.kind]);
+  useEffect(() => {
+    document.title = windowTitle(screen); // the shell mirrors this to the window title
+  }, [screen]);
   async function open(id: string, tab?: SheetTabId) {
     const request = openSeq.current.next();
     try {
@@ -150,6 +170,18 @@ function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (in
     </li>
   );
 
+  function go(next: Screen) {
+    setMessage(undefined);
+    setScreen(next);
+  }
+  const navItem = (label: string, isCurrent: boolean, onClick: () => void, disabled?: boolean) => (
+    <li key={label}>
+      <button type="button" className="link" disabled={disabled} aria-current={isCurrent ? 'page' : undefined} onClick={onClick}>
+        {label}
+      </button>
+    </li>
+  );
+
   async function chooseImport(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = '';
@@ -164,30 +196,46 @@ function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (in
   }
 
   return (
-    <div className="app" data-sidebar={collapsed ? 'collapsed' : undefined}>
+    <div className="app" data-sidebar={hidden ? 'collapsed' : undefined}>
       <header className="app-header">
         <button
           type="button"
           className="sidebar-toggle"
           ref={sidebarToggle}
-          aria-expanded={!collapsed}
+          aria-expanded={!hidden}
           aria-controls="sidebar"
           aria-keyshortcuts="Control+B"
-          title={collapsed ? 'Show sidebar (Ctrl+B)' : 'Hide sidebar (Ctrl+B)'}
+          title={hidden ? 'Show sidebar (Ctrl+B)' : 'Hide sidebar (Ctrl+B)'}
           onClick={toggleSidebar}
         >
-          {collapsed ? 'Show sidebar' : 'Hide sidebar'}
+          {hidden ? 'Show sidebar' : 'Hide sidebar'}
         </button>
-        <h1>TomeStack</h1>
+        {/* Spec 3.1: the window title area is a way home when the sidebar has no "All characters" (fewer than two). */}
+        <div className="brand-wrap">
+          <button
+            type="button"
+            className="brand"
+            aria-label="TomeStack, your characters"
+            onClick={() => (screen.kind === 'home' ? document.getElementById('home-heading')?.focus() : go({ kind: 'home', focus: true }))}
+          >
+            TomeStack
+          </button>
+        </div>
         <span className="tag">Offline</span>
       </header>
 
       {/* Owner (2026-10-12): the header's "Hide sidebar" is the only close control; the sidebar has none of its own. */}
-      <nav id="sidebar" className="sidebar" aria-labelledby="characters-heading" ref={sidebar} hidden={collapsed}>
-        <h2 id="characters-heading" className="sidebar-heading">
+      <nav id="sidebar" className="sidebar" aria-label="Main" ref={sidebar} hidden={hidden}>
+        {/* Always available: the file import needs no rules families; the chooser disables only what does. */}
+        <button type="button" className="add-character" aria-current={screen.kind === 'add' ? 'page' : undefined} onClick={() => go({ kind: 'add' })}>
+          + Add a character
+        </button>
+        {/* Owner (2026-11-13): group labels, not headings, so each screen's h1 is the first heading Narrator reaches. */}
+        <p id="characters-heading" className="sidebar-heading">
           Characters
-        </h2>
+        </p>
         <ul className="character-list" aria-labelledby="characters-heading">
+          {characters.length > 1 && navItem('All characters', screen.kind === 'home', () => go({ kind: 'home', focus: true }))}
           {active.map(characterLink)}
           {active.length === 0 && <li className="hint">{archived.length === 0 ? 'No characters yet.' : 'No active characters.'}</li>}
         </ul>
@@ -200,120 +248,23 @@ function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (in
             </ul>
           </details>
         )}
-        <h2 id="tools-heading" className="sidebar-heading">
-          Tools
-        </h2>
-        <div className="actions" role="group" aria-labelledby="tools-heading">
-          <button
-            type="button"
-            aria-current={screen.kind === 'home' ? 'page' : undefined}
-            onClick={() => {
-              setMessage(undefined);
-              setScreen({ kind: 'home', focus: true });
-            }}
-          >
-            Characters
-          </button>
-          {/* Disabled until app.info has loaded: the form needs the rules families, and a click must never do nothing. */}
-          <button
-            type="button"
-            onClick={startCreate}
-            disabled={!info}
-          >
-            New character
-          </button>
-          <button
-            type="button"
-            title="This is for TomeStack .zip files. For a character sheet PDF or text, use From a character sheet (PDF or text)."
-            onClick={() => fileInput.current?.click()}
-          >
-            From a TomeStack file…
-          </button>
-          <input ref={fileInput} type="file" accept=".zip" hidden onChange={chooseImport} aria-label="TomeStack file" />
-          <button
-            type="button"
-            disabled={!info}
-            aria-current={screen.kind === 'ddb-import' ? 'page' : undefined}
-            onClick={() => {
-              setMessage(undefined);
-              setScreen({ kind: 'ddb-import' });
-            }}
-          >
-            From a character sheet (PDF or text)…
-          </button>
-          <button
-            type="button"
-            disabled={!info}
-            aria-current={screen.kind === 'studio' ? 'page' : undefined}
-            onClick={() => {
-              setMessage(undefined);
-              setScreen({ kind: 'studio' });
-            }}
-          >
-            Homebrew
-          </button>
-          <button
-            type="button"
-            aria-current={screen.kind === 'sources' ? 'page' : undefined}
-            onClick={() => {
-              setMessage(undefined);
-              setScreen({ kind: 'sources' });
-            }}
-          >
-            Books and PDFs
-          </button>
-          <button
-            type="button"
-            disabled={!info}
-            aria-current={screen.kind === 'campaigns' ? 'page' : undefined}
-            onClick={() => {
-              setMessage(undefined);
-              setScreen({ kind: 'campaigns' });
-            }}
-          >
-            Campaigns
-          </button>
-          <button
-            type="button"
-            aria-current={screen.kind === 'gaps' ? 'page' : undefined}
-            onClick={() => {
-              setMessage(undefined);
-              setScreen({ kind: 'gaps' });
-            }}
-          >
-            Gap notes
-          </button>
-          <button
-            type="button"
-            aria-current={screen.kind === 'backups' ? 'page' : undefined}
-            onClick={() => {
-              setMessage(undefined);
-              setScreen({ kind: 'backups' });
-            }}
-          >
-            Backups
-          </button>
-          <button
-            type="button"
-            aria-current={screen.kind === 'extensions' ? 'page' : undefined}
-            onClick={() => {
-              setMessage(undefined);
-              setScreen({ kind: 'extensions' });
-            }}
-          >
-            Extensions
-          </button>
-          <button
-            type="button"
-            aria-current={screen.kind === 'settings' ? 'page' : undefined}
-            onClick={() => {
-              setMessage(undefined);
-              setScreen({ kind: 'settings' });
-            }}
-          >
-            Settings
-          </button>
-        </div>
+        <p id="library-heading" className="sidebar-heading">
+          Library
+        </p>
+        <ul className="character-list" aria-labelledby="library-heading">
+          {navItem('Books and PDFs', screen.kind === 'sources', () => go({ kind: 'sources' }))}
+          {navItem('Homebrew', screen.kind === 'studio', () => go({ kind: 'studio' }), !info)}
+          {navItem('Campaigns', screen.kind === 'campaigns', () => go({ kind: 'campaigns' }), !info)}
+        </ul>
+        <p id="app-heading" className="sidebar-heading">
+          App
+        </p>
+        <ul className="character-list" aria-labelledby="app-heading">
+          {navItem('Backups', screen.kind === 'backups', () => go({ kind: 'backups' }))}
+          {/* Stays here until the Help screen (Group 2, G11) takes it. */}
+          {navItem('Gap notes', screen.kind === 'gaps', () => go({ kind: 'gaps' }))}
+          {navItem('Settings', screen.kind === 'settings', () => go({ kind: 'settings' }))}
+        </ul>
       </nav>
 
       <main className="content">
@@ -442,15 +393,16 @@ function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (in
           {screen.kind === 'backups' && (
             <BackupsPanel onError={onError} onStatus={(text) => setMessage({ tone: 'status', text })} onRestored={() => void refresh()} />
           )}
-          {screen.kind === 'extensions' && info && (
-            <ExtensionsPanel
-              characters={characters}
-              rulesFamilies={info.rulesFamilies}
-              onError={onError}
-              onStatus={(text) => setMessage({ tone: 'status', text })}
+          {screen.kind === 'add' && (
+            <AddCharacterPanel
+              canCreate={!!info}
+              start={screen.start}
+              onNew={startCreate}
+              onSheetImport={() => go({ kind: 'ddb-import' })}
+              onFileImport={() => fileInput.current?.click()}
             />
           )}
-          {screen.kind === 'settings' && <SettingsPanel info={info} onError={onError} />}
+          {screen.kind === 'settings' && <SettingsPanel info={info} characters={characters} onError={onError} onStatus={(text) => setMessage({ tone: 'status', text })} />}
           {screen.kind === 'ddb-import' && info && (
             <DdbImportPanel
               rulesFamilies={info.rulesFamilies}
@@ -534,6 +486,7 @@ function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (in
         </Suspense>
         </ScreenBoundary>
       </main>
+      <input ref={fileInput} type="file" accept=".zip" hidden onChange={chooseImport} aria-label="TomeStack file" />
     </div>
   );
 }

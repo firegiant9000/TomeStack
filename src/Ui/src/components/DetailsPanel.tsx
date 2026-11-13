@@ -159,9 +159,9 @@ export function DetailsPanel({ view, onChanged, onError, onStatus, headingRef, s
 
   return (
     <form aria-labelledby="details-heading" className="play-panel details-form" onSubmit={save}>
-      <h3 id="details-heading" tabIndex={-1} ref={headingRef}>
+      <h2 id="details-heading" tabIndex={-1} ref={headingRef}>
         Details
-      </h3>
+      </h2>
       <p className="hint">
         Your own words about this character. A shared TomeStack file or backup carries them; a sheet or Foundry export does not. Print them by ticking
         &quot;Include details&quot; in the print preview.

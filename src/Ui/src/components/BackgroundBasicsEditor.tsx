@@ -216,7 +216,7 @@ export function BackgroundBasicsEditor(props: BackgroundProps) {
 
   return (
     <section aria-labelledby="background-basics-heading" className="effect-editor origin-basics">
-      <h4 id="background-basics-heading">Background basics</h4>
+      <h3 id="background-basics-heading">Background basics</h3>
       <p aria-live="polite" className="hint">
         {announcement}
       </p>

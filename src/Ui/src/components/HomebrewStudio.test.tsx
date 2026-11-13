@@ -111,7 +111,7 @@ it('opens on the source it was asked for, and takes focus on its heading', async
   render(<HomebrewStudio info={info} initialSourceId="b" onError={() => {}} onStatus={() => {}} />);
   const select = await screen.findByRole<HTMLSelectElement>('combobox', { name: 'Book or notebook' });
   await waitFor(() => expect(select.selectedOptions[0]?.textContent).toMatch(/^Testy Beta/));
-  expect(document.activeElement).toBe(screen.getByRole('heading', { level: 2, name: 'Homebrew' }));
+  expect(document.activeElement).toBe(screen.getByRole('heading', { level: 1, name: 'Homebrew' }));
 });
 
 it('falls back to the first source when the asked-for one is not there', async () => {

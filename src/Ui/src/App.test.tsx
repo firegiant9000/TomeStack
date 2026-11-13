@@ -9,6 +9,7 @@ import { client } from './api/client';
 import type { Character, CharacterSummary, CharacterView, ChoiceStatus } from './api/types';
 import { diffLevelUp, writeChecklist } from './levelUpChecklist';
 import { noticeText } from './replaceable';
+import { expectContinuousOutline } from './test/outline';
 
 // The real module, except that diffLevelUp is a spy (it throws once in the A3 test).
 vi.mock('./levelUpChecklist', async (importOriginal) => {
@@ -43,6 +44,11 @@ vi.mock('./api/client', () => ({
     restPreview: vi.fn(),
     rest: vi.fn(),
     listSources: vi.fn(),
+    dailyCopies: vi.fn(),
+    libraryBackupPreview: vi.fn(),
+    listAllGapNotes: vi.fn(),
+    listExtensions: vi.fn(),
+    previewImport: vi.fn(),
   },
 }));
 
@@ -78,6 +84,10 @@ beforeEach(() => {
   vi.mocked(client.draftCounts).mockResolvedValue({});
   vi.mocked(client.listCampaigns).mockResolvedValue([]);
   vi.mocked(client.listSources).mockResolvedValue([]);
+  vi.mocked(client.dailyCopies).mockResolvedValue({ on: false, copies: [], bytes: 0 });
+  vi.mocked(client.libraryBackupPreview).mockReturnValue(new Promise(() => {})); // the Backups heading does not wait for it
+  vi.mocked(client.listAllGapNotes).mockResolvedValue([]);
+  vi.mocked(client.listExtensions).mockResolvedValue([]); // the Settings screen lists installed extensions
   vi.mocked(client.snapshots).mockResolvedValue({ items: [], hasMore: false });
 });
 afterEach(() => {
@@ -89,7 +99,7 @@ it('shows the rules family id before app.info arrives, then the label the servic
   let resolveInfo: (value: Awaited<ReturnType<typeof client.info>>) => void = () => {};
   vi.mocked(client.info).mockReturnValue(new Promise((resolve) => (resolveInfo = resolve)));
   render(<App />);
-  const list = await screen.findByRole('navigation', { name: 'Characters' });
+  const list = await screen.findByRole('navigation', { name: 'Main' });
   await within(list).findAllByText('srd-5.1');
   expect(within(list).queryByText('2014 rules')).toBeNull();
   resolveInfo({
@@ -102,10 +112,96 @@ it('shows the rules family id before app.info arrives, then the label the servic
   expect((await within(list).findAllByText('2014 rules')).length).toBe(2);
 });
 
+it('the document title names the place: the home screen, then an opened sheet', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  const list = await screen.findByRole('navigation', { name: 'Main' });
+  await waitFor(() => expect(document.title).toBe('Your characters – TomeStack'));
+  await user.click(within(list).getByRole('button', { name: /Fixture Avery/ }));
+  await waitFor(() => expect(document.title).toBe('Fixture Avery – TomeStack'));
+});
+
+it('on home, the brand button moves focus to the home heading', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  await screen.findByRole('navigation', { name: 'Main' });
+  const heading = await screen.findByRole('heading', { level: 1, name: 'Your characters' });
+  expect(document.activeElement).not.toBe(heading);
+  await user.click(screen.getByRole('button', { name: 'TomeStack, your characters' }));
+  expect(document.activeElement).toBe(heading);
+  expect(heading.id).toBe('home-heading');
+});
+
+it('navigating to a screen that is not a sheet updates the document title (Settings)', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  const nav = await screen.findByRole('navigation', { name: 'Main' });
+  await user.click(within(nav).getByRole('button', { name: 'Settings' }));
+  await waitFor(() => expect(document.title).toBe('Settings – TomeStack'));
+  await user.click(within(nav).getByRole('button', { name: 'Backups' }));
+  await waitFor(() => expect(document.title).toBe('Backups – TomeStack'));
+});
+
+it('Every_screen_has_one_h1_matching_the_title', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.info).mockResolvedValue({
+    version: 'test',
+    schemaVersion: 1,
+    rulesFamilies: [{ id: 'srd-5.1', displayName: 'SRD 5.1', shortLabel: '2014 rules' } as never],
+    warnings: [],
+    fields: [],
+  });
+  render(<App />);
+  const nav = await screen.findByRole('navigation', { name: 'Main' });
+  await within(nav).findByRole('button', { name: /Fixture Avery/ });
+  const main = () => document.querySelector('.app') as HTMLElement;
+  const expectOneH1 = async (place: string) => {
+    await waitFor(() => expect(document.title).toBe(`${place} – TomeStack`));
+    await waitFor(() => {
+      const h1s = within(main()).getAllByRole('heading', { level: 1, hidden: true });
+      expect(h1s.map((h) => h.textContent)).toEqual([place]);
+      expectContinuousOutline(main());
+    });
+  };
+  const sidebar = (name: string | RegExp) => user.click(within(nav).getByRole('button', { name }));
+
+  await expectOneH1('Your characters');
+  for (const [label, place] of [
+    ['Books and PDFs', 'Books and PDFs'],
+    ['Homebrew', 'Homebrew'],
+    ['Campaigns', 'Campaigns'],
+    ['Backups', 'Backups'],
+    ['Gap notes', 'Gap notes'],
+    ['Settings', 'Settings'],
+    ['All characters', 'Your characters'],
+  ] as const) {
+    await sidebar(label);
+    await expectOneH1(place);
+  }
+  await sidebar(/Fixture Avery/);
+  await expectOneH1('Fixture Avery');
+
+  await user.click(await screen.findByRole('button', { name: 'Level up' }));
+  await expectOneH1('Level up Fixture Avery');
+  await user.click(await screen.findByRole('button', { name: 'Next: choices' })); // the builder's choices step
+  await expectOneH1('Level up Fixture Avery');
+
+  await sidebar('+ Add a character');
+  await expectOneH1('Add a character');
+  await user.click(screen.getByRole('radio', { name: /^Make a new one/ }));
+  await user.click(screen.getByRole('button', { name: 'Continue' }));
+  await expectOneH1('New character');
+
+  await sidebar('+ Add a character');
+  await user.click(screen.getByRole('radio', { name: /^From a character sheet/ }));
+  await user.click(screen.getByRole('button', { name: 'Continue' }));
+  await expectOneH1('From a character sheet (PDF or text)');
+}, 30000); // a long walk of 14 screens; each step waits on real user-event clicks
+
 it('Cancel from a level-up shows the character as it is now, not as it was when the builder opened (carry 1)', async () => {
   const user = userEvent.setup();
   render(<App />);
-  const list = await screen.findByRole('navigation', { name: 'Characters' });
+  const list = await screen.findByRole('navigation', { name: 'Main' });
   await user.click(within(list).getByRole('button', { name: /Fixture Avery/ }));
   await user.click(await screen.findByRole('button', { name: 'Level up' }));
   await screen.findByRole('heading', { name: 'Level up Fixture Avery' });
@@ -120,7 +216,7 @@ it('two quick opens: only the latest reply is shown (carry 4)', async () => {
   const replies: Record<string, (view: CharacterView) => void> = {};
   vi.mocked(client.getCharacter).mockImplementation((id) => new Promise<CharacterView>((r) => (replies[id] = r)));
   render(<App />);
-  const list = await screen.findByRole('navigation', { name: 'Characters' });
+  const list = await screen.findByRole('navigation', { name: 'Main' });
   await user.click(within(list).getByRole('button', { name: /Fixture Avery/ }));
   await user.click(within(list).getByRole('button', { name: /Fixture Blake/ }));
   replies['fixture-b']!(b);
@@ -131,9 +227,19 @@ it('two quick opens: only the latest reply is shown (carry 4)', async () => {
   expect(within(list).getByRole('button', { name: /Fixture Avery/ }).getAttribute('aria-current')).toBeNull();
 });
 
+/** From the sidebar: "+ Add a character", pick "Make a new one", Continue. */
+async function startNew(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('button', { name: '+ Add a character' }));
+  await chooseNew(user);
+}
+async function chooseNew(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('radio', { name: 'Make a new one' }));
+  await user.click(screen.getByRole('button', { name: 'Continue' }));
+}
+
 /** Walks the create steps by hand (no content installed) up to "Create and save". */
 async function toCreate(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(await screen.findByRole('button', { name: 'New character' }));
+  await startNew(user);
   await user.type(await screen.findByRole('textbox', { name: 'Name' }), 'Fixture New');
   await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
   await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
@@ -150,12 +256,12 @@ it('a save that lands after the user left the builder refreshes the list and say
   render(<App />);
   await user.click(await toCreate(user));
   const lists = vi.mocked(client.listCharacters).mock.calls.length;
-  await user.click(screen.getByRole('button', { name: 'Characters' })); // leaves the builder while the save is in flight
-  await screen.findByRole('region', { name: 'Characters' });
+  await user.click(screen.getByRole('button', { name: 'All characters' })); // leaves the builder while the save is in flight
+  await screen.findByRole('region', { name: 'Your characters' });
   finish(created);
   expect(await screen.findByText('Saved Fixture New.')).toBeTruthy();
   expect(vi.mocked(client.listCharacters).mock.calls.length).toBeGreaterThan(lists);
-  expect(screen.getByRole('region', { name: 'Characters' })).toBeTruthy(); // still the home screen
+  expect(screen.getByRole('region', { name: 'Your characters' })).toBeTruthy(); // still the home screen
   expect(screen.queryByRole('article', { name: 'Fixture New' })).toBeNull();
 });
 
@@ -169,7 +275,7 @@ it('a level-up saved while the same character was opened again shows the saved s
   let finish: (view: CharacterView) => void = () => {};
   vi.mocked(client.saveCharacter).mockReturnValue(new Promise<CharacterView>((r) => (finish = r)));
   render(<App />);
-  const list = await screen.findByRole('navigation', { name: 'Characters' });
+  const list = await screen.findByRole('navigation', { name: 'Main' });
   await user.click(within(list).getByRole('button', { name: /Fixture Avery/ }));
   await user.click(await screen.findByRole('button', { name: 'Level up' }));
   await user.click(await screen.findByRole('button', { name: 'Next: choices' }));
@@ -199,7 +305,7 @@ async function toSaveLevelUp(user: ReturnType<typeof userEvent.setup>, before: C
   vi.mocked(client.getCharacter).mockResolvedValue(before);
   vi.mocked(client.preview).mockResolvedValue(before);
   render(<App />);
-  const list = await screen.findByRole('navigation', { name: 'Characters' });
+  const list = await screen.findByRole('navigation', { name: 'Main' });
   await user.click(within(list).getByRole('button', { name: /Fixture Avery/ }));
   await user.click(await screen.findByRole('button', { name: 'Level up' }));
   await user.click(await screen.findByRole('button', { name: 'Next: choices' }));
@@ -274,7 +380,8 @@ it('pressing New character during a save mounts a fresh empty builder; the save 
   render(<App />);
   const create = await toCreate(user);
   await user.click(create);
-  await user.click(screen.getByRole('button', { name: 'New character' })); // a new builder mode while the save is in flight
+  await user.click(screen.getByRole('button', { name: '+ Add a character' })); // a new builder mode while the save is in flight
+  await chooseNew(user);
   finish(created);
   // The new builder starts empty at step 1; the saved draft is not offered again.
   expect((screen.getByRole('textbox', { name: 'Name' }) as HTMLInputElement).value).toBe('');
@@ -293,8 +400,8 @@ it('says the save succeeded when only the list refresh fails after the user has 
   vi.mocked(client.createCharacter).mockReturnValue(new Promise<CharacterView>((r) => (finish = r)));
   render(<App />);
   await user.click(await toCreate(user));
-  await user.click(screen.getByRole('button', { name: 'Characters' }));
-  await screen.findByRole('region', { name: 'Characters' });
+  await user.click(screen.getByRole('button', { name: 'All characters' }));
+  await screen.findByRole('region', { name: 'Your characters' });
   vi.mocked(client.listCharacters).mockRejectedValueOnce(new Error('fixture refresh failure'));
   finish(created);
   const alert = await screen.findByRole('alert');
@@ -319,9 +426,10 @@ it('a slow open never replaces a screen chosen after it (R37)', async () => {
   let reply: (view: CharacterView) => void = () => {};
   vi.mocked(client.getCharacter).mockReturnValue(new Promise<CharacterView>((r) => (reply = r)));
   render(<App />);
-  const list = await screen.findByRole('navigation', { name: 'Characters' });
+  const list = await screen.findByRole('navigation', { name: 'Main' });
   await user.click(within(list).getByRole('button', { name: /Fixture Avery/ }));
-  await user.click(await screen.findByRole('button', { name: 'New character' }));
+  await user.click(await screen.findByRole('button', { name: '+ Add a character' }));
+  await chooseNew(user);
   expect(await screen.findByRole('textbox', { name: 'Name' })).toBeTruthy();
   reply(a);
   await new Promise((r) => setTimeout(r, 20));
@@ -334,7 +442,7 @@ it("a late rest reply for the first character leaves the second character's shee
   let resolveRest: (value: CharacterView) => void = () => {};
   vi.mocked(client.rest).mockReturnValue(new Promise<CharacterView>((r) => (resolveRest = r)));
   render(<App />);
-  const list = await screen.findByRole('navigation', { name: 'Characters' });
+  const list = await screen.findByRole('navigation', { name: 'Main' });
   const avery = () => within(list).getByRole('button', { name: /Fixture Avery/ });
   const blake = () => within(list).getByRole('button', { name: /Fixture Blake/ });
   await user.click(avery());
@@ -413,7 +521,7 @@ it('a choices-mode save with the notice shows its words as the status (MECH-X it
   vi.mocked(client.getCharacter).mockResolvedValue(before);
   vi.mocked(client.saveCharacter).mockResolvedValue(saved);
   render(<App />);
-  const list = await screen.findByRole('navigation', { name: 'Characters' });
+  const list = await screen.findByRole('navigation', { name: 'Main' });
   await user.click(within(list).getByRole('button', { name: /Fixture Avery/ }));
   await user.click(await screen.findByRole('button', { name: 'Make choices' }));
   await user.click(await screen.findByRole('button', { name: 'Save choices' }));
@@ -456,4 +564,204 @@ it('a throw while wording the notice never blocks the screen switch; the generic
   expect(await screen.findByRole('region', { name: 'What changed at level 2' })).toBeTruthy();
   expect(screen.getByText('A choice had picks replaced outside its window.')).toBeTruthy();
   expect(screen.queryByRole('alert')).toBeNull();
+});
+
+it('the sidebar has an add button, then Characters, Library and App as labelled lists in that order, with no headings (Task 2.1)', async () => {
+  render(<App />);
+  const nav = await screen.findByRole('navigation', { name: 'Main' });
+  await within(nav).findByRole('button', { name: /Fixture Avery/ });
+  // Owner (2026-11-13): labelled lists, not h2s, so the screen's h1 is the first heading.
+  expect(within(nav).queryAllByRole('heading')).toEqual([]);
+  const lists = within(nav).getAllByRole('list');
+  expect(lists.slice(0, 3)).toEqual(['Characters', 'Library', 'App'].map((name) => within(nav).getByRole('list', { name })));
+  const names = (list: HTMLElement) => within(list).getAllByRole('button').map((b) => b.textContent?.replace(/\s+/g, ' ').trim());
+  expect(names(lists[0]!)[0]).toBe('All characters');
+  expect(names(lists[1]!)).toEqual(['Books and PDFs', 'Homebrew', 'Campaigns']);
+  expect(names(lists[2]!)).toEqual(['Backups', 'Gap notes', 'Settings']);
+  const buttons = within(nav).getAllByRole('button');
+  expect(buttons[0]!.textContent).toBe('+ Add a character');
+  for (const gone of ['Extensions', 'New character', /^Import package/, /^From a TomeStack file/]) expect(within(nav).queryByRole('button', { name: gone })).toBeNull();
+});
+
+it('"All characters" appears only with two or more characters', async () => {
+  vi.mocked(client.listCharacters).mockResolvedValue([summary('fixture-a', 'Fixture Avery')]);
+  render(<App />);
+  const nav = await screen.findByRole('navigation', { name: 'Main' });
+  await within(nav).findByRole('button', { name: /Fixture Avery/ });
+  expect(within(nav).queryByRole('button', { name: 'All characters' })).toBeNull();
+});
+
+it('aria-current follows the screen: Add, a Library entry, an App entry and a character', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  const nav = await screen.findByRole('navigation', { name: 'Main' });
+  const current = () => within(nav).queryAllByRole('button').filter((b) => b.getAttribute('aria-current') === 'page').map((b) => b.textContent);
+  await within(nav).findByRole('button', { name: /Fixture Avery/ });
+  await user.click(within(nav).getByRole('button', { name: '+ Add a character' }));
+  expect(current()).toEqual(['+ Add a character']);
+  await user.click(within(nav).getByRole('button', { name: 'Books and PDFs' }));
+  expect(current()).toEqual(['Books and PDFs']);
+  await user.click(within(nav).getByRole('button', { name: 'Settings' }));
+  expect(current()).toEqual(['Settings']);
+  await user.click(within(nav).getByRole('button', { name: 'All characters' }));
+  expect(current()).toEqual(['All characters']);
+  await user.click(within(nav).getByRole('button', { name: /Fixture Blake/ }));
+  await waitFor(() => expect(current()).toHaveLength(1));
+  expect(current()[0]).toMatch(/Fixture Blake/);
+});
+
+it('the add screen keeps the file import and the character-sheet import reachable', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: '+ Add a character' }));
+  const picker = screen.getByLabelText('TomeStack file') as HTMLInputElement;
+  const picked = vi.fn();
+  picker.addEventListener('click', picked);
+  await user.click(screen.getByRole('radio', { name: /^From a TomeStack file/ }));
+  await user.click(screen.getByRole('button', { name: 'Continue' }));
+  expect(picked).toHaveBeenCalledTimes(1); // the chooser opened the file picker
+  await user.click(screen.getByRole('radio', { name: /^From a character sheet/ }));
+  await user.click(screen.getByRole('button', { name: 'Continue' }));
+  expect(await screen.findByRole('heading', { name: /From a character sheet/ })).toBeTruthy();
+});
+
+it('+ Add a character is enabled before app.info arrives and the file import works', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.info).mockReturnValue(new Promise(() => {}));
+  render(<App />);
+  const add = await screen.findByRole('button', { name: '+ Add a character' });
+  expect((add as HTMLButtonElement).disabled).toBe(false);
+  await user.click(add);
+  const picker = screen.getByLabelText('TomeStack file');
+  const picked = vi.fn();
+  picker.addEventListener('click', picked);
+  await user.click(screen.getByRole('radio', { name: /^From a TomeStack file/ }));
+  await user.click(screen.getByRole('button', { name: 'Continue' }));
+  expect(picked).toHaveBeenCalledTimes(1);
+});
+
+it('arriving on the add screen, then on the import screen, moves focus to that screen heading; the title has no file name', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.previewImport).mockResolvedValue({ items: [], errors: [], warnings: [], canApply: false } as never);
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: '+ Add a character' }));
+  const addHeading = screen.getByRole('heading', { level: 1, name: 'Add a character' });
+  expect(document.activeElement).toBe(addHeading);
+  await user.upload(screen.getByLabelText('TomeStack file'), new File(['x'], 'fixture-secret-name.zip', { type: 'application/zip' }));
+  const importHeading = await screen.findByRole('heading', { level: 1, name: 'Import a TomeStack file' });
+  expect(document.activeElement).toBe(importHeading);
+  expect(importHeading.id).toBe('import-heading');
+  expect(document.title).toBe('Import a TomeStack file – TomeStack');
+});
+
+it('the brand button returns home with one character: sheet, Settings, brand, list; nothing in the sidebar is current', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listCharacters).mockResolvedValue([summary('fixture-a', 'Fixture Avery')]);
+  render(<App />);
+  const nav = await screen.findByRole('navigation', { name: 'Main' });
+  await user.click(await within(nav).findByRole('button', { name: /Fixture Avery/ }));
+  await screen.findByRole('article', { name: 'Fixture Avery' });
+  await user.click(within(nav).getByRole('button', { name: 'Settings' }));
+  await user.click(screen.getByRole('button', { name: 'TomeStack, your characters' }));
+  expect(await screen.findByRole('region', { name: 'Your characters' })).toBeTruthy();
+  expect(within(nav).getAllByRole('button').filter((b) => b.getAttribute('aria-current') === 'page')).toHaveLength(0);
+});
+
+it('Esc on the builder leaves the draft and the screen alone', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  await startNew(user);
+  await user.type(await screen.findByRole('textbox', { name: 'Name' }), 'Fixture New');
+  await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
+  await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
+  for (const next of ['Next: species', 'Next: class', 'Next: background']) await user.click(await screen.findByRole('button', { name: next }));
+  const summary = await screen.findByText(/Other content \(0 selected\)/);
+  const details = summary.closest('details')!;
+  await user.click(summary);
+  expect(details.open).toBe(true);
+  await user.keyboard('{Escape}'); // focus is on the summary, inside the open disclosure
+  expect(details.open).toBe(false); // Esc closes the disclosure ...
+  expect(screen.getByRole('heading', { name: 'Background' })).toBeTruthy(); // ... and leaves the builder on the same step
+  await user.click(screen.getByRole('button', { name: 'Back' }));
+  await user.click(screen.getByRole('button', { name: 'Back' }));
+  await user.click(screen.getByRole('button', { name: 'Back' }));
+  await user.click(screen.getByRole('button', { name: 'Back' }));
+  expect((screen.getByRole('textbox', { name: 'Name' }) as HTMLInputElement).value).toBe('Fixture New'); // the draft is intact
+});
+
+it('Esc closes the open Archived disclosure in the sidebar and returns focus to its summary', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listCharacters).mockResolvedValue([
+    summary('fixture-a', 'Fixture Avery'),
+    { ...summary('fixture-b', 'Fixture Blake'), archivedAt: '2026-01-01T00:00:00Z' } as CharacterSummary,
+  ]);
+  render(<App />);
+  const nav = await screen.findByRole('navigation', { name: 'Main' });
+  await user.click(await within(nav).findByText(/Archived \(1\)/));
+  const link = await within(nav).findByRole('button', { name: /Fixture Blake/ });
+  link.focus();
+  await user.keyboard('{Escape}');
+  expect(nav.querySelector('details')!.open).toBe(false);
+  expect(document.activeElement).toBe(nav.querySelector('summary'));
+});
+
+it('on a narrow window a sheet starts with the sidebar hidden (nothing saved) and home shows it again', async () => {
+  const user = userEvent.setup();
+  const original = window.matchMedia;
+  window.matchMedia = ((query: string) => ({ matches: true, media: query, addEventListener() {}, removeEventListener() {} })) as never;
+  try {
+    render(<App />);
+    const nav = await screen.findByRole('navigation', { name: 'Main' });
+    await user.click(await within(nav).findByRole('button', { name: /Fixture Avery/ }));
+    await screen.findByRole('article', { name: 'Fixture Avery' });
+    await waitFor(() => expect(nav.hidden).toBe(true));
+    expect(screen.getByRole('button', { name: /Show sidebar/ })).toBeTruthy();
+    expect(localStorage.getItem('tomestack.sidebar')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'TomeStack, your characters' }));
+    await waitFor(() => expect(nav.hidden).toBe(false));
+  } finally {
+    window.matchMedia = original;
+  }
+});
+
+it('on a narrow window, Show sidebar keeps the sidebar visible when a second character is opened', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listCharacters).mockResolvedValue([summary('fixture-a', 'Fixture Avery'), summary('fixture-b', 'Fixture Blake')]);
+  const original = window.matchMedia;
+  window.matchMedia = ((query: string) => ({ matches: true, media: query, addEventListener() {}, removeEventListener() {} })) as never;
+  try {
+    render(<App />);
+    const nav = await screen.findByRole('navigation', { name: 'Main' });
+    await user.click(await within(nav).findByRole('button', { name: /Fixture Avery/ }));
+    await screen.findByRole('article', { name: 'Fixture Avery' });
+    await waitFor(() => expect(nav.hidden).toBe(true));
+    await user.click(screen.getByRole('button', { name: /Show sidebar/ }));
+    expect(nav.hidden).toBe(false);
+    await user.click(within(nav).getByRole('button', { name: /Fixture Blake/ }));
+    await screen.findByRole('article', { name: 'Fixture Blake' });
+    expect(nav.hidden).toBe(false);
+  } finally {
+    window.matchMedia = original;
+  }
+});
+
+it('on a narrow window the sidebar is hidden again on the sheet after a visit to Settings', async () => {
+  const user = userEvent.setup();
+  const original = window.matchMedia;
+  window.matchMedia = ((query: string) => ({ matches: true, media: query, addEventListener() {}, removeEventListener() {} })) as never;
+  try {
+    render(<App />);
+    const nav = await screen.findByRole('navigation', { name: 'Main' });
+    await user.click(await within(nav).findByRole('button', { name: /Fixture Avery/ }));
+    await screen.findByRole('article', { name: 'Fixture Avery' });
+    await waitFor(() => expect(nav.hidden).toBe(true));
+    await user.click(screen.getByRole('button', { name: /Show sidebar/ }));
+    await user.click(within(nav).getByRole('button', { name: 'Settings' }));
+    expect(nav.hidden).toBe(false);
+    await user.click(within(nav).getByRole('button', { name: /Fixture Avery/ }));
+    await screen.findByRole('article', { name: 'Fixture Avery' });
+    await waitFor(() => expect(nav.hidden).toBe(true));
+  } finally {
+    window.matchMedia = original;
+  }
 });

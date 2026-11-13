@@ -45,9 +45,9 @@ export function UpdateReviewPanel({ characterId, characterName, contentName, fro
   const title = `Update ${characterName}: ${contentName}`;
   return (
     <section aria-labelledby="update-heading" className="play-panel">
-      <h3 id="update-heading" tabIndex={-1} ref={heading}>
+      <h2 id="update-heading" tabIndex={-1} ref={heading}>
         {title}
-      </h3>
+      </h2>
       {!review ? (
         <p className="hint">Comparing the versions…</p>
       ) : (

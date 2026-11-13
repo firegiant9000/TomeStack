@@ -101,7 +101,7 @@ export function DdbMatchesStep({ preview, family, campaignId, resolutions, answe
       })}
       {preview.openChoices.length > 0 && filter === 'all' && (
         <section aria-labelledby="ddb-open-choices">
-          <h4 id="ddb-open-choices">Open choices</h4>
+          <h3 id="ddb-open-choices">Open choices</h3>
           <p className="hint">The sheet does not settle these. Answer them here, or later in the builder.</p>
           {preview.openChoices.map((choice) => (
             <OpenChoice key={`${choice.source.contentId}:${choice.choiceId}`} choice={choice} names={names} answers={answers} onAnswer={onAnswer} />
@@ -183,7 +183,7 @@ function Row({
         {statusLabels[row.status]}
         {row.note && <span className="hint"> {noteLabels[row.note] ?? row.note}</span>}
       </td>
-      <td>{row.chosen ? `${describe(row.chosen, names)} · ${row.chosen.families.map((f) => rulesLabel(f)).join(', ')}` : row.candidates.length > 1 ? `${row.candidates.length} candidates` : '—'}</td>
+      <td>{row.chosen ? `${describe(row.chosen, names)} · ${row.chosen.families.map((f) => rulesLabel(f)).join(', ')}` : row.candidates.length > 1 ? `${row.candidates.length} possible matches` : '—'}</td>
       <td>
         <div role="group" aria-labelledby={headerId}>
           {stubBox}

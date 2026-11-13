@@ -123,7 +123,7 @@ export function EquipmentPanel({ view, onChanged, onError, onStatus, saveCharact
 
   return (
     <section aria-labelledby="equipment-heading" className="play-panel">
-      <h3 id="equipment-heading">Equipment</h3>
+      <h2 id="equipment-heading">Equipment</h2>
       {equipment.length === 0 ? (
         <p className="hint">Nothing carried.</p>
       ) : (
@@ -136,7 +136,7 @@ export function EquipmentPanel({ view, onChanged, onError, onStatus, saveCharact
         ).map(([title, group]) =>
           group.length === 0 ? null : (
             <section key={title} className="equipment-group" aria-labelledby={`equipment-${title.toLowerCase()}`}>
-              <h4 id={`equipment-${title.toLowerCase()}`}>{title}</h4>
+              <h3 id={`equipment-${title.toLowerCase()}`}>{title}</h3>
               <ul className="resources">
                 {group.map(({ entry, index }) => {
                   const use = uses.find((u) => u.entryIndex === index);
@@ -339,9 +339,9 @@ export function CurrencyPanel({ view, onChanged, onError, saveCharacter }: Omit<
 
   return (
     <section aria-labelledby="currency-heading" className="play-panel">
-      <h3 id="currency-heading" tabIndex={-1} ref={heading}>
+      <h2 id="currency-heading" tabIndex={-1} ref={heading}>
         Currency
-      </h3>
+      </h2>
       <div className="inline-form">
         {coins.map(([key, label]) => (
           <label key={key} className="field">

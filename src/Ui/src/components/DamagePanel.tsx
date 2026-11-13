@@ -244,9 +244,9 @@ export function DamagePanel({ view, amount, type, how, onDone, onCancel, onError
 
   return (
     <section aria-labelledby="damage-heading" className="play-panel">
-      <h3 id="damage-heading" tabIndex={-1} ref={heading}>
+      <h2 id="damage-heading" tabIndex={-1} ref={heading}>
         {applied ? 'Damage applied' : `Take ${amount} ${type ? damageTypeLabel(type).toLowerCase() : 'untyped'} damage`}
-      </h3>
+      </h2>
       {failed && <p className="error">Could not work out this damage. Close and try again.</p>}
       {!preview ? (
         !failed && <p className="hint">Working out the damage…</p>

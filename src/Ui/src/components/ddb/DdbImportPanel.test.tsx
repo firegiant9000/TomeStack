@@ -151,6 +151,7 @@ it('shows Needs a choice rows first under the filter and requires a pick before 
   await user.click(screen.getByRole('radio', { name: 'Needs a choice' }));
   const shown = within(region).getAllByRole('rowheader').map((h) => h.textContent);
   expect(shown).toEqual(['Fixture Veil']);
+  expect(within(region).getByText('2 possible matches')).toBeTruthy();
 
   await user.click(screen.getByRole('button', { name: 'Next: numbers' }));
   await user.click(await screen.findByRole('button', { name: 'Next: summary' }));

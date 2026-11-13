@@ -381,7 +381,7 @@ export function CustomItemsPanel({ view, onChanged, onError, onStatus, saveChara
 
   return (
     <section aria-labelledby="own-items-heading" className="play-panel">
-      <h3 id="own-items-heading" tabIndex={-1}>Your own items</h3>
+      <h2 id="own-items-heading" tabIndex={-1}>Your own items</h2>
       <p className="hint">Things you carry that are not in the rules content. They never count toward Armor Class or any calculation.</p>
       {entries.length === 0 && !editing && <p className="hint">No items of your own yet.</p>}
       {(entries.length > 0 || editing?.isNew) && (
@@ -497,7 +497,7 @@ export function CustomAttacksPanel({ view, onChanged, onError, onStatus, saveCha
 
   return (
     <section aria-labelledby="own-attacks-heading" className="play-panel">
-      <h3 id="own-attacks-heading" tabIndex={-1}>Your own attacks</h3>
+      <h2 id="own-attacks-heading" tabIndex={-1}>Your own attacks</h2>
       <p className="hint">
         Attacks you type in, such as a weapon the rules content does not list. Roll them on Play. Nothing here is calculated.
       </p>

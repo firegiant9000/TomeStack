@@ -76,7 +76,7 @@ export function SpellsPanel({
 
   return (
     <section aria-labelledby="spells-heading" className="play-panel">
-      <h3 id="spells-heading">Spells and slots</h3>
+      <h2 id="spells-heading">Spells and slots</h2>
       {(slots.length > 0 || pact) && (
         <ul className="resources" aria-label="Spell slots">
           {slots.map((slot) => (
@@ -92,10 +92,10 @@ export function SpellsPanel({
         const shown = filterSpells(entry.spells, toSpellFilter(query, choice));
         return (
         <section key={entry.content.revisionId} aria-labelledby={`caster-${entry.content.revisionId}`}>
-          <h4 id={`caster-${entry.content.revisionId}`}>
+          <h3 id={`caster-${entry.content.revisionId}`}>
             {entry.name} (level {entry.classLevel}, {abilityNames[entry.ability]}): spell attack {entry.attackBonus >= 0 ? '+' : ''}
             {entry.attackBonus}, save DC {entry.saveDc}
-          </h4>
+          </h3>
           <p className="hint">
             {entry.cantripsAllowed !== undefined && `${entry.cantripsAllowed} cantrips · `}
             {entry.spellsAllowed !== undefined && `${entry.spellsAllowed} ${entry.preparation === 'known' ? 'spells known' : 'spells prepared'} · `}
@@ -232,9 +232,9 @@ export function SpellsPanel({
 function SlotItem({ label, slot, spend, regain, act }: { label: string; slot: SlotValue; spend: PlayAction; regain: PlayAction; act: Act }) {
   return (
     <li className="resource">
-      <h4>
+      <h3>
         {label}: {slot.remaining} of {slot.maximum} <Pips filled={slot.remaining} total={slot.maximum} />
-      </h4>
+      </h3>
       <div className="actions">
         <button type="button" disabled={slot.remaining === 0} onClick={() => act(spend)}>
           Spend 1 {label.toLowerCase().replace(' slots', ' slot')}

@@ -56,9 +56,9 @@ it('lists a heading per class, a list per level, then the features', async () =>
   vi.mocked(client.contentCoverage).mockResolvedValue(reportOf());
   const { container } = render(<CoveragePanel sourceId="s1" />);
   await screen.findByRole('heading', { name: 'Fixture Warden' });
-  expect(screen.getByRole('heading', { name: 'Fixture Warden' }).tagName).toBe('H4');
-  expect(screen.getByRole('heading', { name: 'Coverage' }).tagName).toBe('H3');
-  const levels = screen.getAllByRole('heading', { level: 5 }).map((h) => h.textContent);
+  expect(screen.getByRole('heading', { name: 'Fixture Warden' }).tagName).toBe('H3');
+  expect(screen.getByRole('heading', { name: 'Coverage' }).tagName).toBe('H2');
+  const levels = screen.getAllByRole('heading', { level: 4 }).map((h) => h.textContent);
   expect(levels).toEqual(['Level 1', 'Level 3']);
   const first = within(screen.getByRole('region', { name: 'Level 1' }));
   expect(first.getByRole('list')).toBeTruthy();

@@ -76,7 +76,7 @@ export function DdbSummaryStep({ preview, family, suggested, includePlayState, o
       </dl>
       {preview.stub && (
         <section aria-labelledby="ddb-stub-class">
-          <h4 id="ddb-stub-class">Homebrew class to create</h4>
+          <h3 id="ddb-stub-class">Homebrew class to create</h3>
           <dl>
             <dt>Class</dt>
             <dd>{preview.stub.name}</dd>
@@ -106,7 +106,7 @@ export function DdbSummaryStep({ preview, family, suggested, includePlayState, o
       )}
       {drafts.length > 0 && (
         <section aria-labelledby="ddb-reference-drafts">
-          <h4 id="ddb-reference-drafts">Reference drafts</h4>
+          <h3 id="ddb-reference-drafts">Reference drafts</h3>
           <ul>
             {drafts.slice(0, shownDrafts).map((d) => (
               <li key={d.rowId}>
@@ -137,7 +137,7 @@ export function DdbSummaryStep({ preview, family, suggested, includePlayState, o
         spent hit dice and slots, death saves and inspiration
       </label>
       <section aria-labelledby="ddb-not-brought-over">
-        <h4 id="ddb-not-brought-over">Not brought over</h4>
+        <h3 id="ddb-not-brought-over">Not brought over</h3>
         <ul>
           {report.notBroughtOver.map((code) => (
             <li key={code}>{notBroughtOverLabels[code] ?? code}</li>
@@ -148,7 +148,7 @@ export function DdbSummaryStep({ preview, family, suggested, includePlayState, o
       </section>
       {notRead.length > 0 && (
         <section aria-labelledby="ddb-not-read">
-          <h4 id="ddb-not-read">Lines not read</h4>
+          <h3 id="ddb-not-read">Lines not read</h3>
           <ul>
             {notRead.slice(0, shownNotRead).map((n) => (
               <li key={n.line}>
@@ -164,7 +164,7 @@ export function DdbSummaryStep({ preview, family, suggested, includePlayState, o
       )}
       {report.lines && report.lines.length > 0 && (
         <section aria-labelledby="ddb-report-lines">
-          <h4 id="ddb-report-lines">From reading the sheet</h4>
+          <h3 id="ddb-report-lines">From reading the sheet</h3>
           <ul>
             {report.lines.map((line) => (
               <li key={line}>{line}</li>

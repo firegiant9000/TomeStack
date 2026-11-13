@@ -6,9 +6,10 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { clampAccent } from '../accentClamp';
 import { client } from '../api/client';
 import type { AppInfo } from '../api/types';
+import { expectNoAxeViolations } from '../test/axe';
 import { SettingsPanel } from './SettingsPanel';
 
-vi.mock('../api/client', () => ({ client: { copyDiagnostics: vi.fn() } }));
+vi.mock('../api/client', () => ({ client: { copyDiagnostics: vi.fn(), listExtensions: vi.fn() } }));
 
 afterEach(() => {
   cleanup();
@@ -23,7 +24,7 @@ afterEach(() => {
 it('offers the presets and Custom accent as a radio group, applies the pick at once and remembers it', async () => {
   const user = userEvent.setup();
   render(<SettingsPanel />);
-  expect(screen.getByRole('heading', { level: 2, name: 'Settings' })).toBeTruthy();
+  expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeTruthy();
   const group = screen.getByRole('radiogroup', { name: 'Theme' });
   expect(within(group).getAllByRole('radio').map((r) => r.closest('label')?.textContent?.trim())).toEqual(['Cool', 'Ember', 'Forest', 'Rose', 'Tide', 'Violet', 'Custom accent']);
   expect(screen.getByRole<HTMLInputElement>('radio', { name: 'Forest' }).checked).toBe(true);
@@ -31,6 +32,15 @@ it('offers the presets and Custom accent as a radio group, applies the pick at o
   expect(document.documentElement.dataset.theme).toBe('cool');
   expect(localStorage.getItem('tomestack.theme')).toBe('cool');
   expect(group).toBeTruthy();
+});
+
+it('shows an Add-ons section with the installed extensions once the rules families are known', async () => {
+  vi.mocked(client.listExtensions).mockResolvedValue([]);
+  const { container } = render(<SettingsPanel info={{ version: '0.0.0-fixture', schemaVersion: 99, rulesFamilies: [] } as unknown as AppInfo} characters={[]} />);
+  expect(await screen.findByRole('heading', { level: 2, name: 'Add-ons' })).toBeTruthy();
+  expect(await screen.findByRole('button', { name: 'Install extension…' })).toBeTruthy();
+  expect(screen.queryByRole('heading', { name: 'Extensions' })).toBeNull();
+  await expectNoAxeViolations(container);
 });
 
 it('names the version and the data schema, which the app header no longer shows', () => {
@@ -51,7 +61,7 @@ it('switches the dice animation off and on', async () => {
 
 it('groups the screen under Appearance, Accessibility, Keyboard shortcuts, About and Diagnostics headings', () => {
   render(<SettingsPanel />);
-  expect(screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual(['Appearance', 'Accessibility', 'Keyboard shortcuts', 'About', 'Diagnostics']);
+  expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Appearance', 'Accessibility', 'Keyboard shortcuts', 'About', 'Diagnostics']);
   expect(screen.getByText('Ctrl+B', { selector: 'dt' }).nextElementSibling!.textContent).toContain('sidebar');
 });
 

@@ -9,6 +9,7 @@ import { client } from '../api/client';
 import type { Character, CharacterView, Companion, CompanionPlay, PlayAction, RollTarget } from '../api/types';
 import { CompanionsPanel } from './CompanionsPanel';
 import { fill } from '../test/fill';
+import { expectContinuousOutline } from '../test/outline';
 
 vi.mock('../api/client', () => ({ client: { saveCharacter: vi.fn(), rollDice: vi.fn() } }));
 
@@ -290,6 +291,12 @@ const showContent = (companions: object[] = [given()], hand: Companion[] = [], r
     <CompanionsPanel view={contentView(companions, hand, rows)} act={(a) => acted.push(a)} roll={(t) => rolled.push(t)} onChanged={() => {}} onError={() => {}} onStatus={() => {}} />,
   );
 
+it('keeps the heading outline continuous: Companions h2, each card h3, its pools h4', () => {
+  showContent([given()], [crow]);
+  expectContinuousOutline(document.body, 1);
+  expect(within(card('Testy Wolf')).getByRole('heading', { name: /^Testy Howl: 2 of 2/ }).tagName).toBe('H4');
+});
+
 it('renders a content companion card with its attacks and pools and no Edit', async () => {
   showContent([given()], [crow]);
   const wolf = within(card('Testy Wolf'));
@@ -301,7 +308,7 @@ it('renders a content companion card with its attacks and pools and no Edit', as
   expect(wolf.getByRole('heading', { name: /^Testy Howl: 2 of 2/ })).toBeTruthy();
   expect(wolf.queryByRole('button', { name: /^Edit|^Remove/ })).toBeNull();
   // Content cards come first; the hand companion keeps its Edit and Remove.
-  const names = screen.getAllByRole('heading', { level: 4 }).map((h) => h.textContent);
+  const names = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
   expect(names.indexOf('Testy Wolf')).toBeLessThan(names.indexOf('Testy Crow'));
   expect(within(card('Testy Crow')).getByRole('button', { name: 'Edit Testy Crow' })).toBeTruthy();
   await userEvent.click(wolf.getByRole('button', { name: 'Roll Testy Claw attack' }));

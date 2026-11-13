@@ -88,7 +88,7 @@ export function GapNotesPanel({ view, onError, onStatus, about, onAboutChange, t
 
   return (
     <section aria-labelledby="gaps-heading" className="play-panel">
-      <h3 id="gaps-heading">Gap notes{notes ? `: ${open} open` : ''}</h3>
+      <h2 id="gaps-heading">Gap notes{notes ? `: ${open} open` : ''}</h2>
       <p className="hint">
         Write down where TomeStack fell short at the table, to fix or accept later. Notes stay on this computer; only a personal backup includes them.
       </p>

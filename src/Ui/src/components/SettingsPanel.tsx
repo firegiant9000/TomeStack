@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { hueName } from '../accentClamp';
 import { client } from '../api/client';
-import type { AppInfo } from '../api/types';
+import type { AppInfo, CharacterSummary } from '../api/types';
 import {
   abilityOrder,
   abilityOrderIds,
@@ -44,6 +44,10 @@ import {
   type ThemeId,
 } from '../settings';
 
+// The add-ons list is not part of the first paint of Settings (the same code split App.tsx used for its own screen).
+const ExtensionsPanel = lazy(() => import('./ExtensionsPanel').then((m) => ({ default: m.ExtensionsPanel })));
+const noop = () => {};
+
 const themeLabels: Record<ThemeId, string> = { cool: 'Cool', ember: 'Ember', forest: 'Forest', rose: 'Rose', tide: 'Tide', violet: 'Violet', custom: 'Custom accent' };
 const appearanceLabels: Record<AppearanceId, string> = { system: 'System', light: 'Light', dark: 'Dark' };
 const abilityOrderLabels: Record<AbilityOrderId, string> = { modifier: 'Modifier first', score: 'Score first' };
@@ -68,7 +72,18 @@ function Choice<Id extends string>({ legend, ids, labels, value, onPick }: { leg
  * an `html[data-*]` attribute the CSS keys on (investigation 2026-10-06: Appearance, Text size, Ability boxes; the
  * Accessibility section; a static list of the keyboard shortcuts so they can be found).
  */
-export function SettingsPanel({ info, onError }: { info?: AppInfo; onError?: (error: unknown) => void }) {
+export function SettingsPanel({
+  info,
+  characters,
+  onError,
+  onStatus,
+}: {
+  info?: AppInfo;
+  characters?: CharacterSummary[];
+  onError?: (error: unknown) => void;
+  onStatus?: (text: string) => void;
+}) {
+  const rulesFamilies = info?.rulesFamilies;
   const [current, setCurrent] = useState<ThemeId>(theme());
   const [hue, setHue] = useState(accentHue());
   const [scheme, setScheme] = useState<AppearanceId>(appearance());
@@ -131,11 +146,11 @@ export function SettingsPanel({ info, onError }: { info?: AppInfo; onError?: (er
 
   return (
     <section className="panel settings" aria-labelledby="settings-heading">
-      <h2 id="settings-heading" tabIndex={-1} ref={heading}>
+      <h1 id="settings-heading" tabIndex={-1} ref={heading}>
         Settings
-      </h2>
+      </h1>
 
-      <h3>Appearance</h3>
+      <h2>Appearance</h2>
       <Choice legend="Colour scheme" ids={appearanceIds} labels={appearanceLabels} value={scheme} onPick={pick(setAppearance, setScheme)} />
       <Choice legend="Theme" ids={themeIds} labels={themeLabels} value={current} onPick={pick(setTheme, setCurrent)} />
       {current === 'custom' && (
@@ -168,7 +183,7 @@ export function SettingsPanel({ info, onError }: { info?: AppInfo; onError?: (er
         <input type="checkbox" checked={dice} onChange={(e) => toggleDice(e.target.checked)} /> Animate dice
       </label>
 
-      <h3>Accessibility</h3>
+      <h2>Accessibility</h2>
       <Choice legend="Motion" ids={motionIds} labels={{ system: 'Follow Windows', reduce: 'Reduce motion' }} value={move} onPick={pick(setMotion, setMove)} />
       <p className="hint">Dice stop tumbling; nothing else moves today. &quot;Follow Windows&quot; uses your &quot;Animation effects&quot; setting.</p>
       <label className="choice">
@@ -188,7 +203,13 @@ export function SettingsPanel({ info, onError }: { info?: AppInfo; onError?: (er
       </label>
       <p className="hint">Rolls are always shown as text; turning announcements off takes full effect the next time a sheet is opened.</p>
 
-      <h3>Keyboard shortcuts</h3>
+      {rulesFamilies && (
+        <Suspense fallback={null}>
+          <ExtensionsPanel characters={characters ?? []} rulesFamilies={rulesFamilies} onError={onError ?? noop} onStatus={onStatus ?? noop} />
+        </Suspense>
+      )}
+
+      <h2>Keyboard shortcuts</h2>
       <dl className="shortcuts">
         <dt>Ctrl+B</dt>
         <dd>Hide or show the sidebar</dd>
@@ -200,7 +221,7 @@ export function SettingsPanel({ info, onError }: { info?: AppInfo; onError?: (er
         <dd>Move between controls</dd>
       </dl>
 
-      <h3>About</h3>
+      <h2>About</h2>
       <p className="hint">Settings are kept in this app's own storage on this computer and are in no backup or TomeStack file.</p>
       {info && (
         <p className="hint">
@@ -208,7 +229,7 @@ export function SettingsPanel({ info, onError }: { info?: AppInfo; onError?: (er
         </p>
       )}
 
-      <h3>Diagnostics</h3>
+      <h2>Diagnostics</h2>
       <p className="hint">
         For a bug report: the app and Windows versions and the newest entries of the error log. Error messages and folder paths are left out, and your user name
         and source titles are replaced. Nothing is sent anywhere; you paste it where you choose.
