@@ -1180,6 +1180,36 @@ public class DownConversionExportTests
 
         Assert.True(lowered.Blocked);
         Assert.DoesNotContain(lowered.Changes, c => c.Action == "dropped" && c.Message.Contains("becomes a custom item", StringComparison.Ordinal));
+        Assert.Contains(lowered.Changes, c => c.Action == "blocks" && c.Message.Contains("Compat Rope Coil", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void One_character_holding_a_plain_and_an_attuned_entry_of_one_item_lists_a_single_blocker_line()
+    {
+        var rope = GearItem(1, "Compat Rope Coil");
+        var ropeRef = new ContentReference(rope.ContentId, rope.RevisionId);
+        var hero = Hero(c => c with { Equipment = [Held(rope), new EquipmentEntry(ropeRef, Attuned: true)] });
+
+        var lowered = LowerGear(hero, "0.6.0", null, rope);
+
+        Assert.True(lowered.Blocked);
+        Assert.DoesNotContain(lowered.Changes, c => c.Message.Contains("becomes a custom item", StringComparison.Ordinal));
+        Assert.Single(lowered.Changes, c => c.Action == "blocks" && c.Message.Contains("Compat Rope Coil", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void An_out_of_range_quantity_in_one_character_keeps_its_block_and_removes_the_others_custom_item_line()
+    {
+        var rope = GearItem(1, "Compat Rope Coil");
+        var first = Hero(c => c with { Equipment = [Held(rope, EquipmentEntry.MaxQuantity + 1)] });
+        var second = Hero(c => c with { Id = Guid.NewGuid(), Name = "Second Hero", Equipment = [Held(rope)] });
+
+        var lowered = DownConversion.Lower(new([first, second], [rope], [], [], "x.tomestack.zip"), Row("0.6.0") with { BundledRevisionIds = new HashSet<Guid>() },
+            id => id == BundledSourceId, _ => "Compat Bundled Pack", new HomebrewCatalog());
+
+        Assert.True(lowered.Blocked);
+        Assert.Contains(lowered.Changes, c => c.Action == "blocks" && c.Message.Contains("Compat Rope Coil", StringComparison.Ordinal));
+        Assert.DoesNotContain(lowered.Changes, c => c.Message.Contains("becomes a custom item", StringComparison.Ordinal));
     }
 
     [Fact]
