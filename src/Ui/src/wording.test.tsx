@@ -17,7 +17,7 @@ import { HomebrewStudio } from './components/HomebrewStudio';
 import { SourcesPanel } from './components/SourcesPanel';
 import { RulesLabelProvider } from './rulesLabel';
 import { sheetTabIds, type SheetTabId } from './sheetTab';
-import { packageTargetsFixture } from './test/downConversion';
+import { exportChange, packageTargetsFixture } from './test/downConversion';
 
 vi.mock('./api/client', () => ({
   client: {
@@ -32,6 +32,7 @@ vi.mock('./api/client', () => ({
     listCampaigns: vi.fn(),
     snapshots: vi.fn(),
     previewExport: vi.fn(),
+    preview: vi.fn(),
     packagePreflight: vi.fn(),
     packageTargets: vi.fn(),
     restPreview: vi.fn(),
@@ -262,11 +263,16 @@ it('character sheet, manage tab, sharing the character', async () => {
 it('character sheet, manage tab, export with the version choice', async () => {
   const user = userEvent.setup();
   vi.mocked(client.packageTargets).mockResolvedValue(packageTargetsFixture);
-  vi.mocked(client.previewExport).mockResolvedValue({ purpose: 'share', fileName: 'fixture-wren.tomestack.zip', characters: ['fixture-wording'], included: [], omitted: [], gapNotes: 0 });
+  vi.mocked(client.previewExport).mockImplementation(async (request) => {
+    const base = { purpose: 'share' as const, fileName: 'fixture-wren.tomestack.zip', characters: ['fixture-wording'], included: [], omitted: [], gapNotes: 0 };
+    const target = (request as { target?: string }).target;
+    return target ? { ...base, target, changes: [exportChange('dropped'), exportChange('leftOut')], changesHash: `hash-${target}` } : base;
+  });
   const { container } = render(labelled(<CharacterSheet view={view} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} initialTab="manage" rulesFamilies={families} />));
   await user.click(await screen.findByRole('radio', { name: /^Share with someone/ }));
   expect(await screen.findByRole('group', { name: 'Which version will open this file?' })).toBeTruthy();
   await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
+  expect(await screen.findByRole('region', { name: /^Changed for TomeStack/ })).toBeTruthy();
   expectPlainWords(container);
 });
 
@@ -281,6 +287,11 @@ it('Backups, with the version choice', async () => {
 it('level up', async () => {
   const { container } = render(labelled(<CharacterBuilder mode={{ kind: 'levelUp', view }} rulesFamilies={families} onCommitted={noop} onCancel={noop} onError={noop} />));
   expect(await screen.findByRole('heading', { name: /Level up/ })).toBeTruthy();
+  expectPlainWords(container);
+  // The choices step (a level-up has no separate review step; the choices step holds the save).
+  vi.mocked(client.preview).mockResolvedValue(view);
+  await userEvent.setup().click(screen.getByRole('button', { name: 'Next: choices' }));
+  expect(await screen.findByRole('button', { name: 'Save level-up' })).toBeTruthy();
   expectPlainWords(container);
 });
 
