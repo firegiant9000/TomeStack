@@ -62,10 +62,12 @@ async function openTab(user: ReturnType<typeof userEvent.setup>, sheet: HTMLElem
   if (tab.getAttribute('aria-selected') !== 'true') await user.click(tab);
 }
 
-/** One value of the sheet's summary bar: the text of the `<dd>` after the `<dt>` named `term` (slice 2). */
+/** One value of the sheet's status bar: the `.status-value` beside the `.status-label` named `term` (button or plain item). */
 function summaryValue(sheet: HTMLElement, term: string): string {
-  const summary = within(sheet).getByRole('region', { name: 'Summary' });
-  return within(summary).getByText(term, { selector: 'dt' }).nextElementSibling!.textContent!.trim();
+  const summary = within(sheet).getByRole('region', { name: 'Status' });
+  const label = Array.from(summary.querySelectorAll('.status-label')).find((l) => l.textContent?.trim() === term);
+  if (!label) throw new Error(`No status bar item named ${term}`);
+  return label.parentElement!.querySelector('.status-value')!.textContent!.trim();
 }
 
 it('creates a character, shows its traced sheet, overrides, exports and re-imports it', async () => {
@@ -326,14 +328,14 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   await user.click(within(screen.getByRole('region', { name: /^Hit points:/ })).getByRole('button', { name: 'Take damage' }));
   await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 28 of 35' })).toBeTruthy());
 
-  await user.click(screen.getByRole('checkbox', { name: 'Poisoned' }));
-  await waitFor(() => expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Poisoned' }).checked).toBe(true));
+  await user.selectOptions(screen.getByRole('combobox', { name: 'Add condition' }), 'Poisoned');
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Remove Poisoned' })).toBeTruthy());
 
   // A feature roll shows its record, and rolling spends nothing.
   await user.click(screen.getByRole('checkbox', { name: /Critical hit/ }));
   await user.click(screen.getByRole('button', { name: 'Roll Frenzy extra damage (Rage Damage +2: 2d6) (2d6)' }));
-  const lastRoll = screen.getByRole('region', { name: 'Last roll' });
-  expect(within(screen.getByRole('region', { name: 'Summary' })).getByRole('region', { name: 'Last roll' })).toBe(lastRoll);
+  const lastRoll = screen.getByRole('status', { name: 'Last roll' });
+  expect(within(screen.getByRole('region', { name: 'Status' })).getByRole('status', { name: 'Last roll' })).toBe(lastRoll);
   await waitFor(() => expect(lastRoll.textContent).toMatch(/Frenzy extra damage.*: \d+ \(2d6, critical\)/));
   expect(lastRoll.textContent).toMatch(/d6 \d \(critical\)/); // doubled dice are marked
   expect(lastRoll.textContent).toMatch(/Frenzy \(System Reference Document 5\.2\.1, p\. \d+\)/);
@@ -348,16 +350,16 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   expect(lastRoll.textContent).toMatch(/\(dropped\)/);
   expect(lastRoll.textContent).toMatch(/Strength saving throw \+5/);
   // D72: "Why?" sits beside the Last roll (not inside it) and explains the +5 in words, naming the proficiency bonus.
-  const why = within(screen.getByRole('region', { name: 'Summary' })).getByText('Why?').closest('details')!;
+  const why = within(screen.getByRole('region', { name: 'Status' })).getByText('Why?').closest('details')!;
   expect(why.open).toBe(false);
   expect(lastRoll.contains(why)).toBe(false);
   await user.click(within(why).getByText('Why?'));
   expect(why.open).toBe(true);
   expect(within(why).getByRole('list', { name: 'Why this roll came out this way' }).textContent).toMatch(/proficiency bonus/i);
-  // D28: the roll before it is in Previous rolls, outside the live region.
-  await user.click(within(sheet).getByText('Previous rolls (1)'));
-  expect(within(sheet).getByText('Previous rolls (1)').closest('details')!.textContent).toMatch(/Frenzy extra damage.*: \d+ \(2d6, critical\)/);
-  expect(lastRoll.textContent).not.toMatch(/Previous rolls/);
+  // D28: the roll before it is in Earlier rolls, outside the live region.
+  await user.click(within(sheet).getByText('Earlier rolls (1)'));
+  expect(within(sheet).getByText('Earlier rolls (1)').closest('details')!.textContent).toMatch(/Frenzy extra damage.*: \d+ \(2d6, critical\)/);
+  expect(lastRoll.textContent).not.toMatch(/Earlier rolls/);
   await openTab(user, sheet, 'Play');
   expect(within(screen.getByRole('region', { name: 'Resources' })).getByRole('heading', { name: 'Rages: 2 of 3' })).toBeTruthy();
 
@@ -407,8 +409,9 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   expect(within(screen.getByRole('region', { name: 'Resources' })).getByRole('heading', { name: 'Rages: 3 of 3' })).toBeTruthy();
 
   // Heroic Inspiration (2024) and death saving throws (SPEC C-05): a 20 at the table regains 1 hit point.
-  await user.click(within(hpPanel()).getByRole('checkbox', { name: 'Heroic Inspiration' }));
-  await waitFor(() => expect(within(hpPanel()).getByRole<HTMLInputElement>('checkbox', { name: 'Heroic Inspiration' }).checked).toBe(true));
+  const statusBar = () => screen.getByRole('region', { name: 'Status' });
+  await user.click(within(statusBar()).getByRole('checkbox', { name: 'Heroic Inspiration' }));
+  await waitFor(() => expect(within(statusBar()).getByRole<HTMLInputElement>('checkbox', { name: 'Heroic Inspiration' }).checked).toBe(true));
   expect(screen.queryByRole('region', { name: /^Death saving throws/ })).toBeNull();
   await user.type(within(hpPanel()).getByRole('spinbutton', { name: 'Amount' }), '40');
   await user.click(within(hpPanel()).getByRole('button', { name: 'Take damage' }));
@@ -695,16 +698,16 @@ it('authors a +1 weapon in the studio, equips it and rolls it, and "Why?" names 
   await openTab(user, hero, 'Play');
   const actions = () => screen.getByRole('region', { name: 'Attacks and actions' });
   const whyList = async () => {
-    const why = within(screen.getByRole('region', { name: 'Summary' })).getByText('Why?').closest('details')!;
+    const why = within(screen.getByRole('region', { name: 'Status' })).getByText('Why?').closest('details')!;
     if (!why.open) await user.click(within(why).getByText('Why?'));
     return within(why).getByRole('list', { name: 'Why this roll came out this way' }).textContent ?? '';
   };
   await waitFor(() => expect(within(actions()).getByRole('button', { name: 'Roll E2E Plus Blade attack' })).toBeTruthy());
   await user.click(within(actions()).getByRole('button', { name: 'Roll E2E Plus Blade attack' }));
-  await waitFor(() => expect(screen.getByRole('region', { name: 'Last roll' }).textContent).toMatch(/E2E Plus Blade attack: \d+ \(1d20\)/));
+  await waitFor(() => expect(screen.getByRole('status', { name: 'Last roll' }).textContent).toMatch(/E2E Plus Blade attack: \d+ \(1d20\)/));
   expect(await whyList()).toMatch(/\+1 to hit \(weapon\)/);
   await user.click(within(actions()).getByRole('button', { name: /^Roll E2E Plus Blade damage/ }));
-  await waitFor(() => expect(screen.getByRole('region', { name: 'Last roll' }).textContent).toMatch(/E2E Plus Blade damage \(slashing\): \d+/));
+  await waitFor(() => expect(screen.getByRole('status', { name: 'Last roll' }).textContent).toMatch(/E2E Plus Blade damage \(slashing\): \d+/));
   expect(await whyList()).toMatch(/\+1 damage \(weapon\)/);
 });
 
@@ -2234,7 +2237,7 @@ it('equips a weapon: the attack uses finesse and proficiency, rolls, and actions
   const actions = () => screen.getByRole('region', { name: 'Attacks and actions' });
   await waitFor(() => expect(within(actions()).getByText(/\+5 to hit, 1d4\+3 piercing/)).toBeTruthy());
   await user.click(within(actions()).getByRole('button', { name: 'Roll Fixture Needle attack' }));
-  const lastRoll = screen.getByRole('region', { name: 'Last roll' });
+  const lastRoll = screen.getByRole('status', { name: 'Last roll' });
   await waitFor(() => expect(lastRoll.textContent).toMatch(/Fixture Needle attack: \d+ \(1d20\)/));
   expect(lastRoll.textContent).toMatch(/Fixture Needle to hit \+5/);
   const reactions = within(actions()).getByRole('region', { name: 'Reactions' });
@@ -2284,7 +2287,7 @@ it('adds an attack of your own on Inventory, rolls it on Play with advantage, an
   expect(within(actions()).getAllByRole('button', { name: 'Roll Testy Sling attack' })).toHaveLength(1);
   await user.click(screen.getByRole('radio', { name: 'Advantage' }));
   await user.click(within(actions()).getByRole('button', { name: 'Roll Testy Sling attack' }));
-  const lastRoll = screen.getByRole('region', { name: 'Last roll' });
+  const lastRoll = screen.getByRole('status', { name: 'Last roll' });
   await waitFor(() => expect(lastRoll.textContent).toMatch(/Testy Sling attack: \d+ \(1d20, advantage\)/));
   expect(lastRoll.textContent).toMatch(/Testy Sling to hit \+5/);
   await user.click(within(actions()).getByRole('button', { name: 'Roll Testy Sling damage' }));
@@ -2312,7 +2315,7 @@ it('switches a toggled effect on and off, spends a chosen amount, and a long res
 
   // The surge spends a chosen amount (1 to the cost or what is left): here only 1 is left.
   await user.click(within(actions()).getByRole('button', { name: 'Roll Radiant surge (1d6)' }));
-  const lastRoll = screen.getByRole('region', { name: 'Last roll' });
+  const lastRoll = screen.getByRole('status', { name: 'Last roll' });
   await user.type(await within(lastRoll).findByRole('spinbutton', { name: 'Radiance to spend (1 to 1)' }), '1');
   await user.click(within(lastRoll).getByRole('button', { name: /^Spend 1 Radiance/ }));
   await waitFor(() => expect(within(resources()).getByRole('heading', { name: 'Radiance: 0 of 2' })).toBeTruthy());
@@ -2508,7 +2511,7 @@ it('builds a spellcaster: picks spells in the builder, casts one, rolls a spell 
   await user.click(within(spells()).getByRole('button', { name: 'Cast Fixture Frost Ring (spend a slot)' }));
   await waitFor(() => expect(within(spells()).getByRole('heading', { name: 'Level 1 slots: 1 of 2' })).toBeTruthy());
   await user.click(within(spells()).getByRole('button', { name: 'Roll Fixture Spark attack' }));
-  const lastRoll = screen.getByRole('region', { name: 'Last roll' });
+  const lastRoll = screen.getByRole('status', { name: 'Last roll' });
   await waitFor(() => expect(lastRoll.textContent).toMatch(/Fixture Spark \(spell attack\): \d+ \(1d20\)/));
   expect(lastRoll.textContent).toMatch(/Fixture Arcanist spell attack \+5/);
   expect(within(spells()).getByRole('heading', { name: 'Level 1 slots: 1 of 2' })).toBeTruthy();
@@ -2521,6 +2524,47 @@ it('builds a spellcaster: picks spells in the builder, casts one, rolls a spell 
   await user.click(within(rest).getByRole('button', { name: 'Finish long rest' }));
   await openTab(user, sheet, 'Spells');
   await waitFor(() => expect(within(spells()).getByRole('heading', { name: 'Level 1 slots: 2 of 2' })).toBeTruthy());
+});
+
+it('a roll from any tab shows in the status bar', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  await createCharacter(user, { name: 'E2E Barwatch', family: 'srd-5.2.1', scores: { Intelligence: 16 }, cls: /^Fixture Arcanist/ });
+  const picker = await screen.findByRole('group', { name: /^Fixture Arcanist spells \(0 of 3 cantrips, 0 of 4 prepared spells\)/ });
+  await user.click(within(picker).getByRole('checkbox', { name: /^Fixture Spark/ }));
+  await user.click(screen.getByRole('button', { name: 'Create and save' }));
+  const sheet = await screen.findByRole('article', { name: 'E2E Barwatch' });
+
+  // Gear: a weapon, so Play has an attack to roll.
+  await openTab(user, sheet, 'Gear');
+  const equipment = () => screen.getByRole('region', { name: 'Equipment' });
+  await waitFor(() => expect(within(equipment()).getByRole('option', { name: /^Fixture Needle/ })).toBeTruthy());
+  await user.selectOptions(within(equipment()).getByRole('combobox', { name: 'Add an item' }), within(equipment()).getByRole('option', { name: /^Fixture Needle/ }));
+  await user.click(within(equipment()).getByRole('button', { name: 'Add' }));
+  await user.click(await within(equipment()).findByRole('checkbox', { name: 'Equip Fixture Needle' }));
+
+  // The last roll is the one live node inside the status bar, whichever tab rolled it.
+  const bar = () => within(screen.getByRole('region', { name: 'Status' }));
+  expect(screen.getByRole('region', { name: 'Status' }).classList.contains('status-bar')).toBe(true);
+  const lastRoll = () => bar().getByRole('status', { name: 'Last roll' });
+
+  await openTab(user, sheet, 'Play');
+  const actions = () => screen.getByRole('region', { name: 'Attacks and actions' });
+  await user.click(await within(actions()).findByRole('button', { name: 'Roll Fixture Needle attack' }));
+  await waitFor(() => expect(lastRoll().textContent).toMatch(/Fixture Needle attack: \d+ \(1d20\)/));
+
+  await openTab(user, sheet, 'Spells');
+  const spells = () => within(screen.getByRole('article', { name: 'E2E Barwatch' })).getByRole('region', { name: 'Spells and slots' });
+  await user.click(within(spells()).getByRole('button', { name: 'Roll Fixture Spark attack' }));
+  await waitFor(() => expect(lastRoll().textContent).toMatch(/Fixture Spark \(spell attack\): \d+ \(1d20\)/));
+  expect(lastRoll().textContent).not.toMatch(/Fixture Needle/);
+
+  await openTab(user, sheet, 'Skills and saves');
+  const intSave = screen.getByRole('region', { name: /^Intelligence saving throw:/ });
+  await user.click(within(intSave).getByRole('heading'));
+  await user.click(within(intSave).getByRole('button', { name: 'Roll Intelligence saving throw' }));
+  await waitFor(() => expect(lastRoll().textContent).toMatch(/Intelligence saving throw \(d20 test\): \d+ \(1d20\)/));
+  expect(lastRoll().textContent).not.toMatch(/Fixture Spark/);
 });
 
 it('the Backups screen says what a full backup holds, and needs the desktop app to write or restore one (M2.1)', async () => {
@@ -2632,7 +2676,7 @@ it('adds a homebrew Fighter subclass through the studio and plays it: the Stardu
 
   // Second Wind rolls 1d10 plus the Fighter level; spending it is a separate, confirmed press.
   await user.click(within(sheet).getByRole('button', { name: 'Roll Second Wind healing (1d10 + 3)' }));
-  const lastRoll = screen.getByRole('region', { name: 'Last roll' });
+  const lastRoll = screen.getByRole('status', { name: 'Last roll' });
   await waitFor(() => expect(lastRoll.textContent).toMatch(/Second Wind healing bonus \+3/));
   expect(lastRoll.textContent).not.toMatch(/CLASS_LEVEL/); // the label names the roll, not its formula
   await user.click(await screen.findByRole('button', { name: 'Spend 1 Second Wind (2 left)' }));
@@ -3391,7 +3435,7 @@ it('shows the Bloodied chip and switches an auto toggle on at half hit points, a
   await user.click(await screen.findByRole('button', { name: /^E2E Grit Hero/ }));
   const sheet = await screen.findByRole('article', { name: 'E2E Grit Hero' });
   await openTab(user, sheet, 'Play');
-  const summary = () => within(sheet).getByRole('region', { name: 'Summary' });
+  const summary = () => within(sheet).getByRole('region', { name: 'Status' });
   const effects = () => within(screen.getByRole('region', { name: 'Attacks and actions' })).getByRole('group', { name: /Active effects/ });
   const armorClass = summaryValue(sheet, 'Armor Class');
   expect(within(summary()).queryByText('Bloodied')).toBeNull();
@@ -3559,7 +3603,7 @@ it('adds a companion on Play, damages it, undoes that exactly, and rolls its att
 
   // Its attack rolls through the dice engine and shows in Last roll like an attack of your own.
   await user.click(within(dog()).getByRole('button', { name: /^Roll Testy Bite attack/ }));
-  const lastRoll = screen.getByRole('region', { name: 'Last roll' });
+  const lastRoll = screen.getByRole('status', { name: 'Last roll' });
   await waitFor(() => expect(lastRoll.textContent).toMatch(/Testy Hound: Testy Bite attack: \d+ \(1d20\)/));
   expect(lastRoll.textContent).toMatch(/Testy Bite to hit \+4/);
   await user.click(within(dog()).getByRole('button', { name: /^Roll Testy Bite damage/ }));

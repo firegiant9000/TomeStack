@@ -286,7 +286,7 @@ it('authors a feature attack and a toggled rider, rolls damage in and out of the
   await user.click(await screen.findByRole('button', { name: /^E2E Blaze Hero/ }));
   const sheet = await screen.findByRole('article', { name: 'E2E Blaze Hero' });
   await openTab(user, sheet, 'Play');
-  const lastRoll = () => screen.getByRole('region', { name: 'Last roll' });
+  const lastRoll = () => screen.getByRole('status', { name: 'Last roll' });
   const mode = () => screen.getByRole<HTMLInputElement>('checkbox', { name: /^E2E Blaze Mode/ });
 
   // Out of the form: the damage names no rider dice, and the roll shows none.
@@ -358,7 +358,7 @@ it('authors a scaling technique with a save in the studio, rolls it with extra p
   const sheet = await screen.findByRole('article', { name: 'E2E Surge Hero' });
   await openTab(user, sheet, 'Play');
   const resources = () => screen.getByRole('region', { name: 'Resources' });
-  const lastRoll = () => screen.getByRole('region', { name: 'Last roll' });
+  const lastRoll = () => screen.getByRole('status', { name: 'Last roll' });
   expect(within(resources()).getByRole('heading', { name: 'E2E Charge: 6 of 6' })).toBeTruthy();
 
   // The action shows its save, and its points box starts at the cost and stops at the cost plus three.
@@ -434,7 +434,7 @@ it('a feat with automatic advantage rolls two dice on a Dex save, and turning on
   const sheet = await screen.findByRole('article', { name: 'E2E Mode Hero' });
   await openTab(user, sheet, 'Skills and saves');
   await user.click(await screen.findByRole('heading', { name: /^Dexterity saving throw: / })); // the card's body is a closed <details>
-  const lastRoll = () => screen.getByRole('region', { name: 'Last roll' });
+  const lastRoll = () => screen.getByRole('status', { name: 'Last roll' });
   const diceRolled = () => (lastRoll().textContent!.match(/d20 \d+/g) ?? []).length;
 
   // Automatic advantage from the feat: the button names it, and the roll uses two d20.
@@ -615,7 +615,7 @@ it('gather twice, release with the charge, then end the encounter with nothing l
   const sheet = await screen.findByRole('article', { name: 'E2E Charger' });
   await openTab(user, sheet, 'Play');
   const resources = () => screen.getByRole('region', { name: 'Resources' });
-  const lastRoll = () => screen.getByRole('region', { name: 'Last roll' });
+  const lastRoll = () => screen.getByRole('status', { name: 'Last roll' });
   expect(within(resources()).getByRole('heading', { name: 'Focus: 9 of 9' })).toBeTruthy();
   await user.click(await screen.findByRole('button', { name: 'Start encounter' }));
   await screen.findByRole('button', { name: 'End encounter' });
@@ -683,7 +683,7 @@ it('pins a per-unit roll, presses it with Alt+1: it rolls and spends once, Undo 
   const sheet = await screen.findByRole('article', { name: 'E2E Quickbar Wave' });
   await openTab(user, sheet, 'Play');
   const resources = () => screen.getByRole('region', { name: 'Resources' });
-  const lastRoll = () => screen.getByRole('region', { name: 'Last roll' });
+  const lastRoll = () => screen.getByRole('status', { name: 'Last roll' });
   const quickbar = () => screen.getByRole('region', { name: 'Quickbar' });
   const focus = async () => Number(/^Focus: (\d+) of 9$/.exec((await within(resources()).findByRole('heading', { name: /^Focus: \d+ of 9$/ })).textContent!)![1]);
   expect(await focus()).toBe(9);
@@ -793,7 +793,7 @@ it('authors a hit-point roll in the studio, uses it and undoes it (MECH-X item 1
   await user.click(await screen.findByRole('button', { name: /^E2E Rite Hero/ }));
   const sheet = await screen.findByRole('article', { name: 'E2E Rite Hero' });
   await openTab(user, sheet, 'Play');
-  const lastRoll = () => screen.getByRole('region', { name: 'Last roll' });
+  const lastRoll = () => screen.getByRole('status', { name: 'Last roll' });
   await waitFor(() => expect(screen.getByRole('region', { name: /^Hit points: 20 of 20/ })).toBeTruthy());
 
   // Rolling pays nothing; the record's "Pay 2 hit points" takes exactly two as one change.
