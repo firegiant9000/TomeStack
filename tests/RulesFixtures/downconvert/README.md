@@ -2,6 +2,8 @@
 
 Everything here is original test data written for TomeStack: no SRD or third-party rules text, no book or setting names.
 
+`frozen/` holds outputs 0.8.1 made (for 0.7.0); they are never regenerated, and they guard the files users already made (`FrozenDownConversionImportTests`).
+
 Each folder pins what a character export made for an older release writes, byte for byte
 (`DownConversionGoldenTests.Golden_copy_matches_byte_for_byte`).
 
