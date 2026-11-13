@@ -566,13 +566,14 @@ it('a throw while wording the notice never blocks the screen switch; the generic
   expect(screen.queryByRole('alert')).toBeNull();
 });
 
-it('the sidebar has an add button, then Characters, Library and App as headed lists in that order (Task 2.1)', async () => {
+it('the sidebar has an add button, then Characters, Library and App as labelled lists in that order, with no headings (Task 2.1)', async () => {
   render(<App />);
   const nav = await screen.findByRole('navigation', { name: 'Main' });
   await within(nav).findByRole('button', { name: /Fixture Avery/ });
-  const headings = within(nav).getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
-  expect(headings).toEqual(['Characters', 'Library', 'App']);
+  // Owner (2026-11-13): labelled lists, not h2s, so the screen's h1 is the first heading.
+  expect(within(nav).queryAllByRole('heading')).toEqual([]);
   const lists = within(nav).getAllByRole('list');
+  expect(lists.slice(0, 3)).toEqual(['Characters', 'Library', 'App'].map((name) => within(nav).getByRole('list', { name })));
   const names = (list: HTMLElement) => within(list).getAllByRole('button').map((b) => b.textContent?.replace(/\s+/g, ' ').trim());
   expect(names(lists[0]!)[0]).toBe('All characters');
   expect(names(lists[1]!)).toEqual(['Books and PDFs', 'Homebrew', 'Campaigns']);

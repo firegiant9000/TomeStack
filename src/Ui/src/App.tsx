@@ -230,9 +230,10 @@ function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (in
         <button type="button" className="add-character" aria-current={screen.kind === 'add' ? 'page' : undefined} onClick={() => go({ kind: 'add' })}>
           + Add a character
         </button>
-        <h2 id="characters-heading" className="sidebar-heading">
+        {/* Owner (2026-11-13): group labels, not headings, so each screen's h1 is the first heading Narrator reaches. */}
+        <p id="characters-heading" className="sidebar-heading">
           Characters
-        </h2>
+        </p>
         <ul className="character-list" aria-labelledby="characters-heading">
           {characters.length > 1 && navItem('All characters', screen.kind === 'home', () => go({ kind: 'home', focus: true }))}
           {active.map(characterLink)}
@@ -247,17 +248,17 @@ function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (in
             </ul>
           </details>
         )}
-        <h2 id="library-heading" className="sidebar-heading">
+        <p id="library-heading" className="sidebar-heading">
           Library
-        </h2>
+        </p>
         <ul className="character-list" aria-labelledby="library-heading">
           {navItem('Books and PDFs', screen.kind === 'sources', () => go({ kind: 'sources' }))}
           {navItem('Homebrew', screen.kind === 'studio', () => go({ kind: 'studio' }), !info)}
           {navItem('Campaigns', screen.kind === 'campaigns', () => go({ kind: 'campaigns' }), !info)}
         </ul>
-        <h2 id="app-heading" className="sidebar-heading">
+        <p id="app-heading" className="sidebar-heading">
           App
-        </h2>
+        </p>
         <ul className="character-list" aria-labelledby="app-heading">
           {navItem('Backups', screen.kind === 'backups', () => go({ kind: 'backups' }))}
           {/* Stays here until the Help screen (Group 2, G11) takes it. */}

@@ -154,7 +154,7 @@ body { margin: 0; background: var(--bg); color: var(--fg); }
 /* Headings moved up one level when each screen got its one h1: keep the sizes the screens were designed with (the old h2..h5 defaults). */
 /* Wrapped in :where() so these defaults have zero specificity and never outrank a component rule such as .print-title. */
 :where(.app h1) { font-size: 1.5em; margin: 0.83em 0; }
-:where(.app h2:not(.sidebar-heading)) { font-size: 1.17em; }
+:where(.app h2) { font-size: 1.17em; }
 :where(.app h3) { font-size: 1em; }
 :where(.app h4) { font-size: 0.83em; }
 :where(.app h5) { font-size: 0.67em; }

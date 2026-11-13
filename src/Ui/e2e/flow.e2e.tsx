@@ -3288,7 +3288,7 @@ it('hides and shows the sidebar from the header and by Ctrl+B, moves focus out o
 
   // Owner (2026-10-12): the header toggle is the only close control; the sidebar has none of its own.
   expect(screen.queryByRole('button', { name: 'Close sidebar' })).toBeNull();
-  expect(within(screen.getByRole('navigation', { name: 'Main' })).getByRole('heading', { level: 2, name: 'Characters' })).toBeTruthy();
+  expect(within(screen.getByRole('navigation', { name: 'Main' })).getByRole('list', { name: 'Characters' })).toBeTruthy();
 
   // Focus inside the sidebar, then hide it by the shortcut: focus must land on the toggle, not on <body>.
   screen.getByRole<HTMLButtonElement>('button', { name: '+ Add a character' }).focus();
