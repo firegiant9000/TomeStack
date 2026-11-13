@@ -184,7 +184,10 @@ article.sheet > .sheet-header { grid-column: 1 / -1; grid-row: head; padding: va
    the sheet (align-self: start keeps it its own height). The summary row would then collapse, so the hint under the bar sits in
    that row, pushed down by the bar's measured height (--status-bar-height, set by SheetSummary), which keeps the room reserved. */
 article.sheet > .sheet-summary { grid-column: 1 / -1; grid-row: summary / -1; align-self: start; margin: 0 var(--space-5); }
-article.sheet > p.hint { grid-column: 1 / -1; grid-row: summary; margin: var(--status-bar-height, 0px) var(--space-5) 0; padding-top: var(--space-2); }
+article.sheet > details.help-note { grid-column: 1 / -1; grid-row: summary; margin: var(--status-bar-height, 0px) var(--space-5) 0; padding-top: var(--space-2); }
+.help-note { margin: 0.25rem 0; }
+.help-note > summary { cursor: pointer; display: inline-block; min-width: 1.5rem; min-height: 1.5rem; line-height: 1.5rem; text-align: center; border: 1px solid var(--line-strong); border-radius: 50%; font-weight: 600; color: var(--muted); }
+.help-note[open] > summary { color: var(--fg); }
 /* D29: a rest opened from the header gets its own full-width row under the summary. */
 article.sheet > .rest-sheet { grid-column: 1 / -1; grid-row: rest; margin: 0 var(--space-5); }
 article.sheet > .print-sheet { grid-column: main; grid-row: print; margin-right: var(--space-5); }
@@ -508,7 +511,7 @@ button.roll:hover { background: var(--accent); color: var(--bg); }
   .app[data-sidebar='collapsed'] :is(.content > .messages, .content > :not(.messages, .sheet), article.sheet > .sheet-body, article.sheet > .print-sheet) { margin-left: 0; }
   article.sheet > .sheet-header, article.sheet > .sheet-summary, article.sheet > .rest-sheet { padding: 0; margin: 0 0 var(--space-3); }
   article.sheet > .summary-abilities { margin: 0 0 var(--space-3); }
-  article.sheet > p.hint { padding: 0; margin: 0 0 var(--space-3); }
+  article.sheet > details.help-note { padding: 0; margin: 0 0 var(--space-3); }
 }
 
 /* Wave 3 3.3: a short window or a narrow one (400% zoom at 1280px is 320px wide) has no room for a pinned bar. */
@@ -525,7 +528,7 @@ button.roll:hover { background: var(--accent); color: var(--bg); }
   html:is([data-text-size='150'], [data-text-size='175'], [data-text-size='200']) .content { padding: var(--space-4); }
   html:is([data-text-size='150'], [data-text-size='175'], [data-text-size='200']) :is(.content > .messages, .content > :not(.messages, .sheet), article.sheet > .print-sheet, article.sheet > .sheet-body) { margin-right: 0; margin-left: 0; }
   html:is([data-text-size='150'], [data-text-size='175'], [data-text-size='200']) :is(article.sheet > .sheet-header, article.sheet > .sheet-summary, article.sheet > .rest-sheet) { padding: 0; margin: 0 0 var(--space-3); }
-  html:is([data-text-size='150'], [data-text-size='175'], [data-text-size='200']) article.sheet > p.hint { padding: 0; margin: 0 0 var(--space-3); }
+  html:is([data-text-size='150'], [data-text-size='175'], [data-text-size='200']) article.sheet > details.help-note { padding: 0; margin: 0 0 var(--space-3); }
   html:is([data-text-size='150'], [data-text-size='175'], [data-text-size='200']) article.sheet > .summary-abilities { margin: 0 0 var(--space-3); }
 }
 
@@ -594,7 +597,7 @@ dl.review-list dd { overflow-wrap: anywhere; }
   .panel, .sheet-summary { background: none; border-radius: 0; padding: 0; }
   .sheet-summary { display: block; }
   .status-bar { position: static; }
-  article.sheet > p.hint { margin: 0; padding: 0; }
+  article.sheet > details.help-note { margin: 0; padding: 0; }
   .sheet-summary dl > div, .summary-abilities > div { border: none; padding: 0; }
   article.sheet > .summary-abilities { margin: 0; }
   .print-feature, tr { break-inside: avoid; }

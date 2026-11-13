@@ -4,6 +4,7 @@ import type { AttackEntry, CharacterSheet, CharacterView, Companion, CompanionVa
 import { attackAvailability, poolFor } from '../actionRows';
 import { refusalText } from './DiceBox';
 import { ExplainList } from './ExplainList';
+import { HelpNote } from './HelpNote';
 import { AttackItem, ResourceCard } from './PlayPanels';
 import { AddButton, EntryForm, TextBox, useEntryEditor } from './CustomEntries';
 import {
@@ -255,11 +256,11 @@ export function CompanionsPanel({ view, act, roll, rollMode = 'normal', onChange
       <h3 id="companions-heading" tabIndex={-1}>
         Companions
       </h3>
-      <p className="hint">
+      <HelpNote topic="companions">
         Familiars, mounts and the like, kept as free text. TomeStack applies no rules to them: you type their numbers and press the buttons.
         Their hit points change only here, and a rest does not change them. A companion marked &quot;From&quot; a feature or item is calculated
         from it: you cannot edit or remove it here.
-      </p>
+      </HelpNote>
       {entries.length === 0 && given.length === 0 && !editing && <p className="hint">No companions yet.</p>}
       {anyDamage && (
         <label className="choice">

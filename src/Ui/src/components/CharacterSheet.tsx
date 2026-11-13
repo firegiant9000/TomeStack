@@ -353,7 +353,10 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   const { character, sheet } = view;
   const rulesLabel = useRulesLabel();
   // D43: `toggle.group-absent` is information (the toggle works as a group of one), not content that failed to apply.
-  const notApplied = sheet.diagnostics.filter((d) => d.code !== 'toggle.group-absent');
+  // An open choice is listed once, under "Choices to make"; internal ids never reach the player.
+  const notApplied = sheet.diagnostics
+    .filter((d) => d.code !== 'toggle.group-absent' && d.code !== 'choice.unresolved')
+    .map((d) => ({ ...d, message: d.message.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, 'an entry') }));
   // R161/R182: one handler for every save path. A save refused as stale (the character changed since this sheet's copy was read)
   // shows its words in the usual alert and brings in the current copy, so the next edit starts from it. Focus is not touched: whatever
   // the user was on stays, and what they typed stays in its field for them to apply again.

@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { CharacterView, DerivedValue, PlayAction, RollMode, RollRecord, RulesFamilyPolicy } from '../api/types';
 import { DiceBox } from './DiceBox';
+import { HelpNote } from './HelpNote';
 import { AbilityBoxes } from './AbilityBoxes';
 import { FieldWhy } from './sheet/FieldWhy';
 import { attacksAgainstText } from '../rollModes';
@@ -200,13 +201,13 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, ac
         </div>
         <div id="status-why">{whyValue && <FieldWhy field={whyValue} label={whyValue.label} labels={labels} />}</div>
       </section>
-      <p className="hint">
+      <HelpNote topic="rolling">
         {/* D73 R13: a quickbar button whose name says "and spend" rolls and then makes that spend once; other pins only roll (Use and toggle pins make their own play change). */}
         {hasQuickbar ? 'Rolling from here never spends anything; a quickbar button that says "and spend" rolls and then spends.' : 'Rolling never spends anything.'}
         {spellsTab
           ? ' Roll a check here; a save, skill or initiative from its field on Skills and saves; an attack or feature on Play; or a spell on Spells.'
           : ' Roll a check here; a save, skill or initiative from its field on Skills and saves; or an attack or feature on Play.'}
-      </p>
+      </HelpNote>
     </>
   );
 }

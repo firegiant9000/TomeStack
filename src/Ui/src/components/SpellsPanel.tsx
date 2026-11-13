@@ -49,6 +49,7 @@ export function SpellsPanel({
   const casters = view.sheet.spellcasting ?? [];
   if (casters.length === 0) return null;
   const slots = view.sheet.spellSlots ?? [];
+  const shownSlots = slots.filter((s) => s.maximum > 0); // a level with no slots is not a slot level the character has
   const pact = view.sheet.pactSlots;
   const labels = new Map(view.sheet.fields.map((f) => [f.field, f.label]));
 
@@ -77,9 +78,9 @@ export function SpellsPanel({
   return (
     <section aria-labelledby="spells-heading" className="play-panel">
       <h3 id="spells-heading">Spells and slots</h3>
-      {(slots.length > 0 || pact) && (
+      {(shownSlots.length > 0 || pact) && (
         <ul className="resources" aria-label="Spell slots">
-          {slots.map((slot) => (
+          {shownSlots.map((slot) => (
             <SlotItem key={slot.level} label={`Level ${slot.level} slots`} slot={slot} spend={{ action: 'spendSlot', amount: slot.level }} regain={{ action: 'regainSlot', amount: slot.level }} act={act} />
           ))}
           {pact && <SlotItem label={`Pact Magic slots (level ${pact.level})`} slot={pact} spend={{ action: 'spendPactSlot' }} regain={{ action: 'regainPactSlot' }} act={act} />}

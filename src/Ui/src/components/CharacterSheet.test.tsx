@@ -571,6 +571,40 @@ it('leaves the information-only toggle.group-absent out of "Needs your attention
   expect(screen.queryByRole('heading', { name: 'Needs your attention' })).toBeNull();
 });
 
+it('keeps open choices out of "Needs your attention" and prints no id there (Wave 3 3.6)', () => {
+  const guid = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
+  const choices = [{ source: { contentId: 'fixture.feature', revisionId: 'r1' }, sourceName: 'Fixture feature', choiceId: 'pick', count: 1, options: [], selected: [], resolved: false }] as unknown as SheetModel['choices'];
+  renderSheet(
+    view({
+      choices,
+      diagnostics: [
+        { code: 'choice.unresolved', message: "'Fixture feature' offers a choice ('pick') of 1; 0 selected." },
+        { code: 'effect.invalid-formula', message: `Effect ${guid} has a formula that does not read.` },
+      ],
+    }),
+  );
+  const attention = screen.getByRole('heading', { name: 'Needs your attention' }).closest('section')!;
+  expect(attention.textContent).toContain('formula that does not read');
+  expect(attention.textContent).not.toContain('offers a choice');
+  expect(attention.textContent).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/);
+  expect(screen.getByRole('heading', { name: 'Choices to make' })).toBeTruthy();
+  cleanup();
+  renderSheet(view({ choices, diagnostics: [{ code: 'choice.unresolved', message: 'x' }] }));
+  expect(screen.queryByRole('heading', { name: 'Needs your attention' })).toBeNull();
+});
+
+it('keeps the standing explanations behind closed "?" notes that open on click (Wave 3 3.6)', async () => {
+  const user = userEvent.setup();
+  renderSheet(view());
+  for (const topic of ['rolling', 'damage types', 'companions']) {
+    const summary = screen.getByLabelText(`Help: ${topic}`);
+    const details = summary.closest('details') as HTMLDetailsElement;
+    expect(details.open).toBe(false);
+    await user.click(summary);
+    expect(details.open).toBe(true);
+  }
+});
+
 it('offers a compact view on Play that is remembered as a preference (D20)', async () => {
   const user = userEvent.setup();
   renderSheet(view());
@@ -828,7 +862,7 @@ it('renders the print preview after the summary and before the body, matching th
   renderSheet(view());
   await user.click(screen.getByRole('button', { name: 'Print…' }));
   const article = document.querySelector('article.sheet') as HTMLElement;
-  expect(Array.from(article.children).map((c) => `${c.tagName.toLowerCase()}.${c.className.split(' ')[0]}`)).toEqual(['header.sheet-header', 'section.sheet-summary', 'p.hint', 'section.print-sheet', 'div.sheet-body']);
+  expect(Array.from(article.children).map((c) => `${c.tagName.toLowerCase()}.${c.className.split(' ')[0]}`)).toEqual(['header.sheet-header', 'section.sheet-summary', 'details.help-note', 'section.print-sheet', 'div.sheet-body']);
 });
 
 it('moves focus to the print preview heading when the preview opens (investigation 2026-10-06 item 9)', async () => {
@@ -894,7 +928,7 @@ it('keeps the header, print preview slot and summary as direct children of the a
   renderSheet(view());
   const article = screen.getByRole('article');
   const children = Array.from(article.children).map((c) => `${c.tagName.toLowerCase()}.${c.className.split(' ')[0]}`);
-  expect(children).toEqual(['header.sheet-header', 'section.sheet-summary', 'p.hint', 'div.sheet-body']);
+  expect(children).toEqual(['header.sheet-header', 'section.sheet-summary', 'details.help-note', 'div.sheet-body']);
   const body = article.querySelector('.sheet-body')!;
   expect(within(body as HTMLElement).getByRole('tablist', { name: 'Sheet sections' })).toBeTruthy();
 });
@@ -909,7 +943,7 @@ it('opens a rest from the header above the body, focuses its heading, and return
   expect(short.getAttribute('aria-expanded')).toBe('false');
   expect(within(screen.getByRole('tabpanel', { name: 'Play' })).queryByRole('button', { name: /rest…$/ })).toBeNull();
   await user.click(short);
-  expect(childShape(screen.getByRole('article'))).toEqual(['header.sheet-header', 'section.sheet-summary', 'p.hint', 'div.rest-sheet', 'div.sheet-body']);
+  expect(childShape(screen.getByRole('article'))).toEqual(['header.sheet-header', 'section.sheet-summary', 'details.help-note', 'div.rest-sheet', 'div.sheet-body']);
   const panel = screen.getByRole('region', { name: 'Short rest' });
   expect(panel.parentElement!.id).toBe('rest-panel');
   expect(short.getAttribute('aria-controls')).toBe('rest-panel');

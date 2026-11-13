@@ -32,6 +32,7 @@ import { assistedNotes, rollButtonSuffix } from '../rollModes';
 import { diceLine, rollKey, rollModeText } from '../rollText';
 import { announceRollsOn, diceAnimationOn } from '../settings';
 import { damageTypeLabel, damageTypes, normalizeDamageType } from './customModel';
+import { HelpNote } from './HelpNote';
 import { AbilityBoxes } from './AbilityBoxes';
 import { ExplainList } from './ExplainList';
 import { Pips } from './Pips';
@@ -250,10 +251,10 @@ export function HitPointsPanel({
         </>
       )}
       {!panelOpen && skippedResponseLabels(view).length > 0 && <p className="hint">Available and not chosen: {skippedResponseLabels(view).join(', ')}.</p>}
-      <p className="hint">
+      <HelpNote topic="damage types">
         A damage type applies the character&apos;s resistances, immunities and vulnerabilities first (Untyped ignores them). Temporary hit points absorb the
         rest. They do not stack: setting them replaces the old value.
-      </p>
+      </HelpNote>
       {(view.sheet.hitDice ?? []).length > 0 && (
         <p>
           Hit dice: {hitDiceText(view.sheet.hitDice ?? [])}

@@ -159,7 +159,7 @@ it('pins the status bar sticky, static when short or narrow, with no fixed roll-
   expect(flat).toContain('html { scroll-padding-top: var(--status-bar-pin, 0px); }');
   // The bar spans from the summary row to the end of the sheet (a sticky grid item sticks only within its area); the hint holds the room.
   expect(flat).toContain('grid-row: summary / -1; align-self: start;');
-  expect(flat).toMatch(/article\.sheet > p\.hint \{[^}]*grid-row: summary;[^}]*margin: var\(--status-bar-height, 0px\)/);
+  expect(flat).toMatch(/article\.sheet > details\.help-note \{[^}]*grid-row: summary;[^}]*margin: var\(--status-bar-height, 0px\)/);
   // The ability boxes (Play panel or top setting) keep their side margins only on the wide grid.
   expect(blockAfter(css, '@media (max-width: 40rem) {').replace(/\s+/g, ' ')).toContain('article.sheet > .summary-abilities { margin: 0 0 var(--space-3); }');
   expect(blockAfter(css, '@media screen and (max-width: 60rem) {').replace(/\s+/g, ' ')).toMatch(/\[data-text-size='200'\]\) article\.sheet > \.summary-abilities \{ margin: 0 0 var\(--space-3\); \}/);
@@ -168,9 +168,9 @@ it('pins the status bar sticky, static when short or narrow, with no fixed roll-
   // The die glyph shows on the ability Roll buttons in both placements, also under forced colours.
   expect(flat.match(/:is\(\.sheet-summary, \.summary-abilities\) button\.roll::before/g)).toHaveLength(2);
   // The hint's reserved margin is reset wherever the bar is not a spanning grid item.
-  expect(blockAfter(css, '@media (max-width: 40rem) {').replace(/\s+/g, ' ')).toContain('article.sheet > p.hint { padding: 0; margin: 0 0 var(--space-3); }');
-  expect(blockAfter(css, '@media screen and (max-width: 60rem) {').replace(/\s+/g, ' ')).toMatch(/\[data-text-size='200'\]\) article\.sheet > p\.hint \{ padding: 0; margin: 0 0 var\(--space-3\); \}/);
-  expect(blockAfter(css, '@media print {').replace(/\s+/g, ' ')).toContain('article.sheet > p.hint { margin: 0; padding: 0; }');
+  expect(blockAfter(css, '@media (max-width: 40rem) {').replace(/\s+/g, ' ')).toContain('article.sheet > details.help-note { padding: 0; margin: 0 0 var(--space-3); }');
+  expect(blockAfter(css, '@media screen and (max-width: 60rem) {').replace(/\s+/g, ' ')).toMatch(/\[data-text-size='200'\]\) article\.sheet > details\.help-note \{ padding: 0; margin: 0 0 var\(--space-3\); \}/);
+  expect(blockAfter(css, '@media print {').replace(/\s+/g, ' ')).toContain('article.sheet > details.help-note { margin: 0; padding: 0; }');
   const media = blockAfter(css, '@media (max-height: 40rem), (max-width: 40rem) {').replace(/\s+/g, ' ');
   expect(media).toContain('.status-bar { position: static; }');
   expect(media).toContain('html { scroll-padding-top: 0; }');
