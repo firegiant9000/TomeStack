@@ -397,6 +397,13 @@ export function ConditionsPanel({ view, act }: { view: CharacterView; act: Act }
   const panelRef = useRef<HTMLElement>(null);
   const pending = useRef<{ kind: 'added'; key: string } | { kind: 'removed' } | null>(null);
   const activeKey = active.join(',');
+  // A refused change leaves the list as it was: its pending focus is dropped so a later list change does not move focus.
+  const run = (next: NonNullable<typeof pending.current>, action: PlayAction) => {
+    pending.current = next;
+    void Promise.resolve(act(action)).then((ok) => {
+      if (ok === false && pending.current === next) pending.current = null;
+    });
+  };
   useEffect(() => {
     const p = pending.current;
     if (!p) return;
@@ -427,8 +434,7 @@ export function ConditionsPanel({ view, act }: { view: CharacterView; act: Act }
                 id={`remove-condition-${key}`}
                 aria-label={`Remove ${conditionLabels[key] ?? key}`}
                 onClick={() => {
-                  pending.current = { kind: 'removed' };
-                  act({ action: 'removeCondition', condition: key });
+                  run({ kind: 'removed' }, { action: 'removeCondition', condition: key });
                 }}
               >
                 Remove
@@ -446,8 +452,7 @@ export function ConditionsPanel({ view, act }: { view: CharacterView; act: Act }
             onChange={(e) => {
               const key = e.target.value;
               if (!key) return;
-              pending.current = { kind: 'added', key };
-              act({ action: 'addCondition', condition: key });
+              run({ kind: 'added', key }, { action: 'addCondition', condition: key });
             }}
           >
             <option value="">Choose a condition</option>

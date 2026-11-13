@@ -229,6 +229,19 @@ it('marks an immune condition in the select and keeps it addable', async () => {
   expect(act).toHaveBeenCalledWith({ action: 'addCondition', condition: 'frightened' });
 });
 
+it('a refused add leaves no pending focus: a later list change does not move focus', async () => {
+  const user = userEvent.setup();
+  const act = vi.fn(() => Promise.resolve(false));
+  const { rerender } = render(<ConditionsPanel view={base({ play: { conditions: [] } })} act={act} />);
+  await user.selectOptions(screen.getByRole('combobox', { name: 'Add condition' }), screen.getByRole('option', { name: 'Prone' }));
+  await vi.waitFor(() => expect(act).toHaveBeenCalled());
+  await Promise.resolve();
+  const select = screen.getByRole('combobox', { name: 'Add condition' });
+  expect(document.activeElement).toBe(select);
+  rerender(<ConditionsPanel view={base({ play: { conditions: ['prone'] } })} act={act} />);
+  expect(document.activeElement).not.toBe(document.getElementById('remove-condition-prone'));
+});
+
 it('the hint says immunities cancel conditions', () => {
   render(<ConditionsPanel view={base()} act={() => {}} />);
   expect(screen.getByText('Conditions are reminders; a condition you are immune to has no effect.')).toBeTruthy();
