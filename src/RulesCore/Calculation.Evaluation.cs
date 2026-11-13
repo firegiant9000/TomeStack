@@ -75,7 +75,7 @@ public static partial class CharacterCalculator
                 var revision = bonus.Modifier.Content.Revision;
                 warnings.Add(new(
                     "effect.out-of-range",
-                    $"'{revision.Name}' has an effect that is turned off: it would take {FieldLabel(field)} outside ±{FormulaLimits.MaxMagnitude:0}.",
+                    $"'{revision.Name}' has an effect that isn't applied: it would take {FieldLabel(field)} outside ±{FormulaLimits.MaxMagnitude:0}.",
                     revision.Reference,
                     bonus.Modifier.Effect.Id));
                 manual.Add(field);
@@ -163,7 +163,7 @@ public static partial class CharacterCalculator
     }
 
     private static Diagnostic InvalidFormula(ContentRevision revision, Effect effect, FormulaError error) =>
-        new("effect.invalid-formula", $"'{revision.Name}' has an effect that is turned off: {error.Message}", revision.Reference, effect.Id);
+        new("effect.invalid-formula", $"'{revision.Name}' has an effect that isn't applied: {error.Message}", revision.Reference, effect.Id);
 
     private static TraceOrigin ContentOrigin(string family, ActiveContent content, Effect effect) =>
         new(TraceOriginKind.Content, family, content.Revision.Reference, content.Revision.Name, effect.Id, content.Source.Id, content.Source.Title, content.Revision.Provenance.Page);

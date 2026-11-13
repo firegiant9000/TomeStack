@@ -116,7 +116,7 @@ public class FieldGraphTests
 
         var diagnostic = Assert.Single(sheet.Diagnostics, d => d.Code == "effect.dependency-cycle");
         Assert.Equal(("self", loop.Reference), (diagnostic.EffectId, diagnostic.Content));
-        Assert.Contains(" → ", diagnostic.Message, StringComparison.Ordinal);
+        Assert.Contains("loop: Dexterity modifier → Dexterity modifier)", diagnostic.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("ability.dex", diagnostic.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("'self'", diagnostic.Message, StringComparison.Ordinal);
         Assert.Equal(3, sheet.Field(FieldIds.Modifier(Ability.Dex)).Value);
@@ -131,7 +131,7 @@ public class FieldGraphTests
         var sheet = Sheet(Fixtures.Srd51Character(), loop);
 
         var diagnostic = Assert.Single(sheet.Diagnostics, d => d.Code == "effect.dependency-cycle");
-        Assert.Contains(" → ", diagnostic.Message, StringComparison.Ordinal);
+        Assert.Contains("loop: Dexterity score → Dexterity modifier → Dexterity score)", diagnostic.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("ability.dex", diagnostic.Message, StringComparison.Ordinal);
         Assert.Contains(sheet.Field(FieldIds.Score(Ability.Dex)).Warnings, w => w.Code == "effect.dependency-cycle");
         Assert.Equal(17, sheet.Field(FieldIds.Score(Ability.Dex)).Value);

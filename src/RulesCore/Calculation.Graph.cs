@@ -45,7 +45,7 @@ public static partial class CharacterCalculator
             var revision = modifier.Content.Revision;
             var diagnostic = new Diagnostic(
                 "effect.dependency-cycle",
-                $"'{revision.Name}' has an effect that is turned off: its formula '{modifier.Formula.Source}' reads {string.Join(", ", modifier.ReadsFields.Select(FieldLabel))}, which depends on {FieldLabel(modifier.Effect.Target)} (loop: {cycle}).",
+                $"'{revision.Name}' has an effect that isn't applied: its formula '{modifier.Formula.Source}' reads {string.Join(", ", modifier.ReadsFields.Select(FieldLabel))}, which depends on {FieldLabel(modifier.Effect.Target)} (loop: {cycle}).",
                 revision.Reference,
                 modifier.Effect.Id);
             diagnostics.Add(diagnostic);

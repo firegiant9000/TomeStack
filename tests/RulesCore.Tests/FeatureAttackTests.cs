@@ -301,9 +301,9 @@ public class FeatureAttackTests
         var own = WithStrike(a => a with { WhileToggle = new ToggleRef(null, "nonesuch") });
         var missing = WithStrike(a => a with { WhileToggle = new ToggleRef(Guid.Parse("6f0dc000-0000-4000-8000-0000000009ff"), "kindled") });
 
-        Assert.Equal((false, "Available in nonesuch"), (Strike(Sheet(Adept(Kindled), own)).Available, Strike(Sheet(Adept(Kindled), own)).UnavailableReason));
+        Assert.Equal((false, "Available in another form"), (Strike(Sheet(Adept(Kindled), own)).Available, Strike(Sheet(Adept(Kindled), own)).UnavailableReason));
         var gone = Strike(Sheet(Adept(Kindled), missing));
-        Assert.Equal((false, "Available in kindled"), (gone.Available, gone.UnavailableReason));
+        Assert.Equal((false, "Available in another form"), (gone.Available, gone.UnavailableReason));
         Assert.DoesNotContain(Sheet(Adept(Kindled), missing).Diagnostics, d => d.Code.Contains("toggle", StringComparison.Ordinal));
     }
 

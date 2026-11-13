@@ -595,7 +595,7 @@ public static partial class CharacterCalculator
                 }
                 if (IsCharacterOnlyField(effect.Target, revision.SchemaVersion) || IsPlayMechanicsOnlyField(effect.Target, revision.SchemaVersion))
                 {
-                    diagnostics.Add(new("effect.character-only-field", $"'{revision.Name}' changes '{FieldLabel(effect.Target)}', which content may not change yet; it is ignored.", revision.Reference, effect.Id));
+                    diagnostics.Add(new("effect.character-only-field", $"'{revision.Name}' changes {FieldLabel(effect.Target)}, which content may not change yet; it is ignored.", revision.Reference, effect.Id));
                     continue;
                 }
                 if (IsV8Field(effect.Target) && IgnoresV8(revision))

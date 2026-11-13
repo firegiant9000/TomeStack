@@ -121,13 +121,13 @@ public static partial class CharacterCalculator
         var readerRevision = reader.Revision;
         if (reader.ClassRoot is not { } root)
         {
-            ReportValue(classLevels, new("value.no-class", $"'{readerRevision.Name}' reads {identifier}, but it is not part of a class; named values are read within a class, so the formula is disabled.", readerRevision.Reference));
+            ReportValue(classLevels, new("value.no-class", $"'{readerRevision.Name}' reads {identifier}, but it is not part of a class; named values are read within a class, so the formula isn't applied.", readerRevision.Reference));
             return null;
         }
         var key = (root, valueId);
         if (!classLevels.NamedValues.TryGetValue(key, out var declared))
         {
-            ReportValue(classLevels, new("value.unknown", $"'{readerRevision.Name}' reads {identifier}, which no content of this class declares; the formula is disabled.", readerRevision.Reference));
+            ReportValue(classLevels, new("value.unknown", $"'{readerRevision.Name}' reads {identifier}, which no content of this class declares; the formula isn't applied.", readerRevision.Reference));
             return null;
         }
 
@@ -185,7 +185,7 @@ public static partial class CharacterCalculator
         {
             ReportValue(classLevels, new(
                 "value.cycle",
-                $"'{readerRevision.Name}' reads {identifier}, which depends on itself through '{declared.Content.Revision.Name}'; the value and every formula reading it are disabled.",
+                $"'{readerRevision.Name}' reads {identifier}, which depends on itself through '{declared.Content.Revision.Name}'; the value and every formula reading it aren't applied.",
                 readerRevision.Reference));
         }
         return result;

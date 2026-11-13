@@ -197,7 +197,7 @@ public partial class ServiceWordingTests
     {
         var quick = ChoiceTests.Homebrew(26, ContentKind.Feat, new ModifierEffect { Id = "fast-id", Operation = ModifierOperation.Bonus, Target = FieldIds.Speed, Value = "10" }) with { SchemaVersion = 9 };
 
-        AssertPlain(Message(Pinned(quick), "effect.character-only-field"), ["Fixture Homebrew 26", "changes 'Speed'", "may not change yet"], "fast-id", $"'{FieldIds.Speed}'");
+        AssertPlain(Message(Pinned(quick), "effect.character-only-field"), ["Fixture Homebrew 26", "changes Speed,", "may not change yet"], "fast-id", $"'{FieldIds.Speed}'");
     }
 
     [Fact]
@@ -217,7 +217,7 @@ public partial class ServiceWordingTests
             new ModifierEffect { Id = "bad-id", Operation = ModifierOperation.Bonus, Target = FieldIds.Initiative, Value = "PB; DROP TABLE" });
 
         var warning = Assert.Single(Pinned(odd).Field(FieldIds.Initiative).Warnings, w => w.Code == "effect.invalid-formula");
-        AssertPlain(warning.Message, ["Fixture Homebrew 60", "has an effect that is turned off", "is not allowed in a formula"], "bad-id", "formula.invalid", "(formula");
+        AssertPlain(warning.Message, ["Fixture Homebrew 60", "has an effect that isn't applied", "is not allowed in a formula"], "bad-id", "formula.invalid", "(formula");
     }
 
     [Fact]
@@ -226,7 +226,7 @@ public partial class ServiceWordingTests
         var loop = ChoiceTests.Homebrew(61, ContentKind.Feat,
             new ModifierEffect { Id = "self-id", Operation = ModifierOperation.Bonus, Target = FieldIds.Modifier(Ability.Dex), Value = "DEX.MOD" });
 
-        AssertPlain(Message(Pinned(loop), "effect.dependency-cycle"), ["Fixture Homebrew 61", "has an effect that is turned off", "loop:", " → "], "self-id", "ability.dex");
+        AssertPlain(Message(Pinned(loop), "effect.dependency-cycle"), ["Fixture Homebrew 61", "has an effect that isn't applied", "loop: Dexterity modifier → Dexterity modifier"], "self-id", "ability.dex");
     }
 
     [Fact]

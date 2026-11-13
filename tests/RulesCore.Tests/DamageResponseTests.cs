@@ -217,7 +217,7 @@ public class DamageResponseTests
         var endure = Offer(plan, "endure")!;
         Assert.False(endure.Offered);
         Assert.False(endure.Response.Available);
-        Assert.Equal("Available in Fixture Surge Form", endure.Reason);
+        Assert.Equal("Available in Surge form", endure.Reason);
         Assert.True(Offer(PlanFor(Stand(hp: 10, surge: true), 15, null), "endure")!.Offered);
     }
 
@@ -382,7 +382,7 @@ public class DamageResponseTests
 
         var endure = On(sheet, "endure");
         Assert.False(endure.Available);
-        Assert.Equal("Available in Fixture Surge Form", endure.UnavailableReason);
+        Assert.Equal("Available in Surge form", endure.UnavailableReason);
 
         var spent = Stand(hp: 68, more: p => p.WithSpent(Fixtures.LastStand.ContentId, "stand", 1).WithSpent(Fixtures.Bulwark.ContentId, "grit", 5)).Sheet;
         Assert.Equal((false, "Needs 1 Last stand (0 left)"), (On(spent, "stand").Available, On(spent, "stand").UnavailableReason));
