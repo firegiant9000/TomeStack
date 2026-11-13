@@ -9,6 +9,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { client } from './api/client';
 import type { AppInfo, Campaign, Character, CharacterView, CandidateCheck, DerivedValue, DraftCandidate, ImportJob, RulesFamilyPolicy, SourceRecord, StoredCandidate, StudioEntry } from './api/types';
+import { BackupsPanel } from './components/BackupsPanel';
 import { CampaignsPanel } from './components/CampaignsPanel';
 import { CharacterBuilder } from './components/CharacterBuilder';
 import { CharacterSheet } from './components/CharacterSheet';
@@ -16,6 +17,7 @@ import { HomebrewStudio } from './components/HomebrewStudio';
 import { SourcesPanel } from './components/SourcesPanel';
 import { RulesLabelProvider } from './rulesLabel';
 import { sheetTabIds, type SheetTabId } from './sheetTab';
+import { packageTargetsFixture } from './test/downConversion';
 
 vi.mock('./api/client', () => ({
   client: {
@@ -45,6 +47,8 @@ vi.mock('./api/client', () => ({
     sourcePackPreview: vi.fn(),
     checkCandidate: vi.fn(),
     campaignPackPreview: vi.fn(),
+    libraryBackupPreview: vi.fn(),
+    dailyCopies: vi.fn(),
   },
 }));
 
@@ -190,6 +194,8 @@ beforeEach(() => {
   vi.mocked(client.feedback).mockResolvedValue([]);
   vi.mocked(client.previewFormula).mockResolvedValue({ formula: '3', points: [] });
   vi.mocked(client.validateRevision).mockResolvedValue({ revision: { contentId: 'fixture-draft', revisionId: 'r1' }, errors: [], warnings: [], canPublish: true });
+  vi.mocked(client.libraryBackupPreview).mockResolvedValue({ fileName: 'fixture-backup.tomestack-library.zip', characters: 1, campaigns: 0, gapNotes: 0, sources: 1, publishedRevisions: 1, draftRevisions: 0, managedPdfs: 0, managedPdfBytes: 0, linkedPdfs: 0, unreadable: [] });
+  vi.mocked(client.dailyCopies).mockResolvedValue({ on: false, copies: [], bytes: 0 });
 });
 afterEach(() => {
   cleanup();
@@ -250,6 +256,31 @@ it('character sheet, manage tab, sharing the character', async () => {
   expect(await screen.findByRole('region', { name: 'Left out of the shared TomeStack file' })).toBeTruthy();
   expect(await screen.findByRole('region', { name: 'Preflight: shared TomeStack file' })).toBeTruthy();
   await screen.findByText(/Left out: 1\./);
+  expectPlainWords(container);
+});
+
+it('character sheet, manage tab, export with the version choice', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.packageTargets).mockResolvedValue(packageTargetsFixture);
+  vi.mocked(client.previewExport).mockResolvedValue({ purpose: 'share', fileName: 'fixture-wren.tomestack.zip', characters: ['fixture-wording'], included: [], omitted: [], gapNotes: 0 });
+  const { container } = render(labelled(<CharacterSheet view={view} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} initialTab="manage" rulesFamilies={families} />));
+  await user.click(await screen.findByRole('radio', { name: /^Share with someone/ }));
+  expect(await screen.findByRole('group', { name: 'Which version will open this file?' })).toBeTruthy();
+  await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
+  expectPlainWords(container);
+});
+
+it('Backups, with the version choice', async () => {
+  vi.mocked(client.packageTargets).mockResolvedValue(packageTargetsFixture);
+  const { container } = render(labelled(<BackupsPanel onError={noop} onStatus={noop} onRestored={noop} />));
+  await screen.findByRole('list', { name: 'What the backup contains' });
+  expect(await screen.findByRole('group', { name: 'Which version will open this file?' })).toBeTruthy();
+  expectPlainWords(container);
+});
+
+it('level up', async () => {
+  const { container } = render(labelled(<CharacterBuilder mode={{ kind: 'levelUp', view }} rulesFamilies={families} onCommitted={noop} onCancel={noop} onError={noop} />));
+  expect(await screen.findByRole('heading', { name: /Level up/ })).toBeTruthy();
   expectPlainWords(container);
 });
 

@@ -1259,7 +1259,7 @@ describe('export for an older TomeStack', () => {
     await user.click(screen.getByRole('tab', { name: 'Manage' }));
     await waitFor(() => expect(client.packageTargets).toHaveBeenCalled());
     await waitFor(() => expect(exportButton().disabled).toBe(false));
-    expect(screen.queryByText('Which TomeStack will open it?')).toBeNull();
+    expect(screen.queryByText('Which version will open this file?')).toBeNull();
     expect(onError).not.toHaveBeenCalled();
   });
 

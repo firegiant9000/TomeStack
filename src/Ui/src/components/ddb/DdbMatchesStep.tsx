@@ -183,7 +183,7 @@ function Row({
         {statusLabels[row.status]}
         {row.note && <span className="hint"> {noteLabels[row.note] ?? row.note}</span>}
       </td>
-      <td>{row.chosen ? `${describe(row.chosen, names)} · ${row.chosen.families.map((f) => rulesLabel(f)).join(', ')}` : row.candidates.length > 1 ? `${row.candidates.length} candidates` : '—'}</td>
+      <td>{row.chosen ? `${describe(row.chosen, names)} · ${row.chosen.families.map((f) => rulesLabel(f)).join(', ')}` : row.candidates.length > 1 ? `${row.candidates.length} possible matches` : '—'}</td>
       <td>
         <div role="group" aria-labelledby={headerId}>
           {stubBox}
