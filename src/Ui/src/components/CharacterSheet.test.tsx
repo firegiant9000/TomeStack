@@ -92,6 +92,12 @@ function view(sheetOver: Partial<SheetModel> = {}): CharacterView {
 }
 
 const noop = () => {};
+/** The status bar no longer holds ability boxes (Task 3.4 restores them in a Play panel), so a d20 roll comes from the Dexterity field card on Skills and saves. */
+async function rollDexterity(user: ReturnType<typeof userEvent.setup>) {
+  const tab = screen.getByRole('tab', { name: 'Skills and saves' });
+  if (tab.getAttribute('aria-selected') !== 'true') await user.click(tab);
+  await user.click(screen.getByRole('button', { name: 'Roll Dexterity modifier' }));
+}
 const sheetElement = (v: CharacterView, initialTab?: Parameters<typeof CharacterSheet>[0]['initialTab'], focusChecklist?: boolean) => (
   <CharacterSheet view={v} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} initialTab={initialTab} focusChecklist={focusChecklist} />
 );
@@ -793,7 +799,7 @@ it('renders the print preview after the summary and before the body, matching th
   renderSheet(view());
   await user.click(screen.getByRole('button', { name: 'Print…' }));
   const article = document.querySelector('article.sheet') as HTMLElement;
-  expect(Array.from(article.children).map((c) => `${c.tagName.toLowerCase()}.${c.className.split(' ')[0]}`)).toEqual(['header.sheet-header', 'section.sheet-summary', 'section.print-sheet', 'div.sheet-body']);
+  expect(Array.from(article.children).map((c) => `${c.tagName.toLowerCase()}.${c.className.split(' ')[0]}`)).toEqual(['header.sheet-header', 'section.sheet-summary', 'p.hint', 'section.print-sheet', 'div.sheet-body']);
 });
 
 it('moves focus to the print preview heading when the preview opens (investigation 2026-10-06 item 9)', async () => {
@@ -859,7 +865,7 @@ it('keeps the header, print preview slot and summary as direct children of the a
   renderSheet(view());
   const article = screen.getByRole('article');
   const children = Array.from(article.children).map((c) => `${c.tagName.toLowerCase()}.${c.className.split(' ')[0]}`);
-  expect(children).toEqual(['header.sheet-header', 'section.sheet-summary', 'div.sheet-body']);
+  expect(children).toEqual(['header.sheet-header', 'section.sheet-summary', 'p.hint', 'div.sheet-body']);
   const body = article.querySelector('.sheet-body')!;
   expect(within(body as HTMLElement).getByRole('tablist', { name: 'Sheet sections' })).toBeTruthy();
 });
@@ -874,7 +880,7 @@ it('opens a rest from the header above the body, focuses its heading, and return
   expect(short.getAttribute('aria-expanded')).toBe('false');
   expect(within(screen.getByRole('tabpanel', { name: 'Play' })).queryByRole('button', { name: /rest…$/ })).toBeNull();
   await user.click(short);
-  expect(childShape(screen.getByRole('article'))).toEqual(['header.sheet-header', 'section.sheet-summary', 'div.rest-sheet', 'div.sheet-body']);
+  expect(childShape(screen.getByRole('article'))).toEqual(['header.sheet-header', 'section.sheet-summary', 'p.hint', 'div.rest-sheet', 'div.sheet-body']);
   const panel = screen.getByRole('region', { name: 'Short rest' });
   expect(panel.parentElement!.id).toBe('rest-panel');
   expect(short.getAttribute('aria-controls')).toBe('rest-panel');
@@ -981,8 +987,8 @@ it('keeps Previous rolls through a rest (spec 2.4c)', async () => {
     return <CharacterSheet view={shown} onChanged={setShown} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />;
   }
   render(<Host />);
-  await user.click(screen.getByRole('button', { name: 'Roll Dexterity check (+1)' }));
-  await user.click(screen.getByRole('button', { name: 'Roll Dexterity check (+1)' }));
+  await rollDexterity(user);
+  await rollDexterity(user);
   await screen.findByText('Previous rolls (1)');
   await user.click(screen.getByRole('button', { name: 'Short rest…' }));
   const finish = await screen.findByRole('button', { name: 'Finish short rest' });
@@ -1703,7 +1709,7 @@ describe('a record Spend after a failed play change', () => {
     vi.mocked(client.play).mockRejectedValue(failure);
     const v = view();
     renderSheet({ ...v, sheet: { ...v.sheet, resources: [pool] } });
-    await user.click(screen.getByRole('button', { name: 'Roll Dexterity check (+1)' }));
+    await rollDexterity(user);
     const spend = await screen.findByRole<HTMLButtonElement>('button', { name: 'Spend 1 Fixture pool (3 left)' });
     await user.click(spend);
     await waitFor(() => expect(client.play).toHaveBeenCalledTimes(1));
@@ -1727,9 +1733,9 @@ it('moves the replaced Last roll into Previous rolls (D28)', async () => {
   vi.mocked(client.roll).mockReset();
   vi.mocked(client.roll).mockResolvedValueOnce(rollRecord('Dexterity check', 9)).mockResolvedValueOnce(rollRecord('Dexterity check', 15));
   renderSheet(view());
-  await user.click(screen.getByRole('button', { name: 'Roll Dexterity check (+1)' }));
+  await rollDexterity(user);
   expect(screen.queryByText(/^Previous rolls/)).toBeNull();
-  await user.click(screen.getByRole('button', { name: 'Roll Dexterity check (+1)' }));
+  await rollDexterity(user);
   const log = await screen.findByText('Previous rolls (1)');
   expect(within(screen.getByRole('region', { name: 'Last roll' })).getByText(/Dexterity check: 15/)).toBeTruthy();
   expect(log.closest('details')!.textContent).toMatch(/Dexterity check: 9/);
@@ -1742,7 +1748,7 @@ it('rolls typed dice into Last roll, labelled Dice, and moves the field roll int
   vi.mocked(client.rollDice).mockReset();
   vi.mocked(client.rollDice).mockResolvedValueOnce(rollRecord('Dice', 11, 6));
   renderSheet(view());
-  await user.click(screen.getByRole('button', { name: 'Roll Dexterity check (+1)' }));
+  await rollDexterity(user);
   await user.type(screen.getByRole('textbox', { name: 'Dice to roll' }), '2d6+3');
   await user.click(screen.getByRole('button', { name: 'Roll dice' }));
   expect(vi.mocked(client.rollDice)).toHaveBeenCalledWith('2d6+3', undefined, 'Dice');
@@ -1775,14 +1781,14 @@ it('logs a rest hit die without showing it, and keeps the log newest first by ti
     .mockResolvedValueOnce(rollRecord('Roll B', 15));
   vi.mocked(client.restPreview).mockResolvedValue({ kind: 'shortRest', changes: [], manual: [], basis: 'fixture' });
   renderSheet(view({ hitDice: [{ die: 8, total: 2, spent: 0, remaining: 2, classes: ['Fixture'] }] }));
-  await user.click(screen.getByRole('button', { name: 'Roll Dexterity check (+1)' }));
+  await rollDexterity(user);
   await user.click(screen.getByRole('button', { name: 'Short rest…' }));
   await user.click(await screen.findByRole('button', { name: 'Roll a d8' }));
   const lastRoll = screen.getByRole('region', { name: 'Last roll' });
   expect(within(lastRoll).getByText(/Roll A: 9/)).toBeTruthy();
   expect(within(lastRoll).queryByText(/Hit die H/)).toBeNull();
   expect((await screen.findByText('Previous rolls (1)')).closest('details')!.textContent).toMatch(/Hit die H: 5/);
-  await user.click(screen.getByRole('button', { name: 'Roll Dexterity check (+1)' }));
+  await rollDexterity(user);
   const log = (await screen.findByText('Previous rolls (2)')).closest('details')!;
   expect(within(lastRoll).getByText(/Roll B: 15/)).toBeTruthy();
   const items = within(log).getAllByRole('listitem').map((li) => li.textContent ?? '');
