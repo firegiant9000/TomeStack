@@ -4,6 +4,12 @@
 
 ### Added
 - **Content schema 13: creation guides and packs, engine only (D97, D98, [ADR-024](decisions/ADR-024-content-v13.md)):** content can now carry a creation guide for a class or background (starting equipment as picks and options, and primary abilities) and packs (an item that lists what it contains). The change adds the format, validation, kit expansion and a catalogue lookup; no bundled guides or gear ship yet. The one change a player can see is in saving for an older TomeStack. Characters never pin a guide. Saving for an older TomeStack leaves guides out, drops what a pack contains, and turns plain gear that release does not have into a custom item (the save is blocked if that would pass 50 custom items, if a quantity is outside 1 to 9,999, or if an item's name is blank or over 80 characters). A source pack or campaign pack that would hold only guides cannot be saved for an older TomeStack; a library backup is unaffected. Older versions refuse v13 content.
+- **One status bar on the sheet (D96):** Hit points, Armor Class, Initiative, Speed, Heroic Inspiration (Inspiration in the 2014 rules), conditions and the last roll now sit in one bar under the sheet header. It stays at the top while you scroll when it fits in a third of the window, and the last roll shows there from every tab. Keyboard order is the sheet header, the bar, "Choices to make", the tabs, then the tab's page.
+- **Ability boxes setting (D96):** by default the six ability boxes are an "Abilities" panel on Play. Settings has "Ability boxes at the top of the sheet" (`tomestack.abilityBoxesTop`) to put them above the bar again.
+- **Conditions and Inspiration (D96):** you add a condition from an "Add condition" list and take it off with its own Remove button; focus stays on a sensible control after each. Inspiration is one checkbox, in the bar, not repeated on Play.
+- **Help notes (D96):** the standing explanations are closed "?" notes you open when you want them.
+- **Empty slot levels hidden (D96):** spell slot levels with a maximum of 0 are no longer listed.
+- **"Earlier rolls":** the list under the last roll was "Previous rolls". "Needs your attention" no longer repeats open choices (they stay under "Choices to make") and never shows internal ids.
 
 ### Changed
 - **CI:** the workflow runs as parallel jobs (`ui-build`, `ui-test`, `dotnet`, `gui`) behind the same required check, `build-test`, which passes only if all four pass. No app change.
