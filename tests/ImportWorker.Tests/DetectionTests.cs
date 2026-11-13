@@ -519,7 +519,7 @@ public class DetectionTests
         {
             Assert.Empty(c.RulesFamilies);
             Assert.Contains("rulesFamilies", c.LowConfidenceFields);
-            Assert.Contains("Say which rules family this is written for before accepting.", c.Uncertainties);
+            Assert.Contains("Say whether this is for the 2014 rules, the 2024 rules or both, before accepting.", c.Uncertainties);
         });
         // Layout-decided kinds still pick their family.
         Assert.Equal([RulesFamilies.Srd521], Named(found, "Fixture Ember Lance").RulesFamilies);
@@ -565,7 +565,7 @@ public class DetectionTests
         var candidate = Assert.Single(CandidateDetector.Detect([page], new(Source, [RulesFamilies.Srd521], _ => false)));
 
         Assert.Equal([RulesFamilies.Srd521], candidate.RulesFamilies);
-        Assert.Contains("The layout looks like srd-5.1, which is outside the families this reading is for; those families are used.", candidate.Uncertainties);
+        Assert.Contains("The layout looks like the 2014 rules, which is outside the rules this reading is for; those rules are used.", candidate.Uncertainties);
     }
 
     // 2026-10-14 items 5 and 6: tolerance for third-party layouts. Every block here is invented.
@@ -606,7 +606,7 @@ public class DetectionTests
         var feat = Assert.Single(found, c => c.ProposedKind == ContentKind.Feat);
         Assert.Empty(feat.RulesFamilies);
         Assert.Contains("rulesFamilies", feat.LowConfidenceFields);
-        Assert.Contains("Say which rules family this is written for before accepting.", feat.Uncertainties);
+        Assert.Contains("Say whether this is for the 2014 rules, the 2024 rules or both, before accepting.", feat.Uncertainties);
     }
 
     [Theory]
@@ -645,7 +645,7 @@ public class DetectionTests
         var feat = Assert.Single(found, c => c.ProposedKind == ContentKind.Feat);
         Assert.Empty(feat.RulesFamilies);
         Assert.Contains("rulesFamilies", feat.LowConfidenceFields);
-        Assert.Contains("Say which rules family this is written for before accepting.", feat.Uncertainties);
+        Assert.Contains("Say whether this is for the 2014 rules, the 2024 rules or both, before accepting.", feat.Uncertainties);
     }
 
     [Fact]

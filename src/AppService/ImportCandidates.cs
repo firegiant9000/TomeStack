@@ -299,10 +299,10 @@ public sealed partial class TomeStackApp
         IReadOnlyList<string> families = [.. (request.RulesFamilies ?? current.RulesFamilies).Distinct(StringComparer.Ordinal)];
         // 2026-10-14 item 3: none is allowed here (other fields can be saved first); check and accept wait for a family.
         if (families.Any(f => !RulesFamilies.IsKnown(f)))
-            throw new AppValidationException([new("candidate.family-invalid", "Choose supported rules families.")]);
+            throw new AppValidationException([new("candidate.family-invalid", "Choose the 2014 rules, the 2024 rules or both.")]);
         var sourceFamilies = _store.FindSource(ImportStatus(stored.JobId).SourceId)?.RulesFamilies ?? [];
         if (families.Any(f => !sourceFamilies.Contains(f)))
-            throw new AppValidationException([new("import.family-not-in-source", $"A candidate can only be written for the families its source declares ({string.Join(", ", sourceFamilies)}).")]);
+            throw new AppValidationException([new("import.family-not-in-source", $"An entry found can only be written for the rules its source covers ({string.Join(", ", sourceFamilies.Select(f => RulesFamilies.IsKnown(f) ? "the " + RulesFamilies.Get(f).ShortLabel : f))}).")]);
         var summary = request.Summary ?? current.Summary;
         if (summary is { Length: > 20_000 })
             throw new AppValidationException([new("candidate.summary-too-long", "The text has at most 20,000 characters.")]);
@@ -340,8 +340,8 @@ public sealed partial class TomeStackApp
     {
         if (expected is null || stored.Etag is null || !string.Equals(expected, stored.Etag, StringComparison.Ordinal))
             throw new AppValidationException([new("import.candidate-changed", forEdit
-                ? "This candidate changed since it was opened. Reload it and edit again; nothing was changed."
-                : "This candidate changed since you opened it. Review it again; nothing was changed.")]);
+                ? "This entry changed since it was opened. Reload it and edit again; nothing was changed."
+                : "This entry changed since you opened it. Review it again; nothing was changed.")]);
     }
 
     /// <summary>
@@ -366,9 +366,9 @@ public sealed partial class TomeStackApp
         var plan = PlanOf(stored, request.AsReference, confirmed);
         var check = Check(stored, request.AsReference, provenance, plan);
         if (!request.AsReference && check.Blockers.Count > 0)
-            throw new AppValidationException([new("candidate.needs-review", $"This candidate has {check.Blockers.Count} unsure field(s), unresolved reference(s) or linked feature(s) to settle. Edit them, or accept it as reference only."), .. check.Blockers]);
+            throw new AppValidationException([new("candidate.needs-review", $"This entry has {check.Blockers.Count} unsure field(s), unresolved reference(s) or linked feature(s) to settle. Edit them, or accept it as reference only."), .. check.Blockers]);
         if (!check.Report.CanPublish)
-            throw new AppValidationException([new("candidate.validation-failed", $"This candidate has {check.Report.Errors.Count} problem(s)."), .. check.Report.Errors]);
+            throw new AppValidationException([new("candidate.validation-failed", $"This entry has {check.Report.Errors.Count} problem(s)."), .. check.Report.Errors]);
         if (ClassUnconfirmed(stored, request.AsReference, confirmed) is { } unconfirmed)
             throw new AppValidationException([unconfirmed]);
 
@@ -411,7 +411,7 @@ public sealed partial class TomeStackApp
             throw new AppValidationException([new("candidate.confirm-unsupported", "Only a class accepted as a draft takes confirmed effects. Nothing was changed.")]);
         var known = CandidateQuarantine.WithTypedEffects(stored.Current).ProposedEffects.Select(e => e.Id).ToHashSet(StringComparer.Ordinal);
         if (ids.Any(id => !known.Contains(id)))
-            throw new AppValidationException([new("candidate.confirm-unknown", "A confirmed effect is not one of this candidate's effects. Nothing was changed.")]);
+            throw new AppValidationException([new("candidate.confirm-unknown", "A confirmed effect is not one of this entry's effects. Nothing was changed.")]);
         return [.. ids.Distinct(StringComparer.Ordinal)];
     }
 
@@ -590,7 +590,7 @@ public sealed partial class TomeStackApp
             throw new AppValidationException([new("candidate.confirmation-required", "Accepting creates draft entries. Confirm to accept; nothing was changed.")]);
         var ids = (request.CandidateIds ?? []).Distinct().ToList();
         if (ids.Count is < 1 or > MaxAcceptMany)
-            throw new AppValidationException([new("import.limit-out-of-range", $"Accept 1 to {MaxAcceptMany} candidates at a time.")]);
+            throw new AppValidationException([new("import.limit-out-of-range", $"Accept 1 to {MaxAcceptMany} entries found at a time.")]);
         var accepted = new List<StoredCandidate>();
         var blocked = new List<BlockedCandidate>();
         var acceptedCache = new Dictionary<(Guid Source, string Sha), List<(Guid JobId, (ContentKind, string, int) Identity)>>();
@@ -684,7 +684,7 @@ public sealed partial class TomeStackApp
             blockers.Add(new("candidate.low-confidence", $"The detector is unsure of '{field}'. Check it against the page and save your edit."));
         // Messages never quote the PDF's text; the review shows the names from the candidate itself.
         for (var i = 0; i < current.UnresolvedReferences.Count; i++)
-            blockers.Add(new("candidate.unresolved-reference", $"Reference {i + 1} of {current.UnresolvedReferences.Count} is neither installed nor another candidate. Install or import it, or dismiss the reference."));
+            blockers.Add(new("candidate.unresolved-reference", $"Reference {i + 1} of {current.UnresolvedReferences.Count} is neither installed nor another entry found. Install or import it, or dismiss the reference."));
         // R66: an ignored linked feature is not granted; that is said, not blocked.
         var ignored = plan.Linked.Count(l => l.Candidate?.Status == CandidateStatus.Ignored);
         var notes = new List<string>();
@@ -744,10 +744,10 @@ public sealed partial class TomeStackApp
         var current = stored.Current;
         var job = ImportStatus(stored.JobId);
         if (current.RulesFamilies.Count == 0)
-            blockers.Add(new("import.family-needed", "Say which rules family this entry is written for."));
+            blockers.Add(new("import.family-needed", "Say whether this entry is for the 2014 rules, the 2024 rules or both."));
         else if (job.WrittenFor is null && !stored.FamiliesReviewed && IsLayoutNeutral(stored.Candidate)
             && (_store.FindSource(job.SourceId)?.RulesFamilies.Count ?? 0) > 1)
-            blockers.Add(new("import.family-needed", "Say which rules family this entry is written for. It was read before TomeStack asked."));
+            blockers.Add(new("import.family-needed", "Say whether this entry is for the 2014 rules, the 2024 rules or both. It was read before TomeStack asked."));
 
         var identity = CandidateIdentity(current); // the effective values: renaming a twin is how a deliberate second copy is made (R27)
         var already = acceptedCache is null
@@ -835,12 +835,12 @@ public sealed partial class TomeStackApp
     }
 
     private StoredCandidate FindCandidateOrThrow(Guid candidateId) =>
-        _store.FindImportCandidate(candidateId) ?? throw new AppValidationException([new("candidate.not-found", $"Candidate {candidateId} does not exist.")]);
+        _store.FindImportCandidate(candidateId) ?? throw new AppValidationException([new("candidate.not-found", "That entry found does not exist.")]);
 
     private static void RequirePending(StoredCandidate stored)
     {
         if (stored.Status != CandidateStatus.Pending)
-            throw new AppValidationException([new("candidate.already-reviewed", $"This candidate is already {stored.Status switch { CandidateStatus.Ignored => "ignored", _ => "accepted" }}.")]);
+            throw new AppValidationException([new("candidate.already-reviewed", $"This entry is already {stored.Status switch { CandidateStatus.Ignored => "ignored", _ => "accepted" }}.")]);
     }
 
     /// <summary><c>import.candidates</c> (SPEC I-02): a job's candidates, filtered by page, kind, confidence and status, in page order. Writes nothing.</summary>
@@ -867,7 +867,7 @@ public sealed partial class TomeStackApp
         if (request.Offset is < 0)
             throw new AppValidationException([new("import.offset-out-of-range", "The offset is 0 or more.")]);
         if (request.Limit is < 1 or > MaxCandidatePageSize)
-            throw new AppValidationException([new("import.limit-out-of-range", $"A page holds 1 to {MaxCandidatePageSize} candidates.")]);
+            throw new AppValidationException([new("import.limit-out-of-range", $"A page holds 1 to {MaxCandidatePageSize} entries found.")]);
         ImportStatus(request.JobId);
         // R82: the filter and the order run on the indexed columns; only the rows of this page are read from the JSON.
         var (items, total) = _store.QueryImportCandidates(request.JobId, FilterOf(request), request.Offset ?? 0, request.Limit ?? DefaultCandidatePageSize);

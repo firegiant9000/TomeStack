@@ -272,7 +272,7 @@
     "confidence": 0.85,
     "uncertainties": [
       "Read from a table row; check the columns against the page.",
-      "Say which rules family this is written for before accepting."
+      "Say whether this is for the 2014 rules, the 2024 rules or both, before accepting."
     ],
     "unresolvedReferences": [],
     "fields": {
@@ -306,7 +306,7 @@
     "confidence": 0.85,
     "uncertainties": [
       "Read from a table row; check the columns against the page.",
-      "Say which rules family this is written for before accepting."
+      "Say whether this is for the 2014 rules, the 2024 rules or both, before accepting."
     ],
     "unresolvedReferences": [],
     "fields": {
@@ -330,7 +330,7 @@
     "proposedEffects": [],
     "confidence": 0.7,
     "uncertainties": [
-      "Say which rules family this is written for before accepting.",
+      "Say whether this is for the 2014 rules, the 2024 rules or both, before accepting.",
       "The hit die was not found on the class page: add it by hand.",
       "The saving throw proficiencies were not found on the class page: add them by hand.",
       "The armor proficiencies were not found on the class page: add them by hand if the class has any.",
@@ -361,7 +361,7 @@
     "proposedEffects": [],
     "confidence": 0.3,
     "uncertainties": [
-      "Say which rules family this is written for before accepting.",
+      "Say whether this is for the 2014 rules, the 2024 rules or both, before accepting.",
       "Only the name was found, in the class table: add its text by hand, or accept it as reference."
     ],
     "unresolvedReferences": [],
@@ -384,7 +384,7 @@
     "proposedEffects": [],
     "confidence": 0.3,
     "uncertainties": [
-      "Say which rules family this is written for before accepting.",
+      "Say whether this is for the 2014 rules, the 2024 rules or both, before accepting.",
       "Only the name was found, in the class table: add its text by hand, or accept it as reference."
     ],
     "unresolvedReferences": [],
@@ -643,7 +643,7 @@
     ],
     "confidence": 0.7,
     "uncertainties": [
-      "Say which rules family this is written for before accepting.",
+      "Say whether this is for the 2014 rules, the 2024 rules or both, before accepting.",
       "The skill choice is shown but not proposed: add it by hand.",
       "The subclass choice is proposed with no options: subclasses extend it.",
       "The spell list is assumed to be this class\u0027s own (fixture-lamplighter): check it before accepting.",
@@ -689,7 +689,7 @@
     "proposedEffects": [],
     "confidence": 0.3,
     "uncertainties": [
-      "Say which rules family this is written for before accepting.",
+      "Say whether this is for the 2014 rules, the 2024 rules or both, before accepting.",
       "Only the name was found, in the class table: add its text by hand, or accept it as reference."
     ],
     "unresolvedReferences": [],
@@ -712,7 +712,7 @@
     "proposedEffects": [],
     "confidence": 0.3,
     "uncertainties": [
-      "Say which rules family this is written for before accepting.",
+      "Say whether this is for the 2014 rules, the 2024 rules or both, before accepting.",
       "Only the name was found, in the class table: add its text by hand, or accept it as reference."
     ],
     "unresolvedReferences": [],
@@ -735,7 +735,7 @@
     "proposedEffects": [],
     "confidence": 0.3,
     "uncertainties": [
-      "Say which rules family this is written for before accepting.",
+      "Say whether this is for the 2014 rules, the 2024 rules or both, before accepting.",
       "Only the name was found, in the class table: add its text by hand, or accept it as reference."
     ],
     "unresolvedReferences": [],
@@ -783,7 +783,7 @@
     "proposedEffects": [],
     "confidence": 0.3,
     "uncertainties": [
-      "Say which rules family this is written for before accepting.",
+      "Say whether this is for the 2014 rules, the 2024 rules or both, before accepting.",
       "Only the name was found, in the class table: add its text by hand, or accept it as reference."
     ],
     "unresolvedReferences": [],
@@ -806,7 +806,7 @@
     "proposedEffects": [],
     "confidence": 0.3,
     "uncertainties": [
-      "Say which rules family this is written for before accepting.",
+      "Say whether this is for the 2014 rules, the 2024 rules or both, before accepting.",
       "Only the name was found, in the class table: add its text by hand, or accept it as reference."
     ],
     "unresolvedReferences": [],
@@ -829,7 +829,7 @@
     "proposedEffects": [],
     "confidence": 0.3,
     "uncertainties": [
-      "Say which rules family this is written for before accepting.",
+      "Say whether this is for the 2014 rules, the 2024 rules or both, before accepting.",
       "Only the name was found, in the class table: add its text by hand, or accept it as reference."
     ],
     "unresolvedReferences": [],

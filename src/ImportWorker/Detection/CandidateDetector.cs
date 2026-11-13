@@ -321,8 +321,16 @@ public static partial class CandidateDetector
     {
         if (context.SourceFamilies.Contains(layout))
             return ([layout], []);
-        return (context.SourceFamilies, [$"The layout looks like {layout}, which is outside the families this reading is for; those families are used."]);
+        return (context.SourceFamilies, [$"The layout looks like {LayoutLabel(layout)}, which is outside the rules this reading is for; those rules are used."]);
     }
+
+    /// <summary>Plain words for a layout id in player-visible text; an id that is not one of the two known stays as it is.</summary>
+    private static string LayoutLabel(string layout) => layout switch
+    {
+        "srd-5.1" => "the 2014 rules",
+        "srd-5.2.1" => "the 2024 rules",
+        _ => layout,
+    };
 
     /// <summary>
     /// 2026-10-14 item 3: a layout-neutral kind (armour rows, class tables) takes the context's family when there is one.
@@ -331,7 +339,7 @@ public static partial class CandidateDetector
     private static (IReadOnlyList<string> Families, List<string> Notes, bool Unsure) NeutralFamily(DetectionContext context) =>
         context.SourceFamilies.Count == 1
             ? ([context.SourceFamilies[0]], [], false)
-            : ([], ["Say which rules family this is written for before accepting."], true);
+            : ([], ["Say whether this is for the 2014 rules, the 2024 rules or both, before accepting."], true);
 
     /// <summary>The description after a header: the following blocks until the next header or heading, at most 80 lines.</summary>
     /// <param name="lastUnit">The index of the last unit taken (D64 spans); <c>start - 1</c> when none was.</param>
