@@ -2646,3 +2646,71 @@ it('says once when a saved view reset a companion, and leaves the view it opened
   rerender(<CharacterSheet view={view()} {...props} />);
   expect(onStatus.mock.calls.filter(([text]) => text === pruned)).toHaveLength(1);
 });
+
+// Task 3.5: the Play tab has one Inspiration control (the status bar's), a short conditions panel and keeps its focus-return ids.
+describe('Play tab: hit points, Inspiration and conditions', () => {
+  const withConditions = (conditions: string[]): CharacterView => {
+    const v = view();
+    return { ...v, character: { ...v.character, play: { temporaryHitPoints: 0, resources: [], conditions, exhaustion: 0 } } };
+  };
+  const sheetOf = (v: CharacterView) => <CharacterSheet view={v} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />;
+
+  it('has exactly one Inspiration control on the sheet, in the status bar and not in the Play panels', () => {
+    renderSheet(view());
+    const boxes = screen.getAllByRole('checkbox', { name: /Inspiration/ });
+    expect(boxes).toHaveLength(1);
+    expect(within(screen.getByRole('region', { name: 'Status' })).getAllByRole('checkbox', { name: /Inspiration/ })).toHaveLength(1);
+    const panel = screen.getByRole('heading', { name: /^Hit points:/ }).closest('section')!;
+    expect(within(panel).queryByRole('checkbox', { name: /Inspiration/ })).toBeNull();
+  });
+
+  it('keeps the focus-return targets: the hit points heading and the Lose 1 hit point button', () => {
+    renderSheet(view());
+    expect(document.getElementById('hp-heading')).toBe(screen.getByRole('heading', { name: /^Hit points:/ }));
+    expect(document.querySelector('[aria-label="Lose 1 hit point"]')).toBe(screen.getByRole('button', { name: 'Lose 1 hit point' }));
+  });
+
+  it('lists active conditions with Remove, says None. when empty and offers only inactive ones in the select', () => {
+    const { rerender } = renderSheet(withConditions([]));
+    const panel = () => screen.getByRole('heading', { name: 'Conditions' }).closest('section')!;
+    expect(within(panel()).getByText('None.')).toBeTruthy();
+    const select = within(panel()).getByRole('combobox', { name: 'Add condition' });
+    expect(within(select).getAllByRole('option')).toHaveLength(15); // placeholder + 14
+    rerender(sheetOf(withConditions(['poisoned', 'prone'])));
+    expect(within(panel()).queryByText('None.')).toBeNull();
+    expect(within(panel()).getAllByRole('button', { name: /^Remove / }).map((b) => b.getAttribute('aria-label'))).toEqual(['Remove Poisoned', 'Remove Prone']);
+    const options = within(within(panel()).getByRole('combobox', { name: 'Add condition' })).getAllByRole('option').map((o) => o.textContent);
+    expect(options).toHaveLength(13);
+    expect(options).not.toContain('Poisoned');
+    expect(options.slice(1, 4)).toEqual(['Blinded', 'Charmed', 'Deafened']);
+  });
+
+  it('adds a condition from the select and focuses its Remove button; removing returns focus to the select', async () => {
+    const user = userEvent.setup();
+    vi.mocked(client.play).mockClear();
+    const { rerender } = renderSheet(withConditions([]));
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Add condition' }), 'prone');
+    expect(client.play).toHaveBeenLastCalledWith('fixture-2', { action: 'addCondition', condition: 'prone' });
+    rerender(sheetOf(withConditions(['prone'])));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Remove Prone' })));
+    await user.click(screen.getByRole('button', { name: 'Remove Prone' }));
+    expect(client.play).toHaveBeenLastCalledWith('fixture-2', { action: 'removeCondition', condition: 'prone' });
+    rerender(sheetOf(withConditions([])));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('combobox', { name: 'Add condition' })));
+  });
+
+  it('brings the select back and focuses it when a condition is removed from a full list', async () => {
+    const user = userEvent.setup();
+    const all = ['blinded', 'charmed', 'deafened', 'frightened', 'grappled', 'incapacitated', 'invisible', 'paralyzed', 'petrified', 'poisoned', 'prone', 'restrained', 'stunned', 'unconscious'];
+    const { rerender } = renderSheet(withConditions(all));
+    expect(screen.queryByRole('combobox', { name: 'Add condition' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Remove Prone' }));
+    rerender(sheetOf(withConditions(all.filter((c) => c !== 'prone'))));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('combobox', { name: 'Add condition' })));
+  });
+
+  it('has no axe violations on the conditions panel', async () => {
+    const { container } = renderSheet(withConditions(['poisoned']));
+    await expectNoAxeViolations(container);
+  });
+});

@@ -5,7 +5,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
-import type { CharacterView, PlayState, RulesFamilyPolicy } from '../api/types';
+import type { CharacterView, PlayState } from '../api/types';
 import { ConcentrationPanel, HitPointsPanel } from './PlayPanels';
 
 afterEach(cleanup);
@@ -86,21 +86,9 @@ it('moves focus to the Hit points heading after "End concentration" removes the 
   expect(document.activeElement).toBe(screen.getByRole('heading', { name: /^Hit points:/ }));
 });
 
-const policies = [
-  { id: 'srd-5.1', displayName: 'SRD 5.1 (2014 rules)', inspirationName: 'Inspiration' },
-  { id: 'srd-5.2.1', displayName: 'SRD 5.2.1 (2024 rules)', inspirationName: 'Heroic Inspiration' },
-] as RulesFamilyPolicy[];
-
-it('names the inspiration checkbox from the family policy', () => {
-  render(<HitPointsPanel view={view()} act={() => {}} rulesFamilies={policies} />);
-  expect(screen.getByRole('checkbox', { name: 'Heroic Inspiration' })).toBeTruthy();
-});
-
-it('falls back to "Inspiration" for a family the policies do not list', () => {
-  const v = view();
-  v.character.rulesFamily = 'srd-9.9' as CharacterView['character']['rulesFamily'];
-  render(<HitPointsPanel view={v} act={() => {}} rulesFamilies={policies} />);
-  expect(screen.getByRole('checkbox', { name: 'Inspiration' })).toBeTruthy();
+it('has no Inspiration control (the status bar carries the only one)', () => {
+  render(<HitPointsPanel view={view()} act={() => {}} />);
+  expect(screen.queryByRole('checkbox', { name: /Inspiration/ })).toBeNull();
 });
 
 it('offers only End concentration when no save is pending', () => {

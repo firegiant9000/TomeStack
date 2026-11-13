@@ -21,13 +21,12 @@ import type {
   RollMode,
   RollRecord,
   RollTarget,
-  RulesFamilyPolicy,
   ToggleValue,
 } from '../api/types';
 import { attackAvailability, dicelessUse, hasDice, poolFor, recordPayment, recordSpend, rollAvailability, toggleAvailability, type Availability } from '../actionRows';
 import { castsText, paying, paymentText } from '../payment';
 import { explainSteps } from '../explain';
-import { hitDiceText, inspirationLabel, rollBonus } from '../format';
+import { hitDiceText, rollBonus } from '../format';
 import { attackPin, customPin, maxPins, pinKey, rollPin, togglePin, weaponTarget, type Pin } from '../quickbar';
 import { assistedNotes, rollButtonSuffix } from '../rollModes';
 import { diceLine, rollKey, rollModeText } from '../rollText';
@@ -120,12 +119,9 @@ export function HitPointsPanel({
   onDamageType,
   onDamage,
   panelOpen = false,
-  rulesFamilies = [],
 }: {
   view: CharacterView;
   act: Act;
-  /** The families from `app.info`; the inspiration checkbox is named by the character's family policy. */
-  rulesFamilies?: RulesFamilyPolicy[];
   damageType?: string;
   onDamageType?: (type: string) => void;
   /** D43 S7: opens the damage panel (amount, type '' for untyped). Used instead of a one-step damage when the sheet has damage responses. */
@@ -263,14 +259,6 @@ export function HitPointsPanel({
           Hit dice: {hitDiceText(view.sheet.hitDice ?? [])}
         </p>
       )}
-      <label className="choice">
-        <input
-          type="checkbox"
-          checked={view.character.play?.inspiration ?? false}
-          onChange={(e) => act({ action: 'setInspiration', amount: e.target.checked ? 1 : 0 })}
-        />
-        {inspirationLabel(rulesFamilies, view.character.rulesFamily)}
-      </label>
     </section>
   );
 }
@@ -399,22 +387,78 @@ export function ConditionsPanel({ view, act }: { view: CharacterView; act: Act }
   const play = view.character.play;
   const active = play?.conditions ?? [];
   const immune = new Set((view.sheet.conditionImmunities ?? []).map((i) => i.condition));
+  const labelOf = (key: string) => {
+    const label = conditionLabels[key] ?? key;
+    return immune.has(key) ? `${label} (immune)` : label;
+  };
+  // Focus after a change: adding lands on the new condition's Remove button; removing returns to the "Add condition" select
+  // (it always exists then, since the removed condition is inactive again). Applied once the new list arrives.
+  const panelRef = useRef<HTMLElement>(null);
+  const pending = useRef<{ kind: 'added'; key: string } | { kind: 'removed' } | null>(null);
+  const activeKey = active.join(',');
+  useEffect(() => {
+    const p = pending.current;
+    if (!p) return;
+    const here = document.activeElement;
+    if (here && here !== document.body && !panelRef.current?.contains(here)) {
+      pending.current = null;
+      return;
+    }
+    pending.current = null;
+    if (p.kind === 'added') document.getElementById(`remove-condition-${p.key}`)?.focus();
+    else document.getElementById('add-condition')?.focus(); // removing always frees a condition, so the select exists
+  }, [activeKey]);
+  const inactive = Object.keys(conditionLabels).filter((key) => !active.includes(key));
   return (
-    <section aria-labelledby="conditions-heading" className="play-panel">
-      <h3 id="conditions-heading">Conditions</h3>
-      <fieldset className="conditions">
-        <legend>Conditions (reminders; a condition you are immune to has no effect)</legend>
-        {Object.entries(conditionLabels).map(([key, label]) => (
-          <label key={key} className="choice">
-            <input
-              type="checkbox"
-              checked={active.includes(key)}
-              onChange={() => act({ action: active.includes(key) ? 'removeCondition' : 'addCondition', condition: key })}
-            />
-            {immune.has(key) ? `${label} (immune)` : label}
-          </label>
-        ))}
-      </fieldset>
+    <section ref={panelRef} aria-labelledby="conditions-heading" className="play-panel">
+      <h3 id="conditions-heading" tabIndex={-1}>
+        Conditions
+      </h3>
+      {active.length === 0 ? (
+        <p>None.</p>
+      ) : (
+        <ul className="conditions" aria-label="Active conditions">
+          {active.map((key) => (
+            <li key={key}>
+              <span className="option-name">{labelOf(key)}</span>{' '}
+              <button
+                type="button"
+                id={`remove-condition-${key}`}
+                aria-label={`Remove ${conditionLabels[key] ?? key}`}
+                onClick={() => {
+                  pending.current = { kind: 'removed' };
+                  act({ action: 'removeCondition', condition: key });
+                }}
+              >
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {inactive.length > 0 && (
+        <label className="field">
+          Add condition
+          <select
+            id="add-condition"
+            value=""
+            onChange={(e) => {
+              const key = e.target.value;
+              if (!key) return;
+              pending.current = { kind: 'added', key };
+              act({ action: 'addCondition', condition: key });
+            }}
+          >
+            <option value="">Choose a condition</option>
+            {inactive.map((key) => (
+              <option key={key} value={key}>
+                {labelOf(key)}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      <p className="hint">Conditions are reminders; a condition you are immune to has no effect.</p>
       <label className="field">
         Exhaustion level
         <select value={play?.exhaustion ?? 0} onChange={(e) => act({ action: 'setExhaustion', amount: Number(e.target.value) })}>

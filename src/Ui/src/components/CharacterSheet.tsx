@@ -1129,7 +1129,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
         )}
         {/* Investigation 2026-10-06 item 8: two plain wrappers, side by side at 60rem and up, stacked below it. Visual order is DOM order. */}
         <div className="play-column">
-          <HitPointsPanel view={view} act={act} damageType={damageType} onDamageType={setDamageType} onDamage={openDamage} panelOpen={damaging !== undefined} rulesFamilies={rulesFamilies} />
+          <HitPointsPanel view={view} act={act} damageType={damageType} onDamageType={setDamageType} onDamage={openDamage} panelOpen={damaging !== undefined} />
           <DeathSavesPanel view={view} act={act} roll={roll} lastRoll={lastRoll} />
           <ConcentrationPanel view={view} act={act} roll={roll} />
           <ConditionsPanel view={view} act={act} />

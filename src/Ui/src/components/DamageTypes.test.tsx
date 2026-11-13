@@ -218,19 +218,18 @@ it('shows no condition immunity list when there are none', () => {
   expect(screen.queryByRole('list', { name: 'Condition immunities' })).toBeNull();
 });
 
-it('marks an immune condition chip and keeps it toggleable', async () => {
+it('marks an immune condition in the select and keeps it addable', async () => {
   const user = userEvent.setup();
   const act = vi.fn();
   const view = base({}, { conditionImmunities: [{ condition: 'frightened', sources: [stormSource] }] });
   render(<ConditionsPanel view={view} act={act} />);
-  const box = screen.getByRole('checkbox', { name: 'Frightened (immune)' }) as HTMLInputElement;
-  expect(box.disabled).toBe(false);
-  expect(screen.getByRole('checkbox', { name: 'Charmed' })).toBeTruthy();
-  await user.click(box);
+  const select = screen.getByRole('combobox', { name: 'Add condition' });
+  expect(screen.getByRole('option', { name: 'Charmed' })).toBeTruthy();
+  await user.selectOptions(select, screen.getByRole('option', { name: 'Frightened (immune)' }));
   expect(act).toHaveBeenCalledWith({ action: 'addCondition', condition: 'frightened' });
 });
 
-it('legend says immunities cancel conditions', () => {
+it('the hint says immunities cancel conditions', () => {
   render(<ConditionsPanel view={base()} act={() => {}} />);
-  expect(screen.getByText('Conditions (reminders; a condition you are immune to has no effect)')).toBeTruthy();
+  expect(screen.getByText('Conditions are reminders; a condition you are immune to has no effect.')).toBeTruthy();
 });
