@@ -933,6 +933,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
       </header>
 
       <SheetSummary view={view} rollMode={rollMode} onRollMode={setRollMode} lastRoll={lastRoll} rollLog={rollLog} act={act} onDamage={openDamage} spellsTab={showSpells} rulesFamilies={rulesFamilies}
+        fields={sheet.fields} abilityBoxesTop={false}
         onRoll={(f) => roll({ field: f, mode: rollMode })}
         onRollDice={rollDice}
         quickbar={<Quickbar actions={quickActions} busy={quickBusy} run={quickRun} />}
