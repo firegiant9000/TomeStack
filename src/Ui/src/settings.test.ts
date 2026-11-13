@@ -11,6 +11,7 @@ import {
   appearance,
   applyPreferences,
   applyTheme,
+  abilityBoxesTop,
   compactPlay,
   contrast,
   diceAnimationOn,
@@ -20,6 +21,7 @@ import {
   setAbilityOrder,
   setAnnounceRolls,
   setAppearance,
+  setAbilityBoxesTop,
   setCompactPlay,
   setContrast,
   setDiceAnimation,
@@ -257,4 +259,14 @@ it('defaults the accessibility settings to the OS or off, and remembers each und
   setCompactPlay(false);
   applyPreferences();
   expect(document.documentElement.dataset.compactPlay).toBeUndefined();
+});
+
+it('stores the ability-boxes-at-the-top choice as on or removed, off by default', () => {
+  expect(abilityBoxesTop()).toBe(false);
+  setAbilityBoxesTop(true);
+  expect(localStorage.getItem('tomestack.abilityBoxesTop')).toBe('on');
+  expect(abilityBoxesTop()).toBe(true);
+  setAbilityBoxesTop(false);
+  expect(localStorage.getItem('tomestack.abilityBoxesTop')).toBeNull();
+  expect(abilityBoxesTop()).toBe(false);
 });

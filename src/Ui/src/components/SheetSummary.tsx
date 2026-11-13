@@ -1,22 +1,14 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { CharacterView, DerivedValue, PlayAction, RollMode, RollRecord, RulesFamilyPolicy } from '../api/types';
 import { DiceBox } from './DiceBox';
+import { AbilityBoxes } from './AbilityBoxes';
 import { FieldWhy } from './sheet/FieldWhy';
-import { attacksAgainstText, rollButtonSuffix } from '../rollModes';
+import { attacksAgainstText } from '../rollModes';
 import { inspirationLabel } from '../format';
 import { RollModePicker, RollResult, type RecordSpent } from './PlayPanels';
 import { RollLog, type LoggedRoll } from './RollLog';
 import { RollWhy } from './RollWhy';
 
-const abilities = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const;
-const abilityNames: Record<(typeof abilities)[number], string> = {
-  str: 'Strength',
-  dex: 'Dexterity',
-  con: 'Constitution',
-  int: 'Intelligence',
-  wis: 'Wisdom',
-  cha: 'Charisma',
-};
 const conditionLabel = (key: string) => key.charAt(0).toUpperCase() + key.slice(1);
 const signed = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
 
@@ -126,35 +118,7 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, ac
 
   return (
     <>
-      {abilityBoxesTop && (
-      <dl className="summary-abilities">
-        {abilities.map((a) => {
-          const score = field(`ability.${a}.score`);
-          const mod = field(`ability.${a}.mod`);
-          if (!score || !mod) return null;
-          return (
-            <div key={a}>
-              <dt>{abilityNames[a]}</dt>
-              {/* Owner (2026-10-06): modifier first by default, score first by the "Ability boxes" setting; one markup, CSS `order`.
-                  The modifier is what the roll button adds, so it is the large number. DOM (and screen-reader) order stays modifier, score. */}
-              <dd className="ability">
-                <span className="derived">{signed(mod.value)}</span>{' '}
-                <span className="score">
-                  {score.value}
-                  {score.override && <span className="override-label"> (set by hand)</span>}
-                </span>{' '}
-                {/* D28 (owner, 2026-10-07): a compact control. The visible word starts the accessible name (WCAG 2.5.3). */}
-                <button type="button" className="roll" onClick={() => onRoll(mod.field)}>
-                  Roll{rollButtonSuffix(mod)}{' '}
-                  <span className="visually-hidden"> {abilityNames[a]} check ({signed(mod.value)})</span>
-                </button>
-                {mod.override && <span className="override-label"> (modifier set by hand)</span>}
-              </dd>
-            </div>
-          );
-        })}
-      </dl>
-      )}
+      {abilityBoxesTop && <AbilityBoxes fields={allFields} onRoll={onRoll} />}
       <section ref={barRef} className="sheet-summary status-bar" aria-label="Status">
         <div className="status-line">
           {hp && (

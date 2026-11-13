@@ -33,6 +33,7 @@ import { assistedNotes, rollButtonSuffix } from '../rollModes';
 import { diceLine, rollKey, rollModeText } from '../rollText';
 import { announceRollsOn, diceAnimationOn } from '../settings';
 import { damageTypeLabel, damageTypes, normalizeDamageType } from './customModel';
+import { AbilityBoxes } from './AbilityBoxes';
 import { ExplainList } from './ExplainList';
 import { Pips } from './Pips';
 import { conditionLabels } from './conditionLabels';
@@ -650,6 +651,16 @@ function PinButton({ name, pinned, full, onPin }: Pinning) {
         </span>
       )}
     </>
+  );
+}
+
+/** Wave 3 3.4: the six ability boxes on Play (the "Ability boxes at the top of the sheet" setting moves them above the status bar instead). */
+export function AbilitiesPanel({ view, onRoll }: { view: CharacterView; onRoll: (field: string) => void }) {
+  return (
+    <section aria-labelledby="abilities-heading" className="play-panel">
+      <h3 id="abilities-heading">Abilities</h3>
+      <AbilityBoxes fields={view.sheet.fields} onRoll={onRoll} />
+    </section>
   );
 }
 

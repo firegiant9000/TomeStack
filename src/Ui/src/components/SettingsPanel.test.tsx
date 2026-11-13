@@ -38,6 +38,20 @@ it('names the version and the data schema, which the app header no longer shows'
   expect(screen.getByText(/^TomeStack 0\.0\.0-fixture, data schema 99\./)).toBeTruthy();
 });
 
+it('keeps the ability boxes at the top of the sheet only when asked (Wave 3 3.4), and by keyboard', async () => {
+  const user = userEvent.setup();
+  render(<SettingsPanel />);
+  const box = screen.getByRole<HTMLInputElement>('checkbox', { name: 'Ability boxes at the top of the sheet' });
+  expect(box.checked).toBe(false);
+  expect(localStorage.getItem('tomestack.abilityBoxesTop')).toBeNull();
+  box.focus();
+  await user.keyboard(' ');
+  expect(box.checked).toBe(true);
+  expect(localStorage.getItem('tomestack.abilityBoxesTop')).toBe('on');
+  await user.keyboard(' ');
+  expect(localStorage.getItem('tomestack.abilityBoxesTop')).toBeNull();
+});
+
 it('switches the dice animation off and on', async () => {
   const user = userEvent.setup();
   render(<SettingsPanel />);

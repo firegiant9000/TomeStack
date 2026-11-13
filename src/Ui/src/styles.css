@@ -132,7 +132,7 @@ body { margin: 0; background: var(--bg); color: var(--fg); }
 .app {
   display: grid;
   grid-template-columns: [side] minmax(14rem, 18rem) [main] minmax(0, 1fr);
-  grid-template-rows: [top] auto [head] auto [summary] auto [rest] auto [messages] auto [print] auto [body] 1fr;
+  grid-template-rows: [top] auto [head] auto [boxes] auto [summary] auto [rest] auto [messages] auto [print] auto [body] 1fr;
   min-height: 100vh;
 }
 .app[data-sidebar='collapsed'] { grid-template-columns: [side] 0 [main] minmax(0, 1fr); }
@@ -184,7 +184,7 @@ article.sheet > .sheet-header { grid-column: 1 / -1; grid-row: head; padding: va
    the sheet (align-self: start keeps it its own height). The summary row would then collapse, so the hint under the bar sits in
    that row, pushed down by the bar's measured height (--status-bar-height, set by SheetSummary), which keeps the room reserved. */
 article.sheet > .sheet-summary { grid-column: 1 / -1; grid-row: summary / -1; align-self: start; margin: 0 var(--space-5); }
-article.sheet > p.hint { grid-column: 1 / -1; grid-row: summary; margin: var(--status-bar-height, 10rem) var(--space-5) 0; padding-top: var(--space-2); }
+article.sheet > p.hint { grid-column: 1 / -1; grid-row: summary; margin: var(--status-bar-height, 0px) var(--space-5) 0; padding-top: var(--space-2); }
 /* D29: a rest opened from the header gets its own full-width row under the summary. */
 article.sheet > .rest-sheet { grid-column: 1 / -1; grid-row: rest; margin: 0 var(--space-5); }
 article.sheet > .print-sheet { grid-column: main; grid-row: print; margin-right: var(--space-5); }
@@ -403,21 +403,23 @@ html[data-compact-play='on'] #sheet-panel-play .play-panel { padding-top: var(--
 #status-why:empty { display: none; }
 html { scroll-padding-top: var(--status-bar-pin, 0px); }
 .sheet-summary dl { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; }
-.summary-abilities { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 6.5rem), 1fr)); }
-.sheet-summary dl > div { display: grid; gap: 0.1rem; align-content: start; border: 1px solid var(--line-strong); border-radius: var(--radius); padding: var(--space-2) var(--space-3); }
-.sheet-summary dt { font-weight: 600; font-size: var(--text-sm); color: var(--muted); }
-.sheet-summary dd { margin: 0; font-family: var(--font-numbers); font-size: var(--text-lg); font-variant-numeric: tabular-nums; }
+.summary-abilities { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 6.5rem), 1fr)); gap: var(--space-2); margin: 0; }
+/* Wave 3 3.4: with the "boxes at the top" setting the list sits above the bar in its own row (the bar starts at `summary`). */
+article.sheet > .summary-abilities { grid-column: 1 / -1; grid-row: boxes; margin: var(--space-2) var(--space-5) 0; }
+.sheet-summary dl > div, .summary-abilities > div { display: grid; gap: 0.1rem; align-content: start; border: 1px solid var(--line-strong); border-radius: var(--radius); padding: var(--space-2) var(--space-3); }
+:is(.sheet-summary, .summary-abilities) dt { font-weight: 600; font-size: var(--text-sm); color: var(--muted); }
+:is(.sheet-summary, .summary-abilities) dd { margin: 0; font-family: var(--font-numbers); font-size: var(--text-lg); font-variant-numeric: tabular-nums; }
 /* D28: the ability box. The modifier is the large number (what the roll adds), the score sits beside it on the baseline, the
    compact Roll control beneath; the "Ability boxes: Score first" setting swaps the two numbers by CSS order. */
-.sheet-summary dd.ability { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: baseline; column-gap: var(--space-2); }
-.sheet-summary dd.ability .derived { font-size: var(--text-3xl); line-height: 1.1; }
-.sheet-summary dd.ability .score { font-size: var(--text-sm); color: var(--muted); font-family: var(--font-numbers); }
-.sheet-summary dd.ability .roll { grid-column: 1 / -1; justify-self: start; margin-top: var(--space-1); min-width: 0; overflow-wrap: anywhere; }
-.sheet-summary dd.ability > .override-label { grid-column: 1 / -1; }
-html[data-ability-order='score'] .sheet-summary dd.ability .derived { order: 2; font-size: var(--text-sm); color: var(--muted); }
-html[data-ability-order='score'] .sheet-summary dd.ability .score { order: 1; font-size: var(--text-3xl); color: inherit; line-height: 1.1; }
-html[data-ability-order='score'] .sheet-summary dd.ability .roll { order: 3; }
-html[data-ability-order='score'] .sheet-summary dd.ability > .override-label { order: 4; }
+:is(.sheet-summary, .summary-abilities) dd.ability { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: baseline; column-gap: var(--space-2); }
+:is(.sheet-summary, .summary-abilities) dd.ability .derived { font-size: var(--text-3xl); line-height: 1.1; }
+:is(.sheet-summary, .summary-abilities) dd.ability .score { font-size: var(--text-sm); color: var(--muted); font-family: var(--font-numbers); }
+:is(.sheet-summary, .summary-abilities) dd.ability .roll { grid-column: 1 / -1; justify-self: start; margin-top: var(--space-1); min-width: 0; overflow-wrap: anywhere; }
+:is(.sheet-summary, .summary-abilities) dd.ability > .override-label { grid-column: 1 / -1; }
+html[data-ability-order='score'] :is(.sheet-summary, .summary-abilities) dd.ability .derived { order: 2; font-size: var(--text-sm); color: var(--muted); }
+html[data-ability-order='score'] :is(.sheet-summary, .summary-abilities) dd.ability .score { order: 1; font-size: var(--text-3xl); color: inherit; line-height: 1.1; }
+html[data-ability-order='score'] :is(.sheet-summary, .summary-abilities) dd.ability .roll { order: 3; }
+html[data-ability-order='score'] :is(.sheet-summary, .summary-abilities) dd.ability > .override-label { order: 4; }
 .sheet-summary > .roll-controls { flex: 0 1 auto; display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
 /* Item 8: the free dice box sits under the d20 mode row, outside the fixed .roll-strip (whose height is unchanged). The label,
    box and button wrap onto further lines when the column is narrow; the refusal is a full-width line under them. */

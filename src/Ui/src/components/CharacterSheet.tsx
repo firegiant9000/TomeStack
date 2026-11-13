@@ -28,7 +28,7 @@ import { CombatStrip } from './CombatStrip';
 import { DamagePanel } from './DamagePanel';
 import { TurnPanel } from './TurnPanel';
 import { SnapshotsPanel } from './SnapshotsPanel';
-import { ActionsPanel, ClassColumnsPanel, ConcentrationPanel, ConditionsPanel, DeathSavesPanel, FeaturesPanel, HitPointsPanel, ResourcesPanel } from './PlayPanels';
+import { AbilitiesPanel, ActionsPanel, ClassColumnsPanel, ConcentrationPanel, ConditionsPanel, DeathSavesPanel, FeaturesPanel, HitPointsPanel, ResourcesPanel } from './PlayPanels';
 import { CompanionsPanel } from './CompanionsPanel';
 import { CustomAttacksPanel, CustomItemsPanel } from './CustomEntries';
 import { CurrencyPanel, EquipmentPanel } from './EquipmentPanel';
@@ -58,7 +58,7 @@ import { inverseOf, isCompound, type UndoEntry } from '../undo';
 import { recordSpend } from '../actionRows';
 import { editPins, readPins, resolvePin, visiblePins, writePins, type Pin, type QuickAction } from '../quickbar';
 import { Quickbar } from './Quickbar';
-import { applyPreferences, compactPlay, setCompactPlay } from '../settings';
+import { abilityBoxesTop, applyPreferences, compactPlay, setCompactPlay } from '../settings';
 import { useRulesLabel } from '../rulesLabel';
 
 import { assistedNotes, rollButtonSuffix } from '../rollModes';
@@ -416,6 +416,8 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   const lastLogged = useRef<LoggedRoll | undefined>(undefined);
   const [resting, setResting] = useState<RestPeriod>();
   const [compact, setCompact] = useState(compactPlay());
+  // Wave 3 3.4: read on every render (Settings is another screen, so the sheet remounts after a change).
+  const boxesTop = abilityBoxesTop();
   const [printing, setPrinting] = useState(false);
   // D43 S3: the open turn panel (start or end of the turn) and the opener to return focus to when it closes (WCAG 2.4.3).
   const [turning, setTurning] = useState<TurnMoment>();
@@ -933,7 +935,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
       </header>
 
       <SheetSummary view={view} rollMode={rollMode} onRollMode={setRollMode} lastRoll={lastRoll} rollLog={rollLog} act={act} onDamage={openDamage} spellsTab={showSpells} rulesFamilies={rulesFamilies}
-        fields={sheet.fields} abilityBoxesTop={false}
+        fields={sheet.fields} abilityBoxesTop={boxesTop}
         onRoll={(f) => roll({ field: f, mode: rollMode })}
         onRollDice={rollDice}
         quickbar={<Quickbar actions={quickActions} busy={quickBusy} run={quickRun} />}
@@ -1135,6 +1137,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
           <ClassColumnsPanel view={view} />
         </div>
         <div className="play-column">
+          {!boxesTop && <AbilitiesPanel view={view} onRoll={(f) => roll({ field: f, mode: rollMode })} />}
           <ActionsPanel view={view} roll={roll} act={act} rollMode={rollMode} onDamageType={setDamageType} pins={visible} onPin={pinAction} />
           <CompanionsPanel view={view} act={act} roll={roll} rollMode={rollMode} onChanged={onChanged} onError={onError} onStatus={onStatus} saveCharacter={saveCharacter} />
         </div>

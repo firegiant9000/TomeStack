@@ -26,6 +26,7 @@ const keys = {
   underline: 'tomestack.underline',
   announceRolls: 'tomestack.announceRolls',
   compactPlay: 'tomestack.compactPlay',
+  abilityBoxesTop: 'tomestack.abilityBoxesTop',
 } as const;
 
 /** This session's choices, read only while storage is unavailable, so a pick still applies and lasts until the app closes. */
@@ -186,6 +187,10 @@ export const setAnnounceRolls = (on: boolean): void => write(keys.announceRolls,
 /** D20: the compact combat layout of the Play tab (CSS hides traces, hints and class columns). Off is the default: no attribute. */
 export const compactPlay = (): boolean => read(keys.compactPlay) === 'on';
 export const setCompactPlay = (on: boolean): void => write(keys.compactPlay, on ? 'on' : null);
+
+/** Wave 3 3.4: keep the six ability boxes above the status bar (the old layout). Off is the default: they live in the Abilities panel on Play. */
+export const abilityBoxesTop = (): boolean => read(keys.abilityBoxesTop) === 'on';
+export const setAbilityBoxesTop = (on: boolean): void => write(keys.abilityBoxesTop, on ? 'on' : null);
 
 /** Applied once at start (`App.tsx`) and by the Settings screen after every change. */
 export function applyPreferences(): void {

@@ -10,6 +10,7 @@ import { client } from '../api/client';
 import type { Character, CharacterSheet as SheetModel, CharacterView, DerivedValue, FeatureEntry, RollRecord } from '../api/types';
 import { TomeStackError } from '../api/transport';
 import { blockedHint, confirmLabel, describedBy, exportChange, failedLine, firstRadio, packageTargetsFixture } from '../test/downConversion';
+import { expectNoAxeViolations } from '../test/axe';
 import { CharacterSheet } from './CharacterSheet';
 import { writeChecklist } from '../levelUpChecklist';
 import { RollResult } from './PlayPanels';
@@ -578,6 +579,34 @@ it('offers a compact view on Play that is remembered as a preference (D20)', asy
   await user.click(toggle);
   expect(localStorage.getItem('tomestack.compactPlay')).toBe('on');
   expect(document.documentElement.dataset.compactPlay).toBe('on');
+});
+
+describe('Abilities panel (Wave 3 3.4)', () => {
+  it('shows the boxes in an Abilities panel on Play, none above the status bar, and Roll rolls the ability field', async () => {
+    const user = userEvent.setup();
+    const { container } = renderSheet(view());
+    expect(container.querySelector('dl.summary-abilities')!.closest('section.status-bar')).toBeNull();
+    const panel = screen.getByRole('region', { name: 'Abilities' });
+    expect(panel.querySelector('dl.summary-abilities')).not.toBeNull();
+    expect(container.querySelectorAll('dl.summary-abilities')).toHaveLength(1);
+    expect(screen.getByRole('heading', { name: 'Abilities' }).id).toBe('abilities-heading');
+    const roll = within(panel).getByRole('button', { name: /^Roll/ });
+    roll.focus();
+    await user.keyboard('{Enter}');
+    expect(client.roll).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ field: 'ability.dex.mod' }));
+    await expectNoAxeViolations(panel);
+  });
+
+  it('with the setting on, the boxes sit above the bar and there is no Play panel', () => {
+    localStorage.setItem('tomestack.abilityBoxesTop', 'on');
+    const { container } = renderSheet(view());
+    expect(screen.queryByRole('region', { name: 'Abilities' })).toBeNull();
+    const boxes = container.querySelector('dl.summary-abilities')!;
+    const bar = container.querySelector('section.status-bar')!;
+    expect(container.querySelectorAll('dl.summary-abilities')).toHaveLength(1);
+    expect(boxes.compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(boxes.closest('section.status-bar')).toBeNull();
+  });
 });
 
 it('marks proficient and expert fields on Skills and saves and lists passive scores and Speed (D24)', () => {
