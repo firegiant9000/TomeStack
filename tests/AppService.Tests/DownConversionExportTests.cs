@@ -1261,7 +1261,7 @@ public class DownConversionExportTests
 
     // ---- C2-5: the way back (guarded re-pin on import) ---------------------------------------------------------------------
 
-    private const string RepinnedSentence = "'Compat Steady Hands': switched back to your original version (the file held a copy made for 0.6.0).";
+    private const string RepinnedSentence = "'Compat Steady Hands': switched back to your original copy (the file held a copy made for 0.6.0).";
 
     private static (SourceRecord Source, ContentReference Draft, ContentReference Published) PublishFlyOriginal(TempApp app)
     {

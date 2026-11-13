@@ -675,7 +675,7 @@ public static class DownConversion
                 moved[member.RevisionId] = original.RevisionId;
                 repinned.Add(new(member.RevisionId, original.RevisionId, member.Name));
                 warnings.Add(new("package.down-converted-repinned",
-                    $"'{member.Name}': switched back to your original version (the file held a copy made for {madeFor ?? "an older TomeStack"}).", original.Reference));
+                    $"'{member.Name}': switched back to your original copy (the file held a copy made for {madeFor ?? "an older TomeStack"}).", original.Reference));
             }
         }
         // C2-Q5: one line for the file, not one per copy.

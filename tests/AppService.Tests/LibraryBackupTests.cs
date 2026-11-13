@@ -105,7 +105,7 @@ public class LibraryBackupTests
 
             Assert.True(preview.CanApply, string.Join("; ", preview.Errors.Select(e => e.Message)));
             var repinned = Assert.Single(preview.Repinned!, r => r.OriginalId == published.RevisionId);
-            Assert.Contains(preview.Warnings, w => w.Code == "package.down-converted-repinned" && w.Message.StartsWith("'Compat Steady Hands': switched back to your original version", StringComparison.Ordinal));
+            Assert.Contains(preview.Warnings, w => w.Code == "package.down-converted-repinned" && w.Message.StartsWith("'Compat Steady Hands': switched back to your original copy", StringComparison.Ordinal));
 
             app.App.ApplyLibraryRestore(path);
 
