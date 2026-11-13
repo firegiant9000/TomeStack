@@ -119,8 +119,8 @@ public static partial class CharacterCalculator
                 warnings[FieldIds.ArmorClass].Add(new(
                     "equipment.shield-untrained",
                     policy.UntrainedShieldGivesArmorClass
-                        ? $"This character has no training with shields: '{content.Revision.Name}' still adds to Armor Class under {policy.DisplayName}, with disadvantage on d20 tests that use Strength or Dexterity, and no spellcasting."
-                        : $"This character has no training with shields, so '{content.Revision.Name}' adds nothing to Armor Class under {policy.DisplayName}.",
+                        ? $"This character has no training with shields: '{content.Revision.Name}' still adds to Armor Class under the {policy.ShortLabel}, with disadvantage on d20 tests that use Strength or Dexterity, and no spellcasting."
+                        : $"This character has no training with shields, so '{content.Revision.Name}' adds nothing to Armor Class under the {policy.ShortLabel}.",
                     content.Revision.Reference,
                     effect.Id));
                 if (!policy.UntrainedShieldGivesArmorClass)
@@ -225,7 +225,7 @@ public static partial class CharacterCalculator
             {
                 diagnostics.Add(new(
                     "modifier.toggle-content-missing",
-                    $"'{revision.Name}' effect '{effectId}' follows toggle '{toggleId}' of content {ownerId}, which is not active or does not declare it; the effect is not applied.",
+                    $"'{revision.Name}' has an effect that follows a toggle of other content, which is not active or does not have that toggle; the effect is not applied.",
                     revision.Reference,
                     effectId));
                 return ToggleGate.Skips;
@@ -426,7 +426,7 @@ public static partial class CharacterCalculator
                     var revision = candidate.Content.Revision;
                     var diagnostic = new Diagnostic(
                         "effect.dependency-cycle",
-                        $"'{revision.Name}' effect '{candidate.Effect.Id}' is ignored: using {mod} for {field} would make {mod} depend on {field}.",
+                        $"'{revision.Name}' has an effect that is ignored: using {mod} for {field} would make {mod} depend on {field}.",
                         revision.Reference,
                         candidate.Effect.Id);
                     diagnostics.Add(diagnostic);
@@ -590,12 +590,12 @@ public static partial class CharacterCalculator
                 }
                 if (!SpecIndex.ContainsKey(effect.Target))
                 {
-                    diagnostics.Add(new("effect.unknown-target", $"'{revision.Name}' effect '{effect.Id}' targets '{effect.Target}', which is not a calculated field; it is ignored.", revision.Reference, effect.Id));
+                    diagnostics.Add(new("effect.unknown-target", $"'{revision.Name}' changes '{effect.Target}', which is not something the sheet calculates; it is ignored.", revision.Reference, effect.Id));
                     continue;
                 }
                 if (IsCharacterOnlyField(effect.Target, revision.SchemaVersion) || IsPlayMechanicsOnlyField(effect.Target, revision.SchemaVersion))
                 {
-                    diagnostics.Add(new("effect.character-only-field", $"'{revision.Name}' effect '{effect.Id}' targets '{effect.Target}', which content may not target yet; it is ignored.", revision.Reference, effect.Id));
+                    diagnostics.Add(new("effect.character-only-field", $"'{revision.Name}' changes '{effect.Target}', which content may not change yet; it is ignored.", revision.Reference, effect.Id));
                     continue;
                 }
                 if (IsV8Field(effect.Target) && IgnoresV8(revision))
@@ -611,14 +611,14 @@ public static partial class CharacterCalculator
                         : $", from {origin.ToString().ToLowerInvariant()} content via {parent.Kind.ToString().ToLowerInvariant()} '{parent.Name}'";
                     warnings[effect.Target].Add(new(
                         "policy.ability-increase-source",
-                        $"'{revision.Name}' ({revision.Kind}{via}) cannot change ability scores under {policy.DisplayName}; only {policy.AbilityIncreaseSource} content can. The effect is ignored.",
+                        $"'{revision.Name}' ({revision.Kind}{via}) cannot change ability scores under the {policy.ShortLabel}; only {policy.AbilityIncreaseSource} content can. The effect is ignored.",
                         revision.Reference,
                         effect.Id));
                     continue;
                 }
                 if (effect.Stacking == StackingRule.HighestInGroup && string.IsNullOrWhiteSpace(effect.StackGroup))
                 {
-                    warnings[effect.Target].Add(new("effect.stack-group-missing", $"'{revision.Name}' effect '{effect.Id}' uses highest-in-group stacking without a stackGroup; it is ignored.", revision.Reference, effect.Id));
+                    warnings[effect.Target].Add(new("effect.stack-group-missing", $"'{revision.Name}' has an effect that uses highest-in-group stacking without a stackGroup; it is ignored.", revision.Reference, effect.Id));
                     manual.Add(effect.Target);
                     continue;
                 }
@@ -701,7 +701,7 @@ public static partial class CharacterCalculator
     private static bool IsV8Field(string field) => field is FieldIds.Attacks or FieldIds.CriticalRange;
 
     private static Diagnostic V8FieldIgnored(ContentRevision revision, Effect effect, string field) =>
-        new("effect.schema-field-ignored", $"'{revision.Name}' effect '{effect.Id}' uses {field}, a content schema v8 field, but the revision declares v{revision.SchemaVersion}; it is ignored.", revision.Reference, effect.Id);
+        new("effect.schema-field-ignored", $"'{revision.Name}' has an effect that uses {field}, which needs file version 8, but this entry is file version {revision.SchemaVersion}; it is ignored.", revision.Reference, effect.Id);
 
     /// <param name="unseenArmor">
     /// Armor training grants that apply to the character but that the calculator cannot apply (assisted, reference or
@@ -737,7 +737,7 @@ public static partial class CharacterCalculator
                     else if (key == NoArmorTrainingKey)
                         continue; // a record only (RecordsArmorTraining)
                     else if (!ArmorTrainingKeys.Contains(key))
-                        diagnostics.Add(new("effect.unknown-target", $"'{item.Revision.Name}' effect '{grant.Id}' grants training in '{armorTarget}', which is not armor.light, armor.medium, armor.heavy, armor.shield or armor.none; it is ignored.", item.Revision.Reference, grant.Id));
+                        diagnostics.Add(new("effect.unknown-target", $"'{item.Revision.Name}' grants training in '{armorTarget}', which is not light armor, medium armor, heavy armor, a shield or none; it is ignored.", item.Revision.Reference, grant.Id));
                     else if (grant.Automation == AutomationStatus.Automatic && grant.Timing == EffectTiming.Always)
                         armor.TryAdd(key, new(GrantKind.Proficiency, item, grant));
                     else
@@ -753,12 +753,12 @@ public static partial class CharacterCalculator
                 var target = grant.Target ?? "";
                 if (!SpecIndex.ContainsKey(target) || !(target.StartsWith("save.", StringComparison.Ordinal) || target.StartsWith("skill.", StringComparison.Ordinal)))
                 {
-                    diagnostics.Add(new("effect.unknown-target", $"'{item.Revision.Name}' effect '{grant.Id}' grants {grant.Grant.ToString().ToLowerInvariant()} in '{target}', which is not a calculated saving throw or skill; it is ignored.", item.Revision.Reference, grant.Id));
+                    diagnostics.Add(new("effect.unknown-target", $"'{item.Revision.Name}' grants {grant.Grant.ToString().ToLowerInvariant()} in '{target}', which is not a saving throw or skill; it is ignored.", item.Revision.Reference, grant.Id));
                     continue;
                 }
                 if (grant.Grant == GrantKind.Expertise && target.StartsWith("save.", StringComparison.Ordinal))
                 {
-                    diagnostics.Add(new("effect.expertise-on-save", $"'{item.Revision.Name}' effect '{grant.Id}' grants expertise in a saving throw, which is not supported; proficiency is applied instead.", item.Revision.Reference, grant.Id));
+                    diagnostics.Add(new("effect.expertise-on-save", $"'{item.Revision.Name}' grants expertise in a saving throw, which is not supported; proficiency is applied instead.", item.Revision.Reference, grant.Id));
                 }
                 var kind = target.StartsWith("save.", StringComparison.Ordinal) ? GrantKind.Proficiency : grant.Grant;
                 if (!best.TryGetValue(target, out var current) || (kind == GrantKind.Expertise && current.Grant != GrantKind.Expertise))

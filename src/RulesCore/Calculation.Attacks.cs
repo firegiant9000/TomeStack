@@ -198,7 +198,7 @@ public static partial class CharacterCalculator
                     // Never assumes the content was validated: a missing count or die is an invalid formula, a bad range leaves the rider out.
                     if (EvaluateScaledDice(scaled, false, item, character, classLevels, values, out var scaledCount, out var scaledDie, out _) != ScaledDiceStatus.Ok)
                     {
-                        diagnostics.Add(new("rider.dice-invalid", $"'{item.Revision.Name}' attack rider '{rider.Id}' is left out: its dice count or die is not valid.", item.Revision.Reference, rider.Id));
+                        diagnostics.Add(new("rider.dice-invalid", $"'{item.Revision.Name}' has an attack extra that is left out: its dice count or die is not valid.", item.Revision.Reference, rider.Id));
                         continue;
                     }
                     dice = null;
@@ -257,7 +257,7 @@ public static partial class CharacterCalculator
                 if (!AttackRiderEffect.TryParseDice(baseDamage, out _, out var sides)
                     || (versatileDamage is not null && !AttackRiderEffect.TryParseDice(versatileDamage, out _, out _)))
                 {
-                    AddOnce(diagnostics, new("rider.dice-invalid", $"'{name}' attack rider '{rider.Effect.Id}' is left out of an attack: the attack's own die could not be read.", rider.Item.Revision.Reference, rider.Effect.Id));
+                    AddOnce(diagnostics, new("rider.dice-invalid", $"'{name}' has an attack extra that is left out of an attack: the attack's own die could not be read.", rider.Item.Revision.Reference, rider.Effect.Id));
                     continue;
                 }
                 var dice = $"{dielessCount}d{sides}";

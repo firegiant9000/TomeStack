@@ -326,7 +326,7 @@ public static partial class CharacterCalculator
             var what = offering.Revision.Kind == ContentKind.Background ? "background" : $"{offering.Revision.Kind.ToString().ToLowerInvariant()} from a background";
             diagnostics.Add(new(
                 "policy.background-feat",
-                $"'{offering.Revision.Name}' ({what}) cannot {verb} a feat under {policy.DisplayName}; the {(verb == "grant" ? "grant" : "selection")} is ignored.",
+                $"'{offering.Revision.Name}' ({what}) cannot {verb} a feat under the {policy.ShortLabel}; the {(verb == "grant" ? "grant" : "selection")} is ignored.",
                 offering.Revision.Reference,
                 effectId));
             return true;

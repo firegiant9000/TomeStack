@@ -167,6 +167,66 @@ public partial class ServiceWordingTests
         AssertPlain(message, ["'homebrew-x' is not a set of rules this app knows"]);
     }
 
+    private static CharacterSheet Pinned(ContentRevision revision, string? family = null)
+    {
+        var ash = Fixtures.Load("srd521-ash-m1.json");
+        return ChoiceTests.SheetWith(ash with { Pins = [revision.Reference], RulesFamily = family ?? ash.RulesFamily }, revision);
+    }
+
+    [Fact]
+    public void An_unknown_target_names_the_field_not_the_effect()
+    {
+        var odd = ChoiceTests.Homebrew(25, ContentKind.Feat, new ModifierEffect { Id = "odd-id", Operation = ModifierOperation.Bonus, Target = "swim-fast", Value = "1" });
+
+        AssertPlain(Message(Pinned(odd), "effect.unknown-target"), ["Fixture Homebrew 25", "changes 'swim-fast'", "not something the sheet calculates"], "odd-id");
+    }
+
+    [Fact]
+    public void A_field_content_may_not_change_yet_names_the_field_not_the_effect()
+    {
+        var quick = ChoiceTests.Homebrew(26, ContentKind.Feat, new ModifierEffect { Id = "fast-id", Operation = ModifierOperation.Bonus, Target = FieldIds.Speed, Value = "10" }) with { SchemaVersion = 9 };
+
+        AssertPlain(Message(Pinned(quick), "effect.character-only-field"), ["Fixture Homebrew 26", $"changes '{FieldIds.Speed}'", "may not change yet"], "fast-id");
+    }
+
+    [Fact]
+    public void A_missing_stack_group_is_reported_without_the_effect_id()
+    {
+        var odd = ChoiceTests.Homebrew(27, ContentKind.Feat,
+            new ModifierEffect { Id = "stack-id", Operation = ModifierOperation.Bonus, Target = FieldIds.Initiative, Value = "1", Stacking = StackingRule.HighestInGroup });
+
+        var warning = Assert.Single(Pinned(odd).Field(FieldIds.Initiative).Warnings, w => w.Code == "effect.stack-group-missing");
+        AssertPlain(warning.Message, ["Fixture Homebrew 27", "has an effect that uses highest-in-group stacking"], "stack-id");
+    }
+
+    [Fact]
+    public void A_toggle_of_other_content_that_is_not_active_is_reported_without_ids()
+    {
+        var other = Guid.NewGuid();
+        var follower = ChoiceTests.Homebrew(28, ContentKind.Feat,
+            new ModifierEffect { Id = "follow-id", Operation = ModifierOperation.Bonus, Target = FieldIds.Initiative, Value = "1", Timing = EffectTiming.WhileActive, Toggle = "stance-id", ToggleContent = other });
+
+        AssertPlain(Message(Pinned(follower), "modifier.toggle-content-missing"), ["Fixture Homebrew 28", "follows a toggle of other content"], "follow-id", "stance-id", other.ToString());
+    }
+
+    [Fact]
+    public void A_toggle_whose_group_is_absent_is_named_by_its_label()
+    {
+        var toggle = ChoiceTests.Homebrew(29, ContentKind.Feat,
+            new ToggleEffect { Id = "tg-id", ToggleId = "tg-toggle", Label = "Stone shape", Group = "shapes-id", GroupContent = Guid.NewGuid() });
+
+        AssertPlain(Message(Pinned(toggle), "toggle.group-absent"), ["'Stone shape' is in a group", "it stands alone"], "tg-id", "tg-toggle", "shapes-id");
+    }
+
+    [Fact]
+    public void A_feat_a_background_may_not_bring_names_the_rules_by_their_label()
+    {
+        var background = ChoiceTests.Homebrew(30, ContentKind.Background, new ChoiceEffect { Id = "feat", ChoiceId = "feat", Options = [Fixtures.Watchful] });
+        var ash = Fixtures.Load("srd521-ash-m1.json") with { RulesFamily = RulesFamilies.Srd51, Pins = [background.Reference], Choices = [new(background.Reference, "feat", [Fixtures.Watchful])] };
+
+        AssertPlain(Message(ChoiceTests.SheetWith(ash, background), "policy.background-feat"), ["Fixture Homebrew 30", "under the 2014 rules"], "SRD 5.1");
+    }
+
     [Fact]
     public void A_character_file_from_a_newer_build_speaks_of_file_versions()
     {

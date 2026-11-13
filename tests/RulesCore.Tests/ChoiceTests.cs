@@ -186,7 +186,7 @@ public class ChoiceTests
         var refused = sheet.Diagnostics.SingleOrDefault(d => d.Code == "policy.background-feat");
         Assert.Equal(!applies, refused is not null);
         if (!applies)
-            Assert.Contains("'Fixture Homebrew 1' (background) cannot offer a feat under SRD 5.1", refused!.Message, StringComparison.Ordinal);
+            Assert.Contains("'Fixture Homebrew 1' (background) cannot offer a feat under the 2014 rules", refused!.Message, StringComparison.Ordinal);
     }
 
     [Fact]
