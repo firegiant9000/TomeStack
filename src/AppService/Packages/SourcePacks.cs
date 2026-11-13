@@ -16,7 +16,7 @@ public sealed partial class PackageService
     /// <summary>At most this many sources in one pack: a pack is a deliberate share, not a library dump.</summary>
     public const int MaxPackSources = Preflight.MaxPackSources;
 
-    public const string SourceAttachmentPolicy = "A TomeStack file for sources never includes PDFs, drafts, characters, gap notes or text read from PDFs.";
+    public const string SourceAttachmentPolicy = "A source pack never includes PDFs, drafts, characters, gap notes or text read from PDFs.";
 
     /// <summary>The bundled SRD sources: never in a source pack, never replaced by any package, never import-derived.</summary>
     private IReadOnlySet<Guid> _bundledSources = new HashSet<Guid>();
@@ -281,7 +281,7 @@ public sealed partial class PackageService
         foreach (var source in parsed.Sources)
         {
             if (_bundledSources.Contains(source.Id))
-                errors.Add(new("pack.source-bundled", $"The file carries the bundled source '{source.Title}', which no TomeStack file for sources may carry."));
+                errors.Add(new("pack.source-bundled", $"The file carries the bundled source '{source.Title}', which no shared TomeStack file may carry."));
             else if (source.ImportDerived == true || !source.Redistributable)
                 errors.Add(new("pack.source-not-shareable", $"The file carries '{source.Title}', which its sender did not mark as shareable."));
             else if (!attested.Contains(source.Id))
@@ -295,11 +295,16 @@ public sealed partial class PackageService
         foreach (var revision in parsed.Revisions)
         {
             if (revision.Status != RevisionStatus.Published)
-                errors.Add(new("pack.draft-not-allowed", $"'{revision.Name}' is a draft; a TomeStack file for sources carries only published content.", revision.Reference));
+                errors.Add(new("pack.draft-not-allowed", $"'{revision.Name}' is a draft; a shared TomeStack file carries only published content.", revision.Reference));
             if (!packSources.ContainsKey(revision.Provenance.SourceId))
                 errors.Add(new("pack.revision-source", $"'{revision.Name}' belongs to a source the file does not carry.", revision.Reference));
         }
     }
+
+    /// <summary>The refusal for a file this version cannot read (D99): no raw format name, "file version" for the number.</summary>
+    internal static string UnsupportedFormatText(bool isTomeStackFile, int number, string advice) => isTomeStackFile
+        ? $"This TomeStack file is not supported by this version (file version {number}; this version reads up to {PackageManifest.CurrentFormatVersion}). {advice}"
+        : $"This is not a TomeStack file. {advice}";
 
     /// <summary>
     /// Reads only <c>format</c> and <c>formatVersion</c> from the manifest before anything else, so a package from a newer
@@ -324,7 +329,7 @@ public sealed partial class PackageService
                     && root.TryGetProperty("appVersion", out var appVersion) && appVersion.ValueKind == JsonValueKind.String
                     ? appVersion.GetString()
                     : null;
-                errors.Add(new("package.unsupported-format", $"Package format '{format.GetString()}' v{number} is not supported by this version (v{PackageManifest.CurrentFormatVersion}). {NewerVersionAdvice.ForPackage(madeBy)}"));
+                errors.Add(new("package.unsupported-format", UnsupportedFormatText(format.GetString() == PackageManifest.FormatName, number, NewerVersionAdvice.ForPackage(madeBy))));
                 return false;
             }
             return true;

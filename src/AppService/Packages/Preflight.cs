@@ -368,7 +368,7 @@ public static class Preflight
     {
         var ids = RequirePackSources(selection);
         var (shareable, problems) = SplitPackSources(store, ids, bundled);
-        var blocking = problems.Select(p => SourceRow(p.Id, p.Source, p.Source?.Title ?? "an unknown source", bundled, ReasonOf(p.Problem))).ToList();
+        var blocking = problems.Select(p => SourceRow(p.Id, p.Source, p.Source?.Title ?? "Unknown source", bundled, ReasonOf(p.Problem))).ToList();
         var content = PackContentOf(store, shareable);
         var bySource = shareable.ToDictionary(s => s.Id);
         blocking.AddRange(content.Spanning.Select(s => RevisionRow(s, store.FindSource(s.Provenance.SourceId), bundled, SpansSourcesReason)));

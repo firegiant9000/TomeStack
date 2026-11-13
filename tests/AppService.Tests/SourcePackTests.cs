@@ -458,10 +458,10 @@ public class SourcePackTests
         // Any published revision at v12 counts (R26); source packs carry published revisions only.
         temp.App.Store.AddRevision(Feat(source.Id, "Test Twelve", Guid.NewGuid(), Guid.NewGuid()) with { Status = RevisionStatus.Published, SchemaVersion = 12 });
         var warning = Assert.Single(temp.App.PreviewSourcePack([source.Id]).Warnings, w => w.Code == "package.needs-newer-build");
-        Assert.Equal($"Opening this needs TomeStack 0.8.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Test Twelve' is content at schema 12. Older versions refuse the file.", warning.Message);
+        Assert.Equal($"Opening this needs TomeStack 0.8.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Test Twelve' is content at file version 12. Older versions refuse the file.", warning.Message);
     }
 
-    private static readonly string PackageWarningText = $"Opening this needs TomeStack 0.8.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Test Newer One' is content at schema 12, and 'Test Newer Two' is content at schema 12. Older versions refuse the file.";
+    private static readonly string PackageWarningText = $"Opening this needs TomeStack 0.8.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Test Newer One' is content at file version 12, and 'Test Newer Two' is content at file version 12. Older versions refuse the file.";
 
     [Fact]
     public void A_toggle_that_names_content_in_another_source_gives_a_reference_outside_warning()
@@ -701,8 +701,8 @@ public class SourcePackTests
         Assert.Contains("Test Split Step", spans, StringComparison.Ordinal);
         foreach (var message in new[] { bundledMessage, Message(() => app.ExportSourcePack([unmarked.Id])), Message(() => app.ExportSourcePack([Guid.NewGuid()])), spans })
             AssertPlainFileWording(message);
-        Assert.Contains("TomeStack file", PackageService.SourceAttachmentPolicy, StringComparison.Ordinal);
-        Assert.DoesNotContain("source pack", PackageService.SourceAttachmentPolicy, StringComparison.OrdinalIgnoreCase);
+        // Written into manifests (and byte-compared goldens): never reworded.
+        Assert.Equal("A source pack never includes PDFs, drafts, characters, gap notes or text read from PDFs.", PackageService.SourceAttachmentPolicy);
     }
 
     [Fact]

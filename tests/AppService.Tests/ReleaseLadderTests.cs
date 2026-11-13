@@ -146,9 +146,9 @@ public class ReleaseLadderTests
         Assert.Equal("0.8.0", one.OpensIn);
         var warning = Assert.Single(one.Warnings);
         Assert.Equal(NewerBuild.Code, warning.Code);
-        Assert.Equal($"Opening this needs TomeStack 0.8.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Compat Hero' is a character at schema 11. Older versions refuse the file.", warning.Message);
+        Assert.Equal($"Opening this needs TomeStack 0.8.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Compat Hero' is a character at file version 11. Older versions refuse the file.", warning.Message);
         var cause = Assert.Single(one.Causes);
-        Assert.Equal(new OpensInCause($"characters/{hero.Id:D}.json", "character", hero.Id, "Compat Hero", 11, null, "'Compat Hero' is a character at schema 11"), cause);
+        Assert.Equal(new OpensInCause($"characters/{hero.Id:D}.json", "character", hero.Id, "Compat Hero", 11, null, "'Compat Hero' is a character at file version 11"), cause);
     }
 
     [Fact]
@@ -159,14 +159,14 @@ public class ReleaseLadderTests
 
         var result = NewerBuild.Evaluate([stance], [hero], 0, [], _ => "");
 
-        Assert.Equal($"Opening this needs TomeStack 0.8.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Compat Hero' is a character at schema 11, and 'Compat Tide Stance' is content at schema 12. Older versions refuse the file.",
+        Assert.Equal($"Opening this needs TomeStack 0.8.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Compat Hero' is a character at file version 11, and 'Compat Tide Stance' is content at file version 12. Older versions refuse the file.",
             Assert.Single(result.Warnings).Message);
         Assert.Equal(["character", "content"], result.Causes.Select(c => c.Kind));
         Assert.Equal($"content/{stance.RevisionId:D}.json", result.Causes[1].Entry);
 
         var gap = NewerBuild.Evaluate([], [], ReleaseLadder.PreviousMinor!.GapNoteSchema + 1, [], _ => "");
         var gapCause = Assert.Single(gap.Causes);
-        Assert.Equal(new OpensInCause("gaps/", "gapNote", Guid.Empty, "gap notes", 3, null, "the gap notes are at schema 3"), gapCause);
+        Assert.Equal(new OpensInCause("gaps/", "gapNote", Guid.Empty, "gap notes", 3, null, "the gap notes are at file version 3"), gapCause);
     }
 
     [Fact]
@@ -193,7 +193,7 @@ public class ReleaseLadderTests
         var result = NewerBuild.Evaluate([], heroes, 0, [], _ => "");
 
         Assert.Equal(5, result.Causes.Count);
-        Assert.Equal($"Opening this needs TomeStack 0.8.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Ann' is a character at schema 11, 'Bo' is a character at schema 11, 'Cy' is a character at schema 11, and 1 more. Older versions refuse the file.",
+        Assert.Equal($"Opening this needs TomeStack 0.8.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Ann' is a character at file version 11, 'Bo' is a character at file version 11, 'Cy' is a character at file version 11, and 1 more. Older versions refuse the file.",
             Assert.Single(result.Warnings).Message);
     }
 
@@ -204,7 +204,7 @@ public class ReleaseLadderTests
 
         var result = NewerBuild.Evaluate([], heroes, 0, [], _ => "");
 
-        Assert.Equal($"Opening this needs TomeStack 0.8.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Ann' is a character at schema 11, and 'Bo' is a character at schema 11, and 'Cy' is a character at schema 11. Older versions refuse the file.",
+        Assert.Equal($"Opening this needs TomeStack 0.8.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Ann' is a character at file version 11, and 'Bo' is a character at file version 11, and 'Cy' is a character at file version 11. Older versions refuse the file.",
             Assert.Single(result.Warnings).Message);
     }
 
@@ -255,7 +255,7 @@ public class ReleaseLadderTests
         var result = NewerBuild.Evaluate([], [], 3, [], _ => "");
 
         Assert.Null(result.OpensIn);
-        Assert.Equal("Opening this needs a TomeStack version that reads gap note schema 3 or later: it holds gap notes that older versions refuse.", Assert.Single(result.Warnings).Message);
+        Assert.Equal("Opening this needs a TomeStack version that reads gap note file version 3 or later: it holds gap notes that older versions refuse.", Assert.Single(result.Warnings).Message);
     }
 
     [Fact]
@@ -263,10 +263,10 @@ public class ReleaseLadderTests
     {
         var content = NewerBuild.Evaluate([Revision("Compat Tide Stance", 13)], [], 0, [], _ => "");
         Assert.Null(content.OpensIn);
-        Assert.Equal("Opening this needs a TomeStack version that reads content schema 13 or later: it holds content that older versions refuse.", Assert.Single(content.Warnings).Message);
+        Assert.Equal("Opening this needs a TomeStack version that reads content file version 13 or later: it holds content that older versions refuse.", Assert.Single(content.Warnings).Message);
 
         var character = NewerBuild.Evaluate([], [Hero() with { SchemaVersion = 12 }], 0, [], _ => "");
-        Assert.Equal("Opening this needs a TomeStack version that reads character schema 12 or later: it holds a character that older versions refuse.", Assert.Single(character.Warnings).Message);
+        Assert.Equal("Opening this needs a TomeStack version that reads character file version 12 or later: it holds a character that older versions refuse.", Assert.Single(character.Warnings).Message);
     }
 
     [Theory]

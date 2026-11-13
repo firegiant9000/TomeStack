@@ -267,7 +267,7 @@ public class CampaignPackTests
         }
         var campaign = Campaign(temp, "Test Newer Table", Srd521Source, old.Id, newer.Id);
         var warning = Assert.Single(temp.App.PreviewCampaignPack(campaign.Id).Warnings, w => w.Code == "package.needs-newer-build");
-        Assert.Equal($"Opening this needs TomeStack 0.8.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Test Newer One' is content at schema 12, and 'Test Newer Two' is content at schema 12. Older versions refuse the file.", warning.Message);
+        Assert.Equal($"Opening this needs TomeStack 0.8.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Test Newer One' is content at file version 12, and 'Test Newer Two' is content at file version 12. Older versions refuse the file.", warning.Message);
         Assert.Equal("0.8.0", temp.App.PreviewCampaignPack(campaign.Id).OpensIn);
     }
 
@@ -360,6 +360,24 @@ public class CampaignPackTests
     }
 
     [Fact]
+    public void A_campaign_rules_family_difference_reads_in_plain_words_not_as_an_id()
+    {
+        using var origin = new TempApp();
+        var campaign = Campaign(origin, "Test Harbor Table", Srd521Source);
+        var pack = origin.App.ExportCampaignPack(campaign.Id);
+
+        using var destination = new TempApp();
+        var app = destination.App;
+        app.ApplyImport(pack.Content);
+        app.SaveCampaign(Assert.Single(app.ListCampaigns()) with { RulesFamily = RulesFamilies.Srd51 });
+
+        var item = Assert.Single(app.PreviewImport(pack.Content).Items, i => i.Kind == "campaign");
+        var change = Assert.Single(item.Changes!, c => c.Field == "rulesFamily");
+        Assert.Equal("the 2014 rules", change.Local);
+        Assert.Equal("the 2024 rules", change.Imported);
+    }
+
+    [Fact]
     public void A_campaign_that_differs_needs_a_choice_and_the_preview_lists_characters_that_would_lose_content()
     {
         using var origin = new TempApp();
@@ -444,7 +462,7 @@ public class CampaignPackTests
         var stray = Message("pack.source-not-allowed", PackageEditor.Edit(pack, p => p == campaignPath, c => c["allowedSources"] = new JsonArray(Srd521Source.ToString("D"), other.Id.ToString("D"))));
         Assert.Contains("The file carries 'Test Harbor Notes', which its campaign does not allow", stray, StringComparison.Ordinal);
         var draft = Message("pack.draft-not-allowed", PackageEditor.Edit(pack, p => p.StartsWith("content/", StringComparison.Ordinal), r => r["status"] = "draft"));
-        Assert.Contains("a TomeStack file for sources carries only published content", draft, StringComparison.Ordinal);
+        Assert.Contains("a shared TomeStack file carries only published content", draft, StringComparison.Ordinal);
         foreach (var message in new[] { count, unlisted, stray, draft })
             SourcePackTests.AssertPlainFileWording(message);
     }

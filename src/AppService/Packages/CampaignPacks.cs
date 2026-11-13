@@ -12,7 +12,7 @@ namespace TomeStack.AppService.Packages;
 /// </summary>
 public sealed partial class PackageService
 {
-    public const string CampaignAttachmentPolicy = "A TomeStack file for a campaign never includes characters, gap notes, drafts, PDFs or text read from PDFs.";
+    public const string CampaignAttachmentPolicy = "A campaign pack never includes characters, gap notes, drafts, PDFs or text read from PDFs.";
 
     /// <summary>M6 slice 2: set by the app, which can calculate characters (the preview of "use the imported one").</summary>
     private Func<Campaign, Campaign, IReadOnlyList<CampaignImpact>>? _campaignImpact;
@@ -183,14 +183,20 @@ public sealed partial class PackageService
     /// </summary>
     private List<FieldChange> CampaignChanges(Campaign local, Campaign imported, IReadOnlyDictionary<Guid, SourceRecord> packSources)
     {
-        string Titles(IEnumerable<Guid> ids) => string.Join(", ", ids
-            .Select(id => packSources.GetValueOrDefault(id)?.Title ?? store.FindSource(id)?.Title ?? "an unknown source")
-            .Order(StringComparer.Ordinal));
+        string Titles(IEnumerable<Guid> ids)
+        {
+            var unknown = 0; // two sources nobody can name must not read as one
+            return string.Join(", ", ids
+                .Select(id => packSources.GetValueOrDefault(id)?.Title ?? store.FindSource(id)?.Title ?? $"an unknown source ({++unknown})")
+                .Order(StringComparer.Ordinal));
+        }
+        // Display only (the preview table); the families compared below are the raw ids, never these labels (D99).
+        static string FamilyLabel(string id) => RulesFamilies.IsKnown(id) ? "the " + RulesFamilies.Get(id).ShortLabel : id;
         var changes = new List<FieldChange>();
         if (local.Name != imported.Name)
             changes.Add(new("name", local.Name, imported.Name));
         if (local.RulesFamily != imported.RulesFamily)
-            changes.Add(new("rulesFamily", local.RulesFamily, imported.RulesFamily));
+            changes.Add(new("rulesFamily", FamilyLabel(local.RulesFamily), FamilyLabel(imported.RulesFamily)));
         if (!local.AllowedSources.ToHashSet().SetEquals(imported.AllowedSources))
             changes.Add(new("allowedSources", Titles(local.AllowedSources), Titles(imported.AllowedSources)));
         if ((local.HouseRules ?? "") != (imported.HouseRules ?? ""))

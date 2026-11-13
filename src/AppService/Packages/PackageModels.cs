@@ -118,7 +118,7 @@ public sealed record PackageManifest
 
     public string AttachmentPolicy { get; init; } = CharacterAttachmentPolicy;
 
-    public const string CharacterAttachmentPolicy = "PDF attachments are never included in TomeStack files; linked pages must be re-attached on the receiving machine.";
+    public const string CharacterAttachmentPolicy = "PDF attachments are never included in packages; linked pages must be re-attached on the receiving machine.";
 
     public const string LibraryAttachmentPolicy = "A full backup includes the PDFs TomeStack keeps a copy of. Linked PDFs stay where they are and are not included. Text read from PDFs is not included; import it again.";
 }
