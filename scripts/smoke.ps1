@@ -8,7 +8,9 @@
   window (ADR-005). It fails if the UI or the viewer attempted any network request. A plain passing run then starts a
   second process with --simulate-unhandled-exception on a fresh data folder and checks that it exits non-zero and wrote
   a dispatcher entry to errors.log (crashCheck in the report). -SkipCrashCheck omits that step; use it for any build
-  that predates the switch (installer-smoke's old build) and for the other check scripts. Exit code: 0 pass, 1 fail.
+  that predates the switch (installer-smoke's old build) and for the other check scripts. The first-paint budget
+  (processStartToReadyMs) is checked by ready-budget.ps1: 15 s locally, 30 s when CI=true; -MaxReadyMs sets it and a
+  negative value skips it. Exit code: 0 pass, 1 fail.
 .EXAMPLE
   scripts/smoke.ps1 -Exe src/DesktopShell/bin/Release/net10.0-windows/TomeStack.exe
 .EXAMPLE
@@ -25,7 +27,8 @@ param(
   [int] $TimeoutSeconds = 90,
   [hashtable] $Environment = @{},
   [string[]] $ExtraArguments = @(),
-  [switch] $SkipCrashCheck
+  [switch] $SkipCrashCheck,
+  [int] $MaxReadyMs = 0
 )
 $ErrorActionPreference = 'Stop'
 
@@ -64,6 +67,10 @@ if ($ExpectCharactersAtStart -ge 0 -and $result.charactersAtStart -ne $ExpectCha
   $problems += "charactersAtStart $($result.charactersAtStart) (expected $ExpectCharactersAtStart)"
 }
 if ($problems.Count -gt 0) { Write-Output "FAIL: $($problems -join '; ')"; exit 1 }
+
+# First-paint budget (D102): process start to UI ready. ready-budget.ps1 prints the line; -MaxReadyMs -1 skips it.
+& (Join-Path $PSScriptRoot 'ready-budget.ps1') -Report $Report -MaxReadyMs $MaxReadyMs
+if ($LASTEXITCODE -ne 0) { exit 1 }
 
 # Crash handler: a forced unhandled exception on the UI thread must exit non-zero and leave a dispatcher entry in
 # errors.log. Only on the plain passing run, so offline-check.ps1's runs (extra arguments, other expected details) are unchanged.

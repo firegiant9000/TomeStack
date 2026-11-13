@@ -180,7 +180,15 @@ Not measured yet. Method, so the result can be compared later:
 
 The smoke script's `processStartToReadyMs` is not first paint: it is taken when the whole smoke script finishes (`MainWindow.xaml.cs`). `dailyCopyMs` is how long the D77 daily copy held the window back before it showed (`dailyCopy` says what it did; a fresh smoke folder normally writes one). The smoke's 30 s budget starts once the window has shown, so it does not include that copy; the script's 90 s exit limit does (raised from 60 s, so a copy of up to about 55 s still leaves the app time to write its own report).
 
-## What the numbers say (the roadmap's questions)
+## First paint budget (smoke)
+
+The smoke run checks first paint against a budget (D102; `scripts/ready-budget.ps1`, called by `scripts/smoke.ps1`). The figure is the report's `processStartToReadyMs`, the time from process start to UI ready. It is an automated check, not the manual method above, so its numbers are not comparable with the owed cold and warm medians.
+
+- **Budget:** 15 s locally and 30 s in CI (`CI=true`), owner ruling 2026-11-12. `-MaxReadyMs` sets another budget; a negative value skips the check. A report from a build without the field is not checked.
+- **0.8.0 measurement:** about 8.5 s on the dev machine, WebView2 cold.
+- **CI:** 7278 ms in the smoke of main, run 43189478437 (2026-11-12).
+
+## What the numbers say (the roadmap's questions)## What the numbers say (the roadmap's questions)
 
 - **Why is `Calculation.cs` 2,249 lines, and where does the time go?**
   - The file is the whole rules pipeline: fields, effect ordering, stacking, multiclass, spellcasting, armor and the trace.
