@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Changed
+- **Development only:** a test (`ContractParityTests`) keeps `src/Ui/src/api/types.ts` in step with the service: the gate fails when a type the command dispatcher returns gains a property that `types.ts` lacks. Fields the UI received but did not declare (rules family policy, source record, package manifest and others) are now declared; nothing in the app's behavior changes.
 - **Docs:** the README "Code signing policy" and [ADR-024](decisions/ADR-024-code-signing.md) record that the SignPath Foundation application was submitted on 2026-11-12. Releases stay unsigned until it is accepted.
 - **Docs (owed checks):** the populated upgrade check is recorded as passed: a copy of a library went through the published 0.8.0 and then 0.8.1 with every count, table and sheet unchanged ([m2-acceptance.md](features/m2-acceptance.md)).
 
