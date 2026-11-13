@@ -170,6 +170,20 @@ public class DamagePipelineV12Tests
     }
 
     [Fact]
+    public void Roll_notes_name_the_response_by_its_label_and_never_a_content_id()
+    {
+        var c = Sheet(68, R("dice", amount: 4, dice: "1d10"), R("flat", amount: 3));
+
+        var outside = Assert.Single(Run(c, new(20, null), Pick("dice", 11)).Notes).Message;
+        var notDice = Assert.Single(Run(c, new(20, null), Pick("flat", 4)).Notes).Message;
+
+        Assert.Equal("'dice' needs a roll between 1 and 10.", outside);
+        Assert.Equal("'flat' cannot use the roll given.", notDice);
+        ServiceWordingTests.AssertPlain(outside, [], Holder.ToString());
+        ServiceWordingTests.AssertPlain(notDice, [], Holder.ToString());
+    }
+
+    [Fact]
     public void Save_trigger_missing_its_ability_or_result_matches_nothing()
     {
         var c = Sheet(68, R("noAbility", trigger: new(ResponseSource.Save, null, SaveResult.Success)), R("noResult", trigger: new(ResponseSource.Save, "dex", null)));

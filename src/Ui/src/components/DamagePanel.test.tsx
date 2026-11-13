@@ -507,7 +507,7 @@ it('needs a roll in range before confirming a dice response', async () => {
 it('shows the response-roll note only once a roll is typed and out of range', async () => {
   const user = userEvent.setup();
   const die = response({ responseId: 'ward', label: 'Ward', dice: '1d10', amount: 2 });
-  const note = { code: 'damage.response-roll', message: "Response 'ward' of content c1 needs a roll between 1 and 10." };
+  const note = { code: 'damage.response-roll', message: "'Ward' needs a roll between 1 and 10." };
   vi.mocked(client.damagePreview).mockImplementation(async (_id, _a, _t, sent) =>
     preview({ offers: [offer(die)], notes: (sent as { rolled?: number }[]).some((c) => c.rolled === undefined) && sent.length > 0 ? [note] : [] }),
   );

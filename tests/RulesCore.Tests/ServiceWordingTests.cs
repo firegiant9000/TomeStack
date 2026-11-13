@@ -385,4 +385,56 @@ public partial class ServiceWordingTests
 
         AssertPlain(Assert.Single(problems, d => d.Code == "character.schema-unsupported").Message, [$"file version {Character.CurrentSchemaVersion + 1}"]);
     }
+
+    private static CharacterSheet Charger() => CharacterCalculator.Calculate(Fixtures.Load("pm-charger-l5.json"), Fixtures.PlayMechanicsCatalog());
+
+    [Fact]
+    public void A_pool_message_names_the_pool_by_its_label_and_never_its_id()
+    {
+        var sheet = Charger();
+        var content = Fixtures.ChargeAdept.ContentId;
+        var focus = sheet.Resources!.Single(r => r.ResourceId == "focus");
+        var charge = sheet.Resources!.Single(r => r.ResourceId == "charge");
+
+        var full = PoolChanges.Apply(new PlayState().WithSpent(content, "charge", charge.Maximum!.Value), sheet, [new(content, "charge", UpkeepChange.Spend, 1)]).Errors.Single();
+        var short_ = PoolChanges.Apply(new PlayState().WithSpent(content, "focus", focus.Maximum!.Value), sheet, [new(content, "focus", UpkeepChange.Spend, 1)]).Errors.Single();
+        var below = PoolChanges.Apply(new PlayState(), sheet, [new(content, "charge", UpkeepChange.Regain, 1)]).Errors.Single();
+        var negative = PoolChanges.Apply(new PlayState(), sheet, [new(content, "focus", UpkeepChange.Spend, -1)]).Errors.Single();
+
+        Assert.Equal("use.pool-full", full.Code);
+        AssertPlain(full.Message, [$"'{charge.Label}' has {charge.Maximum} of {charge.Maximum} built up"], "charge'", content.ToString());
+        Assert.Equal("use.unaffordable", short_.Code);
+        AssertPlain(short_.Message, [$"'{focus.Label}' has 0 of {focus.Maximum} left"], "focus'", content.ToString());
+        Assert.Equal("use.unaffordable", below.Code);
+        AssertPlain(below.Message, [$"'{charge.Label}' has 0 built up; 1 cannot be taken off."], "charge'", content.ToString());
+        Assert.Equal("use.unavailable", negative.Code);
+        AssertPlain(negative.Message, [$"'{focus.Label}' cannot change by -1."], "focus'", content.ToString());
+    }
+
+    [Fact]
+    public void A_pool_that_is_not_tracked_is_called_that_pool()
+    {
+        var gone = Guid.NewGuid();
+
+        var error = PoolChanges.Apply(new PlayState(), Charger(), [new(gone, "nope", UpkeepChange.Spend, 1)]).Errors.Single();
+
+        Assert.Equal("use.unavailable", error.Code);
+        Assert.Equal("That pool is not tracked on this character.", error.Message);
+        AssertPlain(error.Message, [], "nope", gone.ToString());
+    }
+
+    [Fact]
+    public void A_play_state_with_a_bad_or_repeated_resource_says_so_without_the_resource_id()
+    {
+        var state = new PlayState();
+        var bad = state with { Resources = [new(Guid.NewGuid(), "bad-id", -1)] };
+        var twice = state with { Resources = [new(Fixtures.ChargeAdept.ContentId, "dup-id", 1), new(Fixtures.ChargeAdept.ContentId, "dup-id", 2)] };
+
+        var invalid = Assert.Single(bad.Validate(), d => d.Code == "play.resource-invalid").Message;
+        var duplicate = Assert.Single(twice.Validate(), d => d.Code == "play.resource-duplicate").Message;
+
+        AssertPlain(invalid, ["Spent uses of a resource must be between 0 and"], "bad-id");
+        Assert.Equal("A resource is recorded more than once.", duplicate);
+        AssertPlain(duplicate, [], "dup-id");
+    }
 }

@@ -167,7 +167,7 @@ public class DamageResponseTests
         Assert.Empty(one.Notes);
         var note = Assert.Single(both.Notes);
         Assert.Equal("damage.response-unavailable", note.Code);
-        Assert.Contains("twin", note.Message, StringComparison.Ordinal);
+        Assert.Contains("'Twin'", note.Message, StringComparison.Ordinal);
         // The refused response shapes nothing: the plan is brace's alone.
         Assert.Equal(5, both.Reduction);
         Assert.Equal(one.Final, both.Final);
@@ -317,15 +317,17 @@ public class DamageResponseTests
         // Not available (its form is off), not on the sheet, listed twice, and not eligible (a survival when the hit does not drop to 0).
         var endureChoice = new ResponseChoice(endure.ContentId, "endure");
         var braceChoice = new ResponseChoice(brace.ContentId, "brace");
-        foreach (var (plan, choice) in new[] { (Run(endureChoice), "endure"), (Run(ghost), "ghost"), (Run(braceChoice, braceChoice), "brace") })
+        // D99: the note names the response by its label ("That response" when the sheet does not list it), never by an id.
+        foreach (var (plan, name) in new[] { (Run(endureChoice), $"'{endure.Label}'"), (Run(ghost), "That response"), (Run(braceChoice, braceChoice), $"'{brace.Label}'") })
         {
             var note = Assert.Single(plan.Notes);
             Assert.Equal("damage.response-unavailable", note.Code);
-            Assert.Contains(choice, note.Message, StringComparison.Ordinal);
+            Assert.Equal($"{name} cannot be used for this hit.", note.Message);
+            ServiceWordingTests.AssertPlain(note.Message, [], "endure", "ghost", "brace", ghost.ContentId.ToString(), endure.ContentId.ToString());
             Assert.Empty(plan.Outcomes);
         }
         var notDropping = DamagePipeline.Plan(new(5, null), c.Character, c.Sheet, [new(stand.ContentId, "stand")], Policy);
-        Assert.Contains(notDropping.Notes, n => n.Code == "damage.response-unavailable" && n.Message.Contains(stand.ContentId.ToString(), StringComparison.Ordinal));
+        Assert.Contains(notDropping.Notes, n => n.Code == "damage.response-unavailable" && n.Message == $"'{stand.Label}' cannot be used for this hit." && !n.Message.Contains(stand.ContentId.ToString(), StringComparison.Ordinal));
     }
 
     // ---- hit point outcomes from the new kinds (G-b) ---------------------------------------------------------------------------
@@ -482,7 +484,7 @@ public class DamageResponseTests
         Assert.Equal(5, plan.Reduction);
         var note = Assert.Single(plan.Notes);
         Assert.Equal("damage.response-unavailable", note.Code);
-        Assert.Contains("'x'", note.Message, StringComparison.Ordinal);
+        Assert.Contains("'X'", note.Message, StringComparison.Ordinal);
         Assert.Equal(new HitPointState(68, 63, 0), plan.Final);
     }
 
@@ -498,7 +500,7 @@ public class DamageResponseTests
 
         var note = Assert.Single(plan.Notes);
         Assert.Equal("damage.response-unavailable", note.Code);
-        Assert.Contains("'x'", note.Message, StringComparison.Ordinal);
+        Assert.Contains("'X'", note.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -518,7 +520,7 @@ public class DamageResponseTests
         Assert.Equal(5, both.Reduction);
         Assert.Equal(new HitPointState(68, 15, 0), both.Final);
         var note = Assert.Single(both.Notes);
-        Assert.Contains("'late'", note.Message, StringComparison.Ordinal);
+        Assert.Contains("'Late'", note.Message, StringComparison.Ordinal);
         Assert.Empty(PlanFor(c, 20, null, "late").Notes);
     }
 
@@ -686,7 +688,7 @@ public class DamageResponseTests
         Assert.Empty(rolls);
         var error = Assert.Single(errors);
         Assert.Equal("damage.response-unavailable", error.Code);
-        Assert.Contains("'go'", error.Message, StringComparison.Ordinal);
+        Assert.Contains("'Go'", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -743,7 +745,7 @@ public class DamageResponseTests
         Assert.Empty(rolls);
         var error = Assert.Single(errors);
         Assert.Equal("damage.response-unavailable", error.Code);
-        Assert.Contains("rally", error.Message, StringComparison.Ordinal);
+        Assert.Contains("'Rally'", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -860,7 +862,7 @@ public class DamageResponseTests
     }
 
     [Fact]
-    public void A_response_unavailable_at_apply_time_names_the_ids_only()
+    public void A_response_unavailable_at_apply_time_names_the_response_by_its_label()
     {
         // The pool is spent between planning and applying (rally's cost cannot be paid), so apply refuses and changes nothing.
         var c = Stand(hp: 30);
@@ -871,7 +873,8 @@ public class DamageResponseTests
 
         Assert.Same(spent, play);
         var error = Assert.Single(errors);
-        Assert.Contains(Fixtures.Rally.ContentId.ToString(), error.Message, StringComparison.Ordinal);
+        Assert.Equal("'Rally' cannot be used for this hit.", error.Message);
+        ServiceWordingTests.AssertPlain(error.Message, [], Fixtures.Rally.ContentId.ToString(), "rally");
     }
 
     [Fact]

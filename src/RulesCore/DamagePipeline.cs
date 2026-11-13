@@ -212,7 +212,7 @@ public static class DamagePipeline
         void Refuse(Guid contentId, string responseId)
         {
             if (noted.Add((contentId, responseId)))
-                notes.Add(Unavailable(contentId, responseId));
+                notes.Add(Unavailable(responses, contentId, responseId));
         }
 
         // The choices: unknown and repeated ones are notes; the rest are the picked responses (counted once each).
@@ -241,13 +241,13 @@ public static class DamagePipeline
             else if (!DiceExpression.TryParse(response.Dice, out var expression, out _) || expression is null)
                 RefuseRoll(response);
             else if (rolled is not { } value || value < expression.Minimum || value > expression.Maximum)
-                notes.Add(new("damage.response-roll", $"Response '{response.ResponseId}' of content {response.ContentId} needs a roll between {expression.Minimum} and {expression.Maximum}."));
+                notes.Add(new("damage.response-roll", $"{ResponseName(responses, response.ContentId, response.ResponseId)} needs a roll between {expression.Minimum} and {expression.Maximum}."));
             else
                 continue;
             badRoll.Add(response);
         }
         void RefuseRoll(ResponseValue response) =>
-            notes.Add(new("damage.response-roll", $"Response '{response.ResponseId}' of content {response.ContentId} cannot use the roll given."));
+            notes.Add(new("damage.response-roll", $"{ResponseName(responses, response.ContentId, response.ResponseId)} cannot use the roll given."));
         var usable = pickedResponses.Where(r => r.Available && Matches(r, damage) && !badRoll.Contains(r)).ToList();
 
         // The chosen costs together must fit each pool. Eligibility depends on the hit points, which depend on the reductions and
@@ -388,7 +388,7 @@ public static class DamagePipeline
         void Refuse(Guid contentId, string responseId)
         {
             if (refused.Add((contentId, responseId)))
-                errors.Add(Unavailable(contentId, responseId));
+                errors.Add(Unavailable(responses, contentId, responseId));
         }
         foreach (var (contentId, responseId) in chosenKeys)
         {
@@ -518,6 +518,14 @@ public static class DamagePipeline
         response.Phase == ResponsePhase.HitPointOutcome
         || (response.Outcomes ?? []).Any(o => o.Kind is ResponseOutcomeKind.RegainHitPoints or ResponseOutcomeKind.TemporaryHitPoints);
 
-    private static Diagnostic Unavailable(Guid contentId, string responseId) =>
-        new("damage.response-unavailable", $"Response '{responseId}' of content {contentId} cannot be used for this hit.");
+    private static Diagnostic Unavailable(IReadOnlyList<ResponseValue> responses, Guid contentId, string responseId) =>
+        new("damage.response-unavailable", $"{ResponseName(responses, contentId, responseId)} cannot be used for this hit.");
+
+    /// <summary>D99: the response's own label in quotes, or "That response" when the sheet does not list it. Never its id.</summary>
+    private static string ResponseName(IReadOnlyList<ResponseValue> responses, Guid contentId, string responseId)
+    {
+        var found = responses.FirstOrDefault(r => r.ContentId == contentId && r.ResponseId == responseId);
+        var name = found is null ? null : !string.IsNullOrWhiteSpace(found.Label) ? found.Label : found.ContentName;
+        return string.IsNullOrWhiteSpace(name) ? "That response" : $"'{name}'";
+    }
 }
