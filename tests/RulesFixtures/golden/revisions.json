@@ -215,5 +215,31 @@
       { "type": "xTideLore", "id": "tidal-lore", "verses": { "ebb": 1, "flow": [2, 3] }, "note": "Kept as written." }
     ],
     "xFixtureNote": { "kept": "as written", "list": [1, "two", true, null] }
+  },
+  {
+    "contentId": "6a7e000d-0000-4000-8000-000000000001",
+    "revisionId": "6a7e000d-0000-4000-8000-000000000101",
+    "schemaVersion": 13,
+    "kind": "creationGuide",
+    "name": "Fixture Tidecaller guide",
+    "rulesFamilies": ["srd-5.2.1"],
+    "provenance": { "sourceId": "6a7e0000-0000-4000-8000-000000000001" },
+    "status": "published",
+    "effects": [
+      { "type": "guideFor", "id": "for", "content": { "contentId": "6a7e000b-0000-4000-8000-000000000001" } },
+      { "type": "primaryAbilities", "id": "primary", "abilities": ["wis", "con"] },
+      {
+        "type": "startingEquipment", "id": "kit", "picks": [
+          {
+            "id": "weapon", "label": "Weapon", "options": [
+              { "id": "a", "lines": [{ "item": { "contentId": "6a7e000c-0000-4000-8000-000000000001" }, "quantity": 1 }] },
+              { "id": "b", "lines": [{ "anyOf": "weapon.simple" }, { "coins": { "gp": 5 } }], "requiresProficiency": "weapon.martial" }
+            ]
+          }
+        ]
+      },
+      { "type": "xTideLore", "id": "tide-guide-lore", "note": "Kept as written." }
+    ],
+    "xFixtureNote": { "kept": "as written" }
   }
 ]

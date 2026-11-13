@@ -135,7 +135,7 @@ public class ToggleGroupTests
     {
         Assert.Equal(ContentRevision.PlayDetailsSchemaVersion + 1, ContentRevision.PlayMechanicsSchemaVersion);
         Assert.Equal(11, ContentRevision.PlayMechanicsSchemaVersion);
-        Assert.Equal(ContentRevision.PlayMechanicsSchemaVersion + 1, ContentRevision.CurrentSchemaVersion);
+        Assert.Equal(ContentRevision.PlayMechanicsSchemaVersion + 2, ContentRevision.CurrentSchemaVersion);
     }
 
     [Fact]

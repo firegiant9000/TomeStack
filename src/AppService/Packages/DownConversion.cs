@@ -139,12 +139,17 @@ public static class DownConversion
 
         var characters = new List<Character>(plan.Characters.Count);
         var changes = new List<ExportChange>();
+        var gearConverted = new HashSet<Guid>();
+        var gearBlocked = new HashSet<Guid>();
+        var afterGear = new List<Character>(plan.Characters.Count);
         foreach (var character in plan.Characters)
         {
-            var below = DownConvert.Below(character, target.CharacterSchema);
+            var gear = GearAsCustomItems(character, plan, target, isBundledSource, catalog, gearConverted, gearBlocked);
+            afterGear.Add(gear.Character);
+            var below = DownConvert.Below(gear.Character, target.CharacterSchema);
             characters.Add(below.Character);
             var entry = $"characters/{character.Id:D}.json";
-            foreach (var change in below.Changes)
+            foreach (var change in gear.Changes.Concat(below.Changes))
             {
                 switch (change.Action)
                 {
@@ -158,7 +163,17 @@ public static class DownConversion
             }
         }
 
-        var content = LowerContent(plan, target, isBundledSource, sourceTitle, catalog, mayLeaveOut, changes);
+        // A converted item no longer needs to exist on the target. It stays blocking when anything else still holds it: an entry that
+        // could not be converted, another pin of the character, or a revision that grants or offers it.
+        gearConverted.ExceptWith(gearBlocked);
+        if (gearConverted.Count > 0)
+        {
+            // Each character after its conversion: only the converted entries are gone, so the kept entries and their mods still count.
+            var held = afterGear.SelectMany(HeldReferences).Select(r => r.RevisionId).ToHashSet();
+            gearConverted.ExceptWith(held);
+            gearConverted.ExceptWith(plan.Revisions.SelectMany(RefsOf));
+        }
+        var content = LowerContent(plan, target, isBundledSource, sourceTitle, catalog, mayLeaveOut, changes, gearConverted);
         // One map, one pass per character (moves never chain: a copy id is new).
         var moves = new Dictionary<ContentReference, ContentReference>();
         foreach (var (from, to) in content.Moves)
@@ -250,6 +265,83 @@ public static class DownConversion
             $"'{incoming.Name}' in this file was made for {made} and has less than your copy: {string.Join("; ", lines)}. Importing replaces your copy; a backup is taken first.");
     }
 
+    /// <summary>The fixed prefix of the id a converted gear entry's custom item gets (with <see cref="Namespace"/>), so preview and export agree.</summary>
+    private const string GearIdPrefix = "gear:";
+
+    /// <summary>
+    /// Plain gear the target release does not ship (Q3c, D98): an equipment entry whose item is a bundled revision outside
+    /// <paramref name="target"/>'s set becomes a custom item, listed as <see cref="BelowCodes.GearAsCustomItem"/> (dropped). "Plain gear" means an
+    /// <c>item</c> revision whose effects are empty or only one <c>item</c> effect with no charges and no attunement. A pack (an <c>item</c> effect with
+    /// <c>contains</c>) is still plain gear: it becomes one custom item named after the pack and its contents are not expanded. Weapons, armour, mods and
+    /// anything else keep today's behaviour (the bundled-outside-target block). The custom item has the entry's name and quantity, no note, and is not equipped.
+    /// Its id is a UUIDv5 of the entry id, so converting twice gives the same item. When the character would hold more than
+    /// <see cref="Character.MaxCustomItems"/> custom items, or a quantity or name cannot be represented, nothing is converted and one blocking line says why.
+    /// Converted revision ids go to <paramref name="converted"/>, ids still held by an unconverted entry to <paramref name="unconverted"/>.
+    /// </summary>
+    private static (Character Character, List<BelowChange> Changes) GearAsCustomItems(Character character, PackageService.ExportPlan plan, LadderRow target,
+        Func<Guid, bool> isBundledSource, IContentCatalog catalog, HashSet<Guid> converted, HashSet<Guid> unconverted)
+    {
+        var changes = new List<BelowChange>();
+        // Below a v9 target a custom item has no home: the old behaviour (block) stays.
+        if (target.CharacterSchema < Character.DetailsSchemaVersion)
+            return (character, changes);
+        var release = target.Release.ToString(3);
+        var byId = plan.Revisions.GroupBy(r => r.RevisionId).ToDictionary(g => g.Key, g => g.First());
+        ContentRevision? Find(ContentReference reference) => byId.TryGetValue(reference.RevisionId, out var r) ? r : catalog.FindRevision(reference);
+
+        var plain = new List<(EquipmentEntry Entry, ContentRevision Item)>();
+        foreach (var entry in character.Equipment)
+        {
+            if (entry.Mods is not null || entry.Attuned is true || entry.ChargesSpent is not null || target.BundledRevisionIds.Contains(entry.Item.RevisionId))
+                continue;
+            if (Find(entry.Item) is { Kind: ContentKind.Item } item && isBundledSource(item.Provenance.SourceId) && IsPlainGear(item))
+                plain.Add((entry, item));
+        }
+        // Whatever stays an equipment entry keeps its revision blocking, even when another character converts the same item.
+        foreach (var entry in character.Equipment.Where(e => plain.All(p => !ReferenceEquals(p.Entry, e))))
+            unconverted.Add(entry.Item.RevisionId);
+        if (plain.Count == 0)
+            return (character, changes);
+
+        var name = character.Name;
+        var existing = character.CustomItems ?? [];
+        var problem = existing.Count + plain.Count > Character.MaxCustomItems
+            ? $"'{name}': {existing.Count + plain.Count} custom items would be needed for gear TomeStack {release} does not have, and a character can keep {Character.MaxCustomItems}. Remove some custom items or gear, then export."
+            : plain.FirstOrDefault(p => p.Entry.Quantity is < 1 or > EquipmentEntry.MaxQuantity) is { Item: { } big }
+                ? $"'{name}': the quantity of '{big.Name}' cannot be kept as a custom item. Change it to between 1 and {EquipmentEntry.MaxQuantity}, then export."
+                : plain.FirstOrDefault(p => string.IsNullOrWhiteSpace(p.Item.Name) || p.Item.Name.Length > Character.MaxName) is { Item: { } tooLong }
+                    ? $"'{name}': the name '{tooLong.Name}' cannot be kept as a custom item (it must have 1 to {Character.MaxName} characters and not be blank), so it cannot be copied into the file."
+                    : null;
+        if (problem is not null)
+        {
+            changes.Add(new("equipment", BelowAction.Blocks, BelowCodes.GearAsCustomItem, problem));
+            foreach (var (_, item) in plain)
+                unconverted.Add(item.RevisionId);
+            return (character, changes);
+        }
+
+        var used = existing.Select(i => i.Id).ToHashSet();
+        var added = new List<CustomItem>();
+        foreach (var (entry, item) in plain)
+        {
+            // An entry without an id is keyed by its place in the list, so two of the same item never depend on the :2 suffix order.
+            var key = entry.Id?.ToString("D") ?? FormattableString.Invariant($"{item.RevisionId:D}@{character.Equipment.ToList().FindIndex(e => ReferenceEquals(e, entry))}");
+            var id = Uuid5(Namespace, GearIdPrefix + key);
+            for (var n = 2; !used.Add(id); n++)
+                id = Uuid5(Namespace, FormattableString.Invariant($"{GearIdPrefix}{key}:{n}"));
+            added.Add(new CustomItem(id, item.Name, entry.Quantity, null, false));
+            converted.Add(item.RevisionId);
+            changes.Add(new("equipment", BelowAction.Dropped, BelowCodes.GearAsCustomItem,
+                $"'{name}': '{item.Name}' is not in TomeStack {release}, so it becomes a custom item (not equipped, no longer linked to its content)."));
+        }
+        var kept = character.Equipment.Where(e => plain.All(p => !ReferenceEquals(p.Entry, e))).ToList();
+        return (character with { Equipment = kept, CustomItems = [.. existing, .. added] }, changes);
+    }
+
+    /// <summary>Plain gear: no effects, or only <c>item</c> effects with no charges and no attunement (a pack's <c>contains</c> is allowed).</summary>
+    private static bool IsPlainGear(ContentRevision item) =>
+        item.Effects.All(e => e is ItemEffect { Charges: null, RequiresAttunement: null or false });
+
     /// <summary>R-C4: a rounds-left line names the toggle by its label (the id when no revision in the plan has one).</summary>
     private static string ToggleLabelled(BelowChange change, Character character, IEnumerable<ContentRevision> revisions)
     {
@@ -283,6 +375,8 @@ public static class DownConversion
 
         public IEnumerable<ContentRevision> ChoiceExtensions(Guid contentId, string choiceId) => inner.ChoiceExtensions(contentId, choiceId);
 
+        public IReadOnlyList<ContentRevision> GuidesFor(Guid targetContentId) => inner.GuidesFor(targetContentId);
+
         public IEnumerable<ContentRevision> RevisionsOf(Guid contentId) => inner.RevisionsOf(contentId);
 
         public ContentRevision? NewestPublished(Guid contentId) => inner.NewestPublished(contentId);
@@ -301,18 +395,23 @@ public static class DownConversion
         });
 
     private static ContentOutcome LowerContent(PackageService.ExportPlan plan, LadderRow target, Func<Guid, bool> isBundledSource,
-        Func<Guid, string> sourceTitle, IContentCatalog catalog, Func<ContentRevision, bool>? mayLeaveOut, List<ExportChange> changes)
+        Func<Guid, string> sourceTitle, IContentCatalog catalog, Func<ContentRevision, bool>? mayLeaveOut, List<ExportChange> changes,
+        IReadOnlySet<Guid> gearConverted)
     {
         var release = target.Release.ToString(3);
         var revisions = new List<ContentRevision>();
         foreach (var revision in plan.Revisions)
         {
-            if (revisions.All(r => r.RevisionId != revision.RevisionId))
+            // Plain gear that became a custom item is neither written nor blocking.
+            if (!gearConverted.Contains(revision.RevisionId) && revisions.All(r => r.RevisionId != revision.RevisionId))
                 revisions.Add(revision);
         }
         var overlay = new OverlayCatalog(catalog, revisions);
         var lowered = new Dictionary<Guid, ContentRevision>();
         var own = new HashSet<Guid>();
+        // Revisions lowering leaves out whole (a creation guide): not written, but their dropped line is kept. Nothing can pin one
+        // (a character holds no guide), so no character is left holding a missing revision.
+        var omitted = new HashSet<Guid>();
 
         // Each revision's own lines are kept apart until the left-out rule has decided, so a left-out revision can swap them for one.
         var linesOf = new Dictionary<Guid, List<ExportChange>>();
@@ -374,6 +473,8 @@ public static class DownConversion
             }
 
             var below = DownConvert.Below(r, target.ContentSchema, overlay);
+            if (below.Omit)
+                omitted.Add(r.RevisionId);
             lowered[r.RevisionId] = below.Revision;
             if (!ReferenceEquals(below.Revision, r))
                 own.Add(r.RevisionId);
@@ -425,8 +526,8 @@ public static class DownConversion
                 changes.AddRange(mine);
             }
         }
-        revisions.RemoveAll(r => leftOut.Contains(r.RevisionId));
-        foreach (var id in leftOut)
+        revisions.RemoveAll(r => leftOut.Contains(r.RevisionId) || omitted.Contains(r.RevisionId));
+        foreach (var id in leftOut.Concat(omitted))
         {
             lowered.Remove(id);
             own.Remove(id);

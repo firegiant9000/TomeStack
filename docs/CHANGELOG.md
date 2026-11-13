@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Added
+- **Content schema 13: creation guides and packs, engine only (D97, D98, [ADR-024](decisions/ADR-024-content-v13.md)):** content can now carry a creation guide for a class or background (starting equipment as picks and options, and primary abilities) and packs (an item that lists what it contains). The change adds the format, validation, kit expansion and a catalogue lookup; no bundled guides or gear ship yet. The one change a player can see is in saving for an older TomeStack. Characters never pin a guide. Saving for an older TomeStack leaves guides out, drops what a pack contains, and turns plain gear that release does not have into a custom item (the save is blocked if that would pass 50 custom items, if a quantity is outside 1 to 9,999, or if an item's name is blank or over 80 characters). A source pack or campaign pack that would hold only guides cannot be saved for an older TomeStack; a library backup is unaffected. Older versions refuse v13 content.
+
 ### Changed
 - **Docs:** the README "Code signing policy" and [ADR-024](decisions/ADR-024-code-signing.md) record that the SignPath Foundation application was submitted on 2026-11-12. Releases stay unsigned until it is accepted.
 - **Plainer words on screen (D99):** the rules a character or book follows now read "2014 rules" and "2024 rules" instead of an id. A shared file is a "TomeStack file", and the studio is "Homebrew".
