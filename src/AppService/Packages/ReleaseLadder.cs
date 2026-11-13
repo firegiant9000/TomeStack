@@ -30,14 +30,15 @@ public sealed record OpensInResult(string? OpensIn, IReadOnlyList<OpensInCause> 
 public static class ReleaseLadder
 {
     // Character, content, gap note, format, database. 0.4.0 is not offered: no v7 writer exists (Q1). 0.7.0 is offered from
-    // 0.8.1, with its proof under tests/RulesFixtures/downconvert/for-0.7.0 (D85 Q8; owner, 2026-11-10).
+    // 0.8.1, with its proof under tests/RulesFixtures/downconvert/for-0.7.0 (D85 Q8; owner, 2026-11-10). 0.8.0 is offered, with
+    // its proof under tests/RulesFixtures/downconvert/for-0.8.0 (row 4.5).
     private static readonly (string Release, int Character, int Content, int GapNote, int Format, int Database, bool Offered)[] Table =
     [
         ("0.4.0", 7, 9, 1, 9, 9, false),
         ("0.5.0", 8, 9, 2, 9, 10, true),
         ("0.6.0", 9, 10, 2, 9, 11, true),
         ("0.7.0", 10, 11, 2, 9, 11, true),
-        ("0.8.0", 11, 12, 2, 9, 11, false),
+        ("0.8.0", 11, 12, 2, 9, 11, true),
     ];
 
     private static readonly Lazy<IReadOnlyList<LadderRow>> LazyRows = new(() =>

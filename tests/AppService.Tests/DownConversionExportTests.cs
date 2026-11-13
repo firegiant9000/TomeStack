@@ -308,7 +308,7 @@ public class DownConversionExportTests
     [Theory]
     [InlineData("0.4.0")]
     [InlineData("0.7.1")]
-    [InlineData("0.8.0")]
+    [InlineData("0.8.1")]
     [InlineData("0.6")]
     public void Preview_with_unknown_target_fails(string target)
     {
@@ -344,7 +344,7 @@ public class DownConversionExportTests
         var id = SaveCharacter(app);
         var dispatcher = new CommandDispatcher(app.App);
 
-        Assert.Equal("package.target-unknown", ErrorOf(Send(dispatcher, "package.export", $$"""{"characterIds":["{{id}}"],"target":"0.8.0"}""")).Code);
+        Assert.Equal("package.target-unknown", ErrorOf(Send(dispatcher, "package.export", $$"""{"characterIds":["{{id}}"],"target":"0.8.1"}""")).Code);
         Assert.Equal("package.target-unknown", ErrorOf(Send(dispatcher, "package.saveAs", $$"""{"characterIds":["{{id}}"],"target":"0.4.0"}""")).Code);
     }
 
