@@ -9,7 +9,7 @@
 - **CI:** the workflow runs as parallel jobs (`ui-build`, `ui-test`, `dotnet`, `gui`) behind the same required check, `build-test`, which passes only if all four pass. No app change.
 - **Docs:** the README "Code signing policy" and [ADR-024](decisions/ADR-024-code-signing.md) record that the SignPath Foundation application was submitted on 2026-11-12. Releases stay unsigned until it is accepted.
 - **Plainer words on screen (D99):** the rules a character or book follows now read "2014 rules" and "2024 rules" instead of an id. A shared file is a "TomeStack file", and the studio is "Homebrew".
-- **Plainer words on screen (D99), continued:** content has "versions", not "revisions". Book imports show "entries found", not "candidates". A number you changed by hand is "a number you set by hand", not an "override". The text a screen reader reads uses the same words.
+- **Plainer words on screen (D99), continued:** content has "versions", not "revisions". Book imports show "entries found", not "candidates". A number you changed by hand is "a number you set by hand", not an "override". The export choice is headed "Which version will open this file?", and the matches column of a D&D Beyond import reads "N possible matches". The text a screen reader reads uses the same words.
 - **Wording check:** a UI test (`wording.test.tsx`) renders the main screens and fails if an id or one of the old words comes back. Ids, file formats, diagnostics codes and exported JSON keep their names.
 - **Docs (owed checks):** the populated upgrade check is recorded as passed: a copy of a library went through the published 0.8.0 and then 0.8.1 with every count, table and sheet unchanged ([m2-acceptance.md](features/m2-acceptance.md)).
 
