@@ -12,7 +12,8 @@ interface Props {
 /** Which TomeStack will open the file: the current row first (everything), then each older release the service offers. */
 export function TargetFieldset({ targets, value, onChange }: Props) {
   const name = useId();
-  if (!targets || targets.targets.length === 0) return null;
+  if (!targets) return null;
+  if (targets.targets.length === 0) return <p className="hint">This TomeStack has no older version to save for.</p>;
   return (
     <fieldset>
       <legend>Which TomeStack will open it?</legend>
