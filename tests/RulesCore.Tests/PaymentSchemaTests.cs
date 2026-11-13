@@ -336,7 +336,7 @@ public class PaymentSchemaTests
     public void Payment_schema_version_is_current()
     {
         Assert.Equal(12, ContentRevision.PaymentSchemaVersion);
-        Assert.Equal(ContentRevision.PaymentSchemaVersion, ContentRevision.CurrentSchemaVersion);
+        Assert.Equal(ContentRevision.PaymentSchemaVersion + 1, ContentRevision.CurrentSchemaVersion);
         Assert.Equal(ContentRevision.WeaponBonusSchemaVersion, ContentRevision.PaymentSchemaVersion);
     }
 

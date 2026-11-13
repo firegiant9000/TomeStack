@@ -5,7 +5,8 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { client } from '../api/client';
-import type { SourcePackPreview, SourceRecord } from '../api/types';
+import type { RulesFamilyPolicy, SourcePackPreview, SourceRecord } from '../api/types';
+import { RulesLabelProvider } from '../rulesLabel';
 import { blockedHint, confirmLabel, describedBy, exportChange, failedLine, firstRadio, packageTargetsFixture } from '../test/downConversion';
 import { SourcesPanel } from './SourcesPanel';
 
@@ -55,15 +56,33 @@ beforeEach(() => {
   vi.mocked(client.listImports).mockResolvedValue([]); // D67: every homebrew source shows the import panel
 });
 
+it('lists the rules a source covers by short label, never an id', async () => {
+  const families = [
+    { id: 'srd-5.1', displayName: 'SRD 5.1 (2014 rules)', shortLabel: '2014 rules' },
+    { id: 'srd-5.2.1', displayName: 'SRD 5.2.1 (2024 rules)', shortLabel: '2024 rules' },
+  ] as unknown as RulesFamilyPolicy[];
+  vi.mocked(client.listSources).mockResolvedValue([{ ...source, rulesFamilies: ['srd-5.1', 'srd-5.2.1'] }]);
+  render(
+    <RulesLabelProvider families={families}>
+      <SourcesPanel onError={() => {}} onStatus={() => {}} onOpenStudio={() => {}} />
+    </RulesLabelProvider>,
+  );
+
+  const item = await screen.findByRole('listitem', { name: 'Compat Homebrew A' });
+  const line = item.querySelector('p.hint')?.textContent ?? '';
+  expect(line).toContain('2014 rules, 2024 rules');
+  expect(line).not.toMatch(/srd-5|SRD 5/);
+});
+
 async function openPreview(onError: (e: unknown) => void = () => {}) {
   const user = userEvent.setup();
   render(<SourcesPanel onError={onError} onStatus={() => {}} onOpenStudio={() => {}} />);
   await user.click(await screen.findByRole('checkbox', { name: 'Compat Homebrew A' }));
-  await user.click(screen.getByRole('button', { name: 'Preview pack' }));
-  await screen.findByRole('region', { name: 'Source pack preview' });
+  await user.click(screen.getByRole('button', { name: 'Preview file' }));
+  await screen.findByRole('region', { name: 'TomeStack file preview' });
   return user;
 }
-const save = () => screen.getByRole('button', { name: 'Save pack…' }) as HTMLButtonElement;
+const save = () => screen.getByRole('button', { name: 'Save file…' }) as HTMLButtonElement;
 
 it('re-runs the preview for the chosen release and again without a target for the first choice', async () => {
   const user = await openPreview();
@@ -161,6 +180,6 @@ it('says so plainly, and has no Save, when the preview for a chosen release fail
   const user = await openPreview(onError);
   await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
   expect(await screen.findByText(failedLine('0.6.0'))).toBeTruthy();
-  expect(screen.queryByRole('button', { name: 'Save pack…' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Save file…' })).toBeNull();
   expect(onError).not.toHaveBeenCalled();
 });

@@ -113,6 +113,93 @@ public class SourcePackTests
         Assert.Equal([CompatRevision(1), CompatRevision(3)], export.Manifest.RevisionOrder);
     }
 
+    private static readonly Guid GuideContent = Guid.Parse("c3000000-0000-4000-8000-0000000000a1");
+    private static readonly Guid GuideRevision = Guid.Parse("c300e000-0000-4000-8000-0000000000a1");
+    private static readonly Guid PackContent = Guid.Parse("c3000000-0000-4000-8000-0000000000a2");
+    private static readonly Guid PackRevision = Guid.Parse("c300e000-0000-4000-8000-0000000000a2");
+    private static LadderRow For070 => ReleaseLadder.Target("0.7.0")!;
+
+    private static ContentRevision Guide(Guid sourceId) => new()
+    {
+        ContentId = GuideContent,
+        RevisionId = GuideRevision,
+        SchemaVersion = ContentRevision.CreationGuideSchemaVersion,
+        Kind = ContentKind.CreationGuide,
+        Name = "Compat Guide",
+        RulesFamilies = [RulesFamilies.Srd51],
+        Provenance = new(sourceId),
+        Status = RevisionStatus.Published,
+        Effects = [new PrimaryAbilitiesEffect { Id = "primary", Abilities = ["wis"] }],
+    };
+
+    [Fact]
+    public void Source_pack_manifest_agrees_with_its_contents_after_a_guide_is_omitted()
+    {
+        using var temp = new TempApp();
+        var source = StoreCompat(temp, id => [Compat(id, 1), Guide(id)]);
+
+        var preview = temp.App.PreviewSourcePack([source.Id], For070);
+        var export = temp.App.ExportSourcePack([source.Id], For070, preview.ChangesHash);
+
+        Assert.Equal(1, preview.Revisions);
+        Assert.Equal(DownConversion.DropsCode, Assert.Single(preview.Changes).Code);
+        Assert.Equal([CompatRevision(1)], export.Manifest.RevisionOrder);
+        var paths = export.Manifest.Entries.Select(e => e.Path).ToList();
+        Assert.DoesNotContain($"content/{GuideRevision:D}.json", paths);
+        Assert.Contains($"content/{CompatRevision(1):D}.json", paths);
+        Assert.Equal(source.Id, Assert.Single(export.Manifest.Notices!).SourceId);
+        Assert.Equal(source.Id, Assert.Single(export.Manifest.Attestations!).SourceId);
+        using var zip = new ZipArchive(new MemoryStream(export.Content), ZipArchiveMode.Read);
+        Assert.Equal(export.Manifest.Entries.Count + 1, zip.Entries.Count); // the manifest itself
+        Assert.All(export.Manifest.Entries, e => Assert.NotNull(zip.GetEntry(e.Path)));
+    }
+
+    [Fact]
+    public void Source_pack_of_only_guides_is_blocked_with_the_source_empty_wording()
+    {
+        using var temp = new TempApp();
+        var source = StoreCompat(temp, id => [Guide(id)]);
+
+        var preview = temp.App.PreviewSourcePack([source.Id], For070);
+
+        var blocks = Assert.Single(preview.Changes, c => c.Action == "blocks");
+        Assert.Equal($"'{source.Title}' has no published content to share yet.", blocks.Message);
+        var thrown = Assert.Throws<AppValidationException>(() => temp.App.ExportSourcePack([source.Id], For070, preview.ChangesHash));
+        Assert.Equal(DownConversion.BlockedCode, thrown.Problems[0].Code);
+        Assert.Contains(thrown.Problems, p => p.Message == blocks.Message);
+        // At the current version the same source is fine: nothing is lowered.
+        Assert.NotEmpty(temp.App.ExportSourcePack([source.Id]).Content);
+    }
+
+    [Fact]
+    public void A_v13_source_pack_lowers_across_two_rungs_to_0_7_0()
+    {
+        using var temp = new TempApp();
+        var source = StoreCompat(temp, id =>
+        [
+            Compat(id, 1) with
+            {
+                ContentId = PackContent,
+                RevisionId = PackRevision,
+                Kind = ContentKind.Item,
+                SchemaVersion = ContentRevision.CurrentSchemaVersion,
+                Effects = [new ItemEffect { Id = "item", Contains = [new PackLine(new GuideTarget(CompatContent), 10)] }],
+            },
+        ]);
+
+        var preview = temp.App.PreviewSourcePack([source.Id], For070);
+        var export = temp.App.ExportSourcePack([source.Id], For070, preview.ChangesHash);
+
+        var change = Assert.Single(preview.Changes);
+        Assert.Equal(DownConversion.DropsCode, change.Code);
+        Assert.Contains("what a pack contains", change.Message, StringComparison.Ordinal);
+        using var zip = new ZipArchive(new MemoryStream(export.Content), ZipArchiveMode.Read);
+        var id = Assert.Single(export.Manifest.RevisionOrder!);
+        var written = JsonDocument.Parse(new StreamReader(zip.GetEntry($"content/{id:D}.json")!.Open()).ReadToEnd()).RootElement;
+        Assert.Equal(For070.ContentSchema, written.GetProperty("schemaVersion").GetInt32());
+        Assert.False(written.GetProperty("effects")[0].TryGetProperty("contains", out _));
+    }
+
     [Fact]
     public void Source_pack_keeps_a_chain_of_blocked_revisions_that_a_written_revision_reaches()
     {

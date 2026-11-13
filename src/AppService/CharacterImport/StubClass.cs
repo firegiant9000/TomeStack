@@ -175,6 +175,8 @@ internal sealed class ImportCatalog : IContentCatalog
 
     public IEnumerable<ContentRevision> ChoiceExtensions(Guid contentId, string choiceId) => _current.ChoiceExtensions(contentId, choiceId);
 
+    public IReadOnlyList<ContentRevision> GuidesFor(Guid targetContentId) => _current.GuidesFor(targetContentId);
+
     public IEnumerable<ContentRevision> RevisionsOf(Guid contentId) => _current.RevisionsOf(contentId);
 
     public ContentRevision? NewestPublished(Guid contentId) => _current.NewestPublished(contentId);

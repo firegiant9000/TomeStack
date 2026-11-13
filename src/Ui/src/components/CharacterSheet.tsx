@@ -60,6 +60,7 @@ import { recordSpend } from '../actionRows';
 import { editPins, readPins, resolvePin, visiblePins, writePins, type Pin, type QuickAction } from '../quickbar';
 import { Quickbar } from './Quickbar';
 import { applyPreferences, compactPlay, setCompactPlay } from '../settings';
+import { useRulesLabel } from '../rulesLabel';
 
 import { assistedNotes, rollButtonSuffix } from '../rollModes';
 
@@ -119,7 +120,7 @@ function FieldCard({ value, labels, onOverride, onRoll, onReportGap }: FieldProp
                 <span className="mark">· {value.mark}</span>
               </>
             )}
-            {value.override && <span className="override-label"> overridden (calculated {display(value, value.computedValue)})</span>}
+            {value.override && <span className="override-label"> set by hand (calculated {display(value, value.computedValue)})</span>}
             {value.warnings.length > 0 && <span className="warning-count"> · {value.warnings.length} warning{value.warnings.length === 1 ? '' : 's'}</span>}
           </h4>
         </summary>
@@ -147,17 +148,17 @@ function FieldCard({ value, labels, onOverride, onRoll, onReportGap }: FieldProp
         )}
         <form className="override" onSubmit={submit}>
           <label className="field">
-            Override value
+            Number to set by hand
             <input type="number" value={overrideValue} onChange={(e) => setOverrideValue(e.target.value)} required />
           </label>
           <label className="field">
             Reason (optional)
             <input value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} />
           </label>
-          <button type="submit">Apply override</button>
+          <button type="submit">Set by hand</button>
           {value.override && (
             <button type="button" onClick={() => onOverride(value.field, undefined)}>
-              Remove override
+              Remove the number I set
             </button>
           )}
         </form>
@@ -280,7 +281,7 @@ export function ExportPanel({ characterId, active, updatedAt, onError, onStatus 
     <section aria-labelledby="export-heading" className="export-panel">
       <h3 id="export-heading">Export</h3>
       <fieldset>
-        <legend>What is this package for?</legend>
+        <legend>What is this TomeStack file for?</legend>
         <label>
           <input type="radio" name="export-purpose" checked={purpose === 'backup'} onChange={() => choose('backup')} />
           Personal backup of this character: everything it uses, your gap notes too, but no PDFs. Do not share it. (To back up
@@ -296,7 +297,7 @@ export function ExportPanel({ characterId, active, updatedAt, onError, onStatus 
         <ChangeRegion target={target} opensIn={preview.opensIn} causes={preview.opensInCauses} changes={preview.changes} previousMinor={targets?.previousMinor ?? null} />
       )}
       {purpose === 'share' && preview && (
-        <div role="region" aria-label="Left out of the shared package">
+        <div role="region" aria-label="Left out of the shared TomeStack file">
           {preview.omitted.length === 0 ? (
             <p>Nothing is left out: every source this character uses may be shared.</p>
           ) : (
@@ -320,10 +321,10 @@ export function ExportPanel({ characterId, active, updatedAt, onError, onStatus 
           ))}
         </ul>
       )}
-      {backupFailed && purpose === 'backup' && <p>Could not check whether this package needs a newer TomeStack.</p>}
+      {backupFailed && purpose === 'backup' && <p>Could not check whether this TomeStack file needs a newer TomeStack.</p>}
       {targetFailed && <p>Could not check what the copy for TomeStack {target} leaves out.</p>}
       {purpose === 'share' && active && (
-        <PreflightPanel kind="package" selection={[characterId]} label="shared package" refreshKey={updatedAt} onReport={setReport} onError={onError} />
+        <PreflightPanel kind="package" selection={[characterId]} label="shared TomeStack file" refreshKey={updatedAt} onReport={setReport} onError={onError} />
       )}
       <ExportConfirmation changes={preview?.changes} confirmed={confirmed} onConfirmedChange={setConfirmed} hintId={hintId} />
       <button
@@ -332,7 +333,7 @@ export function ExportPanel({ characterId, active, updatedAt, onError, onStatus 
         disabled={exportDisabled || (purpose === 'share' && !canSaveAfter(report))}
         aria-describedby={blocked ? hintId : undefined}
       >
-        Export package
+        Export TomeStack file
       </button>
     </section>
   );
@@ -359,6 +360,7 @@ interface Props {
 
 export function CharacterSheet({ view, onChanged, onError: reportError, onStatus, onLevelUp, onMakeChoices, onArchiveChanged, initialTab, focusChecklist, rulesFamilies }: Props) {
   const { character, sheet } = view;
+  const rulesLabel = useRulesLabel();
   // D43: `toggle.group-absent` is information (the toggle works as a group of one), not content that failed to apply.
   const notApplied = sheet.diagnostics.filter((d) => d.code !== 'toggle.group-absent');
   // R161/R182: one handler for every save path. A save refused as stale (the character changed since this sheet's copy was read)
@@ -464,10 +466,10 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   const tabs: readonly TabSpec<SheetTabId>[] = [
     { id: 'play', label: 'Play' },
     ...(showSpells ? ([{ id: 'spells', label: 'Spells' }] as const) : []),
-    { id: 'inventory', label: 'Inventory' },
+    { id: 'inventory', label: 'Gear' },
     { id: 'features', label: 'Features' },
-    { id: 'stats', label: 'Stats' },
-    { id: 'notes', label: 'Notes' },
+    { id: 'stats', label: 'Skills and saves' },
+    { id: 'notes', label: 'Journal' },
     { id: 'manage', label: 'Manage' },
   ];
   // The sheet is keyed by character, so this runs once per opened character. A deep link wins over the memory.
@@ -902,7 +904,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
         <h2 id="sheet-heading" tabIndex={-1} ref={heading}>
           {character.name}
         </h2>
-        <span className="tag">{character.rulesFamily}</span>
+        <span className="tag">{rulesLabel(character.rulesFamily)}</span>
         <span className="tag">Level {character.level}</span>
         {view.campaign && <span className="tag">Campaign: {view.campaign.name}</span>}
         {/* D29 (owner, 2026-10-07): rests at the top of the sheet, not in Play. */}
@@ -1066,7 +1068,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
 
       {notApplied.length > 0 && (
         <section aria-labelledby="diagnostics-heading">
-          <h3 id="diagnostics-heading">Content not applied</h3>
+          <h3 id="diagnostics-heading">Needs your attention</h3>
           <ul className="warnings">
             {notApplied.map((d) => (
               <li key={`${d.code}-${d.content?.revisionId ?? ''}-${d.effectId ?? ''}`}>{d.message}</li>
@@ -1192,7 +1194,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
             {detailList('stats-languages', 'Languages', character.details?.languages)}
             {detailList('stats-tools', 'Tools and other', character.details?.toolsAndOther)}
             <button type="button" onClick={editDetails}>
-              Edit in Notes → Details
+              Edit in Journal → Details
             </button>
           </section>
         )}

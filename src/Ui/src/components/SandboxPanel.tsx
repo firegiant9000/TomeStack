@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { client } from '../api/client';
 import type { CharacterSummary, ContentRevision, RulesFamilyId, SandboxView } from '../api/types';
+import { useRulesLabel } from '../rulesLabel';
 
 /** The calculated fields a read-only preview lists: here and in the builder's "Preview at level" (D82). */
 export const shown = ['hitPoints', 'armorClass', 'initiative', 'proficiencyBonus', 'attacks', 'spellSaveDc'];
@@ -12,6 +13,7 @@ export const shown = ['hitPoints', 'armorClass', 'initiative', 'proficiencyBonus
  */
 export function SandboxPanel(props: { revision: ContentRevision; prepare: (r: ContentRevision) => ContentRevision; onError: (error: unknown) => void }) {
   const { revision, onError } = props;
+  const rulesLabel = useRulesLabel();
   const [characters, setCharacters] = useState<CharacterSummary[]>([]);
   const [characterId, setCharacterId] = useState('');
   const [level, setLevel] = useState('');
@@ -66,7 +68,7 @@ export function SandboxPanel(props: { revision: ContentRevision; prepare: (r: Co
     <section aria-labelledby="sandbox-heading" className="effect-editor">
       <h4 id="sandbox-heading">Try it</h4>
       <p className="hint">
-        Calculates this {revision.kind} as if it were published, on a copy that is never saved. Your characters keep using published revisions.
+        Calculates this {revision.kind} as if it were published, on a copy that is never saved. Your characters keep using published versions.
       </p>
       <label className="field">
         Try it on
@@ -81,11 +83,11 @@ export function SandboxPanel(props: { revision: ContentRevision; prepare: (r: Co
       </label>
       {!characterId && revision.rulesFamilies.length > 1 && (
         <label className="field">
-          Blank character's rules family
+          Blank character's rules
           <select value={blankFamily} onChange={(e) => setFamily(e.target.value)}>
             {revision.rulesFamilies.map((f) => (
               <option key={f} value={f}>
-                {f}
+                {rulesLabel(f)}
               </option>
             ))}
           </select>
@@ -116,7 +118,7 @@ export function SandboxPanel(props: { revision: ContentRevision; prepare: (r: Co
       {result && sheet && (
         <div role="region" aria-label="Try it results">
           <p>
-            Unsaved {current.characterId ? 'copy' : 'blank character'} at total level {result.view.character.level} ({result.view.character.rulesFamily}).
+            Unsaved {current.characterId ? 'copy' : 'blank character'} at total level {result.view.character.level} ({rulesLabel(result.view.character.rulesFamily)}).
           </p>
           {result.changes.length > 0 && (
             <>

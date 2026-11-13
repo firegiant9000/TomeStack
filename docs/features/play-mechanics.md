@@ -668,7 +668,7 @@ Decided in [ADR-022](../decisions/ADR-022-content-v12.md#slice-g7-roll-modes-on-
 
 **Rolling.** Weapon, feature and spell attack rolls combine your mode with the automatic reasons (advantage and disadvantage cancel) and report the automatic mode, its sources and a note, as a field roll does. Custom and companion attack rolls are unchanged: they are not the character's own rolls.
 
-**Play and the studio.** Attack buttons show the automatic mode. An "Attacks against you" line sits near Armor Class. The Homebrew studio offers "Attack rolls", "Initiative" and "Attacks against you" targets with the tags, ability, "Can't have this" (`prevent`) and "Unless" (a condition) fields; members that don't fit the chosen target are reported with a Remove button.
+**Play and Homebrew.** Attack buttons show the automatic mode. An "Attacks against you" line sits near Armor Class. Homebrew offers "Attack rolls", "Initiative" and "Attacks against you" targets with the tags, ability, "Can't have this" (`prevent`) and "Unless" (a condition) fields; members that don't fit the chosen target are reported with a Remove button.
 
 **Validation** (errors): `validate.roll-mode-tags`, `validate.roll-mode-ability`, `validate.roll-mode-condition`, `validate.roll-mode-prevent`; `validate.roll-mode-target` and `validate.roll-mode-against` are reused; below v12 `validate.requires-v12` applies as for every v12 field.
 

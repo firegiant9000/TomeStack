@@ -399,10 +399,11 @@ public class SchemaTests
     [InlineData(10, false)]
     [InlineData(11, false)]
     [InlineData(12, false)]
-    [InlineData(13, true)]
-    public void A_package_content_entry_at_content_schema_v12_is_accepted_and_v13_is_refused(int version, bool refused)
+    [InlineData(13, false)]
+    [InlineData(14, true)]
+    public void A_package_content_entry_at_content_schema_v13_is_accepted_and_v14_is_refused(int version, bool refused)
     {
-        // Content schema v12 (weapon bonus, MECH-X item 0) is the current version; v13 is reserved for a later build and is refused here.
+        // Content schema v13 (creation guides, Wave 3) is the current version; v14 is reserved for a later build and is refused here.
         using var origin = new TempApp();
         var saved = origin.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json"));
         var package = origin.App.ExportCharacters([saved.Character.Id]).Content;
@@ -414,7 +415,7 @@ public class SchemaTests
         var errors = preview.Errors.Where(e => e.Code == "package.schema-unsupported").ToList();
         Assert.Equal(refused, errors.Count > 0);
         if (refused)
-            Assert.All(errors, e => Assert.Contains("content schema v13", e.Message, StringComparison.Ordinal));
+            Assert.All(errors, e => Assert.Contains("content schema v14", e.Message, StringComparison.Ordinal));
     }
 
     [Fact]
