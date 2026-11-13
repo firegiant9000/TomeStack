@@ -184,8 +184,8 @@ jobs:
         run: |
           fail=0
           check() { echo "$1: $2"; if [ "$2" != "success" ]; then fail=1; fi; }
-          check ui-build "${{ needs.ui-build.result }}" # success required
-          check ui-test "${{ needs.ui-test.result }}" # success required
-          check dotnet "${{ needs.dotnet.result }}" # success required
-          check gui "${{ needs.gui.result }}" # success required
+          check ui-build "${{ needs.ui-build.result }}"
+          check ui-test "${{ needs.ui-test.result }}"
+          check dotnet "${{ needs.dotnet.result }}"
+          check gui "${{ needs.gui.result }}"
           exit $fail

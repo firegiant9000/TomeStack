@@ -60,8 +60,11 @@ public sealed partial class CiWorkflowTests
         Assert.True(needs.Success, "build-test has no inline needs list.");
         var listed = needs.Groups[1].Value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
         Assert.Equal(Others.Order().ToList(), listed.Order().ToList());
+        // The comparison itself: the helper flags anything that is not "success" and the script exits with that flag.
+        Assert.Contains("if [ \"$2\" != \"success\" ]; then fail=1; fi", job);
+        Assert.Contains("exit $fail", job);
         foreach (var other in Others)
-            Assert.Matches($@"needs\.{Regex.Escape(other)}\.result\b.*success|success.*needs\.{Regex.Escape(other)}\.result\b", job);
+            Assert.Contains("check " + other + " \"${{ needs." + other + ".result }}\"", job);
     }
 
     [Theory]

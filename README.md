@@ -61,7 +61,7 @@ dotnet test TomeStack.slnx -c Release
 npm run test:e2e --prefix src/Ui       # UI flow against the real DevHost (needs the Release build above)
 ```
 
-CI runs the same steps on `windows-latest` ([.github/workflows/ci.yml](.github/workflows/ci.yml)).
+CI runs these steps as parallel jobs on `windows-latest` (`ui-build`, `ui-test`, `dotnet`, `gui`); the required `build-test` check is an aggregate job on `ubuntu-latest` that passes only if all four succeed ([.github/workflows/ci.yml](.github/workflows/ci.yml)).
 
 Performance: the measured baseline (a level-20 multiclass sheet, a 500-revision pack import, every SRD formula, update reviews across 100 characters) and how to run the benchmarks are in [docs/performance.md](docs/performance.md).
 
