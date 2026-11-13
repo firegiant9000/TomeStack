@@ -135,7 +135,7 @@ Create `CHANGELOG.md` with `## Unreleased` and subsections `Added`, `Changed`, `
 
 ## Change history
 
-- **2026-11-12 · Release SBOMs (D101, row 4.10b):** the release build makes two CycloneDX SBOMs (NuGet, npm runtime), hashed into `SHA256SUMS`, attested and uploaded. Release assets only: no app behaviour change.
+- **2026-11-12 · Release SBOMs (D101, row 4.10b):** the release build makes two CycloneDX SBOMs (NuGet, which includes the bundled .NET runtime packs, and npm runtime), hashed into `SHA256SUMS`, attested and uploaded. Release assets only: no app behaviour change.
 - **2026-11-12 · Supply chain (D100, row 4.10a):** NuGet lock files committed, locked restore in CI and release, NuGet audit in mode `all` at level `low`. Development only: no app behaviour, schema or package format change.
 
 - **2026-11-11 · Docs wave 2 (owner rulings; [ADR-024](decisions/ADR-024-code-signing.md)):** ADR-024 (code signing, proposed) and an ADR index with the numbering gaps ([decisions/README.md](decisions/README.md)); a "Code signing policy" section in the README; ROADMAP is now now/next/later with the 1.0 definition (M3 accepted, a restore drill on record, the first-run sample shipped, and a signed installer if SignPath Foundation accepts; signing is not a 1.0 blocker), and its dated revision notes moved to the CHANGELOG; the owner's accessibility passes on 0.8.0 (items 6, 15, 16, 17, 68) are recorded. Docs only: no behaviour, schema, package format, database or dependency change.

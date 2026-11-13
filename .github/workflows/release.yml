@@ -145,9 +145,17 @@ jobs:
           dotnet dotnet-cyclonedx src/DesktopShell/TomeStack.DesktopShell.csproj --recursive --exclude-test-projects --exclude-dev --disable-package-restore -c Release --output-format Json --output $sbom --filename "tomestack-$env:VERSION-nuget.cdx.json"
           if ($LASTEXITCODE -ne 0) { throw 'CycloneDX (NuGet) failed' }
           # The filter guards: a later tool bump that changes --exclude-dev (deprecated in 6.3.1) must fail here, not ship dev packages.
-          $nuget = Get-Content (Join-Path $sbom "tomestack-$env:VERSION-nuget.cdx.json") -Raw | ConvertFrom-Json
+          # The self-contained publish also ships the .NET runtime packs, which CycloneDX does not see: add them from deps.json.
+          $nugetPath = Join-Path $sbom "tomestack-$env:VERSION-nuget.cdx.json"
+          $deps = Join-Path $env:RUNNER_TEMP "installer/$env:VERSION/publish/TomeStack.deps.json"
+          node scripts/sbom-add-runtime.mjs $nugetPath $deps --out $nugetPath
+          if ($LASTEXITCODE -ne 0) { throw 'adding the .NET runtime packs to the NuGet SBOM failed' }
+          $nuget = Get-Content $nugetPath -Raw | ConvertFrom-Json
           $names = @($nuget.components | ForEach-Object { $_.name })
           if ($names -notcontains 'Velopack') { throw 'NuGet SBOM lacks Velopack: the CycloneDX filter or inputs changed' }
+          foreach ($rt in 'Microsoft.NETCore.App.Runtime.win-x64', 'Microsoft.WindowsDesktop.App.Runtime.win-x64') {
+            if ($names -notcontains $rt) { throw "NuGet SBOM lacks $rt" }
+          }
           if (@($names | Where-Object { $_ -like 'xunit*' }).Count -gt 0) { throw 'NuGet SBOM contains xunit components: --exclude-dev no longer filters test packages' }
           $npmRaw = Join-Path $env:RUNNER_TEMP 'npm-sbom-raw.json'
           $npmSbom = Join-Path $sbom "tomestack-$env:VERSION-npm.cdx.json"

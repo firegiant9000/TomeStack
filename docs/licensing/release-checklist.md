@@ -165,7 +165,7 @@ Velopack (MIT, Caelan Sayler) builds `Setup.exe` and `Update.exe` in Rust, with 
 
 The **Release** workflow has three jobs, so no step that runs the repo's code or npm packages holds a write or OIDC token:
 
-- `build` (`contents: read`, checkout without a persisted token): the version check, the full gate, pack, installer smoke, the two CycloneDX SBOMs (`tomestack-X.Y.Z-nuget.cdx.json`, `tomestack-X.Y.Z-npm.cdx.json`), then `SHA256SUMS` (`<sha256>  <file>` per asset including the SBOMs, lower-case hex). Signing, when it lands, goes after the pack and before the hash file.
+- `build` (`contents: read`, checkout without a persisted token): the version check, the full gate, pack, installer smoke, the two CycloneDX SBOMs (`tomestack-X.Y.Z-nuget.cdx.json`, which also lists the bundled .NET runtime packs read from the published `TomeStack.deps.json`, and `tomestack-X.Y.Z-npm.cdx.json`), then `SHA256SUMS` (`<sha256>  <file>` per asset including the SBOMs, lower-case hex). Signing, when it lands, goes after the pack and before the hash file.
 - `attest` (`id-token: write`, `attestations: write`): checks the files against `SHA256SUMS`, then `actions/attest-build-provenance` with `subject-checksums: SHA256SUMS`.
 - `publish` (`contents: write`): checks the files again and creates the draft with the listed files and `SHA256SUMS`. It runs no repo code.
 
