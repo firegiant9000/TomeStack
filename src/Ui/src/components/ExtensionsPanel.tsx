@@ -366,8 +366,8 @@ export function ExtensionsPanel(props: Props) {
   }
 
   return (
-    <section className="panel" aria-labelledby="extensions-heading">
-      <h2 id="extensions-heading">Extensions</h2>
+    <section aria-labelledby="extensions-heading">
+      <h3 id="extensions-heading">Add-ons</h3>
       <p className="hint">
         An extension adds an import or an export. It never runs code: TomeStack reads its instructions and does the work, and
         it can use only the permissions you grant. Every run shows you the result first.

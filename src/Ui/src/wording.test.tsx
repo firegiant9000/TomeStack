@@ -198,7 +198,7 @@ afterEach(() => {
 
 it('home screen', async () => {
   const { container } = render(<App />);
-  const list = await screen.findByRole('navigation', { name: 'Characters' });
+  const list = await screen.findByRole('navigation', { name: 'Main' });
   await waitFor(() => expect(list.textContent).toContain('2014 rules'));
   expectPlainWords(container);
 });

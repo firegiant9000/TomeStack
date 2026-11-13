@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { hueName } from '../accentClamp';
 import { client } from '../api/client';
-import type { AppInfo } from '../api/types';
+import type { AppInfo, CharacterSummary } from '../api/types';
 import {
   abilityOrder,
   abilityOrderIds,
@@ -44,6 +44,10 @@ import {
   type ThemeId,
 } from '../settings';
 
+// The add-ons list is not part of the first paint of Settings (the same code split App.tsx used for its own screen).
+const ExtensionsPanel = lazy(() => import('./ExtensionsPanel').then((m) => ({ default: m.ExtensionsPanel })));
+const noop = () => {};
+
 const themeLabels: Record<ThemeId, string> = { cool: 'Cool', ember: 'Ember', forest: 'Forest', rose: 'Rose', tide: 'Tide', violet: 'Violet', custom: 'Custom accent' };
 const appearanceLabels: Record<AppearanceId, string> = { system: 'System', light: 'Light', dark: 'Dark' };
 const abilityOrderLabels: Record<AbilityOrderId, string> = { modifier: 'Modifier first', score: 'Score first' };
@@ -68,7 +72,18 @@ function Choice<Id extends string>({ legend, ids, labels, value, onPick }: { leg
  * an `html[data-*]` attribute the CSS keys on (investigation 2026-10-06: Appearance, Text size, Ability boxes; the
  * Accessibility section; a static list of the keyboard shortcuts so they can be found).
  */
-export function SettingsPanel({ info, onError }: { info?: AppInfo; onError?: (error: unknown) => void }) {
+export function SettingsPanel({
+  info,
+  characters,
+  onError,
+  onStatus,
+}: {
+  info?: AppInfo;
+  characters?: CharacterSummary[];
+  onError?: (error: unknown) => void;
+  onStatus?: (text: string) => void;
+}) {
+  const rulesFamilies = info?.rulesFamilies;
   const [current, setCurrent] = useState<ThemeId>(theme());
   const [hue, setHue] = useState(accentHue());
   const [scheme, setScheme] = useState<AppearanceId>(appearance());
@@ -187,6 +202,12 @@ export function SettingsPanel({ info, onError }: { info?: AppInfo; onError?: (er
         <input type="checkbox" checked={announce} onChange={(e) => { setAnnounceRolls(e.target.checked); setAnnounce(e.target.checked); }} /> Announce each roll to screen readers
       </label>
       <p className="hint">Rolls are always shown as text; turning announcements off takes full effect the next time a sheet is opened.</p>
+
+      {rulesFamilies && (
+        <Suspense fallback={null}>
+          <ExtensionsPanel characters={characters ?? []} rulesFamilies={rulesFamilies} onError={onError ?? noop} onStatus={onStatus ?? noop} />
+        </Suspense>
+      )}
 
       <h3>Keyboard shortcuts</h3>
       <dl className="shortcuts">
