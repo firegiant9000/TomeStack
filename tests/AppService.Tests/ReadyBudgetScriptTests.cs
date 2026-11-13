@@ -71,7 +71,7 @@ public sealed class ReadyBudgetScriptTests
         var (exitCode, output) = Run("""{"success": true, "detail": "ok", "processStartToReadyMs": 5000}""", ciValue: null, "-MaxReadyMs", "15000");
 
         Assert.Equal(0, exitCode);
-        Assert.Contains("First paint 5000 ms (budget 15000 ms).", output);
+        Assert.Contains("Smoke ready time 5000 ms (budget 15000 ms).", output);
     }
 
     [Fact]
