@@ -97,7 +97,8 @@ it('is a named Status section with the core numbers, no heading, no hit dice and
   expect(bar.tagName).toBe('SECTION');
   expect(bar.classList.contains('status-bar')).toBe(true);
   expect(within(bar).queryAllByRole('heading')).toHaveLength(0);
-  expect(within(bar).getAllByRole('region').map((r) => r.getAttribute('aria-label'))).toEqual(['Last roll']);
+  expect(within(bar).queryAllByRole('region')).toHaveLength(0);
+  expect(within(bar).getAllByRole('status').map((r) => r.getAttribute('aria-label'))).toEqual(['Last roll']);
   expect(dd('Proficiency bonus')).toBe('+2');
   expect(dd('Armor Class')).toBe('16 (set by hand)');
   expect(dd('Initiative')).toBe('+2');
@@ -179,22 +180,39 @@ it('opens a number\'s trace in the one status-why region, switches on another nu
   expect(why().textContent).toBe('');
 });
 
-it('always has the last-roll status region, and it holds the roll after lastRoll changes', () => {
+it('always has the one last-roll status node, and it holds the roll after lastRoll changes; Why and the log sit outside it', () => {
   const record: RollRecord = {
     formula: '1d20+3', mode: 'normal', critical: false,
     dice: [{ term: 0, sides: 20, value: 14, kept: true, fromCritical: false }],
     diceTotal: 14, expressionConstant: 0, modifiers: [{ label: 'Strength modifier', amount: 3 }], total: 17,
   };
-  const { rerender } = render(<SheetSummary view={fixtureView()} {...plain} />);
-  const status = screen.getByRole('status');
-  expect(status.classList.contains('last-roll')).toBe(true);
-  expect(status.querySelector('[aria-label="Last roll"]')).toBeTruthy();
+  const { rerender, container } = render(<SheetSummary view={fixtureView()} {...plain} />);
+  const status = screen.getByRole('status', { name: 'Last roll' });
+  expect(status.getAttribute('aria-live')).toBe('polite');
+  expect(container.querySelectorAll('[role=status]')).toHaveLength(1);
+  expect(status.parentElement!.classList.contains('last-roll')).toBe(true);
   expect(status.textContent).not.toContain('17');
   rerender(<SheetSummary view={fixtureView()} {...plain} lastRoll={record} rollLog={[{ at: Date.now(), record }]} />);
-  expect(screen.getByRole('status')).toBe(status);
+  expect(screen.getByRole('status', { name: 'Last roll' })).toBe(status);
+  expect(container.querySelectorAll('[role=status]')).toHaveLength(1);
   expect(status.textContent).toContain('17');
-  expect(status.querySelector('details.roll-why')).toBeTruthy();
-  expect(within(status).getByText(/Previous rolls/)).toBeTruthy();
+  for (const el of [container.querySelector('details.roll-why')!, container.querySelector('details.roll-log')!]) {
+    expect(el).toBeTruthy();
+    expect(status.contains(el)).toBe(false);
+    expect(el.closest('[role=status],[aria-live]')).toBeNull();
+  }
+  expect(within(container).getByText(/Earlier rolls/)).toBeTruthy();
+});
+
+it('with Announce each roll off there is no polite live region in the bar', () => {
+  localStorage.setItem('tomestack.announceRolls', 'off');
+  try {
+    const { container } = render(<SheetSummary view={fixtureView()} {...plain} />);
+    expect(screen.getByRole('status', { name: 'Last roll' }).getAttribute('aria-live')).toBe('off');
+    expect(container.querySelector('.last-roll [aria-live=polite]')).toBeNull(); // the dice box's own error line is a separate, empty polite region
+  } finally {
+    localStorage.removeItem('tomestack.announceRolls');
+  }
 });
 
 it('has no axe violations with a trace open and ability boxes on top', async () => {
@@ -218,7 +236,7 @@ it('has no axe violations in the summary bar with a roll result', async () => {
   const { container } = render(
     <SheetSummary view={fixtureView()} rollMode="normal" onRollMode={() => {}} lastRoll={record} rollLog={[{ at: Date.now(), record }]} act={() => {}} onRoll={() => {}} onRollDice={async () => {}} />,
   );
-  expect(screen.getByRole('region', { name: 'Last roll' }).textContent).toContain('17');
+  expect(screen.getByRole('status', { name: 'Last roll' }).textContent).toContain('17');
   await expectNoAxeViolations(container);
 });
 
@@ -274,7 +292,8 @@ it('puts the dice box beside the d20 mode, outside the fixed roll strip (item 8)
   expect(box.previousElementSibling?.classList.contains('roll-mode')).toBe(true);
   expect(strip.children[0]?.getAttribute('aria-label')).toBe('Last roll');
   expect(strip.querySelector('input, form')).toBeNull();
-  expect(within(summary).getAllByRole('region').map((r) => r.getAttribute('aria-label'))).toEqual(['Last roll']);
+  expect(within(summary).queryAllByRole('region')).toHaveLength(0);
+  expect(within(summary).getAllByRole('status').map((r) => r.getAttribute('aria-label'))).toEqual(['Last roll']);
   await user.type(within(box).getByRole('textbox', { name: 'Dice to roll' }), '1d4{Enter}');
   expect(onRollDice).toHaveBeenCalledWith('1d4');
 });
@@ -543,8 +562,8 @@ it('puts the Why? disclosure in the roll strip, outside the Last roll live regio
   const why = container.querySelector('details.roll-why') as HTMLElement;
   expect(why).toBeTruthy();
   expect(why.closest('.roll-strip')).toBeTruthy();
-  expect(screen.getByRole('region', { name: 'Last roll' }).contains(why)).toBe(false);
-  expect(why.closest('[aria-live]')).toBeNull();
+  expect(screen.getByRole('status', { name: 'Last roll' }).contains(why)).toBe(false);
+  expect(why.closest('[role=status],[aria-live]')).toBeNull();
 });
 
 it('puts a quickbar slot inside the bar, after the numbers, before the roll controls and outside the roll strip (D73)', () => {

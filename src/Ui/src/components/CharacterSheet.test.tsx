@@ -975,7 +975,7 @@ it('a late finish after the sheet is gone shows no rest-finished status', async 
   expect(onStatus).not.toHaveBeenCalled();
 });
 
-it('keeps Previous rolls through a rest (spec 2.4c)', async () => {
+it('keeps Earlier rolls through a rest (spec 2.4c)', async () => {
   const user = userEvent.setup();
   const v = view();
   const rested = changedView(v);
@@ -989,13 +989,13 @@ it('keeps Previous rolls through a rest (spec 2.4c)', async () => {
   render(<Host />);
   await rollDexterity(user);
   await rollDexterity(user);
-  await screen.findByText('Previous rolls (1)');
+  await screen.findByText('Earlier rolls (1)');
   await user.click(screen.getByRole('button', { name: 'Short rest…' }));
   const finish = await screen.findByRole('button', { name: 'Finish short rest' });
   await waitFor(() => expect(finish.getAttribute('aria-disabled')).toBe('false'));
   await user.click(finish);
   await waitFor(() => expect(screen.queryByRole('region', { name: 'Short rest' })).toBeNull());
-  expect(screen.getByText('Previous rolls (1)')).toBeTruthy();
+  expect(screen.getByText('Earlier rolls (1)')).toBeTruthy();
 });
 
 it('a late finish after the opener closed the rest does not steal focus (D29, 2.4.3)', async () => {
@@ -1728,16 +1728,16 @@ describe('a record Spend after a failed play change', () => {
   });
 });
 
-it('moves the replaced Last roll into Previous rolls (D28)', async () => {
+it('moves the replaced Last roll into Earlier rolls (D28)', async () => {
   const user = userEvent.setup();
   vi.mocked(client.roll).mockReset();
   vi.mocked(client.roll).mockResolvedValueOnce(rollRecord('Dexterity check', 9)).mockResolvedValueOnce(rollRecord('Dexterity check', 15));
   renderSheet(view());
   await rollDexterity(user);
-  expect(screen.queryByText(/^Previous rolls/)).toBeNull();
+  expect(screen.queryByText(/^Earlier rolls/)).toBeNull();
   await rollDexterity(user);
-  const log = await screen.findByText('Previous rolls (1)');
-  expect(within(screen.getByRole('region', { name: 'Last roll' })).getByText(/Dexterity check: 15/)).toBeTruthy();
+  const log = await screen.findByText('Earlier rolls (1)');
+  expect(within(screen.getByRole('status', { name: 'Last roll' })).getByText(/Dexterity check: 15/)).toBeTruthy();
   expect(log.closest('details')!.textContent).toMatch(/Dexterity check: 9/);
 });
 
@@ -1752,8 +1752,8 @@ it('rolls typed dice into Last roll, labelled Dice, and moves the field roll int
   await user.type(screen.getByRole('textbox', { name: 'Dice to roll' }), '2d6+3');
   await user.click(screen.getByRole('button', { name: 'Roll dice' }));
   expect(vi.mocked(client.rollDice)).toHaveBeenCalledWith('2d6+3', undefined, 'Dice');
-  const log = await screen.findByText('Previous rolls (1)');
-  expect(within(screen.getByRole('region', { name: 'Last roll' })).getByText(/Dice: 11/)).toBeTruthy();
+  const log = await screen.findByText('Earlier rolls (1)');
+  expect(within(screen.getByRole('status', { name: 'Last roll' })).getByText(/Dice: 11/)).toBeTruthy();
   expect(log.closest('details')!.textContent).toMatch(/Dexterity check: 9/);
 });
 
@@ -1766,7 +1766,7 @@ it('a refused dice roll changes neither Last roll nor the log, and the sheet sho
   await user.type(screen.getByRole('textbox', { name: 'Dice to roll' }), '1000d6{Enter}');
   expect(await screen.findByText('Too many dice.')).toBeTruthy();
   expect(onError).not.toHaveBeenCalled();
-  expect(screen.queryByText(/^Previous rolls/)).toBeNull();
+  expect(screen.queryByText(/^Earlier rolls/)).toBeNull();
   expect(vi.mocked(client.rollDice)).toHaveBeenCalledWith('1000d6', undefined, 'Dice');
 });
 
@@ -1784,12 +1784,12 @@ it('logs a rest hit die without showing it, and keeps the log newest first by ti
   await rollDexterity(user);
   await user.click(screen.getByRole('button', { name: 'Short rest…' }));
   await user.click(await screen.findByRole('button', { name: 'Roll a d8' }));
-  const lastRoll = screen.getByRole('region', { name: 'Last roll' });
+  const lastRoll = screen.getByRole('status', { name: 'Last roll' });
   expect(within(lastRoll).getByText(/Roll A: 9/)).toBeTruthy();
   expect(within(lastRoll).queryByText(/Hit die H/)).toBeNull();
-  expect((await screen.findByText('Previous rolls (1)')).closest('details')!.textContent).toMatch(/Hit die H: 5/);
+  expect((await screen.findByText('Earlier rolls (1)')).closest('details')!.textContent).toMatch(/Hit die H: 5/);
   await rollDexterity(user);
-  const log = (await screen.findByText('Previous rolls (2)')).closest('details')!;
+  const log = (await screen.findByText('Earlier rolls (2)')).closest('details')!;
   expect(within(lastRoll).getByText(/Roll B: 15/)).toBeTruthy();
   const items = within(log).getAllByRole('listitem').map((li) => li.textContent ?? '');
   expect(items[0]).toMatch(/Hit die H: 5/);

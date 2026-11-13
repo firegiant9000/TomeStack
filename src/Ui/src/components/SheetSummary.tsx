@@ -199,8 +199,8 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, ac
           <RollModePicker mode={rollMode} onChange={onRollMode} />
           <DiceBox onRoll={onRollDice} />
         </div>
-        {/* Always present, so a screen reader hears the roll that arrives (a region added with its first content is often missed). */}
-        <div role="status" className="last-roll roll-strip">
+        {/* RollResult is the single live node (role=status); Why and the log stay outside it so opening them announces nothing. */}
+        <div className="last-roll roll-strip">
           <RollResult record={lastRoll} resources={sheet.resources ?? []} features={sheet.features ?? []} attacks={sheet.attacks ?? []} act={act} spent={spent} />
           <RollWhy record={lastRoll} />
           <RollLog rolls={rollLog} />

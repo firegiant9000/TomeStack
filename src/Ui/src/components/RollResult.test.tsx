@@ -27,7 +27,7 @@ afterEach(() => {
   localStorage.clear();
 });
 
-const region = () => screen.getByRole('region', { name: 'Last roll' });
+const region = () => screen.getByRole('status', { name: 'Last roll' });
 const dice = () => Array.from(region().querySelectorAll<HTMLElement>('.die'));
 
 it('heads a record whose label is an empty string with "Roll" (Review Focus 2)', () => {
@@ -112,10 +112,10 @@ it('renders an empty live region with no dice when there is no record', () => {
   expect(region().children).toHaveLength(0);
 });
 
-it('drops aria-live from the Last roll region when "Announce each roll" is off, keeping the text (4.1.3 trade, item 11)', () => {
+it('turns aria-live off on the Last roll status when "Announce each roll" is off, keeping the text (4.1.3 trade, item 11)', () => {
   localStorage.setItem('tomestack.announceRolls', 'off');
   render(<RollResult record={record()} resources={[]} features={[]} act={() => {}} />);
-  expect(region().getAttribute('aria-live')).toBeNull();
+  expect(region().getAttribute('aria-live')).toBe('off');
   expect(region().textContent).toMatch(/^Fixture damage: 7/);
   cleanup();
   localStorage.removeItem('tomestack.announceRolls');

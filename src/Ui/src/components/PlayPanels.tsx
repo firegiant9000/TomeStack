@@ -1335,9 +1335,10 @@ export function RollResult({
         refused?.();
       });
   }
-  // Toggling aria-live on a mounted region is unreliable in some screen readers; the "Announce each roll" setting takes
-  // full effect on the next sheet open, which the Settings hint says.
-  if (!record) return <div role="region" aria-label="Last roll" aria-live={announceRollsOn() ? 'polite' : undefined} className="roll-result" />;
+  // The one live node of the status bar: always rendered (empty too), so a screen reader hears the roll that arrives. 'off' rather than
+  // absent when "Announce each roll" is off, so no polite region is left in the bar. Toggling aria-live on a mounted node is
+  // unreliable in some screen readers; the setting takes full effect on the next sheet open, which the Settings hint says.
+  if (!record) return <div role="status" aria-label="Last roll" aria-live={announceRollsOn() ? 'polite' : 'off'} className="roll-result" />;
   const p = record.provenance;
   // D73: which pool a record spends, what it costs and the action that spends it are worked out in actionRows.ts.
   const { linked, cost, costUnavailable, cantUse, variableCost, stockText, most, spendAction, autoAction } = recordSpend(record, resources, features, attacks);
@@ -1347,7 +1348,7 @@ export function RollResult({
   const chosen = Number(amount);
   const validChoice = amount !== '' && Number.isInteger(chosen) && chosen >= 1 && chosen <= most;
   return (
-    <div role="region" aria-label="Last roll" aria-live={announceRollsOn() ? 'polite' : undefined} className="roll-result">
+    <div role="status" aria-label="Last roll" aria-live={announceRollsOn() ? 'polite' : 'off'} className="roll-result">
       {/* ADR-015: the service's dice, drawn. aria-hidden and textless (faces come from CSS attr()), so the text below is
           the result for everyone and the region announces once. Nothing is rolled here. */}
       <div key={rollKey(record)} className={diceAnimationOn() ? 'dice' : 'dice dice-still'} aria-hidden="true">
