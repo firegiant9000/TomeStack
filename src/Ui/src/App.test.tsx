@@ -131,10 +131,19 @@ it('two quick opens: only the latest reply is shown (carry 4)', async () => {
   expect(within(list).getByRole('button', { name: /Fixture Avery/ }).getAttribute('aria-current')).toBeNull();
 });
 
+/** From the sidebar: "+ Add a character", pick "Make a new one", Continue. */
+async function startNew(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('button', { name: '+ Add a character' }));
+  await chooseNew(user);
+}
+async function chooseNew(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('radio', { name: 'Make a new one' }));
+  await user.click(screen.getByRole('button', { name: 'Continue' }));
+}
+
 /** Walks the create steps by hand (no content installed) up to "Create and save". */
 async function toCreate(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(await screen.findByRole('button', { name: '+ Add a character' }));
-  await user.click(await screen.findByRole('button', { name: 'Start from scratch' }));
+  await startNew(user);
   await user.type(await screen.findByRole('textbox', { name: 'Name' }), 'Fixture New');
   await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
   await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
@@ -276,7 +285,7 @@ it('pressing New character during a save mounts a fresh empty builder; the save 
   const create = await toCreate(user);
   await user.click(create);
   await user.click(screen.getByRole('button', { name: '+ Add a character' })); // a new builder mode while the save is in flight
-  await user.click(await screen.findByRole('button', { name: 'Start from scratch' }));
+  await chooseNew(user);
   finish(created);
   // The new builder starts empty at step 1; the saved draft is not offered again.
   expect((screen.getByRole('textbox', { name: 'Name' }) as HTMLInputElement).value).toBe('');
@@ -324,7 +333,7 @@ it('a slow open never replaces a screen chosen after it (R37)', async () => {
   const list = await screen.findByRole('navigation', { name: 'Main' });
   await user.click(within(list).getByRole('button', { name: /Fixture Avery/ }));
   await user.click(await screen.findByRole('button', { name: '+ Add a character' }));
-  await user.click(await screen.findByRole('button', { name: 'Start from scratch' }));
+  await chooseNew(user);
   expect(await screen.findByRole('textbox', { name: 'Name' })).toBeTruthy();
   reply(a);
   await new Promise((r) => setTimeout(r, 20));
@@ -509,6 +518,7 @@ it('the add screen keeps the file import and the character-sheet import reachabl
   render(<App />);
   await user.click(await screen.findByRole('button', { name: '+ Add a character' }));
   expect(screen.getByLabelText('TomeStack file')).toBeTruthy();
-  await user.click(await screen.findByRole('button', { name: /^From a character sheet/ }));
+  await user.click(screen.getByRole('radio', { name: /^From a character sheet/ }));
+  await user.click(screen.getByRole('button', { name: 'Continue' }));
   expect(await screen.findByRole('heading', { name: /From a character sheet/ })).toBeTruthy();
 });

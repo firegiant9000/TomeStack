@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ChangeEv
 import { client } from './api/client';
 import { TomeStackError } from './api/transport';
 import type { AppInfo, CharacterSummary, CharacterView, PackagePreview } from './api/types';
+import { AddCharacterPanel } from './components/AddCharacterPanel';
 import { AllGapNotesPanel } from './components/AllGapNotesPanel';
 import { SettingsPanel } from './components/SettingsPanel';
 import type { BuilderMode } from './components/CharacterBuilder';
@@ -36,8 +37,7 @@ type Screen =
   | { kind: 'campaigns' }
   | { kind: 'gaps' }
   | { kind: 'backups' }
-  | { kind: 'add'; start?: 'import' } // 2.2 replaces the placeholder with the chooser
-  | { kind: 'settings' }
+  | { kind: 'add'; start?: 'import' }  | { kind: 'settings' }
   | { kind: 'ddb-import' }
   | { kind: 'sheet'; view: CharacterView; tab?: SheetTabId; levelledUp?: true }
   | { kind: 'import'; fileName: string; base64: string; preview: PackagePreview };
@@ -362,20 +362,13 @@ function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (in
             <BackupsPanel onError={onError} onStatus={(text) => setMessage({ tone: 'status', text })} onRestored={() => void refresh()} />
           )}
           {screen.kind === 'add' && (
-            <section className="panel" aria-labelledby="add-heading">
-              <h2 id="add-heading">Add a character</h2>
-              <div className="actions">
-                <button type="button" onClick={startCreate} disabled={!info}>
-                  Start from scratch
-                </button>
-                <button type="button" title="This is for TomeStack .zip files." onClick={() => fileInput.current?.click()}>
-                  From a TomeStack file…
-                </button>
-                <button type="button" disabled={!info} onClick={() => go({ kind: 'ddb-import' })}>
-                  From a character sheet (PDF or text)…
-                </button>
-              </div>
-            </section>
+            <AddCharacterPanel
+              canCreate={!!info}
+              start={screen.start}
+              onNew={startCreate}
+              onSheetImport={() => go({ kind: 'ddb-import' })}
+              onFileImport={() => fileInput.current?.click()}
+            />
           )}
           {screen.kind === 'settings' && <SettingsPanel info={info} characters={characters} onError={onError} onStatus={(text) => setMessage({ tone: 'status', text })} />}
           {screen.kind === 'ddb-import' && info && (
