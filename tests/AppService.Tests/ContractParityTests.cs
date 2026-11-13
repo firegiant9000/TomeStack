@@ -301,19 +301,19 @@ public sealed partial class ContractParityTests
         return problems;
     }
 
-    /// <summary>Names written inside a property-level converter's items that are not in <paramref name="allowed"/>.</summary>
-    private static List<string> NestedOutputProblems(IEnumerable<object> samples, Type owner, string property, IReadOnlySet<string> allowed, JsonSerializerOptions options)
+    /// <summary>Names written inside a property-level converter's items that are not in the walked <paramref name="shape"/> or, when there is one, the <paramref name="ts"/> fields.</summary>
+    private static List<string> NestedOutputProblems(IEnumerable<object> samples, Type owner, string property, IEnumerable<string> shape, IReadOnlySet<string>? ts, JsonSerializerOptions options)
     {
         var jsonName = options.PropertyNamingPolicy?.ConvertName(property) ?? property;
-        return samples.Where(s => s.GetType() == owner)
+        var written = samples.Where(s => s.GetType() == owner)
             .Select(s => JsonSerializer.SerializeToElement(s, owner, options))
             .Where(e => e.TryGetProperty(jsonName, out var v) && v.ValueKind == JsonValueKind.Array)
             .SelectMany(e => e.GetProperty(jsonName).EnumerateArray().Where(i => i.ValueKind == JsonValueKind.Object).SelectMany(i => i.EnumerateObject().Select(p => p.Name)))
-            .Where(n => !allowed.Contains(n))
-            .Distinct()
-            .Order(StringComparer.Ordinal)
-            .Select(n => $"{owner.Name}.{property}: items carry {n}, not in the expected shape")
-            .ToList();
+            .ToHashSet();
+        var problems = written.Except(shape).Order(StringComparer.Ordinal).Select(n => $"{owner.Name}.{property}: items carry {n}, not in the walked shape").ToList();
+        if (ts is not null)
+            problems.AddRange(written.Except(ts).Order(StringComparer.Ordinal).Select(n => $"{owner.Name}.{property}: items carry {n}, not in the TS type"));
+        return problems;
     }
 
     /// <summary>
@@ -355,9 +355,7 @@ public sealed partial class ContractParityTests
             // A sample must populate the property, or the check below is vacuous.
             Assert.Contains(effects, e => e.GetType() == owner
                 && owner.GetProperty(property)!.GetValue(e) is System.Collections.ICollection { Count: > 0 });
-            var allowed = walk.Shapes[element].ToHashSet();
-            if (TsFieldsOf(walk, element) is { } ts) allowed.IntersectWith(ts);
-            var problems = NestedOutputProblems(effects, owner, property, allowed, RulesJson.Compact);
+            var problems = NestedOutputProblems(effects, owner, property, walk.Shapes[element], TsFieldsOf(walk, element), RulesJson.Compact);
             Assert.True(problems.Count == 0, string.Join("\n", problems));
         }
     }
@@ -388,12 +386,12 @@ public sealed partial class ContractParityTests
     [Fact]
     public void Property_converter_probe_reports_a_nested_name_the_ts_type_lacks()
     {
-        var shape = new HashSet<string> { "kept", "renamed" };
-        var ts = new HashSet<string> { "kept" };
-        var allowed = shape.ToHashSet();
-        allowed.IntersectWith(ts);
-        var problems = NestedOutputProblems([new ConvHolder { Items = [new ConvItem { Kept = 1 }] }], typeof(ConvHolder), nameof(ConvHolder.Items), allowed, RulesJson.Compact);
-        Assert.Contains("renamed", Assert.Single(problems), StringComparison.Ordinal);
+        // The shape has "renamed", TS does not: only the TS comparison inside NestedOutputProblems can report it.
+        var problems = NestedOutputProblems([new ConvHolder { Items = [new ConvItem { Kept = 1 }] }], typeof(ConvHolder), nameof(ConvHolder.Items),
+            ["kept", "renamed"], new HashSet<string> { "kept" }, RulesJson.Compact);
+        var single = Assert.Single(problems);
+        Assert.Contains("renamed", single, StringComparison.Ordinal);
+        Assert.Contains("not in the TS type", single, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -409,7 +407,7 @@ public sealed partial class ContractParityTests
     [Fact]
     public void Property_converter_probe_that_renames_a_nested_property_is_reported()
     {
-        var problems = NestedOutputProblems([new ConvHolder { Items = [new ConvItem { Kept = 1 }] }], typeof(ConvHolder), nameof(ConvHolder.Items), new HashSet<string> { "kept" }, RulesJson.Compact);
+        var problems = NestedOutputProblems([new ConvHolder { Items = [new ConvItem { Kept = 1 }] }], typeof(ConvHolder), nameof(ConvHolder.Items), ["kept"], null, RulesJson.Compact);
         var single = Assert.Single(problems);
         Assert.Contains("renamed", single, StringComparison.Ordinal);
     }
