@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       dry-run:
-        description: 'Build only (gate, pack, installer smoke, SHA256SUMS). A manual run never attests or publishes.'
+        description: 'Build only (gate, pack, installer smoke, SBOMs, SHA256SUMS). A manual run never attests or publishes.'
         type: boolean
         default: true
 
@@ -144,12 +144,20 @@ jobs:
           New-Item -ItemType Directory -Path $sbom -Force | Out-Null
           dotnet dotnet-cyclonedx src/DesktopShell/TomeStack.DesktopShell.csproj --recursive --exclude-test-projects --exclude-dev --disable-package-restore -c Release --output-format Json --output $sbom --filename "tomestack-$env:VERSION-nuget.cdx.json"
           if ($LASTEXITCODE -ne 0) { throw 'CycloneDX (NuGet) failed' }
+          # The filter guards: a later tool bump that changes --exclude-dev (deprecated in 6.3.1) must fail here, not ship dev packages.
+          $nuget = Get-Content (Join-Path $sbom "tomestack-$env:VERSION-nuget.cdx.json") -Raw | ConvertFrom-Json
+          $names = @($nuget.components | ForEach-Object { $_.name })
+          if ($names -notcontains 'Velopack') { throw 'NuGet SBOM lacks Velopack: the CycloneDX filter or inputs changed' }
+          if (@($names | Where-Object { $_ -like 'xunit*' }).Count -gt 0) { throw 'NuGet SBOM contains xunit components: --exclude-dev no longer filters test packages' }
+          $npmRaw = Join-Path $env:RUNNER_TEMP 'npm-sbom-raw.json'
           $npmSbom = Join-Path $sbom "tomestack-$env:VERSION-npm.cdx.json"
           Push-Location src/Ui
-          npm sbom --sbom-format cyclonedx --package-lock-only | node ../../scripts/npm-sbom-runtime.mjs | Set-Content -Path $npmSbom -Encoding utf8NoBOM
+          cmd /c "npm sbom --sbom-format cyclonedx --package-lock-only > ""$npmRaw"""
           $npmExit = $LASTEXITCODE
           Pop-Location
           if ($npmExit -ne 0) { throw 'npm SBOM failed' }
+          node scripts/npm-sbom-runtime.mjs $npmRaw --out $npmSbom
+          if ($LASTEXITCODE -ne 0) { throw 'npm runtime SBOM filter failed' }
           foreach ($name in "tomestack-$env:VERSION-nuget.cdx.json", "tomestack-$env:VERSION-npm.cdx.json") {
             $f = Join-Path $sbom $name
             if (-not (Test-Path $f) -or (Get-Item $f).Length -eq 0) { throw "SBOM $name is missing or empty" }
