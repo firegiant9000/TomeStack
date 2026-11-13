@@ -249,6 +249,226 @@ public sealed partial class ContractParityTests
         Assert.NotNull(TsFieldsOf(walk, typeof(ModifierEffect)));
     }
 
+    // ---- Abstract type behind a converter: what the converter really writes ----
+
+    // Property-level converters on Effect subtypes: (declaring type, property) -> the element type each written item must match.
+    // A new converter-backed property must be listed here (guard below), so its output is compared with a walked shape.
+    private static readonly Dictionary<(Type Owner, string Property), Type> PropertyConverterElements = new()
+    {
+        [(typeof(ItemModEffect), nameof(ItemModEffect.Modifiers))] = typeof(ModifierEffect),
+    };
+
+    /// <summary>Real effects: every revision of the bundled SRD packs and of the fixture packs (the fixtures cover the v11 and v12 types).</summary>
+    private static List<Effect> RealEffects()
+    {
+        var files = Directory.GetFiles(Path.Combine(RepoRoot, "src", "AppService", "Content"), "*.json")
+            .Concat(Directory.GetFiles(Path.Combine(RepoRoot, "tests", "RulesFixtures"), "fixture-pack*.json"));
+        var effects = new List<Effect>();
+        foreach (var file in files)
+        {
+            if (JsonNode.Parse(File.ReadAllText(file)) is not JsonObject { } pack || pack["revisions"] is not JsonArray revisions) continue;
+            foreach (var revision in revisions)
+                effects.AddRange(revision.Deserialize<ContentRevision>(RulesJson.Options)!.Effects);
+        }
+        // Types no shipped pack or fixture uses yet (v13 guides are authored by the app, not bundled): built directly.
+        if (!effects.Any(e => e is PrimaryAbilitiesEffect))
+            effects.Add(new PrimaryAbilitiesEffect { Id = "primary", Abilities = ["str", "dex"] });
+        return effects;
+    }
+
+    /// <summary>Concrete subtypes of <paramref name="root"/> the walk did not record with a TypeName, or that no sample covers. Opaque types (UnknownEffect) are exempt.</summary>
+    private static List<string> ConcreteSubtypeGaps(Type root, Walk walk, IReadOnlySet<Type> sampled) =>
+        root.Assembly.GetTypes()
+            .Where(t => t != root && !t.IsAbstract && root.IsAssignableFrom(t) && !OpaqueConverterTypes.ContainsKey(t.Name))
+            .SelectMany(t => !walk.Subtypes.ContainsKey(t) ? [$"{t.Name}: no TypeName constant, so it was not matched to the TS union"]
+                : !sampled.Contains(t) ? (IEnumerable<string>)[$"{t.Name}: no sample instance, so its converter output is unchecked"] : [])
+            .Order(StringComparer.Ordinal)
+            .ToList();
+
+    /// <summary>Samples written through <paramref name="root"/>'s own converter: each emitted name must be in the walked shape and, when there is one, the TS fields.</summary>
+    private static List<string> ConverterOutputProblems(Type root, IEnumerable<object> samples, Walk walk, Func<Type, IReadOnlySet<string>?> tsFields)
+    {
+        var problems = new List<string>();
+        foreach (var group in samples.GroupBy(s => s.GetType()).Where(g => !OpaqueConverterTypes.ContainsKey(g.Key.Name)))
+        {
+            var emitted = group.SelectMany(s => JsonSerializer.SerializeToElement(s, root, RulesJson.Compact).EnumerateObject().Select(p => p.Name)).ToHashSet();
+            if (!walk.Shapes.TryGetValue(group.Key, out var shape)) { problems.Add($"{group.Key.Name}: sampled but never walked"); continue; }
+            var notInShape = emitted.Except(shape).Order(StringComparer.Ordinal).ToList();
+            if (notInShape.Count > 0) problems.Add($"{group.Key.Name}: the converter writes {string.Join(", ", notInShape)}, not in the walked shape");
+            if (tsFields(group.Key) is { } ts && emitted.Except(ts).Order(StringComparer.Ordinal).ToList() is { Count: > 0 } notInTs)
+                problems.Add($"{group.Key.Name}: the converter writes {string.Join(", ", notInTs)}, not in the TS type");
+        }
+        return problems;
+    }
+
+    /// <summary>Names written inside a property-level converter's items that are not in the walked <paramref name="shape"/> or, when there is one, the <paramref name="ts"/> fields.</summary>
+    private static List<string> NestedOutputProblems(IEnumerable<object> samples, Type owner, string property, IEnumerable<string> shape, IReadOnlySet<string>? ts, JsonSerializerOptions options)
+    {
+        var jsonName = options.PropertyNamingPolicy?.ConvertName(property) ?? property;
+        var written = samples.Where(s => s.GetType() == owner)
+            .Select(s => JsonSerializer.SerializeToElement(s, owner, options))
+            .Where(e => e.TryGetProperty(jsonName, out var v) && v.ValueKind == JsonValueKind.Array)
+            .SelectMany(e => e.GetProperty(jsonName).EnumerateArray().Where(i => i.ValueKind == JsonValueKind.Object).SelectMany(i => i.EnumerateObject().Select(p => p.Name)))
+            .ToHashSet();
+        var problems = written.Except(shape).Order(StringComparer.Ordinal).Select(n => $"{owner.Name}.{property}: items carry {n}, not in the walked shape").ToList();
+        if (ts is not null)
+            problems.AddRange(written.Except(ts).Order(StringComparer.Ordinal).Select(n => $"{owner.Name}.{property}: items carry {n}, not in the TS type"));
+        return problems;
+    }
+
+    /// <summary>
+    /// Limitation: only properties that some sample populates are compared, because RulesJson.Compact omits defaults;
+    /// a converter-written name that no sample sets goes unchecked.
+    /// </summary>
+    [Fact]
+    public void Converter_output_names_match_the_walked_shape_and_ts()
+    {
+        var walk = Analyse();
+        var effects = RealEffects();
+        Assert.True(effects.Count(e => e is ModifierEffect) > 1, "The real samples are too thin to compare anything.");
+        var problems = ConverterOutputProblems(typeof(Effect), effects, walk.Walk, t => TsFieldsOf(walk, t));
+        Assert.True(problems.Count == 0, "Effect converter output drifted from the walked shape or TS type:\n" + string.Join("\n", problems));
+    }
+
+    [Fact]
+    public void Every_concrete_effect_subtype_is_sampled_and_has_a_type_name()
+    {
+        var walk = Analyse();
+        var gaps = ConcreteSubtypeGaps(typeof(Effect), walk.Walk, RealEffects().Select(e => e.GetType()).ToHashSet());
+        Assert.True(gaps.Count == 0, "Effect subtypes the converter parity test cannot cover (add a TypeName, or a fixture that uses it):\n" + string.Join("\n", gaps));
+    }
+
+    [Fact]
+    public void Property_level_converters_on_effects_write_the_walked_item_shape()
+    {
+        var walk = Analyse();
+        var effects = RealEffects();
+        var unlisted = typeof(Effect).Assembly.GetTypes()
+            .Where(t => !t.IsAbstract && typeof(Effect).IsAssignableFrom(t))
+            .SelectMany(t => t.GetProperties().Where(p => p.GetCustomAttribute<JsonConverterAttribute>() is not null).Select(p => (Owner: t, Property: p.Name)))
+            .Where(x => !PropertyConverterElements.ContainsKey(x))
+            .Select(x => $"{x.Owner.Name}.{x.Property}")
+            .ToList();
+        Assert.True(unlisted.Count == 0, "A property-level [JsonConverter] on an effect is not in PropertyConverterElements: " + string.Join(", ", unlisted));
+        foreach (var ((owner, property), element) in PropertyConverterElements)
+        {
+            // A sample must populate the property, or the check below is vacuous.
+            Assert.Contains(effects, e => e.GetType() == owner
+                && owner.GetProperty(property)!.GetValue(e) is System.Collections.ICollection { Count: > 0 });
+            var problems = NestedOutputProblems(effects, owner, property, walk.Shapes[element], TsFieldsOf(walk, element), RulesJson.Compact);
+            Assert.True(problems.Count == 0, string.Join("\n", problems));
+        }
+    }
+
+    [Fact]
+    public void Converter_probe_that_renames_a_property_is_reported()
+    {
+        var probeWalk = WalkAll([typeof(ConvBase)]);
+        Assert.Contains("extra", probeWalk.Shapes[typeof(ConvDerived)]);
+        var problems = ConverterOutputProblems(typeof(ConvBase), [new ConvDerived { Extra = 1 }], probeWalk, _ => null);
+        Assert.Contains(problems, p => p.Contains("renamed", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Converter_probe_reports_a_name_the_ts_type_lacks()
+    {
+        var probeWalk = WalkAll([typeof(ConvBase)]);
+        // "renamed" is in a (pretend) walked shape but TS only has "type": only the TS half can report it.
+        var shapeWithRenamed = new Walk(
+            new Dictionary<Type, IReadOnlyList<string>> { [typeof(ConvDerived)] = ["kind", "renamed"] },
+            probeWalk.Subtypes, probeWalk.ListedOpaque, probeWalk.Unlisted);
+        var problems = ConverterOutputProblems(typeof(ConvBase), [new ConvDerived { Extra = 1 }], shapeWithRenamed,
+            _ => new HashSet<string> { "type" });
+        Assert.DoesNotContain(problems, p => p.Contains("not in the walked shape", StringComparison.Ordinal));
+        Assert.Contains(problems, p => p.Contains("renamed", StringComparison.Ordinal) && p.Contains("not in the TS type", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Property_converter_probe_reports_a_nested_name_the_ts_type_lacks()
+    {
+        // The shape has "renamed", TS does not: only the TS comparison inside NestedOutputProblems can report it.
+        var problems = NestedOutputProblems([new ConvHolder { Items = [new ConvItem { Kept = 1 }] }], typeof(ConvHolder), nameof(ConvHolder.Items),
+            ["kept", "renamed"], new HashSet<string> { "kept" }, RulesJson.Compact);
+        var single = Assert.Single(problems);
+        Assert.Contains("renamed", single, StringComparison.Ordinal);
+        Assert.Contains("not in the TS type", single, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Converter_probe_reports_a_missing_type_name_and_a_missing_sample()
+    {
+        var probeWalk = WalkAll([typeof(ConvBase)]);
+        var gaps = ConcreteSubtypeGaps(typeof(ConvBase), probeWalk, new HashSet<Type>());
+        Assert.Contains(gaps, g => g.StartsWith(nameof(ConvNoName), StringComparison.Ordinal) && g.Contains("no TypeName", StringComparison.Ordinal));
+        Assert.Contains(gaps, g => g.StartsWith(nameof(ConvDerived), StringComparison.Ordinal) && g.Contains("no sample", StringComparison.Ordinal));
+        Assert.DoesNotContain(ConcreteSubtypeGaps(typeof(ConvBase), probeWalk, new HashSet<Type> { typeof(ConvDerived) }), g => g.StartsWith(nameof(ConvDerived), StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Property_converter_probe_that_renames_a_nested_property_is_reported()
+    {
+        var problems = NestedOutputProblems([new ConvHolder { Items = [new ConvItem { Kept = 1 }] }], typeof(ConvHolder), nameof(ConvHolder.Items), ["kept"], null, RulesJson.Compact);
+        var single = Assert.Single(problems);
+        Assert.Contains("renamed", single, StringComparison.Ordinal);
+    }
+
+    [JsonConverter(typeof(ConvBaseConverter))]
+    internal abstract class ConvBase;
+
+    internal sealed class ConvDerived : ConvBase
+    {
+        public const string TypeName = "d";
+        public int Extra { get; init; }
+    }
+
+    internal sealed class ConvNoName : ConvBase
+    {
+        public int Other { get; init; }
+    }
+
+    // Writes {"kind":"d","renamed":1} although the reflection shape of ConvDerived is {extra}.
+    internal sealed class ConvBaseConverter : JsonConverter<ConvBase>
+    {
+        public override ConvBase Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) => throw new NotSupportedException();
+
+        public override void Write(Utf8JsonWriter writer, ConvBase value, JsonSerializerOptions options)
+        {
+            writer.WriteStartObject();
+            writer.WriteString("kind", "d");
+            writer.WriteNumber("renamed", 1);
+            writer.WriteEndObject();
+        }
+    }
+
+    internal sealed class ConvItem
+    {
+        public int Kept { get; init; }
+    }
+
+    internal sealed class ConvHolder
+    {
+        [JsonConverter(typeof(ConvItemListConverter))]
+        public IReadOnlyList<ConvItem>? Items { get; init; }
+    }
+
+    internal sealed class ConvItemListConverter : JsonConverter<IReadOnlyList<ConvItem>>
+    {
+        public override IReadOnlyList<ConvItem> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) => throw new NotSupportedException();
+
+        public override void Write(Utf8JsonWriter writer, IReadOnlyList<ConvItem> value, JsonSerializerOptions options)
+        {
+            writer.WriteStartArray();
+            foreach (var item in value)
+            {
+                writer.WriteStartObject();
+                writer.WriteNumber("kept", item.Kept);
+                writer.WriteNumber("renamed", 2);
+                writer.WriteEndObject();
+            }
+            writer.WriteEndArray();
+        }
+    }
+
     [Fact]
     public void Walker_reaches_derived_types()
     {
