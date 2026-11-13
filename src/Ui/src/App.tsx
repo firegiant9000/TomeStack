@@ -189,14 +189,19 @@ function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (in
         >
           {collapsed ? 'Show sidebar' : 'Hide sidebar'}
         </button>
-        <h1>TomeStack</h1>
+        {/* Spec 3.1: the window title area is a way home when the sidebar has no "All characters" (fewer than two). */}
+        <h1>
+          <button type="button" className="brand" aria-label="TomeStack, your characters" onClick={() => go({ kind: 'home', focus: true })}>
+            TomeStack
+          </button>
+        </h1>
         <span className="tag">Offline</span>
       </header>
 
       {/* Owner (2026-10-12): the header's "Hide sidebar" is the only close control; the sidebar has none of its own. */}
       <nav id="sidebar" className="sidebar" aria-label="Main" ref={sidebar} hidden={collapsed}>
-        {/* Disabled until app.info has loaded: the add screen needs the rules families, and a click must never do nothing. */}
-        <button type="button" className="add-character" disabled={!info} aria-current={screen.kind === 'add' ? 'page' : undefined} onClick={() => go({ kind: 'add' })}>
+        {/* Always available: the file import needs no rules families; the chooser disables only what does. */}
+        <button type="button" className="add-character" aria-current={screen.kind === 'add' ? 'page' : undefined} onClick={() => go({ kind: 'add' })}>
           + Add a character
         </button>
         <h2 id="characters-heading" className="sidebar-heading">

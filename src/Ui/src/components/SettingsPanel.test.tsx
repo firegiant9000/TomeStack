@@ -6,6 +6,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { clampAccent } from '../accentClamp';
 import { client } from '../api/client';
 import type { AppInfo } from '../api/types';
+import { expectNoAxeViolations } from '../test/axe';
 import { SettingsPanel } from './SettingsPanel';
 
 vi.mock('../api/client', () => ({ client: { copyDiagnostics: vi.fn(), listExtensions: vi.fn() } }));
@@ -35,10 +36,11 @@ it('offers the presets and Custom accent as a radio group, applies the pick at o
 
 it('shows an Add-ons section with the installed extensions once the rules families are known', async () => {
   vi.mocked(client.listExtensions).mockResolvedValue([]);
-  render(<SettingsPanel info={{ version: '0.0.0-fixture', schemaVersion: 99, rulesFamilies: [] } as unknown as AppInfo} characters={[]} />);
+  const { container } = render(<SettingsPanel info={{ version: '0.0.0-fixture', schemaVersion: 99, rulesFamilies: [] } as unknown as AppInfo} characters={[]} />);
   expect(await screen.findByRole('heading', { level: 3, name: 'Add-ons' })).toBeTruthy();
   expect(await screen.findByRole('button', { name: 'Install extension…' })).toBeTruthy();
   expect(screen.queryByRole('heading', { name: 'Extensions' })).toBeNull();
+  await expectNoAxeViolations(container);
 });
 
 it('names the version and the data schema, which the app header no longer shows', () => {

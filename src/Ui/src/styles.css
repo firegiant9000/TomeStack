@@ -150,6 +150,9 @@ body { margin: 0; background: var(--bg); color: var(--fg); }
   border-bottom: 2px solid var(--accent);
 }
 .app-header h1 { margin: 0; font-size: var(--text-xl); }
+/* The brand is a button (it opens the home list) that looks like the heading; the focus outline is left to the global rule. */
+.app-header .brand { all: unset; cursor: pointer; font: inherit; color: inherit; border-radius: 0.25rem; }
+.app-header .brand:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 /* The toggle is first (the hamburger convention; DOM order = visual order, WCAG 1.3.2). It is still the header's only control. */
 .sidebar-toggle { margin-left: 0; }
 /* With the side column at 0 the subgrid gap would leave a strip at the left edge. */

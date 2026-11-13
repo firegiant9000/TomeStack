@@ -517,8 +517,41 @@ it('the add screen keeps the file import and the character-sheet import reachabl
   const user = userEvent.setup();
   render(<App />);
   await user.click(await screen.findByRole('button', { name: '+ Add a character' }));
-  expect(screen.getByLabelText('TomeStack file')).toBeTruthy();
+  const picker = screen.getByLabelText('TomeStack file') as HTMLInputElement;
+  const picked = vi.fn();
+  picker.addEventListener('click', picked);
+  await user.click(screen.getByRole('radio', { name: /^From a TomeStack file/ }));
+  await user.click(screen.getByRole('button', { name: 'Continue' }));
+  expect(picked).toHaveBeenCalledTimes(1); // the chooser opened the file picker
   await user.click(screen.getByRole('radio', { name: /^From a character sheet/ }));
   await user.click(screen.getByRole('button', { name: 'Continue' }));
   expect(await screen.findByRole('heading', { name: /From a character sheet/ })).toBeTruthy();
+});
+
+it('+ Add a character is enabled before app.info arrives and the file import works', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.info).mockReturnValue(new Promise(() => {}));
+  render(<App />);
+  const add = await screen.findByRole('button', { name: '+ Add a character' });
+  expect((add as HTMLButtonElement).disabled).toBe(false);
+  await user.click(add);
+  const picker = screen.getByLabelText('TomeStack file');
+  const picked = vi.fn();
+  picker.addEventListener('click', picked);
+  await user.click(screen.getByRole('radio', { name: /^From a TomeStack file/ }));
+  await user.click(screen.getByRole('button', { name: 'Continue' }));
+  expect(picked).toHaveBeenCalledTimes(1);
+});
+
+it('the brand button returns home with one character: sheet, Settings, brand, list; nothing in the sidebar is current', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listCharacters).mockResolvedValue([summary('fixture-a', 'Fixture Avery')]);
+  render(<App />);
+  const nav = await screen.findByRole('navigation', { name: 'Main' });
+  await user.click(await within(nav).findByRole('button', { name: /Fixture Avery/ }));
+  await screen.findByRole('article', { name: 'Fixture Avery' });
+  await user.click(within(nav).getByRole('button', { name: 'Settings' }));
+  await user.click(screen.getByRole('button', { name: 'TomeStack, your characters' }));
+  expect(await screen.findByRole('region', { name: 'Characters' })).toBeTruthy();
+  expect(within(nav).getAllByRole('button').filter((b) => b.getAttribute('aria-current') === 'page')).toHaveLength(0);
 });
