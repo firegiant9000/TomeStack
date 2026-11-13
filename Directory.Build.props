@@ -8,6 +8,18 @@
     <Company>TomeStack</Company>
     <Product>TomeStack</Product>
   </PropertyGroup>
+  <!-- Supply chain (D100): lock files are committed; CI (CI=true, set by GitHub Actions) restores in locked mode, so a package
+       change needs `dotnet restore TomeStack.slnx` and the updated packages.lock.json files. NuGet audit covers direct and
+       transitive packages at every severity; with TreatWarningsAsErrors an advisory fails the build. -->
+  <PropertyGroup>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>low</NuGetAuditLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(CI)' == 'true'">
+    <RestoreLockedMode>true</RestoreLockedMode>
+  </PropertyGroup>
   <!-- .NET analyzers: see docs/testing/analyzers.md. A compound AnalysisLevel also sets each category's mode, so the
        Security and Style overrides must be AnalysisLevel<Category> (AnalysisMode<Category> loses to the "-recommended" suffix).
        Style stays at "default", which raises no IDE rule to a warning: the formatter's layout rules (IDE0055) stay off. -->
