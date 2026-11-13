@@ -274,6 +274,23 @@ With the M1 Dwarf, Soldier and Savage Attacker and the four Fighting Style feats
 - **Same attribution.** Each file has its own `-v12` `packId`, with the same notice and sources shape as its base pack and a notice saying these are new v12 revisions.
 - **Nothing outside `src/AppService/Content/`.** The docs name features and describe mechanics in our own words only.
 
+## 2014 gear catalogue and creation guides (2026-11-13, wave 3 Group 6, ADR-024)
+
+**Documents:** the 5.1 PDF only (`SRD_CC_v5.1.pdf`, SHA-256 `2504d2a0abb0a4d491a939be4f17910a2dde0312570ab8d208080225ccf0a1f0`, the hash in the table above). The file stays outside the repository.
+
+**Scope:** two new pack files, `src/AppService/Content/srd-5.1-gear.json` and `src/AppService/Content/srd-5.1-guides.json`, with the same attribution and modification notice as the other 5.1 packs and the same CC-BY-4.0 source record. Nothing outside these pages.
+
+| Pack file | Content | Pages |
+| --- | --- | --- |
+| `srd-5.1-gear.json` | 73 item names (ammunition, arcane, druidic and holy-symbol focuses, spellcasting and kit gear, adventuring gear named by a pack or a class kit, the pack-only names, two tools, the ten musical instruments, three Acolyte items) and the seven equipment packs with their contents (item names and quantities) | 5.1 pp. 61, 69, 70 |
+| `srd-5.1-guides.json` | 13 creation guides, one per class and the Acolyte background: each class's and the Acolyte's starting equipment as structured data (picks, options, item names and quantities, coins), and the class's primary abilities | 5.1 pp. 8, 11, 15, 19, 24, 26, 30, 35, 39, 42, 46, 52 (class equipment) and 61 (Acolyte); abilities p. 56 |
+
+- **What was taken:** item names, pack contents (names and quantities), and each class and background starting-equipment choice recorded as picks, options and lines. No costs or weights are stored (the catalogue needs neither). Weapons and armour are not repeated: guides point at the weapon and armour revisions already bundled.
+- **Primary abilities:** from the SRD 5.1 Multiclassing Prerequisites table, p. 56 (page confirmed against the extracted text). Only the ability keys are stored (for example Fighter: Strength or Dexterity; Monk: Dexterity and Wisdom); the Acolyte has none.
+- **No SRD prose.** Every `summary` is one original line (for example "Adventuring gear." or "Starting equipment and key ability/abilities."). No item or pack description, and no class or background text, is copied.
+- **Not taken:** the rest of the equipment tables (costs, weights, tools and items no kit or pack names), starting gold alternatives, and any background other than the Acolyte (the only 2014 background bundled).
+- **Checks:** `SrdGear51Tests` and `SrdGuides51Tests` (every option of every guide expands to the SRD's items and quantities, written independently from the SRD text; all pack contents are pinned), `SrdPackTests` and `BundledContentInsertOnlyTests`.
+
 ## README screenshots (docs/media, reviewed 2026-09-30)
 
 Two screenshots of the app, shown in the README, reproduce bundled SRD 5.2.1 content as the app renders it. They add no SRD text that the packs above do not already hold, and nothing from outside the two checked PDFs.
