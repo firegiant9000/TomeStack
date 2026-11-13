@@ -31,7 +31,7 @@ public class FrozenDownConversionImportTests
 
     private static void AssertSheet(CommandDispatcher dispatcher)
     {
-        var response = JsonDocument.Parse(dispatcher.Dispatch($$"""{"id":"1","command":"character.get","payload":{"id":"{{HeroId}}"}}""")).RootElement.Clone();
+        var response = JsonDocument.Parse(dispatcher.Dispatch($$"""{"id":"1","command":"character.get","payload":{"id":"{{HeroId}}"} }""")).RootElement.Clone();
         Assert.True(response.GetProperty("ok").GetBoolean(), response.ToString());
         var fields = response.GetProperty("result").GetProperty("sheet").GetProperty("fields").EnumerateArray()
             .ToDictionary(f => f.GetProperty("field").GetString()!, f => f.GetProperty("value").GetInt32());
@@ -46,7 +46,7 @@ public class FrozenDownConversionImportTests
         var dispatcher = new CommandDispatcher(app.App);
         var base64 = Convert.ToBase64String(File.ReadAllBytes(Frozen("Compat-Hero-for-0.7.0.tomestack.zip")));
 
-        var response = JsonDocument.Parse(dispatcher.Dispatch($$"""{"id":"1","command":"package.apply","payload":{"base64":"{{base64}}"}}""")).RootElement.Clone();
+        var response = JsonDocument.Parse(dispatcher.Dispatch($$"""{"id":"1","command":"package.apply","payload":{"base64":"{{base64}}"} }""")).RootElement.Clone();
         Assert.True(response.GetProperty("ok").GetBoolean(), response.ToString());
         AssertSheet(dispatcher);
     }
