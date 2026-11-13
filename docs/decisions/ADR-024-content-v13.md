@@ -23,7 +23,7 @@ Content schema v12 cannot express this. A guide is advice used only while creati
          { "id": "b", "lines": [ { "item": { "contentId": "<hammer>" } } ], "requiresProficiency": "weapon.martial" } ] } ] } ] }
    ```
 
-   `guideFor` names one class or background by content id. `primaryAbilities` lists one or two ability keys (`str` to `cha`). `startingEquipment` holds picks; each pick holds options; each option holds lines and may carry `requiresProficiency` (a `weapon.` or `armor.` key). A line is exactly one of four kinds:
+   `guideFor` names one class or background by content id. `primaryAbilities` lists one or two ability keys (`str` to `cha`); it is a plain list with no "or", so a rule like the 2014 Fighter's "Strength or Dexterity" is stored as both keys and a guide only suggests where the highest scores go. `startingEquipment` holds picks; each pick holds options; each option holds lines and may carry `requiresProficiency` (a `weapon.` or `armor.` key). A line is exactly one of four kinds:
    - `{ "item": {contentId}, "quantity": n }`: a fixed item.
    - `{ "anyOf": "weapon.simple" }`: the player chooses one catalogue item in that category. The categories are `weapon.simple`, `weapon.martial`, `armor.light`, `armor.medium`, `armor.heavy` and `armor.shield`, the same vocabulary as grants, never a name.
    - `{ "coins": { "gp": 50 } }`: coins; this is how an "A or B, with B as gold" option is written.
