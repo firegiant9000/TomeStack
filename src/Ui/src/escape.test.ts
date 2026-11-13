@@ -12,6 +12,15 @@ function esc(target: Element, init: KeyboardEventInit = {}) {
   return event;
 }
 
+it('leaves an open details alone while an IME composition is active', () => {
+  document.body.innerHTML = '<details open><summary>More</summary><button id="inner">Inner</button></details>';
+  const inner = document.getElementById('inner')!;
+  const event = esc(inner, { isComposing: true });
+  expect(closeOnEscape(event)).toBe(false);
+  expect(document.querySelector('details')!.open).toBe(true);
+  expect(event.defaultPrevented).toBe(false);
+});
+
 it('closes an open details and returns focus to its summary', () => {
   document.body.innerHTML = '<details open><summary>More</summary><button id="inner">Inner</button></details>';
   const inner = document.getElementById('inner')!;

@@ -5,7 +5,7 @@
  * a closed disclosure is reported with `preventDefault` so later handlers skip the same key press.
  */
 export function closeOnEscape(event: KeyboardEvent): boolean {
-  if (event.key !== 'Escape' || event.defaultPrevented) return false;
+  if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return false; // Esc during IME composition cancels the composition
   const target = event.target;
   if (!(target instanceof Element)) return false;
   if (target.closest('[role="dialog"], [role="alertdialog"], dialog')) return false; // a dialog owns Esc while it is open

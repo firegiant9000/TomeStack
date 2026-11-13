@@ -655,10 +655,22 @@ it('Esc on the builder leaves the draft and the screen alone', async () => {
   const user = userEvent.setup();
   render(<App />);
   await startNew(user);
-  const name = await screen.findByRole('textbox', { name: 'Name' });
-  await user.type(name, 'Fixture New');
-  await user.keyboard('{Escape}');
-  expect((screen.getByRole('textbox', { name: 'Name' }) as HTMLInputElement).value).toBe('Fixture New');
+  await user.type(await screen.findByRole('textbox', { name: 'Name' }), 'Fixture New');
+  await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
+  await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
+  for (const next of ['Next: species', 'Next: class', 'Next: background']) await user.click(await screen.findByRole('button', { name: next }));
+  const summary = await screen.findByText(/Other content \(0 selected\)/);
+  const details = summary.closest('details')!;
+  await user.click(summary);
+  expect(details.open).toBe(true);
+  await user.keyboard('{Escape}'); // focus is on the summary, inside the open disclosure
+  expect(details.open).toBe(false); // Esc closes the disclosure ...
+  expect(screen.getByRole('heading', { name: 'Background' })).toBeTruthy(); // ... and leaves the builder on the same step
+  await user.click(screen.getByRole('button', { name: 'Back' }));
+  await user.click(screen.getByRole('button', { name: 'Back' }));
+  await user.click(screen.getByRole('button', { name: 'Back' }));
+  await user.click(screen.getByRole('button', { name: 'Back' }));
+  expect((screen.getByRole('textbox', { name: 'Name' }) as HTMLInputElement).value).toBe('Fixture New'); // the draft is intact
 });
 
 it('Esc closes the open Archived disclosure in the sidebar and returns focus to its summary', async () => {
@@ -691,6 +703,48 @@ it('on a narrow window a sheet starts with the sidebar hidden (nothing saved) an
     expect(localStorage.getItem('tomestack.sidebar')).toBeNull();
     await user.click(screen.getByRole('button', { name: 'TomeStack, your characters' }));
     await waitFor(() => expect(nav.hidden).toBe(false));
+  } finally {
+    window.matchMedia = original;
+  }
+});
+
+it('on a narrow window, Show sidebar keeps the sidebar visible when a second character is opened', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listCharacters).mockResolvedValue([summary('fixture-a', 'Fixture Avery'), summary('fixture-b', 'Fixture Blake')]);
+  const original = window.matchMedia;
+  window.matchMedia = ((query: string) => ({ matches: true, media: query, addEventListener() {}, removeEventListener() {} })) as never;
+  try {
+    render(<App />);
+    const nav = await screen.findByRole('navigation', { name: 'Main' });
+    await user.click(await within(nav).findByRole('button', { name: /Fixture Avery/ }));
+    await screen.findByRole('article', { name: 'Fixture Avery' });
+    await waitFor(() => expect(nav.hidden).toBe(true));
+    await user.click(screen.getByRole('button', { name: /Show sidebar/ }));
+    expect(nav.hidden).toBe(false);
+    await user.click(within(nav).getByRole('button', { name: /Fixture Blake/ }));
+    await screen.findByRole('article', { name: 'Fixture Blake' });
+    expect(nav.hidden).toBe(false);
+  } finally {
+    window.matchMedia = original;
+  }
+});
+
+it('on a narrow window the sidebar is hidden again on the sheet after a visit to Settings', async () => {
+  const user = userEvent.setup();
+  const original = window.matchMedia;
+  window.matchMedia = ((query: string) => ({ matches: true, media: query, addEventListener() {}, removeEventListener() {} })) as never;
+  try {
+    render(<App />);
+    const nav = await screen.findByRole('navigation', { name: 'Main' });
+    await user.click(await within(nav).findByRole('button', { name: /Fixture Avery/ }));
+    await screen.findByRole('article', { name: 'Fixture Avery' });
+    await waitFor(() => expect(nav.hidden).toBe(true));
+    await user.click(screen.getByRole('button', { name: /Show sidebar/ }));
+    await user.click(within(nav).getByRole('button', { name: 'Settings' }));
+    expect(nav.hidden).toBe(false);
+    await user.click(within(nav).getByRole('button', { name: /Fixture Avery/ }));
+    await screen.findByRole('article', { name: 'Fixture Avery' });
+    await waitFor(() => expect(nav.hidden).toBe(true));
   } finally {
     window.matchMedia = original;
   }
