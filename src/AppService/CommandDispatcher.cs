@@ -346,11 +346,12 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         if (ReleaseLadder.Target(target) is { } row)
             return row;
         var choices = string.Join(", ", OfferedTargets().Select(r => r.Release.ToString(3)));
+        var advice = choices.Length == 0 ? "This TomeStack has no older version to save for." : $"Choose one of: {choices}.";
         // A caller's string is echoed only as letters, digits, dots and hyphens (no control characters or split pairs), cut at 16 with "…" when it was cut.
         var safe = new string([.. target.Where(c => c is (>= '0' and <= '9') or (>= 'A' and <= 'Z') or (>= 'a' and <= 'z') or '.' or '-')]);
         var shown = safe.Length > 16 ? safe[..16] + "…" : safe.Length == 0 ? "(none)" : safe;
         throw new AppValidationException(
-            [new("package.target-unknown", $"TomeStack {shown} is not a version this export can be made for. Choose one of: {choices}.")],
+            [new("package.target-unknown", $"TomeStack {shown} is not a version this export can be made for. {advice}")],
             "package.target-unknown");
     }
 

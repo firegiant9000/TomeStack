@@ -199,8 +199,8 @@ jobs:
           gh issue edit "$number" --repo "$GITHUB_REPOSITORY" --body-file "$BODY"
           echo "Updated issue #$number" >> "$GITHUB_STEP_SUMMARY"
 
-  # Opens the down-conversion goldens with real 0.6.0 and 0.5.0 builds (scripts/old-release-check.ps1; spec section 8, real
-  # older build) and fails on any package that is not a pass. The outcome files are uploaded; the committed ones are
+  # Opens the down-conversion goldens with the previous minor's real build (scripts/old-release-check.ps1; spec section 8,
+  # real older build; only the previous minor is offered as a target, D103) and fails on any package that is not a pass. The outcome files are uploaded; the committed ones are
   # checked against the goldens by OldReleaseOutcomeTests on every PR.
   old-release-check:
     runs-on: windows-latest
@@ -214,7 +214,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      # Each old tag pins 10.0.100 with rollForward latestFeature, so the SDK main pins satisfies them.
+      # The old tag pins 10.0.100 with rollForward latestFeature, so the SDK main pins satisfies them.
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
@@ -222,7 +222,7 @@ jobs:
       - name: Open the goldens with the old releases
         shell: pwsh
         run: |
-          ./scripts/old-release-check.ps1 -Tags v0.7.0,v0.6.0,v0.5.0 -Inputs 'tests/RulesFixtures/downconvert/for-{target}' -Expected 'tests/RulesFixtures/downconvert/for-{target}' -Out "$env:RUNNER_TEMP/old-release/opened-by-{target}.json" -Work "$env:RUNNER_TEMP/old-release-work"
+          ./scripts/old-release-check.ps1 -Tags v0.8.0 -Inputs 'tests/RulesFixtures/downconvert/for-{target}' -Expected 'tests/RulesFixtures/downconvert/for-{target}' -Out "$env:RUNNER_TEMP/old-release/opened-by-{target}.json" -Work "$env:RUNNER_TEMP/old-release-work"
 
       - name: Upload the outcomes
         if: always()

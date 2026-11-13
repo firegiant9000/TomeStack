@@ -9,7 +9,10 @@ namespace TomeStack.AppService.Tests;
 /// <summary>D85 part 1, lane C1: <c>package.targets</c> and <c>target</c> on the export commands, through the dispatcher.</summary>
 public class DownConversionExportTests
 {
-    private static string UnknownSentence(string target) => $"TomeStack {target} is not a version this export can be made for. Choose one of: 0.7.0, 0.6.0, 0.5.0.";
+    // This build is stamped 0.8.1, so no row is older than its minor and nothing is listed (D103).
+    private static string UnknownSentence(string target) => $"TomeStack {target} is not a version this export can be made for. This TomeStack has no older version to save for.";
+
+    private static LadderRow Offered(string release) => ReleaseLadder.Row(release)!;
 
     private static JsonElement Send(CommandDispatcher dispatcher, string command, string payload) =>
         JsonDocument.Parse(dispatcher.Dispatch($$"""{"id":"1","command":"{{command}}","payload":{{payload}}}""")).RootElement.Clone();
@@ -76,21 +79,24 @@ public class DownConversionExportTests
                 return $"{Path.GetRelativePath(app.App.DataDirectory, f)}:{Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream))}";
             }));
 
+    // The 0.5.0, 0.6.0 and 0.7.0 rows are no longer offered through the commands (R4, D103), so the cases below that need those
+    // targets go to the app-level API with the row; they keep the lowering rules covered.
+
     [Fact]
     public void Preview_for_0_6_0_blocks_a_running_encounter()
     {
         using var app = new TempApp();
         var id = Save(app, RunningEncounter);
 
-        var result = Result(Send(new CommandDispatcher(app.App), "package.exportPreview", Payload(id, "0.6.0")));
+        var result = app.App.PreviewExport([id], ExportPurpose.Share, Offered("0.6.0"));
 
-        var change = Assert.Single(result.GetProperty("changes").EnumerateArray());
-        Assert.Equal($"characters/{id:D}.json", change.GetProperty("entry").GetString());
-        Assert.Equal("character", change.GetProperty("kind").GetString());
-        Assert.Equal("blocks", change.GetProperty("action").GetString());
-        Assert.Equal("package.target-blocked", change.GetProperty("code").GetString());
-        Assert.Equal("'Compat Hero': an encounter is running. End it, then export.", change.GetProperty("message").GetString());
-        Assert.Equal("0.6.0", result.GetProperty("target").GetString());
+        var change = Assert.Single(result.Changes);
+        Assert.Equal($"characters/{id:D}.json", change.Entry);
+        Assert.Equal("character", change.Kind);
+        Assert.Equal("blocks", change.Action);
+        Assert.Equal("package.target-blocked", change.Code);
+        Assert.Equal("'Compat Hero': an encounter is running. End it, then export.", change.Message);
+        Assert.Equal("0.6.0", result.Target);
 
         var plan = new PackageService.ExportPlan([Hero(RunningEncounter) with { Id = id }], [], [], [], "x.tomestack.zip");
         var lowered = DownConversion.Lower(plan, ReleaseLadder.Row("0.6.0")!, _ => false, _ => "", new EmptyCatalog());
@@ -102,19 +108,13 @@ public class DownConversionExportTests
     {
         using var app = new TempApp();
         var id = Save(app, RunningEncounter);
-        var saved = Path.Combine(app.App.DataDirectory, "out", "x.tomestack.zip");
-        Directory.CreateDirectory(Path.GetDirectoryName(saved)!);
-        var host = new SaveHost(saved);
-        var dispatcher = new CommandDispatcher(app.App, host: host);
-        var hash = Result(Send(dispatcher, "package.exportPreview", Payload(id, "0.6.0"))).GetProperty("changesHash").GetString()!;
+        var row = Offered("0.6.0");
+        var hash = app.App.PreviewExport([id], ExportPurpose.Share, row).ChangesHash;
         var before = Snapshot(app);
 
-        Assert.Equal("package.target-blocked", ErrorOf(Send(dispatcher, "package.export", Payload(id, "0.6.0", hash))).Code);
-        Assert.Equal("package.target-blocked", ErrorOf(Send(dispatcher, "package.saveAs", Payload(id, "0.6.0", hash))).Code);
+        var refused = Assert.Throws<AppValidationException>(() => app.App.ExportCharacters([id], ExportPurpose.Share, row, hash));
 
-        Assert.Equal(0, host.Opened);
-        Assert.False(File.Exists(saved));
-        Assert.False(File.Exists(saved + ".partial"));
+        Assert.Equal("package.target-blocked", refused.Code);
         Assert.Equal(before, Snapshot(app));
     }
 
@@ -123,13 +123,13 @@ public class DownConversionExportTests
     {
         using var app = new TempApp();
         var id = Save(app, c => WithDetails(WithRoundsLeft(c))); // details keep it a v9 character once the v10 field is gone
-        var dispatcher = new CommandDispatcher(app.App);
+        var row = Offered("0.6.0");
 
-        var preview = Result(Send(dispatcher, "package.exportPreview", Payload(id, "0.6.0")));
-        var change = Assert.Single(preview.GetProperty("changes").EnumerateArray());
-        Assert.Equal(("dropped", "package.target-drops"), (change.GetProperty("action").GetString(), change.GetProperty("code").GetString()));
+        var preview = app.App.PreviewExport([id], ExportPurpose.Share, row);
+        var change = Assert.Single(preview.Changes);
+        Assert.Equal(("dropped", "package.target-drops"), (change.Action, change.Code));
 
-        var bytes = ExportBytes(Send(dispatcher, "package.export", Payload(id, "0.6.0", preview.GetProperty("changesHash").GetString())));
+        var bytes = app.App.ExportCharacters([id], ExportPurpose.Share, row, preview.ChangesHash).Content;
         var character = Entry(bytes, $"characters/{id:D}.json");
         Assert.Equal(9, character.GetProperty("schemaVersion").GetInt32());
         Assert.DoesNotContain("roundsLeft", character.ToString(), StringComparison.Ordinal);
@@ -140,13 +140,13 @@ public class DownConversionExportTests
     {
         using var app = new TempApp();
         var id = Save(app, WithDetails);
-        var dispatcher = new CommandDispatcher(app.App);
+        var row = Offered("0.5.0");
 
-        var preview = Result(Send(dispatcher, "package.exportPreview", Payload(id, "0.5.0")));
-        var change = Assert.Single(preview.GetProperty("changes").EnumerateArray());
-        Assert.Equal(("dropped", "package.target-drops"), (change.GetProperty("action").GetString(), change.GetProperty("code").GetString()));
+        var preview = app.App.PreviewExport([id], ExportPurpose.Share, row);
+        var change = Assert.Single(preview.Changes);
+        Assert.Equal(("dropped", "package.target-drops"), (change.Action, change.Code));
 
-        var bytes = ExportBytes(Send(dispatcher, "package.export", Payload(id, "0.5.0", preview.GetProperty("changesHash").GetString())));
+        var bytes = app.App.ExportCharacters([id], ExportPurpose.Share, row, preview.ChangesHash).Content;
         var character = Entry(bytes, $"characters/{id:D}.json");
         Assert.Equal(8, character.GetProperty("schemaVersion").GetInt32());
         Assert.False(character.TryGetProperty("details", out _));
@@ -158,26 +158,26 @@ public class DownConversionExportTests
         using var app = new TempApp();
         var id = Save(app, c => c);
         var dispatcher = new CommandDispatcher(app.App);
-        var hash = Result(Send(dispatcher, "package.exportPreview", Payload(id, "0.6.0"))).GetProperty("changesHash").GetString();
+        var hash = Result(Send(dispatcher, "package.exportPreview", Payload(id, "0.8.0"))).GetProperty("changesHash").GetString();
 
-        var manifest = Entry(ExportBytes(Send(dispatcher, "package.export", Payload(id, "0.6.0", hash))), "manifest.json");
+        var manifest = Entry(ExportBytes(Send(dispatcher, "package.export", Payload(id, "0.8.0", hash))), "manifest.json");
 
-        Assert.Equal("0.6.0", manifest.GetProperty("madeFor").GetString());
+        Assert.Equal("0.8.0", manifest.GetProperty("madeFor").GetString());
         Assert.Equal(AppVersionStamp.CurrentVersion, manifest.GetProperty("appVersion").GetString());
     }
 
     [Theory]
-    [InlineData("share", "Compat-Hero-for-0.6.0.tomestack.zip")]
-    [InlineData("backup", "Compat-Hero-for-0.6.0-personal-backup.tomestack.zip")]
+    [InlineData("share", "Compat-Hero-for-0.8.0.tomestack.zip")]
+    [InlineData("backup", "Compat-Hero-for-0.8.0-personal-backup.tomestack.zip")]
     public void File_name_carries_the_target(string purpose, string expected)
     {
         using var app = new TempApp();
         var id = Save(app, c => c);
         var dispatcher = new CommandDispatcher(app.App);
 
-        var preview = Result(Send(dispatcher, "package.exportPreview", Payload(id, "0.6.0", purpose: purpose)));
+        var preview = Result(Send(dispatcher, "package.exportPreview", Payload(id, "0.8.0", purpose: purpose)));
         Assert.Equal(expected, preview.GetProperty("fileName").GetString());
-        var export = Result(Send(dispatcher, "package.export", Payload(id, "0.6.0", preview.GetProperty("changesHash").GetString(), purpose)));
+        var export = Result(Send(dispatcher, "package.export", Payload(id, "0.8.0",preview.GetProperty("changesHash").GetString(), purpose)));
         Assert.Equal(expected, export.GetProperty("fileName").GetString());
     }
 
@@ -190,16 +190,16 @@ public class DownConversionExportTests
         Directory.CreateDirectory(Path.GetDirectoryName(saved)!);
         var dispatcher = new CommandDispatcher(app.App, host: new SaveHost(saved));
         const string sentence = "The preview changed since you confirmed it. Review the list and try again.";
-        var hash = Result(Send(dispatcher, "package.exportPreview", Payload(id, "0.5.0"))).GetProperty("changesHash").GetString()!;
+        var hash = Result(Send(dispatcher, "package.exportPreview", Payload(id, "0.8.0"))).GetProperty("changesHash").GetString()!;
 
-        Assert.Equal(("package.target-changed", sentence), ErrorOf(Send(dispatcher, "package.export", Payload(id, "0.5.0"))));
-        Assert.Equal(("package.target-changed", sentence), ErrorOf(Send(dispatcher, "package.saveAs", Payload(id, "0.5.0"))));
-        Assert.Equal(("package.target-changed", sentence), ErrorOf(Send(dispatcher, "package.export", Payload(id, "0.5.0", new string('0', 64)))));
-        Assert.Equal(("package.target-changed", sentence), ErrorOf(Send(dispatcher, "package.saveAs", Payload(id, "0.5.0", new string('0', 64)))));
+        Assert.Equal(("package.target-changed", sentence), ErrorOf(Send(dispatcher, "package.export", Payload(id, "0.8.0"))));
+        Assert.Equal(("package.target-changed", sentence), ErrorOf(Send(dispatcher, "package.saveAs", Payload(id, "0.8.0"))));
+        Assert.Equal(("package.target-changed", sentence), ErrorOf(Send(dispatcher, "package.export", Payload(id, "0.8.0", new string('0', 64)))));
+        Assert.Equal(("package.target-changed", sentence), ErrorOf(Send(dispatcher, "package.saveAs", Payload(id, "0.8.0", new string('0', 64)))));
         Assert.False(File.Exists(saved));
 
-        Result(Send(dispatcher, "package.export", Payload(id, "0.5.0", hash)));
-        Assert.True(Result(Send(dispatcher, "package.saveAs", Payload(id, "0.5.0", hash))).GetProperty("saved").GetBoolean());
+        Result(Send(dispatcher, "package.export", Payload(id, "0.8.0", hash)));
+        Assert.True(Result(Send(dispatcher, "package.saveAs", Payload(id, "0.8.0", hash))).GetProperty("saved").GetBoolean());
         Assert.True(File.Exists(saved));
     }
 
@@ -219,10 +219,10 @@ public class DownConversionExportTests
         using var app = new TempApp();
         var id = Save(app, WithDetails);
         var dispatcher = new CommandDispatcher(app.App);
-        var hash = Result(Send(dispatcher, "package.exportPreview", Payload(id, "0.5.0"))).GetProperty("changesHash").GetString();
+        var hash = Result(Send(dispatcher, "package.exportPreview", Payload(id, "0.8.0"))).GetProperty("changesHash").GetString();
 
-        var first = ExportBytes(Send(dispatcher, "package.export", Payload(id, "0.5.0", hash)));
-        var second = ExportBytes(Send(dispatcher, "package.export", Payload(id, "0.5.0", hash)));
+        var first = ExportBytes(Send(dispatcher, "package.export", Payload(id, "0.8.0", hash)));
+        var second = ExportBytes(Send(dispatcher, "package.export", Payload(id, "0.8.0", hash)));
 
         Assert.Equal(first, second);
     }
@@ -234,13 +234,13 @@ public class DownConversionExportTests
         var id = Save(app, c => c);
         var dispatcher = new CommandDispatcher(app.App);
 
-        var preview = Result(Send(dispatcher, "package.exportPreview", Payload(id, "0.6.0")));
+        var preview = Result(Send(dispatcher, "package.exportPreview", Payload(id, "0.8.0")));
 
         Assert.Empty(preview.GetProperty("changes").EnumerateArray());
         var hash = preview.GetProperty("changesHash").GetString();
         Assert.Equal(DownConversion.HashChanges([]), hash);
         Assert.Equal(64, hash!.Length);
-        Result(Send(dispatcher, "package.export", Payload(id, "0.6.0", hash)));
+        Result(Send(dispatcher, "package.export", Payload(id, "0.8.0", hash)));
     }
 
     [Fact]
@@ -249,16 +249,14 @@ public class DownConversionExportTests
         using var app = new TempApp();
         var first = Save(app, RunningEncounter);
         var second = app.App.SaveCharacter(Hero(RunningEncounter) with { Id = Guid.NewGuid(), Name = "Compat Second" }).Character.Id;
-        var payload = $$"""{"characterIds":["{{first}}","{{second}}"],"purpose":"share","target":"0.6.0","changesHash":"x"}""";
 
-        var response = Send(new CommandDispatcher(app.App), "package.export", payload);
+        var refused = Assert.Throws<AppValidationException>(() => app.App.ExportCharacters([first, second], ExportPurpose.Share, Offered("0.6.0"), "x"));
 
-        Assert.Equal("package.target-blocked", ErrorOf(response).Code);
-        var problems = response.GetProperty("error").GetProperty("diagnostics").EnumerateArray().ToList();
-        Assert.Equal(2, problems.Count);
-        Assert.All(problems, p => Assert.Equal("package.target-blocked", p.GetProperty("code").GetString()));
-        Assert.Equal("'Compat Hero': an encounter is running. End it, then export.", problems[0].GetProperty("message").GetString());
-        Assert.Equal("'Compat Second': an encounter is running. End it, then export.", problems[1].GetProperty("message").GetString());
+        Assert.Equal("package.target-blocked", refused.Code);
+        Assert.Equal(2, refused.Problems.Count);
+        Assert.All(refused.Problems, p => Assert.Equal("package.target-blocked", p.Code));
+        Assert.Equal("'Compat Hero': an encounter is running. End it, then export.", refused.Problems[0].Message);
+        Assert.Equal("'Compat Second': an encounter is running. End it, then export.", refused.Problems[1].Message);
     }
 
     [Theory]
@@ -291,7 +289,7 @@ public class DownConversionExportTests
     }
 
     [Fact]
-    public void Targets_lists_offered_rows_newest_first()
+    public void Targets_lists_only_rows_older_than_the_builds_minor()
     {
         using var app = new TempApp();
         var result = Result(Send(new CommandDispatcher(app.App), "package.targets", "{}"));
@@ -299,10 +297,36 @@ public class DownConversionExportTests
         Assert.Equal(AppVersionStamp.CurrentVersion, result.GetProperty("current").GetString());
         Assert.Equal("0.8.0", result.GetProperty("currentRow").GetString());
         Assert.Equal("0.7.0", result.GetProperty("previousMinor").GetString());
-        var targets = result.GetProperty("targets").EnumerateArray().ToList();
-        Assert.Equal(
-            [("0.7.0", 10, 11), ("0.6.0", 9, 10), ("0.5.0", 8, 9)],
-            targets.Select(t => (t.GetProperty("release").GetString()!, t.GetProperty("characterSchema").GetInt32(), t.GetProperty("contentSchema").GetInt32())));
+        // The build is 0.8.x, so its own minor's row is not listed; a 0.9.0 build lists [0.8.0] (ReleaseLadderTests).
+        Assert.Empty(result.GetProperty("targets").EnumerateArray());
+    }
+
+    [Fact]
+    public void The_previous_minor_row_still_resolves_through_the_dispatcher_in_a_patch_build()
+    {
+        // The 0.8.0 goldens drive the commands with target "0.8.0" while the build is stamped 0.8.1 (D103).
+        using var app = new TempApp();
+        var id = SaveCharacter(app);
+
+        var preview = Result(Send(new CommandDispatcher(app.App), "package.exportPreview", Payload(id, "0.8.0")));
+
+        Assert.Equal("0.8.0", preview.GetProperty("target").GetString());
+    }
+
+    [Theory]
+    [InlineData("0.7.0")]
+    [InlineData("0.6.0")]
+    [InlineData("0.5.0")]
+    public void Older_rungs_are_no_longer_offered_as_targets(string target)
+    {
+        using var app = new TempApp();
+        var id = SaveCharacter(app);
+
+        var (code, message) = ErrorOf(Send(new CommandDispatcher(app.App), "package.exportPreview", Payload(id, target)));
+
+        Assert.Equal("package.target-unknown", code);
+        Assert.Equal(UnknownSentence(target), message);
+        Assert.DoesNotContain("Choose one of", message, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -371,11 +395,11 @@ public class DownConversionExportTests
         Assert.Equal("package.target-unknown", unknown.Code);
         Assert.Equal(UnknownSentence("0.4.0"), unknown.Message);
 
-        var valid = Result(Send(dispatcher, "package.sourcePackPreview", $$"""{"sourceIds":["{{source.Id}}"],"target":"0.6.0"}"""));
-        Assert.Equal("0.6.0", valid.GetProperty("target").GetString());
+        var valid = Result(Send(dispatcher, "package.sourcePackPreview", $$"""{"sourceIds":["{{source.Id}}"],"target":"0.8.0"}"""));
+        Assert.Equal("0.8.0", valid.GetProperty("target").GetString());
         Assert.False(string.IsNullOrEmpty(valid.GetProperty("changesHash").GetString()));
 
-        Assert.Equal("package.target-changed", ErrorOf(Send(dispatcher, "package.sourcePackExport", $$"""{"sourceIds":["{{source.Id}}"],"target":"0.6.0"}""")).Code);
+        Assert.Equal("package.target-changed", ErrorOf(Send(dispatcher, "package.sourcePackExport", $$"""{"sourceIds":["{{source.Id}}"],"target":"0.8.0"}""")).Code);
 
         var plain = Result(Send(dispatcher, "package.sourcePackPreview", $$"""{"sourceIds":["{{source.Id}}"]}"""));
         Assert.Empty(plain.GetProperty("changes").EnumerateArray());
@@ -392,11 +416,11 @@ public class DownConversionExportTests
         var unknown = ErrorOf(Send(dispatcher, "package.campaignPackPreview", $$"""{"campaignId":"{{campaign.Id}}","target":"0.7.1"}"""));
         Assert.Equal("package.target-unknown", unknown.Code);
 
-        var valid = Send(dispatcher, "package.campaignPackPreview", $$"""{"campaignId":"{{campaign.Id}}","target":"0.6.0"}""");
+        var valid = Send(dispatcher, "package.campaignPackPreview", $$"""{"campaignId":"{{campaign.Id}}","target":"0.8.0"}""");
         Assert.True(valid.GetProperty("ok").GetBoolean(), valid.ToString());
-        Assert.Equal("0.6.0", valid.GetProperty("result").GetProperty("target").GetString());
+        Assert.Equal("0.8.0", valid.GetProperty("result").GetProperty("target").GetString());
 
-        Assert.Equal("package.target-changed", ErrorOf(Send(dispatcher, "package.campaignPackExport", $$"""{"campaignId":"{{campaign.Id}}","target":"0.5.0"}""")).Code);
+        Assert.Equal("package.target-changed", ErrorOf(Send(dispatcher, "package.campaignPackExport", $$"""{"campaignId":"{{campaign.Id}}","target":"0.8.0"}""")).Code);
 
         var plain = Send(dispatcher, "package.campaignPackPreview", $$"""{"campaignId":"{{campaign.Id}}"}""");
         Assert.True(plain.GetProperty("ok").GetBoolean(), plain.ToString());
@@ -433,7 +457,7 @@ public class DownConversionExportTests
         foreach (var (command, body) in packs)
         {
             Assert.Equal("package.target-unknown", ErrorOf(Send(dispatcher, command, body.Replace("TARGET", "0.4.0", StringComparison.Ordinal))).Code);
-            Assert.Equal("package.target-changed", ErrorOf(Send(dispatcher, command, body.Replace("TARGET", "0.6.0", StringComparison.Ordinal))).Code);
+            Assert.Equal("package.target-changed", ErrorOf(Send(dispatcher, command, body.Replace("TARGET", "0.8.0",StringComparison.Ordinal))).Code);
         }
         Assert.Equal(0, host.Opened);
     }
@@ -925,12 +949,11 @@ public class DownConversionExportTests
         using var app = new TempApp();
         PublishFlyFeature(app);
         var id = Save(app, c => c with { Pins = [.. c.Pins, FeatureRef] });
-        var dispatcher = new CommandDispatcher(app.App);
 
-        var preview = Result(Send(dispatcher, "package.exportPreview", Payload(id, target)));
+        var preview = app.App.PreviewExport([id], ExportPurpose.Share, Offered(target));
 
-        Assert.Contains(preview.GetProperty("changes").EnumerateArray(), c => c.GetProperty("kind").GetString() == "content");
-        Assert.Equal(target, preview.GetProperty("opensIn").GetString());
+        Assert.Contains(preview.Changes, c => c.Kind == "content");
+        Assert.Equal(target, preview.OpensIn);
     }
 
     [Fact]
@@ -939,12 +962,12 @@ public class DownConversionExportTests
         using var app = new TempApp();
         PublishFlyFeature(app);
         var id = Save(app, c => c with { Pins = [.. c.Pins, FeatureRef] });
-        var dispatcher = new CommandDispatcher(app.App);
-        var hash = Result(Send(dispatcher, "package.exportPreview", Payload(id, "0.6.0"))).GetProperty("changesHash").GetString();
+        var row = Offered("0.6.0");
+        var hash = app.App.PreviewExport([id], ExportPurpose.Share, row).ChangesHash;
         var before = Snapshot(app);
 
-        var first = ExportBytes(Send(dispatcher, "package.export", Payload(id, "0.6.0", hash)));
-        var second = ExportBytes(Send(dispatcher, "package.export", Payload(id, "0.6.0", hash)));
+        var first = app.App.ExportCharacters([id], ExportPurpose.Share, row, hash).Content;
+        var second = app.App.ExportCharacters([id], ExportPurpose.Share, row, hash).Content;
 
         using var zip = new System.IO.Compression.ZipArchive(new MemoryStream(first));
         Assert.Null(zip.GetEntry($"content/{FeatureRevision:D}.json"));

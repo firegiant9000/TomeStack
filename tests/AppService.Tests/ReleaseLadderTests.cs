@@ -15,7 +15,7 @@ public class ReleaseLadderTests
         Assert.Equal([new Version(0, 4, 0), new Version(0, 5, 0), new Version(0, 6, 0), new Version(0, 7, 0), new Version(0, 8, 0)], rows.Select(r => r.Release));
         Assert.Equal([(7, 9, 1, 9, 9), (8, 9, 2, 9, 10), (9, 10, 2, 9, 11), (10, 11, 2, 9, 11), (11, 12, 2, 9, 11)],
             rows.Select(r => (r.CharacterSchema, r.ContentSchema, r.GapNoteSchema, r.FormatVersion, r.DatabaseSchema)));
-        Assert.Equal([false, true, true, true, true], rows.Select(r => r.OfferedAsTarget));
+        Assert.Equal([false, false, false, false, true], rows.Select(r => r.OfferedAsTarget));
     }
 
     [Fact]
@@ -241,9 +241,10 @@ public class ReleaseLadderTests
     [Fact]
     public void OfferedFor_never_lists_the_builds_own_minor()
     {
-        Assert.Equal(["0.7.0", "0.6.0", "0.5.0"], ReleaseLadder.OfferedFor("0.8.1").Select(r => r.Release.ToString(3)));
-        Assert.Equal(["0.8.0", "0.7.0", "0.6.0", "0.5.0"], ReleaseLadder.OfferedFor("0.9.0").Select(r => r.Release.ToString(3)));
-        Assert.Equal(["0.6.0", "0.5.0"], ReleaseLadder.OfferedFor("0.7.1").Select(r => r.Release.ToString(3)));
+        Assert.Empty(ReleaseLadder.OfferedFor("0.8.1"));
+        Assert.Equal(["0.8.0"], ReleaseLadder.OfferedFor("0.9.0").Select(r => r.Release.ToString(3)));
+        Assert.Equal(["0.8.0"], ReleaseLadder.OfferedFor("1.0.0").Select(r => r.Release.ToString(3)));
+        Assert.Empty(ReleaseLadder.OfferedFor("0.7.1"));
     }
 
     [Fact]
@@ -287,10 +288,10 @@ public class ReleaseLadderTests
     }
 
     [Theory]
-    [InlineData("0.6.0", true)]
-    [InlineData("0.5.0", true)]
+    [InlineData("0.6.0", false)]
+    [InlineData("0.5.0", false)]
     [InlineData("0.4.0", false)]
-    [InlineData("0.7.0", true)]
+    [InlineData("0.7.0", false)]
     [InlineData("0.7.1", false)]
     [InlineData("0.8.0", true)]
     [InlineData("", false)]
