@@ -204,7 +204,7 @@ it('always has the one last-roll status node, and it holds the roll after lastRo
   expect(within(container).getByText(/Earlier rolls/)).toBeTruthy();
 });
 
-it('with Announce each roll off there is no polite live region in the bar', () => {
+it('with Announce each roll off there is no polite roll region in the bar', () => {
   localStorage.setItem('tomestack.announceRolls', 'off');
   try {
     const { container } = render(<SheetSummary view={fixtureView()} {...plain} />);

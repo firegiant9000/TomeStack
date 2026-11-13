@@ -593,6 +593,23 @@ it('keeps open choices out of "Needs your attention" and prints no id there (Wav
   expect(screen.queryByRole('heading', { name: 'Needs your attention' })).toBeNull();
 });
 
+it('Tab_order_is_header_bar_choices_tabs_panel', () => {
+  const choices = [{ source: { contentId: 'fixture.feature', revisionId: 'r1' }, sourceName: 'Fixture feature', choiceId: 'pick', count: 1, options: [], selected: [], resolved: false }] as unknown as SheetModel['choices'];
+  const { container } = renderSheet(view({ choices }));
+  // Spec section 5: sheet header, status bar controls, "Choices to make", the tab list, then the active panel. All are plain
+  // buttons, inputs and tabs in the DOM, so DOM order is the Tab order (no positive tabindex anywhere in between).
+  expect(container.querySelector('[tabindex]:not([tabindex="-1"]):not([tabindex="0"])')).toBeNull();
+  const header = screen.getByRole('button', { name: 'Short rest…' });
+  const barControl = within(screen.getByRole('region', { name: 'Status' })).getAllByRole('button')[0]!;
+  const choicesControl = within(screen.getByRole('heading', { name: 'Choices to make' }).closest('section')!).getByRole('button', { name: 'Make choices' });
+  const tab = screen.getByRole('tab', { selected: true });
+  const panelControl = within(screen.getByRole('tabpanel')).getAllByRole('checkbox')[0]!;
+  const ordered = [header, barControl, choicesControl, tab, panelControl];
+  for (let i = 0; i < ordered.length - 1; i++) {
+    expect(ordered[i]!.compareDocumentPosition(ordered[i + 1]!) & Node.DOCUMENT_POSITION_FOLLOWING, `element ${i} precedes ${i + 1}`).toBeTruthy();
+  }
+});
+
 it('swallows the noun before an id in service text ("revision {id}", "Effect {id}") and keeps an unmatched choice.unresolved', () => {
   const guid = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
   renderSheet(

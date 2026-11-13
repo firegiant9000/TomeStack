@@ -180,7 +180,7 @@ export type UnderlineId = (typeof underlineIds)[number];
 export const underline = (): UnderlineId => oneOf(underlineIds, read(keys.underline), 'off');
 export const setUnderline = (id: UnderlineId): void => write(keys.underline, id === 'off' ? null : id);
 
-/** Off removes `aria-live` from the Last roll region (the text stays): a screen-reader user then reads it on demand (4.1.3). */
+/** Off sets `aria-live` off on the Last roll region (the text stays): a screen-reader user then reads it on demand (4.1.3). */
 export const announceRollsOn = (): boolean => read(keys.announceRolls) !== 'off';
 export const setAnnounceRolls = (on: boolean): void => write(keys.announceRolls, on ? null : 'off');
 

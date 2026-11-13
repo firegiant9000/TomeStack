@@ -1352,7 +1352,7 @@ export type RecordSpent = {
   spendOnce: (record: RollRecord, action: PlayAction, refused?: () => void) => Promise<boolean>;
 };
 
-/** The last roll's record (SPEC C-04): formula, every die, modifiers and provenance. Announced politely. */
+/** The last roll's record (SPEC C-04): formula, every die, modifiers and provenance. Its status is announced politely only while "Announce each roll" is on; the DiceBox error line (aria-live polite) is an error message outside that setting. */
 export function RollResult({
   record,
   resources,
@@ -1396,8 +1396,9 @@ export function RollResult({
         refused?.();
       });
   }
-  // The one live node of the status bar: always rendered (empty too), so a screen reader hears the roll that arrives. 'off' rather than
-  // absent when "Announce each roll" is off, so no polite region is left in the bar. Toggling aria-live on a mounted node is
+  // The one roll status of the status bar: always rendered (empty too), so a screen reader hears the roll that arrives. 'off' rather than
+  // absent when "Announce each roll" is off. The DiceBox error line (aria-live polite) is an error message outside that setting; only this
+  // RollResult status follows it. Toggling aria-live on a mounted node is
   // unreliable in some screen readers; the setting takes full effect on the next sheet open, which the Settings hint says.
   if (!record) return <div role="status" aria-label="Last roll" aria-live={announceRollsOn() ? 'polite' : 'off'} className="roll-result" />;
   const p = record.provenance;
