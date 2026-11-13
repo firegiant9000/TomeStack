@@ -32,7 +32,8 @@ public static class ReleaseLadder
     // Character, content, gap note, format, database. Only the previous minor is offered as a target (owner ruling R4, D103).
     // 0.8.0 is offered, with its proof under tests/RulesFixtures/downconvert/for-0.8.0. Older rows stay for reading a returning
     // file and for the "opens in" answer. A minor's own row is added at its release cut with Offered=false (a build never offers
-    // its own minor); the next minor's release PR flips it to true together with its goldens and outcome. 0.4.0 has no v7 writer (Q1).
+    // its own minor). A release cut flips its own row to Offered=true only at the NEXT minor's cut, together with its goldens and
+    // outcome, and flips the previous offered row to false at the same time, so exactly one row is ever offered. 0.4.0 has no v7 writer (Q1).
     private static readonly (string Release, int Character, int Content, int GapNote, int Format, int Database, bool Offered)[] Table =
     [
         ("0.4.0", 7, 9, 1, 9, 9, false),
@@ -76,13 +77,14 @@ public static class ReleaseLadder
     internal static LadderRow? Row(string release) =>
         Rows.FirstOrDefault(r => string.Equals(r.Release.ToString(3), release, StringComparison.Ordinal));
 
-    /// <summary>The offered rows older than the build's own (major, minor), newest first.</summary>
+    /// <summary>The newest offered row older than the build's own (major, minor): at most one row (D103).</summary>
     public static IReadOnlyList<LadderRow> OfferedFor(string buildVersion)
     {
         var build = new Version(buildVersion);
         return Rows
             .Where(r => r.OfferedAsTarget && (r.Release.Major, r.Release.Minor).CompareTo((build.Major, build.Minor)) < 0)
             .Reverse()
+            .Take(1)
             .ToList();
     }
 

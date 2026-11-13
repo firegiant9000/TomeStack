@@ -239,6 +239,12 @@ public class ReleaseLadderTests
     }
 
     [Fact]
+    public void At_most_one_ladder_row_is_offered()
+    {
+        Assert.True(ReleaseLadder.Rows.Count(r => r.OfferedAsTarget) <= 1);
+    }
+
+    [Fact]
     public void OfferedFor_never_lists_the_builds_own_minor()
     {
         Assert.Empty(ReleaseLadder.OfferedFor("0.8.1"));
