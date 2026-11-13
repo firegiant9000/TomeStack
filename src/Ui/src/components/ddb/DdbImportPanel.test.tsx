@@ -29,8 +29,8 @@ vi.mock('../../api/client', () => ({
 const SLOTS = [[2], [3], [4, 2], [4, 3], [4, 3, 2], [4, 3, 3], [4, 3, 3, 1], [4, 3, 3, 2], [4, 3, 3, 3, 1], [4, 3, 3, 3, 2], [4, 3, 3, 3, 2, 1], [4, 3, 3, 3, 2, 1], [4, 3, 3, 3, 2, 1, 1], [4, 3, 3, 3, 2, 1, 1], [4, 3, 3, 3, 2, 1, 1, 1], [4, 3, 3, 3, 2, 1, 1, 1], [4, 3, 3, 3, 2, 1, 1, 1, 1], [4, 3, 3, 3, 3, 1, 1, 1, 1], [4, 3, 3, 3, 3, 2, 1, 1, 1], [4, 3, 3, 3, 3, 2, 2, 1, 1]];
 
 const families: RulesFamilyPolicy[] = [
-  { id: 'srd-5.1', displayName: 'SRD 5.1 (2014 rules)', shortLabel: '2014 rules', abilityIncreaseSource: 'species', backgroundGrantsFeat: false, longRestExhaustionNeedsFoodAndDrink: true, inspirationName: 'Inspiration', longRestHitDice: 'halfTotal', hitDieHealingMinimum: 0, shortRestNeedsOneHitPoint: false, halfCasterLevels: 'down', thirdCasterLevels: 'down', multiclassSpellSlots: SLOTS },
-  { id: 'srd-5.2.1', displayName: 'SRD 5.2.1 (2024 rules)', shortLabel: '2024 rules', abilityIncreaseSource: 'background', backgroundGrantsFeat: true, longRestExhaustionNeedsFoodAndDrink: false, inspirationName: 'Heroic Inspiration', longRestHitDice: 'all', hitDieHealingMinimum: 1, shortRestNeedsOneHitPoint: true, halfCasterLevels: 'up', thirdCasterLevels: 'down', multiclassSpellSlots: SLOTS },
+  { id: 'srd-5.1', displayName: 'SRD 5.1 (2014 rules)', shortLabel: '2014 rules', abilityIncreaseSource: 'species', backgroundGrantsFeat: false, longRestExhaustionNeedsFoodAndDrink: true, inspirationName: 'Inspiration', untrainedShieldGivesArmorClass: true, longRestHitDice: 'halfTotal', hitDieHealingMinimum: 0, shortRestNeedsOneHitPoint: false, halfCasterLevels: 'down', thirdCasterLevels: 'down', multiclassSpellSlots: SLOTS },
+  { id: 'srd-5.2.1', displayName: 'SRD 5.2.1 (2024 rules)', shortLabel: '2024 rules', abilityIncreaseSource: 'background', backgroundGrantsFeat: true, longRestExhaustionNeedsFoodAndDrink: false, inspirationName: 'Heroic Inspiration', untrainedShieldGivesArmorClass: false, concentrationSaveMaximumDc: 30, longRestHitDice: 'all', hitDieHealingMinimum: 1, shortRestNeedsOneHitPoint: true, halfCasterLevels: 'up', thirdCasterLevels: 'down', multiclassSpellSlots: SLOTS },
 ];
 
 const read: DdbReadResult = {
@@ -1252,7 +1252,12 @@ it('names the family step radios by short label and warns in the same words', ()
 });
 
 it('keeps the 2024 rules fixture in line with the real family policy', () => {
-  const policy = families.find((f) => f.id === 'srd-5.2.1');
-  expect(policy).toMatchObject({ longRestHitDice: 'all', hitDieHealingMinimum: 1, halfCasterLevels: 'up', shortRestNeedsOneHitPoint: true });
-  expect(policy?.multiclassSpellSlots).toHaveLength(20);
+  expect(SLOTS).toHaveLength(20);
+  const totals = SLOTS.map((row) => row.reduce((a, b) => a + b, 0));
+  SLOTS.forEach((row) => expect(row.length).toBeLessThanOrEqual(9));
+  totals.forEach((t, i) => expect(t).toBeGreaterThanOrEqual(totals[i - 1] ?? 0));
+  expect(SLOTS[19]).toEqual([4, 3, 3, 3, 3, 2, 2, 1, 1]);
+  const [older, newer] = ['srd-5.1', 'srd-5.2.1'].map((id) => families.find((f) => f.id === id));
+  expect(older).toMatchObject({ longRestHitDice: 'halfTotal', hitDieHealingMinimum: 0, halfCasterLevels: 'down', shortRestNeedsOneHitPoint: false, untrainedShieldGivesArmorClass: true });
+  expect(newer).toMatchObject({ longRestHitDice: 'all', hitDieHealingMinimum: 1, halfCasterLevels: 'up', shortRestNeedsOneHitPoint: true, untrainedShieldGivesArmorClass: false, concentrationSaveMaximumDc: 30 });
 });

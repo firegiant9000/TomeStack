@@ -139,10 +139,11 @@ public sealed partial class CiWorkflowTests
         Assert.Single(run, l => l == HelperLine);
         Assert.Single(run, l => l == "exit $fail");
         Assert.Equal("exit $fail", run[^1]);
+        // Every "check" call is a well-formed pair; a mismatched job and result name fails the pattern.
+        var malformed = run.Where(l => l.StartsWith("check ", StringComparison.Ordinal) && !CheckLine().IsMatch(l)).ToList();
+        Assert.True(malformed.Count == 0, $"Malformed check line: {string.Join(" | ", malformed)}");
         var checks = run.Where(l => CheckLine().IsMatch(l)).Select(l => CheckLine().Match(l).Groups[1].Value).ToList();
         Assert.Equal(Others.Order().ToList(), checks.Order().ToList());
-        // Every "check" call is a well-formed pair; a mismatched job and result name fails the pattern.
-        Assert.Equal(Others.Length, run.Count(l => l.StartsWith("check ", StringComparison.Ordinal)));
     }
 
     private static void CheckTakesBundle(string[] lines, string name)
@@ -208,35 +209,35 @@ public sealed partial class CiWorkflowTests
 
         var commented = Copy();
         commented[IndexOf(commented, "    if: always()")] = "    # if: always()";
-        Assert.ThrowsAny<Exception>(() => CheckBuildTest(commented.ToArray()));
+        Assert.Contains("job-level 'if'", Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => CheckBuildTest(commented.ToArray())).Message);
 
         var moved = Copy();
         moved.RemoveAt(IndexOf(moved, "    if: always()"));
         moved.Insert(IndexOf(moved, "      - name: Require every CI job to succeed") + 1, "        if: always()");
-        Assert.ThrowsAny<Exception>(() => CheckBuildTest(moved.ToArray()));
+        Assert.Contains("job-level 'if'", Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => CheckBuildTest(moved.ToArray())).Message);
 
         var wrongResult = Copy();
         var gui = IndexOf(wrongResult, "          check gui \"${{ needs.gui.result }}\"");
         wrongResult[gui] = "          check gui \"${{ needs.dotnet.result }}\"";
-        Assert.ThrowsAny<Exception>(() => CheckBuildTest(wrongResult.ToArray()));
+        Assert.Contains("Malformed check line", Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => CheckBuildTest(wrongResult.ToArray())).Message);
 
         var commentedCheck = Copy();
         var ui = IndexOf(commentedCheck, "          check ui-test \"${{ needs.ui-test.result }}\"");
         commentedCheck[ui] = "          # check ui-test \"${{ needs.ui-test.result }}\"";
-        Assert.ThrowsAny<Exception>(() => CheckBuildTest(commentedCheck.ToArray()));
+        Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => CheckBuildTest(commentedCheck.ToArray()));
 
         var needsDropped = Copy();
         needsDropped[IndexOf(needsDropped, "    needs: [ui-build, ui-test, dotnet, gui]")] = "    needs: [ui-build, ui-test, dotnet]";
-        Assert.ThrowsAny<Exception>(() => CheckBuildTest(needsDropped.ToArray()));
+        Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => CheckBuildTest(needsDropped.ToArray()));
 
         var exitNotLast = Copy();
         var exit = IndexOf(exitNotLast, "          exit $fail");
         exitNotLast.Insert(exit + 1, "          echo done");
-        Assert.ThrowsAny<Exception>(() => CheckBuildTest(exitNotLast.ToArray()));
+        Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => CheckBuildTest(exitNotLast.ToArray()));
 
         var weakHelper = Copy();
         weakHelper[IndexOf(weakHelper, "          " + HelperLine)] = "          check() { echo \"$1: $2\"; }";
-        Assert.ThrowsAny<Exception>(() => CheckBuildTest(weakHelper.ToArray()));
+        Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => CheckBuildTest(weakHelper.ToArray()));
     }
 
     [Theory]
@@ -254,20 +255,20 @@ public sealed partial class CiWorkflowTests
         nameMoved.RemoveAt(nameLine);
         // Park the name on the next step instead, where it is not the download step's input.
         nameMoved.Insert(IndexOf(nameMoved, "      - name: .NET build", download) + 1, "        name: ui-dist");
-        Assert.ThrowsAny<Exception>(() => CheckTakesBundle(nameMoved.ToArray(), name));
+        Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => CheckTakesBundle(nameMoved.ToArray(), name));
 
         var needsChanged = Copy();
         needsChanged[IndexOf(needsChanged, "    needs: [ui-build]", start)] = "    needs: [ui-test]";
-        Assert.ThrowsAny<Exception>(() => CheckTakesBundle(needsChanged.ToArray(), name));
+        Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => CheckTakesBundle(needsChanged.ToArray(), name));
 
         var needsCommented = Copy();
         needsCommented[IndexOf(needsCommented, "    needs: [ui-build]", start)] = "    # needs: [ui-build]";
-        Assert.ThrowsAny<Exception>(() => CheckTakesBundle(needsCommented.ToArray(), name));
+        Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => CheckTakesBundle(needsCommented.ToArray(), name));
 
         var downloadCommented = Copy();
         var uses = IndexOf(downloadCommented, "        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2", start);
         downloadCommented[uses] = "        # " + downloadCommented[uses].TrimStart();
-        Assert.ThrowsAny<Exception>(() => CheckTakesBundle(downloadCommented.ToArray(), name));
+        Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => CheckTakesBundle(downloadCommented.ToArray(), name));
     }
 
     [Fact]
@@ -278,10 +279,10 @@ public sealed partial class CiWorkflowTests
         var tagged = Copy();
         var checkout = IndexOf(tagged, "      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1");
         tagged[checkout] = "      - uses: actions/checkout@v7";
-        Assert.ThrowsAny<Exception>(() => CheckPinned(tagged.ToArray()));
+        Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => CheckPinned(tagged.ToArray()));
 
         var hidden = Copy();
         hidden.Insert(IndexOf(hidden, "        run: npm run build") + 1, "          uses: evil/action@v1");
-        Assert.ThrowsAny<Exception>(() => CheckPinned(hidden.ToArray()));
+        Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => CheckPinned(hidden.ToArray()));
     }
 }
