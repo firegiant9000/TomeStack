@@ -263,9 +263,8 @@ it('character sheet, manage tab, sharing the character', async () => {
 it('character sheet, manage tab, export with the version choice', async () => {
   const user = userEvent.setup();
   vi.mocked(client.packageTargets).mockResolvedValue(packageTargetsFixture);
-  vi.mocked(client.previewExport).mockImplementation(async (request) => {
+  vi.mocked(client.previewExport).mockImplementation(async (_ids, _purpose, target) => {
     const base = { purpose: 'share' as const, fileName: 'fixture-wren.tomestack.zip', characters: ['fixture-wording'], included: [], omitted: [], gapNotes: 0 };
-    const target = (request as { target?: string }).target;
     return target ? { ...base, target, changes: [exportChange('dropped'), exportChange('leftOut')], changesHash: `hash-${target}` } : base;
   });
   const { container } = render(labelled(<CharacterSheet view={view} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} initialTab="manage" rulesFamilies={families} />));
@@ -273,6 +272,7 @@ it('character sheet, manage tab, export with the version choice', async () => {
   expect(await screen.findByRole('group', { name: 'Which version will open this file?' })).toBeTruthy();
   await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
   expect(await screen.findByRole('region', { name: /^Changed for TomeStack/ })).toBeTruthy();
+  expect(await screen.findByText('Compat dropped message')).toBeTruthy();
   expectPlainWords(container);
 });
 
