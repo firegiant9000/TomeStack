@@ -158,7 +158,7 @@ it('names each number as a button with aria-expanded and aria-controls, "Armor C
 it('opens a number\'s trace in the one status-why region, switches on another number and closes on the same one', async () => {
   const user = userEvent.setup();
   const base = fixtureView();
-  const traced = (f: DerivedValue): DerivedValue => ({ ...f, trace: [{ order: 1, operation: 'base', description: 'Fixture step', result: f.value, origin: { kind: 'rule', rulesFamily: 'srd-5.2.1' } }] });
+  const traced = (f: DerivedValue): DerivedValue => ({ ...f, trace: [{ order: 1, operation: 'base', description: 'Fixture step', result: f.value, origin: { kind: 'rulesPolicy', rulesFamily: 'srd-5.2.1' } }] });
   const fields = base.sheet.fields.map((f) => (f.field === 'armorClass' || f.field === 'initiative' ? traced(f) : f));
   render(<SheetSummary view={{ ...base, sheet: { ...base.sheet, fields } }} fields={fields} {...plain} />);
   const ac = screen.getByRole('button', { name: /^Armor Class/ });
