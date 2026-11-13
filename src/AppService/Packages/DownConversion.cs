@@ -142,9 +142,12 @@ public static class DownConversion
         var gearConverted = new HashSet<Guid>();
         var gearBlocked = new HashSet<Guid>();
         var afterGear = new List<Character>(plan.Characters.Count);
+        // Each "becomes a custom item" line with the revision it converts, matched by instance (two entries can read the same).
+        var gearLines = new Dictionary<BelowChange, Guid>(ReferenceEqualityComparer.Instance);
+        var gearExportLines = new List<(ExportChange Line, Guid RevisionId)>();
         foreach (var character in plan.Characters)
         {
-            var gear = GearAsCustomItems(character, plan, target, isBundledSource, catalog, gearConverted, gearBlocked);
+            var gear = GearAsCustomItems(character, plan, target, isBundledSource, catalog, gearConverted, gearBlocked, gearLines);
             afterGear.Add(gear.Character);
             var below = DownConvert.Below(gear.Character, target.CharacterSchema);
             characters.Add(below.Character);
@@ -154,8 +157,13 @@ public static class DownConversion
                 switch (change.Action)
                 {
                     case BelowAction.Dropped:
-                        changes.Add(new(entry, "character", character.Id, character.Name, null, "dropped", DropsCode, ToggleLabelled(change, character, plan.Revisions)));
+                    {
+                        var dropped = new ExportChange(entry, "character", character.Id, character.Name, null, "dropped", DropsCode, ToggleLabelled(change, character, plan.Revisions));
+                        changes.Add(dropped);
+                        if (gearLines.TryGetValue(change, out var gearRevision))
+                            gearExportLines.Add((dropped, gearRevision));
                         break;
+                    }
                     case BelowAction.Blocks:
                         changes.Add(new(entry, "character", character.Id, character.Name, null, "blocks", BlockedCode, change.Message));
                         break;
@@ -172,6 +180,13 @@ public static class DownConversion
             var held = afterGear.SelectMany(HeldReferences).Select(r => r.RevisionId).ToHashSet();
             gearConverted.ExceptWith(held);
             gearConverted.ExceptWith(plan.Revisions.SelectMany(RefsOf));
+        }
+        // An item that stays blocking is listed once, as the blocker: nothing is written, so "becomes a custom item" would describe
+        // a result that cannot happen. An item that is not a blocker keeps its custom-item line.
+        foreach (var (line, revisionId) in gearExportLines)
+        {
+            if (!gearConverted.Contains(revisionId))
+                changes.Remove(line);
         }
         var content = LowerContent(plan, target, isBundledSource, sourceTitle, catalog, mayLeaveOut, changes, gearConverted);
         // One map, one pass per character (moves never chain: a copy id is new).
@@ -279,7 +294,8 @@ public static class DownConversion
     /// Converted revision ids go to <paramref name="converted"/>, ids still held by an unconverted entry to <paramref name="unconverted"/>.
     /// </summary>
     private static (Character Character, List<BelowChange> Changes) GearAsCustomItems(Character character, PackageService.ExportPlan plan, LadderRow target,
-        Func<Guid, bool> isBundledSource, IContentCatalog catalog, HashSet<Guid> converted, HashSet<Guid> unconverted)
+        Func<Guid, bool> isBundledSource, IContentCatalog catalog, HashSet<Guid> converted, HashSet<Guid> unconverted,
+        Dictionary<BelowChange, Guid> lineRevisions)
     {
         var changes = new List<BelowChange>();
         // Below a v9 target a custom item has no home: the old behaviour (block) stays.
@@ -331,8 +347,10 @@ public static class DownConversion
                 id = Uuid5(Namespace, FormattableString.Invariant($"{GearIdPrefix}{key}:{n}"));
             added.Add(new CustomItem(id, item.Name, entry.Quantity, null, false));
             converted.Add(item.RevisionId);
-            changes.Add(new("equipment", BelowAction.Dropped, BelowCodes.GearAsCustomItem,
-                $"'{name}': '{item.Name}' is not in TomeStack {release}, so it becomes a custom item (not equipped, no longer linked to its content)."));
+            var line = new BelowChange("equipment", BelowAction.Dropped, BelowCodes.GearAsCustomItem,
+                $"'{name}': '{item.Name}' is not in TomeStack {release}, so it becomes a custom item (not equipped, no longer linked to its content).");
+            changes.Add(line);
+            lineRevisions[line] = item.RevisionId;
         }
         var kept = character.Equipment.Where(e => plain.All(p => !ReferenceEquals(p.Entry, e))).ToList();
         return (character with { Equipment = kept, CustomItems = [.. existing, .. added] }, changes);
