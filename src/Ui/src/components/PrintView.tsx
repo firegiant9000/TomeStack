@@ -86,6 +86,11 @@ const Ticks = ({ count, noun }: { count: number; noun: string }) =>
   );
 
 /** Source and page only: never a file name or path (ADR-005, ADR-007). */
+/** A level with no slots is not a slot level the character has (same filter as the Spells panel). */
+function shownSlots(sheet: CharacterView['sheet']) {
+  return (sheet.spellSlots ?? []).filter((s) => s.maximum > 0);
+}
+
 function cite(origin: TraceOrigin): string {
   if (origin.kind !== 'content') return '';
   const page = origin.page ? (origin.page.end && origin.page.end !== origin.page.start ? `, pp. ${origin.page.start}-${origin.page.end}` : `, p. ${origin.page.start}`) : '';
@@ -422,12 +427,12 @@ export function PrintView({ view, onError, onClose }: Props) {
                 </div>
               )}
             </div>
-            {((sheet.spellSlots ?? []).length > 0 || sheet.pactSlots) && (
+            {(shownSlots(sheet).length > 0 || sheet.pactSlots) && (
               <div className="card-block" ref={spellsEl} hidden={!fit.spells}>
                 <table>
                   <caption>Spell slots</caption>
                   <tbody>
-                    {(sheet.spellSlots ?? []).map((s) => (
+                    {shownSlots(sheet).map((s) => (
                       <tr key={s.level}>
                         <th scope="row">Level {s.level}</th>
                         <td>
@@ -563,8 +568,8 @@ export function PrintView({ view, onError, onClose }: Props) {
       {caster && (
         <div>
           <h4>Spells</h4>
-          {(sheet.spellSlots ?? []).length > 0 && (
-            <p>Spell slots: {sheet.spellSlots!.map((s) => `level ${s.level}: ${s.remaining} of ${s.maximum}`).join(', ')}</p>
+          {shownSlots(sheet).length > 0 && (
+            <p>Spell slots: {shownSlots(sheet).map((s) => `level ${s.level}: ${s.remaining} of ${s.maximum}`).join(', ')}</p>
           )}
           {sheet.pactSlots && (
             <p>

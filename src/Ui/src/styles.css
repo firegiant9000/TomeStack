@@ -323,9 +323,7 @@ span.warn { color: var(--warn); }
 .companion-line { display: grid; gap: var(--space-2); padding: var(--space-2) 0; border-top: 1px solid var(--line); min-width: 0; }
 /* Conditions as outlined chips (still native checkboxes); the checked chip is accent-filled like the d20 segment. */
 .conditions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-.conditions .choice { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.1rem 0.6rem; border: 1px solid var(--line-strong); border-radius: 1rem; }
-.conditions .choice:has(:checked) { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
-.conditions .choice:has(:checked) input { accent-color: var(--bg); }
+ul.conditions { list-style: none; padding: 0; }
 .resources, .features { list-style: none; padding: 0; margin: 0; }
 .resource, .feature { padding: 0.35rem 0; border-bottom: 1px solid var(--line); }
 .resource h4 { margin: 0; font-size: var(--text-md); font-variant-numeric: tabular-nums; }
@@ -369,7 +367,7 @@ span.warn { color: var(--warn); }
    stay; only what their details would open to goes. Only explanatory parts are hidden (the HP and Concentration explanations,
    Class columns, resource traces, attack detail). Rest, Roll-row hints, spend consequences ("turning it on spends 1 use"),
    recovery text, status and empty states stay. The toggle and Concentration's save controls are not targets. */
-html[data-compact-play='on'] #sheet-panel-play :is(section[aria-labelledby='hp-heading'] > .hint, section[aria-labelledby='concentration-heading'] > .hint, section[aria-labelledby='class-columns-heading'], .resource details, .feature details > :not(summary)) { display: none; }
+html[data-compact-play='on'] #sheet-panel-play :is(section[aria-labelledby='hp-heading'] .help-note, section[aria-labelledby='concentration-heading'] > .hint, section[aria-labelledby='class-columns-heading'], .resource details, .feature details > :not(summary)) { display: none; }
 html[data-compact-play='on'] #sheet-panel-play .play-panel { padding-top: var(--space-1); }
 #sheet-panel-manage > section + section { border-top: 1px solid var(--line); padding-top: var(--space-2); }
 .equipment-group h4, .play-panel > section > h4 { margin: var(--space-3) 0 var(--space-1); font-size: var(--text-md); }
@@ -497,7 +495,6 @@ button.roll:hover { background: var(--accent); color: var(--bg); }
   .sheet-header button[aria-disabled='true'],
   section[aria-labelledby='builder-heading'] button[aria-disabled='true'] { forced-color-adjust: none; color: GrayText; border-color: GrayText; }
   button.roll:hover { forced-color-adjust: none; color: HighlightText; background: Highlight; border-color: Highlight; }
-  .conditions .choice:has(:checked) { forced-color-adjust: none; color: HighlightText; background: Highlight; border-color: Highlight; }
   .pip[data-filled='true'] { forced-color-adjust: none; background: Highlight; border-color: Highlight; }
 }
 
@@ -597,9 +594,8 @@ dl.review-list dd { overflow-wrap: anywhere; }
   .panel, .sheet-summary { background: none; border-radius: 0; padding: 0; }
   .sheet-summary { display: block; }
   .status-bar { position: static; }
-  article.sheet > details.help-note { margin: 0; padding: 0; }
-  .sheet-summary dl > div, .summary-abilities > div { border: none; padding: 0; }
-  article.sheet > .summary-abilities { margin: 0; }
+  .help-note { display: none !important; } /* a closed note would print a bare "?" */
+  .sheet-summary dl > div { border: none; padding: 0; }
   .print-feature, tr { break-inside: avoid; }
   .combat-page { width: auto; font-size: inherit !important; }
   .combat-scroll { overflow: visible; }

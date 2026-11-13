@@ -354,9 +354,24 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   const rulesLabel = useRulesLabel();
   // D43: `toggle.group-absent` is information (the toggle works as a group of one), not content that failed to apply.
   // An open choice is listed once, under "Choices to make"; internal ids never reach the player.
+  // A `choice.unresolved` is dropped only when that choice is in the list (same source, and its id in the message); otherwise it stays.
+  const choiceListed = (d: { content?: { contentId: string; revisionId: string }; message: string }) =>
+    (sheet.choices ?? []).some(
+      (c) =>
+        !c.resolved &&
+        c.source.contentId === d.content?.contentId &&
+        c.source.revisionId === d.content?.revisionId &&
+        d.message.includes(`('${c.choiceId}')`),
+    );
+  // STOPGAP: the GUID scrub below goes away when Group 2b rewrites the service's diagnostic text. Delete it then.
   const notApplied = sheet.diagnostics
-    .filter((d) => d.code !== 'toggle.group-absent' && d.code !== 'choice.unresolved')
-    .map((d) => ({ ...d, message: d.message.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, 'an entry') }));
+    .filter((d) => d.code !== 'toggle.group-absent' && !(d.code === 'choice.unresolved' && choiceListed(d)))
+    .map((d) => ({
+      ...d,
+      message: d.message
+        .replace(/\b(revision|effect) [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, (m) => (m.charAt(0) === m.charAt(0).toUpperCase() ?'An entry' : 'an entry'))
+        .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, 'an entry'),
+    }));
   // R161/R182: one handler for every save path. A save refused as stale (the character changed since this sheet's copy was read)
   // shows its words in the usual alert and brings in the current copy, so the next edit starts from it. Focus is not touched: whatever
   // the user was on stays, and what they typed stays in its field for them to apply again.

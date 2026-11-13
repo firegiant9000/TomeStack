@@ -163,14 +163,17 @@ it('pins the status bar sticky, static when short or narrow, with no fixed roll-
   // The ability boxes (Play panel or top setting) keep their side margins only on the wide grid.
   expect(blockAfter(css, '@media (max-width: 40rem) {').replace(/\s+/g, ' ')).toContain('article.sheet > .summary-abilities { margin: 0 0 var(--space-3); }');
   expect(blockAfter(css, '@media screen and (max-width: 60rem) {').replace(/\s+/g, ' ')).toMatch(/\[data-text-size='200'\]\) article\.sheet > \.summary-abilities \{ margin: 0 0 var\(--space-3\); \}/);
-  expect(blockAfter(css, '@media print {').replace(/\s+/g, ' ')).toContain('article.sheet > .summary-abilities { margin: 0; }');
-  expect(blockAfter(css, '@media print {').replace(/\s+/g, ' ')).toContain('.summary-abilities > div { border: none; padding: 0; }');
   // The die glyph shows on the ability Roll buttons in both placements, also under forced colours.
   expect(flat.match(/:is\(\.sheet-summary, \.summary-abilities\) button\.roll::before/g)).toHaveLength(2);
   // The hint's reserved margin is reset wherever the bar is not a spanning grid item.
   expect(blockAfter(css, '@media (max-width: 40rem) {').replace(/\s+/g, ' ')).toContain('article.sheet > details.help-note { padding: 0; margin: 0 0 var(--space-3); }');
   expect(blockAfter(css, '@media screen and (max-width: 60rem) {').replace(/\s+/g, ' ')).toMatch(/\[data-text-size='200'\]\) article\.sheet > details\.help-note \{ padding: 0; margin: 0 0 var\(--space-3\); \}/);
-  expect(blockAfter(css, '@media print {').replace(/\s+/g, ' ')).toContain('article.sheet > details.help-note { margin: 0; padding: 0; }');
+  // Print shows only PrintView; a closed help note would print a bare "?", so every note is hidden there.
+  expect(blockAfter(css, '@media print {').replace(/\s+/g, ' ')).toContain('.help-note { display: none !important; }');
+  // Compact play view hides the Hit points panel's help note (D20); the old `> .hint` selector no longer matches it.
+  expect(flat).toContain("section[aria-labelledby='hp-heading'] .help-note");
+  expect(flat).not.toContain("section[aria-labelledby='hp-heading'] > .hint");
+  expect(flat).toContain('ul.conditions { list-style: none; padding: 0; }');
   const media = blockAfter(css, '@media (max-height: 40rem), (max-width: 40rem) {').replace(/\s+/g, ' ');
   expect(media).toContain('.status-bar { position: static; }');
   expect(media).toContain('html { scroll-padding-top: 0; }');
