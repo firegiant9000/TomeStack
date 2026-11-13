@@ -21,6 +21,12 @@ public class SrdGuides51Tests
         ["Druid starting guide"] = ("Druid", ["wis"]),
         ["Fighter starting guide"] = ("Fighter", ["str", "dex"]),
         ["Monk starting guide"] = ("Monk", ["dex", "wis"]),
+        ["Paladin starting guide"] = ("Paladin", ["str", "cha"]),
+        ["Ranger starting guide"] = ("Ranger", ["dex", "wis"]),
+        ["Rogue starting guide"] = ("Rogue", ["dex"]),
+        ["Sorcerer starting guide"] = ("Sorcerer", ["cha"]),
+        ["Warlock starting guide"] = ("Warlock", ["cha"]),
+        ["Wizard starting guide"] = ("Wizard", ["int"]),
     };
 
     private static ContentRevision ClassNamed(string name) =>
@@ -37,16 +43,18 @@ public class SrdGuides51Tests
     }
 
     [Fact]
-    public void There_are_exactly_six_guides_in_the_unused_block_each_valid_and_published()
+    public void There_are_exactly_the_twelve_class_guides_and_the_Acolyte_guide_in_the_unused_block_each_valid_and_published()
     {
-        Assert.Equal(Expected.Keys.Order(), Guides.Revisions.Select(r => r.Name).Order());
+        Assert.Equal(Expected.Keys.Append("Acolyte starting guide").Order(), Guides.Revisions.Select(r => r.Name).Order());
         Assert.All(Guides.Revisions, r =>
         {
             Assert.Equal(ContentKind.CreationGuide, r.Kind);
             Assert.Equal(RevisionStatus.Published, r.Status);
             Assert.Equal(ContentRevision.CreationGuideSchemaVersion, r.SchemaVersion);
             Assert.Equal(["srd-5.1"], r.RulesFamilies);
-            Assert.Equal("Starting equipment and key " + (Expected[r.Name].Abilities.Length == 1 ? "ability." : "abilities."), r.Summary);
+            Assert.Equal(
+                Expected.TryGetValue(r.Name, out var e) ? "Starting equipment and key " + (e.Abilities.Length == 1 ? "ability." : "abilities.") : "Starting equipment.",
+                r.Summary);
             Assert.NotNull(r.Provenance?.Page);
             Assert.StartsWith("51c00000-0000-4000-8000-000000600", r.ContentId.ToString("D"));
             Assert.StartsWith("51e00000-0000-4000-8000-000000600", r.RevisionId.ToString("D"));
@@ -57,7 +65,7 @@ public class SrdGuides51Tests
     }
 
     [Fact]
-    public void Each_of_the_six_classes_has_exactly_one_guide_with_the_prerequisite_table_abilities()
+    public void Each_of_the_twelve_classes_has_exactly_one_guide_with_the_prerequisite_table_abilities()
     {
         foreach (var (guideName, (className, abilities)) in Expected)
         {
@@ -146,6 +154,33 @@ public class SrdGuides51Tests
                 Assert.Contains(pack.ContentId, existing);
         }
         Assert.Equal(Guides.Revisions.Count, Guides.Revisions.Select(r => r.ContentId).Distinct().Count());
+    }
+
+    [Fact]
+    public void Every_bundled_class_and_background_has_a_guide_whose_every_line_resolves()
+    {
+        var published = All.SelectMany(p => p.Revisions)
+            .Where(r => r.Status == RevisionStatus.Published && r.RulesFamilies.Contains("srd-5.1") && r.Kind is ContentKind.Class or ContentKind.Background)
+            .DistinctBy(r => r.ContentId)
+            .ToList();
+        Assert.Equal(13, published.Count);
+        foreach (var target in published)
+        {
+            var guide = Assert.Single(Catalog.GuidesFor(target.ContentId));
+            var kit = Kit(guide);
+            foreach (var pick in kit.Picks)
+            {
+                foreach (var option in pick.Options)
+                {
+                    var choices = kit.Picks.Select(p => p == pick ? new KitChoice(p.Id, option.Id, AnyOfFor(option)) : new KitChoice(p.Id, p.Options[0].Id, AnyOfFor(p.Options[0]))).ToList();
+                    var result = KitExpansion.Expand(kit, choices, Catalog);
+                    Assert.True(result.Problems.Count == 0, $"{target.Name} {pick.Id}/{option.Id}: {string.Join("; ", result.Problems.Select(p => p.Message))}");
+                }
+            }
+        }
+        var acolyte = Kit(Catalog.GuidesFor(Guid.Parse("51c00000-0000-4000-8000-000000000002")).Single());
+        var coins = KitExpansion.Expand(acolyte, acolyte.Picks.Select(p => new KitChoice(p.Id, "a")).ToList(), Catalog).Coins;
+        Assert.Equal(new Currency { Gp = 15 }, coins);
     }
 
     // For each anyOf line of the option (by index), any published item of that category.

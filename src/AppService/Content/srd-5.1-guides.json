@@ -1,7 +1,7 @@
 {
   "packId": "srd-5.1-guides",
   "formatVersion": 1,
-  "notice": "Creation guides (starting equipment and primary abilities) for the 2014-rules classes of the System Reference Document 5.1 (CC-BY-4.0): item names, quantities and ability keys only, from the class Equipment sections and the Multiclassing Prerequisites table. Ids use the 51c0/51e0 block 000000600001-000000600006 (guides, one per class in the order Barbarian, Bard, Cleric, Druid, Fighter, Monk). Taken from SRD_CC_v5.1.pdf (SHA-256 2504d2a0abb0a4d491a939be4f17910a2dde0312570ab8d208080225ccf0a1f0). See docs/licensing/srd-pack-review.md.",
+  "notice": "Creation guides (starting equipment and primary abilities) for the 2014-rules classes and the Acolyte background of the System Reference Document 5.1 (CC-BY-4.0): item names, quantities and ability keys only, from the class and background Equipment sections and the Multiclassing Prerequisites table. Ids use the 51c0/51e0 block 000000600001-000000600013 (guides, one per class in the order Barbarian, Bard, Cleric, Druid, Fighter, Monk, Paladin, Ranger, Rogue, Sorcerer, Warlock, Wizard, then Acolyte). Taken from SRD_CC_v5.1.pdf (SHA-256 2504d2a0abb0a4d491a939be4f17910a2dde0312570ab8d208080225ccf0a1f0). See docs/licensing/srd-pack-review.md.",
   "sources": [
     {
       "id": "51500000-0000-4000-8000-000000000001",
@@ -213,6 +213,239 @@
             { "id": "b", "lines": [ { "pack": { "contentId": "51c00000-0000-4000-8000-000000500105" } } ] } ] },
           { "id": "darts", "label": "Darts", "options": [
             { "id": "a", "lines": [ { "item": { "contentId": "51c00000-0000-4000-8000-000000200012" }, "quantity": 10 } ] } ] }
+        ] }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000600007",
+      "revisionId": "51e00000-0000-4000-8000-000000600007",
+      "schemaVersion": 13,
+      "kind": "creationGuide",
+      "name": "Paladin starting guide",
+      "rulesFamilies": ["srd-5.1"],
+      "provenance": { "sourceId": "51500000-0000-4000-8000-000000000001", "page": { "start": 30, "end": 30 } },
+      "status": "published",
+      "summary": "Starting equipment and key abilities.",
+      "effects": [
+        { "type": "guideFor", "id": "for", "content": { "contentId": "51c00000-0000-4000-8000-000000403000" } },
+        { "type": "primaryAbilities", "id": "primary", "abilities": ["str", "cha"] },
+        { "type": "startingEquipment", "id": "kit", "picks": [
+          { "id": "weapons", "label": "Weapons", "options": [
+            { "id": "a", "lines": [
+              { "anyOf": "weapon.martial" },
+              { "item": { "contentId": "51c00000-0000-4000-8000-000000201013" } } ] },
+            { "id": "b", "lines": [ { "anyOf": "weapon.martial" }, { "anyOf": "weapon.martial" } ] } ] },
+          { "id": "second", "label": "Javelins or melee weapon", "options": [
+            { "id": "a", "lines": [ { "item": { "contentId": "51c00000-0000-4000-8000-000000200005" }, "quantity": 5 } ] },
+            { "id": "b", "lines": [ { "anyOf": "weapon.simple" } ] } ] },
+          { "id": "pack", "label": "Pack", "options": [
+            { "id": "a", "lines": [ { "pack": { "contentId": "51c00000-0000-4000-8000-000000500106" } } ] },
+            { "id": "b", "lines": [ { "pack": { "contentId": "51c00000-0000-4000-8000-000000500105" } } ] } ] },
+          { "id": "armor", "label": "Armor", "options": [
+            { "id": "a", "lines": [ { "item": { "contentId": "51c00000-0000-4000-8000-000000201010" } } ] } ] },
+          { "id": "symbol", "label": "Holy symbol", "options": [
+            { "id": "a", "lines": [ { "item": { "contentId": "51c00000-0000-4000-8000-000000500014" } } ] },
+            { "id": "b", "lines": [ { "item": { "contentId": "51c00000-0000-4000-8000-000000500015" } } ] },
+            { "id": "c", "lines": [ { "item": { "contentId": "51c00000-0000-4000-8000-000000500016" } } ] } ] }
+        ] }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000600008",
+      "revisionId": "51e00000-0000-4000-8000-000000600008",
+      "schemaVersion": 13,
+      "kind": "creationGuide",
+      "name": "Ranger starting guide",
+      "rulesFamilies": ["srd-5.1"],
+      "provenance": { "sourceId": "51500000-0000-4000-8000-000000000001", "page": { "start": 35, "end": 35 } },
+      "status": "published",
+      "summary": "Starting equipment and key abilities.",
+      "effects": [
+        { "type": "guideFor", "id": "for", "content": { "contentId": "51c00000-0000-4000-8000-000000404000" } },
+        { "type": "primaryAbilities", "id": "primary", "abilities": ["dex", "wis"] },
+        { "type": "startingEquipment", "id": "kit", "picks": [
+          { "id": "armor", "label": "Armor", "options": [
+            { "id": "a", "lines": [ { "item": { "contentId": "51c00000-0000-4000-8000-000000201006" } } ] },
+            { "id": "b", "lines": [ { "item": { "contentId": "51c00000-0000-4000-8000-000000201002" } } ] } ] },
+          { "id": "weapons", "label": "Weapons", "options": [
+            { "id": "a", "lines": [ { "item": { "contentId": "51c00000-0000-4000-8000-000000200028" }, "quantity": 2 } ] },
+            { "id": "b", "lines": [ { "anyOf": "weapon.simple" }, { "anyOf": "weapon.simple" } ] } ] },
+          { "id": "pack", "label": "Pack", "options": [
+            { "id": "a", "lines": [ { "pack": { "contentId": "51c00000-0000-4000-8000-000000500103" } } ] },
+            { "id": "b", "lines": [ { "pack": { "contentId": "51c00000-0000-4000-8000-000000500105" } } ] } ] },
+          { "id": "bow", "label": "Longbow and arrows", "options": [
+            { "id": "a", "lines": [
+              { "item": { "contentId": "51c00000-0000-4000-8000-000000200036" } },
+              { "item": { "contentId": "51c00000-0000-4000-8000-000000500019" } },
+              { "item": { "contentId": "51c00000-0000-4000-8000-000000500001" }, "quantity": 20 } ] } ] }
+        ] }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000600009",
+      "revisionId": "51e00000-0000-4000-8000-000000600009",
+      "schemaVersion": 13,
+      "kind": "creationGuide",
+      "name": "Rogue starting guide",
+      "rulesFamilies": ["srd-5.1"],
+      "provenance": { "sourceId": "51500000-0000-4000-8000-000000000001", "page": { "start": 39, "end": 39 } },
+      "status": "published",
+      "summary": "Starting equipment and key ability.",
+      "effects": [
+        { "type": "guideFor", "id": "for", "content": { "contentId": "51c00000-0000-4000-8000-000000410001" } },
+        { "type": "primaryAbilities", "id": "primary", "abilities": ["dex"] },
+        { "type": "startingEquipment", "id": "kit", "picks": [
+          { "id": "weapon", "label": "Weapon", "options": [
+            { "id": "a", "lines": [ { "item": { "contentId": "51c00000-0000-4000-8000-000000200026" } } ] },
+            { "id": "b", "lines": [ { "item": { "contentId": "51c00000-0000-4000-8000-000000200028" } } ] } ] },
+          { "id": "ranged", "label": "Ranged weapon", "options": [
+            { "id": "a", "lines": [
+              { "item": { "contentId": "51c00000-0000-4000-8000-000000200013" } },
+              { "item": { "contentId": "51c00000-0000-4000-8000-000000500019" } },
+              { "item": { "contentId": "51c00000-0000-4000-8000-000000500001" }, "quantity": 20 } ] },
+            { "id": "b", "lines": [ { "item": { "contentId": "51c00000-0000-4000-8000-000000200028" } } ] } ] },
+          { "id": "pack", "label": "Pack", "options": [
+            { "id": "a", "lines": [ { "pack": { "contentId": "51c00000-0000-4000-8000-000000500101" } } ] },
+            { "id": "b", "lines": [ { "pack": { "contentId": "51c00000-0000-4000-8000-000000500103" } } ] },
+            { "id": "c", "lines": [ { "pack": { "contentId": "51c00000-0000-4000-8000-000000500105" } } ] } ] },
+          { "id": "gear", "label": "Armor, daggers and tools", "options": [
+            { "id": "a", "lines": [
+              { "item": { "contentId": "51c00000-0000-4000-8000-000000201002" } },
+              { "item": { "contentId": "51c00000-0000-4000-8000-000000200002" }, "quantity": 2 },
+              { "item": { "contentId": "51c00000-0000-4000-8000-000000500059" } } ] } ] }
+        ] }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000600010",
+      "revisionId": "51e00000-0000-4000-8000-000000600010",
+      "schemaVersion": 13,
+      "kind": "creationGuide",
+      "name": "Sorcerer starting guide",
+      "rulesFamilies": ["srd-5.1"],
+      "provenance": { "sourceId": "51500000-0000-4000-8000-000000000001", "page": { "start": 42, "end": 42 } },
+      "status": "published",
+      "summary": "Starting equipment and key ability.",
+      "effects": [
+        { "type": "guideFor", "id": "for", "content": { "contentId": "51c00000-0000-4000-8000-000000405000" } },
+        { "type": "primaryAbilities", "id": "primary", "abilities": ["cha"] },
+        { "type": "startingEquipment", "id": "kit", "picks": [
+          { "id": "ranged", "label": "Ranged weapon", "options": [
+            { "id": "a", "lines": [
+              { "item": { "contentId": "51c00000-0000-4000-8000-000000200011" } },
+              { "item": { "contentId": "51c00000-0000-4000-8000-000000500003" }, "quantity": 20 } ] },
+            { "id": "b", "lines": [ { "anyOf": "weapon.simple" } ] } ] },
+          { "id": "focus", "label": "Spellcasting focus", "options": [
+            { "id": "a", "lines": [ { "item": { "contentId": "51c00000-0000-4000-8000-000000500017" } } ] },
+            { "id": "b", "lines": [ { "item": { "contentId": "51c00000-0000-4000-8000-000000500005" } } ] },
+            { "id": "c", "lines": [ { "item": { "contentId": "51c00000-0000-4000-8000-000000500006" } } ] },
+            { "id": "d", "lines": [ { "item": { "contentId": "51c00000-0000-4000-8000-000000500007" } } ] },
+            { "id": "e", "lines": [ { "item": { "contentId": "51c00000-0000-4000-8000-000000500008" } } ] },
+            { "id": "f", "lines": [ { "item": { "contentId": "51c00000-0000-4000-8000-000000500009" } } ] } ] },
+          { "id": "pack", "label": "Pack", "options": [
+            { "id": "a", "lines": [ { "pack": { "contentId": "51c00000-0000-4000-8000-000000500103" } } ] },
+            { "id": "b", "lines": [ { "pack": { "contentId": "51c00000-0000-4000-8000-000000500105" } } ] } ] },
+          { "id": "daggers", "label": "Daggers", "options": [
+            { "id": "a", "lines": [ { "item": { "contentId": "51c00000-0000-4000-8000-000000200002" }, "quantity": 2 } ] } ] }
+        ] }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000600011",
+      "revisionId": "51e00000-0000-4000-8000-000000600011",
+      "schemaVersion": 13,
+      "kind": "creationGuide",
+      "name": "Warlock starting guide",
+      "rulesFamilies": ["srd-5.1"],
+      "provenance": { "sourceId": "51500000-0000-4000-8000-000000000001", "page": { "start": 46, "end": 46 } },
+      "status": "published",
+      "summary": "Starting equipment and key ability.",
+      "effects": [
+        { "type": "guideFor", "id": "for", "content": { "contentId": "51c00000-0000-4000-8000-000000406000" } },
+        { "type": "primaryAbilities", "id": "primary", "abilities": ["cha"] },
+        { "type": "startingEquipment", "id": "kit", "picks": [
+          { "id": "ranged", "label": "Ranged weapon", "options": [
+            { "id": "a", "lines": [
+              { "item": { "contentId": "51c00000-0000-4000-8000-000000200011" } },
+              { "item": { "contentId": "51c00000-0000-4000-8000-000000500003" }, "quantity": 20 } ] },
+            { "id": "b", "lines": [ { "anyOf": "weapon.simple" } ] } ] },
+          { "id": "focus", "label": "Spellcasting focus", "options": [
+            { "id": "a", "lines": [ { "item": { "contentId": "51c00000-0000-4000-8000-000000500017" } } ] },
+            { "id": "b", "lines": [ { "item": { "contentId": "51c00000-0000-4000-8000-000000500005" } } ] },
+            { "id": "c", "lines": [ { "item": { "contentId": "51c00000-0000-4000-8000-000000500006" } } ] },
+            { "id": "d", "lines": [ { "item": { "contentId": "51c00000-0000-4000-8000-000000500007" } } ] },
+            { "id": "e", "lines": [ { "item": { "contentId": "51c00000-0000-4000-8000-000000500008" } } ] },
+            { "id": "f", "lines": [ { "item": { "contentId": "51c00000-0000-4000-8000-000000500009" } } ] } ] },
+          { "id": "pack", "label": "Pack", "options": [
+            { "id": "a", "lines": [ { "pack": { "contentId": "51c00000-0000-4000-8000-000000500107" } } ] },
+            { "id": "b", "lines": [ { "pack": { "contentId": "51c00000-0000-4000-8000-000000500103" } } ] } ] },
+          { "id": "gear", "label": "Armor, simple weapon and daggers", "options": [
+            { "id": "a", "lines": [
+              { "item": { "contentId": "51c00000-0000-4000-8000-000000201002" } },
+              { "anyOf": "weapon.simple" },
+              { "item": { "contentId": "51c00000-0000-4000-8000-000000200002" }, "quantity": 2 } ] } ] }
+        ] }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000600012",
+      "revisionId": "51e00000-0000-4000-8000-000000600012",
+      "schemaVersion": 13,
+      "kind": "creationGuide",
+      "name": "Wizard starting guide",
+      "rulesFamilies": ["srd-5.1"],
+      "provenance": { "sourceId": "51500000-0000-4000-8000-000000000001", "page": { "start": 52, "end": 52 } },
+      "status": "published",
+      "summary": "Starting equipment and key ability.",
+      "effects": [
+        { "type": "guideFor", "id": "for", "content": { "contentId": "51c00000-0000-4000-8000-000000407000" } },
+        { "type": "primaryAbilities", "id": "primary", "abilities": ["int"] },
+        { "type": "startingEquipment", "id": "kit", "picks": [
+          { "id": "weapon", "label": "Weapon", "options": [
+            { "id": "a", "lines": [ { "item": { "contentId": "51c00000-0000-4000-8000-000000200008" } } ] },
+            { "id": "b", "lines": [ { "item": { "contentId": "51c00000-0000-4000-8000-000000200002" } } ] } ] },
+          { "id": "focus", "label": "Spellcasting focus", "options": [
+            { "id": "a", "lines": [ { "item": { "contentId": "51c00000-0000-4000-8000-000000500017" } } ] },
+            { "id": "b", "lines": [ { "item": { "contentId": "51c00000-0000-4000-8000-000000500005" } } ] },
+            { "id": "c", "lines": [ { "item": { "contentId": "51c00000-0000-4000-8000-000000500006" } } ] },
+            { "id": "d", "lines": [ { "item": { "contentId": "51c00000-0000-4000-8000-000000500007" } } ] },
+            { "id": "e", "lines": [ { "item": { "contentId": "51c00000-0000-4000-8000-000000500008" } } ] },
+            { "id": "f", "lines": [ { "item": { "contentId": "51c00000-0000-4000-8000-000000500009" } } ] } ] },
+          { "id": "pack", "label": "Pack", "options": [
+            { "id": "a", "lines": [ { "pack": { "contentId": "51c00000-0000-4000-8000-000000500107" } } ] },
+            { "id": "b", "lines": [ { "pack": { "contentId": "51c00000-0000-4000-8000-000000500105" } } ] } ] },
+          { "id": "book", "label": "Spellbook", "options": [
+            { "id": "a", "lines": [ { "item": { "contentId": "51c00000-0000-4000-8000-000000500018" } } ] } ] }
+        ] }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000600013",
+      "revisionId": "51e00000-0000-4000-8000-000000600013",
+      "schemaVersion": 13,
+      "kind": "creationGuide",
+      "name": "Acolyte starting guide",
+      "rulesFamilies": ["srd-5.1"],
+      "provenance": { "sourceId": "51500000-0000-4000-8000-000000000001", "page": { "start": 61, "end": 61 } },
+      "status": "published",
+      "summary": "Starting equipment.",
+      "effects": [
+        { "type": "guideFor", "id": "for", "content": { "contentId": "51c00000-0000-4000-8000-000000000002" } },
+        { "type": "startingEquipment", "id": "kit", "picks": [
+          { "id": "symbol", "label": "Holy symbol", "options": [
+            { "id": "a", "lines": [ { "item": { "contentId": "51c00000-0000-4000-8000-000000500014" } } ] },
+            { "id": "b", "lines": [ { "item": { "contentId": "51c00000-0000-4000-8000-000000500015" } } ] },
+            { "id": "c", "lines": [ { "item": { "contentId": "51c00000-0000-4000-8000-000000500016" } } ] } ] },
+          { "id": "devotion", "label": "Prayer book or prayer wheel", "options": [
+            { "id": "a", "lines": [ { "item": { "contentId": "51c00000-0000-4000-8000-000000500072" } } ] },
+            { "id": "b", "lines": [ { "item": { "contentId": "51c00000-0000-4000-8000-000000500073" } } ] } ] },
+          { "id": "gear", "label": "Incense, vestments, clothes and pouch", "options": [
+            { "id": "a", "lines": [
+              { "item": { "contentId": "51c00000-0000-4000-8000-000000500071" }, "quantity": 5 },
+              { "item": { "contentId": "51c00000-0000-4000-8000-000000500056" } },
+              { "item": { "contentId": "51c00000-0000-4000-8000-000000500030" } },
+              { "item": { "contentId": "51c00000-0000-4000-8000-000000500020" } },
+              { "coins": { "gp": 15 } } ] } ] }
         ] }
       ]
     }
