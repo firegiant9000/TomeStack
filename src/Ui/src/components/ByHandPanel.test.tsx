@@ -44,7 +44,7 @@ function mech(name: string, effectType: string, automation: AutomationStatus, pa
   };
 }
 
-const report = (mechanics: MechanicEntry[], unsupported: MechanicEntry[] = []): MechanicsReport => ({ mechanics, unsupported });
+const report = (mechanics: MechanicEntry[], unsupported: MechanicEntry[] = []): MechanicsReport => ({ mechanics, unsupported, hasLimitedUseAction: false, hasReferenceOnlyFeature: false });
 
 const spender = feature('Fixture Surge', [{ type: 'roll', resourceId: 'pool', label: 'Surge die' }], 7);
 const plain = feature('Fixture Lore');

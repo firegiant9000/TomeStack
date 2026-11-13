@@ -309,7 +309,7 @@ export interface RecoveryInfo {
   text?: string;
   value?: number;
   /** `all` is sent as false unless the recovery restores the whole pool. */
-  all?: boolean;
+  all: boolean;
 }
 
 /** A limited-use resource; `maximum`/`current` are absent when it is tracked by hand. */
@@ -599,8 +599,8 @@ export interface EffectiveAutomation {
 export interface MechanicsReport {
   mechanics: MechanicEntry[];
   unsupported: MechanicEntry[];
-  hasLimitedUseAction?: boolean;
-  hasReferenceOnlyFeature?: boolean;
+  hasLimitedUseAction: boolean;
+  hasReferenceOnlyFeature: boolean;
 }
 
 export interface HitPointState {
@@ -882,8 +882,8 @@ export interface PlayState {
   /** Character schema v10 (D43): the encounter in progress. Round 0 means the first turn has not started; show max(1, round). */
   encounter?: { round: number };
   /** Spell slots spent, by spell level. */
-  spellSlotsSpent?: { level: number; spent: number }[];
-  pactSlotsSpent?: number;
+  spellSlotsSpent: { level: number; spent: number }[];
+  pactSlotsSpent: number;
 }
 
 export type PlayActionKind =
@@ -1217,14 +1217,14 @@ export interface RulesFamilyPolicy {
   /** What the sheet calls the inspiration toggle: "Inspiration" (2014) or "Heroic Inspiration" (2024). */
   inspirationName: string;
   /** How many spent hit dice a long rest gives back: half the total (2014) or all (2024). */
-  longRestHitDice?: 'halfTotal' | 'all';
-  hitDieHealingMinimum?: number;
+  longRestHitDice: 'halfTotal' | 'all';
+  hitDieHealingMinimum: number;
   shortRestNeedsOneHitPoint?: boolean;
   /** How a half caster's class levels round for the Multiclass Spellcaster table. */
-  halfCasterLevels?: 'down' | 'up';
+  halfCasterLevels: 'down' | 'up';
   thirdCasterLevels?: 'down' | 'up';
   /** The Multiclass Spellcaster table: slots per spell level, by caster level. */
-  multiclassSpellSlots?: number[][];
+  multiclassSpellSlots: number[][];
   untrainedShieldGivesArmorClass?: boolean;
   concentrationSaveMaximumDc?: number;
 }
@@ -1390,7 +1390,7 @@ export interface PackageManifest {
   /** Source packs: the sender's statement, per source, that it is their own work. TomeStack cannot verify it. */
   attestations?: { sourceId: string; statement: string; confirmedAt: string }[];
   /** The files in the package. */
-  entries?: { path: string; kind: string; sha256: string; size: number }[];
+  entries: { path: string; kind: string; sha256: string; size: number }[];
   /** Library backups and source packs: the order revisions are applied in (ids). */
   revisionOrder?: string[];
   /** The older release the copy was made for, when it is a down-converted copy. */
@@ -1688,6 +1688,7 @@ export type ImportJobStatus = 'queued' | 'running' | 'completed' | 'cancelled' |
 /** An import job: extraction of one source's PDF, then candidate detection. Local only; never exported. */
 export interface ImportJob {
   id: string;
+  schemaVersion: number;
   sourceId: string;
   /** SHA-256 of the document the job read (the PDF, or the Markdown file's bytes); its pages are stored under it. */
   sha256: string;
@@ -1962,6 +1963,8 @@ export type Effect =
       operation: 'bonus' | 'set' | 'replace';
       target: string;
       value: string;
+      stacking?: 'stack' | 'highestInGroup';
+      stackGroup?: string;
       toggle?: string;
       /** Content v11 (D43): the content that declares `toggle`. Absent: this revision. */
       toggleContent?: string;
@@ -2183,7 +2186,7 @@ export type Effect =
       mastery?: string;
       bonus?: number;
     })
-  | (EffectBase & { type: 'armor'; category: 'light' | 'medium' | 'heavy' | 'shield'; armorClass: number; dexterityCap?: number })
+  | (EffectBase & { type: 'armor'; category: 'light' | 'medium' | 'heavy' | 'shield'; armorClass: number; dexterityCap?: number; strength?: number; stealthDisadvantage?: boolean })
   | (EffectBase & { type: 'choice'; choiceId: string; count: number; options: ContentReference[]; level?: number; onlyAs?: ClassEntry; replaceable?: { when: 'levelUp' | 'longRest'; max?: number } })
   // M5 slice 1b: the class editor (content v3/v5 effects, and v9 scale and multiclassCasterTable; ADR-010).
   | (EffectBase & { type: 'hitDie'; die: number })
@@ -2425,7 +2428,7 @@ export interface ValidationReport {
   warnings: Diagnostic[];
   canPublish: boolean;
   /** The lowest content schema version a revision must have to be published. */
-  requiredSchemaVersion?: number;
+  requiredSchemaVersion: number;
 }
 
 /** M5 slice 2 (B02): how much a debugger finding matters; errors block publishing. */

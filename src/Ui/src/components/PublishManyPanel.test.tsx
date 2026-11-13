@@ -24,7 +24,7 @@ const entryOf = (p: PendingDraft, over: Partial<PublishManyEntry> = {}): Publish
   draft: p.draft,
   name: p.name,
   kind: p.kind,
-  report: { revision: p.draft, errors: [], warnings: [], canPublish: true },
+  report: { revision: p.draft, errors: [], warnings: [], requiredSchemaVersion: 12, canPublish: true },
   findings: [],
   replacesPublished: p.replacesPublished,
   rePointings: [],
@@ -136,7 +136,7 @@ it('refuses while any error exists, naming it, and sends nothing', async () => {
   vi.mocked(client.publishManyPreview).mockResolvedValue(
     previewOf([
       entryOf(all[0]!),
-      entryOf(all[1]!, { report: { revision: all[1]!.draft, errors: [{ code: 'validate.dice-invalid', message: 'The dice are not valid.' }], warnings: [], canPublish: false } }),
+      entryOf(all[1]!, { report: { revision: all[1]!.draft, errors: [{ code: 'validate.dice-invalid', message: 'The dice are not valid.' }], warnings: [], requiredSchemaVersion: 12, canPublish: false } }),
     ]),
   );
   renderPanel(all);
@@ -232,7 +232,7 @@ it('says how many problems hold publishing', async () => {
   const all = [pendingOf(1), pendingOf(2)];
   const bad = { code: 'validate.dice-invalid', message: 'The dice are not valid.' };
   vi.mocked(client.publishManyPreview).mockResolvedValue(
-    previewOf([entryOf(all[0]!), entryOf(all[1]!, { report: { revision: all[1]!.draft, errors: [bad, bad], warnings: [], canPublish: false } })]),
+    previewOf([entryOf(all[0]!), entryOf(all[1]!, { report: { revision: all[1]!.draft, errors: [bad, bad], warnings: [], requiredSchemaVersion: 12, canPublish: false } })]),
   );
   renderPanel(all);
   await vi.waitFor(() => expect(liveNote()?.textContent).toBe('2 problems; publishing is held.'));

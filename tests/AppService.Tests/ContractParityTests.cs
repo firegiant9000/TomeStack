@@ -13,56 +13,78 @@ namespace TomeStack.AppService.Tests;
 /// Row 4.6: the gate fails when a DTO the dispatcher returns gains a property that <c>src/Ui/src/api/types.ts</c> does not declare.
 /// The C# side is read by reflection (the return type of every <c>app.</c>-rooted command in <c>CommandDispatcher.Execute</c>, then the JSON
 /// property names from <c>RulesJson.Compact</c>); the TS side is read as plain text. Every allow-list entry carries a reason and is checked for staleness.
-/// Exempt by rule: get-only computed properties (no setter or init accessor) and <c>[JsonExtensionData]</c> members; positional record
-/// parameters have init accessors, so they stay checked. A C# type whose TS name is an opaque alias (Record, a union of literals) counts as matched with no field check.
+/// Exempt by rule: <c>[JsonExtensionData]</c> members and computed properties, meaning no setter of any visibility (init counts as one) and no
+/// constructor parameter binding them; positional record parameters and <c>{ get; private set; }</c> stay checked. A C# type whose TS name is an opaque
+/// alias (Record, a union of literals) counts as matched with no field check.
+/// A type behind a custom converter has no object contract to read: an abstract one (<c>Effect</c>) has its concrete subtypes walked, each checked against the TS union
+/// member with the same discriminator (<c>TypeName</c> against <c>type: 'x'</c>), with the discriminator the converter writes added to its names.
+/// Any other non-object contract must be listed in <c>OpaqueConverterTypes</c> with a reason, or the walk fails instead of skipping it.
 /// </summary>
 public sealed partial class ContractParityTests
 {
-    // C# type name -> TS name, where they differ.
+    // C# type name -> TS name, where they differ (field-checked like any other pair).
     private static readonly Dictionary<string, string> NameMap = new()
     {
+        ["Appearance"] = "CharacterAppearance",
+        ["ChoiceRef"] = "ClassTableRef",
+        ["CostPayment"] = "EffectPayment",
+        ["CoverageScope"] = "CoverageRequest",
+        ["DailyCopiesState"] = "DailyCopies",
+        ["FeatureRef"] = "ClassTableRef",
+        ["ImportJobRecord"] = "ImportJob",
+        ["ItemChargeRecoveryInfo"] = "ItemChargeRecovery",
+        ["Mechanic"] = "MechanicEntry",
+        ["ResponseOutcome"] = "ResponseOutcomeDef",
+        ["TextBlock"] = "StoredTextBlock",
     };
 
-    // C# types the dispatcher returns that have no TS counterpart.
+    // C# types the dispatcher returns that have no named TS interface. Triaged by field set, not by name (2026-11-12).
+    // An "inline in" reason says TS declares the shape inside its parent (the parent's own fields are checked, the inline ones are not);
+    // such an entry also stops a same-named TS interface from being compared (ItemChargeRecovery is a different type from TS's ItemChargeRecovery).
     private static readonly Dictionary<string, string> UnmatchedTypes = new()
     {
-        // Typed inline in the TS parent, so there is no named interface to compare (the parent's own fields are checked).
         ["ActiveToggle"] = "inline in PlayState.toggles",
+        ["AlsoChange"] = "inline in Effect (alsoChange)",
+        ["AttackDamage"] = "inline in Effect (attack damage)",
+        ["AttachOutcome"] = "no TS shape with fields attached and attachment",
+        ["CandidateGrant"] = "inline in StoredCandidate.grantsCandidates",
+        ["ChoiceReplaceable"] = "inline in Effect (choice replaceable)",
         ["Concentration"] = "inline in PlayState.concentration",
+        ["ContentDiff"] = "inline in UpdateReview.mechanics (TS declares properties and effects; from and to sit on UpdateReview)",
         ["DeathSaves"] = "inline in PlayState.deathSaves",
         ["EncounterState"] = "inline in PlayState.encounter",
+        ["ExtensionDraft"] = "inline in ExtensionRunPreview.drafts",
+        ["ExtensionImportResult"] = "no TS shape with sourceId, sourceTitle and drafts (ExtensionRunPreview has no sourceId)",
+        ["ExtensionUpdate"] = "inline in ExtensionInstallPreview.update",
+        ["FormulaError"] = "inline in FormulaPreviewResult.error",
         ["HitDiceUse"] = "inline in PlayState.hitDiceSpent",
-        ["SpellSlotUse"] = "inline in PlayState.spellSlotsSpent",
+        ["ImportAuditEntry"] = "no TS shape with at, event and detail",
+        ["ItemChargeRecovery"] = "inline in Effect (item charges recovery)",
+        ["ItemCharges"] = "inline in Effect (item charges)",
         ["PackageEntry"] = "inline in PackageManifest.entries",
+        ["PermissionInfo"] = "inline in ExtensionInstallPreview.permissions",
+        ["PropertyChange"] = "inline in UpdateReview.mechanics.properties",
+        ["Provenance"] = "inline in ContentRevision.provenance",
         ["Repinned"] = "inline in PackagePreview.repinned",
+        ["ResourceFullPrompt"] = "inline in Effect (resourceFull)",
+        ["ResponseSupersedes"] = "inline in Effect (response supersedes)",
+        ["ResponseTrigger"] = "inline in Effect (response trigger)",
+        ["ResponseWhen"] = "inline in Effect (response when)",
+        ["RollSave"] = "inline in Effect (roll save)",
+        ["ScaledDice"] = "inline in Effect (scaledDice)",
+        ["SessionNote"] = "inline in Character.notes",
         ["SourceAttestation"] = "inline in PackageManifest.attestations",
-        // No named TS interface yet; the UI reads these structurally or not at all. Each is a follow-up candidate, not a decision.
-        ["Appearance"] = "no named TS interface",
-        ["AttachOutcome"] = "no named TS interface",
-        ["CandidateGrant"] = "no named TS interface",
-        ["ChoiceRef"] = "no named TS interface",
-        ["ChoiceReplaceable"] = "no named TS interface",
-        ["ContentDiff"] = "no named TS interface",
-        ["CoverageScope"] = "no named TS interface",
-        ["DailyCopiesState"] = "no named TS interface",
-        ["ExtensionDraft"] = "no named TS interface",
-        ["ExtensionImportResult"] = "no named TS interface",
-        ["ExtensionUpdate"] = "no named TS interface",
-        ["FeatureRef"] = "no named TS interface",
-        ["FormulaError"] = "no named TS interface",
-        ["ImportAuditEntry"] = "no named TS interface",
-        ["ImportJobRecord"] = "no named TS interface",
-        ["ItemChargeRecoveryInfo"] = "no named TS interface",
-        ["Mechanic"] = "no named TS interface (the UI's MechanicEntry is a separate shape)",
-        ["PermissionInfo"] = "no named TS interface",
-        ["PropertyChange"] = "no named TS interface",
-        ["Provenance"] = "no named TS interface",
-        ["ResponseTrigger"] = "no named TS interface",
-        ["SessionNote"] = "no named TS interface",
-        ["SpellSummary"] = "no named TS interface",
-        ["TextBlock"] = "no named TS interface",
-        ["TextLine"] = "no named TS interface",
-        ["ToggleRef"] = "no named TS interface",
+        ["SpellSlotUse"] = "inline in PlayState.spellSlotsSpent",
+        ["SpellSummary"] = "inline in ContentOption.spell",
+        ["TextLine"] = "inline in TextChange.lines (the ImportWorker's TextLine shares the name; its TS shape is StoredTextLine and is not compared)",
+        ["ToggleRef"] = "inline in Effect (toggle references)",
+    };
+
+    // Types behind a custom converter that the walk deliberately does not enter (C# type name -> why). A type with a custom
+    // contract that is neither abstract (its subtypes are walked) nor listed here fails Walk_does_not_silently_skip_a_type_with_a_custom_contract.
+    private static readonly Dictionary<string, string> OpaqueConverterTypes = new()
+    {
+        ["UnknownEffect"] = "EffectJsonConverter writes its Raw JSON verbatim: the shape is whatever the content author wrote",
     };
 
     // "CSharpType.jsonName": a property the UI has no field for.
@@ -121,9 +143,9 @@ public sealed partial class ContractParityTests
         foreach (var (type, names) in walk.Shapes)
         {
             var tsName = TsNameOf(type);
-            if (!walk.Ts.TryGetValue(tsName, out var fields))
+            if (TsFieldsOf(walk, type) is not { } fields)
             {
-                if (walk.TsOpaque.Contains(tsName)) continue; // declared in TS as an alias (Record, union): matched, no field check
+                if (IsTsOpaque(walk, type)) continue; // declared in TS as an alias (Record, union): matched, no field check
                 if (!UnmatchedTypes.ContainsKey(type.Name))
                     gaps.Add($"{type.Name} (whole type) → {tsName}");
                 continue;
@@ -151,7 +173,7 @@ public sealed partial class ContractParityTests
         foreach (var key in UnmatchedTypes.Keys)
         {
             if (!byName.TryGetValue(key, out var types)) stale.Add($"UnmatchedTypes {key}: no longer walked");
-            else if (types.Any(t => walk.Ts.ContainsKey(TsNameOf(t)) || walk.TsOpaque.Contains(TsNameOf(t)))) stale.Add($"UnmatchedTypes {key}: TS now has it");
+            else if (types.Any(t => TsFieldsOf(walk, t) is not null || IsTsOpaque(walk, t))) stale.Add($"UnmatchedTypes {key}: TS now has it");
         }
         foreach (var key in KnownGaps.Keys)
         {
@@ -161,7 +183,7 @@ public sealed partial class ContractParityTests
             var types = byName.GetValueOrDefault(typeName);
             if (types is null) { stale.Add($"KnownGaps {key}: type no longer walked"); continue; }
             var stillGap = types.Any(t => walk.Shapes[t].Contains(json)
-                && walk.Ts.TryGetValue(TsNameOf(t), out var fields) && !fields.Contains(json));
+                && TsFieldsOf(walk, t) is { } fields && !fields.Contains(json));
             if (!stillGap) stale.Add($"KnownGaps {key}: not a gap any more");
         }
         foreach (var key in UntypedCommands.Keys)
@@ -176,6 +198,29 @@ public sealed partial class ContractParityTests
         var missing = walk.Commands.Where(c => !walk.TypedCommands.Contains(c) && !UntypedCommands.ContainsKey(c)).Order(StringComparer.Ordinal).ToList();
         Assert.True(missing.Count == 0, "Commands with no typed result and no UntypedCommands entry: " + string.Join(", ", missing));
         Assert.True(walk.TypedCommands.Count > 50, "The Execute parser found suspiciously few typed commands.");
+    }
+
+    [Fact]
+    public void Walk_does_not_silently_skip_a_type_with_a_custom_contract()
+    {
+        var walk = Analyse();
+        Assert.True(walk.Walk.Unlisted.Count == 0,
+            "The walk skipped types whose JSON contract is not a plain object (custom converter): walk their subtypes or add an OpaqueConverterTypes entry with a reason: "
+            + string.Join(", ", walk.Walk.Unlisted.Select(t => t.Name).Order(StringComparer.Ordinal)));
+        var stale = OpaqueConverterTypes.Keys.Where(k => !walk.Walk.ListedOpaque.Contains(k)).ToList();
+        Assert.True(stale.Count == 0, "Stale OpaqueConverterTypes entries (never reached by the walk): " + string.Join(", ", stale));
+    }
+
+    [Fact]
+    public void Walker_reaches_the_effect_hierarchy_behind_its_converter()
+    {
+        var walk = Analyse();
+        var modifier = Assert.Single(walk.Walk.Shapes, s => s.Key == typeof(ModifierEffect));
+        Assert.Contains("type", modifier.Value);
+        Assert.Contains("id", modifier.Value);
+        Assert.Contains("operation", modifier.Value);
+        Assert.Equal((typeof(Effect), "modifier"), walk.Walk.Subtypes[typeof(ModifierEffect)]);
+        Assert.NotNull(TsFieldsOf(walk, typeof(ModifierEffect)));
     }
 
     [Fact]
@@ -220,16 +265,35 @@ public sealed partial class ContractParityTests
         IReadOnlyDictionary<string, IReadOnlySet<string>> Ts,
         IReadOnlySet<string> TsOpaque,
         IReadOnlySet<string> Commands,
-        IReadOnlySet<string> TypedCommands);
+        IReadOnlySet<string> TypedCommands,
+        Walk Walk,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, IReadOnlySet<string>>> Variants);
 
     private static string TsNameOf(Type type) => NameMap.GetValueOrDefault(type.Name, type.Name);
+
+    /// <summary>The TS fields to check a walked type against: its interface, or the member of the TS union that has its discriminator. Null when TS has none.</summary>
+    private static IReadOnlySet<string>? TsFieldsOf(Analysis walk, Type type)
+    {
+        if (IsInline(type)) return null;
+        if (walk.Walk.Subtypes.TryGetValue(type, out var sub))
+            return walk.Variants.GetValueOrDefault(TsNameOf(sub.Parent))?.GetValueOrDefault(sub.Discriminator);
+        return walk.Ts.GetValueOrDefault(TsNameOf(type));
+    }
+
+    // An "inline in ..." entry says the TS type is declared inside its parent, so a same-named TS interface (if any) is a different thing.
+    private static bool IsInline(Type type) => UnmatchedTypes.TryGetValue(type.Name, out var reason) && reason.StartsWith("inline in", StringComparison.Ordinal);
+
+    private static bool IsTsOpaque(Analysis walk, Type type) => !IsInline(type) && !walk.Walk.Subtypes.ContainsKey(type) && walk.TsOpaque.Contains(TsNameOf(type));
+
+    // Extra walk roots: DTOs that only an untyped command embeds (UntypedCommands says which).
+    private static readonly Type[] ExtraRoots = [];
 
     private static Analysis Analyse()
     {
         var (commands, typed) = DispatcherResultTypes();
-        var shapes = WalkJsonShapes(typed.Values.SelectMany(t => t).Distinct().ToList());
-        var (ts, opaque) = TsParse(File.ReadAllText(Path.Combine(RepoRoot, "src", "Ui", "src", "api", "types.ts")));
-        return new Analysis(shapes, ts, opaque, commands.ToHashSet(), typed.Keys.ToHashSet());
+        var walked = WalkAll(typed.Values.SelectMany(t => t).Concat(ExtraRoots).Distinct().ToList());
+        var (ts, opaque, variants) = TsParse(File.ReadAllText(Path.Combine(RepoRoot, "src", "Ui", "src", "api", "types.ts")));
+        return new Analysis(walked.Shapes, ts, opaque, commands.ToHashSet(), typed.Keys.ToHashSet(), walked, variants);
     }
 
     // ---- C# side ----
@@ -305,29 +369,66 @@ public sealed partial class ContractParityTests
 
     // Exempt by rule: get-only computed properties (no setter or init accessor) and [JsonExtensionData] members.
     // Positional record parameters have init accessors, so they stay checked.
-    private static bool IsChecked(JsonPropertyInfo property) => property.Set is not null && !property.IsExtensionData;
+    private static bool IsChecked(JsonPropertyInfo property) =>
+        !property.IsExtensionData
+        && property.Get is not null // [JsonIgnore] members are never written
+        && (property.Set is not null
+            || property.AssociatedParameter is not null
+            || (property.AttributeProvider as PropertyInfo)?.SetMethod is not null);
 
-    private static IReadOnlyDictionary<Type, IReadOnlyList<string>> WalkJsonShapes(IEnumerable<Type> roots)
+    /// <summary>What the walk found: the checked JSON names per type, the converter-backed subtypes and their parent, and every skipped type.</summary>
+    private sealed record Walk(
+        IReadOnlyDictionary<Type, IReadOnlyList<string>> Shapes,
+        IReadOnlyDictionary<Type, (Type Parent, string Discriminator)> Subtypes,
+        IReadOnlySet<string> ListedOpaque,
+        IReadOnlyList<Type> Unlisted);
+
+    private static IReadOnlyDictionary<Type, IReadOnlyList<string>> WalkJsonShapes(IEnumerable<Type> roots) => WalkAll(roots).Shapes;
+
+    private static Walk WalkAll(IEnumerable<Type> roots)
     {
         var shapes = new Dictionary<Type, IReadOnlyList<string>>();
+        var subtypes = new Dictionary<Type, (Type, string)>();
+        var listed = new HashSet<string>();
+        var unlisted = new List<Type>();
+        var seen = new HashSet<Type>();
         var queue = new Queue<Type>(roots);
         while (queue.Count > 0)
         {
             var type = Unwrap(queue.Dequeue());
-            if (!IsWalkable(type) || shapes.ContainsKey(type)) continue;
+            if (!IsWalkable(type) || !seen.Add(type)) continue;
+            if (OpaqueConverterTypes.ContainsKey(type.Name)) { listed.Add(type.Name); continue; }
             var info = RulesJson.Compact.GetTypeInfo(type);
-            if (info.Kind != JsonTypeInfoKind.Object) continue;
-            shapes[type] = info.Properties.Where(IsChecked).Select(p => p.Name).ToList();
+            if (info.Kind != JsonTypeInfoKind.Object)
+            {
+                // A custom converter or an abstract base hides the contract from the walk: walk the concrete subtypes it can write instead.
+                // A concrete type behind its own converter has no subtypes to walk, so it must be listed in OpaqueConverterTypes.
+                if (type.IsAbstract)
+                {
+                    foreach (var sub in type.Assembly.GetTypes().Where(t => t != type && !t.IsAbstract && type.IsAssignableFrom(t)))
+                    {
+                        if (sub.GetField("TypeName", BindingFlags.Public | BindingFlags.Static)?.GetRawConstantValue() is string discriminator)
+                            subtypes[sub] = (type, discriminator);
+                        queue.Enqueue(sub);
+                    }
+                }
+                else unlisted.Add(type);
+                continue;
+            }
+            var names = info.Properties.Where(IsChecked).Select(p => p.Name).ToList();
+            // EffectJsonConverter writes the discriminator first from the (get-only) Type property.
+            if (subtypes.ContainsKey(type) && !names.Contains("type")) names.Add("type");
+            shapes[type] = names;
             foreach (var property in info.Properties) queue.Enqueue(property.PropertyType);
             if (info.PolymorphismOptions is { } polymorphism)
                 foreach (var derived in polymorphism.DerivedTypes) queue.Enqueue(derived.DerivedType);
         }
-        return shapes;
+        return new Walk(shapes, subtypes, listed, unlisted);
     }
 
     // ---- TS side ----
 
-    [GeneratedRegex(@"export\s+interface\s+(\w+)\s*(?:<[^{]*?>)?\s*(?:extends\s+([^{]+?))?\s*\{")]
+    [GeneratedRegex(@"(?:export\s+)?interface\s+(\w+)\s*(?:<[^{]*?>)?\s*(?:extends\s+([^{]+?))?\s*\{")]
     private static partial Regex InterfaceHead();
 
     [GeneratedRegex(@"export\s+type\s+(\w+)\s*(?:<[^=]*?>)?\s*=\s*")]
@@ -342,15 +443,20 @@ public sealed partial class ContractParityTests
     [GeneratedRegex(@"\n(?=\s*(?:export|declare|const|function|import|type|interface)\b)")]
     private static partial Regex NextDeclaration();
 
+    [GeneratedRegex(@"^\{\s*type\s*:\s*'([^']+)'")]
+    private static partial Regex DiscriminatorStart();
+
     private static IReadOnlyDictionary<string, IReadOnlySet<string>> TsShapes(string typesTs) => TsParse(typesTs).Shapes;
 
-    private static (IReadOnlyDictionary<string, IReadOnlySet<string>> Shapes, IReadOnlySet<string> Opaque) TsParse(string typesTs)
+    private static (IReadOnlyDictionary<string, IReadOnlySet<string>> Shapes, IReadOnlySet<string> Opaque,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, IReadOnlySet<string>>> Variants) TsParse(string typesTs)
     {
         var text = StripComments(typesTs);
         var own = new Dictionary<string, HashSet<string>>();
         var parents = new Dictionary<string, List<string>>();
         var aliases = new Dictionary<string, List<string>>(); // alias -> parts: "{...}" bodies are stored as own fields, names as parents
         var opaque = new HashSet<string>();
+        var rawVariants = new Dictionary<string, List<(string Discriminator, HashSet<string> Fields, List<string> Parents)>>();
 
         foreach (Match head in InterfaceHead().Matches(text))
         {
@@ -372,6 +478,17 @@ public sealed partial class ContractParityTests
             var fields = new HashSet<string>();
             var names = new List<string>();
             var ok = parts.Count > 0;
+            // A discriminated union: every member is `(Base & { type: 'x'; ... })` or `{ type: 'x'; ... }`.
+            var members = new List<(string Discriminator, HashSet<string> Fields, List<string> Parents)>();
+            foreach (var part in parts)
+            {
+                var member = part.StartsWith('(') && part.EndsWith(')') ? part[1..^1].Trim() : part;
+                var pieces = SplitTop(member, ['&']).Select(p => p.Trim()).ToList();
+                var body = pieces.FirstOrDefault(p => p.StartsWith('{') && p.EndsWith('}'));
+                if (body is null || DiscriminatorStart().Match(body) is not { Success: true } d) { members.Clear(); break; }
+                members.Add((d.Groups[1].Value, FieldsOfBody(body[1..^1]), pieces.Where(p => PlainName().IsMatch(p)).ToList()));
+            }
+            if (parts.Count > 1 && members.Count == parts.Count) rawVariants[name] = members;
             foreach (var part in parts)
             {
                 if (part.StartsWith('{') && part.EndsWith('}')) fields.UnionWith(FieldsOfBody(part[1..^1]));
@@ -391,7 +508,19 @@ public sealed partial class ContractParityTests
             if (isOpaque) opaque.Add(name);
             else result[name] = resolved;
         }
-        return (result, opaque);
+        var variants = new Dictionary<string, IReadOnlyDictionary<string, IReadOnlySet<string>>>();
+        foreach (var (alias, members) in rawVariants)
+        {
+            var byValue = new Dictionary<string, IReadOnlySet<string>>();
+            foreach (var (discriminator, fields, parentNames) in members)
+            {
+                var all = new HashSet<string>(fields);
+                foreach (var parent in parentNames) all.UnionWith(Resolve(parent, [], out _));
+                byValue[discriminator] = all;
+            }
+            variants[alias] = byValue;
+        }
+        return (result, opaque, variants);
 
         HashSet<string> Resolve(string name, HashSet<string> seen, out bool isOpaque)
         {
