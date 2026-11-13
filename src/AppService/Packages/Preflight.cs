@@ -89,10 +89,10 @@ public static class Preflight
     /// </summary>
     internal static Diagnostic? ShareProblem(Guid id, SourceRecord? source, IReadOnlySet<Guid> bundled) => source switch
     {
-        null => new Diagnostic("pack.source-missing", $"Source {id} is not installed."),
-        _ when bundled.Contains(id) => new Diagnostic("pack.source-bundled", $"'{source.Title}' is bundled with TomeStack; everyone has it already, so a pack never carries it."),
+        null => new Diagnostic("pack.source-missing", "That source is not installed."),
+        _ when bundled.Contains(id) => new Diagnostic("pack.source-bundled", $"'{source.Title}' is bundled with TomeStack; everyone has it already, so a TomeStack file never carries it."),
         { ImportDerived: true } => new Diagnostic("pack.source-import-derived", $"'{source.Title}' holds imported material (from a PDF or a Markdown file), so it is never shared."),
-        { Origin: SourceOrigin.Received } => new Diagnostic("pack.source-received", $"'{source.Title}' came from someone else's package, so you cannot share it as your own work."),
+        { Origin: SourceOrigin.Received } => new Diagnostic("pack.source-received", $"'{source.Title}' came from someone else's TomeStack file, so you cannot share it as your own work."),
         { Redistributable: false } or { ShareConfirmedAt: null } => new Diagnostic("pack.source-not-shareable", $"'{source.Title}' is not marked as shareable. Mark it as shareable (you confirm it is your own work) first."),
         _ => null,
     };
@@ -130,7 +130,7 @@ public static class Preflight
             if (store.FindCharacter(id) is { } character)
                 characters.Add(character);
             else
-                errors.Add(new("export.character-missing", $"Character {id} does not exist."));
+                errors.Add(new("export.character-missing", "That character does not exist."));
         }
 
         var revisions = new Dictionary<Guid, ContentRevision>();
@@ -139,7 +139,7 @@ public static class Preflight
             if (store.FindRevision(pin) is { } revision)
                 revisions[revision.RevisionId] = revision;
             else
-                errors.Add(new("export.revision-missing", $"Pinned revision {pin.RevisionId} is missing; repair the character before exporting.", pin));
+                errors.Add(new("export.revision-missing", "A version this character uses is missing; repair the character before exporting.", pin));
         }
         // Content granted by included content (class features, a background's feat) is needed to calculate the same
         // sheet on the receiving machine. Follow grants transitively; a granted revision missing here is already shown
@@ -173,7 +173,7 @@ public static class Preflight
             if (store.FindSource(revision.Provenance.SourceId) is { } source)
                 sources[source.Id] = source;
             else
-                errors.Add(new("export.source-missing", $"Source {revision.Provenance.SourceId} for '{revision.Name}' is missing.", revision.Reference));
+                errors.Add(new("export.source-missing", $"The source of '{revision.Name}' is missing.", revision.Reference));
         }
         return new(characters, revisions, sources, errors);
     }
@@ -225,7 +225,7 @@ public static class Preflight
     }
 
     internal static Campaign RequireCampaign(SqliteStore store, Guid campaignId) =>
-        store.FindCampaign(campaignId) ?? throw new PackageException([new("pack.campaign-missing", $"Campaign {campaignId} does not exist.")]);
+        store.FindCampaign(campaignId) ?? throw new PackageException([new("pack.campaign-missing", "That campaign does not exist.")]);
 
     /// <summary>
     /// Sorts a campaign's allowed sources: bundled ones are referenced; ones that pass the guard and have published content are
@@ -261,14 +261,14 @@ public static class Preflight
                 // Not installed here: pending from an earlier campaign pack, so its name is known, or unknown.
                 var known = pending.GetValueOrDefault(id);
                 leftOut.Add(Left(id, known?.Title, known?.Publisher, known?.License,
-                    new("pack.source-missing", $"'{known?.Title ?? id.ToString()}' is not installed here, so the pack only names it.")));
+                    new("pack.source-missing", $"{PlainNames.Cap(PlainNames.Of(known?.Title, "a source"))} is not installed here, so the file only names it.")));
             }
             else if (ShareProblem(id, source, bundled) is { } problem)
                 leftOut.Add(Left(id, source.Title, source.Publisher, source.License, problem));
             else if (!withContent.Contains(id))
                 leftOut.Add(Left(id, source.Title, source.Publisher, source.License, new("pack.source-empty", $"'{source.Title}' has no published content to share yet.")));
             else if (spanning.TryGetValue(id, out var split))
-                leftOut.Add(Left(id, source.Title, source.Publisher, source.License, new("pack.content-spans-sources", $"'{split.Name}' has revisions in '{source.Title}' and in another source, so '{source.Title}' cannot be shared from here.", split.Reference)));
+                leftOut.Add(Left(id, source.Title, source.Publisher, source.License, new("pack.content-spans-sources", $"'{split.Name}' has versions in '{source.Title}' and in another source, so '{source.Title}' cannot be shared from here.", split.Reference)));
             else
                 included.Add(source);
         }
@@ -368,7 +368,7 @@ public static class Preflight
     {
         var ids = RequirePackSources(selection);
         var (shareable, problems) = SplitPackSources(store, ids, bundled);
-        var blocking = problems.Select(p => SourceRow(p.Id, p.Source, p.Source?.Title ?? p.Id.ToString(), bundled, ReasonOf(p.Problem))).ToList();
+        var blocking = problems.Select(p => SourceRow(p.Id, p.Source, p.Source?.Title ?? "an unknown source", bundled, ReasonOf(p.Problem))).ToList();
         var content = PackContentOf(store, shareable);
         var bySource = shareable.ToDictionary(s => s.Id);
         blocking.AddRange(content.Spanning.Select(s => RevisionRow(s, store.FindSource(s.Provenance.SourceId), bundled, SpansSourcesReason)));

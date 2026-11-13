@@ -16,7 +16,7 @@ public sealed partial class PackageService
     /// <summary>At most this many sources in one pack: a pack is a deliberate share, not a library dump.</summary>
     public const int MaxPackSources = Preflight.MaxPackSources;
 
-    public const string SourceAttachmentPolicy = "A source pack never includes PDFs, drafts, characters, gap notes or text read from PDFs.";
+    public const string SourceAttachmentPolicy = "A TomeStack file for sources never includes PDFs, drafts, characters, gap notes or text read from PDFs.";
 
     /// <summary>The bundled SRD sources: never in a source pack, never replaced by any package, never import-derived.</summary>
     private IReadOnlySet<Guid> _bundledSources = new HashSet<Guid>();
@@ -118,7 +118,7 @@ public sealed partial class PackageService
     {
         if (files.Count + 1 > MaxEntries || files.Values.Any(f => f.Bytes.LongLength > MaxEntryBytes) || files.Values.Sum(f => f.Bytes.LongLength) > MaxTotalBytes - (1024 * 1024))
         {
-            throw new PackageException([new("pack.too-large", $"These sources are larger than a package can hold ({MaxEntries:N0} entries, {MaxEntryBytes / (1024 * 1024)} MB per revision, {MaxTotalBytes / (1024 * 1024)} MB in all). Nothing was written. {advice}")]);
+            throw new PackageException([new("pack.too-large", $"These sources are larger than a TomeStack file can hold ({MaxEntries:N0} entries, {MaxEntryBytes / (1024 * 1024)} MB per version, {MaxTotalBytes / (1024 * 1024)} MB in all). Nothing was written. {advice}")]);
         }
     }
 
@@ -168,7 +168,7 @@ public sealed partial class PackageService
         var content = Preflight.PackContentOf(store, sources);
         var (all, revisions, drafts) = (content.All, content.Published, content.Drafts.Count);
         foreach (var spanning in content.Spanning)
-            errors.Add(new("pack.content-spans-sources", $"'{spanning.Name}' has revisions in another source too, so it cannot be shared from this one.", spanning.Reference));
+            errors.Add(new("pack.content-spans-sources", $"'{spanning.Name}' has versions in another source too, so it cannot be shared from this one.", spanning.Reference));
 
         var bySource = all.GroupBy(r => r.ContentId).ToDictionary(g => g.Key, g => g.Last().Provenance.SourceId);
         // D85: asked again over the revisions a lowered pack writes, so a reference only a left-out revision held is not warned about.
@@ -182,8 +182,8 @@ public sealed partial class PackageService
                 .Distinct();
             foreach (var sourceId in outside)
             {
-                var title = store.FindSource(sourceId)?.Title ?? sourceId.ToString();
-                warnings.Add(new("pack.reference-outside", $"Content in this pack refers to content from '{title}', which the pack does not carry. Whoever imports it needs that source too."));
+                var title = PlainNames.Of(store.FindSource(sourceId)?.Title, "another source");
+                warnings.Add(new("pack.reference-outside", $"Content in this TomeStack file refers to content from {title}, which the file does not carry. Whoever opens it needs that source too."));
             }
             return warnings;
         }
@@ -274,20 +274,20 @@ public sealed partial class PackageService
             var newest = DownConversion.Newest(content)!;
             var unmarked = content.Any(r => !DownConversion.IsCopy(r));
             if (store.RevisionHash(newest.RevisionId) is not null && content.Any(r => store.RevisionHash(r.RevisionId) is null && (!unmarked || !DownConversion.IsCopy(r))))
-                warnings.Add(new("pack.newest-changes", $"'{newest.Name}': the pack's newest revision is already here, and the pack adds older ones. Afterwards an older one counts as the newest: new picks and update offers use it. Characters keep the revision they pin.", newest.Reference));
+                warnings.Add(new("pack.newest-changes", $"'{newest.Name}': the file's newest version is already here, and the file adds older ones. Afterwards an older one counts as the newest: new picks and update offers use it. Characters keep the version they use.", newest.Reference));
         }
         var packSources = parsed.Sources.ToDictionary(s => s.Id);
         var attested = (parsed.Manifest.Attestations ?? []).Where(a => a is not null).Select(a => a.SourceId).ToHashSet();
         foreach (var source in parsed.Sources)
         {
             if (_bundledSources.Contains(source.Id))
-                errors.Add(new("pack.source-bundled", $"The pack carries the bundled source '{source.Title}', which no source pack may carry."));
+                errors.Add(new("pack.source-bundled", $"The file carries the bundled source '{source.Title}', which no TomeStack file for sources may carry."));
             else if (source.ImportDerived == true || !source.Redistributable)
-                errors.Add(new("pack.source-not-shareable", $"The pack carries '{source.Title}', which its sender did not mark as shareable."));
+                errors.Add(new("pack.source-not-shareable", $"The file carries '{source.Title}', which its sender did not mark as shareable."));
             else if (!attested.Contains(source.Id))
-                errors.Add(new("pack.attestation-missing", $"The pack carries '{source.Title}' without its author's statement that it is their own work."));
+                errors.Add(new("pack.attestation-missing", $"The file carries '{source.Title}' without its author's statement that it is their own work."));
             if (!parsed.Revisions.Any(r => r.Provenance.SourceId == source.Id))
-                errors.Add(new("pack.source-empty", $"The pack carries '{source.Title}' with no content."));
+                errors.Add(new("pack.source-empty", $"The file carries '{source.Title}' with no content."));
             // Adding to a source you made here is refused for every package (package.own-source, BuildPreview).
         }
         // A content's revisions belong to one source, inside the pack and against this machine: BuildPreview checks that
@@ -295,9 +295,9 @@ public sealed partial class PackageService
         foreach (var revision in parsed.Revisions)
         {
             if (revision.Status != RevisionStatus.Published)
-                errors.Add(new("pack.draft-not-allowed", $"'{revision.Name}' is a draft; a source pack carries only published content.", revision.Reference));
+                errors.Add(new("pack.draft-not-allowed", $"'{revision.Name}' is a draft; a TomeStack file for sources carries only published content.", revision.Reference));
             if (!packSources.ContainsKey(revision.Provenance.SourceId))
-                errors.Add(new("pack.revision-source", $"'{revision.Name}' belongs to a source the pack does not carry.", revision.Reference));
+                errors.Add(new("pack.revision-source", $"'{revision.Name}' belongs to a source the file does not carry.", revision.Reference));
         }
     }
 

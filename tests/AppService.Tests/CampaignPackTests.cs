@@ -425,6 +425,31 @@ public class CampaignPackTests
     }
 
     [Fact]
+    public void Campaign_file_messages_are_in_plain_words_and_name_no_guid()
+    {
+        using var origin = new TempApp();
+        var shared = Homebrew(origin, "Test Harbor Notes");
+        var other = Homebrew(origin, "Test Private Notes", shareable: false);
+        var campaign = Campaign(origin, "Test Harbor Table", Srd521Source, shared.Id, other.Id);
+        var pack = origin.App.ExportCampaignPack(campaign.Id).Content;
+        var campaignPath = $"campaigns/{campaign.Id:D}.json";
+        using var destination = new TempApp();
+        string Message(string code, byte[] package) => Assert.Single(destination.App.PreviewImport(package).Errors, e => e.Code == code).Message;
+
+        var second = campaign with { Id = Guid.NewGuid(), Name = "Test Second Table" };
+        var count = Message("pack.campaign-count", SourcePackTests.AddEntry(pack, $"campaigns/{second.Id:D}.json", "campaign", second));
+        Assert.StartsWith("A TomeStack file for a campaign carries exactly one campaign", count, StringComparison.Ordinal);
+        var unlisted = Message("pack.campaign-source-unlisted", PackageEditor.Edit(pack, p => p == campaignPath, c => c["allowedSources"]!.AsArray().Add(Guid.NewGuid().ToString("D"))));
+        Assert.Contains("allows a source that the file neither carries nor names", unlisted, StringComparison.Ordinal);
+        var stray = Message("pack.source-not-allowed", PackageEditor.Edit(pack, p => p == campaignPath, c => c["allowedSources"] = new JsonArray(Srd521Source.ToString("D"), other.Id.ToString("D"))));
+        Assert.Contains("The file carries 'Test Harbor Notes', which its campaign does not allow", stray, StringComparison.Ordinal);
+        var draft = Message("pack.draft-not-allowed", PackageEditor.Edit(pack, p => p.StartsWith("content/", StringComparison.Ordinal), r => r["status"] = "draft"));
+        Assert.Contains("a TomeStack file for sources carries only published content", draft, StringComparison.Ordinal);
+        foreach (var message in new[] { count, unlisted, stray, draft })
+            SourcePackTests.AssertPlainFileWording(message);
+    }
+
+    [Fact]
     public void Hostile_campaign_packs_are_refused()
     {
         using var origin = new TempApp();
