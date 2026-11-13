@@ -6,6 +6,9 @@ export function characterNameOf(name: string): string {
   return name.trim() || 'Character';
 }
 
+/** The import screen's heading and place name (no file name: it would put a path-like string in the window title). */
+export const IMPORT_PLACE = 'Import a TomeStack file';
+
 /** The builder's heading and place name, so the h1 and the window title cannot drift. */
 export function builderTitle(mode: BuilderMode): string {
   switch (mode.kind) {
@@ -44,7 +47,7 @@ export function placeOf(screen: Screen): string {
     case 'sheet':
       return characterNameOf(screen.view.character.name);
     case 'import':
-      return `Import ${screen.fileName}`;
+      return IMPORT_PLACE;
     default: {
       const unreachable: never = screen;
       return unreachable;

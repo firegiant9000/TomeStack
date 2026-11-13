@@ -33,7 +33,7 @@ export function HomePanel({ characters, onOpen, onNew, canCreate, focusOnMount =
       </h1>
       {active.length === 0 ? (
         <>
-          <p className="hint">No characters yet. Create one, or open a TomeStack file or a character sheet from the sidebar.</p>
+          <p className="hint">Choose + Add a character in the sidebar, or create one here.</p>
           <button type="button" disabled={!canCreate} onClick={onNew}>
             Create a character
           </button>

@@ -48,6 +48,7 @@ vi.mock('./api/client', () => ({
     libraryBackupPreview: vi.fn(),
     listAllGapNotes: vi.fn(),
     listExtensions: vi.fn(),
+    previewImport: vi.fn(),
   },
 }));
 
@@ -636,6 +637,20 @@ it('+ Add a character is enabled before app.info arrives and the file import wor
   await user.click(screen.getByRole('radio', { name: /^From a TomeStack file/ }));
   await user.click(screen.getByRole('button', { name: 'Continue' }));
   expect(picked).toHaveBeenCalledTimes(1);
+});
+
+it('arriving on the add screen, then on the import screen, moves focus to that screen heading; the title has no file name', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.previewImport).mockResolvedValue({ items: [], errors: [], warnings: [], canApply: false } as never);
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: '+ Add a character' }));
+  const addHeading = screen.getByRole('heading', { level: 1, name: 'Add a character' });
+  expect(document.activeElement).toBe(addHeading);
+  await user.upload(screen.getByLabelText('TomeStack file'), new File(['x'], 'fixture-secret-name.zip', { type: 'application/zip' }));
+  const importHeading = await screen.findByRole('heading', { level: 1, name: 'Import a TomeStack file' });
+  expect(document.activeElement).toBe(importHeading);
+  expect(importHeading.id).toBe('import-heading');
+  expect(document.title).toBe('Import a TomeStack file – TomeStack');
 });
 
 it('the brand button returns home with one character: sheet, Settings, brand, list; nothing in the sidebar is current', async () => {

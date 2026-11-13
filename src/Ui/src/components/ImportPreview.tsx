@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { IMPORT_PLACE } from '../placeTitle';
 import { client } from '../api/client';
 import type { ImportResult, PackageItem, PackagePreview, SourceChoice } from '../api/types';
 import { useRulesLabel } from '../rulesLabel';
@@ -57,6 +58,8 @@ interface Props {
 /** SPEC P-02: the importer shows dependencies and conflicts; nothing is written until the user applies. */
 export function ImportPreview({ fileName, base64, preview, onApplied, onCancel, onError }: Props) {
   const rulesLabel = useRulesLabel();
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => heading.current?.focus(), []); // keyed per file, so this runs for each file
   const [applying, setApplying] = useState(false);
   const [choices, setChoices] = useState<Record<string, SourceChoice>>({});
   const [campaignChoices, setCampaignChoices] = useState<Record<string, SourceChoice>>({});
@@ -80,7 +83,10 @@ export function ImportPreview({ fileName, base64, preview, onApplied, onCancel, 
 
   return (
     <section className="panel" aria-labelledby="import-heading">
-      <h1 id="import-heading">Import {fileName}</h1>
+      <h1 id="import-heading" tabIndex={-1} ref={heading}>
+        {IMPORT_PLACE}
+      </h1>
+      <p className="hint">File: {fileName}</p>
 
       {preview.errors.length > 0 && (
         <div role="alert">

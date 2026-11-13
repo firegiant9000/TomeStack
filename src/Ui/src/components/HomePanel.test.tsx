@@ -45,7 +45,7 @@ it('shows the empty state and a Create a character button when there is nothing 
   const user = userEvent.setup();
   const onNew = vi.fn();
   render(<HomePanel characters={[]} onOpen={() => {}} onNew={onNew} canCreate />);
-  expect(screen.getByText(/No characters yet\./)).toBeTruthy();
+  expect(screen.getByText('Choose + Add a character in the sidebar, or create one here.')).toBeTruthy();
   await user.click(screen.getByRole('button', { name: 'Create a character' }));
   expect(onNew).toHaveBeenCalled();
 });

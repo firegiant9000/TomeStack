@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 
 type Choice = 'new' | 'sample' | 'sheet' | 'file';
 
@@ -17,6 +17,8 @@ export interface AddCharacterPanelProps {
 export function AddCharacterPanel({ canCreate, start, onNew, onSheetImport, onFileImport, onTrySample }: AddCharacterPanelProps) {
   const [choice, setChoice] = useState<Choice | undefined>(start === 'import' ? 'file' : undefined);
   const base = useId();
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => heading.current?.focus(), []); // arriving here moves focus to the heading (WCAG 2.4.3)
   const reasonId = `${base}-reason`;
 
   const options: { id: Choice; label: string; description: string; needsApp: boolean }[] = [
@@ -44,7 +46,9 @@ export function AddCharacterPanel({ canCreate, start, onNew, onSheetImport, onFi
 
   return (
     <section className="panel" aria-labelledby={`${base}-heading`}>
-      <h1 id={`${base}-heading`}>Add a character</h1>
+      <h1 id={`${base}-heading`} tabIndex={-1} ref={heading}>
+        Add a character
+      </h1>
       <fieldset className="add-choices">
         <legend>How do you want to start?</legend>
         {options.map((o) => {

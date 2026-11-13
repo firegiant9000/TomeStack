@@ -21,7 +21,7 @@ const cases: [Screen, string][] = [
   [{ kind: 'settings' }, 'Settings'],
   [{ kind: 'ddb-import' }, 'From a character sheet (PDF or text)'],
   [{ kind: 'sheet', view }, 'Wren Ashdown'],
-  [{ kind: 'import', fileName: 'fixture.json', base64: '', preview: {} as PackagePreview }, 'Import fixture.json'],
+  [{ kind: 'import', fileName: 'fixture.json', base64: '', preview: {} as PackagePreview }, 'Import a TomeStack file'],
 ];
 
 it.each(cases)('placeOf %j', (screen, place) => {
