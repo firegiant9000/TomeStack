@@ -302,6 +302,7 @@ public class ScaledDiceV12SheetTests
         Assert.Null(Flash(sheet).Dice);
         var diagnostic = Assert.Single(sheet.Diagnostics, d => d.EffectId == "flash");
         Assert.Equal((code, Fixtures.KindledMode), (diagnostic.Code, diagnostic.Content));
+        ServiceWordingTests.AssertPlain(diagnostic.Message, ["has a roll with no dice"], "'flash'", "(", "formula.");
     }
 
     [Fact]

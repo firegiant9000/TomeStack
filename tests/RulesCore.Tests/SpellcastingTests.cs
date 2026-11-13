@@ -110,7 +110,9 @@ public class SpellcastingTests
         var slots = sheet.Field(FieldIds.SpellSlots(1));
         Assert.Equal((4, AutomationStatus.Assisted), (slots.Value, slots.Automation)); // the Arcanist's 4, not combined
         Assert.Contains(slots.Warnings, w => w.Code == "spellcasting.multiclass-slots");
-        Assert.Contains(sheet.Field(FieldIds.SpellAttack).Warnings, w => w.Code == "spellcasting.multiclass");
+        var multiclass = Assert.Single(sheet.Field(FieldIds.SpellAttack).Warnings, w => w.Code == "spellcasting.multiclass");
+        ServiceWordingTests.AssertPlain(multiclass.Message, ["are those of 'Fixture Arcanist'; each"], "''");
+        ServiceWordingTests.AssertPlain(Assert.Single(slots.Warnings, w => w.Code == "spellcasting.multiclass-slots").Message, ["shows the slots of 'Fixture Arcanist'"], "''");
 
         // The manual step: the total recorded as an override (SPEC C-06); play uses it.
         var overridden = Sheet(character with { Overrides = [new(FieldIds.SpellSlots(1), 6, "Multiclass spellcaster table")] });

@@ -27,7 +27,7 @@ public static partial class CharacterCalculator
             }
             if (SpellcastingProblem(effect) is { } problem)
             {
-                diagnostics.Add(new("spellcasting.table-invalid", $"'{item.Revision.Name}' spellcasting '{effect.Id}': {problem}; it is not calculated.", item.Revision.Reference, effect.Id));
+                diagnostics.Add(new("spellcasting.table-invalid", $"'{item.Revision.Name}' spellcasting: {problem}; it is not calculated.", item.Revision.Reference, effect.Id));
                 continue;
             }
             casters.Add(new(item, effect, level));
@@ -155,7 +155,7 @@ public static partial class CharacterCalculator
         }
         var casterIds = casters.Select(c => c.Content.Revision.ContentId).ToHashSet();
         foreach (var orphan in character.Spells.Where(s => !casterIds.Contains(s.Caster)))
-            diagnostics.Add(new("spells.caster-missing", $"A spell is recorded for caster {orphan.Caster}, which gives this character no spellcasting; it is not listed.", orphan.Spell));
+            diagnostics.Add(new("spells.caster-missing", $"A spell is recorded for a caster that gives this character no spellcasting; it is not listed.", orphan.Spell));
         return entries;
     }
 
@@ -166,7 +166,7 @@ public static partial class CharacterCalculator
         var revision = catalog.FindRevision(known.Spell);
         if (SpellRefusal(revision, character.RulesFamily) is { } refused)
         {
-            warnings.Add(new("spells.unusable", $"Spell {revision?.Name ?? known.Spell.RevisionId.ToString()} {refused}; it is not listed.", known.Spell));
+            warnings.Add(new("spells.unusable", $"{SpellSubject(revision, refused)}; it is not listed.", known.Spell));
             return null;
         }
         var data = revision!.Effects.OfType<SpellEffect>().First();
@@ -184,6 +184,10 @@ public static partial class CharacterCalculator
             origin, diagnostics, SpellTagsOf(revision, data));
     }
 
+    /// <summary>"Spell Name is not published" for a spell the library has; "A spell is not available ..." (no id) for one it has not (D99).</summary>
+    private static string SpellSubject(ContentRevision? revision, string refused) =>
+        revision is null ? "A spell is not available (it may be missing from your library)" : $"Spell {revision.Name} {refused}";
+
     /// <summary>Why a revision cannot be used as a spell for a character of <paramref name="rulesFamily"/> ("is not published", ...), or null when it can. Shared by recorded spells and <c>castsSpell</c>.</summary>
     private static string? SpellRefusal(ContentRevision? revision, string rulesFamily) =>
         revision switch
@@ -191,7 +195,7 @@ public static partial class CharacterCalculator
             null => "is not available",
             { Status: not RevisionStatus.Published } => "is not published",
             { SchemaVersion: > ContentRevision.CurrentSchemaVersion } => "needs a newer version of TomeStack",
-            _ when !revision.RulesFamilies.Contains(rulesFamily) => $"supports {string.Join(", ", revision.RulesFamilies)}, not {rulesFamily}",
+            _ when !revision.RulesFamilies.Contains(rulesFamily) => $"is written for {FamilyLabels(revision.RulesFamilies)}, not {FamilyLabel(rulesFamily)}",
             _ when revision.Kind != ContentKind.Spell || !revision.Effects.OfType<SpellEffect>().Any() => "is not a spell",
             _ => null,
         };
@@ -220,7 +224,7 @@ public static partial class CharacterCalculator
                     : catalog.NewestPublished(spellId);
                 if (SpellRefusal(revision, character.RulesFamily) is { } refused)
                 {
-                    AddOnce(diagnostics, new("spells.unusable", $"Spell {revision?.Name ?? spellId.ToString()} {refused}; '{roll.Label}' does not cast it.", item.Revision.Reference, roll.Id));
+                    AddOnce(diagnostics, new("spells.unusable", $"{SpellSubject(revision, refused)}; '{roll.Label}' does not cast it.", item.Revision.Reference, roll.Id));
                     continue;
                 }
                 var data = revision!.Effects.OfType<SpellEffect>().First();

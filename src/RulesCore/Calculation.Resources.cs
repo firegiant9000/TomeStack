@@ -143,7 +143,7 @@ public static partial class CharacterCalculator
                     }
                     var clamped = Math.Clamp(value, low, high);
                     if (clamped != value)
-                        Warn(new("companion.out-of-range", $"'{revision.Name}' companion '{effect.Id}': the {what.ToLowerInvariant()} {value} is outside {low} to {high} and was set to {clamped}.", revision.Reference, effect.Id));
+                        Warn(new("companion.out-of-range", $"'{revision.Name}' has a companion whose {what.ToLowerInvariant()} {value} is outside {low} to {high} and was set to {clamped}.", revision.Reference, effect.Id));
                     trace.Add(new(1, "derive", $"{what} from {source}", value, clamped, origin, null, inputs.Count > 0 ? inputs : null));
                     return clamped;
                 }
@@ -165,7 +165,7 @@ public static partial class CharacterCalculator
                         }
                     }
                     if (!found)
-                        Warn(new("companion.missing-part", $"'{revision.Name}' companion '{effect.Id}' lists attack '{id}', which is not on the sheet.", revision.Reference, effect.Id));
+                        Warn(new("companion.missing-part", $"'{revision.Name}' has a companion that lists attack '{id}', which is not on the sheet.", revision.Reference, effect.Id));
                 }
                 foreach (var id in resourceIds)
                 {
@@ -179,7 +179,7 @@ public static partial class CharacterCalculator
                         }
                     }
                     if (!found)
-                        Warn(new("companion.missing-part", $"'{revision.Name}' companion '{effect.Id}' lists pool '{id}', which is not on the sheet.", revision.Reference, effect.Id));
+                        Warn(new("companion.missing-part", $"'{revision.Name}' has a companion that lists pool '{id}', which is not on the sheet.", revision.Reference, effect.Id));
                 }
 
                 var recorded = character.Play.Companions?.FirstOrDefault(p => p.ContentId == revision.ContentId && p.Id == effect.CompanionId);
@@ -256,11 +256,11 @@ public static partial class CharacterCalculator
                     case ScaledDiceStatus.Formula:
                         dice[key] = null;
                         // The same code as the range failure, so a roll refuses on this one code only (bonus, cost and save DC keep theirs).
-                        diagnostics.Add(new("roll.dice-invalid", $"'{item.Revision.Name}' roll '{roll.Id}' has no dice: its scaled dice formula failed ({failure!.Code}).", item.Revision.Reference, roll.Id));
+                        diagnostics.Add(new("roll.dice-invalid", $"'{item.Revision.Name}' has a roll with no dice: its scaled dice formula failed.", item.Revision.Reference, roll.Id));
                         break;
                     case ScaledDiceStatus.Range:
                         dice[key] = null;
-                        diagnostics.Add(new("roll.dice-invalid", $"'{item.Revision.Name}' roll '{roll.Id}' has no dice: a count of {count} or a d{die} is outside what this app rolls.", item.Revision.Reference, roll.Id));
+                        diagnostics.Add(new("roll.dice-invalid", $"'{item.Revision.Name}' has a roll with no dice: a count of {count} or a d{die} is outside what this app rolls.", item.Revision.Reference, roll.Id));
                         break;
                     default:
                         dice[key] = count == 0 ? null : $"{count}d{die}";

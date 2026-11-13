@@ -184,7 +184,7 @@ public class PaymentCalculationTests
 
         Assert.Null(Roll(sheet, "cast").CastsSpell);
         var diagnostic = Assert.Single(sheet.Diagnostics, d => d.Code == "spells.unusable");
-        Assert.Contains("supports srd-5.1, not srd-5.2.1", diagnostic.Message, StringComparison.Ordinal);
+        ServiceWordingTests.AssertPlain(diagnostic.Message, ["is written for the 2014 rules, not the 2024 rules"]);
         Assert.Equal(Rite(12).Reference, diagnostic.Content);
         Assert.Equal("cast", diagnostic.EffectId);
     }
@@ -195,7 +195,8 @@ public class PaymentCalculationTests
         var sheet = Sheet(Caster(), Rite(12));
 
         Assert.Null(Roll(sheet, "cast").CastsSpell);
-        Assert.Contains(sheet.Diagnostics, d => d.Code == "spells.unusable" && d.Message.Contains("is not available", StringComparison.Ordinal));
+        var message = Assert.Single(sheet.Diagnostics, d => d.Code == "spells.unusable" && d.Message.Contains("is not available", StringComparison.Ordinal)).Message;
+        ServiceWordingTests.AssertPlain(message, ["may be missing from your library"]);
     }
 
     [Fact]

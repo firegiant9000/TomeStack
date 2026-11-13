@@ -142,6 +142,8 @@ public class CompanionCalculationTests
         Assert.Equal(2, Count(sheet, "companion.out-of-range"));
         Assert.Contains(sheet.Diagnostics, d => d.Code == "companion.out-of-range" && d.Message.Contains("armor class"));
         Assert.Contains(sheet.Diagnostics, d => d.Code == "companion.out-of-range" && d.Message.Contains("hit point maximum"));
+        foreach (var d in sheet.Diagnostics.Where(d => d.Code == "companion.out-of-range"))
+            ServiceWordingTests.AssertPlain(d.Message, ["Fixture Wild Bond", "has a companion whose"], "'wild'");
     }
 
     [Fact]
@@ -157,6 +159,7 @@ public class CompanionCalculationTests
         var sheet = Sheet(With(Handler(), odd), odd);
 
         Assert.Equal(1, Count(sheet, "companion.missing-part"));
+        ServiceWordingTests.AssertPlain(sheet.Diagnostics.Single(d => d.Code == "companion.missing-part").Message, ["Fixture Odd Bond", "has a companion that lists attack"], "'odd'");
         Assert.DoesNotContain(sheet.Attacks!, a => a.EffectId == "ref-bite");
         Assert.NotNull(sheet.Companions!.Single(c => c.EffectId == "odd"));
     }
@@ -169,6 +172,7 @@ public class CompanionCalculationTests
         var sheet = Sheet(With(Handler(), odd), odd);
 
         Assert.Equal(1, Count(sheet, "companion.missing-part"));
+        ServiceWordingTests.AssertPlain(sheet.Diagnostics.Single(d => d.Code == "companion.missing-part").Message, ["Fixture Odd Bond", "has a companion that lists pool"], "'odd'");
     }
 
     [Fact]
