@@ -20,6 +20,7 @@ import type {
   StudioEntry,
   ValidationReport,
 } from '../api/types';
+import { useRulesLabel } from '../rulesLabel';
 import { FormulaPreview } from './FormulaPreview';
 import { UpdateReviewPanel } from './UpdateReviewPanel';
 import { ClassBasicsEditor, classBasicElementId, isClassBasic } from './ClassBasicsEditor';
@@ -84,7 +85,7 @@ const spellListReasons: Record<string, string> = {
   'content.not-found': 'was not found',
   'spell-list.not-a-spell': 'is not a spell',
   'spell-list.already-on-list': 'is already on this list',
-  'spell-list.has-unpublished-draft': 'has an unpublished draft; publish or discard it first',
+  'spell-list.has-unpublished-draft': 'has a draft that is not yet available to characters; make it available or discard it first',
 };
 
 const automationChoices = [
@@ -108,6 +109,7 @@ interface Props {
  * reviewed update.
  */
 export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Props) {
+  const rulesLabel = useRulesLabel();
   const [sources, setSources] = useState<SourceRecord[]>([]);
   // An unknown id falls back to the first source below, as an empty id does.
   const [sourceId, setSourceId] = useState(initialSourceId ?? '');
@@ -199,7 +201,7 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
     onStatus(
       made.length === 0
         ? `No spell was added to the spell list ${result.listKey}; ${result.skipped.length} skipped.`
-        : `Saved ${made.length} draft${made.length === 1 ? '' : 's'} with the spell list ${result.listKey}${result.skipped.length > 0 ? `; ${result.skipped.length} skipped` : ''}. ${result.note} Review the drafts below, then publish them.`,
+        : `Saved ${made.length} draft${made.length === 1 ? '' : 's'} with the spell list ${result.listKey}${result.skipped.length > 0 ? `; ${result.skipped.length} skipped` : ''}. ${result.note} Review the drafts below, then make them available to characters.`,
     );
     if (made.length > 0) setRestrictTo(made);
     else listOpener.current?.focus();
@@ -294,11 +296,11 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
   return (
     <section className="panel" aria-labelledby="studio-heading">
       <h2 id="studio-heading" tabIndex={-1} ref={heading}>
-        Homebrew studio
+        Homebrew
       </h2>
       <p className="hint">
-        Write your own classes, subclasses, species, backgrounds, features, feats, spells and items. Everything starts as a draft; publishing checks it and creates a
-        new revision. Characters keep their current revision until you review and apply an update.
+        Write your own classes, subclasses, species, backgrounds, features, feats, spells and items. Everything starts as a draft; making it available to
+        characters checks it and creates a new version. Characters keep using the old version until you update them.
       </p>
       <label className="choice">
         <input
@@ -313,14 +315,14 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
         Show design feedback
       </label>
       <p id="feedback-hint" className="hint">
-        Hints that compare your classes and features with the SRD ones. Off by default; they never block publishing, never change a calculation and
+        Hints that compare your classes and features with the SRD ones. Off by default; they never block making content available, never change a calculation and
         are never exported.
       </p>
 
       <SourcePicker
         sources={sources}
         selected={source}
-        rulesFamilies={info.rulesFamilies.map((f) => ({ id: f.id, label: f.displayName }))}
+        rulesFamilies={info.rulesFamilies.map((f) => ({ id: f.id, label: rulesLabel(f.id) }))}
         onSelect={(id) => {
           // Choosing the source already shown changes nothing (and would not reload, so the rows must stay).
           if (id !== source?.id) {
@@ -343,7 +345,7 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
           setNotChanged([]);
           setEntries([]);
           setSourceId(created.id);
-          onStatus(`Created the homebrew source ${created.title}.`);
+          onStatus(`Created ${created.title}.`);
         }}
         onError={onError}
       />
@@ -371,8 +373,8 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
                   )}
                   <span className="option-name">{entry.name}</span> <span className="tag">{entry.kind}</span>{' '}
                   <span className="hint">
-                    {entry.latest.status === 'published' ? 'published' : entry.latestPublished ? 'published, with a newer draft' : 'draft'} ·{' '}
-                    {entry.revisions.length} revision{entry.revisions.length === 1 ? '' : 's'}
+                    {entry.latest.status === 'published' ? 'available to characters' : entry.latestPublished ? 'available to characters, with a newer draft' : 'draft'} ·{' '}
+                    {entry.revisions.length} version{entry.revisions.length === 1 ? '' : 's'}
                   </span>{' '}
                   <DuplicateChip other={duplicateOf(duplicates, (m) => m.contentId === entry.contentId)} />{' '}
                   <button type="button" onClick={() => edit(entry)}>
@@ -432,7 +434,7 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
                     setPublishingAll(true);
                   }}
                 >
-                  Publish all drafts in this source…
+                  Make all drafts in this source available to characters…
                 </button>
                 {editorDirty && (
                   <span id="publish-all-held" className="hint">
@@ -505,7 +507,7 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
               onPublished={async (count) => {
                 setRestrictTo(undefined); // review fix 10: the restriction ends with the publish (the key does not change, so the result stays)
                 await loadEntries(source.id);
-                onStatus(`Published ${count} draft${count === 1 ? '' : 's'}. Characters keep their current revisions until you review an update.`);
+                onStatus(`Made ${count} draft${count === 1 ? '' : 's'} available to characters. Characters keep using the old version until you update them.`);
               }}
             />
           )}
@@ -535,20 +537,20 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
             setEditing(undefined);
             setPublished({ result, name });
             await loadEntries(source.id);
-            onStatus(`Published ${name}.`);
+            onStatus(`Made ${name} available to characters.`);
           }}
           onSuperseded={(name) => {
             setEditing(undefined);
-            onStatus(`Closed the editor of ${name}: it was published with the other drafts. Open it again to change the published version; edits made after the last save were not kept.`);
+            onStatus(`Closed the editor of ${name}: it was made available with the other drafts. Open it again to change the available version; edits made after the last save were not kept.`);
           }}
           onDraftSaved={async (name, pinned) => {
             await loadEntries(source.id);
             // Item 12: an entry that points at drafts is best published with them.
-            const together = `${pinned} unpublished draft${pinned === 1 ? '' : 's'}`;
+            const together = `${pinned} draft${pinned === 1 ? '' : 's'} not yet available to characters`;
             onStatus(
               pinned === 0
                 ? `Saved a draft of ${name}. Drafts never affect characters.`
-                : `Saved a draft of ${name}. It points at ${together}; "Publish all drafts in this source…" publishes ${pinned === 1 ? 'it' : 'them'} together and re-points it.`,
+                : `Saved a draft of ${name}. It points at ${together}; "Make all drafts in this source available to characters…" makes ${pinned === 1 ? 'it available too' : 'them available together'} and re-points it.`,
             );
           }}
         />
@@ -556,12 +558,12 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
 
       {published && (
         <section aria-labelledby="published-heading" className="play-panel">
-          <h3 id="published-heading">Published {published.name}</h3>
+          <h3 id="published-heading">{published.name} is available to characters</h3>
           {published.result.affected.filter((a) => a.pinned.revisionId !== published.result.published.revisionId).length === 0 ? (
-            <p>No character uses an older revision of it.</p>
+            <p>No character uses an older version of it.</p>
           ) : (
             <>
-              <p>These characters use an older revision. Nothing changes for them until you review and apply an update:</p>
+              <p>These characters use an older version. Nothing changes for them until you review and apply an update:</p>
               <ul>
                 {published.result.affected
                   .filter((a) => a.pinned.revisionId !== published.result.published.revisionId)
@@ -570,7 +572,7 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
                       {a.name} ({a.role}
                       {a.via ? `, granted by ${a.via}` : ''}){' '}
                       {a.role === 'grant' ? (
-                        <span className="hint">Publish a new revision of {a.via} that grants this one, then update that.</span>
+                        <span className="hint">Make a new version of {a.via} that grants this one, make it available to characters, then update that.</span>
                       ) : (
                         <button type="button" onClick={() => setReviewing({ affected: a, to: published.result.published, name: published.name })}>
                           Review update for {a.name}
@@ -599,7 +601,7 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
             setPublished((p) =>
               p && { ...p, result: { ...p.result, affected: p.result.affected.filter((a) => a.characterId !== view.character.id) } },
             );
-            onStatus(`Updated ${view.character.name} to the new revision of ${reviewing.name}.`);
+            onStatus(`Updated ${view.character.name} to the new version of ${reviewing.name}.`);
           }}
         />
       )}
@@ -615,6 +617,7 @@ function SourcePicker(props: {
   onCreated: (source: SourceRecord) => void;
   onError: (error: unknown) => void;
 }) {
+  const rulesLabel = useRulesLabel();
   const [title, setTitle] = useState('');
   const [families, setFamilies] = useState<RulesFamilyId[]>([]);
 
@@ -632,26 +635,26 @@ function SourcePicker(props: {
 
   return (
     <section aria-labelledby="sources-heading">
-      <h3 id="sources-heading">Homebrew sources</h3>
+      <h3 id="sources-heading">Books and notebooks</h3>
       {props.sources.length > 0 && (
         <label className="field">
-          Homebrew source
+          Book or notebook
           <select value={props.selected?.id ?? ''} onChange={(e) => props.onSelect(e.target.value)}>
             {props.sources.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.title} ({s.rulesFamilies.join(', ')})
+                {s.title} ({s.rulesFamilies.map((f) => rulesLabel(f)).join(', ')})
               </option>
             ))}
           </select>
         </label>
       )}
-      <form className="inline-form" onSubmit={create} aria-label="New homebrew source">
+      <form className="inline-form" onSubmit={create} aria-label="New book or notebook">
         <label className="field">
-          Source title
+          Title
           <input value={title} onChange={(e) => setTitle(e.target.value)} required />
         </label>
         <fieldset>
-          <legend>Written for</legend>
+          <legend>Rules it is for</legend>
           {props.rulesFamilies.map((f) => (
             <label key={f.id} className="choice">
               <input
@@ -664,10 +667,10 @@ function SourcePicker(props: {
           ))}
         </fieldset>
         <button type="submit" disabled={families.length === 0}>
-          Create source
+          Create
         </button>
       </form>
-      <p className="hint">Homebrew sources are personal: a shared export leaves them out.</p>
+      <p className="hint">Books and notebooks are personal: a shared export leaves them out.</p>
     </section>
   );
 }
@@ -714,6 +717,7 @@ function EntryEditor(props: {
   onSuperseded: (name: string) => void;
   onPublished: (result: PublishResult, name: string) => void;
 }) {
+  const rulesLabel = useRulesLabel();
   const [revision, setRevision] = useState<ContentRevision>(props.initial);
   const [report, setReport] = useState<ValidationReport>();
   // The findings belong to the revision they were computed for: any edit makes a new revision object, which hides them.
@@ -1091,7 +1095,7 @@ function EntryEditor(props: {
         <input value={revision.name} onChange={(e) => update({ name: e.target.value })} />
       </label>
       <fieldset>
-        <legend>Rules families</legend>
+        <legend>Rules</legend>
         {props.source.rulesFamilies.map((f) => (
           <label key={f} className="choice">
             <input
@@ -1101,7 +1105,7 @@ function EntryEditor(props: {
                 update({ rulesFamilies: revision.rulesFamilies.includes(f) ? revision.rulesFamilies.filter((x) => x !== f) : [...revision.rulesFamilies, f] })
               }
             />
-            {f}
+            {rulesLabel(f)}
           </label>
         ))}
       </fieldset>
@@ -1121,7 +1125,7 @@ function EntryEditor(props: {
 
       {revision.kind === 'subclass' && (
         <label className="field">
-          Offered in the choice
+          Subclass of
           <select
             value={revision.extendsChoice ? `${revision.extendsChoice.contentId}|${revision.extendsChoice.choiceId}` : ''}
             onChange={(e) => {
@@ -1129,7 +1133,7 @@ function EntryEditor(props: {
               update({ extendsChoice: contentId && choiceId ? { contentId, choiceId } : undefined });
             }}
           >
-            <option value="">Not offered in any choice</option>
+            <option value="">Choose a class</option>
             {classChoices.map((c) => (
               <option key={`${c.classContentId}|${c.choiceId}`} value={`${c.classContentId}|${c.choiceId}`}>
                 {c.className}: {c.text.length > 60 ? `${c.text.slice(0, 60)}…` : c.text}
@@ -1359,7 +1363,7 @@ function EntryEditor(props: {
       {report && (
         <div role="region" aria-label="Check results">
           {report.errors.length === 0 && report.warnings.length === 0 ? (
-            <p>No problems found. It can be published.</p>
+            <p>No problems found. It can be made available to characters.</p>
           ) : (
             <ul>
               {report.errors.map((d) => (
@@ -1380,7 +1384,7 @@ function EntryEditor(props: {
       {props.designFeedback && (
         <section aria-labelledby="feedback-heading" className="effect-editor">
           <h4 id="feedback-heading">Design feedback</h4>
-          <p className="hint">Opinions, not errors: nothing here blocks publishing or changes a character.</p>
+          <p className="hint">Opinions, not errors: nothing here blocks making content available or changes a character.</p>
           <button
             type="button"
             disabled={hintsBusy}
@@ -1410,7 +1414,7 @@ function EntryEditor(props: {
                   {hinted.hints.map((h, i) => (
                     <li key={`${h.code}-${h.effectId ?? ''}-${h.family ?? ''}-${i}`}>
                       {h.message}
-                      {h.family && <span className="hint"> ({h.family})</span>}
+                      {h.family && <span className="hint"> ({rulesLabel(h.family)})</span>}
                     </li>
                   ))}
                 </ul>
@@ -1474,7 +1478,7 @@ function EntryEditor(props: {
           aria-disabled={blocked || undefined}
           aria-describedby={pins.length > 0 ? 'editor-blocked editor-pins' : 'editor-blocked'}
         >
-          Publish
+          Make available to characters
         </button>
         <button type="button" onClick={props.onClose}>
           Close editor
@@ -1483,12 +1487,12 @@ function EntryEditor(props: {
       </fieldset>
       <p id="editor-pins" className="hint">
         {pins.length > 0
-          ? `Points at ${pins.length} unpublished draft${pins.length === 1 ? '' : 's'}. Publish all drafts publishes ${pins.length === 1 ? 'it' : 'them'} together and re-points this entry.`
+          ? `Points at ${pins.length} draft${pins.length === 1 ? '' : 's'} not yet available to characters. Making all drafts available makes ${pins.length === 1 ? 'it available too' : 'them available together'} and re-points this entry.`
           : ''}
       </p>
       <p id="editor-blocked" className="hint" aria-live="polite">
         {classBusy
-          ? 'Publishing the skill options…'
+          ? 'Making the skill options available…'
           : busy
             ? 'Saving…'
             : problemList.length > 0

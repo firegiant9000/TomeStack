@@ -38,6 +38,9 @@ public sealed class DraftOverlayCatalog : IContentCatalog
             .Where(r => r.ContentId != Draft.ContentId)
             .Concat(Draft.ExtendsChoice == new ChoiceExtension(contentId, choiceId) ? [Draft] : []);
 
+    /// <summary>Guides are published-only, so a draft overlay answers from its base.</summary>
+    public IReadOnlyList<ContentRevision> GuidesFor(Guid targetContentId) => _inner.GuidesFor(targetContentId);
+
     public IEnumerable<ContentRevision> RevisionsOf(Guid contentId) =>
         contentId == Draft.ContentId
             ? _inner.RevisionsOf(contentId).Where(r => r.Reference != Draft.Reference).Append(Draft)

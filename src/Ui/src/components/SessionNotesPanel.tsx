@@ -73,7 +73,7 @@ export function SessionNotesPanel({ view, onChanged, onError, onStatus, saveChar
       <h3 id="session-notes-heading" tabIndex={-1} ref={heading}>
         Session notes
       </h3>
-      <p className="hint">Your own notes per session. They stay on this computer and in your personal backups; a share package never carries them.</p>
+      <p className="hint">Your own notes per session. They stay on this computer and in your personal backups; a shared TomeStack file never carries them.</p>
       <form onSubmit={add} aria-label="New session note" className="inline-form">
         <label className="field">
           Session date

@@ -38,9 +38,9 @@ import { Pips } from './Pips';
 import { conditionLabels } from './conditionLabels';
 
 const automationLabels: Record<AutomationStatus, string> = {
-  automatic: 'automatic',
-  assisted: 'assisted: you apply it',
-  reference: 'reference only: text, not calculated',
+  automatic: 'Worked out for you',
+  assisted: 'You apply this',
+  reference: 'Text only',
 };
 
 /** Investigation 2026-10-06 item 8: Features grouped by what granted them (D25, "From {name}"), else by what the content is. */

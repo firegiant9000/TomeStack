@@ -164,7 +164,7 @@ public class WeaponBonusSchemaTests
     public void Weapon_bonus_schema_version_is_current()
     {
         Assert.Equal(12, ContentRevision.WeaponBonusSchemaVersion);
-        Assert.Equal(ContentRevision.WeaponBonusSchemaVersion, ContentRevision.CurrentSchemaVersion);
+        Assert.Equal(ContentRevision.WeaponBonusSchemaVersion + 1, ContentRevision.CurrentSchemaVersion);
         Assert.Equal(ContentRevision.PlayMechanicsSchemaVersion + 1, ContentRevision.WeaponBonusSchemaVersion);
     }
 }

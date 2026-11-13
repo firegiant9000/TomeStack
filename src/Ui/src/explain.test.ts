@@ -64,7 +64,7 @@ describe('explainSteps', () => {
     ['set with no amount, value context', step('set', 'Dexterity save DC, from Fixture Spark', 13, content('Fixture Spark')), 'value', 'Dexterity save DC, from Fixture Spark: 13'],
     ['replace with no amount, default context', step('replace', 'Replaced score', 9, rules), undefined, 'Replaced score: 9'],
     ['set with no amount, attack context', step('set', 'Damage 1d8 slashing', 7, rules), 'attack', 'Damage 1d8 slashing'],
-    ['override', step('override', 'Typed in', 18, override), undefined, 'Your override: 18'],
+    ['override', step('override', 'Typed in', 18, override), undefined, 'A number you set by hand: 18'],
     ['ignored', step('ignored', 'Fixture Edge (not applicable)', 4, content('Fixture Edge')), undefined, 'Not counted: Fixture Edge (not applicable)'],
     ['rider.not-applied', step('rider.not-applied', 'Fixture Edge needs a ranged weapon', 4, content('Fixture Edge')), 'attack', 'Not counted: Fixture Edge needs a ranged weapon'],
     ['an unknown operation', step('mystery', 'Something new', 4, rules, 2), undefined, 'Something new'],

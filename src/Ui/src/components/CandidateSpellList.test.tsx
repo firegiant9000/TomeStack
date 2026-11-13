@@ -80,7 +80,7 @@ it('names how many ticked spells the list button will change, and holds it with 
   const none = addButton('Add to a spell list…');
   expect(held(none)).toBe(true);
   expect(none).toHaveProperty('disabled', false);
-  expect(reasonOf(none)).toBe('Select at least one candidate first.');
+  expect(reasonOf(none)).toBe('Select at least one entry first.');
 
   await user.click(screen.getByRole('checkbox', { name: 'Select Testy Item 3' }));
   expect(reasonOf(addButton('Add to a spell list…'))).toBe('Select at least one spell first.');
@@ -112,7 +112,7 @@ it('adds the key to the ticked spells only, reports through the app status, and 
 
   expect(client.addCandidatesToSpellList).toHaveBeenCalledExactlyOnceWith(['cand-1', 'cand-2'], 'wizard');
   await vi.waitFor(() => expect(onStatus).toHaveBeenCalledWith(expect.stringMatching(/^Added the spell list wizard to 1 spell; 1 skipped\./)));
-  expect(onStatus.mock.calls.at(-1)![0]).toContain('Accept them to make drafts');
+  expect(onStatus.mock.calls.at(-1)![0]).toContain('Keep them to make drafts');
   await vi.waitFor(() => expect(screen.queryByRole('combobox', { name: 'Spell list key' })).toBeNull()); // the form closed
   expect(document.activeElement).toBe(addButton('Add 2 spells to a spell list…')); // focus is back where it started
   const reasons = screen.getByRole('list', { name: 'Not changed' });
@@ -191,7 +191,7 @@ it('holds paging and the filters while the add is in flight, and the accept butt
   const kind = screen.getByLabelText('Kind');
   expect(held(kind)).toBe(true);
   expect(reasonOf(kind)).toBe('Adding to the spell list…');
-  expect(held(addButton('Accept selected as drafts'))).toBe(true);
+  expect(held(addButton('Keep selected, with their rules'))).toBe(true);
   await act(async () => finish({ listKey: 'wizard', updated: [candidate(1, 'spell'), candidate(2, 'spell')], skipped: [], notes: [] }));
   await vi.waitFor(() => expect(held(screen.getByLabelText('Kind'))).toBe(false));
 });

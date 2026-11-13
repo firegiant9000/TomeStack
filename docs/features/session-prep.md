@@ -1,8 +1,8 @@
 # Session prep: a character built mostly from homebrew
 
-For players whose class, features or items come from a book that TomeStack does not ship. It tells you what to set up in the Homebrew studio before the session, and what you will still do by hand at the table. Every name below ("Fixture Ward", "Fixture Parry") is invented, so you can follow along without any book.
+For players whose class, features or items come from a book that TomeStack does not ship. It tells you what to set up in Homebrew before the session, and what you will still do by hand at the table. Every name below ("Fixture Ward", "Fixture Parry") is invented, so you can follow along without any book.
 
-If the content is in a PDF, start with [From a book to a character](pdf-import.md#from-a-book-to-a-character). Nothing here becomes a rule until you publish it in the studio (ADR-004), and only published content changes a saved character.
+If the content is in a PDF, start with [From a book to a character](pdf-import.md#from-a-book-to-a-character). Nothing here becomes a rule until you make it available to characters in Homebrew (ADR-004), and only published content changes a saved character.
 
 ## A homebrew class
 

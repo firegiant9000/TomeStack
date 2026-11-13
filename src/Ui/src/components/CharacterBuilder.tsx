@@ -34,6 +34,7 @@ import {
 } from '../abilityScores';
 import { hadPicks, replaceHint, replaceOffer } from '../replaceable';
 import { matchesSpell } from '../spellSearch';
+import { useRulesLabel } from '../rulesLabel';
 import { shown } from './SandboxPanel';
 import { SpellSearch } from './sheet/SpellSearch';
 
@@ -103,12 +104,13 @@ interface Props {
  */
 type Shown = ContentOption & { outsideCampaign?: boolean; familyOk: boolean };
 
-function sourceLine(option: Shown) {
+function SourceLine({ option }: { option: Shown }) {
+  const rulesLabel = useRulesLabel();
   return (
     <span className="option-source">
       {option.sourceTitle}
-      {option.page ? `, ${option.page}` : ''} · {option.rulesFamilies.join(', ')}
-      {option.outsideCampaign ? ' · not allowed in this campaign' : !option.compatible && ' · not available for this rules family'}
+      {option.page ? `, ${option.page}` : ''} · {option.rulesFamilies.map((f) => rulesLabel(f)).join(', ')}
+      {option.outsideCampaign ? ' · not allowed in this campaign' : !option.compatible && ' · not available for these rules'}
     </span>
   );
 }
@@ -145,7 +147,7 @@ function SinglePick(props: {
               if (option.compatible) props.onChange(option.reference); // inert, not disabled: a reason typed elsewhere can flip this under focus (2.4.3)
             }}
           />
-          <span className="option-name">{option.name}</span> {sourceLine(option)}
+          <span className="option-name">{option.name}</span> <SourceLine option={option} />
         </label>
       ))}
     </fieldset>
@@ -212,6 +214,7 @@ function RulesStep(props: {
 }) {
   const { basics, onChange } = props;
   const policy = props.rulesFamilies.find((f) => f.id === basics.rulesFamily);
+  const rulesLabel = useRulesLabel();
 
   return (
     <StepForm
@@ -241,7 +244,7 @@ function RulesStep(props: {
             <option value="">No campaign</option>
             {props.campaigns.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.name} ({c.rulesFamily})
+                {c.name} ({rulesLabel(c.rulesFamily)})
               </option>
             ))}
           </select>
@@ -249,7 +252,7 @@ function RulesStep(props: {
       )}
 
       <fieldset>
-        <legend>Rules family</legend>
+        <legend>Which rules does your table use?</legend>
         {props.rulesFamilies.map((family) => (
           <label key={family.id} className="choice">
             <input
@@ -259,12 +262,12 @@ function RulesStep(props: {
               checked={basics.rulesFamily === family.id}
               onChange={() => onChange({ ...basics, rulesFamily: family.id })}
             />
-            {family.displayName} <code>{family.id}</code>
+            {rulesLabel(family.id)}
           </label>
         ))}
         {policy && (
           <p className="hint">
-            Ability score increases under this family come from <strong>{policy.abilityIncreaseSource}</strong> content.
+            Ability score increases under these rules come from <strong>{policy.abilityIncreaseSource}</strong> content.
             Backgrounds {policy.backgroundGrantsFeat ? 'can' : 'cannot'} grant a feat.
           </p>
         )}
@@ -338,6 +341,7 @@ function ScoresStep(props: {
   onError: (error: unknown) => void;
 }) {
   const { basics, onChange } = props;
+  const rulesLabel = useRulesLabel();
   const method = basics.scoreMethod;
   const pool = poolOf(basics, method);
   const spent = abilityKeys.reduce((sum, k) => sum + pointBuyCostOrZero(basics.scores[k]), 0);
@@ -493,7 +497,7 @@ function ScoresStep(props: {
       <p className="hint">Base scores: {abilities.map(({ key, label }) => `${label.slice(0, 3)} ${shown(key)}`).join(', ')}.</p>
       {props.policy && (
         <p className="hint">
-          Increases from your {props.policy.abilityIncreaseSource} are applied on the sheet ({props.policy.displayName}).
+          Increases from your {props.policy.abilityIncreaseSource} are applied on the sheet ({rulesLabel(props.basics.rulesFamily)}).
         </p>
       )}
     </StepForm>
@@ -516,10 +520,10 @@ function missingHint(one: string, many: string, count: number, missing: Missing,
     <>
       {count <= 1 && (
         <p className="hint">
-          {phrase(count)} installed for {policy.displayName}. More can come from the homebrew studio or a content pack.
+          {phrase(count)} installed for {missing.familyName}. More can come from Homebrew or a TomeStack file.
         </p>
       )}
-      {missing.drafts > 0 && <p className="hint">{phrase(missing.drafts)} drafts in the Homebrew studio: publish them there to use them.</p>}
+      {missing.drafts > 0 && <p className="hint">{phrase(missing.drafts)} drafts in Homebrew: make them available to characters there to use them.</p>}
       {missing.otherFamily > 0 && (
         <p className="hint">
           {phrase(missing.otherFamily)} written for {missing.otherFamilyName} only.
@@ -536,6 +540,7 @@ interface Missing {
   /** Published, but written for the other rules family. */
   otherFamily: number;
   otherFamilyName: string;
+  familyName: string;
 }
 
 interface PickStepProps {
@@ -560,7 +565,7 @@ function SpeciesStep(props: PickStepProps) {
   const hint = reasonHint(props.reasonNames([basics.species]));
   return (
     <StepForm label="Species" next="Next: class" nextDisabled={!!hint} nextHint={hint} onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
-      <p className="hint">Every option shows its source and rules family.</p>
+      <p className="hint">Every option shows its source and the rules it is for.</p>
       <SinglePick legend="Species" name="species" options={list} value={basics.species} onChange={(species) => onChange({ ...basics, species })} />
       {missingHint('species', 'species', list.length, props.missing('species'), props.loaded, props.policy)}
     </StepForm>
@@ -573,7 +578,7 @@ function ClassStep(props: PickStepProps) {
   const list = ofKind(options, 'class');
   return (
     <StepForm label="Class" next="Next: background" nextDisabled={!!hint} nextHint={hint} onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
-      <p className="hint">Every option shows its source and rules family.</p>
+      <p className="hint">Every option shows its source and the rules it is for.</p>
       <SinglePick
         legend="Class (level 1)"
         name="startingClass"
@@ -604,7 +609,7 @@ function BackgroundStep(props: PickStepProps) {
   const hint = reasonHint(props.reasonNames([basics.background, ...basics.other]));
   return (
     <StepForm label="Background" next="Next: choices" nextDisabled={!!hint} nextHint={hint} onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
-      <p className="hint">Every option shows its source and rules family.</p>
+      <p className="hint">Every option shows its source and the rules it is for.</p>
       <SinglePick
         legend="Background"
         name="background"
@@ -634,7 +639,7 @@ function BackgroundStep(props: PickStepProps) {
                     }}
                   />
                   <label htmlFor={id}>
-                    <span className="option-name">{option.name}</span> <span className="tag">{option.kind}</span> {sourceLine(option)}
+                    <span className="option-name">{option.name}</span> <span className="tag">{option.kind}</span> <SourceLine option={option} />
                   </label>
                 </li>
               );
@@ -715,14 +720,14 @@ function LevelStep(props: {
                     if (option.compatible) setTarget(option.reference);
                   }}
                 />
-                {option.name} (new class, level 1) {sourceLine(option)}
+                {option.name} (new class, level 1) <SourceLine option={option} />
               </label>
             ))}
           </fieldset>
         )}
         {!atMaximum && (
           <p className="hint">
-            Hit points use the fixed value for each new level. If you rolled, record the total as an override on the sheet.
+            Hit points use the fixed value for each new level. If you rolled, record the total as a number you set by hand on the sheet.
           </p>
         )}
         <div className="actions">
@@ -949,7 +954,7 @@ function ChoicePicker(props: {
               />
               <label htmlFor={id}>
                 <span className="option-name">{option?.name ?? `Missing content ${ref.revisionId}`}</span>
-                {option && <> {sourceLine(option)}</>}
+                {option && <> <SourceLine option={option} /></>}
               </label>
             </li>
           );
@@ -1018,7 +1023,7 @@ function SpellPicker(props: {
                   <li key={option.reference.revisionId} className={option.compatible ? '' : 'incompatible'}>
                     <input id={id} type="checkbox" checked={chosen} aria-disabled={(!chosen && !option.compatible) || undefined} onChange={() => toggle(option)} />
                     <label htmlFor={id}>
-                      <span className="option-name">{option.name}</span> {sourceLine(option)}
+                      <span className="option-name">{option.name}</span> <SourceLine option={option} />
                     </label>
                   </li>
                 );
@@ -1168,6 +1173,7 @@ function draftOf(basics: Basics, id: string, previous?: Character): Character {
 }
 
 export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, onError }: Props) {
+  const rulesLabel = useRulesLabel();
   const [step, setStep] = useState<Step>(mode.kind === 'create' ? 'rules' : mode.kind === 'levelUp' ? 'level' : 'choices');
   const [basics, setBasics] = useState<Basics>({
     name: '',
@@ -1451,7 +1457,8 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
     drafts: drafts?.family === family ? (drafts.counts[kind] ?? 0) : 0,
     // Distinct content, not revisions; campaign-blocked options stay listed with their reason (P-01), so they are not counted.
     otherFamily: new Set(listed.filter((o) => o.kind === kind && !o.compatible && !o.superseded).map((o) => o.reference.contentId)).size,
-    otherFamilyName: otherFamily?.displayName ?? 'the other rules family',
+    otherFamilyName: otherFamily ? rulesLabel(otherFamily.id) : 'the other rules',
+    familyName: rulesLabel(family),
   });
   const pickProps = { basics, policy, options: pickable, loaded: optionsLoaded, missing, reasonNames, onChange: setBasics, onBack: back, onCancel };
 
@@ -1530,7 +1537,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
             mode.kind === 'create'
               ? {
                   name: basics.name.trim(),
-                  family: policy?.displayName ?? basics.rulesFamily,
+                  family: rulesLabel(basics.rulesFamily),
                   campaign: campaignLabel(basics.campaignId, campaigns, campaignsState),
                   scores: basics.scores,
                   method: scoreMethods.find((m) => m.id === basics.scoreMethod)!.label.toLowerCase(),

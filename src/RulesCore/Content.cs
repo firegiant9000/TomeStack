@@ -5,7 +5,7 @@ namespace TomeStack.RulesCore;
 
 public enum Ability { Str, Dex, Con, Int, Wis, Cha }
 
-public enum ContentKind { Species, Background, Class, Subclass, Feature, Feat, Spell, Item }
+public enum ContentKind { Species, Background, Class, Subclass, Feature, Feat, Spell, Item, CreationGuide }
 
 /// <summary>
 /// Only <see cref="Published"/> revisions affect saved characters (SPEC I-01, I-06). The studio sandbox alone calculates
@@ -141,8 +141,14 @@ public sealed record ContentRevision : IJsonOnDeserialized
     /// <c>conditionImmunity</c> with <c>grant.condition</c> (immunity to one condition, optionally while a toggle is on); below v12
     /// the grant stays an unknown effect and a <c>condition</c> key on any other grant stays extension data. Slice G5 adds
     /// <c>modifier.cap</c> (the highest score an ability-score bonus can raise to, 21 to 30); below v12 it stays extension data.
+    /// v13 (Wave 3, ADR-024) adds the content kind <c>creationGuide</c> with the effects <c>guideFor</c>, <c>primaryAbilities</c> and
+    /// <c>startingEquipment</c>, and <c>item.contains</c> (the lines of a pack). Each is read only in a v13 revision; below v13 a
+    /// guide effect stays an unknown effect and <c>contains</c> stays extension data and does nothing.
     /// </summary>
-    public const int CurrentSchemaVersion = 12;
+    public const int CurrentSchemaVersion = 13;
+
+    /// <summary>Wave 3 (ADR-024): the creationGuide kind, the guideFor, primaryAbilities and startingEquipment effects, and <c>item.contains</c>. <b>v13</b>.</summary>
+    public const int CreationGuideSchemaVersion = 13;
 
     /// <summary>MECH-X item 1: cost payment, roll.castsSpell, spell.tags. <b>v12</b>, the same version as <see cref="WeaponBonusSchemaVersion"/>.</summary>
     public const int PaymentSchemaVersion = 12;

@@ -3,6 +3,7 @@ import { client } from '../api/client';
 import { TomeStackError } from '../api/transport';
 import type { Campaign, CampaignPackPreview, PreflightReport, RulesFamilyId, RulesFamilyPolicy, SourceRecord } from '../api/types';
 import { downloadBase64 } from '../files';
+import { useRulesLabel } from '../rulesLabel';
 import { ChangeRegion } from './export/ChangeRegion';
 import { ExportConfirmation, hasBlocker, needsConfirmation } from './export/ExportConfirmation';
 import { TargetFieldset } from './export/TargetFieldset';
@@ -70,14 +71,14 @@ function CampaignPackForm({ campaign, onError, onStatus }: { campaign: Campaign 
   async function save() {
     try {
       const outcome = await client.saveCampaignPackAs(campaign.id, ...downConversion);
-      if (outcome.saved) onStatus(`Saved the campaign pack ${outcome.fileName}.`);
+      if (outcome.saved) onStatus(`Saved the TomeStack file ${outcome.fileName}.`);
     } catch (error) {
       if (error instanceof TomeStackError && error.code === 'unsupported') {
         // Browser development (DevHost) has no native Save dialog: download the pack instead.
         try {
           const exported = await client.exportCampaignPack(campaign.id, ...downConversion);
           downloadBase64(exported.fileName, exported.base64);
-          onStatus(`Downloaded the campaign pack ${exported.fileName}.`);
+          onStatus(`Downloaded the TomeStack file ${exported.fileName}.`);
         } catch (inner) {
           onError(inner);
         }
@@ -89,28 +90,28 @@ function CampaignPackForm({ campaign, onError, onStatus }: { campaign: Campaign 
 
   return (
     <section className="play-panel" aria-label={`Share ${campaign.name}`}>
-      <h3>Share {campaign.name} as a campaign pack</h3>
+      <h3>Share {campaign.name} as a TomeStack file</h3>
       <p className="hint">
-        A campaign pack carries the profile (rules, allowed sources and house rules) and the published content of homebrew
+        A TomeStack file for a campaign carries the profile (rules, allowed sources and house rules) and the published content of homebrew
         you marked as your own work. It never carries characters, gap notes, drafts or PDFs. The SRD is named, not copied.
       </p>
       <TargetFieldset targets={targets} value={target} onChange={chooseTarget} />
       {!preview ? (
-        <p>{previewFailed ? `Could not check what the copy for TomeStack ${target} leaves out.` : 'Checking what the pack would hold…'}</p>
+        <p>{previewFailed ? `Could not check what the copy for TomeStack ${target} leaves out.` : 'Checking what the file would hold…'}</p>
       ) : (
         <>
           <p>
             {preview.fileName}: {preview.included.length} source{preview.included.length === 1 ? '' : 's'} carried with{' '}
-            {preview.revisions} published revision{preview.revisions === 1 ? '' : 's'}
+            {preview.revisions} available version{preview.revisions === 1 ? '' : 's'}
             {preview.referenced.length > 0 ? `; ${preview.referenced.map((s) => s.title).join(', ')} named, not copied` : ''}.
           </p>
           <ChangeRegion target={target} opensIn={preview.opensIn} causes={preview.opensInCauses} changes={preview.changes} previousMinor={targets?.previousMinor ?? null} />
-          <div role="region" aria-label="Left out of the campaign pack">
+          <div role="region" aria-label="Left out of the TomeStack file">
             {preview.leftOut.length === 0 ? (
               <p>Nothing is left out.</p>
             ) : (
               <>
-                <p>These allowed sources are only named; whoever imports the pack needs their own copy:</p>
+                <p>These allowed sources are only named; whoever opens the file needs their own copy:</p>
                 <ul>
                   {preview.leftOut.map((l) => (
                     <li key={l.sourceId}>
@@ -128,11 +129,11 @@ function CampaignPackForm({ campaign, onError, onStatus }: { campaign: Campaign 
               ))}
             </ul>
           )}
-          <PreflightPanel kind="campaignPack" selection={[campaign.id]} label="campaign pack" refreshKey={version} onReport={setReport} onError={onError} />
+          <PreflightPanel kind="campaignPack" selection={[campaign.id]} label="TomeStack file" refreshKey={version} onReport={setReport} onError={onError} />
           <ExportConfirmation changes={preview.changes} confirmed={confirmed} onConfirmedChange={setConfirmed} hintId={hintId} />
           <div className="actions">
             <button type="button" onClick={save} disabled={saveDisabled || !canSaveAfter(report)} aria-describedby={blocked ? hintId : undefined}>
-              Save campaign pack…
+              Save TomeStack file…
             </button>
           </div>
         </>
@@ -147,6 +148,7 @@ function CampaignPackForm({ campaign, onError, onStatus }: { campaign: Campaign 
  * needs a reason (a recorded exception). Profiles never change calculation.
  */
 export function CampaignsPanel({ rulesFamilies, onError, onStatus }: Props) {
+  const rulesLabel = useRulesLabel();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [sources, setSources] = useState<SourceRecord[]>([]);
   const [editing, setEditing] = useState<Campaign>();
@@ -185,7 +187,7 @@ export function CampaignsPanel({ rulesFamilies, onError, onStatus }: Props) {
       <h2 id="campaigns-heading">Campaigns</h2>
       <p className="hint">
         A campaign says which rules and sources its characters use. Content from other sources is marked as not allowed; the
-        player can still use it with a reason. Campaigns never change how numbers are calculated.
+        player can still use it if they note why. Campaigns never change how numbers are calculated.
       </p>
       {campaigns.length === 0 ? (
         <p className="hint">No campaigns yet.</p>
@@ -193,7 +195,7 @@ export function CampaignsPanel({ rulesFamilies, onError, onStatus }: Props) {
         <ul className="resources">
           {campaigns.map((c) => (
             <li key={c.id} className="resource">
-              <span className="option-name">{c.name}</span> <span className="tag">{c.rulesFamily}</span>{' '}
+              <span className="option-name">{c.name}</span> <span className="tag">{rulesLabel(c.rulesFamily)}</span>{' '}
               <span className="hint">
                 {c.allowedSources.length} allowed source{c.allowedSources.length === 1 ? '' : 's'}
               </span>{' '}
@@ -248,7 +250,7 @@ export function CampaignsPanel({ rulesFamilies, onError, onStatus }: Props) {
                     })
                   }
                 />
-                {f.displayName}
+                {rulesLabel(f.id)}
               </label>
             ))}
           </fieldset>
