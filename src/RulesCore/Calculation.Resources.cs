@@ -399,8 +399,11 @@ public static partial class CharacterCalculator
             if (reason is null && roll.DrawsDown == true && roll.ResourceId is { } drawnPool)
             {
                 var drawnContent = roll.ResourceContent ?? revision.ContentId;
-                if (!resources.Any(r => r.Content.ContentId == drawnContent && r.ResourceId == drawnPool && r.CountsUp))
-                    reason = $"Pool '{drawnPool}' does not count up for this character, so it cannot be drawn down.";
+                var drawn = resources.FirstOrDefault(r => r.Content.ContentId == drawnContent && r.ResourceId == drawnPool);
+                if (drawn is not { CountsUp: true })
+                    reason = drawn is null || string.IsNullOrWhiteSpace(drawn.Label)
+                        ? "That pool does not count up for this character, so it cannot be drawn down."
+                        : $"'{drawn.Label}' does not count up for this character, so it cannot be drawn down.";
             }
             var detail = rollDetails.GetValueOrDefault((revision.Reference, roll.Id));
             // A cost or save DC that cannot be calculated: the row stays available and the player works it out.

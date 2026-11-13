@@ -172,15 +172,16 @@ public class DamagePipelineV12Tests
     [Fact]
     public void Roll_notes_name_the_response_by_its_label_and_never_a_content_id()
     {
-        var c = Sheet(68, R("dice", amount: 4, dice: "1d10"), R("flat", amount: 3));
+        // Labels differ from the ids, so a regression that prints the response id fails.
+        var c = Sheet(68, R("dice", amount: 4, dice: "1d10") with { Label = "Die ward" }, R("flat", amount: 3) with { Label = "Flat ward" });
 
         var outside = Assert.Single(Run(c, new(20, null), Pick("dice", 11)).Notes).Message;
         var notDice = Assert.Single(Run(c, new(20, null), Pick("flat", 4)).Notes).Message;
 
-        Assert.Equal("'dice' needs a roll between 1 and 10.", outside);
-        Assert.Equal("'flat' cannot use the roll given.", notDice);
-        ServiceWordingTests.AssertPlain(outside, [], Holder.ToString());
-        ServiceWordingTests.AssertPlain(notDice, [], Holder.ToString());
+        Assert.Equal("'Die ward' needs a roll between 1 and 10.", outside);
+        Assert.Equal("'Flat ward' cannot use the roll given.", notDice);
+        ServiceWordingTests.AssertPlain(outside, [], Holder.ToString(), "'dice'");
+        ServiceWordingTests.AssertPlain(notDice, [], Holder.ToString(), "'flat'");
     }
 
     [Fact]

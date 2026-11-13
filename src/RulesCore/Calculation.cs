@@ -1082,7 +1082,7 @@ public static partial class CharacterCalculator
                 var formOwner = active.FirstOrDefault(a => a.Revision.ContentId == (form.ContentId ?? own));
                 var formToggle = formOwner?.Revision.Effects.OfType<ToggleEffect>().FirstOrDefault(t => t.ToggleId == form.ToggleId);
                 if (formOwner is null || formToggle is null || !ToggleIsOn(formOwner.Revision, formToggle, effective, autoOn))
-                    reason = $"Available in {formToggle?.Label ?? formOwner?.Revision.Name ?? "another form"}";
+                    reason = $"Available in {formToggle?.Label ?? "another form"}";
             }
             if (reason is null && cost is { } needed && response.ResourceId is { } poolId)
             {
@@ -1090,7 +1090,7 @@ public static partial class CharacterCalculator
                 if (pool is null)
                 {
                     var poolLabel = active.FirstOrDefault(a => a.Revision.ContentId == poolContent)?.Revision.Effects.OfType<ResourceEffect>().FirstOrDefault(r => r.ResourceId == poolId)?.Label;
-                    reason = $"Needs {needed} {poolLabel ?? "a pool"} (0 left)";
+                    reason = poolLabel is null ? $"Needs {needed} from a pool this character does not have" : $"Needs {needed} {poolLabel} (0 left)";
                 }
                 else if (pool.Current is not { } left)
                     reason = $"Needs {needed} {pool.Label} (not tracked)";

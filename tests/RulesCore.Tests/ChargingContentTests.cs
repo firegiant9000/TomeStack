@@ -416,7 +416,9 @@ public class ChargingContentTests
         var release = Effect(Sheet(ordinary), "release");
         Assert.False(Sheet(ordinary).Resources!.Single(r => r.ResourceId == "charge").CountsUp);
         Assert.False(release.Available);
-        Assert.Contains("charge", release.UnavailableReason, StringComparison.Ordinal);
+        var label = Sheet(ordinary).Resources!.Single(r => r.ResourceId == "charge").Label;
+        Assert.Equal($"'{label}' does not count up for this character, so it cannot be drawn down.", release.UnavailableReason);
+        Assert.DoesNotContain("'charge'", release.UnavailableReason, StringComparison.Ordinal);
 
         Assert.True(Effect(Sheet(), "release").Available); // a counting-up pool: as before
     }
