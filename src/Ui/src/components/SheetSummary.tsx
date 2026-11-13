@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { CharacterView, DerivedValue, PlayAction, RollMode, RollRecord, RulesFamilyPolicy } from '../api/types';
 import { DiceBox } from './DiceBox';
 import { FieldWhy } from './sheet/FieldWhy';
@@ -78,6 +78,28 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, ac
   const maximumOverridden = Boolean(field('hitPoints')?.override);
   const labels = new Map(allFields.map((f) => [f.field, f.label]));
   const whyValue = whyField ? field(whyField) : undefined;
+  const barRef = useRef<HTMLElement>(null);
+
+  // Task 3.3: the bar's height is --status-bar-height (the page's scroll-padding-top, so focus never lands under the sticky bar);
+  // over a third of the viewport the bar sets data-tall and the stylesheet makes it static.
+  useEffect(() => {
+    const bar = barRef.current;
+    if (!bar || typeof ResizeObserver === 'undefined') return;
+    const root = document.documentElement;
+    const measure = () => {
+      const height = bar.getBoundingClientRect().height;
+      root.style.setProperty('--status-bar-height', `${height}px`);
+      if (height > window.innerHeight / 3) bar.setAttribute('data-tall', '');
+      else bar.removeAttribute('data-tall');
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(bar);
+    return () => {
+      observer.disconnect();
+      root.style.removeProperty('--status-bar-height');
+    };
+  }, []);
 
   const item = (label: string, value: string): ReactNode => (
     <div className="status-item">
@@ -126,7 +148,7 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, ac
         })}
       </dl>
       )}
-      <section className="sheet-summary status-bar" aria-label="Status">
+      <section ref={barRef} className="sheet-summary status-bar" aria-label="Status">
         <div className="status-line">
           {hp && (
             <div className="status-hp">

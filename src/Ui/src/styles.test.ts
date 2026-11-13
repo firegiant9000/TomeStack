@@ -151,3 +151,19 @@ it('forced colours and print both reset --bg and --header-bg, and reach themed p
 it('colours the dice box placeholder with the measured --muted at full opacity (1.4.3: the browser default is unmeasured)', () => {
   expect(css).toMatch(/\.dice-box input::placeholder\s*\{\s*color:\s*var\(--muted\);\s*opacity:\s*1;\s*\}/);
 });
+
+// Wave 3 3.3: the status bar's stylesheet contract (jsdom has no layout, so the rules are read from the source).
+it('pins the status bar sticky, static when short or narrow, with no fixed roll-strip height', () => {
+  const flat = css.replace(/\s+/g, ' ');
+  expect(flat).toMatch(/\.status-bar \{ position: sticky; top: 0; z-index: 2; \}/);
+  expect(flat).toContain('html { scroll-padding-top: var(--status-bar-height, 0px); }');
+  const media = blockAfter(css, '@media (max-height: 40rem), (max-width: 40rem) {').replace(/\s+/g, ' ');
+  expect(media).toContain('.status-bar { position: static; }');
+  expect(media).toContain('html { scroll-padding-top: 0; }');
+  expect(flat).toContain('.status-bar[data-tall] { position: static; }');
+  expect(flat).toContain('.status-bar button { min-width: 24px; min-height: 24px; }');
+  const stripRule = flat.match(/\.roll-strip \{[^}]*\}/g) ?? [];
+  expect(stripRule.length).toBeGreaterThan(0);
+  expect(stripRule.join(' ')).not.toContain('11rem');
+  expect(flat).not.toContain('min-height: 11rem; }');
+});

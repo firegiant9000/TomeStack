@@ -180,7 +180,11 @@ body { margin: 0; background: var(--bg); color: var(--fg); }
 .content > :not(.messages, .sheet) { grid-column: main; grid-row: body; align-self: start; margin-right: var(--space-5); }
 article.sheet { grid-column: 1 / -1; grid-row: head / -1; display: grid; grid-template-columns: subgrid; grid-template-rows: subgrid; background: none; padding: 0; }
 article.sheet > .sheet-header { grid-column: 1 / -1; grid-row: head; padding: var(--space-3) var(--space-5) 0; }
-article.sheet > .sheet-summary { grid-column: 1 / -1; grid-row: summary; margin: 0 var(--space-5); }
+/* Wave 3 3.3: a sticky grid item sticks only inside its own grid area, so the status bar spans from the summary row to the end of
+   the sheet (align-self: start keeps it its own height). The summary row would then collapse, so the hint under the bar sits in
+   that row, pushed down by the bar's measured height (--status-bar-height, set by SheetSummary), which keeps the room reserved. */
+article.sheet > .sheet-summary { grid-column: 1 / -1; grid-row: summary / -1; align-self: start; margin: 0 var(--space-5); }
+article.sheet > p.hint { grid-column: 1 / -1; grid-row: summary; margin: var(--status-bar-height, 0px) var(--space-5) 0; padding-top: var(--space-2); }
 /* D29: a rest opened from the header gets its own full-width row under the summary. */
 article.sheet > .rest-sheet { grid-column: 1 / -1; grid-row: rest; margin: 0 var(--space-5); }
 article.sheet > .print-sheet { grid-column: main; grid-row: print; margin-right: var(--space-5); }
@@ -377,19 +381,29 @@ html[data-compact-play='on'] #sheet-panel-play .play-panel { padding-top: var(--
    grid areas: abilities, the line, then one full-width strip with the d20 mode at the left and the result beside it, with a
    reserved height so an ordinary roll does not push the tabs down (owner answer 4; a very long result may wrap and grow the strip). All rem: wraps at 200% and 400%. */
 .sheet-summary {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  grid-template-areas: 'abilities abilities' 'line line' 'mode result' 'hint hint';
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
   gap: var(--space-2) var(--space-4);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: var(--space-3) var(--space-4);
   background: var(--surface);
 }
+/* Wave 3 3.3: the status bar is sticky, wraps, has no fixed height, and is static when the window is short or narrow (media
+   query below), or when its own height is over a third of the viewport (SheetSummary sets data-tall from a ResizeObserver). */
+.status-bar { position: sticky; top: 0; z-index: 2; }
+.status-bar[data-tall] { position: static; }
+.status-bar button { min-width: 24px; min-height: 24px; }
+.status-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); flex: 1 1 100%; min-width: 0; }
+.status-hp { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); }
+.status-label { font-weight: 600; font-size: var(--text-sm); color: var(--muted); }
+.status-value { font-family: var(--font-numbers); font-size: var(--text-lg); font-variant-numeric: tabular-nums; }
+#status-why { flex: 1 1 100%; min-width: 0; }
+#status-why:empty { display: none; }
+html { scroll-padding-top: var(--status-bar-height, 0px); }
 .sheet-summary dl { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; }
-.sheet-summary dl.summary-abilities { grid-area: abilities; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 6.5rem), 1fr)); }
-.sheet-summary dl.summary-line { grid-area: line; }
-.sheet-summary dl.summary-line > div { flex: 1 1 auto; }
+.summary-abilities { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 6.5rem), 1fr)); }
 .sheet-summary dl > div { display: grid; gap: 0.1rem; align-content: start; border: 1px solid var(--line-strong); border-radius: var(--radius); padding: var(--space-2) var(--space-3); }
 .sheet-summary dt { font-weight: 600; font-size: var(--text-sm); color: var(--muted); }
 .sheet-summary dd { margin: 0; font-family: var(--font-numbers); font-size: var(--text-lg); font-variant-numeric: tabular-nums; }
@@ -404,7 +418,7 @@ html[data-ability-order='score'] .sheet-summary dd.ability .derived { order: 2; 
 html[data-ability-order='score'] .sheet-summary dd.ability .score { order: 1; font-size: var(--text-3xl); color: inherit; line-height: 1.1; }
 html[data-ability-order='score'] .sheet-summary dd.ability .roll { order: 3; }
 html[data-ability-order='score'] .sheet-summary dd.ability > .override-label { order: 4; }
-.sheet-summary > .roll-controls { grid-area: mode; align-self: start; display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.sheet-summary > .roll-controls { flex: 0 1 auto; display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
 /* Item 8: the free dice box sits under the d20 mode row, outside the fixed .roll-strip (whose height is unchanged). The label,
    box and button wrap onto further lines when the column is narrow; the refusal is a full-width line under them. */
 .dice-box { margin: 0; }
@@ -417,14 +431,12 @@ html[data-ability-order='score'] .sheet-summary dd.ability > .override-label { o
    the d20 column and squeezing the Last roll. */
 .dice-box p.error { width: 0; min-width: 100%; margin: var(--space-1) 0 0; font-size: var(--text-sm); overflow-wrap: anywhere; }
 .dice-box p.error:empty { margin: 0; } /* the status stays mounted (so a refusal is announced) but takes no room while empty */
-.sheet-summary > .hint { grid-area: hint; }
-/* D73: the quickbar is its own row after the summary line, outside the roll strip (whose reserved height stays). rem only: it wraps at 200% and 400%. */
-.sheet-summary > .quickbar { grid-area: quick; min-width: 0; }
-.sheet-summary:has(> .quickbar) { grid-template-areas: 'abilities abilities' 'line line' 'quick quick' 'mode result' 'hint hint'; }
+/* D73: the quickbar is its own row after the status line. rem only: it wraps at 200% and 400%. */
+.sheet-summary > .quickbar { flex: 1 1 100%; min-width: 0; }
 .quickbar ol { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
 .quickbar button { display: inline-flex; align-items: center; gap: 0.35em; min-height: 1.5rem; max-width: 100%; overflow-wrap: anywhere; }
 .quickbar .quick-slot { font-family: var(--font-numbers); font-weight: 600; color: var(--muted); }
-.sheet-summary > .roll-strip { grid-area: result; min-height: 11rem; } /* the Last roll (7.5rem) plus the closed "Why?" line and the closed Earlier rolls line, so the first roll does not move the tabs (an open "Why?" grows the strip by design) */
+.sheet-summary > .roll-strip { flex: 1 1 14rem; min-width: 0; } /* no fixed height: the bar wraps and may grow */
 .roll-why { margin-top: var(--space-2); }
 .roll-why ul { margin: var(--space-1) 0 0; padding-left: 1.5rem; font-size: var(--text-sm); }
 .roll-log { margin-top: var(--space-2); }
@@ -493,8 +505,13 @@ button.roll:hover { background: var(--accent); color: var(--bg); }
   .content > .messages, .content > :not(.messages, .sheet), article.sheet > .print-sheet, article.sheet > .sheet-body { margin-right: 0; }
   .app[data-sidebar='collapsed'] :is(.content > .messages, .content > :not(.messages, .sheet), article.sheet > .sheet-body, article.sheet > .print-sheet) { margin-left: 0; }
   article.sheet > .sheet-header, article.sheet > .sheet-summary, article.sheet > .rest-sheet { padding: 0; margin: 0 0 var(--space-3); }
-  .sheet-summary { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'abilities' 'line' 'mode' 'result' 'hint'; }
-  .sheet-summary:has(> .quickbar) { grid-template-areas: 'abilities' 'line' 'quick' 'mode' 'result' 'hint'; }
+  article.sheet > p.hint { padding: 0; margin: 0 0 var(--space-3); }
+}
+
+/* Wave 3 3.3: a short window or a narrow one (400% zoom at 1280px is 320px wide) has no room for a pinned bar. */
+@media (max-height: 40rem), (max-width: 40rem) {
+  .status-bar { position: static; }
+  html { scroll-padding-top: 0; }
 }
 
 /* At 150% text or more the content needs about 960px before it must stack; rem in a media query ignores the root font-size.
@@ -505,6 +522,7 @@ button.roll:hover { background: var(--accent); color: var(--bg); }
   html:is([data-text-size='150'], [data-text-size='175'], [data-text-size='200']) .content { padding: var(--space-4); }
   html:is([data-text-size='150'], [data-text-size='175'], [data-text-size='200']) :is(.content > .messages, .content > :not(.messages, .sheet), article.sheet > .print-sheet, article.sheet > .sheet-body) { margin-right: 0; margin-left: 0; }
   html:is([data-text-size='150'], [data-text-size='175'], [data-text-size='200']) :is(article.sheet > .sheet-header, article.sheet > .sheet-summary, article.sheet > .rest-sheet) { padding: 0; margin: 0 0 var(--space-3); }
+  html:is([data-text-size='150'], [data-text-size='175'], [data-text-size='200']) article.sheet > p.hint { padding: 0; margin: 0 0 var(--space-3); }
 }
 
 /* M4 D5: import review. The excerpt keeps the PDF's line breaks. */
@@ -571,6 +589,8 @@ dl.review-list dd { overflow-wrap: anywhere; }
   .print-sheet { border: none; padding: 0; }
   .panel, .sheet-summary { background: none; border-radius: 0; padding: 0; }
   .sheet-summary { display: block; }
+  .status-bar { position: static; }
+  article.sheet > p.hint { margin: 0; padding: 0; }
   .sheet-summary dl > div { border: none; padding: 0; }
   .print-feature, tr { break-inside: avoid; }
   .combat-page { width: auto; font-size: inherit !important; }

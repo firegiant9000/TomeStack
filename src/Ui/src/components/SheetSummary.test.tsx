@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // The summary bar: a <dl> of the core numbers (no headings, no regions named like the panels'), an overridden value
 // says so, inspiration follows the family, conditions appear only when present, and the ability roll buttons roll.
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { act, cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { Character, CharacterSheet, CharacterView, DerivedValue, FieldOverride, PlayState, RollRecord, RulesFamilyPolicy } from '../api/types';
@@ -589,4 +589,55 @@ it('puts a quickbar slot inside the bar, after the numbers, before the roll cont
   expect(bar.parentElement).toBe(container.querySelector('.status-bar')); // a direct child: the grid's `quick` row
   expect(container.querySelector('.status-line')!.nextElementSibling).toBe(bar);
   expect(bar.nextElementSibling!.classList.contains('roll-controls')).toBe(true);
+});
+
+// Task 3.3: the observer behind the sticky bar (jsdom has no layout, so ResizeObserver and the height are stubbed).
+function stubObserver(height: number, viewport: number) {
+  const instances: { callback: () => void; disconnect: ReturnType<typeof vi.fn> }[] = [];
+  class FakeObserver {
+    callback: () => void;
+    disconnect = vi.fn();
+    constructor(callback: () => void) {
+      this.callback = callback;
+      instances.push(this);
+    }
+    observe() {}
+    unobserve() {}
+  }
+  vi.stubGlobal('ResizeObserver', FakeObserver);
+  vi.stubGlobal('innerHeight', viewport);
+  const heightSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect');
+  const set = (h: number) => heightSpy.mockReturnValue({ height: h } as DOMRect);
+  set(height);
+  return { instances, set };
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+  document.documentElement.style.removeProperty('--status-bar-height');
+});
+
+it('sets --status-bar-height from the bar, flags data-tall over a third of the viewport, and cleans up on unmount', () => {
+  const { instances, set } = stubObserver(120, 600);
+  const { unmount } = render(<SheetSummary view={fixtureView()} {...plain} />);
+  const bar = statusBar();
+  expect(document.documentElement.style.getPropertyValue('--status-bar-height')).toBe('120px');
+  expect(bar.hasAttribute('data-tall')).toBe(false);
+  set(250); // over 600 / 3
+  act(() => instances[0]!.callback());
+  expect(document.documentElement.style.getPropertyValue('--status-bar-height')).toBe('250px');
+  expect(bar.hasAttribute('data-tall')).toBe(true);
+  set(100);
+  act(() => instances[0]!.callback());
+  expect(bar.hasAttribute('data-tall')).toBe(false);
+  unmount();
+  expect(instances[0]!.disconnect).toHaveBeenCalled();
+  expect(document.documentElement.style.getPropertyValue('--status-bar-height')).toBe('');
+});
+
+it('renders without ResizeObserver (older engines, jsdom) and sets nothing', () => {
+  vi.stubGlobal('ResizeObserver', undefined);
+  render(<SheetSummary view={fixtureView()} {...plain} />);
+  expect(document.documentElement.style.getPropertyValue('--status-bar-height')).toBe('');
 });
