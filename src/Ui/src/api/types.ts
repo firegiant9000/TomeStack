@@ -1959,6 +1959,50 @@ export interface EffectPayment {
   minSlotLevel?: number;
 }
 
+/** Content v13 (ADR-024): names one piece of content by id (any revision of it). */
+export interface GuideTarget {
+  contentId: string;
+}
+
+/** Content v13: the coins of a kit line; each denomination is written only when present. */
+export interface KitCoins {
+  cp?: number;
+  sp?: number;
+  ep?: number;
+  gp?: number;
+  pp?: number;
+}
+
+/** Content v13: one line of a kit option; exactly one of item, anyOf, coins or pack is set. */
+export interface KitLine {
+  item?: GuideTarget;
+  quantity?: number;
+  /** A proficiency key such as `weapon.simple`. */
+  anyOf?: string;
+  coins?: KitCoins;
+  pack?: GuideTarget;
+}
+
+/** Content v13: one option of a kit pick, offered only to a character with `requiresProficiency` when that is set. */
+export interface KitOption {
+  id: string;
+  lines: KitLine[];
+  requiresProficiency?: string;
+}
+
+/** Content v13: one choice in a kit: pick one of its options. */
+export interface KitPick {
+  id: string;
+  label?: string;
+  options: KitOption[];
+}
+
+/** Content v13: one line of a pack (an item's `contains`); an absent quantity means 1. */
+export interface PackLine {
+  item: GuideTarget;
+  quantity?: number;
+}
+
 export type Effect =
   | (EffectBase & {
       type: 'modifier';
@@ -2095,7 +2139,11 @@ export type Effect =
       resourceFull?: { text: string };
       allowance?: boolean;
     })
-  | (EffectBase & { type: 'item'; requiresAttunement?: boolean; charges?: { max: number; recovery?: { period: RestPeriod; regain?: string } } })
+  // Content v13 (ADR-024): a pack lists what it contains; a creation guide names its subject, its primary abilities and its starting equipment.
+  | (EffectBase & { type: 'item'; requiresAttunement?: boolean; charges?: { max: number; recovery?: { period: RestPeriod; regain?: string } }; contains?: PackLine[] })
+  | (EffectBase & { type: 'guideFor'; content: GuideTarget })
+  | (EffectBase & { type: 'primaryAbilities'; abilities: Ability[] })
+  | (EffectBase & { type: 'startingEquipment'; picks: KitPick[] })
   | (EffectBase & { type: 'itemMod'; appliesTo: 'weapon' | 'armor' | 'any'; bonus?: number; modifiers?: Extract<Effect, { type: 'modifier' }>[] })
   | (EffectBase & { type: 'companion'; companionId: string; label: string; armorClass: string; hitPointMaximum: string; speed?: string; attacks?: string[]; resourceIds?: string[] })
   | (EffectBase & { type: 'recovery'; resourceId: string; on: RestPeriod; amount: string })
