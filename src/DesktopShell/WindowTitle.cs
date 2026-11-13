@@ -14,6 +14,12 @@ public static class WindowTitle
         var trimmed = documentTitle?.Trim();
         if (string.IsNullOrEmpty(trimmed))
             return AppName;
-        return trimmed.Length <= MaxLength ? trimmed : trimmed[..MaxLength];
+        if (trimmed.Length <= MaxLength)
+            return trimmed;
+        // Never split a surrogate pair: if the cut would fall between a high and a low surrogate, cut one earlier.
+        var cut = char.IsHighSurrogate(trimmed[MaxLength - 1]) && char.IsLowSurrogate(trimmed[MaxLength])
+            ? MaxLength - 1
+            : MaxLength;
+        return trimmed[..cut];
     }
 }

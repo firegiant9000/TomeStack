@@ -38,4 +38,41 @@ public class WindowTitleTests
         Assert.Equal(200, result.Length);
         Assert.Equal(title[..200], result);
     }
+
+    [Fact]
+    public void A_title_of_exactly_200_characters_is_unchanged()
+    {
+        var title = new string('a', 200);
+
+        Assert.Equal(title, WindowTitle.From(title));
+    }
+
+    [Fact]
+    public void A_201_character_title_is_cut_to_200_without_an_ellipsis()
+    {
+        var result = WindowTitle.From(new string('a', 201));
+
+        Assert.Equal(new string('a', 200), result);
+    }
+
+    [Fact]
+    public void A_surrogate_pair_straddling_the_cut_is_not_split()
+    {
+        var title = new string('a', 199) + "\U0001F409" + "bbb"; // the pair occupies chars 199 and 200
+
+        var result = WindowTitle.From(title);
+
+        Assert.Equal(new string('a', 199), result);
+    }
+
+    [Fact]
+    public void A_surrogate_pair_ending_exactly_at_the_cut_is_kept()
+    {
+        var title = new string('a', 198) + "\U0001F409" + "bbb";
+
+        var result = WindowTitle.From(title);
+
+        Assert.Equal(200, result.Length);
+        Assert.EndsWith("\U0001F409", result);
+    }
 }
