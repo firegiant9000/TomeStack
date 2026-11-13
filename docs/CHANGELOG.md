@@ -17,6 +17,7 @@
 - **Wording check:** a UI test (`wording.test.tsx`) renders the main screens and fails if an id or one of the old words comes back. Ids, file formats, diagnostics codes and exported JSON keep their names.
 - **Docs (owed checks):** the populated upgrade check is recorded as passed: a copy of a library went through the published 0.8.0 and then 0.8.1 with every count, table and sheet unchanged ([m2-acceptance.md](features/m2-acceptance.md)).
 - The smoke script fails when its ready time (process start to the end of the in-app smoke script, an upper bound on first paint) is over budget: 15 s locally, 30 s in CI (D102, `scripts/ready-budget.ps1`). Reports from older builds, which lack the field, are not checked. The script's messages say "smoke ready time", not "first paint".
+- **Save for an older TomeStack** now offers only the version before this one (0.8); for an older TomeStack, update it first.
 
 ## 0.8.1 (save for 0.7.0, Foundry dnd5e 6.0.6, release and CI hygiene)
 

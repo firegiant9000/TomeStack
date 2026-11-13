@@ -1,0 +1,36 @@
+{
+  "contentId": "c1080000-0000-4000-8000-0000000000c5",
+  "revisionId": "dfb86ae3-bd02-5992-aac2-1348d086188f",
+  "schemaVersion": 12,
+  "kind": "subclass",
+  "name": "Compat Kit Walker",
+  "rulesFamilies": [
+    "srd-5.1"
+  ],
+  "provenance": {
+    "sourceId": "c1080000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 5
+    }
+  },
+  "status": "published",
+  "summary": "A v13 test subclass that gives one feature.",
+  "effects": [
+    {
+      "type": "grant",
+      "id": "grant-mark",
+      "grant": "content",
+      "content": {
+        "contentId": "c1080000-0000-4000-8000-0000000000c6",
+        "revisionId": "d36650fa-c1b9-5798-bc2f-aaf4656a52e0"
+      },
+      "level": 1,
+      "automation": "automatic",
+      "timing": "always"
+    }
+  ],
+  "downConvertedFrom": {
+    "revisionId": "c1080000-0000-4000-8000-0000000000e5",
+    "schemaVersion": 13
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "contentId": "c1080000-0000-4000-8000-0000000000c2",
+  "revisionId": "c1080000-0000-4000-8000-0000000000e2",
+  "schemaVersion": 12,
+  "kind": "item",
+  "name": "Compat Test Blade",
+  "rulesFamilies": [
+    "srd-5.1"
+  ],
+  "provenance": {
+    "sourceId": "c1080000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 2
+    }
+  },
+  "status": "published",
+  "summary": "A v12 test weapon with a bonus of its own.",
+  "effects": [
+    {
+      "type": "weapon",
+      "id": "blade",
+      "category": "simple",
+      "attack": "melee",
+      "damage": "1d6",
+      "damageType": "slashing",
+      "properties": [],
+      "weaponKey": "compat-blade",
+      "bonus": 1,
+      "automation": "automatic",
+      "timing": "always"
+    }
+  ]
+}

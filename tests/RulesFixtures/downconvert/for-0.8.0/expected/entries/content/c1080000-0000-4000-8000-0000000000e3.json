@@ -1,0 +1,28 @@
+{
+  "contentId": "c1080000-0000-4000-8000-0000000000c3",
+  "revisionId": "c1080000-0000-4000-8000-0000000000e3",
+  "schemaVersion": 12,
+  "kind": "item",
+  "name": "Compat Edge Mod",
+  "rulesFamilies": [
+    "srd-5.1"
+  ],
+  "provenance": {
+    "sourceId": "c1080000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 3
+    }
+  },
+  "status": "published",
+  "summary": "A v12 test mod for a weapon; a 0.8.0 copy keeps it.",
+  "effects": [
+    {
+      "type": "itemMod",
+      "id": "edge",
+      "appliesTo": "weapon",
+      "bonus": 1,
+      "automation": "automatic",
+      "timing": "always"
+    }
+  ]
+}

@@ -69,7 +69,7 @@ public class SourcePackTests
     private static readonly Guid CompatContent = Guid.Parse("c3000000-0000-4000-8000-000000000001");
     private static readonly Guid CompatOtherContent = Guid.Parse("c3000000-0000-4000-8000-000000000002");
     private static Guid CompatRevision(int n) => Guid.Parse($"c300e000-0000-4000-8000-00000000000{n}");
-    private static LadderRow For060 => ReleaseLadder.Target("0.6.0")!;
+    private static LadderRow For060 => ReleaseLadder.Row("0.6.0")!;
 
     /// <summary>A published "Compat Steady Hands" revision: old (schema 3, nothing to lower) or, with a blocker, a v11 toggle that has a cost.</summary>
     private static ContentRevision Compat(Guid sourceId, int n, bool blocker = false, Guid? contentId = null) =>
@@ -117,7 +117,7 @@ public class SourcePackTests
     private static readonly Guid GuideRevision = Guid.Parse("c300e000-0000-4000-8000-0000000000a1");
     private static readonly Guid PackContent = Guid.Parse("c3000000-0000-4000-8000-0000000000a2");
     private static readonly Guid PackRevision = Guid.Parse("c300e000-0000-4000-8000-0000000000a2");
-    private static LadderRow For070 => ReleaseLadder.Target("0.7.0")!;
+    private static LadderRow For070 => ReleaseLadder.Row("0.7.0")!;
 
     private static ContentRevision Guide(Guid sourceId) => new()
     {

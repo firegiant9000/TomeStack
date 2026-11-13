@@ -24,6 +24,7 @@ All 20 ideas from discovery are included here. A target milestone indicates plan
 | B18 | Themes | M7 | Offer modern, dark and tabletop themes |
 | B19 | Relationship graph | M5 | Navigate class → feature → resource dependencies. **Done 2026-09-29 (M5 slice 5, fixture-verified):** "Show relationships", a keyboard tree, [features/homebrew-studio.md](features/homebrew-studio.md#relationships-the-content-tree-m5-slice-5-b19) |
 | B20 | Foundry/Roll20 export adapters | M6+ | Document supported scope and validate generated file. **Foundry built 2026-09-29 (M6 slice 4, ADR-012, fixture-verified; merged to `main` 2026-09-30 via #46; Experimental until the owner imports the golden files into a real Foundry world):** Foundry VTT dnd5e 6.0.5 (pin moved to 6.0.6 on 2026-11-11) and the neutral sheet JSON, [features/export-adapters.md](features/export-adapters.md). Roll20 deferred (ADR-012) |
+| B21 | Remove unreachable down-conversion steps | Unscheduled (D103) | "Save for an older TomeStack" offers only the previous minor (D103), so the `DownConvert` steps below it (content 12 → 11 → 10 → 9, character 11 → 10 → 9 → 8) are reached only by tests. Delete them and their tests once no supported path needs them; the ladder rows stay for re-pin and "opens in" |
 
 ## Other approved directions
 
