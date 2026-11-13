@@ -156,7 +156,14 @@ it('colours the dice box placeholder with the measured --muted at full opacity (
 it('pins the status bar sticky, static when short or narrow, with no fixed roll-strip height', () => {
   const flat = css.replace(/\s+/g, ' ');
   expect(flat).toMatch(/\.status-bar \{ position: sticky; top: 0; z-index: 2; \}/);
-  expect(flat).toContain('html { scroll-padding-top: var(--status-bar-height, 0px); }');
+  expect(flat).toContain('html { scroll-padding-top: var(--status-bar-pin, 0px); }');
+  // The bar spans from the summary row to the end of the sheet (a sticky grid item sticks only within its area); the hint holds the room.
+  expect(flat).toContain('grid-row: summary / -1; align-self: start;');
+  expect(flat).toMatch(/article\.sheet > p\.hint \{[^}]*grid-row: summary;[^}]*margin: var\(--status-bar-height, 10rem\)/);
+  // The hint's reserved margin is reset wherever the bar is not a spanning grid item.
+  expect(blockAfter(css, '@media (max-width: 40rem) {').replace(/\s+/g, ' ')).toContain('article.sheet > p.hint { padding: 0; margin: 0 0 var(--space-3); }');
+  expect(blockAfter(css, '@media screen and (max-width: 60rem) {').replace(/\s+/g, ' ')).toMatch(/\[data-text-size='200'\]\) article\.sheet > p\.hint \{ padding: 0; margin: 0 0 var\(--space-3\); \}/);
+  expect(blockAfter(css, '@media print {').replace(/\s+/g, ' ')).toContain('article.sheet > p.hint { margin: 0; padding: 0; }');
   const media = blockAfter(css, '@media (max-height: 40rem), (max-width: 40rem) {').replace(/\s+/g, ' ');
   expect(media).toContain('.status-bar { position: static; }');
   expect(media).toContain('html { scroll-padding-top: 0; }');

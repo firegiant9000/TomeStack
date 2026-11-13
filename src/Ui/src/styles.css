@@ -184,7 +184,7 @@ article.sheet > .sheet-header { grid-column: 1 / -1; grid-row: head; padding: va
    the sheet (align-self: start keeps it its own height). The summary row would then collapse, so the hint under the bar sits in
    that row, pushed down by the bar's measured height (--status-bar-height, set by SheetSummary), which keeps the room reserved. */
 article.sheet > .sheet-summary { grid-column: 1 / -1; grid-row: summary / -1; align-self: start; margin: 0 var(--space-5); }
-article.sheet > p.hint { grid-column: 1 / -1; grid-row: summary; margin: var(--status-bar-height, 0px) var(--space-5) 0; padding-top: var(--space-2); }
+article.sheet > p.hint { grid-column: 1 / -1; grid-row: summary; margin: var(--status-bar-height, 10rem) var(--space-5) 0; padding-top: var(--space-2); }
 /* D29: a rest opened from the header gets its own full-width row under the summary. */
 article.sheet > .rest-sheet { grid-column: 1 / -1; grid-row: rest; margin: 0 var(--space-5); }
 article.sheet > .print-sheet { grid-column: main; grid-row: print; margin-right: var(--space-5); }
@@ -401,7 +401,7 @@ html[data-compact-play='on'] #sheet-panel-play .play-panel { padding-top: var(--
 .status-value { font-family: var(--font-numbers); font-size: var(--text-lg); font-variant-numeric: tabular-nums; }
 #status-why { flex: 1 1 100%; min-width: 0; }
 #status-why:empty { display: none; }
-html { scroll-padding-top: var(--status-bar-height, 0px); }
+html { scroll-padding-top: var(--status-bar-pin, 0px); }
 .sheet-summary dl { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; }
 .summary-abilities { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 6.5rem), 1fr)); }
 .sheet-summary dl > div { display: grid; gap: 0.1rem; align-content: start; border: 1px solid var(--line-strong); border-radius: var(--radius); padding: var(--space-2) var(--space-3); }

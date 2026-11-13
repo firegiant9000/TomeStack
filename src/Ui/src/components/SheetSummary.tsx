@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { CharacterView, DerivedValue, PlayAction, RollMode, RollRecord, RulesFamilyPolicy } from '../api/types';
 import { DiceBox } from './DiceBox';
 import { FieldWhy } from './sheet/FieldWhy';
@@ -80,24 +80,30 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, ac
   const whyValue = whyField ? field(whyField) : undefined;
   const barRef = useRef<HTMLElement>(null);
 
-  // Task 3.3: the bar's height is --status-bar-height (the page's scroll-padding-top, so focus never lands under the sticky bar);
-  // over a third of the viewport the bar sets data-tall and the stylesheet makes it static.
-  useEffect(() => {
+  // Task 3.3: over a third of the viewport the bar sets data-tall and the stylesheet makes it static. Layout effect: measured before
+  // the first paint, so the hint never sits under the bar for a frame. --status-bar-height keeps the hint's room; --status-bar-pin
+  // is the page's scroll-padding-top (focus never lands under the sticky bar) and is 0 when the bar is static.
+  useLayoutEffect(() => {
     const bar = barRef.current;
     if (!bar || typeof ResizeObserver === 'undefined') return;
     const root = document.documentElement;
     const measure = () => {
       const height = bar.getBoundingClientRect().height;
+      const tall = height > window.innerHeight / 3;
       root.style.setProperty('--status-bar-height', `${height}px`);
-      if (height > window.innerHeight / 3) bar.setAttribute('data-tall', '');
+      root.style.setProperty('--status-bar-pin', tall ? '0px' : `${height}px`);
+      if (tall) bar.setAttribute('data-tall', '');
       else bar.removeAttribute('data-tall');
     };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(bar);
+    window.addEventListener('resize', measure);
     return () => {
       observer.disconnect();
+      window.removeEventListener('resize', measure);
       root.style.removeProperty('--status-bar-height');
+      root.style.removeProperty('--status-bar-pin');
     };
   }, []);
 

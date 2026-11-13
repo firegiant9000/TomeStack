@@ -616,7 +616,9 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   document.documentElement.style.removeProperty('--status-bar-height');
+  document.documentElement.style.removeProperty('--status-bar-pin');
 });
+const rootVar = (name: string) => document.documentElement.style.getPropertyValue(name);
 
 it('sets --status-bar-height from the bar, flags data-tall over a third of the viewport, and cleans up on unmount', () => {
   const { instances, set } = stubObserver(120, 600);
@@ -633,11 +635,33 @@ it('sets --status-bar-height from the bar, flags data-tall over a third of the v
   expect(bar.hasAttribute('data-tall')).toBe(false);
   unmount();
   expect(instances[0]!.disconnect).toHaveBeenCalled();
-  expect(document.documentElement.style.getPropertyValue('--status-bar-height')).toBe('');
+  expect(rootVar('--status-bar-height')).toBe('');
+  expect(rootVar('--status-bar-pin')).toBe('');
 });
 
-it('renders without ResizeObserver (older engines, jsdom) and sets nothing', () => {
-  vi.stubGlobal('ResizeObserver', undefined);
+it('--status-bar-pin is the height while pinned and 0px while tall; --status-bar-height keeps the full height', () => {
+  const { instances, set } = stubObserver(120, 600);
   render(<SheetSummary view={fixtureView()} {...plain} />);
-  expect(document.documentElement.style.getPropertyValue('--status-bar-height')).toBe('');
+  expect(rootVar('--status-bar-pin')).toBe('120px');
+  set(250);
+  act(() => instances[0]!.callback());
+  expect(rootVar('--status-bar-height')).toBe('250px');
+  expect(rootVar('--status-bar-pin')).toBe('0px');
+});
+
+it('a window resize re-evaluates data-tall even when the bar itself did not resize, and the listener goes on unmount', () => {
+  stubObserver(150, 600);
+  const { unmount } = render(<SheetSummary view={fixtureView()} {...plain} />);
+  const bar = statusBar();
+  expect(bar.hasAttribute('data-tall')).toBe(false);
+  vi.stubGlobal('innerHeight', 300); // 150 > 300 / 3
+  act(() => {
+    window.dispatchEvent(new Event('resize'));
+  });
+  expect(bar.hasAttribute('data-tall')).toBe(true);
+  expect(rootVar('--status-bar-pin')).toBe('0px');
+  unmount();
+  vi.stubGlobal('innerHeight', 900);
+  window.dispatchEvent(new Event('resize'));
+  expect(rootVar('--status-bar-pin')).toBe('');
 });
