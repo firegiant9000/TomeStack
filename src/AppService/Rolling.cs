@@ -187,7 +187,7 @@ public sealed partial class TomeStackApp
         else if (command.Content is { } reference)
         {
             if (sheet.Active?.Contains(reference) != true)
-                throw new AppValidationException([new("roll.content-inactive", $"Revision {reference.RevisionId} does not apply to this character, so its rolls are not available.", reference)]);
+                throw new AppValidationException([new("roll.content-inactive", "This content does not apply to this character, so its rolls are not available.", reference)]);
             var revision = _store.FindRevision(reference)!;
             var effect = revision.Effects.OfType<RollEffect>().FirstOrDefault(e => e.Id == command.EffectId)
                 ?? throw new AppValidationException([new("roll.effect-not-found", $"'{revision.Name}' has no roll effect '{command.EffectId}'.", reference, command.EffectId)]);
@@ -204,7 +204,7 @@ public sealed partial class TomeStackApp
             var scaledProblem = effect.ScaledDice is null || rollDice is not null ? null
                 : sheet.Diagnostics.FirstOrDefault(d => d.Code == "roll.dice-invalid" && d.Content == reference && d.EffectId == effect.Id);
             if (scaledProblem is not null)
-                throw new AppValidationException([new(scaledProblem.Code, $"Roll '{effect.Id}' cannot be rolled: its scaled dice could not be calculated ({scaledProblem.Code}).", reference, effect.Id)], scaledProblem.Code);
+                throw new AppValidationException([new(scaledProblem.Code, $"{PlainNames.Cap(PlainNames.Roll(effect.Label))} cannot be rolled: its dice could not be calculated.", reference, effect.Id)], scaledProblem.Code);
             if (rollDice is null && cast?.Dice is null)
             {
                 throw new AppValidationException([new("roll.no-dice", $"'{effect.Label}' has no dice to roll.", reference, effect.Id)], "roll.no-dice");
@@ -272,18 +272,18 @@ public sealed partial class TomeStackApp
     /// D43 S5/S8: the one range check of a per-unit amount, shared by the roll command and <c>useAction</c>: from the base cost up to
     /// base cost plus <c>maxUnits</c> (or the pool's maximum when there is no cap). Null when the amount is in range.
     /// </summary>
-    internal static Diagnostic? PerUnitRangeProblem(string effectId, ContentReference reference, int amount, int baseCost, RollPerUnit perUnit, int? poolMaximum)
+    internal static Diagnostic? PerUnitRangeProblem(string effectId, string? label, ContentReference reference, int amount, int baseCost, RollPerUnit perUnit, int? poolMaximum)
     {
         var cap = perUnit.MaxUnits is { } units ? baseCost + units : poolMaximum;
         return amount < baseCost || (cap is { } limit && amount > limit)
-            ? new("roll.amount-out-of-range", $"'{effectId}' takes an amount from {baseCost} to {cap?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "the pool's maximum"}, not {amount}.", reference, effectId)
+            ? new("roll.amount-out-of-range", $"{PlainNames.Cap(PlainNames.Roll(label))} takes an amount from {baseCost} to {cap?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "the pool's maximum"}, not {amount}.", reference, effectId)
             : null;
     }
 
     /// <summary>
     /// D43 S5: the amount of a roll effect's pool the roll implies spending (the request's amount, else the evaluated cost; informational,
     /// the Spend button sends it later), and, for a per-unit amount, the formula with the extra dice. Every check runs before any die is rolled.
-    /// Messages name ids and numbers only.
+    /// Messages name the roll and pool by their labels (D99), never by id.
     /// </summary>
     private static RollSpend? EffectSpend(
         RollCommand command, RollEffect effect, ContentRevision revision, CharacterSheet sheet, int? cost, bool costFailed, Diagnostic? failure, ref RollRequest request)
@@ -293,33 +293,33 @@ public sealed partial class TomeStackApp
         // D43: a draw-down needs a pool that counts up on this sheet (a pinned revision may have an ordinary one), whatever the amount.
         if (effect is { DrawsDown: true, ResourceId: { } drawnPool }
             && sheet.Resources?.FirstOrDefault(r => r.Content.ContentId == poolContent && r.ResourceId == drawnPool) is not { CountsUp: true })
-            throw new AppValidationException([new("use.unavailable", $"Pool '{drawnPool}' does not count up for this character, so '{effect.Id}' cannot draw it down.", reference, effect.Id)], "use.unavailable");
+            throw new AppValidationException([new("use.unavailable", $"{PlainNames.Cap(PlainNames.Pool(sheet.Resources, poolContent, drawnPool))} does not count up for this character, so {PlainNames.Roll(effect.Label)} cannot draw it down.", reference, effect.Id)], "use.unavailable");
         if (command.Amount is { } amount)
         {
             if (effect.PerUnit is not { } perUnit)
-                throw new AppValidationException([new("roll.amount-not-allowed", $"'{effect.Id}' spends a fixed amount; it takes no per-unit amount.", reference, effect.Id)], "roll.amount-not-allowed");
+                throw new AppValidationException([new("roll.amount-not-allowed", $"{PlainNames.Cap(PlainNames.Roll(effect.Label))} spends a fixed amount; it takes no per-unit amount.", reference, effect.Id)], "roll.amount-not-allowed");
             if (costFailed)
-                throw new AppValidationException([new(failure!.Code, $"'{effect.Id}' cannot be rolled with an amount: {failure.Message}", reference, effect.Id)], failure.Code);
+                throw new AppValidationException([new(failure!.Code, $"{PlainNames.Cap(PlainNames.Roll(effect.Label))} cannot be rolled with an amount: {failure.Message}", reference, effect.Id)], failure.Code);
             var baseCost = cost ?? 0;
             var pool = effect.ResourceId is null ? null : sheet.Resources?.FirstOrDefault(r => r.Content.ContentId == poolContent && r.ResourceId == effect.ResourceId);
-            if (PerUnitRangeProblem(effect.Id, reference, amount, baseCost, perUnit, pool?.Maximum) is { } outOfRange)
+            if (PerUnitRangeProblem(effect.Id, effect.Label, reference, amount, baseCost, perUnit, pool?.Maximum) is { } outOfRange)
                 throw new AppValidationException([outOfRange], outOfRange.Code);
             if (effect.ResourceId is not null)
             {
                 if (pool?.Current is not { } current)
-                    throw new AppValidationException([new("roll.amount-unaffordable", $"Pool '{effect.ResourceId}' is untracked, so {amount} cannot be paid from it.", reference, effect.Id)], "roll.amount-unaffordable");
+                    throw new AppValidationException([new("roll.amount-unaffordable", $"{PlainNames.Cap(PlainNames.Pool(sheet.Resources, poolContent, effect.ResourceId))} is untracked, so {amount} cannot be paid from it.", reference, effect.Id)], "roll.amount-unaffordable");
                 // D43 S8: a roll that draws a counting-up pool down pays from what is built up, not from the room left.
                 if (effect.DrawsDown == true)
                 {
                     if (amount > pool.Spent)
-                        throw new AppValidationException([new("roll.amount-unaffordable", $"Pool '{effect.ResourceId}' has {pool.Spent} built up; {amount} cannot be drawn down.", reference, effect.Id)], "roll.amount-unaffordable");
+                        throw new AppValidationException([new("roll.amount-unaffordable", $"{PlainNames.Cap(PlainNames.Pool(sheet.Resources, poolContent, effect.ResourceId))} has {pool.Spent} built up; {amount} cannot be drawn down.", reference, effect.Id)], "roll.amount-unaffordable");
                 }
                 else if (amount > current)
-                    throw new AppValidationException([new("roll.amount-unaffordable", $"Pool '{effect.ResourceId}' has {current} left; {amount} cannot be paid.", reference, effect.Id)], "roll.amount-unaffordable");
+                    throw new AppValidationException([new("roll.amount-unaffordable", $"{PlainNames.Cap(PlainNames.Pool(sheet.Resources, poolContent, effect.ResourceId))} has {current} left; {amount} cannot be paid.", reference, effect.Id)], "roll.amount-unaffordable");
             }
             // Unreachable for validated content; stored content with a per-unit die this cannot add is refused, never rolled as the base dice.
             if (!DiceRoller.TryPerUnitFormula(request.Formula, perUnit.Dice, baseCost, amount, out var formula))
-                throw new AppValidationException([new("roll.amount-out-of-range", $"'{effect.Id}' has a per-unit die that cannot be added to its dice, so no amount can be rolled.", reference, effect.Id)], "roll.amount-out-of-range");
+                throw new AppValidationException([new("roll.amount-out-of-range", $"{PlainNames.Cap(PlainNames.Roll(effect.Label))} has a per-unit die that cannot be added to its dice, so no amount can be rolled.", reference, effect.Id)], "roll.amount-out-of-range");
             request = request with { Formula = formula };
         }
         if (effect.ResourceId is null)

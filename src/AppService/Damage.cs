@@ -95,7 +95,7 @@ public sealed partial class TomeStackApp
     /// <summary>
     /// A confirmed damage with responses (inside <see cref="Play"/>): re-plans with the same choices, refuses the whole change with the
     /// plan's or the apply's first code on top when anything is wrong, and otherwise returns the new play state. The offered rolls come
-    /// back as <c>damage.roll-offered</c> notices that carry the roll's content and effect id, so the page can roll them; the messages name ids only.
+    /// back as <c>damage.roll-offered</c> notices that carry the roll's content and effect id, so the page can roll them; the messages name the roll by its label (D99).
     /// </summary>
     private static PlayState DamageWithResponses(
         Character character, PlayState play, CharacterSheet sheet, PlayCommand command, out DamageOutcome outcome, out IReadOnlyList<Diagnostic>? notices)
@@ -107,7 +107,7 @@ public sealed partial class TomeStackApp
         outcome = plan.Result.Outcome;
         notices = rolls.Count == 0
             ? null
-            : [.. rolls.Select(r => new Diagnostic("damage.roll-offered", $"Roll {r.RollId} of content {r.Content.ContentId} is offered.", r.Content, r.EffectId))];
+            : [.. rolls.Select(r => new Diagnostic("damage.roll-offered", $"{PlainNames.Cap(PlainNames.Roll(r.Label))} is offered.", r.Content, r.EffectId))];
         return applied;
     }
 
@@ -130,7 +130,7 @@ public sealed partial class TomeStackApp
         [
             .. skipped.Select(r => new Diagnostic(
                 "damage.responses-skipped",
-                $"Response {r.ResponseId} of content {r.ContentId} was available for this hit and was not chosen.",
+                $"{PlainNames.Cap(PlainNames.Of(r.Label, "that response"))} was available for this hit and was not chosen.",
                 sheet.Features?.FirstOrDefault(f => f.Content.ContentId == r.ContentId)?.Content,
                 r.ResponseId)),
         ];

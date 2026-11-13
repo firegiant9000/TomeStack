@@ -184,8 +184,10 @@ public class DamageResponseServiceTests
         Assert.Contains(skipped, n => n.EffectId == "stand" && n.Content!.ContentId == Stand);
         Assert.Contains(skipped, n => n.EffectId == "brace" && n.Content!.ContentId == Brace);
         Assert.DoesNotContain(skipped, n => n.EffectId == "rebound"); // not eligible: nothing was survived
-        Assert.All(skipped, n => Assert.DoesNotContain("Last stand", n.Message));
-    }
+        // D99: the response is named by its label, never by its id or content GUID.
+        Assert.Contains(skipped, n => n.EffectId == "stand" && n.Message.StartsWith("'Last stand' was available", StringComparison.Ordinal));
+        Assert.Contains(skipped, n => n.EffectId == "brace" && n.Message.StartsWith("'Brace' was available", StringComparison.Ordinal));
+        Assert.All(skipped, n => Assert.DoesNotContain(n.Content!.ContentId.ToString(), n.Message, StringComparison.OrdinalIgnoreCase));    }
 
     [Fact]
     public void Plain_damage_that_does_nothing_after_defences_names_no_skipped_response()
@@ -225,7 +227,7 @@ public class DamageResponseServiceTests
         var roll = Assert.Single(view.Notices!, n => n.Code == "damage.roll-offered");
         Assert.Equal(Rebound, roll.Content!.ContentId);
         Assert.Equal("counter", roll.EffectId);
-        Assert.DoesNotContain("Counter", roll.Message);
+        Assert.Equal("'Counter' is offered.", roll.Message); // D99: the label, no id or content GUID
     }
 
     [Fact]

@@ -283,8 +283,8 @@ public sealed partial class TomeStackApp
         var pools = ClearedPools(sheet, clear); // refused whole before anything is applied
         var lost = play.Toggles.Where(t => t.RoundsLeft is not null).Select(t =>
         {
-            var label = sheet.Toggles?.FirstOrDefault(v => v.Content.ContentId == t.ContentId && v.ToggleId == t.ToggleId)?.Label ?? t.ToggleId;
-            return new Diagnostic("encounter.duration-by-hand", $"{label} ({t.ToggleId}): duration: track by hand");
+            var label = sheet.Toggles?.FirstOrDefault(v => v.Content.ContentId == t.ContentId && v.ToggleId == t.ToggleId)?.Label;
+            return new Diagnostic("encounter.duration-by-hand", $"{(string.IsNullOrWhiteSpace(label) ? "A toggle" : label)}: duration: track by hand");
         }).ToList();
         notices = lost.Count == 0 ? null : lost;
         play = play with { Encounter = null, Toggles = [.. play.Toggles.Select(t => t with { RoundsLeft = null })] };
@@ -359,10 +359,10 @@ public sealed partial class TomeStackApp
         }
         // Only a paying attack is usable here, so only one can make the roll ambiguous; a plain attack sharing the id never shadows a roll.
         if (attacks.Any(a => a.Payment is not null))
-            throw new AppValidationException([new("use.not-found", $"Content {contentId:D} has both a roll and an attack '{command.RollId}', so it cannot be told which to use.")], "use.not-found");
+            throw new AppValidationException([new("use.not-found", $"{PlainNames.Cap(PlainNames.Roll(roll.Label))} is both a roll and an attack, so it cannot be told which to use.")], "use.not-found");
         var reference = feature.Content;
         if (!calculated.Available)
-            throw new AppValidationException([new("use.unavailable", $"Roll '{roll.Id}' is not available now.", reference, roll.Id)], "use.unavailable");
+            throw new AppValidationException([new("use.unavailable", $"{PlainNames.Cap(PlainNames.Roll(roll.Label))} is not available now.", reference, roll.Id)], "use.unavailable");
         if (calculated.Payment is { } payment)
         {
             label = $"use {(string.IsNullOrWhiteSpace(roll.Label) ? roll.RollId : roll.Label)}";
@@ -376,20 +376,20 @@ public sealed partial class TomeStackApp
             if (roll.Cost is not null && calculated.Cost is null)
             {
                 var failure = sheet.Diagnostics.FirstOrDefault(d => d.Code == "effect.invalid-formula" && d.Content == reference && d.EffectId == roll.Id)
-                    ?? new Diagnostic("effect.invalid-formula", $"The cost of roll '{roll.Id}' could not be calculated.", reference, roll.Id);
+                    ?? new Diagnostic("effect.invalid-formula", $"The cost of {PlainNames.Roll(roll.Label)} could not be calculated.", reference, roll.Id);
                 throw new AppValidationException([failure], failure.Code);
             }
             var poolContent = calculated.ResourceContent ?? contentId;
             // Defence in depth: a draw-down gives uses back, which on an ordinary pool would refill it, so it needs a counting-up pool here.
             if (calculated.DrawsDown && sheet.Resources?.FirstOrDefault(r => r.Content.ContentId == poolContent && r.ResourceId == ownPool) is not { CountsUp: true })
-                throw new AppValidationException([new("use.unavailable", $"Pool '{ownPool}' does not count up for this character, so roll '{roll.Id}' cannot draw it down.", reference, roll.Id)], "use.unavailable");
+                throw new AppValidationException([new("use.unavailable", $"{PlainNames.Cap(PlainNames.Pool(sheet.Resources, poolContent, ownPool))} does not count up for this character, so {PlainNames.Roll(roll.Label)} cannot draw it down.", reference, roll.Id)], "use.unavailable");
             int amount;
             if (calculated.PerUnit is { } perUnit)
             {
                 amount = command.Amount;
                 var baseCost = calculated.Cost ?? 0;
                 var pool = sheet.Resources?.FirstOrDefault(r => r.Content.ContentId == poolContent && r.ResourceId == ownPool);
-                if (PerUnitRangeProblem(roll.Id, reference, amount, baseCost, perUnit, pool?.Maximum) is { } outOfRange)
+                if (PerUnitRangeProblem(roll.Id, roll.Label, reference, amount, baseCost, perUnit, pool?.Maximum) is { } outOfRange)
                     throw new AppValidationException([outOfRange], outOfRange.Code);
             }
             else
@@ -401,11 +401,11 @@ public sealed partial class TomeStackApp
         foreach (var also in calculated.AlsoChange ?? [])
         {
             if (also.Amount is not { } alsoAmount)
-                throw new AppValidationException([new("use.unavailable", $"An amount of roll '{roll.Id}' could not be calculated, so it cannot be used.", reference, roll.Id)], "use.unavailable");
+                throw new AppValidationException([new("use.unavailable", $"An amount of {PlainNames.Roll(roll.Label)} could not be calculated, so it cannot be used.", reference, roll.Id)], "use.unavailable");
             changes.Add(new(also.ResourceContent, also.ResourceId, also.Change, alsoAmount));
         }
         if (changes.Count == 0)
-            throw new AppValidationException([new("use.unavailable", $"Roll '{roll.Id}' changes no pool, so there is nothing to use.", reference, roll.Id)], "use.unavailable");
+            throw new AppValidationException([new("use.unavailable", $"{PlainNames.Cap(PlainNames.Roll(roll.Label))} changes no pool, so there is nothing to use.", reference, roll.Id)], "use.unavailable");
 
         var (applied, errors) = PoolChanges.Apply(play, sheet, changes);
         if (errors.Count > 0)
@@ -414,7 +414,7 @@ public sealed partial class TomeStackApp
         // A use that changes nothing (a regain with nothing spent, a per-unit amount of 0) is not a change: no write, no undo slot taken.
         var pools = changes.Select(c => (c.ResourceContent, c.ResourceId)).Distinct().ToList();
         if (pools.All(p => applied.SpentOf(p.ResourceContent, p.ResourceId) == play.SpentOf(p.ResourceContent, p.ResourceId)))
-            throw new AppValidationException([new("use.unavailable", $"Using '{roll.Id}' would change no pool.", reference, roll.Id)], "use.unavailable");
+            throw new AppValidationException([new("use.unavailable", $"Using {PlainNames.Roll(roll.Label)} would change no pool.", reference, roll.Id)], "use.unavailable");
 
         // A counting-up pool this use filled says so (the content's own text): it was below its maximum before and is at it now.
         var full = new List<Diagnostic>();
@@ -439,24 +439,24 @@ public sealed partial class TomeStackApp
         if (payment.Kind == PaymentKind.Slot)
             return 1;
         if (roll.Cost is not null && calculated.Cost is null)
-            throw CostNotCalculated(sheet, reference, roll.Id, "roll");
+            throw CostNotCalculated(sheet, reference, roll.Id, "roll", roll.Label);
         var amount = calculated.Cost ?? 0;
         if (calculated.PerUnit is { } perUnit)
         {
             amount = command.Amount;
-            if (PerUnitRangeProblem(roll.Id, reference, amount, calculated.Cost ?? 0, perUnit, null) is { } outOfRange)
+            if (PerUnitRangeProblem(roll.Id, roll.Label, reference, amount, calculated.Cost ?? 0, perUnit, null) is { } outOfRange)
                 throw new AppValidationException([outOfRange], outOfRange.Code);
         }
         if (amount <= 0)
-            throw new AppValidationException([new("use.unavailable", $"Using '{roll.Id}' would pay nothing.", reference, roll.Id)], "use.unavailable");
+            throw new AppValidationException([new("use.unavailable", $"Using {PlainNames.Roll(roll.Label)} would pay nothing.", reference, roll.Id)], "use.unavailable");
         return amount;
     }
 
     /// <summary>The refusal for a cost formula that did not calculate: the sheet's own <c>effect.invalid-formula</c> diagnostic for that content and effect.</summary>
-    private static AppValidationException CostNotCalculated(CharacterSheet sheet, ContentReference reference, string effectId, string noun)
+    private static AppValidationException CostNotCalculated(CharacterSheet sheet, ContentReference reference, string effectId, string noun, string? name)
     {
         var failure = sheet.Diagnostics.FirstOrDefault(d => d.Code == "effect.invalid-formula" && d.Content == reference && d.EffectId == effectId)
-            ?? new Diagnostic("effect.invalid-formula", $"The cost of {noun} '{effectId}' could not be calculated.", reference, effectId);
+            ?? new Diagnostic("effect.invalid-formula", $"The cost of {PlainNames.Of(name, "that " + noun)} could not be calculated.", reference, effectId);
         return new AppValidationException([failure], failure.Code);
     }
 
@@ -468,12 +468,12 @@ public sealed partial class TomeStackApp
     {
         label = $"use {attack.Name}";
         if (attack.Payment is not { } payment || !attack.Available)
-            throw new AppValidationException([new("use.unavailable", $"Attack '{attack.EffectId}' cannot be used now.", attack.Item, attack.EffectId)], "use.unavailable");
+            throw new AppValidationException([new("use.unavailable", $"{PlainNames.Cap(PlainNames.Of(attack.Name, "that attack"))} cannot be used now.", attack.Item, attack.EffectId)], "use.unavailable");
         if (payment.Kind == PaymentKind.HitPoints && attack.Cost is null)
-            throw CostNotCalculated(sheet, attack.Item, attack.EffectId, "attack");
+            throw CostNotCalculated(sheet, attack.Item, attack.EffectId, "attack", attack.Name);
         var amount = payment.Kind == PaymentKind.Slot ? 1 : attack.Cost ?? 0;
         if (amount <= 0)
-            throw new AppValidationException([new("use.unavailable", $"Using '{attack.EffectId}' would pay nothing.", attack.Item, attack.EffectId)], "use.unavailable");
+            throw new AppValidationException([new("use.unavailable", $"Using {PlainNames.Of(attack.Name, "that attack")} would pay nothing.", attack.Item, attack.EffectId)], "use.unavailable");
         return Pay(play, sheet, payment, amount, attack.Item, attack.EffectId);
     }
 
@@ -655,7 +655,7 @@ public sealed partial class TomeStackApp
             throw new AppValidationException([new("toggle.already-on", $"'{toggle.Label}' is already on.")]);
         var isPrimary = toggle is { Group: not null, Layer: not ToggleLayer.Overlay };
         if (toggle is { Group: not null, Layer: ToggleLayer.Overlay, Available: false })
-            throw new AppValidationException([new("toggle.overlay-not-allowed", $"'{toggle.Label}' ({toggle.ToggleId}) is not allowed with the form that is on now. {toggle.UnavailableReason}".TrimEnd(), toggle.Content, toggle.EffectId)]);
+            throw new AppValidationException([new("toggle.overlay-not-allowed", $"{PlainNames.Cap(PlainNames.Of(toggle.Label, "that toggle"))} is not allowed with the form that is on now. {toggle.UnavailableReason}".TrimEnd(), toggle.Content, toggle.EffectId)]);
         var next = others;
         if (isPrimary)
         {
@@ -663,7 +663,7 @@ public sealed partial class TomeStackApp
             var groupPresent = sheet.Features is null || sheet.Features.Any(f => f.Content.ContentId == toggle.GroupContent);
             var occupants = ToggleGroups.Occupants(toggle, sheet.Toggles ?? [], groupPresent);
             if (occupants.Count > 0 && !command.Replace)
-                throw new AppValidationException([new("toggle.group-occupied", $"Group '{toggle.Group}' already has '{occupants[0].Label}' ({occupants[0].ContentName}) on; turn it off first, or switch with replace.", toggle.Content, toggle.EffectId)]);
+                throw new AppValidationException([new("toggle.group-occupied", $"{PlainNames.Cap(PlainNames.Of(occupants[0].Label, "another toggle"))} ({occupants[0].ContentName}) is already on, and only one of them can be on; turn it off first, or switch with replace.", toggle.Content, toggle.EffectId)]);
             next = [.. others.Where(t => !occupants.Any(o => o.Content.ContentId == t.ContentId && o.ToggleId == t.ToggleId))];
         }
         // Everything is computed before anything is written: the new list, then the payment.
@@ -675,7 +675,7 @@ public sealed partial class TomeStackApp
         // A declared cost that did not evaluate (the calculator left it null and warned) refuses; only a toggle with no cost spends the default 1.
         var declaresCost = _store.FindRevision(toggle.Content)?.Effects.OfType<ToggleEffect>().FirstOrDefault(t => t.Id == toggle.EffectId)?.Cost is not null;
         if (declaresCost && toggle.Cost is null)
-            throw new AppValidationException([new("effect.invalid-formula", $"The cost of '{toggle.Label}' ({toggle.ToggleId}) could not be calculated, so it cannot be turned on.", toggle.Content, toggle.EffectId)]);
+            throw new AppValidationException([new("effect.invalid-formula", $"The cost of {PlainNames.Of(toggle.Label, "that toggle")} could not be calculated, so it cannot be turned on.", toggle.Content, toggle.EffectId)]);
         // MECH-X item 1 (S9): a toggle that pays hit points or a slot pays through Pay, checked again on the sheet it was decided on; a
         // hit-point cost of 0 turns it on and pays nothing, as a pool toggle does. The Pay is the compound change Play labelled.
         if (toggle.Payment is { } payment)
