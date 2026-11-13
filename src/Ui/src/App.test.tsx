@@ -46,6 +46,7 @@ vi.mock('./api/client', () => ({
     dailyCopies: vi.fn(),
     libraryBackupPreview: vi.fn(),
     listAllGapNotes: vi.fn(),
+    listExtensions: vi.fn(),
   },
 }));
 
@@ -84,6 +85,7 @@ beforeEach(() => {
   vi.mocked(client.dailyCopies).mockResolvedValue({ on: false, copies: [], bytes: 0 });
   vi.mocked(client.libraryBackupPreview).mockReturnValue(new Promise(() => {})); // the Backups heading does not wait for it
   vi.mocked(client.listAllGapNotes).mockResolvedValue([]);
+  vi.mocked(client.listExtensions).mockResolvedValue([]); // the Settings screen lists installed extensions
   vi.mocked(client.snapshots).mockResolvedValue({ items: [], hasMore: false });
 });
 afterEach(() => {
@@ -165,6 +167,11 @@ it('Every_screen_has_one_h1_matching_the_title', async () => {
   await sidebar(/Fixture Avery/);
   await expectOneH1('Fixture Avery');
 
+  await user.click(await screen.findByRole('button', { name: 'Level up' }));
+  await expectOneH1('Level up Fixture Avery');
+  await user.click(await screen.findByRole('button', { name: 'Next: choices' })); // the builder's choices step
+  await expectOneH1('Level up Fixture Avery');
+
   await sidebar('+ Add a character');
   await expectOneH1('Add a character');
   await user.click(screen.getByRole('radio', { name: /^Make a new one/ }));
@@ -175,7 +182,7 @@ it('Every_screen_has_one_h1_matching_the_title', async () => {
   await user.click(screen.getByRole('radio', { name: /^From a character sheet/ }));
   await user.click(screen.getByRole('button', { name: 'Continue' }));
   await expectOneH1('From a character sheet (PDF or text)');
-});
+}, 30000); // a long walk of 14 screens; each step waits on real user-event clicks
 
 it('Cancel from a level-up shows the character as it is now, not as it was when the builder opened (carry 1)', async () => {
   const user = userEvent.setup();
