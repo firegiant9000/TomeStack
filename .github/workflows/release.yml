@@ -5,7 +5,7 @@ name: Release
 # (owner decision 2026-10-01; docs/licensing/release-checklist.md), so the notes describe the SmartScreen prompt.
 #
 # Three jobs, so no step that runs repo code or npm packages holds a write or OIDC token:
-#   build   (contents: read)   the version check, the full gate, pack, installer smoke, SHA256SUMS
+#   build   (contents: read)   the version check, the full gate, pack, installer smoke, CycloneDX SBOMs (NuGet, npm), SHA256SUMS
 #   attest  (id-token, attestations)   build provenance over every file SHA256SUMS lists
 #   publish (contents: write)  the draft release; runs no repo code
 # A manual run (workflow_dispatch) is a dry run: build only, no attestation, no release.
@@ -132,8 +132,32 @@ jobs:
         shell: pwsh
         run: scripts/installer-smoke.ps1 -Adapter Velopack -InstallOnly -NewBuild "$env:RUNNER_TEMP/installer/${{ steps.version.outputs.version }}"
 
+      # Two CycloneDX SBOMs of what ships (D101): the .NET packages (the pinned CycloneDX tool on DesktopShell, following
+      # its project references, which are the whole published graph; it reads the restored lock-file assets, so no second
+      # restore) and the UI's npm runtime packages (see scripts/npm-sbom-runtime.mjs for why npm's --omit is not used).
+      - name: Software bills of materials (CycloneDX)
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $sbom = Join-Path $env:RUNNER_TEMP 'sbom'
+          New-Item -ItemType Directory -Path $sbom -Force | Out-Null
+          dotnet dotnet-cyclonedx src/DesktopShell/TomeStack.DesktopShell.csproj --recursive --exclude-test-projects --exclude-dev --disable-package-restore -c Release --output-format Json --output $sbom --filename "tomestack-$env:VERSION-nuget.cdx.json"
+          if ($LASTEXITCODE -ne 0) { throw 'CycloneDX (NuGet) failed' }
+          $npmSbom = Join-Path $sbom "tomestack-$env:VERSION-npm.cdx.json"
+          Push-Location src/Ui
+          npm sbom --sbom-format cyclonedx --package-lock-only | node ../../scripts/npm-sbom-runtime.mjs | Set-Content -Path $npmSbom -Encoding utf8NoBOM
+          $npmExit = $LASTEXITCODE
+          Pop-Location
+          if ($npmExit -ne 0) { throw 'npm SBOM failed' }
+          foreach ($name in "tomestack-$env:VERSION-nuget.cdx.json", "tomestack-$env:VERSION-npm.cdx.json") {
+            $f = Join-Path $sbom $name
+            if (-not (Test-Path $f) -or (Get-Item $f).Length -eq 0) { throw "SBOM $name is missing or empty" }
+          }
+          Get-ChildItem $sbom | Format-Table Name, Length
+
       # The release assets are every file vpk wrote at the top of the version folder (the publish folder below it is
-      # not an asset), the same set as before SHA256SUMS. SHA256SUMS is in sha256sum text format: "<hash>  <name>",
+      # not an asset) plus the SBOMs. SHA256SUMS is in sha256sum text format: "<hash>  <name>",
       # lower-case hex, LF line endings, so `sha256sum --check` and the attest job read it as written.
       # The hash of SHA256SUMS itself is a job output, so attest and publish can tell if the artifact was replaced
       # after this step.
@@ -146,7 +170,7 @@ jobs:
           $src = Join-Path $env:RUNNER_TEMP "installer/$env:VERSION"
           $out = Join-Path $env:RUNNER_TEMP 'release-assets'
           New-Item -ItemType Directory -Path $out -Force | Out-Null
-          $files = Get-ChildItem $src -File | Sort-Object Name
+          $files = @(Get-ChildItem $src -File) + @(Get-ChildItem (Join-Path $env:RUNNER_TEMP 'sbom') -File) | Sort-Object Name
           # publish looks the installer up by this exact name, so check the same name here.
           if (-not ($files | Where-Object { $_.Name -ceq 'TomeStack.App-win-Setup.exe' })) { throw 'TomeStack.App-win-Setup.exe is missing' }
           $lines = foreach ($f in $files) {

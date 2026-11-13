@@ -156,7 +156,7 @@ Velopack (MIT, Caelan Sayler) builds `Setup.exe` and `Update.exe` in Rust, with 
    2. the self-contained publish and `vpk pack`;
    3. an install, smoke and uninstall on the runner;
    4. it writes `SHA256SUMS` over those files, attests each file it lists (build provenance) and creates a **draft** release with `Setup.exe`, the portable zip, the `.nupkg`, the Velopack feed files, `SHA256SUMS` and notes from the changelog.
-4. Review the draft on GitHub (assets, notes, the unsigned note), check that its tag's commit is on `main` (`git fetch origin --tags`, then `git merge-base --is-ancestor vX.Y.Z origin/main` must succeed; a draft from any other commit is rejected as below), then **Publish**. The release page is not public before that, but the workflow run's artifacts (`release-assets`, the same files; `release-notes`; `release-smoke-result`) can be downloaded from the public run page for one day.
+4. Review the draft on GitHub (assets, notes, the unsigned note; the draft must list `tomestack-X.Y.Z-nuget.cdx.json` and `tomestack-X.Y.Z-npm.cdx.json`, and `SHA256SUMS` must have a line for each), check that its tag's commit is on `main` (`git fetch origin --tags`, then `git merge-base --is-ancestor vX.Y.Z origin/main` must succeed; a draft from any other commit is rejected as below), then **Publish**. The release page is not public before that, but the workflow run's artifacts (`release-assets`, the same files; `release-notes`; `release-smoke-result`) can be downloaded from the public run page for one day.
 5. After publishing: run the upgrade test and the install checks on the published `Setup.exe` (`docs/features/release-0.4.0-verification.md`).
 
 6. Two GitHub rulesets (repository settings, the owner's; check with `gh api repos/firegiant9000/TomeStack/rulesets`): `Default` protects `main` from force-push and deletion, and `Release Tags` (since 2026-11-03) lets only a repository admin create, move or delete a `refs/tags/v*` tag. The workflow runs as it stands at the tag, so the ruleset is what limits who can start a release; step 4's check that the tag's commit is on `main` stays as the second line.
@@ -165,7 +165,7 @@ Velopack (MIT, Caelan Sayler) builds `Setup.exe` and `Update.exe` in Rust, with 
 
 The **Release** workflow has three jobs, so no step that runs the repo's code or npm packages holds a write or OIDC token:
 
-- `build` (`contents: read`, checkout without a persisted token): the version check, the full gate, pack, installer smoke, then `SHA256SUMS` (`<sha256>  <file>` per asset, lower-case hex). Signing, when it lands, goes after the pack and before the hash file.
+- `build` (`contents: read`, checkout without a persisted token): the version check, the full gate, pack, installer smoke, the two CycloneDX SBOMs (`tomestack-X.Y.Z-nuget.cdx.json`, `tomestack-X.Y.Z-npm.cdx.json`), then `SHA256SUMS` (`<sha256>  <file>` per asset including the SBOMs, lower-case hex). Signing, when it lands, goes after the pack and before the hash file.
 - `attest` (`id-token: write`, `attestations: write`): checks the files against `SHA256SUMS`, then `actions/attest-build-provenance` with `subject-checksums: SHA256SUMS`.
 - `publish` (`contents: write`): checks the files again and creates the draft with the listed files and `SHA256SUMS`. It runs no repo code.
 

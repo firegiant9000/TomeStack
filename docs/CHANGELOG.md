@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Added
+- **Release assets:** each release now includes two CycloneDX software bills of materials, `tomestack-X.Y.Z-nuget.cdx.json` (the .NET packages) and `tomestack-X.Y.Z-npm.cdx.json` (the UI's npm runtime packages). They are listed in `SHA256SUMS` and attested like the installer (D101). No app change.
+
 ### Changed
 - **Development only:** NuGet lock files are committed for every project and CI restores in locked mode; NuGet audit (including transitive packages, every severity) fails the build on an advisory (D100). No app change.
 - **Docs:** the README "Code signing policy" and [ADR-024](decisions/ADR-024-code-signing.md) record that the SignPath Foundation application was submitted on 2026-11-12. Releases stay unsigned until it is accepted.
