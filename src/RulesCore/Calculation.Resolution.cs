@@ -232,10 +232,10 @@ public static partial class CharacterCalculator
 
     private const string UnavailableEntry = "an entry that is not available";
 
-    /// <summary>D99: a rules family as a player reads it ("2014 rules"); an id this app does not know is never printed.</summary>
-    private static string FamilyLabel(string id) => RulesFamilies.IsKnown(id) ? RulesFamilies.Get(id).ShortLabel : "unknown rules";
+    /// <summary>D99: a rules family as a player reads it, article included ("the 2014 rules"); an id this app does not know stays in the text so the author can find the typo.</summary>
+    private static string FamilyLabel(string id) => RulesFamilies.IsKnown(id) ? $"the {RulesFamilies.Get(id).ShortLabel}" : $"'{id}' (rules this app does not know)";
 
-    private static string FamilyLabels(IEnumerable<string> ids) => string.Join(" and the ", ids.Select(FamilyLabel).Distinct());
+    private static string FamilyLabels(IEnumerable<string> ids) => string.Join(" and ", ids.Select(FamilyLabel).Distinct());
 
     private sealed record ResolvedContent(
         List<ActiveContent> Active, List<ClassInfo> Classes, ClassLevelMap ClassLevels, List<ChoiceStatus> Choices, IReadOnlyList<ModdedEntry> ModdedEntries);
@@ -297,12 +297,12 @@ public static partial class CharacterCalculator
                 var exception = grantedBy is null ? character.CrossFamilyExceptions.LastOrDefault(e => e.Content == reference) : null;
                 if (exception is null)
                 {
-                    diagnostics.Add(new("content.rules-family-mismatch", $"{prefix}'{revision.Name}' is written for the {FamilyLabels(revision.RulesFamilies)}, not the {FamilyLabel(character.RulesFamily)}; it is not applied.", reference));
+                    diagnostics.Add(new("content.rules-family-mismatch", $"{prefix}'{revision.Name}' is written for {FamilyLabels(revision.RulesFamilies)}, not {FamilyLabel(character.RulesFamily)}; it is not applied.", reference));
                     return null;
                 }
                 diagnostics.Add(new(
                     "content.cross-family-exception",
-                    $"'{revision.Name}' is written for the {FamilyLabels(revision.RulesFamilies)} but is used under the {FamilyLabel(character.RulesFamily)} by a recorded exception: {exception.Reason}. It follows the {policy.ShortLabel}.",
+                    $"'{revision.Name}' is written for {FamilyLabels(revision.RulesFamilies)} but is used under {FamilyLabel(character.RulesFamily)} by a recorded exception: {exception.Reason}. It follows the {policy.ShortLabel}.",
                     reference));
             }
             var source = catalog.FindSource(revision.Provenance.SourceId);
@@ -448,7 +448,7 @@ public static partial class CharacterCalculator
 
         var referenced = character.AllReferences().ToHashSet();
         foreach (var exception in character.CrossFamilyExceptions.Where(e => !referenced.Contains(e.Content)))
-            diagnostics.Add(new("character.exception-unused", $"An other-rules exception is saved for '{catalog.FindRevision(exception.Content)?.Name ?? UnavailableEntry}', which this character does not use.", exception.Content));
+            diagnostics.Add(new("character.exception-unused", $"An exception to the rules is saved for '{catalog.FindRevision(exception.Content)?.Name ?? UnavailableEntry}', but this character does not use it.", exception.Content));
 
         var pending = new Queue<ActiveContent>(active);
         while (pending.Count > 0)
@@ -567,7 +567,9 @@ public static partial class CharacterCalculator
         }
 
         foreach (var orphan in character.Choices.Where(c => !answered.Contains((c.Source, c.ChoiceId))))
-            diagnostics.Add(new("choice.orphaned", $"A pick is saved for '{catalog.FindRevision(orphan.Source)?.Name ?? "content that is not active"}', which is not active or does not offer that choice (yet); it is not applied.", orphan.Source));
+            diagnostics.Add(new("choice.orphaned", catalog.FindRevision(orphan.Source)?.Name is { } orphanName
+                ? $"A pick is saved for '{orphanName}', which is not active or does not offer that choice (yet); it is not applied."
+                : "A pick is saved for content that is not active; it is not applied.", orphan.Source));
         CollectScales(active, classLevels, diagnostics);
         CollectValues(active, classLevels, diagnostics);
         return new(active, classes, classLevels, choices, modded);

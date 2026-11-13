@@ -8,15 +8,26 @@ namespace TomeStack.RulesCore.Tests;
 /// </summary>
 public partial class ServiceWordingTests
 {
-    private static readonly string[] BannedWords = ["revision", "rules family", "schema", "srd-5", "package", "candidate"];
+    private static readonly string[] BannedWords = ["revision", "rules family", "schema", "package", "candidate"];
 
     [GeneratedRegex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")]
     private static partial Regex GuidPattern();
 
-    /// <summary>The reusable wording check: no GUID, none of the banned words, none of <paramref name="alsoNot"/> (ids), and every <paramref name="names"/> present.</summary>
-    internal static void AssertPlain(string message, string[] names, params string[] alsoNot)
+    /// <summary>A rules-family id such as "srd-5.1" or "srd-9": a player never reads one unless the author typed an id the app does not know.</summary>
+    [GeneratedRegex(@"srd-\d", RegexOptions.IgnoreCase)]
+    private static partial Regex FamilyIdPattern();
+
+    /// <summary>The reusable wording check: no GUID, none of the banned words, no rules-family id, none of <paramref name="alsoNot"/> (ids), and every <paramref name="names"/> present.</summary>
+    internal static void AssertPlain(string message, string[] names, params string[] alsoNot) => AssertPlainKeeping(message, [], names, alsoNot);
+
+    /// <summary>As <see cref="AssertPlain"/>, but the unknown rules ids in <paramref name="keptIds"/> are expected to stay in the message (the owner ruling: a typo must stay findable).</summary>
+    internal static void AssertPlainKeeping(string message, string[] keptIds, string[] names, params string[] alsoNot)
     {
         Assert.DoesNotMatch(GuidPattern(), message);
+        var withoutKept = keptIds.Aggregate(message, (m, id) => m.Replace(id, "", StringComparison.Ordinal));
+        Assert.DoesNotMatch(FamilyIdPattern(), withoutKept);
+        foreach (var id in keptIds)
+            Assert.Contains(id, message, StringComparison.Ordinal);
         foreach (var word in BannedWords)
             Assert.DoesNotContain(word, message, StringComparison.OrdinalIgnoreCase);
         foreach (var id in alsoNot)
@@ -225,6 +236,116 @@ public partial class ServiceWordingTests
         var ash = Fixtures.Load("srd521-ash-m1.json") with { RulesFamily = RulesFamilies.Srd51, Pins = [background.Reference], Choices = [new(background.Reference, "feat", [Fixtures.Watchful])] };
 
         AssertPlain(Message(ChoiceTests.SheetWith(ash, background), "policy.background-feat"), ["Fixture Homebrew 30", "under the 2014 rules"], "SRD 5.1");
+    }
+
+    [Fact]
+    public void Content_written_for_an_unknown_rules_id_keeps_the_id_in_the_message()
+    {
+        var odd = ChoiceTests.Homebrew(31, ContentKind.Feat) with { RulesFamilies = ["srd-9"] };
+
+        var message = Message(Pinned(odd), "content.rules-family-mismatch");
+
+        AssertPlainKeeping(message, ["srd-9"], ["Fixture Homebrew 31", "'srd-9' (rules this app does not know)", "not the 2024 rules"]);
+        Assert.DoesNotContain("the unknown rules", message, StringComparison.Ordinal);
+        Assert.DoesNotContain("the 'srd-9'", message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Content_written_for_known_and_unknown_rules_reads_as_a_list()
+    {
+        var odd = ChoiceTests.Homebrew(32, ContentKind.Feat) with { RulesFamilies = ["srd-9", RulesFamilies.Srd51] };
+
+        var message = Message(Pinned(odd, RulesFamilies.Srd521), "content.rules-family-mismatch");
+
+        AssertPlainKeeping(message, ["srd-9"], ["written for 'srd-9' (rules this app does not know) and the 2014 rules, not the 2024 rules"]);
+    }
+
+    [Fact]
+    public void An_exception_that_is_not_used_reads_as_an_exception_to_the_rules()
+    {
+        var unused = Fixtures.Load("srd521-rook-exception.json") with { Pins = [Fixtures.Wayfarer] };
+
+        AssertPlain(Message(Sheet(unused), "character.exception-unused"), ["An exception to the rules is saved for", "but this character does not use it"], "other-rules");
+    }
+
+    [Fact]
+    public void An_exception_without_a_reason_says_what_it_is()
+    {
+        var rook = Fixtures.Load("srd521-rook-exception.json");
+
+        var problems = (rook with { CrossFamilyExceptions = [new(Fixtures.KeenSenses2014, " ")] }).Validate();
+
+        AssertPlain(Assert.Single(problems, d => d.Code == "character.exception-reason-required").Message, ["An exception to the rules needs a reason"], "cross-family");
+    }
+
+    [Fact]
+    public void An_orphaned_pick_for_unknown_content_is_one_plain_sentence_without_quotes()
+    {
+        var gone = new ContentReference(Guid.NewGuid(), Guid.NewGuid());
+        var sheet = Sheet(Warden(1, Skills(Fixtures.WardenAthletics, Fixtures.WardenSurvival), new ChoiceSelection(gone, "lost-choice", [])));
+
+        Assert.Equal("A pick is saved for content that is not active; it is not applied.", Message(sheet, "choice.orphaned"));
+    }
+
+    [Fact]
+    public void A_stored_class_column_that_is_not_valid_is_reported_without_the_effect_id()
+    {
+        var chronicler = CustomClassTests.ChroniclerRevision();
+        var hostile = chronicler with
+        {
+            Effects = [.. chronicler.Effects.Select(e => e is ScaleEffect { ScaleId: "ink" } s ? s with { Values = [.. Enumerable.Repeat(int.MaxValue, 20)] } : e)],
+        };
+        var pack = Fixtures.ChroniclerPack();
+        var catalog = new InMemoryContentCatalog(pack.Sources, [hostile, .. pack.Revisions.Skip(1)]);
+
+        var sheet = CharacterCalculator.Calculate(CustomClassTests.Chronicler(RulesFamilies.Srd521, classes: new ClassLevel(Fixtures.Chronicler, 5)), catalog);
+
+        AssertPlain(Message(sheet, "scale.invalid"), [hostile.Name, "has a class-table column that needs a name"], "chronicler-ink-column");
+    }
+
+    [Fact]
+    public void A_repeated_class_column_names_the_column_and_both_entries()
+    {
+        var pack = Fixtures.ChroniclerPack();
+        var echoes = pack.Revisions.Single(r => r.Reference == Fixtures.ArchiveOfEchoes);
+        var clash = echoes with { Effects = [.. echoes.Effects.Select(e => e is ScaleEffect s ? s with { ScaleId = "ink", Values = [.. Enumerable.Repeat(99, 20)] } : e)] };
+        var catalog = new InMemoryContentCatalog([.. pack.Sources, .. Fixtures.M1Pack().Sources], [.. pack.Revisions.Where(r => r.Reference != Fixtures.ArchiveOfEchoes), clash]);
+
+        var sheet = CharacterCalculator.Calculate(CustomClassTests.Chronicler(RulesFamilies.Srd521, classes: new ClassLevel(Fixtures.Chronicler, 5)), catalog);
+
+        AssertPlain(Message(sheet, "scale.duplicate"), [echoes.Name, "defines scale 'ink'", CustomClassTests.ChroniclerRevision().Name]);
+    }
+
+    [Fact]
+    public void A_grant_that_names_no_content_is_reported_without_the_grant_id()
+    {
+        var empty = ChoiceTests.Homebrew(34, ContentKind.Feat, new GrantEffect { Id = "empty-grant-id", Grant = GrantKind.Content });
+
+        AssertPlain(Message(Pinned(empty), "effect.grant-content-missing"), ["Fixture Homebrew 34", "has a grant that names no content"], "empty-grant-id");
+    }
+
+    [Fact]
+    public void A_nested_grant_is_reported_without_the_grant_id()
+    {
+        var catalog = Fixtures.M1Catalog();
+        var watchful = catalog.FindRevision(Fixtures.Watchful)!;
+        var chaining = watchful with
+        {
+            RevisionId = Guid.Parse("5f1de000-0000-4000-8000-0000000000ff"),
+            Effects = [.. watchful.Effects, new GrantEffect { Id = "chain", Grant = GrantKind.Content, Content = Fixtures.Wayfarer }],
+        };
+        var granter = catalog.FindRevision(Fixtures.Wayfarer)! with
+        {
+            RevisionId = Guid.Parse("5f1de000-0000-4000-8000-0000000000fe"),
+            Effects = [new GrantEffect { Id = "grant", Grant = GrantKind.Content, Content = chaining.Reference }],
+        };
+        var pack = Fixtures.M1Pack();
+        var withChain = new InMemoryContentCatalog([.. Fixtures.Pack().Sources, .. pack.Sources], [.. Fixtures.Pack().Revisions, .. pack.Revisions, chaining, granter]);
+        var character = Fixtures.Load("srd521-ash-m1.json") with { Pins = [granter.Reference] };
+
+        var sheet = CharacterCalculator.Calculate(character, withChain);
+
+        AssertPlain(Message(sheet, "grant.nested-ignored"), [watchful.Name, "was granted by", "one level deep"], "chain");
     }
 
     [Fact]

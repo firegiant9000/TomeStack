@@ -15,7 +15,7 @@ public class CustomClassTests
 {
     private static readonly string[] BothFamilies = [RulesFamilies.Srd51, RulesFamilies.Srd521];
 
-    private static Character Chronicler(string family, int intelligence = 16, params ClassLevel[] classes) =>
+    internal static Character Chronicler(string family, int intelligence = 16, params ClassLevel[] classes) =>
         Fixtures.Load(family == RulesFamilies.Srd51 ? "srd51-ash-m1.json" : "srd521-ash-m1.json") with
         {
             Pins = [],
@@ -30,7 +30,7 @@ public class CustomClassTests
 
     private static int[] Slots(CharacterSheet sheet) => [.. Enumerable.Range(1, 9).Select(l => sheet.Field(FieldIds.SpellSlots(l)).Value)];
 
-    private static ContentRevision ChroniclerRevision() => Fixtures.ChroniclerPack().Revisions.Single(r => r.Reference == Fixtures.Chronicler);
+    internal static ContentRevision ChroniclerRevision() => Fixtures.ChroniclerPack().Revisions.Single(r => r.Reference == Fixtures.Chronicler);
 
     [Theory]
     // level, ink, lore, echo (0 before the subclass at 3), initiative, spells prepared, own slots at that level

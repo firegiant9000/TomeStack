@@ -290,9 +290,9 @@ public sealed record Character
         foreach (var duplicate in Choices.GroupBy(c => (c.Source, c.ChoiceId)).Where(g => g.Count() > 1))
             problems.Add(new("character.choice-duplicate", "A choice is saved more than once; keep all picks in one entry.", duplicate.Key.Source));
         foreach (var exception in CrossFamilyExceptions.Where(e => string.IsNullOrWhiteSpace(e.Reason)))
-            problems.Add(new("character.exception-reason-required", "A cross-family exception needs a reason.", exception.Content));
+            problems.Add(new("character.exception-reason-required", "An exception to the rules needs a reason.", exception.Content));
         foreach (var exception in CampaignExceptions.Where(e => string.IsNullOrWhiteSpace(e.Reason)))
-            problems.Add(new("character.exception-reason-required", "A campaign exception needs a reason.", exception.Content));
+            problems.Add(new("character.exception-reason-required", "An exception for the campaign needs a reason.", exception.Content));
         foreach (var ability in Enum.GetValues<Ability>())
         {
             var score = BaseAbilities.Get(ability);
