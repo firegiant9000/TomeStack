@@ -141,10 +141,17 @@ export function DamagePanel({ view, amount, type, how, onDone, onCancel, onError
     fetched !== undefined && fetched.version === version && fetched.refresh === refresh && fetched.selKey === selKey && fetched.preview.updatedAt === version;
   const allNotes = preview?.notes ?? [];
   // A ticked dice response whose roll field is still empty is not an error yet (Apply stays off through diceReady): its note shows once a roll is typed.
+  // The note names the response by label (D99), so it is matched by its effect id and content, never by the message text.
   const notes = allNotes.filter(
     (n) =>
       n.code !== 'damage.response-roll' ||
-      !selection.some((c) => responseOf(c)?.dice && (typedRolls[keyOf(c)] ?? '').trim() === '' && n.message.includes(`'${c.responseId}'`)),
+      !selection.some(
+        (c) =>
+          responseOf(c)?.dice &&
+          (typedRolls[keyOf(c)] ?? '').trim() === '' &&
+          n.effectId === c.responseId &&
+          (!n.content || n.content.contentId === c.contentId),
+      ),
   );
   const canApply = ready && diceReady && !busy && !failed && allNotes.length === 0 && !applied;
   const phaseOf = (c: ResponseChoice) => responses.find((r) => r.contentId === c.contentId && r.responseId === c.responseId)?.phase;

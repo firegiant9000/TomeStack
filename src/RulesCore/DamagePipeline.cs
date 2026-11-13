@@ -241,13 +241,17 @@ public static class DamagePipeline
             else if (!DiceExpression.TryParse(response.Dice, out var expression, out _) || expression is null)
                 RefuseRoll(response);
             else if (rolled is not { } value || value < expression.Minimum || value > expression.Maximum)
-                notes.Add(new("damage.response-roll", $"{ResponseName(responses, response.ContentId, response.ResponseId)} needs a roll between {expression.Minimum} and {expression.Maximum}."));
+                notes.Add(new("damage.response-roll", $"{ResponseName(responses, response.ContentId, response.ResponseId)} needs a roll between {expression.Minimum} and {expression.Maximum}.",
+                    ReferenceOf(response), response.ResponseId));
             else
                 continue;
             badRoll.Add(response);
         }
         void RefuseRoll(ResponseValue response) =>
-            notes.Add(new("damage.response-roll", $"{ResponseName(responses, response.ContentId, response.ResponseId)} cannot use the roll given."));
+            notes.Add(new("damage.response-roll", $"{ResponseName(responses, response.ContentId, response.ResponseId)} cannot use the roll given.",
+                ReferenceOf(response), response.ResponseId));
+        // The note names the response by label (D99), so the UI finds its response by these fields, never by the text.
+        ContentReference? ReferenceOf(ResponseValue response) => sheet.Features?.FirstOrDefault(f => f.Content.ContentId == response.ContentId)?.Content;
         var usable = pickedResponses.Where(r => r.Available && Matches(r, damage) && !badRoll.Contains(r)).ToList();
 
         // The chosen costs together must fit each pool. Eligibility depends on the hit points, which depend on the reductions and

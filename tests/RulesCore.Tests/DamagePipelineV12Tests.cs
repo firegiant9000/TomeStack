@@ -175,8 +175,13 @@ public class DamagePipelineV12Tests
         // Labels differ from the ids, so a regression that prints the response id fails.
         var c = Sheet(68, R("dice", amount: 4, dice: "1d10") with { Label = "Die ward" }, R("flat", amount: 3) with { Label = "Flat ward" });
 
-        var outside = Assert.Single(Run(c, new(20, null), Pick("dice", 11)).Notes).Message;
-        var notDice = Assert.Single(Run(c, new(20, null), Pick("flat", 4)).Notes).Message;
+        var outsideNote = Assert.Single(Run(c, new(20, null), Pick("dice", 11)).Notes);
+        var notDiceNote = Assert.Single(Run(c, new(20, null), Pick("flat", 4)).Notes);
+        var (outside, notDice) = (outsideNote.Message, notDiceNote.Message);
+
+        // The UI finds the note's response by these fields, not by the text (which names the label).
+        Assert.Equal("dice", outsideNote.EffectId);
+        Assert.Equal("flat", notDiceNote.EffectId);
 
         Assert.Equal("'Die ward' needs a roll between 1 and 10.", outside);
         Assert.Equal("'Flat ward' cannot use the roll given.", notDice);
