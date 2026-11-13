@@ -180,7 +180,7 @@ public class ReleaseLadderTests
 
         var cause = Assert.Single(result.Causes);
         Assert.Equal(new OpensInCause($"content/{species.RevisionId:D}.json", "content", species.RevisionId, "Example Species", null, "SRD 5.2.1",
-            "'Compat Hero' uses 'Example Species' from the bundled SRD 5.2.1 pack, which TomeStack 0.7.0 does not have"), cause);
+            "'Compat Hero' uses 'Example Species' from the bundled SRD 5.2.1 content, which TomeStack 0.7.0 does not have"), cause);
         Assert.Null(result.OpensIn);
         Assert.Equal("Opening this needs a TomeStack version newer than 0.8.0: it holds bundled SRD content that released versions do not have.", Assert.Single(result.Warnings).Message);
     }
@@ -215,7 +215,7 @@ public class ReleaseLadderTests
 
         var result = NewerBuild.Evaluate([species], [Hero("One"), Hero("Two")], 0, [species.RevisionId], _ => "SRD 5.2.1");
 
-        Assert.Equal("'Example Species' is from the bundled SRD 5.2.1 pack, which TomeStack 0.7.0 does not have", Assert.Single(result.Causes).Message);
+        Assert.Equal("'Example Species' is from the bundled SRD 5.2.1 content, which TomeStack 0.7.0 does not have", Assert.Single(result.Causes).Message);
     }
 
     [Fact]

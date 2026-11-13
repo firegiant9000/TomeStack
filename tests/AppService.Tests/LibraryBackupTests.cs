@@ -105,7 +105,7 @@ public class LibraryBackupTests
 
             Assert.True(preview.CanApply, string.Join("; ", preview.Errors.Select(e => e.Message)));
             var repinned = Assert.Single(preview.Repinned!, r => r.OriginalId == published.RevisionId);
-            Assert.Contains(preview.Warnings, w => w.Code == "package.down-converted-repinned" && w.Message.StartsWith("'Compat Steady Hands': re-pinned to your original revision", StringComparison.Ordinal));
+            Assert.Contains(preview.Warnings, w => w.Code == "package.down-converted-repinned" && w.Message.StartsWith("'Compat Steady Hands': switched back to your original version", StringComparison.Ordinal));
 
             app.App.ApplyLibraryRestore(path);
 
@@ -361,7 +361,8 @@ public class LibraryBackupTests
             File.WriteAllBytes(path, temp.App.ExportCharacters([library.Character]).Content);
             var preview = temp.App.PreviewLibraryRestore(path);
             Assert.False(preview.CanApply);
-            Assert.Contains(preview.Errors, e => e.Code == "restore.not-a-library-backup");
+            var error = Assert.Single(preview.Errors, e => e.Code == "restore.not-a-library-backup");
+            Assert.Equal("This is a TomeStack file, not a full backup. Use \"From a TomeStack file…\" instead.", error.Message);
         }
         finally
         {
@@ -692,7 +693,8 @@ public class LibraryBackupTests
 
                 var warning = Assert.Single(local.App.PreviewLibraryRestore(path).Warnings, w => w.Code == "restore.newest-changes");
                 Assert.Equal(original.Reference, warning.Content);
-                Assert.StartsWith($"'{original.Name}' has a newer", warning.Message, StringComparison.Ordinal);
+                Assert.StartsWith($"'{original.Name}' has a newer published version here", warning.Message, StringComparison.Ordinal);
+                Assert.DoesNotContain("revision", warning.Message, StringComparison.OrdinalIgnoreCase);
             }
             finally
             {
@@ -1241,7 +1243,7 @@ public class LibraryBackupTests
         var preview = temp.App.PreviewLibraryBackup(outside);
 
         var blocks = preview.Changes.Where(c => c.Action == "blocks" && c.Message.StartsWith("'Compat Steady Hands'", StringComparison.Ordinal)).ToList();
-        Assert.Equal($"'Compat Steady Hands' (Compat Homebrew A) uses '{bundled.Name}' from the bundled SRD 5.1 pack, which TomeStack 0.6.0 does not have. Update the receiver's TomeStack; this content cannot be copied into the file.", Assert.Single(blocks).Message);
+        Assert.Equal($"'Compat Steady Hands' (Compat Homebrew A) uses '{bundled.Name}' from the bundled SRD 5.1 content, which TomeStack 0.6.0 does not have. Update the receiver's TomeStack; this content cannot be copied into the file.", Assert.Single(blocks).Message);
         Assert.Throws<AppValidationException>(() => temp.App.WriteLibraryBackup(new MemoryStream(), outside, preview.ChangesHash));
 
         var fine = temp.App.PreviewLibraryBackup(inside);

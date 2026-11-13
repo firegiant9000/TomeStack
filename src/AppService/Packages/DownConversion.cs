@@ -451,10 +451,10 @@ public static class DownConversion
             var referrer = referrers.FirstOrDefault(x => !skipped.Contains(x.RevisionId)) ?? referrers.FirstOrDefault();
             var from = referrer is null ? "" : sourceTitle(referrer.Provenance.SourceId) is { Length: > 0 } rs ? $"'{referrer.Name}' ({rs})" : $"'{referrer.Name}'";
             return user is not null
-                ? $"'{user.Name}' uses '{r.Name}' from the bundled {title} pack, which TomeStack {release} does not have. {tail}"
+                ? $"'{user.Name}' uses '{r.Name}' from the bundled {title} content, which TomeStack {release} does not have. {tail}"
                 : referrer is not null
-                    ? $"{from} uses '{r.Name}' from the bundled {title} pack, which TomeStack {release} does not have. {tail}"
-                    : $"'{r.Name}' from the bundled {title} pack is not in TomeStack {release}. {tail}";
+                    ? $"{from} uses '{r.Name}' from the bundled {title} content, which TomeStack {release} does not have. {tail}"
+                    : $"'{r.Name}' from the bundled {title} content is not in TomeStack {release}. {tail}";
         }
 
         foreach (var r in revisions)
@@ -517,7 +517,7 @@ public static class DownConversion
                 var siblings = revisions.Where(x => x.ContentId == r.ContentId).Select(x => x.RevisionId).ToList();
                 var title = sourceTitle(r.Provenance.SourceId);
                 var where = title.Length == 0 ? "" : $" ({title})";
-                changes.Add(Line(r, "leftOut", LeftOutCode, $"'{r.Name}', revision {siblings.IndexOf(r.RevisionId) + 1} of {siblings.Count}{where}: left out; {reasons[r.RevisionId]}"));
+                changes.Add(Line(r, "leftOut", LeftOutCode, $"'{r.Name}', version {siblings.IndexOf(r.RevisionId) + 1} of {siblings.Count}{where}: left out; {reasons[r.RevisionId]}"));
             }
             else if (linesOf.TryGetValue(r.RevisionId, out var mine))
             {
@@ -630,9 +630,9 @@ public static class DownConversion
         {
             var marker = ReadMarker(revision);
             if (marker is null)
-                warnings.Add(new("package.marker-ignored", $"'{revision.Name}': the note saying which revision it was copied from is not readable, so it was ignored.", revision.Reference));
+                warnings.Add(new("package.marker-ignored", $"'{revision.Name}': the note saying which version it was copied from is not readable, so it was ignored.", revision.Reference));
             else if (marker.RevisionId == revision.RevisionId || VerifiedRoot(revision).RevisionId != marker.RevisionId)
-                warnings.Add(new("package.marker-ignored", $"'{revision.Name}': the note saying which revision it was copied from does not match its content, so it was ignored.", revision.Reference));
+                warnings.Add(new("package.marker-ignored", $"'{revision.Name}': the note saying which version it was copied from does not match its content, so it was ignored.", revision.Reference));
             else
                 markers[revision.RevisionId] = marker;
         }
@@ -675,7 +675,7 @@ public static class DownConversion
                 moved[member.RevisionId] = original.RevisionId;
                 repinned.Add(new(member.RevisionId, original.RevisionId, member.Name));
                 warnings.Add(new("package.down-converted-repinned",
-                    $"'{member.Name}': re-pinned to your original revision (the file held a copy made for {madeFor ?? "an older TomeStack"}).", original.Reference));
+                    $"'{member.Name}': switched back to your original version (the file held a copy made for {madeFor ?? "an older TomeStack"}).", original.Reference));
             }
         }
         // C2-Q5: one line for the file, not one per copy.
@@ -684,7 +684,7 @@ public static class DownConversion
             var by = PackageManifest.IsValidMadeFor(madeFor) ? $"TomeStack {madeFor}" : "an older TomeStack";
             warnings.Add(asTheyAre.Count == 1
                 ? new("package.down-converted", $"'{asTheyAre[0].Name}' in this file was made for {by} by {manifest.AppVersion} and imports as it is (no original here matches it); the original has more.", asTheyAre[0].Reference)
-                : new("package.down-converted", $"{asTheyAre.Count} revisions in this file were made for {by} by {manifest.AppVersion} and import as they are (no original here matches them); the originals have more."));
+                : new("package.down-converted", $"{asTheyAre.Count} entries in this file were made for {by} by {manifest.AppVersion} and import as they are (no original here matches them); the originals have more."));
         }
         if (moved.Count == 0)
             return new(revisions, characters, [], warnings);

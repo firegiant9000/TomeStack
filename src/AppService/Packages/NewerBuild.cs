@@ -44,8 +44,8 @@ internal static class NewerBuild
             var owner = characterList.FirstOrDefault(c => c.AllReferences().Any(r => r.RevisionId == id));
             var pack = bundledPackTitle(id);
             var message = owner is null
-                ? $"'{name}' is from the bundled {pack} pack, which TomeStack {previous.Release.ToString(3)} does not have"
-                : $"'{owner.Name}' uses '{name}' from the bundled {pack} pack, which TomeStack {previous.Release.ToString(3)} does not have";
+                ? $"'{name}' is from the bundled {pack} content, which TomeStack {previous.Release.ToString(3)} does not have"
+                : $"'{owner.Name}' uses '{name}' from the bundled {pack} content, which TomeStack {previous.Release.ToString(3)} does not have";
             var entry = !bundledCarried && owner is not null ? $"characters/{owner.Id:D}.json" : $"content/{id:D}.json";
             causes.Add(new(entry, "content", id, name, null, pack, message));
         }

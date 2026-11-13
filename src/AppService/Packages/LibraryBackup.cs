@@ -424,7 +424,7 @@ public sealed partial class PackageService
                 var parsed = ParseArchive(zip, LibraryLimits, errors);
                 if (parsed is not null && parsed.Manifest.Scope != PackageScope.Library)
                 {
-                    errors.Add(new("restore.not-a-library-backup", "This file is a character package, not a full backup. Use \"Import package\" instead."));
+                    errors.Add(new("restore.not-a-library-backup", "This is a TomeStack file, not a full backup. Use \"From a TomeStack file…\" instead."));
                     parsed = null;
                 }
                 var warnings = new List<Diagnostic>();
@@ -527,7 +527,7 @@ public sealed partial class PackageService
             if (overtaken)
             {
                 var newest = DownConversion.Newest(group)!;
-                warnings.Add(new("restore.newest-changes", $"'{newest.Name}' has a newer published revision here that is not in this file. Afterwards, the file's revision counts as the newest: new picks and update offers use it. Characters keep the revision they pin.", newest.Reference));
+                warnings.Add(new("restore.newest-changes", $"'{newest.Name}' has a newer published version here that is not in this file. Afterwards, the file's version counts as the newest: new picks and update offers use it. Characters keep the version they use.", newest.Reference));
             }
         }
         // C2-Q3 (R-C21): a lowered draft is never re-pinned (that needs a published original), so restoring it next to the draft it
@@ -587,7 +587,7 @@ public sealed partial class PackageService
         var byId = revisions.ToDictionary(r => r.RevisionId);
         if (order is null || order.Count != byId.Count || order.Distinct().Count() != order.Count || order.Any(id => !byId.ContainsKey(id)))
         {
-            errors.Add(new("package.invalid-json", "The backup's revision order does not match its content entries."));
+            errors.Add(new("package.invalid-json", "The backup's version order does not match its content entries."));
             return revisions;
         }
         return [.. order.Select(id => byId[id])];

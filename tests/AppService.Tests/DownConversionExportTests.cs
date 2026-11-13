@@ -770,8 +770,8 @@ public class DownConversionExportTests
         const string tail = "Update the receiver's TomeStack; this content cannot be copied into the file.";
         var uses = preview.Changes.Where(c => c.Message.StartsWith("'Compat Hero' uses ", StringComparison.Ordinal)).ToList();
         Assert.NotEmpty(uses);
-        Assert.All(uses, c => Assert.Equal($"'Compat Hero' uses '{c.Name}' from the bundled SRD 5.1 pack, which TomeStack 0.6.0 does not have. {tail}", c.Message));
-        Assert.All(preview.Changes.Except(uses), c => Assert.Equal($"'{c.Name}' from the bundled SRD 5.1 pack is not in TomeStack 0.6.0. {tail}", c.Message));
+        Assert.All(uses, c => Assert.Equal($"'Compat Hero' uses '{c.Name}' from the bundled SRD 5.1 content, which TomeStack 0.6.0 does not have. {tail}", c.Message));
+        Assert.All(preview.Changes.Except(uses), c => Assert.Equal($"'{c.Name}' from the bundled SRD 5.1 content is not in TomeStack 0.6.0. {tail}", c.Message));
     }
 
     private static readonly Guid BundledSourceId = Guid.Parse("c2000000-0000-4000-8000-0000000000b0");
@@ -874,7 +874,7 @@ public class DownConversionExportTests
         Assert.True(lowered.Blocked);
         Assert.Same(bundled, Assert.Single(lowered.Plan.Revisions));
         var change = Assert.Single(lowered.Changes);
-        Assert.Equal("'Compat Hero' uses 'Compat Steady Hands' from the bundled SRD 5.2.1 pack, which TomeStack 0.5.0 does not have. Update the receiver's TomeStack; this content cannot be copied into the file.", change.Message);
+        Assert.Equal("'Compat Hero' uses 'Compat Steady Hands' from the bundled SRD 5.2.1 content, which TomeStack 0.5.0 does not have. Update the receiver's TomeStack; this content cannot be copied into the file.", change.Message);
     }
 
     [Fact]
@@ -1261,7 +1261,7 @@ public class DownConversionExportTests
 
     // ---- C2-5: the way back (guarded re-pin on import) ---------------------------------------------------------------------
 
-    private const string RepinnedSentence = "'Compat Steady Hands': re-pinned to your original revision (the file held a copy made for 0.6.0).";
+    private const string RepinnedSentence = "'Compat Steady Hands': switched back to your original version (the file held a copy made for 0.6.0).";
 
     private static (SourceRecord Source, ContentReference Draft, ContentReference Published) PublishFlyOriginal(TempApp app)
     {
@@ -1538,7 +1538,7 @@ public class DownConversionExportTests
         Assert.DoesNotContain(preview.Warnings, w => w.Code == (expected == "package.down-converted" ? "package.marker-ignored" : "package.down-converted"));
         Assert.DoesNotContain(preview.Warnings, w => w.Code == "package.down-converted-repinned");
         if (expected == "package.marker-ignored")
-            Assert.Equal("'Compat Steady Hands X': the note saying which revision it was copied from does not match its content, so it was ignored.", preview.Warnings.Single(w => w.Code == expected).Message);
+            Assert.Equal("'Compat Steady Hands X': the note saying which version it was copied from does not match its content, so it was ignored.", preview.Warnings.Single(w => w.Code == expected).Message);
         var item = Assert.Single(preview.Items, i => i.Kind == "contentRevision" && i.Name.StartsWith("Compat Steady Hands", StringComparison.Ordinal));
         Assert.Equal(PackageItemAction.Add, item.Action); // an ordinary revision: today's rules (here the own-source refusal) apply to it
         Assert.Contains(preview.Errors, e => e.Code == "package.own-source");
@@ -1620,7 +1620,7 @@ public class DownConversionExportTests
         Assert.Empty(preview.Repinned ?? []);
         // C2-Q5: one line for the file, with the count, not one per copy.
         var warning = Assert.Single(preview.Warnings, w => w.Code == "package.down-converted");
-        Assert.Equal($"2 revisions in this file were made for TomeStack 0.6.0 by {preview.Manifest!.AppVersion} and import as they are (no original here matches them); the originals have more.", warning.Message);
+        Assert.Equal($"2 entries in this file were made for TomeStack 0.6.0 by {preview.Manifest!.AppVersion} and import as they are (no original here matches them); the originals have more.", warning.Message);
         Assert.Null(warning.Content);
         Assert.Equal(2, preview.Items.Count(i => i.Kind == "contentRevision" && i.Action == PackageItemAction.Add));
         Assert.DoesNotContain(preview.Errors, e => e.Code is "validate.reference-missing" or "package.pin-missing");

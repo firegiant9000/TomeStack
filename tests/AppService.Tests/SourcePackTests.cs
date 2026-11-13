@@ -90,7 +90,7 @@ public class SourcePackTests
         return source;
     }
 
-    private const string LeftOutSecondOfThree = "'Compat Steady Hands', revision 2 of 3 (Compat Homebrew A): left out; what a toggle costs; it would turn on for free.";
+    private const string LeftOutSecondOfThree = "'Compat Steady Hands', version 2 of 3 (Compat Homebrew A): left out; what a toggle costs; it would turn on for free.";
 
     [Fact]
     public void Source_pack_leaves_out_a_superseded_blocked_revision()
@@ -273,7 +273,7 @@ public class SourcePackTests
         var preview = temp.App.PreviewSourcePack([source.Id], outside);
 
         var line = Assert.Single(preview.Changes, c => c.Action == "blocks");
-        Assert.Equal($"'Compat Steady Hands' (Compat Homebrew A) uses '{bundled.Name}' from the bundled SRD 5.1 pack, which TomeStack 0.6.0 does not have. Update the receiver's TomeStack; this content cannot be copied into the file.", line.Message);
+        Assert.Equal($"'Compat Steady Hands' (Compat Homebrew A) uses '{bundled.Name}' from the bundled SRD 5.1 content, which TomeStack 0.6.0 does not have. Update the receiver's TomeStack; this content cannot be copied into the file.", line.Message);
         Assert.Throws<AppValidationException>(() => temp.App.ExportSourcePack([source.Id], outside, preview.ChangesHash));
 
         var fine = temp.App.PreviewSourcePack([source.Id], inside);

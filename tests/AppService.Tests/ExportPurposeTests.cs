@@ -203,7 +203,7 @@ public class ExportPurposeTests
             Assert.Null(preview.OpensIn);
             var cause = Assert.Single(preview.OpensInCauses!);
             Assert.Equal(("content", stance.RevisionId, "SRD 5.1"), (cause.Kind, cause.Id, cause.BundledPack));
-            Assert.Equal($"'{character.Name}' uses 'Compat Tide Stance' from the bundled SRD 5.1 pack, which TomeStack 0.7.0 does not have", cause.Message);
+            Assert.Equal($"'{character.Name}' uses 'Compat Tide Stance' from the bundled SRD 5.1 content, which TomeStack 0.7.0 does not have", cause.Message);
             Assert.Equal("Opening this needs a TomeStack version newer than 0.8.0: it holds bundled SRD content that released versions do not have.", Assert.Single(NewerBuildWarnings(preview)).Message);
         }
     }
