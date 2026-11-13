@@ -36,7 +36,7 @@ export function UpdatesPanel({ view, onChanged, onError, onStatus }: Props) {
   return (
     <section aria-labelledby="updates-heading" className="play-panel">
       <h3 id="updates-heading">Updates available</h3>
-      <p className="hint">Newer revisions of content this character uses. Nothing changes until you review an update and apply it.</p>
+      <p className="hint">Newer versions of content this character uses. Nothing changes until you review an update and apply it.</p>
       {reviewing ? (
         <UpdateReviewPanel
           key={`${reviewing.from.revisionId}-${reviewing.to.revisionId}`}

@@ -14,7 +14,8 @@ import {
   type IncreaseOption,
   type Known,
 } from '../entryBasics';
-import { familyName, joinNames, NewFeatureForm, SkillFieldset, StalePin, type BackgroundProps } from './OriginPieces';
+import { useRulesLabel } from '../rulesLabel';
+import { joinNames, NewFeatureForm, SkillFieldset, StalePin, type BackgroundProps } from './OriginPieces';
 
 const problemField = 'background-increases';
 const words = ['no abilities', 'one', 'two', 'three', 'four', 'five', 'six'];
@@ -38,6 +39,7 @@ const signature = (effects: Effect[]): string =>
  */
 export function BackgroundBasicsEditor(props: BackgroundProps) {
   const { revision, info, onEffects } = props;
+  const rulesLabel = useRulesLabel();
   const effects = revision.effects;
   const policies = revision.rulesFamilies.flatMap((id) => info.rulesFamilies.filter((p) => p.id === id));
   const featureFamilies = policies.filter((p) => !p.backgroundGrantsFeat);
@@ -210,7 +212,7 @@ export function BackgroundBasicsEditor(props: BackgroundProps) {
     onEffects((current) => setKindGrant(current, kindOf, kind, chosen?.reference, kind));
   }
 
-  const choiceLegend = usesIncreases ? `Ability score increases (${joinNames(increaseFamilies.map((p) => p.displayName))})` : 'Ability score increases';
+  const choiceLegend = usesIncreases ? `Ability score increases (${joinNames(increaseFamilies.map((p) => rulesLabel(p.id)))})` : 'Ability score increases';
 
   return (
     <section aria-labelledby="background-basics-heading" className="effect-editor origin-basics">
@@ -224,7 +226,7 @@ export function BackgroundBasicsEditor(props: BackgroundProps) {
       {(featureFamilies.length > 0 || featureGrant) && (
         <fieldset id="background-basics-feature" tabIndex={-1}>
           <legend ref={featureLegend} tabIndex={-1}>
-            {featureFamilies.length > 0 ? `Feature (${joinNames(featureFamilies.map((p) => p.displayName))})` : 'Feature'}
+            {featureFamilies.length > 0 ? `Feature (${joinNames(featureFamilies.map((p) => rulesLabel(p.id)))})` : 'Feature'}
           </legend>
           <label className="field">
             Feature granted by the background
@@ -261,14 +263,14 @@ export function BackgroundBasicsEditor(props: BackgroundProps) {
       )}
       {featureFamilies.map((p) => (
         <p key={p.id} className="hint">
-          In {familyName(info, p.id)}, a background cannot grant a feat.
+          In {rulesLabel(p.id)}, a background cannot grant a feat.
         </p>
       ))}
 
       {(featFamilies.length > 0 || featGrant) && (
         <fieldset id="background-basics-feat" tabIndex={-1}>
           <legend ref={featLegend} tabIndex={-1}>
-            {featFamilies.length > 0 ? `Feat (${joinNames(featFamilies.map((p) => p.displayName))})` : 'Feat'}
+            {featFamilies.length > 0 ? `Feat (${joinNames(featFamilies.map((p) => rulesLabel(p.id)))})` : 'Feat'}
           </legend>
           <label className="field">
             Feat granted by the background
@@ -295,7 +297,7 @@ export function BackgroundBasicsEditor(props: BackgroundProps) {
           <legend>{choiceLegend}</legend>
           <p id={increaseId} className="hint">
             Tick the three abilities this background lists. A character then chooses +2 to one and +1 to another, or +1 to all three. When you save, this
-            makes those seven options as feature drafts in this source; publish them together with the background.
+            makes those seven options as feature drafts in this source; make them available to characters together with the background.
           </p>
           <div className="origin-grid">
             {abilities.map(([key, name]) => (
@@ -323,12 +325,12 @@ export function BackgroundBasicsEditor(props: BackgroundProps) {
                 : `${leftBehind} old option entries stay in this source; they are no longer offered by this background.`}
             </p>
           )}
-          {!usesIncreases && <p className="warn">These increases are ignored in {joinNames(otherFamilies.map((p) => p.displayName))}.</p>}
+          {!usesIncreases && <p className="warn">These increases are ignored in {joinNames(otherFamilies.map((p) => rulesLabel(p.id)))}.</p>}
         </fieldset>
       )}
       {otherFamilies.map((p) => (
         <p key={p.id} className="hint">
-          In {familyName(info, p.id)}, ability increases come from the species.
+          In {rulesLabel(p.id)}, ability increases come from the species.
         </p>
       ))}
     </section>

@@ -24,11 +24,11 @@ public static class RulesFamilies
 
     public static IReadOnlyList<RulesFamilyPolicy> All { get; } =
     [
-        new(Srd51, "SRD 5.1 (2014 rules)", AbilityIncreaseSource: ContentKind.Species, BackgroundGrantsFeat: false, LongRestExhaustionNeedsFoodAndDrink: true,
+        new(Srd51, "SRD 5.1 (2014 rules)", "2014 rules", AbilityIncreaseSource: ContentKind.Species, BackgroundGrantsFeat: false, LongRestExhaustionNeedsFoodAndDrink: true,
             LongRestHitDice: HitDiceRecovery.HalfTotal, HitDieHealingMinimum: 0, ShortRestNeedsOneHitPoint: false,
             HalfCasterLevels: CasterLevelRounding.Down, ThirdCasterLevels: CasterLevelRounding.Down, MulticlassSpellSlots: SrdMulticlassSpellSlots,
             UntrainedShieldGivesArmorClass: true, InspirationName: "Inspiration"),
-        new(Srd521, "SRD 5.2.1 (2024 rules)", AbilityIncreaseSource: ContentKind.Background, BackgroundGrantsFeat: true, LongRestExhaustionNeedsFoodAndDrink: false,
+        new(Srd521, "SRD 5.2.1 (2024 rules)", "2024 rules", AbilityIncreaseSource: ContentKind.Background, BackgroundGrantsFeat: true, LongRestExhaustionNeedsFoodAndDrink: false,
             LongRestHitDice: HitDiceRecovery.All, HitDieHealingMinimum: 1, ShortRestNeedsOneHitPoint: true,
             HalfCasterLevels: CasterLevelRounding.Up, ThirdCasterLevels: CasterLevelRounding.Down, MulticlassSpellSlots: SrdMulticlassSpellSlots,
             UntrainedShieldGivesArmorClass: false, InspirationName: "Heroic Inspiration", ConcentrationSaveMaximumDc: 30),
@@ -45,6 +45,9 @@ public static class RulesFamilies
 /// Explicitly encoded differences between rules families. Each difference is a named field so
 /// that it can be fixture-tested side by side rather than inferred.
 /// </summary>
+/// <param name="ShortLabel">
+/// The words a player reads for this rules family: "2014 rules" or "2024 rules". Required on every policy.
+/// </param>
 /// <param name="AbilityIncreaseSource">
 /// Which origin content kind may grant ability score increases: species under 2014 rules, background under 2024 rules.
 /// Applies to every modifier operation on an ability score, so origin content cannot bypass it with <c>set</c> or <c>replace</c>.
@@ -98,6 +101,7 @@ public static class RulesFamilies
 public sealed record RulesFamilyPolicy(
     string Id,
     string DisplayName,
+    string ShortLabel,
     ContentKind AbilityIncreaseSource,
     bool BackgroundGrantsFeat,
     bool LongRestExhaustionNeedsFoodAndDrink,

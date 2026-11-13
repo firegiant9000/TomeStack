@@ -50,9 +50,6 @@ export interface BackgroundProps extends BasicsProps, PinProps {
   registerBeforeSave: (step: BeforeSave | null) => void;
 }
 
-/** The display name of a rules family, from the app info (never from its id). */
-export const familyName = (info: AppInfo, id: RulesFamilyId): string => info.rulesFamilies.find((f) => f.id === id)?.displayName ?? id;
-
 export const joinNames = (names: string[]): string => (names.length <= 2 ? names.join(' and ') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`);
 
 /** The note and the per-pin button for a grant that points at a superseded draft (R62). The press changes the form only. */
@@ -108,7 +105,7 @@ export function NewFeatureForm(props: {
   const [text, setText] = useState('');
   const submitting = useRef(false);
   const reasonId = useId();
-  const why = name.trim() === '' ? 'Name the feature first.' : props.families.length === 0 ? 'Tick a rules family first.' : '';
+  const why = name.trim() === '' ? 'Name the feature first.' : props.families.length === 0 ? 'Tick the rules first.' : '';
 
   async function create() {
     if (why || submitting.current) return;
@@ -130,7 +127,7 @@ export function NewFeatureForm(props: {
       props.onCreated({ contentId: reference.contentId, name: trimmed, kind: 'feature', reference, draft: true, own: true });
       setName('');
       setText('');
-      props.onDone(`Saved a draft of the feature ${trimmed} and added it. Publish it together with this entry.`);
+      props.onDone(`Saved a draft of the feature ${trimmed} and added it. Make it available to characters together with this entry.`);
     } catch (error) {
       props.onError(error);
     } finally {

@@ -7,6 +7,7 @@ import { ChangeRegion } from './export/ChangeRegion';
 import { ExportConfirmation, hasBlocker, needsConfirmation } from './export/ExportConfirmation';
 import { TargetFieldset } from './export/TargetFieldset';
 import { usePackageTargets } from './export/usePackageTargets';
+import { useRulesLabel } from '../rulesLabel';
 import { ImportPanel } from './ImportPanel';
 import { PreflightPanel } from './PreflightPanel';
 import { canSaveAfter } from './preflightText';
@@ -25,8 +26,8 @@ const inPack = (s: SourceRecord) => s.redistributable && !s.importDerived && s.o
 function sharing(source: SourceRecord): string {
   if (source.importDerived) return 'Holds imported material (from a PDF or a Markdown file): never shared, and that never changes.';
   if (source.origin === 'received') return source.redistributable ? 'Received from someone else; may travel on in character shares.' : 'Received from someone else; not shared.';
-  if (inPack(source)) return 'Marked as shareable: your own work, can go in a source pack.';
-  if (source.redistributable) return 'Shared in character shares, but not confirmed as your own work, so not in a source pack.';
+  if (inPack(source)) return 'Marked as shareable: your own work, can go in a TomeStack file.';
+  if (source.redistributable) return 'Shared in character shares, but not confirmed as your own work, so not in a TomeStack file.';
   return 'Not shared.';
 }
 
@@ -58,7 +59,7 @@ function PageImportForm({ source, onError, onStatus }: { source: SourceRecord } 
   async function run(request: { start?: number; end?: number; title?: string; wholeDocument?: boolean }) {
     try {
       const draft = await client.importPages(source.id, request);
-      onStatus(`Draft reference entry "${draft.name}" created. Review and publish it in the studio; until then it does nothing.`);
+      onStatus(`Draft reference entry "${draft.name}" created. Review it and make it available to characters in Homebrew; until then it does nothing.`);
       setFrom('');
       setTo('');
       setTitle('');
@@ -156,14 +157,14 @@ function SourcePackForm({ sources, onError, onStatus }: { sources: SourceRecord[
   async function save() {
     try {
       const outcome = await client.saveSourcePackAs(chosen, ...downConversion);
-      if (outcome.saved) onStatus(`Saved the source pack ${outcome.fileName}.`);
+      if (outcome.saved) onStatus(`Saved the TomeStack file ${outcome.fileName}.`);
     } catch (error) {
       if (error instanceof TomeStackError && error.code === 'unsupported') {
         // Browser development (DevHost) has no native Save dialog: download the pack instead.
         try {
           const exported = await client.exportSourcePack(chosen, ...downConversion);
           downloadBase64(exported.fileName, exported.base64);
-          onStatus(`Downloaded the source pack ${exported.fileName}.`);
+          onStatus(`Downloaded the TomeStack file ${exported.fileName}.`);
         } catch (inner) {
           onError(inner);
         }
@@ -175,9 +176,9 @@ function SourcePackForm({ sources, onError, onStatus }: { sources: SourceRecord[
 
   return (
     <section className="play-panel" aria-labelledby="source-pack-heading">
-      <h3 id="source-pack-heading">Share sources as a pack</h3>
+      <h3 id="source-pack-heading">Share sources as a TomeStack file</h3>
       <p className="hint">
-        A source pack carries the published content of sources you marked as shareable, and nothing else: no characters,
+        A TomeStack file carries the published content of sources you marked as shareable, and nothing else: no characters,
         drafts, PDFs or text read from PDFs. Whoever imports it sees your statement that the sources are your own work.
       </p>
       {offered.length === 0 ? (
@@ -194,20 +195,20 @@ function SourcePackForm({ sources, onError, onStatus }: { sources: SourceRecord[
             ))}
             <div className="actions">
               <button type="button" disabled={chosen.length === 0} onClick={() => void runPreview(target)}>
-                Preview pack
+                Preview file
               </button>
             </div>
           </fieldset>
           <TargetFieldset targets={targets} value={target} onChange={chooseTarget} />
         </>
       )}
-      {chosen.length > 0 && <PreflightPanel kind="sourcePack" selection={chosen} label="source pack" onReport={setReport} onError={onError} />}
+      {chosen.length > 0 && <PreflightPanel kind="sourcePack" selection={chosen} label="TomeStack file" onReport={setReport} onError={onError} />}
       {previewFailed && <p>Could not check what the copy for TomeStack {target} leaves out.</p>}
       {preview && (
-        <div role="region" aria-label="Source pack preview">
+        <div role="region" aria-label="TomeStack file preview">
           <p>
             {preview.fileName}: {preview.sources.length} source{preview.sources.length === 1 ? '' : 's'}, {preview.revisions} published
-            revision{preview.revisions === 1 ? '' : 's'}.{preview.drafts > 0 ? ` ${preview.drafts} draft${preview.drafts === 1 ? ' stays' : 's stay'} here.` : ''}
+            version{preview.revisions === 1 ? '' : 's'}.{preview.drafts > 0 ? ` ${preview.drafts} draft${preview.drafts === 1 ? ' stays' : 's stay'} here.` : ''}
           </p>
           <ChangeRegion target={target} opensIn={preview.opensIn} causes={preview.opensInCauses} changes={preview.changes} previousMinor={targets?.previousMinor ?? null} />
           {preview.warnings.length > 0 && (
@@ -220,7 +221,7 @@ function SourcePackForm({ sources, onError, onStatus }: { sources: SourceRecord[
           <ExportConfirmation changes={preview.changes} confirmed={confirmed} onConfirmedChange={setConfirmed} hintId={hintId} />
           <div className="actions">
             <button type="button" onClick={save} disabled={saveDisabled || !canSaveAfter(report)} aria-describedby={blocked ? hintId : undefined}>
-              Save pack…
+              Save file…
             </button>
           </div>
         </div>
@@ -235,6 +236,7 @@ function SourcePackForm({ sources, onError, onStatus }: { sources: SourceRecord[
  * shows what breaks first and keeps all content.
  */
 export function SourcesPanel({ onError, onStatus, onOpenStudio }: Props & { onOpenStudio: (sourceId: string) => void }) {
+  const rulesLabel = useRulesLabel();
   const [sources, setSources] = useState<SourceRecord[]>([]);
   const [attachments, setAttachments] = useState<Record<string, AttachmentInfo | undefined>>({});
   const [removing, setRemoving] = useState<DetachPreview>();
@@ -325,7 +327,7 @@ export function SourcesPanel({ onError, onStatus, onOpenStudio }: Props & { onOp
 
   return (
     <section className="panel" aria-labelledby="sources-page-heading">
-      <h2 id="sources-page-heading">Sources</h2>
+      <h2 id="sources-page-heading">Books and PDFs</h2>
       <p className="hint">
         Attach your own PDF of a source to open cited pages from features. PDFs stay on this computer: exports never include
         them. A copy is kept in TomeStack&apos;s data folder unless you link the file where it is.
@@ -340,7 +342,7 @@ export function SourcesPanel({ onError, onStatus, onOpenStudio }: Props & { onOp
               <h3>{source.title}</h3>
               <p className="hint">
                 {source.publisher} · {source.license} · {source.redistributable ? 'may be shared' : 'not shared in exports'} ·{' '}
-                {source.rulesFamilies.join(', ')}
+                {source.rulesFamilies.map((f) => rulesLabel(f)).join(', ')}
               </p>
               {source.editionVersion === 'homebrew' && <p>{sharing(source)}</p>}
               <p>
@@ -382,7 +384,7 @@ export function SourcesPanel({ onError, onStatus, onOpenStudio }: Props & { onOp
               {marking === source.id && (
                 <div role="alertdialog" aria-label={`Mark ${source.title} as shareable?`} className="play-panel">
                   <p>
-                    A shareable source can go in a source pack and in character shares. Once a PDF is attached, it never can
+                    A shareable source can go in a TomeStack file and in character shares. Once a PDF is attached, it never can
                     again.
                   </p>
                   <label className="check">

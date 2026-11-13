@@ -101,7 +101,7 @@ export function SpellsPanel({
             {entry.spellsAllowed !== undefined && `${entry.spellsAllowed} ${entry.preparation === 'known' ? 'spells known' : 'spells prepared'} · `}
             {entry.origin.sourceTitle}
             {entry.origin.page ? `, ${pageText(entry.origin.page)}` : ''}
-            {!entry.primary && ' · its slots are not combined with the first caster’s (record the total as an override)'}
+            {!entry.primary && ' · its slots are not combined with the first caster’s (record the total as a number you set by hand)'}
           </p>
           {/* M2.1: the primary caster's numbers are the sheet's Spellcasting fields; every other caster explains its own here. */}
           {!entry.primary && entry.attackTrace && entry.saveDcTrace && (

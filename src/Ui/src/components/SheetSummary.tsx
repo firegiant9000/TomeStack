@@ -59,7 +59,7 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, ac
     const f = field(id);
     if (!f) return '—';
     const text = f.units === 'modifier' || f.units === 'bonus' ? signed(f.value) : f.units === 'feet' ? `${f.value} ft.` : `${f.value}`;
-    return f.override ? `${text} (overridden)` : text;
+    return f.override ? `${text} (set by hand)` : text;
   };
   const attacksAgainst = attacksAgainstText(sheet.attacksAgainst);
   const hp = sheet.hitPoints;
@@ -86,14 +86,14 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, ac
                 <span className="derived">{signed(mod.value)}</span>{' '}
                 <span className="score">
                   {score.value}
-                  {score.override && <span className="override-label"> (overridden)</span>}
+                  {score.override && <span className="override-label"> (set by hand)</span>}
                 </span>{' '}
                 {/* D28 (owner, 2026-10-07): a compact control. The visible word starts the accessible name (WCAG 2.5.3). */}
                 <button type="button" className="roll" onClick={() => onRoll(mod.field)}>
                   Roll{rollButtonSuffix(mod)}{' '}
                   <span className="visually-hidden"> {abilityNames[a]} check ({signed(mod.value)})</span>
                 </button>
-                {mod.override && <span className="override-label"> (modifier overridden)</span>}
+                {mod.override && <span className="override-label"> (modifier set by hand)</span>}
               </dd>
             </div>
           );
@@ -134,7 +134,7 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, ac
             <dt>Hit points</dt>
             <dd>
               {hp.current} of {hp.maximum}
-              {maximumOverridden ? ' (maximum overridden)' : ''}
+              {maximumOverridden ? ' (maximum set by hand)' : ''}
               {hp.temporary > 0 ? `, ${hp.temporary} temporary` : ''}
             </dd>
             {/* ADR-015: one-point adjustments, the same confirmed play command as the Hit points panel. A second <dd> so the
@@ -207,8 +207,8 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, ac
         {/* D73 R13: a quickbar button whose name says "and spend" rolls and then makes that spend once; other pins only roll (Use and toggle pins make their own play change). */}
         {hasQuickbar ? 'Rolling from here never spends anything; a quickbar button that says "and spend" rolls and then spends.' : 'Rolling never spends anything.'}
         {spellsTab
-          ? ' Roll a check here; a save, skill or initiative from its field on Stats; an attack or feature on Play; or a spell on Spells.'
-          : ' Roll a check here; a save, skill or initiative from its field on Stats; or an attack or feature on Play.'}
+          ? ' Roll a check here; a save, skill or initiative from its field on Skills and saves; an attack or feature on Play; or a spell on Spells.'
+          : ' Roll a check here; a save, skill or initiative from its field on Skills and saves; or an attack or feature on Play.'}
       </p>
       <div className="roll-strip">
         <RollResult record={lastRoll} resources={sheet.resources ?? []} features={sheet.features ?? []} attacks={sheet.attacks ?? []} act={act} spent={spent} />

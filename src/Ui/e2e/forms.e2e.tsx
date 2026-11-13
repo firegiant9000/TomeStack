@@ -34,10 +34,10 @@ it('authors a form group and two forms in the studio, switches forms, refuses a 
   const user = userEvent.setup();
   const source = await client.createHomebrewSource('E2E Forms Book', ['srd-5.2.1']);
   render(<App />);
-  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew' });
   await waitFor(() => expect(studioButton.disabled).toBe(false));
   await user.click(studioButton);
-  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Book or notebook' });
   await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Forms Book/ })).toBeTruthy());
   await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Forms Book/ }));
   await screen.findByRole('heading', { name: 'Content in E2E Forms Book' });
@@ -67,8 +67,8 @@ it('authors a form group and two forms in the studio, switches forms, refuses a 
   }
   await user.click(within(editor()).getByRole('button', { name: 'Check' }));
   expect((await within(editor()).findByRole('region', { name: 'Check results' })).textContent).toMatch(/No problems found/);
-  await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
-  await expectStatus(/Published E2E Forms/);
+  await user.click(within(editor()).getByRole('button', { name: 'Make available to characters' }));
+  await expectStatus(/Made E2E Forms available to characters/);
 
   const published = (await client.contentBySource(source.id)).find((e) => e.name === 'E2E Forms')?.latestPublished;
   expect(published).toBeTruthy();
@@ -125,10 +125,10 @@ it('authors a stance with upkeep in the studio, starts an encounter, takes turns
   const user = userEvent.setup();
   const source = await client.createHomebrewSource('E2E Upkeep Book', ['srd-5.2.1']);
   render(<App />);
-  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew' });
   await waitFor(() => expect(studioButton.disabled).toBe(false));
   await user.click(studioButton);
-  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Book or notebook' });
   await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Upkeep Book/ })).toBeTruthy());
   await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Upkeep Book/ }));
   await screen.findByRole('heading', { name: 'Content in E2E Upkeep Book' });
@@ -162,8 +162,8 @@ it('authors a stance with upkeep in the studio, starts an encounter, takes turns
   await user.selectOptions(rule(/^Rule 5: Upkeep/).getByRole('combobox', { name: 'Pool' }), 'Strain');
   await user.click(within(editor()).getByRole('button', { name: 'Check' }));
   expect((await within(editor()).findByRole('region', { name: 'Check results' })).textContent).toMatch(/No problems found/);
-  await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
-  await expectStatus(/Published E2E Stance Feature/);
+  await user.click(within(editor()).getByRole('button', { name: 'Make available to characters' }));
+  await expectStatus(/Made E2E Stance Feature available to characters/);
 
   const published = (await client.contentBySource(source.id)).find((e) => e.name === 'E2E Stance Feature')?.latestPublished;
   expect(published).toBeTruthy();
@@ -240,10 +240,10 @@ it('authors a feature attack and a toggled rider, rolls damage in and out of the
   const user = userEvent.setup();
   const source = await client.createHomebrewSource('E2E Attack Book', ['srd-5.2.1']);
   render(<App />);
-  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew' });
   await waitFor(() => expect(studioButton.disabled).toBe(false));
   await user.click(studioButton);
-  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Book or notebook' });
   await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Attack Book/ })).toBeTruthy());
   await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Attack Book/ }));
   await screen.findByRole('heading', { name: 'Content in E2E Attack Book' });
@@ -269,8 +269,8 @@ it('authors a feature attack and a toggled rider, rolls damage in and out of the
   await user.selectOptions(rider.getByRole('combobox', { name: 'Applies' }), 'While E2E Blaze Mode is on');
   await user.click(within(editor()).getByRole('button', { name: 'Check' }));
   expect((await within(editor()).findByRole('region', { name: 'Check results' })).textContent).toMatch(/No problems found/);
-  await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
-  await expectStatus(/Published E2E Blaze Feature/);
+  await user.click(within(editor()).getByRole('button', { name: 'Make available to characters' }));
+  await expectStatus(/Made E2E Blaze Feature available to characters/);
 
   const published = (await client.contentBySource(source.id)).find((e) => e.name === 'E2E Blaze Feature')?.latestPublished;
   expect(published).toBeTruthy();
@@ -308,10 +308,10 @@ it('authors a scaling technique with a save in the studio, rolls it with extra p
   const user = userEvent.setup();
   const source = await client.createHomebrewSource('E2E Surge Book', ['srd-5.2.1']);
   render(<App />);
-  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew' });
   await waitFor(() => expect(studioButton.disabled).toBe(false));
   await user.click(studioButton);
-  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Book or notebook' });
   await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Surge Book/ })).toBeTruthy());
   await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Surge Book/ }));
   await screen.findByRole('heading', { name: 'Content in E2E Surge Book' });
@@ -340,8 +340,8 @@ it('authors a scaling technique with a save in the studio, rolls it with extra p
   await user.selectOptions(technique.getByRole('combobox', { name: 'Area shape' }), 'Cone');
   await user.click(within(editor()).getByRole('button', { name: 'Check' }));
   expect((await within(editor()).findByRole('region', { name: 'Check results' })).textContent).toMatch(/No problems found/);
-  await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
-  await expectStatus(/Published E2E Surge Feature/);
+  await user.click(within(editor()).getByRole('button', { name: 'Make available to characters' }));
+  await expectStatus(/Made E2E Surge Feature available to characters/);
 
   const published = (await client.contentBySource(source.id)).find((e) => e.name === 'E2E Surge Feature')?.latestPublished;
   expect(published).toBeTruthy();
@@ -382,10 +382,10 @@ it('a feat with automatic advantage rolls two dice on a Dex save, and turning on
   const user = userEvent.setup();
   const source = await client.createHomebrewSource('E2E Mode Book', ['srd-5.2.1']);
   render(<App />);
-  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew' });
   await waitFor(() => expect(studioButton.disabled).toBe(false));
   await user.click(studioButton);
-  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Book or notebook' });
   await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Mode Book/ })).toBeTruthy());
   await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Mode Book/ }));
   await screen.findByRole('heading', { name: 'Content in E2E Mode Book' });
@@ -399,8 +399,8 @@ it('a feat with automatic advantage rolls two dice on a Dex save, and turning on
   await user.selectOptions(rule(/^Rule 1: Roll mode/).getByRole('combobox', { name: 'Applies to' }), 'save.dex');
   await user.click(within(editor()).getByRole('button', { name: 'Check' }));
   expect((await within(editor()).findByRole('region', { name: 'Check results' })).textContent).toMatch(/No problems found/);
-  await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
-  await expectStatus(/Published E2E Swift Feat/);
+  await user.click(within(editor()).getByRole('button', { name: 'Make available to characters' }));
+  await expectStatus(/Made E2E Swift Feat available to characters/);
 
   // A feature with a form that gives disadvantage on Dexterity saves while it is on. (ability.dex.check would not reach
   // save.dex, so the cancelling form targets the save itself.)
@@ -415,8 +415,8 @@ it('a feat with automatic advantage rolls two dice on a Dex save, and turning on
   await user.selectOptions(heavy.getByRole('combobox', { name: 'Only while' }), 'While E2E Heavy Form is on');
   await user.click(within(editor()).getByRole('button', { name: 'Check' }));
   expect((await within(editor()).findByRole('region', { name: 'Check results' })).textContent).toMatch(/No problems found/);
-  await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
-  await expectStatus(/Published E2E Heavy Feature/);
+  await user.click(within(editor()).getByRole('button', { name: 'Make available to characters' }));
+  await expectStatus(/Made E2E Heavy Feature available to characters/);
 
   const entries = await client.contentBySource(source.id);
   const pins = ['E2E Swift Feat', 'E2E Heavy Feature'].map((name) => entries.find((e) => e.name === name)?.latestPublished);
@@ -432,7 +432,7 @@ it('a feat with automatic advantage rolls two dice on a Dex save, and turning on
   render(<App />);
   await user.click(await screen.findByRole('button', { name: /^E2E Mode Hero/ }));
   const sheet = await screen.findByRole('article', { name: 'E2E Mode Hero' });
-  await openTab(user, sheet, 'Stats');
+  await openTab(user, sheet, 'Skills and saves');
   await user.click(await screen.findByRole('heading', { name: /^Dexterity saving throw: / })); // the card's body is a closed <details>
   const lastRoll = () => screen.getByRole('region', { name: 'Last roll' });
   const diceRolled = () => (lastRoll().textContent!.match(/d20 \d+/g) ?? []).length;
@@ -448,7 +448,7 @@ it('a feat with automatic advantage rolls two dice on a Dex save, and turning on
   const form = await screen.findByRole<HTMLInputElement>('checkbox', { name: /^E2E Heavy Form/ });
   await user.click(form);
   await waitFor(() => expect(form.checked).toBe(true));
-  await openTab(user, sheet, 'Stats');
+  await openTab(user, sheet, 'Skills and saves');
   const cancelled = await screen.findByRole('button', { name: 'Roll Dexterity saving throw (normal: advantage and disadvantage cancel)' });
   await user.click(cancelled);
   await waitFor(() => expect(diceRolled()).toBe(1));
@@ -752,10 +752,10 @@ it('authors a hit-point roll in the studio, uses it and undoes it (MECH-X item 1
   const user = userEvent.setup();
   const source = await client.createHomebrewSource('E2E Rite Book', ['srd-5.2.1']);
   render(<App />);
-  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew' });
   await waitFor(() => expect(studioButton.disabled).toBe(false));
   await user.click(studioButton);
-  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Book or notebook' });
   await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Rite Book/ })).toBeTruthy());
   await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Rite Book/ }));
   await screen.findByRole('heading', { name: 'Content in E2E Rite Book' });
@@ -775,8 +775,8 @@ it('authors a hit-point roll in the studio, uses it and undoes it (MECH-X item 1
   await user.type(rite.getByRole('textbox', { name: /^Hit points paid/ }), '2');
   await user.click(within(editor()).getByRole('button', { name: 'Check' }));
   expect((await within(editor()).findByRole('region', { name: 'Check results' })).textContent).toMatch(/No problems found/);
-  await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
-  await expectStatus(/Published E2E Blood Rite Feature/);
+  await user.click(within(editor()).getByRole('button', { name: 'Make available to characters' }));
+  await expectStatus(/Made E2E Blood Rite Feature available to characters/);
 
   const published = (await client.contentBySource(source.id)).find((e) => e.name === 'E2E Blood Rite Feature')?.latestPublished;
   expect(published).toBeTruthy();
