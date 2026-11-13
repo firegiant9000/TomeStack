@@ -426,7 +426,7 @@ public static partial class CharacterCalculator
                     var revision = candidate.Content.Revision;
                     var diagnostic = new Diagnostic(
                         "effect.dependency-cycle",
-                        $"'{revision.Name}' has an effect that is ignored: using {mod} for {field} would make {mod} depend on {field}.",
+                        $"'{revision.Name}' has an effect that is ignored: using {FieldLabel(mod)} for {FieldLabel(field)} would make {FieldLabel(mod)} depend on {FieldLabel(field)}.",
                         revision.Reference,
                         candidate.Effect.Id);
                     diagnostics.Add(diagnostic);
@@ -595,23 +595,23 @@ public static partial class CharacterCalculator
                 }
                 if (IsCharacterOnlyField(effect.Target, revision.SchemaVersion) || IsPlayMechanicsOnlyField(effect.Target, revision.SchemaVersion))
                 {
-                    diagnostics.Add(new("effect.character-only-field", $"'{revision.Name}' changes '{effect.Target}', which content may not change yet; it is ignored.", revision.Reference, effect.Id));
+                    diagnostics.Add(new("effect.character-only-field", $"'{revision.Name}' changes '{FieldLabel(effect.Target)}', which content may not change yet; it is ignored.", revision.Reference, effect.Id));
                     continue;
                 }
                 if (IsV8Field(effect.Target) && IgnoresV8(revision))
                 {
-                    diagnostics.Add(V8FieldIgnored(revision, effect, $"the {effect.Target} field"));
+                    diagnostics.Add(V8FieldIgnored(revision, effect, $"the {FieldLabel(effect.Target)} field"));
                     continue;
                 }
                 if (item.Origin is { } origin && IsAbilityScore(effect) && origin != policy.AbilityIncreaseSource)
                 {
                     var parent = (item.ChosenFrom ?? item.GrantedBy)!;
                     var via = origin == revision.Kind ? ""
-                        : parent.Kind == origin ? $", from {origin.ToString().ToLowerInvariant()} '{parent.Name}'"
-                        : $", from {origin.ToString().ToLowerInvariant()} content via {parent.Kind.ToString().ToLowerInvariant()} '{parent.Name}'";
+                        : parent.Kind == origin ? $", from {KindText(origin)} '{parent.Name}'"
+                        : $", from {KindText(origin)} content via {KindText(parent.Kind)} '{parent.Name}'";
                     warnings[effect.Target].Add(new(
                         "policy.ability-increase-source",
-                        $"'{revision.Name}' ({revision.Kind.ToString().ToLowerInvariant()}{via}) cannot change ability scores under the {policy.ShortLabel}; only {policy.AbilityIncreaseSource.ToString().ToLowerInvariant()} content can. The effect is ignored.",
+                        $"'{revision.Name}' ({KindText(revision.Kind)}{via}) cannot change ability scores under the {policy.ShortLabel}; only {KindText(policy.AbilityIncreaseSource)} content can. The effect is ignored.",
                         revision.Reference,
                         effect.Id));
                     continue;
@@ -699,6 +699,9 @@ public static partial class CharacterCalculator
 
     /// <summary>The fields content v8 adds (<see cref="FieldIds.Attacks"/>, <see cref="FieldIds.CriticalRange"/>); older builds do not know them.</summary>
     private static bool IsV8Field(string field) => field is FieldIds.Attacks or FieldIds.CriticalRange;
+
+    /// <summary>A content kind in running text: "feat", "creation guide".</summary>
+    private static string KindText(ContentKind kind) => kind == ContentKind.CreationGuide ? "creation guide" : kind.ToString().ToLowerInvariant();
 
     private static Diagnostic V8FieldIgnored(ContentRevision revision, Effect effect, string field) =>
         new("effect.schema-field-ignored", $"'{revision.Name}' has an effect that uses {field}, which needs file version 8, but this entry is file version {revision.SchemaVersion}; it is ignored.", revision.Reference, effect.Id);

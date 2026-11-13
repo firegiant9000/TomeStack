@@ -69,7 +69,7 @@ public static class ToggleGroups
             {
                 // C6: the content that declares the group is not on the character, so this toggle is exclusive with nothing.
                 // Information only: no Content or EffectId, so it stays out of the feature's own list and never downgrades its automation.
-                diagnostics.Add(new("toggle.group-absent", $"'{item.Toggle.Label}' is in a group whose content is not on this character; it stands alone."));
+                diagnostics.Add(new("toggle.group-absent", $"{Named(item)} is in a group whose content is not on this character; it stands alone."));
                 if (storedAt.ContainsKey((item.ContentId, item.Toggle.ToggleId)))
                     effective.SetOn(item.ContentId, item.Toggle.ToggleId);
                 continue;
@@ -92,7 +92,7 @@ public static class ToggleGroups
             {
                 diagnostics.Add(new(
                     "toggle.group-conflict",
-                    $"'{kept!.Toggle.Label}' and '{dropped.Toggle.Label}' are both on in the same group; only '{kept.Toggle.Label}' applies, so '{dropped.Toggle.Label}' does not.",
+                    $"{Named(kept!)} and {Named(dropped)} are both on in the same group; only {Named(kept!)} applies, so {Named(dropped)} does not.",
                     dropped.Reference, dropped.Toggle.Id));
             }
 
@@ -112,14 +112,18 @@ public static class ToggleGroups
                     diagnostics.Add(new(
                         "toggle.overlay-not-allowed",
                         kept is null
-                            ? $"'{overlay.Toggle.Label}' is not allowed with no form on, so it does not apply."
-                            : $"'{overlay.Toggle.Label}' is not allowed with '{kept.Toggle.Label}', so it does not apply.",
+                            ? $"{Named(overlay)} is not allowed with no form on, so it does not apply."
+                            : $"{Named(overlay)} is not allowed with {Named(kept)}, so it does not apply.",
                         overlay.Reference, overlay.Toggle.Id));
                 }
             }
         }
         return effective;
     }
+
+    /// <summary>A toggle as players read it: its label in quotes, or (a draft with no label yet) "a toggle of '{content}'". Never its id.</summary>
+    private static string Named(DeclaredToggle toggle) =>
+        string.IsNullOrWhiteSpace(toggle.Toggle.Label) ? $"a toggle of '{toggle.ContentName}'" : $"'{toggle.Toggle.Label}'";
 
     /// <summary>
     /// The one rule for an overlay: allowed when no primary of its group is on and <c>allowedInBase</c> is true, or when the primary that

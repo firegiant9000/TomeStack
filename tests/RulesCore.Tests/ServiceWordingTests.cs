@@ -197,7 +197,7 @@ public partial class ServiceWordingTests
     {
         var quick = ChoiceTests.Homebrew(26, ContentKind.Feat, new ModifierEffect { Id = "fast-id", Operation = ModifierOperation.Bonus, Target = FieldIds.Speed, Value = "10" }) with { SchemaVersion = 9 };
 
-        AssertPlain(Message(Pinned(quick), "effect.character-only-field"), ["Fixture Homebrew 26", $"changes '{FieldIds.Speed}'", "may not change yet"], "fast-id");
+        AssertPlain(Message(Pinned(quick), "effect.character-only-field"), ["Fixture Homebrew 26", "changes 'Speed'", "may not change yet"], "fast-id", $"'{FieldIds.Speed}'");
     }
 
     [Fact]
@@ -266,6 +266,17 @@ public partial class ServiceWordingTests
         var unused = Fixtures.Load("srd521-rook-exception.json") with { Pins = [Fixtures.Wayfarer] };
 
         AssertPlain(Message(Sheet(unused), "character.exception-unused"), ["An exception to the rules is saved for", "but this character does not use it"], "other-rules");
+    }
+
+    [Fact]
+    public void An_unused_exception_for_missing_content_says_so_without_quoting_a_placeholder()
+    {
+        var gone = new ContentReference(Guid.NewGuid(), Guid.NewGuid());
+        var unused = Fixtures.Load("srd521-rook-exception.json") with { Pins = [Fixtures.Wayfarer], CrossFamilyExceptions = [new CrossFamilyException(gone, "Table ruling")] };
+
+        var message = Message(Sheet(unused), "character.exception-unused");
+        Assert.Equal("An exception to the rules is saved for content that is not available, but this character does not use it.", message);
+        AssertPlain(message, [], gone.ContentId.ToString(), gone.RevisionId.ToString());
     }
 
     [Fact]

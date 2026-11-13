@@ -205,11 +205,11 @@ public class ToggleGroupTests
         var sheet = Sheet(Forms(Tide, Ember));
         var message = Assert.Single(sheet.Diagnostics, d => d.Code == "toggle.group-conflict").Message;
         var (kept, dropped) = (LabelOf(Fixtures.EmberForm, "ember"), LabelOf(Fixtures.TideForm, "tide"));
-        ServiceWordingTests.AssertPlain(message, [$"'{kept}' and '{dropped}' are both on in the same group", $"only '{kept}' applies"]);
+        ServiceWordingTests.AssertPlain(message, [$"'{kept}' and '{dropped}' are both on in the same group", $"only '{kept}' applies"], "'ember'", "'tide'");
 
         var surge = new ActiveToggle(Fixtures.SurgeOverlay.ContentId, "surge");
         var overlay = Assert.Single(Sheet(Forms(Ember, surge)).Diagnostics, d => d.Code == "toggle.overlay-not-allowed").Message;
-        ServiceWordingTests.AssertPlain(overlay, [$"'{LabelOf(Fixtures.SurgeOverlay, "surge")}' is not allowed with '{kept}'", "does not apply"]);
+        ServiceWordingTests.AssertPlain(overlay, [$"'{LabelOf(Fixtures.SurgeOverlay, "surge")}' is not allowed with '{kept}'", "does not apply"], "'surge'", "'ember'");
     }
 
     [Fact]

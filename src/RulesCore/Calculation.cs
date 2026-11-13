@@ -517,6 +517,9 @@ public static partial class CharacterCalculator
 
     public static bool IsField(string field) => SpecIndex.ContainsKey(field);
 
+    /// <summary>The label a player reads for a calculated field ("Speed" for <c>speed</c>); an unknown id is returned as is.</summary>
+    private static string FieldLabel(string field) => SpecIndex.TryGetValue(field, out var i) ? Specs[i].Label : field;
+
     /// <summary>
     /// D24 (2026-10-06): speed and the passive scores are calculated and overridable on the sheet, but a build before
     /// content schema v10 would read content that targets them as supported and drop its bonus silently. So content may

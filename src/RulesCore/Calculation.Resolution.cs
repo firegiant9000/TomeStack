@@ -235,7 +235,8 @@ public static partial class CharacterCalculator
     /// <summary>D99: a rules family as a player reads it, article included ("the 2014 rules"); an id this app does not know stays in the text so the author can find the typo.</summary>
     private static string FamilyLabel(string id) => RulesFamilies.IsKnown(id) ? $"the {RulesFamilies.Get(id).ShortLabel}" : $"'{id}' (rules this app does not know)";
 
-    private static string FamilyLabels(IEnumerable<string> ids) => string.Join(" and ", ids.Select(FamilyLabel).Distinct());
+    private static string FamilyLabels(IEnumerable<string> ids) =>
+        ids.Select(FamilyLabel).Distinct().ToList() is { Count: > 0 } labels ? string.Join(" and ", labels) : "no set of rules";
 
     private sealed record ResolvedContent(
         List<ActiveContent> Active, List<ClassInfo> Classes, ClassLevelMap ClassLevels, List<ChoiceStatus> Choices, IReadOnlyList<ModdedEntry> ModdedEntries);
@@ -448,7 +449,11 @@ public static partial class CharacterCalculator
 
         var referenced = character.AllReferences().ToHashSet();
         foreach (var exception in character.CrossFamilyExceptions.Where(e => !referenced.Contains(e.Content)))
-            diagnostics.Add(new("character.exception-unused", $"An exception to the rules is saved for '{catalog.FindRevision(exception.Content)?.Name ?? UnavailableEntry}', but this character does not use it.", exception.Content));
+            diagnostics.Add(new("character.exception-unused",
+                catalog.FindRevision(exception.Content)?.Name is { } name
+                    ? $"An exception to the rules is saved for '{name}', but this character does not use it."
+                    : "An exception to the rules is saved for content that is not available, but this character does not use it.",
+                exception.Content));
 
         var pending = new Queue<ActiveContent>(active);
         while (pending.Count > 0)
