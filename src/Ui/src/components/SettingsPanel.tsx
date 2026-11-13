@@ -146,11 +146,11 @@ export function SettingsPanel({
 
   return (
     <section className="panel settings" aria-labelledby="settings-heading">
-      <h2 id="settings-heading" tabIndex={-1} ref={heading}>
+      <h1 id="settings-heading" tabIndex={-1} ref={heading}>
         Settings
-      </h2>
+      </h1>
 
-      <h3>Appearance</h3>
+      <h2>Appearance</h2>
       <Choice legend="Colour scheme" ids={appearanceIds} labels={appearanceLabels} value={scheme} onPick={pick(setAppearance, setScheme)} />
       <Choice legend="Theme" ids={themeIds} labels={themeLabels} value={current} onPick={pick(setTheme, setCurrent)} />
       {current === 'custom' && (
@@ -183,7 +183,7 @@ export function SettingsPanel({
         <input type="checkbox" checked={dice} onChange={(e) => toggleDice(e.target.checked)} /> Animate dice
       </label>
 
-      <h3>Accessibility</h3>
+      <h2>Accessibility</h2>
       <Choice legend="Motion" ids={motionIds} labels={{ system: 'Follow Windows', reduce: 'Reduce motion' }} value={move} onPick={pick(setMotion, setMove)} />
       <p className="hint">Dice stop tumbling; nothing else moves today. &quot;Follow Windows&quot; uses your &quot;Animation effects&quot; setting.</p>
       <label className="choice">
@@ -209,7 +209,7 @@ export function SettingsPanel({
         </Suspense>
       )}
 
-      <h3>Keyboard shortcuts</h3>
+      <h2>Keyboard shortcuts</h2>
       <dl className="shortcuts">
         <dt>Ctrl+B</dt>
         <dd>Hide or show the sidebar</dd>
@@ -221,7 +221,7 @@ export function SettingsPanel({
         <dd>Move between controls</dd>
       </dl>
 
-      <h3>About</h3>
+      <h2>About</h2>
       <p className="hint">Settings are kept in this app's own storage on this computer and are in no backup or TomeStack file.</p>
       {info && (
         <p className="hint">
@@ -229,7 +229,7 @@ export function SettingsPanel({
         </p>
       )}
 
-      <h3>Diagnostics</h3>
+      <h2>Diagnostics</h2>
       <p className="hint">
         For a bug report: the app and Windows versions and the newest entries of the error log. Error messages and folder paths are left out, and your user name
         and source titles are replaced. Nothing is sent anywhere; you paste it where you choose.

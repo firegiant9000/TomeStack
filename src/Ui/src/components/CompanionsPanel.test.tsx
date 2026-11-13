@@ -301,7 +301,7 @@ it('renders a content companion card with its attacks and pools and no Edit', as
   expect(wolf.getByRole('heading', { name: /^Testy Howl: 2 of 2/ })).toBeTruthy();
   expect(wolf.queryByRole('button', { name: /^Edit|^Remove/ })).toBeNull();
   // Content cards come first; the hand companion keeps its Edit and Remove.
-  const names = screen.getAllByRole('heading', { level: 4 }).map((h) => h.textContent);
+  const names = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
   expect(names.indexOf('Testy Wolf')).toBeLessThan(names.indexOf('Testy Crow'));
   expect(within(card('Testy Crow')).getByRole('button', { name: 'Edit Testy Crow' })).toBeTruthy();
   await userEvent.click(wolf.getByRole('button', { name: 'Roll Testy Claw attack' }));

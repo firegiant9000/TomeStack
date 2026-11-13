@@ -44,7 +44,7 @@ export function AddCharacterPanel({ canCreate, start, onNew, onSheetImport, onFi
 
   return (
     <section className="panel" aria-labelledby={`${base}-heading`}>
-      <h2 id={`${base}-heading`}>Add a character</h2>
+      <h1 id={`${base}-heading`}>Add a character</h1>
       <fieldset className="add-choices">
         <legend>How do you want to start?</legend>
         {options.map((o) => {

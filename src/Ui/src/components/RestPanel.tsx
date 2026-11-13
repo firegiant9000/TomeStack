@@ -149,9 +149,9 @@ export function RestPanel({ characterId, kind, hitDice, version, onRested, onCan
 
   return (
     <section aria-labelledby="rest-heading" className="play-panel">
-      <h3 id="rest-heading" tabIndex={-1} ref={heading}>
+      <h2 id="rest-heading" tabIndex={-1} ref={heading}>
         {name}
-      </h3>
+      </h2>
       {kind === 'shortRest' && (
         <fieldset>
           <legend>Spend hit dice (each heals its roll plus your Constitution modifier)</legend>

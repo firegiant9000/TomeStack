@@ -81,7 +81,7 @@ export function SpeciesBasicsEditor(props: SpeciesProps) {
 
   return (
     <section aria-labelledby="species-basics-heading" className="effect-editor origin-basics">
-      <h4 id="species-basics-heading">Species basics</h4>
+      <h3 id="species-basics-heading">Species basics</h3>
 
       {showIncreases && (
         <fieldset id="species-basics-increases" tabIndex={-1}>

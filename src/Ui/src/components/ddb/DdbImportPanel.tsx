@@ -252,17 +252,17 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
 
   return (
     <section className="ddb-import" aria-labelledby="ddb-import-title">
-      <h2 id="ddb-import-title" className="visually-hidden">
+      <h1 id="ddb-import-title" className="visually-hidden">
         From a character sheet (PDF or text)
-      </h2>
+      </h1>
       <p className="hint">
         Step {step} of 5. Nothing is saved until you choose “Create character”.{' '}
         {read === undefined ? "The PDF or text itself isn't kept." : source === 'text' ? "The text itself isn't kept." : "The PDF itself isn't kept."}
       </p>
       <section aria-labelledby={headingId}>
-        <h3 id={headingId} ref={heading} tabIndex={-1}>
+        <h2 id={headingId} ref={heading} tabIndex={-1}>
           {titles[step]}
-        </h3>
+        </h2>
         {step === 1 && sheetError && <p role="alert" className="warn">{sheetError}</p>}
         {step >= 3 && failed && (
           <div role="alert" className="warn">

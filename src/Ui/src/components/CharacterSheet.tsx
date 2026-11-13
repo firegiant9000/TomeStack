@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState, type SubmitEvent } from 'react';
 import { client } from '../api/client';
 import { TomeStackError } from '../api/transport';
+import { characterNameOf } from '../placeTitle';
 import type {
   CharacterView,
   DerivedValue,
@@ -112,7 +113,7 @@ function FieldCard({ value, labels, onOverride, onRoll, onReportGap }: FieldProp
     <section aria-labelledby={headingId} className={`field-card${marked ? ' marked' : ''}`}>
       <details>
         <summary>
-          <h4 id={headingId}>
+          <h3 id={headingId}>
             {value.label}: <span className="derived">{display(value, value.value)}</span>
             {marked && (
               <>
@@ -122,7 +123,7 @@ function FieldCard({ value, labels, onOverride, onRoll, onReportGap }: FieldProp
             )}
             {value.override && <span className="override-label"> set by hand (calculated {display(value, value.computedValue)})</span>}
             {value.warnings.length > 0 && <span className="warning-count"> · {value.warnings.length} warning{value.warnings.length === 1 ? '' : 's'}</span>}
-          </h4>
+          </h3>
         </summary>
         {isD20(value.field) && (
           <button type="button" onClick={() => onRoll(value.field)}>
@@ -279,7 +280,7 @@ export function ExportPanel({ characterId, active, updatedAt, onError, onStatus 
 
   return (
     <section aria-labelledby="export-heading" className="export-panel">
-      <h3 id="export-heading">Export</h3>
+      <h2 id="export-heading">Export</h2>
       <fieldset>
         <legend>What is this TomeStack file for?</legend>
         <label>
@@ -878,7 +879,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   const fieldGroup = (title: string, fields: DerivedValue[]) =>
     fields.length === 0 ? null : (
       <section key={title} aria-label={title} className="field-group">
-        <h3>{title}</h3>
+        <h2>{title}</h2>
         {fields.map((field) => (
           <FieldCard key={field.field} value={field} labels={labels} onOverride={changeOverride} onRoll={(f) => roll({ field: f, mode: rollMode })} onReportGap={(f) => reportGap(gapAboutField(f))} />
         ))}
@@ -889,7 +890,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   const detailList = (id: string, title: string, entries: readonly string[] = []) =>
     entries.length === 0 ? null : (
       <div>
-        <h4 id={`${id}-heading`}>{title}</h4>
+        <h3 id={`${id}-heading`}>{title}</h3>
         <ul aria-labelledby={`${id}-heading`}>
           {entries.map((entry, index) => (
             <li key={`${index}-${entry}`}>{entry}</li>
@@ -901,9 +902,9 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   return (
     <article className="panel sheet" aria-labelledby="sheet-heading">
       <header className="sheet-header">
-        <h2 id="sheet-heading" tabIndex={-1} ref={heading}>
-          {character.name}
-        </h2>
+        <h1 id="sheet-heading" tabIndex={-1} ref={heading}>
+          {characterNameOf(character.name)}
+        </h1>
         <span className="tag">{rulesLabel(character.rulesFamily)}</span>
         <span className="tag">Level {character.level}</span>
         {view.campaign && <span className="tag">Campaign: {view.campaign.name}</span>}
@@ -980,7 +981,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
 
       {afterRest && (
         <section aria-labelledby="after-rest-heading" className="play-panel">
-          <h3 id="after-rest-heading">After your long rest</h3>
+          <h2 id="after-rest-heading">After your long rest</h2>
           <p>You may replace {afterRest}.</p>
           <div className="actions">
             <button type="button" onClick={onMakeChoices}>
@@ -1038,7 +1039,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
 
       {view.campaign && view.campaign.warnings.length > 0 && (
         <section aria-labelledby="campaign-heading">
-          <h3 id="campaign-heading">Campaign: {view.campaign.name}</h3>
+          <h2 id="campaign-heading">Campaign: {view.campaign.name}</h2>
           <ul className="warnings">
             {view.campaign.warnings.map((w) => (
               <li key={`${w.code}-${w.content?.revisionId ?? ''}`}>{w.message}</li>
@@ -1050,7 +1051,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
       {/* Open choices and content problems stay visible whatever tab is open (SPEC C-03). */}
       {sheet.choices?.some((c) => !c.resolved) && (
         <section aria-labelledby="choices-heading">
-          <h3 id="choices-heading" tabIndex={-1}>Choices to make</h3>
+          <h2 id="choices-heading" tabIndex={-1}>Choices to make</h2>
           <ul className="warnings">
             {sheet.choices
               .filter((c) => !c.resolved)
@@ -1068,7 +1069,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
 
       {notApplied.length > 0 && (
         <section aria-labelledby="diagnostics-heading">
-          <h3 id="diagnostics-heading">Needs your attention</h3>
+          <h2 id="diagnostics-heading">Needs your attention</h2>
           <ul className="warnings">
             {notApplied.map((d) => (
               <li key={`${d.code}-${d.content?.revisionId ?? ''}-${d.effectId ?? ''}`}>{d.message}</li>
@@ -1190,7 +1191,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
         <ExperiencePanel view={view} onChanged={onChanged} onError={onError} saveCharacter={saveCharacter} />
         {((character.details?.languages ?? []).length > 0 || (character.details?.toolsAndOther ?? []).length > 0) && (
           <section aria-labelledby="stats-details-heading" className="field-group">
-            <h3 id="stats-details-heading">Languages and tools</h3>
+            <h2 id="stats-details-heading">Languages and tools</h2>
             {detailList('stats-languages', 'Languages', character.details?.languages)}
             {detailList('stats-tools', 'Tools and other', character.details?.toolsAndOther)}
             <button type="button" onClick={editDetails}>

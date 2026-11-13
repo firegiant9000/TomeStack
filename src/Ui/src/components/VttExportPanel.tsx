@@ -62,7 +62,7 @@ export function VttExportPanel({ characterId, onError, onStatus }: Props) {
 
   return (
     <section aria-labelledby="vtt-export-heading" className="export-panel">
-      <h3 id="vtt-export-heading">Export for a virtual tabletop</h3>
+      <h2 id="vtt-export-heading">Export for a virtual tabletop</h2>
       <fieldset>
         <legend>Format</legend>
         <label>

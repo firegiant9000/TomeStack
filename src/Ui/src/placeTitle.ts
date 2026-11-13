@@ -1,4 +1,22 @@
 import type { Screen } from './App';
+import type { BuilderMode } from './components/CharacterBuilder';
+
+/** The name shown for a character; a blank name reads "Character". */
+export function characterNameOf(name: string): string {
+  return name.trim() || 'Character';
+}
+
+/** The builder's heading and place name, so the h1 and the window title cannot drift. */
+export function builderTitle(mode: BuilderMode): string {
+  switch (mode.kind) {
+    case 'create':
+      return 'New character';
+    case 'levelUp':
+      return `Level up ${characterNameOf(mode.view.character.name)}`;
+    default:
+      return `Choices for ${characterNameOf(mode.view.character.name)}`;
+  }
+}
 
 /** The place a screen names: the window title is `${placeOf(screen)} – TomeStack` (Wave 3 spec 3.11, row 12). */
 export function placeOf(screen: Screen): string {
@@ -8,11 +26,7 @@ export function placeOf(screen: Screen): string {
     case 'add':
       return 'Add a character';
     case 'builder':
-      return screen.mode.kind === 'create'
-        ? 'New character'
-        : screen.mode.kind === 'levelUp'
-          ? `Level up ${screen.mode.view.character.name}`
-          : `Choices for ${screen.mode.view.character.name}`;
+      return builderTitle(screen.mode);
     case 'studio':
       return 'Homebrew';
     case 'sources':
@@ -28,7 +42,7 @@ export function placeOf(screen: Screen): string {
     case 'ddb-import':
       return 'From a character sheet (PDF or text)';
     case 'sheet':
-      return screen.view.character.name.trim() || 'Character';
+      return characterNameOf(screen.view.character.name);
     case 'import':
       return `Import ${screen.fileName}`;
     default: {

@@ -101,7 +101,7 @@ export function DdbMatchesStep({ preview, family, campaignId, resolutions, answe
       })}
       {preview.openChoices.length > 0 && filter === 'all' && (
         <section aria-labelledby="ddb-open-choices">
-          <h4 id="ddb-open-choices">Open choices</h4>
+          <h3 id="ddb-open-choices">Open choices</h3>
           <p className="hint">The sheet does not settle these. Answer them here, or later in the builder.</p>
           {preview.openChoices.map((choice) => (
             <OpenChoice key={`${choice.source.contentId}:${choice.choiceId}`} choice={choice} names={names} answers={answers} onAnswer={onAnswer} />

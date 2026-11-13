@@ -90,7 +90,7 @@ function CampaignPackForm({ campaign, onError, onStatus }: { campaign: Campaign 
 
   return (
     <section className="play-panel" aria-label={`Share ${campaign.name}`}>
-      <h3>Share {campaign.name} as a TomeStack file</h3>
+      <h2>Share {campaign.name} as a TomeStack file</h2>
       <p className="hint">
         A TomeStack file for a campaign carries the profile (rules, allowed sources and house rules) and the published content of homebrew
         you marked as your own work. It never carries characters, gap notes, drafts or PDFs. The SRD is named, not copied.
@@ -184,7 +184,7 @@ export function CampaignsPanel({ rulesFamilies, onError, onStatus }: Props) {
 
   return (
     <section className="panel" aria-labelledby="campaigns-heading">
-      <h2 id="campaigns-heading">Campaigns</h2>
+      <h1 id="campaigns-heading">Campaigns</h1>
       <p className="hint">
         A campaign says which rules and sources its characters use. Content from other sources is marked as not allowed; the
         player can still use it if they note why. Campaigns never change how numbers are calculated.

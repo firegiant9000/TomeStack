@@ -84,7 +84,7 @@ function Group({ id, title, rows }: { id: string; title: string; rows: ByHandRow
   if (rows.length === 0) return null;
   return (
     <section aria-labelledby={id}>
-      <h4 id={id}>{title}</h4>
+      <h3 id={id}>{title}</h3>
       <ul>
         {rows.map((row) => (
           <li key={row.key}>
@@ -113,7 +113,7 @@ export function ByHandPanel({ characterId, sheet, active }: { characterId: strin
 
   return (
     <section aria-labelledby="by-hand-heading" className="play-panel">
-      <h3 id="by-hand-heading">Things to remember yourself</h3>
+      <h2 id="by-hand-heading">Things to remember yourself</h2>
       {failed ? (
         <p className="hint">Couldn't list what needs you by hand.</p>
       ) : loading ? (

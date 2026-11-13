@@ -32,6 +32,11 @@ it('a sheet without a usable name is "Character"', () => {
   expect(placeOf({ kind: 'sheet', view: viewNamed('  ') })).toBe('Character');
 });
 
+it('the builder falls back to "Character" for a blank name', () => {
+  expect(placeOf({ kind: 'builder', mode: { kind: 'levelUp', view: viewNamed(' ') } })).toBe('Level up Character');
+  expect(placeOf({ kind: 'builder', mode: { kind: 'choices', view: viewNamed('') } })).toBe('Choices for Character');
+});
+
 it('the title joins the place and TomeStack with an en dash (U+2013)', () => {
   expect(windowTitle({ kind: 'sheet', view })).toBe('Wren Ashdown – TomeStack');
 });

@@ -32,13 +32,13 @@ function ClassBlock({ item, prefix }: { item: ClassCoverage; prefix: string }) {
   const headingId = `${prefix}-${item.contentId}`;
   return (
     <section aria-labelledby={headingId}>
-      <h4 id={headingId}>{item.name}</h4>
+      <h3 id={headingId}>{item.name}</h3>
       <p className="hint">{coverageText(item.totals)}</p>
       {item.levels.map((level) => {
         const levelId = `${headingId}-l${level.level}`;
         return (
           <section key={level.level} aria-labelledby={levelId}>
-            <h5 id={levelId}>Level {level.level}</h5>
+            <h4 id={levelId}>Level {level.level}</h4>
             <ul>
               {level.features.map((f) => (
                 <FeatureRow key={`${f.revisionId}|${f.status}`} feature={f} />
@@ -63,7 +63,7 @@ function SourceBlock({ source, prefix }: { source: SourceCoverage; prefix: strin
       ))}
       {source.other.length > 0 && (
         <section aria-labelledby={otherId}>
-          <h4 id={otherId}>Other content</h4>
+          <h3 id={otherId}>Other content</h3>
           <ul>
             {source.other.map((f) => (
               <FeatureRow key={`${f.revisionId}|${f.status}`} feature={f} />
@@ -100,7 +100,7 @@ export function CoveragePanel({ sourceId, refreshKey }: { sourceId: string; refr
 
   return (
     <section aria-labelledby={`${prefix}-coverage`} className="play-panel">
-      <h3 id={`${prefix}-coverage`}>Coverage</h3>
+      <h2 id={`${prefix}-coverage`}>Coverage</h2>
       <label className="choice">
         <input type="checkbox" checked={includeDrafts} onChange={(e) => setIncludeDrafts(e.target.checked)} />
         Show drafts

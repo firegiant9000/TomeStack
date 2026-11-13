@@ -195,11 +195,16 @@ function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (in
           {collapsed ? 'Show sidebar' : 'Hide sidebar'}
         </button>
         {/* Spec 3.1: the window title area is a way home when the sidebar has no "All characters" (fewer than two). */}
-        <h1>
-          <button type="button" className="brand" aria-label="TomeStack, your characters" onClick={() => go({ kind: 'home', focus: true })}>
+        <div className="brand-wrap">
+          <button
+            type="button"
+            className="brand"
+            aria-label="TomeStack, your characters"
+            onClick={() => (screen.kind === 'home' ? document.getElementById('home-heading')?.focus() : go({ kind: 'home', focus: true }))}
+          >
             TomeStack
           </button>
-        </h1>
+        </div>
         <span className="tag">Offline</span>
       </header>
 

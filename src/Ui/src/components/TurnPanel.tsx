@@ -145,9 +145,9 @@ export function TurnPanel({ characterId, at, version, toggles = [], onDone, onCa
 
   return (
     <section aria-labelledby="turn-heading" className="play-panel">
-      <h3 id="turn-heading" tabIndex={-1} ref={heading}>
+      <h2 id="turn-heading" tabIndex={-1} ref={heading}>
         {name}
-      </h3>
+      </h2>
       {(failed || baseFailed) && <p className="error">Could not work out this turn. Close and try again.</p>}
       {!base || !preview ? (
         !failed && !baseFailed && <p className="hint">Working out what this turn changes…</p>

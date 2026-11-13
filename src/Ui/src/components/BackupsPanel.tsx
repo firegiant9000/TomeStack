@@ -150,10 +150,10 @@ export function BackupsPanel({ onError, onStatus, onRestored }: Props) {
 
   return (
     <section className="panel" aria-labelledby="backups-heading">
-      <h2 id="backups-heading">Backups</h2>
+      <h1 id="backups-heading">Backups</h1>
 
       <section aria-labelledby="backup-everything-heading">
-        <h3 id="backup-everything-heading">Back up everything</h3>
+        <h2 id="backup-everything-heading">Back up everything</h2>
         <p>
           One file with your whole library: every character, campaign and gap note, all your homebrew (drafts and unused
           entries too), and the PDFs TomeStack keeps a copy of. Keep it somewhere other than this computer. It is personal:
@@ -195,7 +195,7 @@ export function BackupsPanel({ onError, onStatus, onRestored }: Props) {
       </section>
 
       <section aria-labelledby="daily-copies-heading">
-        <h3 id="daily-copies-heading">Daily copies</h3>
+        <h2 id="daily-copies-heading">Daily copies</h2>
         <p>
           The first time you open TomeStack on a day, if your library changed since the last copy, it saves a full backup in the
           backups\daily folder of your data folder (normally %LOCALAPPDATA%\TomeStack) and keeps the newest 7. Each copy
@@ -216,7 +216,7 @@ export function BackupsPanel({ onError, onStatus, onRestored }: Props) {
       </section>
 
       <section aria-labelledby="restore-heading">
-        <h3 id="restore-heading">Restore full backup</h3>
+        <h2 id="restore-heading">Restore full backup</h2>
         <p>
           Checks the whole file first, PDFs included, and shows what it would add or replace. Nothing in this library is
           deleted. Before anything is replaced, TomeStack saves a copy of your current data in the backups folder.
@@ -227,7 +227,7 @@ export function BackupsPanel({ onError, onStatus, onRestored }: Props) {
 
         {restore && preview && (
           <section aria-labelledby="restore-preview-heading">
-            <h4 id="restore-preview-heading">Restore {restore.fileName}</h4>
+            <h3 id="restore-preview-heading">Restore {restore.fileName}</h3>
             {preview.errors.length > 0 && (
               <div role="alert">
                 <p>This backup cannot be restored:</p>

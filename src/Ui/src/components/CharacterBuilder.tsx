@@ -33,6 +33,7 @@ import {
   type ScoreMethod,
 } from '../abilityScores';
 import { hadPicks, replaceHint, replaceOffer } from '../replaceable';
+import { builderTitle } from '../placeTitle';
 import { matchesSpell } from '../spellSearch';
 import { useRulesLabel } from '../rulesLabel';
 import { shown } from './SandboxPanel';
@@ -820,12 +821,12 @@ function LevelPreview(props: { from: number; draftAt: (level: number) => Charact
       </fieldset>
       {shownView && sheet && (
         <div role="region" aria-labelledby="preview-level-heading">
-          <h4 id="preview-level-heading">Preview at level {shownView.level}</h4>
+          <h3 id="preview-level-heading">Preview at level {shownView.level}</h3>
           <p className="hint">
             An unsaved copy. Nothing is saved, and Next: choices still gains one level.
           </p>
           {open > 0 && <p className="hint">{open === 1 ? '1 choice is' : `${open} choices are`} open on this copy; you make them as you level up.</p>}
-          <h5>Values</h5>
+          <h4>Values</h4>
           <ul>
             {sheet.fields
               .filter((f) => shown.includes(f.field) && (f.field !== 'spellSaveDc' || (sheet.spellcasting ?? []).length > 0))
@@ -845,7 +846,7 @@ function LevelPreview(props: { from: number; draftAt: (level: number) => Charact
               </li>
             ))}
           </ul>
-          <h5>Features</h5>
+          <h4>Features</h4>
           <ul>
             {(sheet.features ?? []).map((f) => (
               <li key={f.content.revisionId}>{f.name}</li>
@@ -853,7 +854,7 @@ function LevelPreview(props: { from: number; draftAt: (level: number) => Charact
           </ul>
           {sheet.diagnostics.length > 0 && (
             <>
-              <h5>Problems</h5>
+              <h4>Problems</h4>
               <ul>
                 {sheet.diagnostics.map((d, i) => (
                   <li key={`d-${d.code}-${i}`} className="warn">
@@ -1083,7 +1084,7 @@ function ChoicesStep(props: {
     <div role="group" aria-label="Choices">
       {review && (
         <section aria-labelledby="review-heading">
-          <h4 id="review-heading">Review</h4>
+          <h3 id="review-heading">Review</h3>
           <dl className="review-list">
             {rows.map(([term, value]) => (
               <div key={term}>
@@ -1462,20 +1463,19 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
   });
   const pickProps = { basics, policy, options: pickable, loaded: optionsLoaded, missing, reasonNames, onChange: setBasics, onBack: back, onCancel };
 
-  const title =
-    mode.kind === 'create' ? 'New character' : mode.kind === 'levelUp' ? `Level up ${mode.view.character.name}` : `Choices for ${mode.view.character.name}`;
+  const title = builderTitle(mode);
 
   return (
     <section className="panel" aria-labelledby="builder-heading">
-      <h2 id="builder-heading" tabIndex={-1} ref={heading}>
+      <h1 id="builder-heading" tabIndex={-1} ref={heading}>
         {title}
-      </h2>
+      </h1>
       <p className="hint">
         {mode.kind === 'create'
           ? `Step ${at + 1} of ${createSteps.length}. Nothing is saved until you press Create and save.`
           : 'Nothing is saved until you press the last button. Cancel discards this draft.'}
       </p>
-      {mode.kind === 'create' && <h3 id="builder-step-heading">{stepTitles[step]}</h3>}
+      {mode.kind === 'create' && <h2 id="builder-step-heading">{stepTitles[step]}</h2>}
 
       {campaign && (
         <fieldset aria-label="Campaign sources">

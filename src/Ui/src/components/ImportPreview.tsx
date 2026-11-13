@@ -80,11 +80,11 @@ export function ImportPreview({ fileName, base64, preview, onApplied, onCancel, 
 
   return (
     <section className="panel" aria-labelledby="import-heading">
-      <h2 id="import-heading">Import {fileName}</h2>
+      <h1 id="import-heading">Import {fileName}</h1>
 
       {preview.errors.length > 0 && (
         <div role="alert">
-          <h3>This TomeStack file cannot be opened</h3>
+          <h2>This TomeStack file cannot be opened</h2>
           <ul className="errors">
             {preview.errors.map((e, i) => (
               <li key={i}>{e.message}</li>
@@ -127,7 +127,7 @@ export function ImportPreview({ fileName, base64, preview, onApplied, onCancel, 
 
       {preview.manifest && (
         <>
-          <h3>Licenses</h3>
+          <h2>Licenses</h2>
           <ul>
             {preview.manifest.notices.map((n) => (
               <li key={n.sourceId}>
@@ -175,7 +175,7 @@ export function ImportPreview({ fileName, base64, preview, onApplied, onCancel, 
 
       {impact.length > 0 && (
         <section aria-labelledby="campaign-impact-heading">
-          <h3 id="campaign-impact-heading">Characters affected if you use the imported campaign</h3>
+          <h2 id="campaign-impact-heading">Characters affected if you use the imported campaign</h2>
           <ul>
             {impact.map((i) => (
               <li key={`${i.campaignId}-${i.characterId}`}>

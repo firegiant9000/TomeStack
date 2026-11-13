@@ -606,7 +606,7 @@ it('groups Features by what granted them, then by kind, and drops none (D25)', (
     }),
     'features',
   );
-  expect(screen.getAllByRole('heading', { level: 4 }).map((h) => h.textContent)).toEqual(['Classes', 'Items', 'From Fixture Fighter', 'From Fixture Wayfarer']);
+  expect(screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual(['Classes', 'Items', 'From Fixture Fighter', 'From Fixture Wayfarer']);
   expect(Array.from(document.querySelectorAll('.feature .option-name')).map((n) => n.textContent)).toEqual(['Fixture Fighter', 'Fixture Torch', 'Fixture Rage', 'Fixture Alert']);
 });
 
@@ -724,7 +724,7 @@ it('puts the Details form on Journal after session notes and gap notes, with no 
   expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Play', 'Gear', 'Features', 'Skills and saves', 'Journal', 'Manage']);
   await user.click(screen.getByRole('tab', { name: 'Journal' }));
   const panel = screen.getByRole('tabpanel', { name: 'Journal' });
-  expect(within(panel).getAllByRole('heading', { level: 3 }).map((h) => h.textContent?.replace(/: \d+ open$/, ''))).toEqual(['Session notes', 'Gap notes', 'Details']);
+  expect(within(panel).getAllByRole('heading', { level: 2 }).map((h) => h.textContent?.replace(/: \d+ open$/, ''))).toEqual(['Session notes', 'Gap notes', 'Details']);
   expect(within(panel).getByRole('form', { name: 'Details' })).toBeTruthy();
 });
 
@@ -851,7 +851,7 @@ it('falls back from a remembered tab that is not offered, without taking focus f
   localStorage.setItem('tomestack.sheetTab.fixture-2', 'spells');
   renderSheet(view());
   expect(screen.getByRole('tab', { name: 'Play' }).getAttribute('aria-selected')).toBe('true');
-  expect(document.activeElement).toBe(screen.getByRole('heading', { level: 2 }));
+  expect(document.activeElement).toBe(screen.getByRole('heading', { level: 1 }));
   expect(localStorage.getItem('tomestack.sheetTab.fixture-2')).toBe('spells');
 });
 

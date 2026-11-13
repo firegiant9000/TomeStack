@@ -45,7 +45,7 @@ function InstallReview({ fileName, preview, onInstalled, onCancel, onError }: {
 
   return (
     <section className="play-panel" aria-labelledby="extension-review-heading">
-      <h3 id="extension-review-heading">Install {manifest?.name ?? fileName}?</h3>
+      <h2 id="extension-review-heading">Install {manifest?.name ?? fileName}?</h2>
       {preview.errors.length > 0 && (
         <div role="alert">
           <p>This extension cannot be installed:</p>
@@ -69,7 +69,7 @@ function InstallReview({ fileName, preview, onInstalled, onCancel, onError }: {
               {preview.update.permissionsAdded.length > 0 && ` New permissions: ${preview.update.permissionsAdded.join(', ')}.`}
             </p>
           )}
-          <h4>What it can do</h4>
+          <h3>What it can do</h3>
           <ul>
             {manifest.hooks.map((h) => (
               <li key={h.id}>{h.label}</li>
@@ -201,7 +201,7 @@ function HookRun({ extension, hook, characters, rulesFamilies, onError, onStatus
 
   return (
     <section className="play-panel" aria-label={`Run ${hook.label}`}>
-      <h4>{hook.label}</h4>
+      <h3>{hook.label}</h3>
       {hook.kind === 'export' ? (
         <>
           {readsSheet && (
@@ -367,7 +367,7 @@ export function ExtensionsPanel(props: Props) {
 
   return (
     <section aria-labelledby="extensions-heading">
-      <h3 id="extensions-heading">Add-ons</h3>
+      <h2 id="extensions-heading">Add-ons</h2>
       <p className="hint">
         An extension adds an import or an export. It never runs code: TomeStack reads its instructions and does the work, and
         it can use only the permissions you grant. Every run shows you the result first.

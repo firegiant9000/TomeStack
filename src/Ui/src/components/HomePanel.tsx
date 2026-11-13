@@ -28,9 +28,9 @@ export function HomePanel({ characters, onOpen, onNew, canCreate, focusOnMount =
   const active = characters.filter((c) => !c.archivedAt).sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
   return (
     <section className="panel home" aria-labelledby="home-heading">
-      <h2 id="home-heading" tabIndex={-1} ref={heading}>
-        Characters
-      </h2>
+      <h1 id="home-heading" tabIndex={-1} ref={heading}>
+        Your characters
+      </h1>
       {active.length === 0 ? (
         <>
           <p className="hint">No characters yet. Create one, or open a TomeStack file or a character sheet from the sidebar.</p>
