@@ -102,6 +102,31 @@ public sealed class ReadyBudgetScriptTests
     }
 
     [Fact]
+    public void Missing_field_with_require_fails()
+    {
+        var (exitCode, output) = Run("""{"success": true, "detail": "ok"}""", ciValue: null, "-Require");
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("Smoke ready time not reported; budget required.", output);
+    }
+
+    [Fact]
+    public void Null_field_with_require_fails()
+    {
+        var (exitCode, _) = Run("""{"success": true, "detail": "ok", "processStartToReadyMs": null}""", ciValue: null, "-Require");
+
+        Assert.Equal(1, exitCode);
+    }
+
+    [Fact]
+    public void Present_field_with_require_passes()
+    {
+        var (exitCode, _) = Run("""{"success": true, "detail": "ok", "processStartToReadyMs": 5000}""", ciValue: null, "-Require");
+
+        Assert.Equal(0, exitCode);
+    }
+
+    [Fact]
     public void Negative_budget_skips_the_check()
     {
         var (exitCode, output) = Run("""{"success": true, "detail": "ok", "processStartToReadyMs": 99999}""", ciValue: null, "-MaxReadyMs", "-1");

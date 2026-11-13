@@ -69,7 +69,11 @@ if ($ExpectCharactersAtStart -ge 0 -and $result.charactersAtStart -ne $ExpectCha
 if ($problems.Count -gt 0) { Write-Output "FAIL: $($problems -join '; ')"; exit 1 }
 
 # First-paint budget (D102): process start to UI ready. ready-budget.ps1 prints the line; -MaxReadyMs -1 skips it.
-& (Join-Path $PSScriptRoot 'ready-budget.ps1') -Report $Report -MaxReadyMs $MaxReadyMs
+# A plain run (the same condition as the crash check: current build, expected detail 'ok', no extra arguments) requires
+# the field, so a build that stops writing it fails instead of silently dropping the budget.
+$plainRun = -not $SkipCrashCheck -and $ExpectDetail -eq 'ok' -and $ExtraArguments.Count -eq 0
+if ($plainRun) { & (Join-Path $PSScriptRoot 'ready-budget.ps1') -Report $Report -MaxReadyMs $MaxReadyMs -Require }
+else { & (Join-Path $PSScriptRoot 'ready-budget.ps1') -Report $Report -MaxReadyMs $MaxReadyMs }
 if ($LASTEXITCODE -ne 0) { exit 1 }
 
 # Crash handler: a forced unhandled exception on the UI thread must exit non-zero and leave a dispatcher entry in
