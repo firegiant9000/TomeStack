@@ -269,7 +269,7 @@ public class ItemModSchemaTests
     public void Item_mod_schema_version_is_current()
     {
         Assert.Equal(12, ContentRevision.ItemModSchemaVersion);
-        Assert.Equal(ContentRevision.ItemModSchemaVersion, ContentRevision.CurrentSchemaVersion);
+        Assert.Equal(ContentRevision.ItemModSchemaVersion + 1, ContentRevision.CurrentSchemaVersion);
         Assert.Equal(ContentRevision.WeaponBonusSchemaVersion, ContentRevision.ItemModSchemaVersion);
         Assert.Equal(10, ItemModEffect.MaxBonus);
     }

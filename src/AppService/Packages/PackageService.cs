@@ -1061,6 +1061,18 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                 .Concat(local.ChoiceExtensions(contentId, choiceId))
                 .DistinctBy(r => r.Reference);
 
+        /// <summary>The package's published guides answer for their content ids (even when they retarget); this machine's guides fill in the rest.</summary>
+        public IReadOnlyList<ContentRevision> GuidesFor(Guid targetContentId)
+        {
+            var packaged = revisions.Values
+                .Where(r => r.Status == RevisionStatus.Published && r.Kind == ContentKind.CreationGuide)
+                .GroupBy(r => r.ContentId)
+                .Select(g => g.Last())
+                .ToList();
+            var ids = packaged.Select(r => r.ContentId).ToHashSet();
+            return [.. packaged.Where(r => GuideForEffect.TargetOf(r) == targetContentId), .. local.GuidesFor(targetContentId).Where(r => !ids.Contains(r.ContentId))];
+        }
+
         /// <summary>
         /// This machine's revisions first, in stored order, then the package's: the order they have once the import adds
         /// them, so "the newest" (the last) means the same during the check as afterwards (review fix).

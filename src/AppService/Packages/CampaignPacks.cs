@@ -27,7 +27,7 @@ public sealed partial class PackageService
     public CampaignPackPreview PreviewCampaignPack(Guid campaignId, LadderRow? target = null)
     {
         var plan = PlanCampaignPack(campaignId);
-        var lowered = LowerPack(plan.Revisions, plan.FileName, target);
+        var lowered = LowerPack(plan.Revisions, plan.FileName, target, plan.Included);
         var (revisions, fileName) = lowered is null ? (plan.Revisions, plan.FileName) : (lowered.Plan.Revisions, lowered.Plan.FileName);
         var opens = NewerBuild.Evaluate(revisions, [], 0, [], BundledPackTitle(revisions));
         var preview = new CampaignPackPreview(fileName, plan.Campaign.Id, plan.Campaign.Name, plan.Campaign.RulesFamily,
@@ -42,7 +42,7 @@ public sealed partial class PackageService
     public ExportResult ExportCampaignPack(Guid campaignId, LadderRow? target = null, string? changesHash = null)
     {
         var plan = PlanCampaignPack(campaignId);
-        if (LowerPack(plan.Revisions, plan.FileName, target) is { } lowered)
+        if (LowerPack(plan.Revisions, plan.FileName, target, plan.Included) is { } lowered)
         {
             RequireConfirmed(lowered, changesHash);
             plan = plan with { Revisions = lowered.Plan.Revisions, FileName = lowered.Plan.FileName };

@@ -189,7 +189,7 @@ public class CompanionSchemaTests
     public void Companion_schema_version_is_current()
     {
         Assert.Equal(12, ContentRevision.CompanionSchemaVersion);
-        Assert.Equal(ContentRevision.CompanionSchemaVersion, ContentRevision.CurrentSchemaVersion);
+        Assert.Equal(ContentRevision.CompanionSchemaVersion + 1, ContentRevision.CurrentSchemaVersion);
         Assert.Equal(ContentRevision.WeaponBonusSchemaVersion, ContentRevision.CompanionSchemaVersion);
         Assert.Equal(Character.MaxCompanionAttacks, CompanionEffect.MaxAttacks);
     }

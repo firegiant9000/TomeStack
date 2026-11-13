@@ -1,4 +1,5 @@
 import type { DdbPreview, RulesFamilyId } from '../../api/types';
+import { useRulesLabel } from '../../rulesLabel';
 import { abilityNames, notBroughtOverLabels } from './ddbLabels';
 
 interface Props {
@@ -29,13 +30,14 @@ const shownNotRead = 200;
 
 const classSlot = 'ddb-publish-held-class';
 const referencesSlot = 'ddb-publish-held-references';
-const heldReasonText = 'The summary is being refreshed, so the publish choices wait for it.';
+const heldReasonText = 'The summary is being refreshed, so the choices to make things available wait for it.';
 
 /** How many reference drafts the summary lists before "and N more". */
 const shownDrafts = 10;
 
 /** Step 5: what will be created and what will not, before the one write. */
 export function DdbSummaryStep({ preview, family, suggested, includePlayState, onIncludePlayState, held = false, publishClass, onPublishClass, publishReferences = false, onPublishReferences, keepNotRead = true, onKeepNotRead }: Props) {
+  const rulesLabel = useRulesLabel();
   if (!preview) return <p className="hint">Preparing the summary…</p>;
   const { character, matches, report } = preview;
   const unplaced = report.notFound + report.noPlace + report.unreadable;
@@ -67,7 +69,7 @@ export function DdbSummaryStep({ preview, family, suggested, includePlayState, o
         <dt>Will be created</dt>
         <dd>
           {character.pins.length} pinned, {character.choices.length} choices answered, {character.spells?.length ?? 0} spells,{' '}
-          {character.equipment?.length ?? 0} items, {character.overrides.length} overrides
+          {character.equipment?.length ?? 0} items, {character.overrides.length} {character.overrides.length === 1 ? 'number' : 'numbers'} set by hand
         </dd>
         <dt>Gap notes</dt>
         <dd>{unplaced} items not brought over will be noted as gaps on the character.</dd>
@@ -79,7 +81,7 @@ export function DdbSummaryStep({ preview, family, suggested, includePlayState, o
             <dt>Class</dt>
             <dd>{preview.stub.name}</dd>
             <dt>Rules</dt>
-            <dd>{preview.stub.rulesFamily}</dd>
+            <dd>{rulesLabel(preview.stub.rulesFamily)}</dd>
             <dt>Hit die</dt>
             <dd>d{preview.stub.hitDie}</dd>
             <dt>Saving throws</dt>
@@ -88,17 +90,17 @@ export function DdbSummaryStep({ preview, family, suggested, includePlayState, o
             <dd>{preview.stub.sourceTitle}, a source that is never shared</dd>
           </dl>
           <p className="hint">
-            The class has only a hit die and saving throws. Add features, spells and proficiencies in the studio. It lives in a source that is never shared,
+            The class has only a hit die and saving throws. Add features, spells and proficiencies in Homebrew. It lives in a source that is never shared,
             so your later work on it cannot be shared or moved; to share your own version, make a new class.
           </p>
           <label>
-            <input type="checkbox" checked={publishClass} {...heldProps(classSlot)} onChange={(e) => !held && onPublishClass(e.target.checked)} /> Publish it
+            <input type="checkbox" checked={publishClass} {...heldProps(classSlot)} onChange={(e) => !held && onPublishClass(e.target.checked)} /> Make it available to characters
           </label>{' '}
           {reason(classSlot)}
           <p role="note">
             {publishClass
               ? 'The class is published with the character, so its hit die and saving throws count now.'
-              : 'The class is a draft: the character gets nothing from it until you publish it in the studio and accept the update on the character.'}
+              : 'The class is a draft: the character gets nothing from it until you make it available to characters in Homebrew and accept the update on the character.'}
           </p>
         </section>
       )}
@@ -116,11 +118,11 @@ export function DdbSummaryStep({ preview, family, suggested, includePlayState, o
           </ul>
           <label>
             <input type="checkbox" checked={publishReferences} {...heldProps(referencesSlot)} onChange={(e) => !held && onPublishReferences?.(e.target.checked)} />{' '}
-            {drafts.length === 1 ? 'Publish this reference draft' : `Publish these ${drafts.length} reference drafts`}
+            {drafts.length === 1 ? 'Make this reference draft available to characters' : `Make these ${drafts.length} reference drafts available to characters`}
           </label>{' '}
           {reason(referencesSlot)}
           <p role="note">
-            They hold a name and a description only, no mechanics. Features are kept as reference content in the studio; the gap notes stay on the
+            They hold a name and a description only, no mechanics. Features are kept as reference content in Homebrew; the gap notes stay on the
             character. Published feats (if any) are pinned on the character.
           </p>
           {preview.referenceNote === 'campaign.source-not-allowed' && (
@@ -172,7 +174,7 @@ export function DdbSummaryStep({ preview, family, suggested, includePlayState, o
       )}
       {report.familyMismatch && suggested && family && (
         <p role="note" className="warn">
-          The sheet looks like {suggested} rules; this character uses {family}.
+          The sheet looks like {rulesLabel(suggested)}; this character uses {rulesLabel(family)}.
         </p>
       )}
       {report.sameNameExists && (

@@ -83,7 +83,7 @@ export function templateEffects(id: TemplateId): Effect[] {
       ];
     case 'subclass-skeleton':
       return subclassFeatureLevels.map((level) =>
-        slot(`level-${level}-feature`, level, `The feature this subclass gives at class level ${level}. Publish it first, then pick it here.`),
+        slot(`level-${level}-feature`, level, `The feature this subclass gives at class level ${level}. Make it available to characters first, then pick it here.`),
       );
     case 'class-skeleton': {
       let effects: Effect[] = setHitDie([], 8);
