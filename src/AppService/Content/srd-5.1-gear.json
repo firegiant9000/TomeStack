@@ -1,0 +1,1948 @@
+{
+  "packId": "srd-5.1-gear",
+  "formatVersion": 1,
+  "notice": "The adventuring gear, ammunition, focuses, tools, instruments and equipment packs of the System Reference Document 5.1 (CC-BY-4.0), pp. 69-70 and the Acolyte background (p. 61): names and pack contents only. Ids use the 51c0/51e0 block 000000500001-000000500073 (items) and 000000500101-000000500107 (packs). Taken from SRD_CC_v5.1.pdf (SHA-256 2504d2a0abb0a4d491a939be4f17910a2dde0312570ab8d208080225ccf0a1f0). See docs/licensing/srd-pack-review.md.",
+  "sources": [
+    {
+      "id": "51500000-0000-4000-8000-000000000001",
+      "title": "System Reference Document 5.1",
+      "publisher": "SRD 5.1 (CC-BY-4.0)",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "editionVersion": "5.1",
+      "license": "CC-BY-4.0",
+      "redistributable": true,
+      "attribution": "This work includes material taken from the System Reference Document 5.1 (\"SRD 5.1\") by Wizards of the Coast LLC and available at https://dnd.wizards.com/resources/systems-reference-document. The SRD 5.1 is licensed under the Creative Commons Attribution 4.0 International License available at https://creativecommons.org/licenses/by/4.0/legalcode.",
+      "modificationNotice": "Modified: TomeStack adapted this material into structured data. Selected passages are excerpted or shortened, with line breaks and hyphenation repaired, and rules are encoded as machine-readable effects.",
+      "sha256": "2504d2a0abb0a4d491a939be4f17910a2dde0312570ab8d208080225ccf0a1f0"
+    }
+  ],
+  "revisions": [
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500001",
+      "revisionId": "51e00000-0000-4000-8000-000000500001",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Arrow",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500002",
+      "revisionId": "51e00000-0000-4000-8000-000000500002",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Blowgun needle",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500003",
+      "revisionId": "51e00000-0000-4000-8000-000000500003",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Crossbow bolt",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500004",
+      "revisionId": "51e00000-0000-4000-8000-000000500004",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Sling bullet",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500005",
+      "revisionId": "51e00000-0000-4000-8000-000000500005",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Arcane focus (crystal)",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500006",
+      "revisionId": "51e00000-0000-4000-8000-000000500006",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Arcane focus (orb)",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500007",
+      "revisionId": "51e00000-0000-4000-8000-000000500007",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Arcane focus (rod)",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500008",
+      "revisionId": "51e00000-0000-4000-8000-000000500008",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Arcane focus (staff)",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500009",
+      "revisionId": "51e00000-0000-4000-8000-000000500009",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Arcane focus (wand)",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500010",
+      "revisionId": "51e00000-0000-4000-8000-000000500010",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Druidic focus (sprig of mistletoe)",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500011",
+      "revisionId": "51e00000-0000-4000-8000-000000500011",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Druidic focus (totem)",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500012",
+      "revisionId": "51e00000-0000-4000-8000-000000500012",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Druidic focus (wooden staff)",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500013",
+      "revisionId": "51e00000-0000-4000-8000-000000500013",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Druidic focus (yew wand)",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500014",
+      "revisionId": "51e00000-0000-4000-8000-000000500014",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Holy symbol (amulet)",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500015",
+      "revisionId": "51e00000-0000-4000-8000-000000500015",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Holy symbol (emblem)",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500016",
+      "revisionId": "51e00000-0000-4000-8000-000000500016",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Holy symbol (reliquary)",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500017",
+      "revisionId": "51e00000-0000-4000-8000-000000500017",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Component pouch",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500018",
+      "revisionId": "51e00000-0000-4000-8000-000000500018",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Spellbook",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500019",
+      "revisionId": "51e00000-0000-4000-8000-000000500019",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Quiver",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500020",
+      "revisionId": "51e00000-0000-4000-8000-000000500020",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Pouch",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500021",
+      "revisionId": "51e00000-0000-4000-8000-000000500021",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Backpack",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500022",
+      "revisionId": "51e00000-0000-4000-8000-000000500022",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Ball bearings (bag of 1,000)",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500023",
+      "revisionId": "51e00000-0000-4000-8000-000000500023",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Bedroll",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500024",
+      "revisionId": "51e00000-0000-4000-8000-000000500024",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Bell",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500025",
+      "revisionId": "51e00000-0000-4000-8000-000000500025",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Blanket",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500026",
+      "revisionId": "51e00000-0000-4000-8000-000000500026",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Book",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500027",
+      "revisionId": "51e00000-0000-4000-8000-000000500027",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Candle",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500028",
+      "revisionId": "51e00000-0000-4000-8000-000000500028",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Case, map or scroll",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500029",
+      "revisionId": "51e00000-0000-4000-8000-000000500029",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Chest",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500030",
+      "revisionId": "51e00000-0000-4000-8000-000000500030",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Clothes, common",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500031",
+      "revisionId": "51e00000-0000-4000-8000-000000500031",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Clothes, costume",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500032",
+      "revisionId": "51e00000-0000-4000-8000-000000500032",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Clothes, fine",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500033",
+      "revisionId": "51e00000-0000-4000-8000-000000500033",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Crowbar",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500034",
+      "revisionId": "51e00000-0000-4000-8000-000000500034",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Hammer",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500035",
+      "revisionId": "51e00000-0000-4000-8000-000000500035",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Ink (1 ounce bottle)",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500036",
+      "revisionId": "51e00000-0000-4000-8000-000000500036",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Ink pen",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500037",
+      "revisionId": "51e00000-0000-4000-8000-000000500037",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Lamp",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500038",
+      "revisionId": "51e00000-0000-4000-8000-000000500038",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Lantern, hooded",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500039",
+      "revisionId": "51e00000-0000-4000-8000-000000500039",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Mess kit",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500040",
+      "revisionId": "51e00000-0000-4000-8000-000000500040",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Oil (flask)",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500041",
+      "revisionId": "51e00000-0000-4000-8000-000000500041",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Paper (one sheet)",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500042",
+      "revisionId": "51e00000-0000-4000-8000-000000500042",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Parchment (one sheet)",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500043",
+      "revisionId": "51e00000-0000-4000-8000-000000500043",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Perfume (vial)",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500044",
+      "revisionId": "51e00000-0000-4000-8000-000000500044",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Piton",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500045",
+      "revisionId": "51e00000-0000-4000-8000-000000500045",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Rations (1 day)",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500046",
+      "revisionId": "51e00000-0000-4000-8000-000000500046",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Rope, hempen (50 feet)",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500047",
+      "revisionId": "51e00000-0000-4000-8000-000000500047",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Sealing wax",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500048",
+      "revisionId": "51e00000-0000-4000-8000-000000500048",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Soap",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500049",
+      "revisionId": "51e00000-0000-4000-8000-000000500049",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Tinderbox",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500050",
+      "revisionId": "51e00000-0000-4000-8000-000000500050",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Torch",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500051",
+      "revisionId": "51e00000-0000-4000-8000-000000500051",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Waterskin",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 69,
+          "end": 69
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500052",
+      "revisionId": "51e00000-0000-4000-8000-000000500052",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "String (10 feet)",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 70,
+          "end": 70
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500053",
+      "revisionId": "51e00000-0000-4000-8000-000000500053",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Alms box",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 70,
+          "end": 70
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500054",
+      "revisionId": "51e00000-0000-4000-8000-000000500054",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Incense (block)",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 70,
+          "end": 70
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500055",
+      "revisionId": "51e00000-0000-4000-8000-000000500055",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Censer",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 70,
+          "end": 70
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500056",
+      "revisionId": "51e00000-0000-4000-8000-000000500056",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Vestments",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 70,
+          "end": 70
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500057",
+      "revisionId": "51e00000-0000-4000-8000-000000500057",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Sand (little bag)",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 70,
+          "end": 70
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500058",
+      "revisionId": "51e00000-0000-4000-8000-000000500058",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Knife, small",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 70,
+          "end": 70
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500059",
+      "revisionId": "51e00000-0000-4000-8000-000000500059",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Thieves' tools",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 70,
+          "end": 70
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500060",
+      "revisionId": "51e00000-0000-4000-8000-000000500060",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Disguise kit",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 70,
+          "end": 70
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500061",
+      "revisionId": "51e00000-0000-4000-8000-000000500061",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Bagpipes",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 70,
+          "end": 70
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500062",
+      "revisionId": "51e00000-0000-4000-8000-000000500062",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Drum",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 70,
+          "end": 70
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500063",
+      "revisionId": "51e00000-0000-4000-8000-000000500063",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Dulcimer",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 70,
+          "end": 70
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500064",
+      "revisionId": "51e00000-0000-4000-8000-000000500064",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Flute",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 70,
+          "end": 70
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500065",
+      "revisionId": "51e00000-0000-4000-8000-000000500065",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Lute",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 70,
+          "end": 70
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500066",
+      "revisionId": "51e00000-0000-4000-8000-000000500066",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Lyre",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 70,
+          "end": 70
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500067",
+      "revisionId": "51e00000-0000-4000-8000-000000500067",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Horn",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 70,
+          "end": 70
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500068",
+      "revisionId": "51e00000-0000-4000-8000-000000500068",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Pan flute",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 70,
+          "end": 70
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500069",
+      "revisionId": "51e00000-0000-4000-8000-000000500069",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Shawm",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 70,
+          "end": 70
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500070",
+      "revisionId": "51e00000-0000-4000-8000-000000500070",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Viol",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 70,
+          "end": 70
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500071",
+      "revisionId": "51e00000-0000-4000-8000-000000500071",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Incense stick",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 61,
+          "end": 61
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500072",
+      "revisionId": "51e00000-0000-4000-8000-000000500072",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Prayer book",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 61,
+          "end": 61
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500073",
+      "revisionId": "51e00000-0000-4000-8000-000000500073",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Prayer wheel",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 61,
+          "end": 61
+        }
+      },
+      "status": "published",
+      "summary": "Adventuring gear."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500101",
+      "revisionId": "51e00000-0000-4000-8000-000000500101",
+      "schemaVersion": 13,
+      "kind": "item",
+      "name": "Burglar's pack",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 70,
+          "end": 70
+        }
+      },
+      "status": "published",
+      "summary": "Equipment pack.",
+      "effects": [
+        {
+          "type": "item",
+          "id": "item",
+          "contains": [
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500021"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500022"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500052"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500024"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500027"
+              },
+              "quantity": 5
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500033"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500034"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500044"
+              },
+              "quantity": 10
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500038"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500040"
+              },
+              "quantity": 2
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500045"
+              },
+              "quantity": 5
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500049"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500051"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500046"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500102",
+      "revisionId": "51e00000-0000-4000-8000-000000500102",
+      "schemaVersion": 13,
+      "kind": "item",
+      "name": "Diplomat's pack",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 70,
+          "end": 70
+        }
+      },
+      "status": "published",
+      "summary": "Equipment pack.",
+      "effects": [
+        {
+          "type": "item",
+          "id": "item",
+          "contains": [
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500029"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500028"
+              },
+              "quantity": 2
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500032"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500035"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500036"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500037"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500040"
+              },
+              "quantity": 2
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500041"
+              },
+              "quantity": 5
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500043"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500047"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500048"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500103",
+      "revisionId": "51e00000-0000-4000-8000-000000500103",
+      "schemaVersion": 13,
+      "kind": "item",
+      "name": "Dungeoneer's pack",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 70,
+          "end": 70
+        }
+      },
+      "status": "published",
+      "summary": "Equipment pack.",
+      "effects": [
+        {
+          "type": "item",
+          "id": "item",
+          "contains": [
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500021"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500033"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500034"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500044"
+              },
+              "quantity": 10
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500050"
+              },
+              "quantity": 10
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500049"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500045"
+              },
+              "quantity": 10
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500051"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500046"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500104",
+      "revisionId": "51e00000-0000-4000-8000-000000500104",
+      "schemaVersion": 13,
+      "kind": "item",
+      "name": "Entertainer's pack",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 70,
+          "end": 70
+        }
+      },
+      "status": "published",
+      "summary": "Equipment pack.",
+      "effects": [
+        {
+          "type": "item",
+          "id": "item",
+          "contains": [
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500021"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500023"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500031"
+              },
+              "quantity": 2
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500027"
+              },
+              "quantity": 5
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500045"
+              },
+              "quantity": 5
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500051"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500060"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500105",
+      "revisionId": "51e00000-0000-4000-8000-000000500105",
+      "schemaVersion": 13,
+      "kind": "item",
+      "name": "Explorer's pack",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 70,
+          "end": 70
+        }
+      },
+      "status": "published",
+      "summary": "Equipment pack.",
+      "effects": [
+        {
+          "type": "item",
+          "id": "item",
+          "contains": [
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500021"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500023"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500039"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500049"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500050"
+              },
+              "quantity": 10
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500045"
+              },
+              "quantity": 10
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500051"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500046"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500106",
+      "revisionId": "51e00000-0000-4000-8000-000000500106",
+      "schemaVersion": 13,
+      "kind": "item",
+      "name": "Priest's pack",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 70,
+          "end": 70
+        }
+      },
+      "status": "published",
+      "summary": "Equipment pack.",
+      "effects": [
+        {
+          "type": "item",
+          "id": "item",
+          "contains": [
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500021"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500025"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500027"
+              },
+              "quantity": 10
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500049"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500053"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500054"
+              },
+              "quantity": 2
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500055"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500056"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500045"
+              },
+              "quantity": 2
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500051"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000500107",
+      "revisionId": "51e00000-0000-4000-8000-000000500107",
+      "schemaVersion": 13,
+      "kind": "item",
+      "name": "Scholar's pack",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 70,
+          "end": 70
+        }
+      },
+      "status": "published",
+      "summary": "Equipment pack.",
+      "effects": [
+        {
+          "type": "item",
+          "id": "item",
+          "contains": [
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500021"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500026"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500035"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500036"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500042"
+              },
+              "quantity": 10
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500057"
+              }
+            },
+            {
+              "item": {
+                "contentId": "51c00000-0000-4000-8000-000000500058"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

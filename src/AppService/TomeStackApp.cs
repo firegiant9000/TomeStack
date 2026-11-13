@@ -67,6 +67,8 @@ public sealed partial class TomeStackApp : IDisposable
         "TomeStack.Content.srd-5.1-barbarian-v12.json", "TomeStack.Content.srd-5.2.1-barbarian-v12.json",
         "TomeStack.Content.srd-5.1-rogue-v12.json", "TomeStack.Content.srd-5.2.1-rogue-v12.json",
         "TomeStack.Content.srd-5.1-monk-v12.json", "TomeStack.Content.srd-5.2.1-monk-v12.json",
+        // Wave 3 G6: the 2014-rules gear catalogue (items and equipment packs); the creation guides that name them come after.
+        "TomeStack.Content.srd-5.1-gear.json",
     ];
 
     /// <summary>
