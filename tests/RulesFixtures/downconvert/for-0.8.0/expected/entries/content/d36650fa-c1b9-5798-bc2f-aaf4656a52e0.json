@@ -1,0 +1,35 @@
+{
+  "contentId": "c1080000-0000-4000-8000-0000000000c6",
+  "revisionId": "d36650fa-c1b9-5798-bc2f-aaf4656a52e0",
+  "schemaVersion": 12,
+  "kind": "feature",
+  "name": "Compat Kit Mark",
+  "rulesFamilies": [
+    "srd-5.1"
+  ],
+  "provenance": {
+    "sourceId": "c1080000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 6
+    }
+  },
+  "status": "published",
+  "summary": "A v13 test feature with advantage on the character\u0027s attack rolls.",
+  "effects": [
+    {
+      "type": "rollMode",
+      "id": "mark-attack",
+      "target": "attack",
+      "mode": "advantage",
+      "tags": [
+        "all"
+      ],
+      "automation": "automatic",
+      "timing": "always"
+    }
+  ],
+  "downConvertedFrom": {
+    "revisionId": "c1080000-0000-4000-8000-0000000000e6",
+    "schemaVersion": 13
+  }
+}

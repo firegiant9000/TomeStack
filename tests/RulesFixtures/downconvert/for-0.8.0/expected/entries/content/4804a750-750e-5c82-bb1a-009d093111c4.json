@@ -1,0 +1,43 @@
+{
+  "contentId": "c1080000-0000-4000-8000-0000000000c4",
+  "revisionId": "4804a750-750e-5c82-bb1a-009d093111c4",
+  "schemaVersion": 12,
+  "kind": "class",
+  "name": "Compat Path of Kits",
+  "rulesFamilies": [
+    "srd-5.1"
+  ],
+  "provenance": {
+    "sourceId": "c1080000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 4
+    }
+  },
+  "status": "published",
+  "summary": "A v13 test class that gives its subclass at level 1.",
+  "effects": [
+    {
+      "type": "hitDie",
+      "id": "path-hit-die",
+      "die": 8,
+      "automation": "automatic",
+      "timing": "always"
+    },
+    {
+      "type": "grant",
+      "id": "grant-walker",
+      "grant": "content",
+      "content": {
+        "contentId": "c1080000-0000-4000-8000-0000000000c5",
+        "revisionId": "dfb86ae3-bd02-5992-aac2-1348d086188f"
+      },
+      "level": 1,
+      "automation": "automatic",
+      "timing": "always"
+    }
+  ],
+  "downConvertedFrom": {
+    "revisionId": "c1080000-0000-4000-8000-0000000000e4",
+    "schemaVersion": 13
+  }
+}

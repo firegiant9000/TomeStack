@@ -16,7 +16,7 @@ public class DownConversionGoldenTests
 {
     private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
-    public static TheoryData<string, string> Folders => new() { { "for-0.7.0", "0.7.0" }, { "for-0.6.0", "0.6.0" }, { "for-0.5.0", "0.5.0" } };
+    public static TheoryData<string, string> Folders => new() { { "for-0.8.0", "0.8.0" }, { "for-0.7.0", "0.7.0" }, { "for-0.6.0", "0.6.0" }, { "for-0.5.0", "0.5.0" } };
 
     private static string SourceFolder(string folder)
     {
@@ -167,12 +167,15 @@ public class DownConversionGoldenTests
             // armor class bonus in a revision that is lowered (0.6.0: the cascade copy "Compat Tide Mark"; 0.5.0: the v11 revision
             // going straight to v9), and a class level (0.6.0: the library's "Compat Path of Tides", a cascade copy; 0.5.0: a class of its own).
             // 0.7.0: the cascade copy "Compat Echo Mark" and the library's "Compat Path of Echoes", like 0.6.0.
-            var bonusRevision = Guid.Parse(target switch { "0.7.0" => "c1070000-0000-4000-8000-0000000000e8", "0.6.0" => "c1060000-0000-4000-8000-0000000000e8", _ => "c1050000-0000-4000-8000-0000000000e4" });
+            // 0.8.0: the same with "Compat Kit Mark" and "Compat Path of Kits" (v13 revisions lowered to v12).
+            var bonusRevision = Guid.Parse(target switch { "0.8.0" => "c1080000-0000-4000-8000-0000000000e6", "0.7.0" => "c1070000-0000-4000-8000-0000000000e8", "0.6.0" => "c1060000-0000-4000-8000-0000000000e8", _ => "c1050000-0000-4000-8000-0000000000e4" });
             var ward = new ModifierEffect { Id = "mark-ac", Operation = ModifierOperation.Bonus, Target = FieldIds.ArmorClass, Value = "1" };
             ContentReference classReference;
             List<ContentRevision> revisions = [.. pack.Revisions.Where(r => !BlockingInPacks.Contains(r.RevisionId))
                 .Select(r => r.RevisionId == bonusRevision ? r with { Effects = [.. r.Effects, ward] } : r)];
-            if (target == "0.7.0")
+            if (target == "0.8.0")
+                classReference = new(Guid.Parse("c1080000-0000-4000-8000-0000000000c4"), Guid.Parse("c1080000-0000-4000-8000-0000000000e4"));
+            else if (target == "0.7.0")
                 classReference = new(Guid.Parse("c1070000-0000-4000-8000-0000000000c6"), Guid.Parse("c1070000-0000-4000-8000-0000000000e6"));
             else if (target == "0.6.0")
                 classReference = new(Guid.Parse("c1060000-0000-4000-8000-0000000000c6"), Guid.Parse("c1060000-0000-4000-8000-0000000000e6"));
@@ -207,7 +210,7 @@ public class DownConversionGoldenTests
             character = character with
             {
                 // Tide Mark is pinned directly as well: reached only through class and subclass grants, its bonus did not reach the sheet.
-                Pins = [.. character.Pins.Where(p => p.RevisionId != BundledRevision && !BlockingInPacks.Contains(p.RevisionId)).Append(new ContentReference(Guid.Parse(target switch { "0.7.0" => "c1070000-0000-4000-8000-0000000000c8", "0.6.0" => "c1060000-0000-4000-8000-0000000000c8", _ => "c1050000-0000-4000-8000-0000000000c4" }), bonusRevision)).DistinctBy(p => p.RevisionId)],
+                Pins = [.. character.Pins.Where(p => p.RevisionId != BundledRevision && !BlockingInPacks.Contains(p.RevisionId)).Append(new ContentReference(Guid.Parse(target switch { "0.8.0" => "c1080000-0000-4000-8000-0000000000c6", "0.7.0" => "c1070000-0000-4000-8000-0000000000c8", "0.6.0" => "c1060000-0000-4000-8000-0000000000c8", _ => "c1050000-0000-4000-8000-0000000000c4" }), bonusRevision)).DistinctBy(p => p.RevisionId)],
                 Classes = [new ClassLevel(classReference, 1)],
             };
             id = app.App.SaveCharacter(character).Character.Id;
