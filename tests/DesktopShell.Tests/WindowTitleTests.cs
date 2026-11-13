@@ -66,6 +66,22 @@ public class WindowTitleTests
     }
 
     [Fact]
+    public void An_unpaired_high_surrogate_at_the_cut_is_kept()
+    {
+        var result = WindowTitle.From(new string('a', 199) + "\uD83D" + "bbb");
+
+        Assert.Equal(200, result.Length);
+    }
+
+    [Fact]
+    public void An_unpaired_low_surrogate_at_the_cut_is_kept()
+    {
+        var result = WindowTitle.From(new string('a', 199) + "\uDC09" + "bbb");
+
+        Assert.Equal(200, result.Length);
+    }
+
+    [Fact]
     public void A_surrogate_pair_ending_exactly_at_the_cut_is_kept()
     {
         var title = new string('a', 198) + "\U0001F409" + "bbb";

@@ -7,7 +7,7 @@ public static class WindowTitle
     private const int MaxLength = 200;
 
     /// <summary>
-    /// The trimmed document title, cut to 200 characters; "TomeStack" when the title is null or blank.
+    /// The trimmed document title, cut to at most 200 characters, never between a surrogate pair; "TomeStack" when the title is null or blank.
     /// </summary>
     public static string From(string? documentTitle)
     {
