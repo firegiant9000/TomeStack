@@ -18,6 +18,8 @@ namespace TomeStack.AppService.Tests;
 /// alias (Record, a union of literals) counts as matched with no field check.
 /// A type behind a custom converter has no object contract to read: an abstract one (<c>Effect</c>) has its concrete subtypes walked, each checked against the TS union
 /// member with the same discriminator (<c>TypeName</c> against <c>type: 'x'</c>), with the discriminator the converter writes added to its names.
+/// A typed command whose result root (after unwrapping Task, collections and nullables) is not a TomeStack type, primitive, enum or leaf fails instead of being skipped.
+/// An "inline in" UnmatchedTypes entry goes stale when types.ts gains a named interface or opaque alias of that name (InlineNameClashes lists the reasoned exceptions).
 /// Any other non-object contract must be listed in <c>OpaqueConverterTypes</c> with a reason, or the walk fails instead of skipping it.
 /// </summary>
 public sealed partial class ContractParityTests
@@ -78,6 +80,12 @@ public sealed partial class ContractParityTests
         ["SpellSummary"] = "inline in ContentOption.spell",
         ["TextLine"] = "inline in TextChange.lines (the ImportWorker's TextLine shares the name; its TS shape is StoredTextLine and is not compared)",
         ["ToggleRef"] = "inline in Effect (toggle references)",
+    };
+
+    // "inline in" entries whose TS name is already taken by a different, named TS type (exempt from the inline staleness check; C# type name -> why).
+    private static readonly Dictionary<string, string> InlineNameClashes = new()
+    {
+        ["ItemChargeRecovery"] = "TS's ItemChargeRecovery is the ItemChargeRecoveryInfo shape (NameMap); the Effect's own recovery object is a different, inline type",
     };
 
     // Types behind a custom converter that the walk deliberately does not enter (C# type name -> why). A type with a custom
@@ -174,6 +182,8 @@ public sealed partial class ContractParityTests
         {
             if (!byName.TryGetValue(key, out var types)) stale.Add($"UnmatchedTypes {key}: no longer walked");
             else if (types.Any(t => TsFieldsOf(walk, t) is not null || IsTsOpaque(walk, t))) stale.Add($"UnmatchedTypes {key}: TS now has it");
+            else if (!InlineNameClashes.ContainsKey(key) && types.Any(t => IsInline(t) && (walk.Ts.ContainsKey(TsNameOf(t)) || walk.TsOpaque.Contains(TsNameOf(t)))))
+                stale.Add($"UnmatchedTypes {key}: TS now declares a named type {key}, so \"inline in\" no longer holds");
         }
         foreach (var key in KnownGaps.Keys)
         {
@@ -198,6 +208,22 @@ public sealed partial class ContractParityTests
         var missing = walk.Commands.Where(c => !walk.TypedCommands.Contains(c) && !UntypedCommands.ContainsKey(c)).Order(StringComparer.Ordinal).ToList();
         Assert.True(missing.Count == 0, "Commands with no typed result and no UntypedCommands entry: " + string.Join(", ", missing));
         Assert.True(walk.TypedCommands.Count > 50, "The Execute parser found suspiciously few typed commands.");
+    }
+
+    [Fact]
+    public void Typed_command_roots_are_walkable()
+    {
+        var (_, typed) = DispatcherResultTypes();
+        var bad = UnwalkableRoots(typed, UntypedCommands.Keys.ToHashSet());
+        Assert.True(bad.Count == 0, "Typed commands whose result type the walk cannot enter (return a TomeStack DTO, or add an UntypedCommands entry): " + string.Join(", ", bad));
+        // The check itself: a ValueTuple root is flagged, Task/ValueTask wrappers are looked through.
+        var probe = new Dictionary<string, List<Type>>
+        {
+            ["a.tuple"] = [typeof((int, string))],
+            ["a.task"] = [typeof(Task<(int, string)>)],
+            ["a.ok"] = [typeof(ValueTask<List<CharacterView>>), typeof(Task)],
+        };
+        Assert.Equal(["a.task: " + typeof((int, string)), "a.tuple: " + typeof((int, string))], UnwalkableRoots(probe, new HashSet<string>()));
     }
 
     [Fact]
@@ -349,6 +375,11 @@ public sealed partial class ContractParityTests
         while (true)
         {
             if (Nullable.GetUnderlyingType(type) is { } inner) { type = inner; continue; }
+            if (type.IsGenericType && (type.GetGenericTypeDefinition() == typeof(Task<>) || type.GetGenericTypeDefinition() == typeof(ValueTask<>)))
+            {
+                type = type.GetGenericArguments()[0];
+                continue;
+            }
             if (type.IsArray) { type = type.GetElementType()!; continue; }
             if (type.IsGenericType)
             {
@@ -363,6 +394,15 @@ public sealed partial class ContractParityTests
             return type;
         }
     }
+
+    /// <summary>The typed commands whose result root cannot be walked (not a TomeStack type, primitive, enum, string or other leaf), each with its unwrapped type.</summary>
+    private static List<string> UnwalkableRoots(IReadOnlyDictionary<string, List<Type>> typed, IReadOnlySet<string> untyped) =>
+        typed.Where(kv => !untyped.Contains(kv.Key))
+            .SelectMany(kv => kv.Value.Select(t => (Command: kv.Key, Type: Unwrap(t))))
+            .Where(x => x.Type != typeof(Task) && x.Type != typeof(ValueTask) && !IsWalkable(x.Type) && !x.Type.IsPrimitive && !x.Type.IsEnum && !Leaf.Contains(x.Type))
+            .Select(x => $"{x.Command}: {x.Type}")
+            .Order(StringComparer.Ordinal)
+            .ToList();
 
     private static bool IsWalkable(Type type) =>
         !type.IsPrimitive && !type.IsEnum && !Leaf.Contains(type) && type.Namespace is { } ns && ns.StartsWith("TomeStack", StringComparison.Ordinal);
