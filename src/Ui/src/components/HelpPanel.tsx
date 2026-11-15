@@ -11,10 +11,13 @@ interface Props {
 }
 
 const glossary: [term: string, meaning: string][] = [
-  ['Draft', 'A character or homebrew entry you saved part-way to finish later. A draft changes nothing until you finish it.'],
-  ['version', 'The release of TomeStack (for example 0.8.1) that made or can open a file, or one saved state of a homebrew entry.'],
+  [
+    'Draft',
+    'A character or homebrew entry saved part-way. A draft changes nothing until you finish it; a homebrew draft is not available to characters until you make it available.',
+  ],
+  ['version', 'A numbered release of TomeStack (for example 0.8.1), or one saved copy of a homebrew entry. Characters keep the version they use until you update them.'],
   ['rules (2014/2024)', 'The two rule sets TomeStack knows. Each character uses one, and the two are never mixed.'],
-  ['campaign', 'A list of the rules and books a group allows. It marks what is outside it and never changes a number.'],
+  ['campaign', 'A list of the books and rules a group allows. The builder marks what falls outside it as unavailable; it never changes a number already worked out.'],
   ['TomeStack file', 'A file you save to share a character, homebrew or a campaign, or to open on another computer.'],
   ['Why?', 'A button under a number that shows, step by step, where the number came from.'],
   ['You apply this', 'TomeStack shows the rule and the numbers; you decide when it applies and spend or track it yourself.'],

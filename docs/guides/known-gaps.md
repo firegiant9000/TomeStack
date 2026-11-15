@@ -20,7 +20,7 @@ TomeStack does not do everything yet. Where it falls short, it shows the rule as
 - Saving throws, areas and ranges are shown as text. Nothing rolls a target's save for you or places an area.
 - Rolls for other creatures, and a view for the person running the game, are not planned.
 
-## Studio and notes
+## Homebrew and notes
 
-- Some homebrew edits need a second step. For example, a roll from another entry can be stored but not yet chosen in the studio.
+- Some homebrew edits need a second step. For example, a roll from another entry can be stored but not yet chosen in Homebrew.
 - Gap notes cannot be exported as text yet. The print view can include them.
