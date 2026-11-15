@@ -295,9 +295,9 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
 
   return (
     <section className="panel" aria-labelledby="studio-heading">
-      <h2 id="studio-heading" tabIndex={-1} ref={heading}>
+      <h1 id="studio-heading" tabIndex={-1} ref={heading}>
         Homebrew
-      </h2>
+      </h1>
       <p className="hint">
         Write your own classes, subclasses, species, backgrounds, features, feats, spells and items. Everything starts as a draft; making it available to
         characters checks it and creates a new version. Characters keep using the old version until you update them.
@@ -352,7 +352,7 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
 
       {source && (
         <section aria-labelledby="entries-heading">
-          <h3 id="entries-heading">Content in {source.title}</h3>
+          <h2 id="entries-heading">Content in {source.title}</h2>
           {entries.length === 0 ? (
             <p className="hint">Nothing yet.</p>
           ) : (
@@ -558,7 +558,7 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
 
       {published && (
         <section aria-labelledby="published-heading" className="play-panel">
-          <h3 id="published-heading">{published.name} is available to characters</h3>
+          <h2 id="published-heading">{published.name} is available to characters</h2>
           {published.result.affected.filter((a) => a.pinned.revisionId !== published.result.published.revisionId).length === 0 ? (
             <p>No character uses an older version of it.</p>
           ) : (
@@ -635,7 +635,7 @@ function SourcePicker(props: {
 
   return (
     <section aria-labelledby="sources-heading">
-      <h3 id="sources-heading">Books and notebooks</h3>
+      <h2 id="sources-heading">Books and notebooks</h2>
       {props.sources.length > 0 && (
         <label className="field">
           Book or notebook
@@ -1085,9 +1085,9 @@ function EntryEditor(props: {
   const title = `${props.initial.name ? `Edit ${props.initial.name}` : `New ${props.initial.kind}`}`;
   return (
     <section aria-labelledby="editor-heading" className="play-panel">
-      <h3 id="editor-heading" tabIndex={-1} ref={heading}>
+      <h2 id="editor-heading" tabIndex={-1} ref={heading}>
         {title}
-      </h3>
+      </h2>
       {/* While the skill-choice helper publishes, the whole editor is disabled, Close included (review fix). */}
       <fieldset disabled={classBusy} className="bare-fieldset">
       <label className="field">
@@ -1383,7 +1383,7 @@ function EntryEditor(props: {
 
       {props.designFeedback && (
         <section aria-labelledby="feedback-heading" className="effect-editor">
-          <h4 id="feedback-heading">Design feedback</h4>
+          <h3 id="feedback-heading">Design feedback</h3>
           <p className="hint">Opinions, not errors: nothing here blocks making content available or changes a character.</p>
           <button
             type="button"
@@ -1425,7 +1425,7 @@ function EntryEditor(props: {
       )}
 
       <section aria-labelledby="relations-heading" className="effect-editor">
-        <h4 id="relations-heading">Relationships</h4>
+        <h3 id="relations-heading">Relationships</h3>
         <p className="hint">
           What this {revision.kind} brings in, level by level: features, choices, resources and the rolls and recoveries that use them. Enter on a
           rule of this entry shows it above.

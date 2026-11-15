@@ -57,7 +57,7 @@ export function ClassBasicsEditor(props: {
 
   return (
     <section aria-labelledby="class-basics-heading" className="effect-editor">
-      <h4 id="class-basics-heading">Class basics</h4>
+      <h3 id="class-basics-heading">Class basics</h3>
       <fieldset disabled={props.disabled} id="class-basics-die" tabIndex={-1}>
         <legend>Hit die and saving throws</legend>
         <label className="field">

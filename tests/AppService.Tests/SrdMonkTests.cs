@@ -534,7 +534,8 @@ public class SrdMonkTests
         foreach (var file in TomeStackApp.BundledPacks.Except(monkFiles))
         {
             var pack = TomeStackApp.LoadBundledPack(file);
-            var json = TempApp.Json(pack.Revisions);
+            // A creation guide (ADR-024) only advises the builder and changes no calculation, so it may name the Monk (guideFor).
+            var json = TempApp.Json(pack.Revisions.Where(r => r.Kind != ContentKind.CreationGuide).ToList());
             Assert.DoesNotContain(monkGuids, g => json.Contains(g, StringComparison.OrdinalIgnoreCase));
             var monkContent = monkRevisions.Select(r => r.ContentId).ToHashSet();
             Assert.DoesNotContain(pack.Revisions, r => r.ExtendsChoice is { } e && monkContent.Contains(e.ContentId));

@@ -246,7 +246,7 @@ export function PrintView({ view, onError, onClose }: Props) {
   return (
     <section className={options.largePrint ? 'print-sheet print-large' : 'print-sheet'} role="region" aria-label="Print preview" id="print-preview" ref={section}>
       <div className="print-controls">
-        <h3 id="print-heading" tabIndex={-1} ref={heading}>Print character</h3>
+        <h2 id="print-heading" tabIndex={-1} ref={heading}>Print character</h2>
         <p className="hint">A printable backup of this sheet. It prints from this computer; nothing is sent anywhere.</p>
         <fieldset>
           <legend>Print</legend>
@@ -294,7 +294,7 @@ export function PrintView({ view, onError, onClose }: Props) {
       <div className={combat ? 'combat-scroll' : undefined}>
       <div ref={pageEl} className={combat ? 'combat-page' : undefined} style={combat ? { fontSize: `${(16 * printPercent) / 100}px` } : undefined}>
       <header>
-        <h3 className="print-title">{character.name}</h3>
+        <h2 className="print-title">{character.name}</h2>
         <p>
           {rulesLabel(character.rulesFamily)} · Level {character.level}
           {character.classes.length > 0 &&
@@ -449,7 +449,7 @@ export function PrintView({ view, onError, onClose }: Props) {
             )}
             {(sheet.toggles ?? []).length > 0 && (
               <div className="card-block" ref={togglesEl} hidden={!fit.toggles}>
-                <h4>Toggles</h4>
+                <h3>Toggles</h3>
                 <ul className="card-toggles">
                   {sheet.toggles!.map((t) => (
                     <li key={`${t.content.revisionId}-${t.effectId}`}>
@@ -460,7 +460,7 @@ export function PrintView({ view, onError, onClose }: Props) {
               </div>
             )}
             <div className="card-block" ref={conditionsEl} hidden={!fit.conditions}>
-              <h4>Conditions</h4>
+              <h3>Conditions</h3>
               <ul className="card-lines" aria-hidden="true">
                 {[0, 1, 2, 3].map((i) => (
                   <li key={i} className="blank-line" />
@@ -562,7 +562,7 @@ export function PrintView({ view, onError, onClose }: Props) {
 
       {caster && (
         <div>
-          <h4>Spells</h4>
+          <h3>Spells</h3>
           {(sheet.spellSlots ?? []).length > 0 && (
             <p>Spell slots: {sheet.spellSlots!.map((s) => `level ${s.level}: ${s.remaining} of ${s.maximum}`).join(', ')}</p>
           )}
@@ -590,7 +590,7 @@ export function PrintView({ view, onError, onClose }: Props) {
       )}
 
       <div>
-        <h4>Features</h4>
+        <h3>Features</h3>
         {(sheet.features ?? []).map((f) => (
           <div key={f.content.revisionId} className="print-feature">
             <p>
@@ -608,7 +608,7 @@ export function PrintView({ view, onError, onClose }: Props) {
 
       {character.overrides.length > 0 && (
         <div>
-          <h4>Numbers set by hand</h4>
+          <h3>Numbers set by hand</h3>
           <ul>
             {character.overrides.map((o) => (
               <li key={o.field}>
@@ -621,7 +621,7 @@ export function PrintView({ view, onError, onClose }: Props) {
 
       {includeDetails && printedDetails.length > 0 && (
         <div>
-          <h4>Details</h4>
+          <h3>Details</h3>
           <dl className="print-details">
             {printedDetails.map(([label, text]) => (
               <div key={label}>
@@ -635,7 +635,7 @@ export function PrintView({ view, onError, onClose }: Props) {
 
       {includeSessionNotes && (character.notes ?? []).length > 0 && (
         <div>
-          <h4>Session notes</h4>
+          <h3>Session notes</h3>
           <ul>
             {[...character.notes!].sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt)).map((n) => (
               <li key={n.id}>
@@ -648,7 +648,7 @@ export function PrintView({ view, onError, onClose }: Props) {
 
       {includeNotes && (
         <div>
-          <h4>Gap notes</h4>
+          <h3>Gap notes</h3>
           {notes === undefined ? (
             <p>Loading…</p>
           ) : notes.length === 0 ? (

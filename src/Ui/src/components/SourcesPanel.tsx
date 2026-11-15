@@ -176,7 +176,7 @@ function SourcePackForm({ sources, onError, onStatus }: { sources: SourceRecord[
 
   return (
     <section className="play-panel" aria-labelledby="source-pack-heading">
-      <h3 id="source-pack-heading">Share sources as a TomeStack file</h3>
+      <h2 id="source-pack-heading">Share sources as a TomeStack file</h2>
       <p className="hint">
         A TomeStack file carries the published content of sources you marked as shareable, and nothing else: no characters,
         drafts, PDFs or text read from PDFs. Whoever imports it sees your statement that the sources are your own work.
@@ -327,7 +327,7 @@ export function SourcesPanel({ onError, onStatus, onOpenStudio }: Props & { onOp
 
   return (
     <section className="panel" aria-labelledby="sources-page-heading">
-      <h2 id="sources-page-heading">Books and PDFs</h2>
+      <h1 id="sources-page-heading">Books and PDFs</h1>
       <p className="hint">
         Attach your own PDF of a source to open cited pages from features. PDFs stay on this computer: exports never include
         them. A copy is kept in TomeStack&apos;s data folder unless you link the file where it is.
@@ -339,7 +339,7 @@ export function SourcesPanel({ onError, onStatus, onOpenStudio }: Props & { onOp
           const pdf = attachments[source.id];
           return (
             <li key={source.id} className="resource" aria-label={source.title}>
-              <h3>{source.title}</h3>
+              <h2>{source.title}</h2>
               <p className="hint">
                 {source.publisher} · {source.license} · {source.redistributable ? 'may be shared' : 'not shared in exports'} ·{' '}
                 {source.rulesFamilies.map((f) => rulesLabel(f)).join(', ')}

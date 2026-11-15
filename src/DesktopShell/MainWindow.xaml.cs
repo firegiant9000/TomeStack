@@ -140,6 +140,7 @@ public partial class MainWindow : Window
             if (!e.IsSuccess)
                 FinishSmoke(false, $"navigation-failed:{e.WebErrorStatus}");
         };
+        core.DocumentTitleChanged += (_, _) => Title = WindowTitle.From(core.DocumentTitle);
         core.WebMessageReceived += OnWebMessageReceived;
         core.ProcessFailed += (_, e) =>
         {

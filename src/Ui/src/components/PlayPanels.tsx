@@ -180,10 +180,10 @@ export function HitPointsPanel({
 
   return (
     <section aria-labelledby="hp-heading" className="play-panel">
-      <h3 id="hp-heading" tabIndex={-1}>
+      <h2 id="hp-heading" tabIndex={-1}>
         Hit points: {hp.current} of {hp.maximum}
         {hp.temporary > 0 ? `, ${hp.temporary} temporary` : ''}
-      </h3>
+      </h2>
       <form className="inline-form" onSubmit={submit}>
         <label className="field">
           Amount
@@ -299,9 +299,9 @@ export function DeathSavesPanel({
   const state = saves.failures >= 3 ? ' (dead)' : saves.successes >= 3 ? ' (stable)' : '';
   return (
     <section aria-labelledby="death-saves-heading" className="play-panel">
-      <h3 id="death-saves-heading">
+      <h2 id="death-saves-heading">
         Death saving throws: {saves.successes} of 3 successes, {saves.failures} of 3 failures{state}
-      </h3>
+      </h2>
       {hp.current === 0 && (
         <div className="actions">
           <button type="button" onClick={() => roll({ deathSave: true })}>
@@ -366,10 +366,10 @@ export function ConcentrationPanel({ view, act, roll }: { view: CharacterView; a
   const saveCon = view.sheet.fields.find((f) => f.field === 'save.con');
   return (
     <section aria-labelledby="concentration-heading" className="play-panel">
-      <h3 id="concentration-heading" tabIndex={-1} ref={heading}>
+      <h2 id="concentration-heading" tabIndex={-1} ref={heading}>
         Concentration: {con.name}
         {pending ? `, Constitution saving throw DC ${con.pendingSaveDc} pending` : ''}
-      </h3>
+      </h2>
       <div className="actions">
         {pending && (
           <>
@@ -400,7 +400,7 @@ export function ConditionsPanel({ view, act }: { view: CharacterView; act: Act }
   const immune = new Set((view.sheet.conditionImmunities ?? []).map((i) => i.condition));
   return (
     <section aria-labelledby="conditions-heading" className="play-panel">
-      <h3 id="conditions-heading">Conditions</h3>
+      <h2 id="conditions-heading">Conditions</h2>
       <fieldset className="conditions">
         <legend>Conditions (reminders; a condition you are immune to has no effect)</legend>
         {Object.entries(conditionLabels).map(([key, label]) => (
@@ -428,11 +428,11 @@ export function ConditionsPanel({ view, act }: { view: CharacterView; act: Act }
   );
 }
 
-export function ResourceCard({ resource, act, level = 4 }: { resource: ResourceValue; act: Act; level?: 4 | 5 }) {
+export function ResourceCard({ resource, act, level = 3 }: { resource: ResourceValue; act: Act; level?: 3 | 4 }) {
   const key = { contentId: resource.content.contentId, resourceId: resource.resourceId };
   const tracked = resource.current !== undefined && resource.maximum !== undefined;
   const headingId = `resource-${resource.content.revisionId}-${resource.resourceId}`;
-  const Heading = level === 4 ? 'h4' : 'h5';
+  const Heading = level === 3 ? 'h3' : 'h4';
   // D43 slice 3: the amount box spends the chosen number in one confirmed change (1 up to what is left); "Spend 1" stays for one click.
   const [amount, setAmount] = useState('1');
   const chosen = Number(amount);
@@ -527,7 +527,7 @@ export function ClassColumnsPanel({ view }: { view: CharacterView }) {
   if (scales.length === 0) return null;
   return (
     <section aria-labelledby="class-columns-heading" className="play-panel">
-      <h3 id="class-columns-heading">Class columns</h3>
+      <h2 id="class-columns-heading">Class columns</h2>
       <ul className="resources">
         {scales.map((s) => (
           <li key={`${s.class.revisionId}-${s.scaleId}`} className="resource">
@@ -550,20 +550,20 @@ export function ResourcesPanel({ view, act }: { view: CharacterView; act: Act })
   if (resources.length === 0) return null;
   // Wave 3 item 22 (R157): a resource with an activation sits under the same group headings as the actions; the rest are listed as before.
   const ungrouped = resources.filter((r) => !r.activation);
-  const card = (resource: ResourceValue, level?: 4 | 5) => (
+  const card = (resource: ResourceValue, level?: 3 | 4) => (
     <ResourceCard key={`${resource.content.revisionId}-${resource.resourceId}`} resource={resource} act={act} level={level} />
   );
   return (
     <section aria-labelledby="resources-heading" className="play-panel">
-      <h3 id="resources-heading">Resources</h3>
+      <h2 id="resources-heading">Resources</h2>
       {ungrouped.length > 0 && <ul className="resources">{ungrouped.map((resource) => card(resource))}</ul>}
       {activationGroups.map(({ key, title }) => {
         const group = resources.filter((r) => r.activation === key);
         if (group.length === 0) return null;
         return (
           <section key={key} aria-labelledby={`resources-${key}`}>
-            <h4 id={`resources-${key}`}>{title}</h4>
-            <ul className="resources">{group.map((resource) => card(resource, 5))}</ul>
+            <h3 id={`resources-${key}`}>{title}</h3>
+            <ul className="resources">{group.map((resource) => card(resource, 4))}</ul>
           </section>
         );
       })}
@@ -783,7 +783,7 @@ export function ActionsPanel({
       onPointerDownCapture={(e) => disarmUnless(e.target)}
       onFocusCapture={(e) => disarmUnless(e.target)}
     >
-      <h3 id="actions-heading">Attacks and actions</h3>
+      <h2 id="actions-heading">Attacks and actions</h2>
       {ungroupedToggles.length > 0 && (
         <fieldset>
           <legend>Active effects (a switch is a confirmed change)</legend>
@@ -812,7 +812,7 @@ export function ActionsPanel({
         if (groupAttacks.length === 0 && groupCustom.length === 0 && groupRolls.length === 0 && groupToggles.length === 0) return null;
         return (
           <section key={key} aria-labelledby={`actions-${key}`}>
-            <h4 id={`actions-${key}`}>{title}</h4>
+            <h3 id={`actions-${key}`}>{title}</h3>
             <ul className="features">
               {groupAttacks.map(({ attack, availability, pin }) => (
                 <AttackItem
@@ -855,7 +855,7 @@ export function ActionsPanel({
         const id = `actions-pool-${pool.content.revisionId}-${pool.resourceId}`;
         return (
           <section key={id} aria-labelledby={id}>
-            <h4 id={id}>{pool.label}</h4>
+            <h3 id={id}>{pool.label}</h3>
             {pool.maximum !== undefined && pool.current !== undefined && (
               <p className="hint">
                 {pool.current} of {pool.maximum} left
@@ -1206,11 +1206,11 @@ export function FeaturesPanel({
   if (features.length === 0) return null;
   return (
     <section aria-labelledby="features-heading" className="play-panel">
-      <h3 id="features-heading">Features</h3>
+      <h2 id="features-heading">Features</h2>
       {groupFeatures(features).map(({ title, items }, index) => {
         return (
           <section key={title} aria-labelledby={`features-${index}`}>
-            <h4 id={`features-${index}`}>{title}</h4>
+            <h3 id={`features-${index}`}>{title}</h3>
             <ul className="features">
               {items.map((feature) => (
                 <FeatureItem

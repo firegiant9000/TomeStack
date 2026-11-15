@@ -68,7 +68,7 @@ export function ArchivePanel({ character, onError, onStatus, onChanged }: Props)
   if (archived) {
     return (
       <section aria-labelledby="archive-heading" className="play-panel">
-        <h3 id="archive-heading">Archived</h3>
+        <h2 id="archive-heading">Archived</h2>
         <p>This character is archived: it is kept, with everything it uses, but listed apart.</p>
         <button
           type="button"
@@ -84,9 +84,9 @@ export function ArchivePanel({ character, onError, onStatus, onChanged }: Props)
 
   return (
     <section aria-labelledby="archive-heading">
-      <h3 id="archive-heading" className="visually-hidden">
+      <h2 id="archive-heading" className="visually-hidden">
         Archive
-      </h3>
+      </h2>
       <button
         type="button"
         ref={archiveButton}

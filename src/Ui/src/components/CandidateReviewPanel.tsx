@@ -324,9 +324,9 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
 
   return (
     <section aria-label={`Entries found in ${source.title}`} className="play-panel">
-      <h5 ref={heading} tabIndex={-1}>
+      <h4 ref={heading} tabIndex={-1}>
         Entries found in {source.title}
-      </h5>
+      </h4>
       <p className="hint">Kept entries are drafts in Homebrew under {source.title}. Make them available to characters there to use them in the builder.</p>
       <div className="actions">
         {/* aria-disabled, never `disabled`; leaving would silently drop an unsaved edit (ruling R26). */}
@@ -757,9 +757,9 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
   const reasonId = check ? (check.blockers.length > 0 ? blocksId : check.report.errors.length > 0 ? problemsId : undefined) : undefined;
   return (
     <section aria-labelledby={headingId} className="play-panel">
-      <h5 id={headingId} tabIndex={-1} ref={heading}>
+      <h4 id={headingId} tabIndex={-1} ref={heading}>
         Entry: {candidate.proposedName}
-      </h5>
+      </h4>
       <p className="hint">
         {candidate.proposedKind} · {pageText(candidate.page)} · {candidate.rulesFamilies.length > 0 ? candidate.rulesFamilies.map((f) => rulesLabel(f)).join(', ') : 'no rules yet'} · confidence {percent(candidate.confidence)} (a hint, not a
         check) · {statusLabels[stored.status]}
@@ -827,7 +827,7 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
       {casting && <SlotTable casting={casting} page={candidate.page.start} onOpenPage={onOpenPage} />}
       {isClass && linked.length > 0 && (
         <>
-          <h6 id={`linked-${stored.id}`}>Linked features</h6>
+          <h5 id={`linked-${stored.id}`}>Linked features</h5>
           <p className="hint">
             Keeping the class with its rules also saves the features still to review as drafts, each granted by the class at its level. An installed or already kept
             feature is granted as it is; an ignored one is not granted.

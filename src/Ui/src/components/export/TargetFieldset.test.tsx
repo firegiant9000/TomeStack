@@ -22,7 +22,7 @@ const targets: PackageTargets = {
 
 it('lists the current row first and checks it by default', () => {
   render(<TargetFieldset targets={targets} value={null} onChange={() => {}} />);
-  const group = screen.getByRole('group', { name: 'Which TomeStack will open it?' });
+  const group = screen.getByRole('group', { name: 'Which version will open this file?' });
   expect(group).toBeTruthy();
   const radios = screen.getAllByRole('radio') as HTMLInputElement[];
   expect(radios.map((r) => r.labels?.[0]?.textContent)).toEqual(['0.8.0 or newer (everything)', '0.7.0', '0.6.0', '0.5.0']);
