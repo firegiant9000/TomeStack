@@ -211,6 +211,7 @@ public class SrdGuides521Tests
     [InlineData("Rogue", "b", 100, "")]
     [InlineData("Sorcerer", "a", 28, "Spear=1;Dagger=2;Arcane Focus (Crystal)=1")]
     [InlineData("Sorcerer", "b", 50, "")]
+    // The Warlock's two Books are the kit's own Book plus the one in the Scholar's Pack.
     [InlineData("Warlock", "a", 15, "Leather Armor=1;Sickle=1;Dagger=2;Arcane Focus (Orb)=1;Book=2")]
     [InlineData("Warlock", "b", 100, "")]
     [InlineData("Wizard", "a", 5, "Dagger=2;Quarterstaff=1;Robe=1;Spellbook=1")]

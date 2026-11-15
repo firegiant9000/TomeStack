@@ -63,9 +63,9 @@ public class SrdPackTests
     [Fact]
     public void A_familys_packs_carry_the_identical_source_record()
     {
-        foreach (var pack in new[] { Spells51, Equipment51, Classes51, Armor51, Fighter51, Origins51, Barbarian51, Rogue51, Monk51, BarbarianV1251, RogueV1251, MonkV1251 })
+        foreach (var pack in new[] { Spells51, Equipment51, Classes51, Armor51, Fighter51, Origins51, Barbarian51, Rogue51, Monk51, BarbarianV1251, RogueV1251, MonkV1251, Gear51, Guides51 })
             Assert.Equal(TempApp.Json(Base51.Sources), TempApp.Json(pack.Sources));
-        foreach (var pack in new[] { Spells521, Equipment521, Classes521, Armor521, Fighter521, Feats521, Origins521, Barbarian521, Rogue521, Monk521, BarbarianV12521, RogueV12521, MonkV12521 })
+        foreach (var pack in new[] { Spells521, Equipment521, Classes521, Armor521, Fighter521, Feats521, Origins521, Barbarian521, Rogue521, Monk521, BarbarianV12521, RogueV12521, MonkV12521, Gear521, Guides521 })
             Assert.Equal(TempApp.Json(Base521.Sources), TempApp.Json(pack.Sources));
     }
 
