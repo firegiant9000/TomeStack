@@ -257,6 +257,10 @@ export function createClient(transport: Transport) {
     restorePreview: (characterId: string, snapshotId: string) => call<RestorePreview>('character.restorePreview', { characterId, snapshotId }),
     restoreSnapshot: (token: string) => call<RestoreResult>('character.restoreSnapshot', { token, confirm: true }),
     createCharacter: (request: CreateCharacterRequest) => call<CharacterView>('character.create', request),
+    /** First run (D95): saves the bundled sample character; refused with character.sample-exists when one is already listed. */
+    createSample: () => call<CharacterView>('character.createSample', {}),
+    /** Removes the sample character, archived or not; the service refuses without confirm. */
+    deleteSample: (characterId: string) => call<{ deleted: boolean }>('character.deleteSample', { characterId, confirm: true }),
     saveCharacter: (character: Character) => call<CharacterView>('character.save', character),
     /** Records the options picked for one choice; an empty list clears it (SPEC C-01). */
     choose: (characterId: string, source: ContentReference, choiceId: string, selected: ContentReference[]) =>
