@@ -783,14 +783,15 @@ it('falls back to Play when the requested tab is not offered', () => {
   expect(screen.getByRole('tabpanel', { name: 'Play' })).toBeTruthy();
 });
 
-it('"Report a gap" switches to Journal, pre-fills About and focuses the text, every time it is pressed', async () => {
+it('"Report a gap" switches to Features, pre-fills About and focuses the text, every time it is pressed', async () => {
   const user = userEvent.setup();
   renderSheet(view());
   await user.click(screen.getByRole('tab', { name: 'Skills and saves' }));
   const ac = screen.getByRole('region', { name: /^Armor Class:/ });
   await user.click(within(ac).getByRole('heading'));
   await user.click(within(ac).getByRole('button', { name: 'Report a gap: Armor Class' }));
-  expect(screen.getByRole('tab', { name: 'Journal' }).getAttribute('aria-selected')).toBe('true');
+  expect(screen.getByRole('tab', { name: 'Features' }).getAttribute('aria-selected')).toBe('true');
+  expect(within(screen.getByRole('tabpanel', { name: 'Features' })).getByRole('form', { name: 'New gap note' })).toBeTruthy();
   const form = screen.getByRole('form', { name: 'New gap note' });
   const text = within(form).getByRole('textbox', { name: /^What was missing or wrong/ });
   await waitFor(() => expect(document.activeElement).toBe(text));
@@ -808,14 +809,14 @@ it('"Report a gap" switches to Journal, pre-fills About and focuses the text, ev
 it('keeps typed text in the gap note box when switching tabs and back', async () => {
   const user = userEvent.setup();
   renderSheet(view());
-  await user.click(screen.getByRole('tab', { name: 'Journal' }));
-  // Choosing Notes by hand keeps focus on the tab (APG); only "Report a gap" moves focus into the text box.
-  expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Journal' }));
+  await user.click(screen.getByRole('tab', { name: 'Features' }));
+  // Choosing Features by hand keeps focus on the tab (APG); only "Report a gap" moves focus into the text box.
+  expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Features' }));
   const form = screen.getByRole('form', { name: 'New gap note' });
   const text = within(form).getByRole('textbox', { name: /^What was missing or wrong/ }) as HTMLTextAreaElement;
   await user.type(text, 'Fixture draft: the rule text is unclear');
   await user.click(screen.getByRole('tab', { name: 'Skills and saves' }));
-  await user.click(screen.getByRole('tab', { name: 'Journal' }));
+  await user.click(screen.getByRole('tab', { name: 'Features' }));
   expect((within(screen.getByRole('form', { name: 'New gap note' })).getByRole('textbox', { name: /^What was missing or wrong/ }) as HTMLTextAreaElement).value).toBe('Fixture draft: the rule text is unclear');
 });
 
@@ -824,14 +825,32 @@ const withDetails = (details: NonNullable<Character['details']>): CharacterView 
   return { ...v, character: { ...v.character, schemaVersion: 9, details } };
 };
 
-it('puts the Details form on Journal after session notes and gap notes, with no new tab', async () => {
+it('Journal holds session notes then Details and no gap form; the gap notes end the Features tab (Wave 3 4.3)', async () => {
   const user = userEvent.setup();
   renderSheet(view());
   expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Play', 'Gear', 'Features', 'Skills and saves', 'Journal']);
   await user.click(screen.getByRole('tab', { name: 'Journal' }));
   const panel = screen.getByRole('tabpanel', { name: 'Journal' });
-  expect(within(panel).getAllByRole('heading', { level: 2 }).map((h) => h.textContent?.replace(/: \d+ open$/, ''))).toEqual(['Session notes', 'Gap notes', 'Details']);
+  expect(within(panel).getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Session notes', 'Details']);
   expect(within(panel).getByRole('form', { name: 'Details' })).toBeTruthy();
+  expect(within(panel).queryByRole('form', { name: 'New gap note' })).toBeNull();
+  expectContinuousOutline(document.body);
+  await user.click(screen.getByRole('tab', { name: 'Features' }));
+  const features = screen.getByRole('tabpanel', { name: 'Features' });
+  const h2 = within(features).getAllByRole('heading', { level: 2 });
+  expect(h2[h2.length - 1]!.textContent).toMatch(/^Gap notes/);
+  expectContinuousOutline(document.body);
+});
+
+it('"Report a gap" on a feature lands in the gap form on Features', async () => {
+  const user = userEvent.setup();
+  const ref = { contentId: '00000000-0000-4000-8000-00000000c100', revisionId: '00000000-0000-4000-8000-00000000d100' };
+  renderSheet(view({ features: [{ content: ref, name: 'Fixture Feature', kind: 'feature', origin: { kind: 'content', rulesFamily: 'srd-5.1' }, automation: 'reference', effects: [], diagnostics: [] }] } as never));
+  await user.click(screen.getByRole('tab', { name: 'Features' }));
+  await user.click(screen.getByRole('button', { name: /^Report a gap: Fixture Feature/ }));
+  expect(screen.getByRole('tab', { name: 'Features' }).getAttribute('aria-selected')).toBe('true');
+  const form = within(screen.getByRole('tabpanel', { name: 'Features' })).getByRole('form', { name: 'New gap note' });
+  await waitFor(() => expect(document.activeElement).toBe(within(form).getByRole('textbox', { name: /^What was missing or wrong/ })));
 });
 
 it('keeps text typed in the Details form when switching tabs and back', async () => {

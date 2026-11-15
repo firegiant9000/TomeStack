@@ -389,7 +389,7 @@ function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (in
               }}
             />
           )}
-          {screen.kind === 'gaps' && <AllGapNotesPanel onError={onError} onOpenCharacter={(id) => open(id, 'notes')} />}
+          {screen.kind === 'gaps' && <AllGapNotesPanel onError={onError} onOpenCharacter={(id) => open(id, 'features')} />}
           {screen.kind === 'backups' && (
             <BackupsPanel onError={onError} onStatus={(text) => setMessage({ tone: 'status', text })} onRestored={() => void refresh()} />
           )}

@@ -523,12 +523,12 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
     if (!focused || focused === document.body) document.getElementById(tabId('sheet', activeRef.current))?.focus();
   }, [showSpells]);
 
-  // M3 C5: "Report a gap" pre-fills the gap note form, opens Notes and moves focus to its text box. A counter, not a flag:
+  // M3 C5: "Report a gap" pre-fills the gap note form, opens Features and moves focus to its text box. A counter, not a flag:
   // setting the tab to the value it already has causes no render, so the focus must not depend on a tab change.
   const [gapFocus, setGapFocus] = useState(0);
   function reportGap(about: string) {
     setGapAbout(about);
-    setTab('notes');
+    setTab('features');
     setGapFocus((n) => n + 1);
   }
   useEffect(() => {
@@ -1219,6 +1219,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
         {(sheet.features ?? []).length === 0 && <p className="hint">No features yet.</p>}
         <FeaturesPanel view={view} pdfSources={pdfSources} openPage={openPage} reportGap={(id) => reportGap(gapAboutFeature(id))} />
         <ByHandPanel characterId={character.id} sheet={sheet} active={active === 'features'} />
+        <GapNotesPanel view={view} onError={onError} onStatus={onStatus} about={gapAbout} onAboutChange={setGapAbout} textRef={gapText} />
       </TabPanel>
 
       <TabPanel idPrefix="sheet" id="stats" active={active === 'stats'}>
@@ -1244,7 +1245,6 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
 
       <TabPanel idPrefix="sheet" id="notes" active={active === 'notes'}>
         <SessionNotesPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} saveCharacter={saveCharacter} />
-        <GapNotesPanel view={view} onError={onError} onStatus={onStatus} about={gapAbout} onAboutChange={setGapAbout} textRef={gapText} />
         <DetailsPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} headingRef={detailsHeading} shown={active === 'notes'} saveCharacter={saveCharacter} />
       </TabPanel>
       </div>
