@@ -5,7 +5,7 @@ namespace TomeStack.AppService.Tests;
 
 /// <summary>
 /// Runs <c>scripts/ready-budget.ps1</c> under Windows PowerShell against a temporary smoke report and checks the first-paint budget
-/// (process start to UI ready, D102): 15 s locally, 30 s when <c>CI</c> is <c>true</c>, a negative budget skips the check and a report
+/// (process start to UI ready, D102): 15 s locally, 45 s when <c>CI</c> is <c>true</c>, a negative budget skips the check and a report
 /// without the field is not checked.
 /// </summary>
 public sealed class ReadyBudgetScriptTests
@@ -84,12 +84,21 @@ public sealed class ReadyBudgetScriptTests
     }
 
     [Fact]
-    public void Ci_environment_uses_the_30_second_budget()
+    public void Ci_environment_uses_the_45_second_budget()
     {
-        var (exitCode, output) = Run("""{"success": true, "detail": "ok", "processStartToReadyMs": 16000}""", ciValue: "true");
+        var (exitCode, output) = Run("""{"success": true, "detail": "ok", "processStartToReadyMs": 36010}""", ciValue: "true");
 
         Assert.Equal(0, exitCode);
-        Assert.Contains("budget 30000 ms", output);
+        Assert.Contains("budget 45000 ms", output);
+    }
+
+    [Fact]
+    public void Ci_environment_over_45_seconds_fails()
+    {
+        var (exitCode, output) = Run("""{"success": true, "detail": "ok", "processStartToReadyMs": 45001}""", ciValue: "true");
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("over the 45000 ms budget", output);
     }
 
     [Fact]

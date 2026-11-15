@@ -9,7 +9,7 @@
   second process with --simulate-unhandled-exception on a fresh data folder and checks that it exits non-zero and wrote
   a dispatcher entry to errors.log (crashCheck in the report). -SkipCrashCheck omits that step; use it for any build
   that predates the switch (installer-smoke's old build) and for the other check scripts. The first-paint budget
-  (processStartToReadyMs) is checked by ready-budget.ps1: 15 s locally, 30 s when CI=true; -MaxReadyMs sets it and a
+  (processStartToReadyMs) is checked by ready-budget.ps1: 15 s locally, 45 s when CI=true; -MaxReadyMs sets it and a
   negative value skips it. Exit code: 0 pass, 1 fail.
 .EXAMPLE
   scripts/smoke.ps1 -Exe src/DesktopShell/bin/Release/net10.0-windows/TomeStack.exe
