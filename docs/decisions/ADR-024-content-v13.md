@@ -23,7 +23,7 @@ Content schema v12 cannot express this. A guide is advice used only while creati
          { "id": "b", "lines": [ { "item": { "contentId": "<hammer>" } } ], "requiresProficiency": "weapon.martial" } ] } ] } ] }
    ```
 
-   `guideFor` names one class or background by content id. `primaryAbilities` lists one or two ability keys (`str` to `cha`). `startingEquipment` holds picks; each pick holds options; each option holds lines and may carry `requiresProficiency` (a `weapon.` or `armor.` key). A line is exactly one of four kinds:
+   `guideFor` names one class or background by content id. `primaryAbilities` lists one or two ability keys (`str` to `cha`); it is a plain list with no "or", so a rule like the 2014 Fighter's "Strength or Dexterity" is stored as both keys and a guide only suggests where the highest scores go. `startingEquipment` holds picks; each pick holds options; each option holds lines and may carry `requiresProficiency` (a `weapon.` or `armor.` key). A line is exactly one of four kinds:
    - `{ "item": {contentId}, "quantity": n }`: a fixed item.
    - `{ "anyOf": "weapon.simple" }`: the player chooses one catalogue item in that category. The categories are `weapon.simple`, `weapon.martial`, `armor.light`, `armor.medium`, `armor.heavy` and `armor.shield`, the same vocabulary as grants, never a name.
    - `{ "coins": { "gp": 50 } }`: coins; this is how an "A or B, with B as gold" option is written.
@@ -74,8 +74,15 @@ Content schema v12 cannot express this. A guide is advice used only while creati
    - Validate-then-insert is not one transaction. The app is single-user and runs one command at a time, so a rival guide cannot appear between the two steps; if that ever changes, the check needs a transaction.
    - Callers of `GuidesFor` must tolerate more than one guide for a target (for example after a restore brings in a guide that a rival already covers). They should choose deterministically, not assume one.
    - Current-version export leaves a source with no published content out, while a lowered-empty source blocks the file. The first is a choice about what to share; the second would write a file a reader refuses.
-   - No bundled guides or gear ship in this change. The gear catalogue and the bundled guides arrive in a later content change, with the licensing review update (SPEC Q-03).
+   - No bundled guides or gear ship in the engine change. The 2014 (SRD 5.1) catalogue and guides arrive with Group 6 (item 9); the 2024 ones come later. The licensing review has a section for the 2014 files (SPEC Q-03).
    - The 0.9.0 release ladder row and `BundledAt/0.9.0.txt` arrive with the release PR. Until then `ReleaseLadder.OpensIn` returns null for content at schema 13 and the preview says "a newer TomeStack", which is correct for an unreleased build.
+
+9. **The 2014 bundled content (Group 6).** `srd-5.1-gear.json` (73 items, 7 packs) and `srd-5.1-guides.json` (13 guides: the 12 classes and the Acolyte). Ids, all `51c00000-0000-4000-8000-000000NNNNNN` (revisions `51e00000-...`): items 500001 to 500073, packs 500101 to 500107, guides 600001 to 600013. Modelling rulings:
+   - A holy symbol, an arcane focus or a druidic focus is one pick with one option per catalogue item (the `anyOf` vocabulary has no focus category).
+   - "Any martial (or simple) melee weapon" is widened to the weapon category (`weapon.martial`, `weapon.simple`); v13 has no melee-only filter, so the player may take a ranged weapon.
+   - A line the SRD gives without a choice is a pick with a single option, which expansion takes without a choice; the builder shows it pre-selected.
+   - The Druid's wooden shield is the bundled Shield.
+   - The Acolyte's 15 gp is a `coins` line; its pouch is an item.
 
 ## Consequences
 
@@ -86,7 +93,7 @@ Content schema v12 cannot express this. A guide is advice used only while creati
 
 ## Not doing
 
-- **Bundled guides or gear** in this change.
+- **Bundled 2024 (SRD 5.2.1) guides or gear** in this change.
 - **Characters pinning a guide**, or a guide changing a calculation.
 - **Packs inside packs**, and expanding a pack's contents when saving for an older TomeStack.
 - **Enforcing `requiresProficiency` in the engine.**
