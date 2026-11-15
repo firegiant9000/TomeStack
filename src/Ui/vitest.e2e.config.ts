@@ -5,6 +5,8 @@ import react from '@vitejs/plugin-react';
 // the .NET build; run with `npm run test:e2e` after `dotnet build TomeStack.slnx -c Release`.
 export default defineConfig({
   plugins: [react()],
+  // The Help screen imports docs/guides/*.md?raw, as in vite.config.ts.
+  server: { fs: { allow: ['.', '../../docs/guides'] } },
   test: {
     include: ['e2e/**/*.e2e.tsx'],
     environment: 'jsdom',
