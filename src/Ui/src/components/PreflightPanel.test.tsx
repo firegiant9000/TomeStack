@@ -246,7 +246,7 @@ it('the character-package export checks a share, and a backup keeps its own rule
   const user = userEvent.setup();
   vi.mocked(client.previewExport).mockResolvedValue({ purpose: 'share', fileName: 'Pell.tomestack.zip', characters: ['ch-1'], included: [], omitted: [], gapNotes: 0 });
   vi.mocked(client.packagePreflight).mockResolvedValue(blocked);
-  render(<ExportPanel characterId="ch-1" active updatedAt="t1" onError={() => {}} onStatus={() => {}} />);
+  render(<ExportPanel characterId="ch-1" updatedAt="t1" onError={() => {}} onStatus={() => {}} />);
 
   // A backup is personal: no preflight, and Export is on.
   expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Export TomeStack file' }).disabled).toBe(false);

@@ -54,6 +54,21 @@ public class ChoiceTests
         Assert.Equal(AutomationStatus.Assisted, CapabilityRegistry.Effective(effect, AutomationStatus.Automatic, hasDiagnostic: true).Status);
     }
 
+    /// <summary>The sheet's choice entry and its choice.unresolved diagnostic both carry the effect's id, even when it differs from the choice id.</summary>
+    [Fact]
+    public void An_unresolved_choice_and_its_diagnostic_share_the_effect_id_when_it_differs_from_the_choice_id()
+    {
+        var holder = MechanicsInventoryTests.Holder("Test Choice Holder", 11,
+            new ChoiceEffect { Id = "c", ChoiceId = "path", Count = 1, Options = [Fixtures.WardenAthletics, Fixtures.WardenSurvival] });
+
+        var (_, sheet) = MechanicsInventoryTests.Pinned(holder);
+
+        var entry = Assert.Single(sheet.Choices ?? [], c => c.ChoiceId == "path");
+        var flag = Assert.Single(sheet.Diagnostics, d => d.Code == "choice.unresolved");
+        Assert.Equal("c", entry.EffectId);
+        Assert.Equal("c", flag.EffectId);
+    }
+
     [Fact]
     public void Unresolved_choices_are_flagged_and_choices_above_the_class_level_are_not_offered_yet()
     {

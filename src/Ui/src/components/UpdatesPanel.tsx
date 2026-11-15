@@ -8,16 +8,25 @@ interface Props {
   onChanged: (view: CharacterView) => void;
   onError: (error: unknown) => void;
   onStatus: (text: string) => void;
+  /** Opened on purpose (More → Updates): with no offers, say so instead of rendering nothing. */
+  showEmpty?: boolean;
 }
 
 /**
  * M3 C7 (SPEC I-06): newer revisions of content this character uses, from a bundled pack or the user's own sources.
  * Each is an offer: "Review update" shows what would change, and only "Apply update" there changes the character.
  */
-export function UpdatesPanel({ view, onChanged, onError, onStatus }: Props) {
+export function UpdatesPanel({ view, onChanged, onError, onStatus, showEmpty }: Props) {
   const { character } = view;
   const [offers, setOffers] = useState<UpdateOffer[]>([]);
   const [reviewing, setReviewing] = useState<UpdateOffer>();
+  // The character copy whose request has settled (success or error). Until the request for the current copy settles, an empty
+  // list means "not known yet", not "none": a refreshed view (a save, a rest) starts a new request with a new copy.
+  const [settledFor, setSettledFor] = useState<CharacterView['character']>();
+  const loaded = settledFor === character;
+  // The copy whose request failed: the app's alert says so too, and the panel must not claim "none" when the check never ran.
+  const [failedFor, setFailedFor] = useState<CharacterView['character']>();
+  const failed = failedFor === character;
 
   useEffect(() => {
     let current = true;
@@ -26,13 +35,27 @@ export function UpdatesPanel({ view, onChanged, onError, onStatus }: Props) {
       .then((found) => {
         if (current) setOffers(found);
       })
-      .catch(onError);
+      .catch((error: unknown) => {
+        if (current) setFailedFor(character);
+        onError(error);
+      })
+      .finally(() => {
+        if (current) setSettledFor(character);
+      });
     return () => {
       current = false;
     };
   }, [character, onError]);
 
-  if (offers.length === 0) return null;
+  if (offers.length === 0) {
+    if (!showEmpty) return null;
+    return (
+      <section aria-labelledby="updates-heading" className="play-panel">
+        <h2 id="updates-heading">Updates</h2>
+        <p className="hint">{failed ? "Couldn't check for newer versions." : loaded ? 'No newer versions of the content this character uses.' : 'Checking for newer versions…'}</p>
+      </section>
+    );
+  }
   return (
     <section aria-labelledby="updates-heading" className="play-panel">
       <h2 id="updates-heading">Updates available</h2>

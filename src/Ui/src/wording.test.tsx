@@ -230,13 +230,12 @@ it.each(sheetTabIds)('character sheet, %s tab', async (tab: SheetTabId) => {
       return screen.findAllByText(/set by hand \(calculated/);
     },
     notes: () => screen.findByRole('heading', { name: 'Session notes' }),
-    manage: () => screen.findByRole('heading', { name: 'Export' }),
   };
   expect(await specific[tab]()).toBeTruthy();
   expectPlainWords(container);
 });
 
-it('character sheet, manage tab, sharing the character', async () => {
+it('character sheet, More → Export, sharing the character', async () => {
   const user = userEvent.setup();
   vi.mocked(client.previewExport).mockResolvedValue({
     purpose: 'share',
@@ -252,7 +251,9 @@ it('character sheet, manage tab, sharing the character', async () => {
     blocking: [],
     notices: ['Fixture Notebook, Fixture Press, own work'],
   });
-  const { container } = render(labelled(<CharacterSheet view={view} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} initialTab="manage" rulesFamilies={families} />));
+  const { container } = render(labelled(<CharacterSheet view={view} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} rulesFamilies={families} />));
+  await user.click(await screen.findByRole("button", { name: "More" }));
+  await user.click(screen.getByRole("button", { name: "Export…" }));
   await user.click(await screen.findByRole('radio', { name: /^Share with someone/ }));
   expect(await screen.findByRole('region', { name: 'Left out of the shared TomeStack file' })).toBeTruthy();
   expect(await screen.findByRole('region', { name: 'Preflight: shared TomeStack file' })).toBeTruthy();
@@ -260,19 +261,37 @@ it('character sheet, manage tab, sharing the character', async () => {
   expectPlainWords(container);
 });
 
-it('character sheet, manage tab, export with the version choice', async () => {
+it('character sheet, More → Export, with the version choice', async () => {
   const user = userEvent.setup();
   vi.mocked(client.packageTargets).mockResolvedValue(packageTargetsFixture);
   vi.mocked(client.previewExport).mockImplementation(async (_ids, _purpose, target) => {
     const base = { purpose: 'share' as const, fileName: 'fixture-wren.tomestack.zip', characters: ['fixture-wording'], included: [], omitted: [], gapNotes: 0 };
     return target ? { ...base, target, changes: [exportChange('dropped'), exportChange('leftOut')], changesHash: `hash-${target}` } : base;
   });
-  const { container } = render(labelled(<CharacterSheet view={view} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} initialTab="manage" rulesFamilies={families} />));
+  const { container } = render(labelled(<CharacterSheet view={view} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} rulesFamilies={families} />));
+  await user.click(await screen.findByRole("button", { name: "More" }));
+  await user.click(screen.getByRole("button", { name: "Export…" }));
   await user.click(await screen.findByRole('radio', { name: /^Share with someone/ }));
   expect(await screen.findByRole('group', { name: 'Which version will open this file?' })).toBeTruthy();
   await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
   expect(await screen.findByRole('region', { name: /^Changed for TomeStack/ })).toBeTruthy();
   expect(await screen.findByText('Compat dropped message')).toBeTruthy();
+  expectPlainWords(container);
+});
+
+// The old Manage tab scanned Updates, Archive and Snapshots with Export; each More panel keeps that coverage.
+it.each([
+  ['Snapshots', 'Snapshots'],
+  ['Updates', 'Updates'],
+  ['Archive', /^Archive/],
+  ['Print…', 'Print character'],
+] as const)('character sheet, More → %s', async (item, heading) => {
+  const user = userEvent.setup();
+  const { container } = render(labelled(<CharacterSheet view={view} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} rulesFamilies={families} />));
+  await user.click(await screen.findByRole('button', { name: 'More' }));
+  await user.click(screen.getByRole('button', { name: item }));
+  expect(await screen.findByRole('heading', { name: heading })).toBeTruthy();
+  if (item === 'Updates') await screen.findByText('No newer versions of the content this character uses.');
   expectPlainWords(container);
 });
 
