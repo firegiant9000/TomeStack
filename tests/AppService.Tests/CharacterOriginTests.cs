@@ -98,11 +98,23 @@ public class CharacterOriginTests
         store.SaveGapNote(Note(sample.Id));
         store.InTransaction(() => store.AddSnapshot(new CharacterSnapshot(Guid.NewGuid(), sample.Id, TempApp.Now, SnapshotReason.Manual, null, sample)));
 
-        Assert.Throws<InvalidOperationException>(() => store.DeleteSampleCharacter(sample.Id));
+        Assert.Throws<SampleHasSnapshotsException>(() => store.DeleteSampleCharacter(sample.Id));
 
         Assert.NotNull(store.FindCharacter(sample.Id));
         Assert.Single(store.ListGapNotes(sample.Id));
         Assert.Equal(1, store.SnapshotCount(sample.Id));
+    }
+
+    [Fact]
+    public void SetCharacterOrigin_returns_false_for_an_unknown_id_and_true_for_a_stored_one()
+    {
+        using var temp = new TempApp();
+        var store = temp.App.Store;
+        var sample = Courier("Test Sample");
+        store.SaveCharacter(sample);
+
+        Assert.False(store.SetCharacterOrigin(Guid.NewGuid(), "sample"));
+        Assert.True(store.SetCharacterOrigin(sample.Id, "sample"));
     }
 
     [Fact]

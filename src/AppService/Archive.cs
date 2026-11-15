@@ -58,9 +58,10 @@ public sealed partial class TomeStackApp
         return Summary(saved);
     }
 
-    private static CharacterSummary Summary(Character character) =>
+    private CharacterSummary Summary(Character character) =>
         new(character.Id, character.Name, character.RulesFamily, character.UpdatedAt, character.ArchivedAt,
-            [.. character.CrossFamilyExceptions.Select(e => e.Content.ContentId).Distinct()], character.TotalLevel);
+            [.. character.CrossFamilyExceptions.Select(e => e.Content.ContentId).Distinct()], character.TotalLevel,
+            _store.CharacterOrigin(character.Id));
 
     private Character FindCharacterOrThrow(Guid characterId) =>
         _store.FindCharacter(characterId) ?? throw new AppValidationException([new("character.not-found", $"Character {characterId} does not exist.")]);

@@ -6,6 +6,9 @@ using TomeStack.RulesCore;
 
 namespace TomeStack.AppService.Persistence;
 
+/// <summary>A sample character with snapshots cannot be deleted: snapshots are insert-only.</summary>
+public sealed class SampleHasSnapshotsException() : InvalidOperationException("The sample character has snapshots, which cannot be removed.");
+
 /// <summary>
 /// Local SQLite store. Entities are stored as versioned JSON documents with indexed key columns.
 /// Published content revisions are insert-only: re-adding identical JSON is a no-op, different JSON is rejected.
@@ -904,11 +907,15 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
     public string? CharacterOrigin(Guid id) =>
         QueryScalar("SELECT origin FROM characters WHERE id = $id;", ("$id", Key(id)));
 
-    /// <summary>Marks an existing character's origin (SaveCharacter never touches it). A missing character is left alone.</summary>
-    public void SetCharacterOrigin(Guid id, string origin)
+    /// <summary>Marks an existing character's origin (SaveCharacter never touches it). Returns false, changing nothing, for an unknown id.</summary>
+    public bool SetCharacterOrigin(Guid id, string origin)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(origin);
-        Execute("UPDATE characters SET origin = $origin WHERE id = $id;", ("$id", Key(id)), ("$origin", origin));
+        lock (_gate)
+        {
+            using var command = Command("UPDATE characters SET origin = $origin WHERE id = $id;", [("$id", Key(id)), ("$origin", origin)]);
+            return command.ExecuteNonQuery() > 0;
+        }
     }
 
     /// <summary>How many snapshots (insert-only, never removable) the character has.</summary>
@@ -924,7 +931,7 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
     /// <summary>
     /// Removes the sample character and its gap notes in one transaction; true when the character went. Anything that is not a
     /// sample (or does not exist) is left whole, gap notes included, and returns false. A sample that has snapshots is refused
-    /// with <see cref="InvalidOperationException"/> and nothing is removed: snapshots are insert-only (v7), so deleting the
+    /// with <see cref="SampleHasSnapshotsException"/> and nothing is removed: snapshots are insert-only (v7), so deleting the
     /// character would orphan them. Callers check <see cref="SnapshotCount"/> first.
     /// </summary>
     public bool DeleteSampleCharacter(Guid id)
@@ -935,7 +942,7 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
             if (CharacterOrigin(id) != "sample")
                 return;
             if (SnapshotCount(id) > 0)
-                throw new InvalidOperationException("The sample character has snapshots, which cannot be removed.");
+                throw new SampleHasSnapshotsException();
             Execute("DELETE FROM gap_notes WHERE character_id = $id;", ("$id", Key(id)));
             lock (_gate)
             {
