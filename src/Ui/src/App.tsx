@@ -64,6 +64,7 @@ export function App() {
 function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (info: AppInfo) => void }) {
   const [characters, setCharacters] = useState<CharacterSummary[]>([]);
   const [charactersLoaded, setCharactersLoaded] = useState(false);
+  const [charactersFailed, setCharactersFailed] = useState(false);
   const [screen, setScreen] = useState<Screen>({ kind: 'home', focus: false });
   const [message, setMessage] = useState<{ tone: 'error' | 'status'; text: string }>();
   const fileInput = useRef<HTMLInputElement>(null);
@@ -115,12 +116,30 @@ function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (in
     applyPreferences(); // ADR-015 §4: every preference is an html[data-*] attribute the CSS keys on
     Promise.all([
       client.info().then(setInfo),
-      client.listCharacters().then((list) => {
-        setCharacters(list);
-        setCharactersLoaded(true);
-      }),
+      client.listCharacters().then(
+        (list) => {
+          setCharacters(list);
+          setCharactersLoaded(true);
+        },
+        (error: unknown) => {
+          setCharactersFailed(true);
+          throw error;
+        },
+      ),
     ]).catch(onError);
   }, [onError, setInfo]);
+
+  // Home offers this after the first list failed: no welcome card is shown for a list that never loaded.
+  const retryList = useCallback(async () => {
+    try {
+      await refresh();
+      setCharactersLoaded(true);
+      setCharactersFailed(false);
+      setMessage(undefined);
+    } catch (error) {
+      onError(error);
+    }
+  }, [refresh, onError]);
 
   // Only the latest open applies: two quick opens can be answered out of order.
   // R40: every "New character" mounts a fresh builder, so a draft that is being saved is never offered again.
@@ -308,6 +327,7 @@ function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (in
             <HomePanel
               characters={characters}
               loaded={charactersLoaded}
+              onRetry={charactersFailed && !charactersLoaded ? () => void retryList() : undefined}
               onOpen={(id) => void open(id)}
               onNew={startCreate}
               canCreate={!!info}

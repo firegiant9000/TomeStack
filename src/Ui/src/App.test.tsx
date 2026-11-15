@@ -778,6 +778,18 @@ it('first run: no welcome card while the list is still loading', async () => {
   await screen.findByRole('heading', { level: 2, name: 'Welcome to TomeStack' });
 });
 
+it('first run: a failed first list says so and offers Try again, which loads the list', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listCharacters).mockRejectedValueOnce(new Error('list failed')).mockResolvedValue([]);
+  render(<App />);
+  const retry = await screen.findByRole('button', { name: 'Try again' });
+  expect(screen.getByText(/^Your characters could not be loaded\./)).toBeTruthy();
+  expect(screen.queryByRole('heading', { name: 'Welcome to TomeStack' })).toBeNull();
+  await user.click(retry);
+  await screen.findByRole('heading', { level: 2, name: 'Welcome to TomeStack' });
+  expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+});
+
 it('first run: the welcome card shows with no characters, and not with only an archived one', async () => {
   vi.mocked(client.listCharacters).mockResolvedValue([]);
   const { unmount } = render(<App />);
