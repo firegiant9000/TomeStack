@@ -19,7 +19,7 @@
 - **Gap notes are on Features (D96):** the gap notes form and list moved from Journal to the end of Features. "Report a gap" opens Features and focuses the form, and "Open <character>" on the Gap notes screen opens Features. Journal holds Session notes and Details.
 
 ### Changed
-- **Fix:** open choices are listed once again. Since the plainer messages (Group 2b) an open choice showed twice, under "Choices to make" and under "Needs your attention". The sheet now matches the choice's problem report to the choice by its id, not by its wording, and no longer rewrites the service's messages.
+- **Fix:** open choices are listed once again. Since the plainer messages (Group 2b) an open choice showed twice, under "Choices to make" and under "Needs your attention". The sheet now matches the choice's problem report to the choice itself, not to its wording, and no longer rewrites the service's messages.
 - Development only: the old-release upgrade suite now includes a data folder and packages made by 0.8.1, the release 0.9.0 upgrades from.
 - **Development only:** a test (`ContractParityTests`) keeps `src/Ui/src/api/types.ts` in step with the service: the gate fails when a type the command dispatcher returns gains a property that `types.ts` lacks. Fields the UI received but did not declare (rules family policy, source record, package manifest and others) are now declared; nothing in the app's behavior changes.
 - **Development only:** NuGet lock files are committed for every project and CI restores in locked mode; NuGet audit (including transitive packages, every severity) fails the build on an advisory (D100). No app change.
