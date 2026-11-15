@@ -165,8 +165,6 @@ function FieldCard({ value, labels, onOverride, onRoll, onReportGap }: FieldProp
 
 interface ExportProps {
   characterId: string;
-  /** The Export panel is open (More → Export…): the preview loads only then. */
-  active: boolean;
   /** The character's stamp; a change reloads the preview. */
   updatedAt: string | undefined;
   onError: (error: unknown) => void;
@@ -174,7 +172,7 @@ interface ExportProps {
 }
 
 /** ADR-007: choose backup or share; a share first lists everything it will leave out. */
-export function ExportPanel({ characterId, active, updatedAt, onError, onStatus }: ExportProps) {
+export function ExportPanel({ characterId, updatedAt, onError, onStatus }: ExportProps) {
   const [purpose, setPurpose] = useState<ExportPurpose>('backup');
   const [preview, setPreview] = useState<ExportPreview>();
   // Import Lab L5: a share goes through the one sharing rule's preflight; a backup keeps its own rule (everything, personal).
@@ -189,7 +187,7 @@ export function ExportPanel({ characterId, active, updatedAt, onError, onStatus 
 
   // G6: both purposes are previewed, so the package's warnings (it needs a newer TomeStack) show before the file is saved. A share needs
   // its preview (the export button waits for it); a backup's is advisory, so a failure shows one plain line. The preview loads only while
-  // the Manage tab is shown and again when the character changes (updatedAt), so the warning never goes stale. A copy for an older
+  // the panel is mounted (More → Export…) and again when the character changes (updatedAt), so the warning never goes stale. A copy for an older
   // TomeStack always needs its preview: it lists what the copy leaves out, and its failure is one plain line too.
   const chosen = useRef<ExportPurpose>('backup');
   const chosenTarget = useRef<string | null>(null);
@@ -226,9 +224,8 @@ export function ExportPanel({ characterId, active, updatedAt, onError, onStatus 
     loadRef.current = load;
   }, [load]);
   useEffect(() => {
-    if (!active) return;
     void loadRef.current(chosen.current, chosenTarget.current);
-  }, [active, characterId, updatedAt]);
+  }, [characterId, updatedAt]);
 
   async function choose(next: ExportPurpose) {
     chosen.current = next;
@@ -316,7 +313,7 @@ export function ExportPanel({ characterId, active, updatedAt, onError, onStatus 
       )}
       {backupFailed && purpose === 'backup' && <p>Could not check whether this TomeStack file needs a newer TomeStack.</p>}
       {targetFailed && <p>Could not check what the copy for TomeStack {target} leaves out.</p>}
-      {purpose === 'share' && active && (
+      {purpose === 'share' && (
         <PreflightPanel kind="package" selection={[characterId]} label="shared TomeStack file" refreshKey={updatedAt} onReport={setReport} onError={onError} />
       )}
       <ExportConfirmation changes={preview?.changes} confirmed={confirmed} onConfirmedChange={setConfirmed} hintId={hintId} />
@@ -1061,7 +1058,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
         <div className="more-panel" ref={moreRegion} key={morePanel.n}>
           {morePanel.id === 'export' && (
             <>
-              <ExportPanel characterId={character.id} active updatedAt={character.updatedAt} onError={onError} onStatus={onStatus} />
+              <ExportPanel characterId={character.id} updatedAt={character.updatedAt} onError={onError} onStatus={onStatus} />
               <VttExportPanel characterId={character.id} onError={onError} onStatus={onStatus} />
             </>
           )}
@@ -1102,7 +1099,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
               ))}
           </ul>
           <button type="button" onClick={onMakeChoices}>
-            Make choices
+            Choose now
           </button>
         </section>
       )}

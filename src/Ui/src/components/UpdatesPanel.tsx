@@ -20,6 +20,8 @@ export function UpdatesPanel({ view, onChanged, onError, onStatus, showEmpty }: 
   const { character } = view;
   const [offers, setOffers] = useState<UpdateOffer[]>([]);
   const [reviewing, setReviewing] = useState<UpdateOffer>();
+  // The request has settled (success or error): until then an empty list means "not known yet", not "none".
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     let current = true;
@@ -28,7 +30,10 @@ export function UpdatesPanel({ view, onChanged, onError, onStatus, showEmpty }: 
       .then((found) => {
         if (current) setOffers(found);
       })
-      .catch(onError);
+      .catch(onError)
+      .finally(() => {
+        if (current) setLoaded(true);
+      });
     return () => {
       current = false;
     };
@@ -39,7 +44,7 @@ export function UpdatesPanel({ view, onChanged, onError, onStatus, showEmpty }: 
     return (
       <section aria-labelledby="updates-heading" className="play-panel">
         <h2 id="updates-heading">Updates</h2>
-        <p className="hint">No newer versions of the content this character uses.</p>
+        <p className="hint">{loaded ? 'No newer versions of the content this character uses.' : 'Checking for newer versions…'}</p>
       </section>
     );
   }

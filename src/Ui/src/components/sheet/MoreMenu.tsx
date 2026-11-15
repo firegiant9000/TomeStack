@@ -36,7 +36,9 @@ export function MoreMenu({ items, triggerRef }: { items: MoreMenuItem[]; trigger
       <button ref={trigger} type="button" aria-expanded={open} aria-controls={listId} onClick={() => setOpen((o) => !o)}>
         More
       </button>
-      <ul id={listId} className="more-menu-list" hidden={!open}>
+      {/* A mousedown on the list's gaps or padding would blur the focused button and close the list (onBlur); keep focus where it is.
+          Buttons still take focus and click normally because the default is only prevented on this list, not their own handlers. */}
+      <ul id={listId} className="more-menu-list" hidden={!open} onMouseDown={(e) => e.preventDefault()}>
         {open &&
           items.map((item) => (
             <li key={item.id}>

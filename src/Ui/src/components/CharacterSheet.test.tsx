@@ -614,7 +614,7 @@ it('Tab_order_is_header_bar_choices_tabs_panel', () => {
   expect(container.querySelector('[tabindex]:not([tabindex="-1"]):not([tabindex="0"])')).toBeNull();
   const header = screen.getByRole('button', { name: 'Short rest…' });
   const barControl = within(screen.getByRole('region', { name: 'Status' })).getAllByRole('button')[0]!;
-  const choicesControl = within(screen.getByRole('heading', { name: 'Choices to make' }).closest('section')!).getByRole('button', { name: 'Make choices' });
+  const choicesControl = within(screen.getByRole('heading', { name: 'Choices to make' }).closest('section')!).getByRole('button', { name: 'Choose now' });
   const tab = screen.getByRole('tab', { selected: true });
   const panelControl = within(screen.getByRole('tabpanel')).getAllByRole('checkbox')[0]!;
   const ordered = [header, barControl, choicesControl, tab, panelControl];
@@ -943,14 +943,51 @@ describe('the More list (Wave 3 3.5)', () => {
     expect(await screen.findByRole('heading', { name: 'Export for a virtual tabletop' })).toBeTruthy();
   });
 
-  it('replaces the open panel when another item is chosen, and leaves the tab list without Manage', async () => {
+  it('replaces the open panel when another item is chosen, focuses the new heading, and leaves the tab list without Manage', async () => {
     const user = userEvent.setup();
     renderSheet(view());
     await openMore(user, 'Snapshots');
     await openMore(user, 'Archive');
     expect(screen.queryByRole('heading', { name: 'Snapshots' })).toBeNull();
     expect(document.querySelectorAll('.more-panel')).toHaveLength(1);
+    const title = await screen.findByRole('heading', { level: 2, name: 'Archive' });
+    await waitFor(() => expect(document.activeElement).toBe(title));
     expect(screen.queryByRole('tab', { name: 'Manage' })).toBeNull();
+  });
+
+  it('choosing the same item twice moves focus back to its heading each time', async () => {
+    const user = userEvent.setup();
+    renderSheet(view());
+    await openMore(user, 'Archive');
+    const title = await screen.findByRole('heading', { level: 2, name: 'Archive' });
+    await waitFor(() => expect(document.activeElement).toBe(title));
+    await openMore(user, 'Archive'); // opening the list moves focus to More, so the heading must take it back
+    const again = await screen.findByRole('heading', { level: 2, name: 'Archive' });
+    await waitFor(() => expect(document.activeElement).toBe(again));
+  });
+
+  it('Updates shows a checking line until the request settles, then the empty text', async () => {
+    let resolve: (v: Awaited<ReturnType<typeof client.availableUpdates>>) => void = () => {};
+    vi.mocked(client.availableUpdates).mockReturnValue(new Promise((r) => { resolve = r; }));
+    const user = userEvent.setup();
+    renderSheet(view());
+    await openMore(user, 'Updates');
+    expect(await screen.findByText('Checking for newer versions…')).toBeTruthy();
+    expect(screen.queryByText(/No newer versions/)).toBeNull();
+    await act(async () => resolve([]));
+    expect(await screen.findByText('No newer versions of the content this character uses.')).toBeTruthy();
+    expect(screen.queryByText('Checking for newer versions…')).toBeNull();
+  });
+
+  it('Updates with one offer shows the offers region', async () => {
+    vi.mocked(client.availableUpdates).mockResolvedValue([
+      { from: { contentId: 'c', revisionId: 'r1' }, to: { contentId: 'c', revisionId: 'r2' }, name: 'Fixture pack', role: 'class', sourceTitle: 'Fixture source', bundled: false } as Awaited<ReturnType<typeof client.availableUpdates>>[number],
+    ]);
+    const user = userEvent.setup();
+    renderSheet(view());
+    await openMore(user, 'Updates');
+    expect(await screen.findByRole('heading', { name: 'Updates available' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Review update: Fixture pack' })).toBeTruthy();
   });
 });
 
@@ -1325,7 +1362,7 @@ describe('export for an older TomeStack', () => {
     vi.mocked(client.saveExportAs).mockResolvedValue({ saved: true, fileName: 'x.tomestack.zip' } as Awaited<ReturnType<typeof client.saveExportAs>>);
   });
 
-  async function openManage() {
+  async function openExport() {
     const user = userEvent.setup();
     renderSheet(view());
     await openMore(user, 'Export…');
@@ -1334,7 +1371,7 @@ describe('export for an older TomeStack', () => {
   const exportButton = () => screen.getByRole('button', { name: 'Export TomeStack file' }) as HTMLButtonElement;
 
   it('re-runs the preview for the chosen release and again without a target for the first choice', async () => {
-    const user = await openManage();
+    const user = await openExport();
     await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
     await waitFor(() => expect(vi.mocked(client.previewExport).mock.lastCall).toEqual([['fixture-2'], 'backup', '0.6.0']));
     await user.click(screen.getByRole('radio', { name: firstRadio }));
@@ -1342,7 +1379,7 @@ describe('export for an older TomeStack', () => {
   });
 
   it('keeps focus on the radio that was chosen while the preview reloads', async () => {
-    const user = await openManage();
+    const user = await openExport();
     const radio = await screen.findByRole('radio', { name: '0.6.0' });
     await user.click(radio);
     await screen.findByRole('region', { name: 'Changed for TomeStack 0.6.0' });
@@ -1352,7 +1389,7 @@ describe('export for an older TomeStack', () => {
 
   it('disables Export while something blocks, and describes why', async () => {
     changesFor['0.6.0'] = [exportChange('blocks', 'Compat Hero needs 0.7.0.')];
-    const user = await openManage();
+    const user = await openExport();
     await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
     await screen.findByText('Compat Hero needs 0.7.0.');
     expect(exportButton().disabled).toBe(true);
@@ -1362,7 +1399,7 @@ describe('export for an older TomeStack', () => {
   it('needs the tick for a dropped item, and a new preview clears it', async () => {
     changesFor['0.6.0'] = [exportChange('dropped', 'Compat Tide Stance is left out.')];
     changesFor['0.5.0'] = [exportChange('dropped', 'Compat Steady Hands is left out.')];
-    const user = await openManage();
+    const user = await openExport();
     await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
     const box = (await screen.findByRole('checkbox', { name: confirmLabel })) as HTMLInputElement;
     expect(exportButton().disabled).toBe(true);
@@ -1376,7 +1413,7 @@ describe('export for an older TomeStack', () => {
 
   it('waits for the preview of a chosen release before Export is possible', async () => {
     let settle: (p: Preview) => void = () => {};
-    const user = await openManage();
+    const user = await openExport();
     await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
     await screen.findByRole('region', { name: 'Changed for TomeStack 0.6.0' });
     vi.mocked(client.previewExport).mockReturnValueOnce(new Promise<Preview>((r) => (settle = r)));
@@ -1387,7 +1424,7 @@ describe('export for an older TomeStack', () => {
   });
 
   it('sends the release and the preview hash when a release is chosen, and neither for the first choice', async () => {
-    const user = await openManage();
+    const user = await openExport();
     await waitFor(() => expect(exportButton().disabled).toBe(false));
     await user.click(exportButton());
     expect(vi.mocked(client.saveExportAs).mock.lastCall).toEqual([['fixture-2'], 'backup']);
@@ -1398,7 +1435,7 @@ describe('export for an older TomeStack', () => {
   });
 
   it('offers the control for a share too', async () => {
-    const user = await openManage();
+    const user = await openExport();
     await user.click(screen.getByRole('radio', { name: /^Share with someone/ }));
     await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
     await waitFor(() => expect(vi.mocked(client.previewExport).mock.lastCall).toEqual([['fixture-2'], 'share', '0.6.0']));
@@ -1406,11 +1443,11 @@ describe('export for an older TomeStack', () => {
 
   it('says which TomeStack opens the default file, and shows nothing when the service does not say', async () => {
     vi.mocked(client.previewExport).mockResolvedValue({ ...base, opensIn: '0.5.0' } as unknown as Preview);
-    await openManage();
+    await openExport();
     expect(await screen.findByText('This file opens in TomeStack 0.5.0 or newer.')).toBeTruthy();
     cleanup();
     vi.mocked(client.previewExport).mockResolvedValue(previewOf());
-    await openManage();
+    await openExport();
     await waitFor(() => expect(exportButton().disabled).toBe(false));
     expect(screen.queryByRole('region', { name: 'Compatibility' })).toBeNull();
   });
@@ -1444,7 +1481,7 @@ describe('export for an older TomeStack', () => {
 
   it('lets the last chosen release win when an earlier reply arrives late', async () => {
     changesFor['0.5.0'] = [exportChange('dropped', 'Compat Steady Hands is left out.')];
-    const user = await openManage();
+    const user = await openExport();
     await waitFor(() => expect(exportButton().disabled).toBe(false));
     let late: (p: Preview) => void = () => {};
     vi.mocked(client.previewExport).mockReturnValueOnce(new Promise<Preview>((r) => (late = r)));
@@ -2748,11 +2785,11 @@ describe('after your long rest', () => {
     expect(screen.queryByRole('button', { name: 'Choices' })).toBeNull();
   });
 
-  it('keeps the Make choices control on the Choices to make line working (Wave 3 3.5)', async () => {
+  it('keeps the Choose now control on the Choices to make line working (Wave 3 3.5)', async () => {
     const user = userEvent.setup();
     const onMakeChoices = vi.fn();
     render(<CharacterSheet view={view({ choices: [{ ...picked('levelUp', 2), resolved: false }] })} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={onMakeChoices} onArchiveChanged={noop} />);
-    await user.click(within(screen.getByRole('heading', { name: 'Choices to make' }).closest('section')!).getByRole('button', { name: 'Make choices' }));
+    await user.click(within(screen.getByRole('heading', { name: 'Choices to make' }).closest('section')!).getByRole('button', { name: 'Choose now' }));
     expect(onMakeChoices).toHaveBeenCalledTimes(1);
   });
 });
