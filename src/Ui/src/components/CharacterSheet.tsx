@@ -42,6 +42,7 @@ import { GapNotesPanel, gapAboutFeature, gapAboutField } from './GapNotesPanel';
 import { PreflightPanel } from './PreflightPanel';
 import { canSaveAfter } from './preflightText';
 import { PrintView } from './PrintView';
+import { MoreMenu } from './sheet/MoreMenu';
 import { RestPanel } from './RestPanel';
 import { logged, rollLogLimit, type LoggedRoll } from './RollLog';
 import { SheetSummary } from './SheetSummary';
@@ -164,7 +165,7 @@ function FieldCard({ value, labels, onOverride, onRoll, onReportGap }: FieldProp
 
 interface ExportProps {
   characterId: string;
-  /** The Manage tab is shown: the preview loads only then. */
+  /** The Export panel is open (More → Export…): the preview loads only then. */
   active: boolean;
   /** The character's stamp; a change reloads the preview. */
   updatedAt: string | undefined;
@@ -331,6 +332,8 @@ export function ExportPanel({ characterId, active, updatedAt, onError, onStatus 
   );
 }
 
+type MorePanelId = 'print' | 'export' | 'snapshots' | 'updates' | 'archive';
+
 interface Props {
   view: CharacterView;
   onChanged: (view: CharacterView) => void;
@@ -400,7 +403,6 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   );
   const labels = new Map(sheet.fields.map((f) => [f.field, f.label]));
   const heading = useRef<HTMLHeadingElement>(null);
-  const printButton = useRef<HTMLButtonElement>(null);
   const shortRestButton = useRef<HTMLButtonElement>(null);
   const longRestButton = useRef<HTMLButtonElement>(null);
   /** MECH-X item 2: the sources whose picks may be replaced after the long rest just finished. Page state; Dismiss clears it. */
@@ -432,7 +434,26 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   const [compact, setCompact] = useState(compactPlay());
   // Wave 3 3.4: read on every render (Settings is another screen, so the sheet remounts after a change).
   const boxesTop = abilityBoxesTop();
-  const [printing, setPrinting] = useState(false);
+  // Wave 3 3.5: the panel a More item opened (one region under the header; choosing another item replaces it). `n` is a fresh
+  // number per choice so choosing the same item again moves focus to its heading again.
+  const [morePanel, setMorePanel] = useState<{ id: MorePanelId; n: number }>();
+  const moreCount = useRef(0);
+  const moreTrigger = useRef<HTMLButtonElement>(null);
+  const moreRegion = useRef<HTMLDivElement>(null);
+  function openMorePanel(id: MorePanelId) {
+    setMorePanel({ id, n: ++moreCount.current });
+  }
+  function closeMorePanel() {
+    setMorePanel(undefined);
+    moreTrigger.current?.focus(); // WCAG 2.4.3: the panel is gone, so back to the button that opened the list
+  }
+  useEffect(() => {
+    if (!morePanel || morePanel.id === 'print') return; // the print preview moves focus to its own heading
+    const first = moreRegion.current?.querySelector<HTMLElement>('h2');
+    if (!first) return;
+    first.tabIndex = -1;
+    first.focus();
+  }, [morePanel]);
   // D43 S3: the open turn panel (start or end of the turn) and the opener to return focus to when it closes (WCAG 2.4.3).
   const [turning, setTurning] = useState<TurnMoment>();
   const turnOpener = useRef<TurnMoment>(undefined);
@@ -477,7 +498,6 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
     { id: 'features', label: 'Features' },
     { id: 'stats', label: 'Skills and saves' },
     { id: 'notes', label: 'Journal' },
-    { id: 'manage', label: 'Manage' },
   ];
   // The sheet is keyed by character, so this runs once per opened character. A deep link wins over the memory.
   const [tab, setTabState] = useState<SheetTabId>(() => (panelTakesFocus ? 'features' : undefined) ?? initialTab ?? rememberedSheetTab(character.id) ?? 'play');
@@ -937,15 +957,19 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
             Already at level 20, the highest level.
           </span>
         )}
-        {/* MECH-X item 2 (owner, 2026-10-28): picks can always be changed; a swap outside its window gets the save notice. */}
-        {(sheet.choices?.length ?? 0) > 0 && (
-          <button type="button" onClick={onMakeChoices}>
-            Change picks
-          </button>
-        )}
-        <button type="button" ref={printButton} onClick={() => setPrinting((open) => !open)} aria-expanded={printing} aria-controls={printing ? 'print-preview' : undefined}>
-          Print…
-        </button>
+        {/* Wave 3 3.5: Manage is gone; its panels, Choices (was "Change picks") and Print live in More. MECH-X item 2 (owner,
+            2026-10-28): picks can always be changed; a swap outside its window gets the save notice. */}
+        <MoreMenu
+          triggerRef={moreTrigger}
+          items={[
+            ...((sheet.choices?.length ?? 0) > 0 ? [{ id: 'choices', label: 'Choices', onSelect: onMakeChoices }] : []),
+            { id: 'print', label: 'Print…', onSelect: () => openMorePanel('print') },
+            { id: 'export', label: 'Export…', onSelect: () => openMorePanel('export') },
+            { id: 'snapshots', label: 'Snapshots', onSelect: () => openMorePanel('snapshots') },
+            { id: 'updates', label: 'Updates', onSelect: () => openMorePanel('updates') },
+            { id: 'archive', label: 'Archive', onSelect: () => openMorePanel('archive') },
+          ]}
+        />
       </header>
 
       <SheetSummary view={view} rollMode={rollMode} onRollMode={setRollMode} lastRoll={lastRoll} rollLog={rollLog} act={act} onDamage={openDamage} spellsTab={showSpells} rulesFamilies={rulesFamilies}
@@ -1032,15 +1056,24 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
         />
       )}
 
-      {printing && (
-        <PrintView
-          view={view}
-          onError={onError}
-          onClose={() => {
-            setPrinting(false);
-            printButton.current?.focus();
-          }}
-        />
+      {morePanel?.id === 'print' && <PrintView key={morePanel.n} view={view} onError={onError} onClose={closeMorePanel} />}
+      {morePanel && morePanel.id !== 'print' && (
+        <div className="more-panel" ref={moreRegion} key={morePanel.n}>
+          {morePanel.id === 'export' && (
+            <>
+              <ExportPanel characterId={character.id} active updatedAt={character.updatedAt} onError={onError} onStatus={onStatus} />
+              <VttExportPanel characterId={character.id} onError={onError} onStatus={onStatus} />
+            </>
+          )}
+          {morePanel.id === 'snapshots' && <SnapshotsPanel character={character} onChanged={onChanged} onError={onError} onStatus={onStatus} />}
+          {morePanel.id === 'updates' && <UpdatesPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} showEmpty />}
+          {morePanel.id === 'archive' && <ArchivePanel character={character} onError={onError} onStatus={onStatus} onChanged={onArchiveChanged} />}
+          <div className="actions">
+            <button type="button" onClick={closeMorePanel}>
+              Close
+            </button>
+          </div>
+        </div>
       )}
       <div className="sheet-body">
 
@@ -1213,14 +1246,6 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
         <SessionNotesPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} saveCharacter={saveCharacter} />
         <GapNotesPanel view={view} onError={onError} onStatus={onStatus} about={gapAbout} onAboutChange={setGapAbout} textRef={gapText} />
         <DetailsPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} headingRef={detailsHeading} shown={active === 'notes'} saveCharacter={saveCharacter} />
-      </TabPanel>
-
-      <TabPanel idPrefix="sheet" id="manage" active={active === 'manage'}>
-        <UpdatesPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} />
-        <ExportPanel characterId={character.id} active={active === 'manage'} updatedAt={character.updatedAt} onError={onError} onStatus={onStatus} />
-        <VttExportPanel characterId={character.id} onError={onError} onStatus={onStatus} />
-        <ArchivePanel character={character} onError={onError} onStatus={onStatus} onChanged={onArchiveChanged} />
-        <SnapshotsPanel character={character} onChanged={onChanged} onError={onError} onStatus={onStatus} />
       </TabPanel>
       </div>
     </article>

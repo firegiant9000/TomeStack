@@ -84,9 +84,7 @@ export function ArchivePanel({ character, onError, onStatus, onChanged }: Props)
 
   return (
     <section aria-labelledby="archive-heading">
-      <h2 id="archive-heading" className="visually-hidden">
-        Archive
-      </h2>
+      <h2 id="archive-heading">Archive</h2>
       <button
         type="button"
         ref={archiveButton}

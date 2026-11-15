@@ -1,5 +1,5 @@
 import { useId, useRef, useState } from 'react';
-import type { KeyboardEvent } from 'react';
+import type { KeyboardEvent, RefObject } from 'react';
 
 export interface MoreMenuItem {
   id: string;
@@ -13,10 +13,11 @@ export interface MoreMenuItem {
  * no arrow-key model), so Tab walks the items. Esc closes it and returns focus to "More". The handler is its own and calls
  * `preventDefault`, so the global Esc handler (escape.ts) skips the same key press instead of toggling the list a second time.
  */
-export function MoreMenu({ items }: { items: MoreMenuItem[] }) {
+export function MoreMenu({ items, triggerRef }: { items: MoreMenuItem[]; triggerRef?: RefObject<HTMLButtonElement | null> }) {
   const listId = useId();
   const [open, setOpen] = useState(false);
-  const trigger = useRef<HTMLButtonElement>(null);
+  const ownTrigger = useRef<HTMLButtonElement>(null);
+  const trigger = triggerRef ?? ownTrigger;
 
   function onKeyDown(event: KeyboardEvent) {
     if (event.key !== 'Escape' || !open || event.nativeEvent.isComposing) return;
