@@ -45,7 +45,7 @@ public sealed partial class TomeStackApp
         var key = RequireSpellListKey(request.ListKey);
         var ids = (request.CandidateIds ?? []).Distinct().ToList();
         if (ids.Count is < 1 or > MaxAcceptMany)
-            throw new AppValidationException([new("import.limit-out-of-range", $"Add 1 to {MaxAcceptMany} candidates to a spell list at a time.")]);
+            throw new AppValidationException([new("import.limit-out-of-range", $"Add 1 to {MaxAcceptMany} entries to a spell list at a time.")]);
         var updated = new List<StoredCandidate>();
         var skipped = new List<BlockedCandidate>();
         var notes = new List<BlockedCandidate>();
@@ -150,7 +150,7 @@ public sealed partial class TomeStackApp
                 }));
             }
         });
-        return new(key, drafts, skipped, "Characters keep the spell revisions they recorded until you review an update for each one.");
+        return new(key, drafts, skipped, "Characters keep the spell versions they recorded until you review an update for each one.");
     }
 
     /// <summary>

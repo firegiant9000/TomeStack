@@ -196,6 +196,22 @@ public class ToggleGroupTests
         Assert.Contains(sheet.Diagnostics, d => d.Code == "toggle.group-conflict");
     }
 
+    private static string LabelOf(ContentReference reference, string toggleId) =>
+        Fixtures.PlayMechanicsCatalog().FindRevision(reference)!.Effects.OfType<ToggleEffect>().Single(t => t.ToggleId == toggleId).Label;
+
+    [Fact]
+    public void Toggle_conflict_wording_uses_labels_not_ids()
+    {
+        var sheet = Sheet(Forms(Tide, Ember));
+        var message = Assert.Single(sheet.Diagnostics, d => d.Code == "toggle.group-conflict").Message;
+        var (kept, dropped) = (LabelOf(Fixtures.EmberForm, "ember"), LabelOf(Fixtures.TideForm, "tide"));
+        ServiceWordingTests.AssertPlain(message, [$"'{kept}' and '{dropped}' are both on in the same group", $"only '{kept}' applies"], "'ember'", "'tide'");
+
+        var surge = new ActiveToggle(Fixtures.SurgeOverlay.ContentId, "surge");
+        var overlay = Assert.Single(Sheet(Forms(Ember, surge)).Diagnostics, d => d.Code == "toggle.overlay-not-allowed").Message;
+        ServiceWordingTests.AssertPlain(overlay, [$"'{LabelOf(Fixtures.SurgeOverlay, "surge")}' is not allowed with '{kept}'", "does not apply"], "'surge'", "'ember'");
+    }
+
     [Fact]
     public void An_overlay_applies_in_base_or_with_an_allowed_primary_only()
     {
@@ -298,7 +314,7 @@ public class ToggleGroupTests
         Assert.Equal(5, sheet.Field(FieldIds.Speed).Value - plain.Field(FieldIds.Speed).Value); // lineage applies
         Assert.Equal(2, sheet.Field(FieldIds.ArmorClass).Value - plain.Field(FieldIds.ArmorClass).Value); // alongside ember (its own group is absent too)
         var absent = sheet.Diagnostics.Where(d => d.Code == "toggle.group-absent").ToList();
-        Assert.Contains(absent, d => d.Message.Contains("'lineage'", StringComparison.Ordinal));
+        Assert.Contains(absent, d => d.Message.Contains("'Lineage form' is in a group", StringComparison.Ordinal));
         Assert.DoesNotContain(absent, d => d.Message.Contains(Fixtures.FormDiscipline.ContentId.ToString(), StringComparison.OrdinalIgnoreCase)); // no raw GUID
         Assert.DoesNotContain(sheet.Diagnostics, d => d.Code == "toggle.group-conflict");
         Assert.DoesNotContain(Sheet(Forms(Ember)).Diagnostics, d => d.Code == "toggle.group-absent");

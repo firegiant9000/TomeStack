@@ -146,7 +146,7 @@ public static partial class CharacterCalculator
         var text = string.Format(System.Globalization.CultureInfo.InvariantCulture, description, AbilityNames[effect.Ability]);
         steps.Add(new(field, "base", $"{text}, from {Describe(content)}", constant, value, ContentOrigin(c.Family, content, effect), [new(FieldIds.ProficiencyBonus, pb), new(modifier, mod)]));
         if (c.Casters.Count > 1)
-            c.Warnings.Add(new("spellcasting.multiclass", $"This character has {c.Casters.Count} casters. The sheet's spell attack and save DC are '{content.Revision.Name}''s; each caster's own are listed with its spells.", content.Revision.Reference, effect.Id));
+            c.Warnings.Add(new("spellcasting.multiclass", $"This character has {c.Casters.Count} casters. The sheet's spell attack and save DC are those of '{content.Revision.Name}'; each caster's own are listed with its spells.", content.Revision.Reference, effect.Id));
         return value;
     }
 
@@ -176,7 +176,7 @@ public static partial class CharacterCalculator
             var others = string.Join(", ", slotCasters.Skip(1).Select(x => $"'{x.Content.Revision.Name}' {x.ClassLevel}"));
             c.Warnings.Add(new(
                 "spellcasting.multiclass-slots",
-                $"Spell slots of several classes ({others}) are not combined yet. TomeStack shows '{content.Revision.Name}''s slots; work out the total with the multiclass spellcaster table and record it as an override.",
+                $"Spell slots of several classes ({others}) are not combined yet. TomeStack shows the slots of '{content.Revision.Name}'; work out the total with the multiclass spellcaster table and record it as an override.",
                 content.Revision.Reference,
                 effect.Id));
             c.Manual.Add(field);

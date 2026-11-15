@@ -114,7 +114,7 @@ public class ExportPurposeTests
         var id = SaveMixedCharacter(origin, homebrewSchemaVersion: 12);
 
         var backup = NewerBuildWarnings(origin.App.PreviewExport([id], ExportPurpose.Backup));
-        Assert.Equal($"Opening this needs TomeStack 0.8.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Homebrew Quick Draw' is content at schema 12. Older versions refuse the file.", Assert.Single(backup).Message);
+        Assert.Equal($"Opening this needs TomeStack 0.8.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Homebrew Quick Draw' is content at file version 12. Older versions refuse the file.", Assert.Single(backup).Message);
         // A share leaves the non-redistributable homebrew out, so nothing at v12 would be written.
         Assert.Empty(NewerBuildWarnings(origin.App.PreviewExport([id], ExportPurpose.Share)));
     }
@@ -138,7 +138,7 @@ public class ExportPurposeTests
         var id = SaveMixedCharacter(origin, homebrewSchemaVersion: 12, homebrewStatus: RevisionStatus.Draft);
 
         var backup = NewerBuildWarnings(origin.App.PreviewExport([id], ExportPurpose.Backup));
-        Assert.Equal($"Opening this needs TomeStack 0.8.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Homebrew Quick Draw' is content at schema 12. Older versions refuse the file.", Assert.Single(backup).Message);
+        Assert.Equal($"Opening this needs TomeStack 0.8.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Homebrew Quick Draw' is content at file version 12. Older versions refuse the file.", Assert.Single(backup).Message);
         Assert.Equal("0.8.0", origin.App.PreviewExport([id], ExportPurpose.Backup).OpensIn);
     }
 
@@ -166,7 +166,7 @@ public class ExportPurposeTests
         Assert.Equal("0.8.0", newer.OpensIn);
         var cause = Assert.Single(newer.OpensInCauses!);
         Assert.Equal(("content", 12), (cause.Kind, cause.SchemaVersion));
-        Assert.Equal("'Homebrew Quick Draw' is content at schema 12", cause.Message);
+        Assert.Equal("'Homebrew Quick Draw' is content at file version 12", cause.Message);
     }
 
     [Fact]
@@ -203,7 +203,7 @@ public class ExportPurposeTests
             Assert.Null(preview.OpensIn);
             var cause = Assert.Single(preview.OpensInCauses!);
             Assert.Equal(("content", stance.RevisionId, "SRD 5.1"), (cause.Kind, cause.Id, cause.BundledPack));
-            Assert.Equal($"'{character.Name}' uses 'Compat Tide Stance' from the bundled SRD 5.1 pack, which TomeStack 0.7.0 does not have", cause.Message);
+            Assert.Equal($"'{character.Name}' uses 'Compat Tide Stance' from the bundled SRD 5.1 content, which TomeStack 0.7.0 does not have", cause.Message);
             Assert.Equal("Opening this needs a TomeStack version newer than 0.8.0: it holds bundled SRD content that released versions do not have.", Assert.Single(NewerBuildWarnings(preview)).Message);
         }
     }
@@ -243,7 +243,7 @@ public class ExportPurposeTests
         Assert.Equal("0.8.0", preview.OpensIn);
         var cause = Assert.Single(preview.OpensInCauses!);
         Assert.Equal(("content", 12), (cause.Kind, cause.SchemaVersion));
-        Assert.Equal("'Homebrew Quick Draw' is content at schema 12", cause.Message);
+        Assert.Equal("'Homebrew Quick Draw' is content at file version 12", cause.Message);
     }
 
     [Fact]

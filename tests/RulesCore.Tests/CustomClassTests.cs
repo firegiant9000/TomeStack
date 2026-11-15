@@ -15,7 +15,7 @@ public class CustomClassTests
 {
     private static readonly string[] BothFamilies = [RulesFamilies.Srd51, RulesFamilies.Srd521];
 
-    private static Character Chronicler(string family, int intelligence = 16, params ClassLevel[] classes) =>
+    internal static Character Chronicler(string family, int intelligence = 16, params ClassLevel[] classes) =>
         Fixtures.Load(family == RulesFamilies.Srd51 ? "srd51-ash-m1.json" : "srd521-ash-m1.json") with
         {
             Pins = [],
@@ -30,7 +30,7 @@ public class CustomClassTests
 
     private static int[] Slots(CharacterSheet sheet) => [.. Enumerable.Range(1, 9).Select(l => sheet.Field(FieldIds.SpellSlots(l)).Value)];
 
-    private static ContentRevision ChroniclerRevision() => Fixtures.ChroniclerPack().Revisions.Single(r => r.Reference == Fixtures.Chronicler);
+    internal static ContentRevision ChroniclerRevision() => Fixtures.ChroniclerPack().Revisions.Single(r => r.Reference == Fixtures.Chronicler);
 
     [Theory]
     // level, ink, lore, echo (0 before the subclass at 3), initiative, spells prepared, own slots at that level
@@ -148,7 +148,7 @@ public class CustomClassTests
             // The feature pinned on its own belongs to no class, so its SCALE.ink is unavailable.
             var character = Chronicler(family, classes: []) with { Pins = [Fixtures.ChroniclerMarginalia], Choices = [] };
             var sheet = Sheet(character);
-            Assert.Contains(sheet.Field(FieldIds.Initiative).Warnings, w => w.Code == "effect.invalid-formula" && w.Message.Contains("formula.value-unavailable", StringComparison.Ordinal));
+            Assert.Contains(sheet.Field(FieldIds.Initiative).Warnings, w => w.Code == "effect.invalid-formula" && w.Message.Contains("is not available for this character yet", StringComparison.Ordinal));
             Assert.Equal(1, sheet.Field(FieldIds.Initiative).Value);
         }
     }
@@ -191,7 +191,7 @@ public class CustomClassTests
 
             var ink = sheet.Resources!.Single(r => r.ResourceId == "ink");
             Assert.Null(ink.Maximum);
-            Assert.Contains(ink.Warnings, w => w.Message.Contains("formula.unknown-identifier", StringComparison.Ordinal));
+            Assert.Contains(ink.Warnings, w => w.Message.Contains("is not a known value", StringComparison.Ordinal));
             // Every other formula site is gated the same way (review fix): recovery amount, roll bonus, modifier value and
             // spellsFormula read no SCALE either.
             Assert.Null(ink.Recoveries.Single(r => r.On == RestPeriod.ShortRest).Value);

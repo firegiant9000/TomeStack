@@ -382,6 +382,26 @@ public class RollCommandTests
     }
 
     [Fact]
+    public void Refused_amounts_name_the_roll_and_pool_by_label_not_id_or_guid()
+    {
+        var (temp, id) = WaveAdept(spentFocus: 6); // focus 9, 3 left
+        using var _ = temp;
+
+        string Message(int amount) => Assert.Throws<AppValidationException>(() => temp.App.Roll(new RollCommand(id, TideWave, "wave", Amount: amount))).Problems[0].Message;
+
+        var range = Message(7);
+        var unaffordable = Message(4);
+
+        Assert.StartsWith("'Tide wave' takes an amount from", range, StringComparison.Ordinal);
+        Assert.StartsWith("'Focus' has 3 left;", unaffordable, StringComparison.Ordinal);
+        foreach (var message in new[] { range, unaffordable })
+        {
+            Assert.DoesNotContain(TideWave.ContentId.ToString(), message, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("roll.", message, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
     public void Rolling_a_dice_less_action_is_refused()
     {
         var (temp, id) = WaveAdept();

@@ -90,7 +90,7 @@ public class SourcePackTests
         return source;
     }
 
-    private const string LeftOutSecondOfThree = "'Compat Steady Hands', revision 2 of 3 (Compat Homebrew A): left out; what a toggle costs; it would turn on for free.";
+    private const string LeftOutSecondOfThree = "'Compat Steady Hands', version 2 of 3 (Compat Homebrew A): left out; what a toggle costs; it would turn on for free.";
 
     [Fact]
     public void Source_pack_leaves_out_a_superseded_blocked_revision()
@@ -273,7 +273,7 @@ public class SourcePackTests
         var preview = temp.App.PreviewSourcePack([source.Id], outside);
 
         var line = Assert.Single(preview.Changes, c => c.Action == "blocks");
-        Assert.Equal($"'Compat Steady Hands' (Compat Homebrew A) uses '{bundled.Name}' from the bundled SRD 5.1 pack, which TomeStack 0.6.0 does not have. Update the receiver's TomeStack; this content cannot be copied into the file.", line.Message);
+        Assert.Equal($"'Compat Steady Hands' (Compat Homebrew A) uses '{bundled.Name}' from the bundled SRD 5.1 content, which TomeStack 0.6.0 does not have. Update the receiver's TomeStack; this content cannot be copied into the file.", line.Message);
         Assert.Throws<AppValidationException>(() => temp.App.ExportSourcePack([source.Id], outside, preview.ChangesHash));
 
         var fine = temp.App.PreviewSourcePack([source.Id], inside);
@@ -458,10 +458,10 @@ public class SourcePackTests
         // Any published revision at v12 counts (R26); source packs carry published revisions only.
         temp.App.Store.AddRevision(Feat(source.Id, "Test Twelve", Guid.NewGuid(), Guid.NewGuid()) with { Status = RevisionStatus.Published, SchemaVersion = 12 });
         var warning = Assert.Single(temp.App.PreviewSourcePack([source.Id]).Warnings, w => w.Code == "package.needs-newer-build");
-        Assert.Equal($"Opening this needs TomeStack 0.8.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Test Twelve' is content at schema 12. Older versions refuse the file.", warning.Message);
+        Assert.Equal($"Opening this needs TomeStack 0.8.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Test Twelve' is content at file version 12. Older versions refuse the file.", warning.Message);
     }
 
-    private static readonly string PackageWarningText = $"Opening this needs TomeStack 0.8.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Test Newer One' is content at schema 12, and 'Test Newer Two' is content at schema 12. Older versions refuse the file.";
+    private static readonly string PackageWarningText = $"Opening this needs TomeStack 0.8.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Test Newer One' is content at file version 12, and 'Test Newer Two' is content at file version 12. Older versions refuse the file.";
 
     [Fact]
     public void A_toggle_that_names_content_in_another_source_gives_a_reference_outside_warning()
@@ -479,7 +479,10 @@ public class SourcePackTests
         };
         temp.App.Store.AddRevision(toggle);
 
-        Assert.Contains(temp.App.PreviewSourcePack([own.Id]).Warnings, w => w.Code == "pack.reference-outside");
+        var outside = Assert.Single(temp.App.PreviewSourcePack([own.Id]).Warnings, w => w.Code == "pack.reference-outside");
+        Assert.Contains("'Test Pool Source'", outside.Message, StringComparison.Ordinal); // the source's title, never its GUID
+        Assert.Contains("this TomeStack file", outside.Message, StringComparison.Ordinal);
+        AssertPlainFileWording(outside.Message);
         Assert.DoesNotContain(temp.App.PreviewSourcePack([other.Id]).Warnings, w => w.Code == "pack.reference-outside");
     }
 
@@ -665,6 +668,41 @@ public class SourcePackTests
         Assert.Equal("content.source-mismatch", Code(() => app.SaveDraft(elsewhere)));
         app.Store.AddRevision(elsewhere with { Status = RevisionStatus.Published, SchemaVersion = 3 });
         Assert.Contains("pack.content-spans-sources", PackCodes(() => app.ExportSourcePack([shared.Id])));
+    }
+
+    /// <summary>D99 (2b.10): a player reads these in plain words: "TomeStack file", "version", a name, never a GUID or a pack/package/revision.</summary>
+    internal static void AssertPlainFileWording(string message)
+    {
+        Assert.DoesNotMatch(@"(?i)\b(packs?|packages?|revisions?|schema|candidates?)\b", message);
+        Assert.DoesNotMatch(@"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-", message);
+    }
+
+    [Fact]
+    public void Source_file_messages_are_in_plain_words_and_name_no_guid()
+    {
+        using var temp = new TempApp();
+        var app = temp.App;
+        var unmarked = app.CreateHomebrewSource(new("Test Private Notes", [RulesFamilies.Srd51]));
+        Publish(temp, Feat(unmarked.Id, "Test Quiet Step", Guid.NewGuid(), Guid.NewGuid()));
+        var empty = Shared(temp, "Test Empty Notes");
+        var bundled = app.ListSources().First(s => s.EditionVersion != "homebrew");
+        var shared = Shared(temp, "Test Shared Notes");
+        var content = Guid.NewGuid();
+        Publish(temp, Feat(shared.Id, "Test Split Step", content, Guid.NewGuid()));
+        app.Store.AddRevision(Feat(unmarked.Id, "Test Split Step", content, Guid.NewGuid()) with { Status = RevisionStatus.Published, SchemaVersion = 3 });
+
+        string Message(Action action) => Assert.Single(Assert.Throws<PackageException>(action).Errors).Message;
+        var bundledMessage = Message(() => app.ExportSourcePack([bundled.Id]));
+        Assert.Contains("a TomeStack file never carries it", bundledMessage, StringComparison.Ordinal);
+        Assert.Contains("is not marked as shareable", Message(() => app.ExportSourcePack([unmarked.Id])), StringComparison.Ordinal);
+        Assert.Equal("That source is not installed.", Message(() => app.ExportSourcePack([Guid.NewGuid()])));
+        var spans = Message(() => app.ExportSourcePack([shared.Id]));
+        Assert.Contains("has versions in another source too", spans, StringComparison.Ordinal);
+        Assert.Contains("Test Split Step", spans, StringComparison.Ordinal);
+        foreach (var message in new[] { bundledMessage, Message(() => app.ExportSourcePack([unmarked.Id])), Message(() => app.ExportSourcePack([Guid.NewGuid()])), spans })
+            AssertPlainFileWording(message);
+        // Written into manifests (and byte-compared goldens): never reworded.
+        Assert.Equal("A source pack never includes PDFs, drafts, characters, gap notes or text read from PDFs.", PackageService.SourceAttachmentPolicy);
     }
 
     [Fact]

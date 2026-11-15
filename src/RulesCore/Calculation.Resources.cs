@@ -143,7 +143,7 @@ public static partial class CharacterCalculator
                     }
                     var clamped = Math.Clamp(value, low, high);
                     if (clamped != value)
-                        Warn(new("companion.out-of-range", $"'{revision.Name}' companion '{effect.Id}': the {what.ToLowerInvariant()} {value} is outside {low} to {high} and was set to {clamped}.", revision.Reference, effect.Id));
+                        Warn(new("companion.out-of-range", $"'{revision.Name}' companion '{effect.Label}': its {what.ToLowerInvariant()} {value} is outside {low} to {high} and was set to {clamped}.", revision.Reference, effect.Id));
                     trace.Add(new(1, "derive", $"{what} from {source}", value, clamped, origin, null, inputs.Count > 0 ? inputs : null));
                     return clamped;
                 }
@@ -165,7 +165,7 @@ public static partial class CharacterCalculator
                         }
                     }
                     if (!found)
-                        Warn(new("companion.missing-part", $"'{revision.Name}' companion '{effect.Id}' lists attack '{id}', which is not on the sheet.", revision.Reference, effect.Id));
+                        Warn(new("companion.missing-part", $"'{revision.Name}' companion '{effect.Label}' lists {(revision.Effects.OfType<AttackEffect>().FirstOrDefault(a => a.Id == id)?.Label is { } attackLabel ? $"the attack '{attackLabel}'" : "an attack")}, which is not on the sheet.", revision.Reference, effect.Id));
                 }
                 foreach (var id in resourceIds)
                 {
@@ -179,7 +179,7 @@ public static partial class CharacterCalculator
                         }
                     }
                     if (!found)
-                        Warn(new("companion.missing-part", $"'{revision.Name}' companion '{effect.Id}' lists pool '{id}', which is not on the sheet.", revision.Reference, effect.Id));
+                        Warn(new("companion.missing-part", $"'{revision.Name}' companion '{effect.Label}' lists {(revision.Effects.OfType<ResourceEffect>().FirstOrDefault(r => r.ResourceId == id)?.Label is { } poolLabel ? $"the pool '{poolLabel}'" : "a pool")}, which is not on the sheet.", revision.Reference, effect.Id));
                 }
 
                 var recorded = character.Play.Companions?.FirstOrDefault(p => p.ContentId == revision.ContentId && p.Id == effect.CompanionId);
@@ -256,11 +256,11 @@ public static partial class CharacterCalculator
                     case ScaledDiceStatus.Formula:
                         dice[key] = null;
                         // The same code as the range failure, so a roll refuses on this one code only (bonus, cost and save DC keep theirs).
-                        diagnostics.Add(new("roll.dice-invalid", $"'{item.Revision.Name}' roll '{roll.Id}' has no dice: its scaled dice formula failed ({failure!.Code}).", item.Revision.Reference, roll.Id));
+                        diagnostics.Add(new("roll.dice-invalid", $"'{item.Revision.Name}' has a roll with no dice: its scaled dice formula failed.", item.Revision.Reference, roll.Id));
                         break;
                     case ScaledDiceStatus.Range:
                         dice[key] = null;
-                        diagnostics.Add(new("roll.dice-invalid", $"'{item.Revision.Name}' roll '{roll.Id}' has no dice: a count of {count} or a d{die} is outside what this app rolls.", item.Revision.Reference, roll.Id));
+                        diagnostics.Add(new("roll.dice-invalid", $"'{item.Revision.Name}' has a roll with no dice: a count of {count} or a d{die} is outside what this app rolls.", item.Revision.Reference, roll.Id));
                         break;
                     default:
                         dice[key] = count == 0 ? null : $"{count}d{die}";
@@ -399,8 +399,11 @@ public static partial class CharacterCalculator
             if (reason is null && roll.DrawsDown == true && roll.ResourceId is { } drawnPool)
             {
                 var drawnContent = roll.ResourceContent ?? revision.ContentId;
-                if (!resources.Any(r => r.Content.ContentId == drawnContent && r.ResourceId == drawnPool && r.CountsUp))
-                    reason = $"Pool '{drawnPool}' does not count up for this character, so it cannot be drawn down.";
+                var drawn = resources.FirstOrDefault(r => r.Content.ContentId == drawnContent && r.ResourceId == drawnPool);
+                if (drawn is not { CountsUp: true })
+                    reason = drawn is null || string.IsNullOrWhiteSpace(drawn.Label)
+                        ? "That pool does not count up for this character, so it cannot be drawn down."
+                        : $"'{drawn.Label}' does not count up for this character, so it cannot be drawn down.";
             }
             var detail = rollDetails.GetValueOrDefault((revision.Reference, roll.Id));
             // A cost or save DC that cannot be calculated: the row stays available and the player works it out.

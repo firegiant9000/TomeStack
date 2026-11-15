@@ -811,7 +811,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         if (manifest.Format != PackageManifest.FormatName || manifest.FormatVersion is < 1 or > PackageManifest.CurrentFormatVersion)
         {
             var madeBy = manifest.Format == PackageManifest.FormatName && manifest.FormatVersion > PackageManifest.CurrentFormatVersion ? manifest.AppVersion : null;
-            errors.Add(new("package.unsupported-format", $"Package format '{manifest.Format}' v{manifest.FormatVersion} is not supported by this version (v{PackageManifest.CurrentFormatVersion}). {NewerVersionAdvice.ForPackage(madeBy)}"));
+            errors.Add(new("package.unsupported-format", UnsupportedFormatText(manifest.Format == PackageManifest.FormatName, manifest.FormatVersion, NewerVersionAdvice.ForPackage(madeBy))));
             return null;
         }
 

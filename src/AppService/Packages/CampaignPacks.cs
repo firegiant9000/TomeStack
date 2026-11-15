@@ -55,7 +55,7 @@ public sealed partial class PackageService
             files[$"sources/{source.Id:D}.json"] = ("source", Json(ForSourcePack(source)));
         foreach (var revision in plan.Revisions)
             files[$"content/{revision.RevisionId:D}.json"] = ("contentRevision", Json(revision));
-        CheckPackLimits(files, "Allow fewer homebrew sources in the campaign, or share them as source packs.");
+        CheckPackLimits(files, "Allow fewer homebrew sources in the campaign, or share them in a TomeStack file for sources.");
 
         var manifest = new PackageManifest
         {
@@ -107,14 +107,14 @@ public sealed partial class PackageService
     {
         if (parsed.Campaigns.Count != 1)
         {
-            errors.Add(new("pack.campaign-count", $"A campaign pack carries exactly one campaign; this one has {parsed.Campaigns.Count}."));
+            errors.Add(new("pack.campaign-count", $"A TomeStack file for a campaign carries exactly one campaign; this one has {parsed.Campaigns.Count}."));
             return;
         }
         var campaign = parsed.Campaigns[0];
         var carried = parsed.Sources.Select(s => s.Id).ToHashSet();
         var allowed = campaign.AllowedSources.ToHashSet();
         foreach (var stray in parsed.Sources.Where(s => !allowed.Contains(s.Id)))
-            errors.Add(new("pack.source-not-allowed", $"The pack carries '{stray.Title}', which its campaign does not allow."));
+            errors.Add(new("pack.source-not-allowed", $"The file carries '{stray.Title}', which its campaign does not allow."));
         var named = new Dictionary<Guid, OmittedSource>();
         foreach (var omitted in parsed.Manifest.Omitted)
             named.TryAdd(omitted.SourceId, omitted); // a repeated entry in the untrusted manifest is harmless
@@ -125,7 +125,7 @@ public sealed partial class PackageService
             if (named.TryGetValue(id, out var omitted))
                 warnings.Add(new("campaign.source-pending", $"'{campaign.Name}' allows '{omitted.Title}' ({omitted.Publisher}, {omitted.License}), which the sender left out because it was not theirs to share. The campaign records it as waiting until you install it yourself (unless you keep a version of the campaign that does not allow it)."));
             else
-                errors.Add(new("pack.campaign-source-unlisted", $"'{campaign.Name}' allows source {id}, which the pack neither carries nor names."));
+                errors.Add(new("pack.campaign-source-unlisted", $"'{campaign.Name}' allows a source that the file neither carries nor names."));
         }
     }
 
@@ -183,14 +183,15 @@ public sealed partial class PackageService
     /// </summary>
     private List<FieldChange> CampaignChanges(Campaign local, Campaign imported, IReadOnlyDictionary<Guid, SourceRecord> packSources)
     {
-        string Titles(IEnumerable<Guid> ids) => string.Join(", ", ids
-            .Select(id => packSources.GetValueOrDefault(id)?.Title ?? store.FindSource(id)?.Title ?? id.ToString())
-            .Order(StringComparer.Ordinal));
+        string Titles(IEnumerable<Guid> ids) =>
+            PlainNames.SourceTitles(ids.Select(id => packSources.GetValueOrDefault(id)?.Title ?? store.FindSource(id)?.Title));
+        // Display only (the preview table); the families compared below are the raw ids, never these labels (D99).
+        static string FamilyLabel(string id) => PlainNames.Family(id);
         var changes = new List<FieldChange>();
         if (local.Name != imported.Name)
             changes.Add(new("name", local.Name, imported.Name));
         if (local.RulesFamily != imported.RulesFamily)
-            changes.Add(new("rulesFamily", local.RulesFamily, imported.RulesFamily));
+            changes.Add(new("rulesFamily", FamilyLabel(local.RulesFamily), FamilyLabel(imported.RulesFamily)));
         if (!local.AllowedSources.ToHashSet().SetEquals(imported.AllowedSources))
             changes.Add(new("allowedSources", Titles(local.AllowedSources), Titles(imported.AllowedSources)));
         if ((local.HouseRules ?? "") != (imported.HouseRules ?? ""))

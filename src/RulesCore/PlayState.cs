@@ -143,10 +143,10 @@ public sealed record PlayState
             yield return new("play.hit-points-out-of-range", $"Temporary hit points {TemporaryHitPoints} must be between 0 and {MaxHitPoints}.");
         if (Exhaustion is < 0 or > MaxExhaustion)
             yield return new("play.exhaustion-out-of-range", $"Exhaustion level {Exhaustion} must be between 0 and {MaxExhaustion}.");
-        foreach (var use in Resources.Where(r => r.Spent is < 0 or > MaxHitPoints || string.IsNullOrWhiteSpace(r.ResourceId)))
-            yield return new("play.resource-invalid", $"Spent uses of resource '{use.ResourceId}' must be between 0 and {MaxHitPoints}, with a resource id.");
-        foreach (var duplicate in Resources.GroupBy(r => (r.ContentId, r.ResourceId)).Where(g => g.Count() > 1))
-            yield return new("play.resource-duplicate", $"Resource '{duplicate.Key.ResourceId}' is recorded more than once.");
+        foreach (var _ in Resources.Where(r => r.Spent is < 0 or > MaxHitPoints || string.IsNullOrWhiteSpace(r.ResourceId)))
+            yield return new("play.resource-invalid", $"Spent uses of a resource must be between 0 and {MaxHitPoints}, and each needs a resource.");
+        foreach (var _ in Resources.GroupBy(r => (r.ContentId, r.ResourceId)).Where(g => g.Count() > 1))
+            yield return new("play.resource-duplicate", "A resource is recorded more than once.");
         foreach (var condition in Conditions.Where(c => !ConditionKeys.All.Contains(c)))
             yield return new("play.condition-unknown", $"'{condition}' is not a condition TomeStack knows.");
         if (Conditions.Distinct().Count() != Conditions.Count)
