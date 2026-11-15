@@ -2492,7 +2492,7 @@ it('keeps the older-version choice behind a disclosure on the sheet export, and 
   await waitFor(() => expect(within(panel).queryByText(/^This TomeStack has no older version to save for\.$|^Opening this in an older TomeStack\?/)).not.toBeNull());
   if (within(panel).queryByText('This TomeStack has no older version to save for.')) {
     expect(panel.querySelector('details')).toBeNull();
-    expect(within(panel).queryByRole('radio')).toBeNull();
+    expect(within(panel).queryByRole('group', { name: 'Which version will open this file?' })).toBeNull();
     return;
   }
   const release = within(panel).getAllByText(/^\d+\.\d+\.\d+$/, { selector: 'label' })[0]!.textContent!;
