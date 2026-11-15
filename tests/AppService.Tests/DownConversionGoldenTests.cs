@@ -16,7 +16,7 @@ public class DownConversionGoldenTests
 {
     private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
-    public static TheoryData<string, string> Folders => new() { { "for-0.7.0", "0.7.0" }, { "for-0.6.0", "0.6.0" }, { "for-0.5.0", "0.5.0" } };
+    public static TheoryData<string, string> Folders => new() { { "for-0.8.0", "0.8.0" } };
 
     private static string SourceFolder(string folder)
     {
@@ -162,37 +162,14 @@ public class DownConversionGoldenTests
             // The drawsDown golden revisions (a counting-up pool and the roll that draws it down) block a whole-source export by
             // design (spec section 2), so a test-time copy of the pack leaves them out; the committed library is not edited.
             var pack = TempApp.LoadFixture<ContentPack>($"{library}/pack.json");
-            var sourceOfPack = pack.Sources[0].Id;
             // The sheet must depend on lowered content, so a test-time copy adds (the library files are not edited): an always-on
-            // armor class bonus in a revision that is lowered (0.6.0: the cascade copy "Compat Tide Mark"; 0.5.0: the v11 revision
-            // going straight to v9), and a class level (0.6.0: the library's "Compat Path of Tides", a cascade copy; 0.5.0: a class of its own).
-            // 0.7.0: the cascade copy "Compat Echo Mark" and the library's "Compat Path of Echoes", like 0.6.0.
-            var bonusRevision = Guid.Parse(target switch { "0.7.0" => "c1070000-0000-4000-8000-0000000000e8", "0.6.0" => "c1060000-0000-4000-8000-0000000000e8", _ => "c1050000-0000-4000-8000-0000000000e4" });
+            // armor class bonus in a revision that is lowered (the cascade copy "Compat Kit Mark", a v13 revision lowered to v12),
+            // and a class level (the library's "Compat Path of Kits", also a cascade copy).
+            var bonusRevision = Guid.Parse("c1080000-0000-4000-8000-0000000000e6");
             var ward = new ModifierEffect { Id = "mark-ac", Operation = ModifierOperation.Bonus, Target = FieldIds.ArmorClass, Value = "1" };
-            ContentReference classReference;
             List<ContentRevision> revisions = [.. pack.Revisions.Where(r => !BlockingInPacks.Contains(r.RevisionId))
                 .Select(r => r.RevisionId == bonusRevision ? r with { Effects = [.. r.Effects, ward] } : r)];
-            if (target == "0.7.0")
-                classReference = new(Guid.Parse("c1070000-0000-4000-8000-0000000000c6"), Guid.Parse("c1070000-0000-4000-8000-0000000000e6"));
-            else if (target == "0.6.0")
-                classReference = new(Guid.Parse("c1060000-0000-4000-8000-0000000000c6"), Guid.Parse("c1060000-0000-4000-8000-0000000000e6"));
-            else
-            {
-                var teacher = new ContentRevision
-                {
-                    ContentId = Guid.Parse("c1050000-0000-4000-8000-0000000000c9"),
-                    RevisionId = Guid.Parse("c1050000-0000-4000-8000-0000000000e9"),
-                    SchemaVersion = 11, // the version the goldens were made at; not CurrentSchemaVersion, which moves
-                    Kind = ContentKind.Class,
-                    Name = "Compat Test Class",
-                    RulesFamilies = [RulesFamilies.Srd51],
-                    Provenance = new(sourceOfPack),
-                    Status = RevisionStatus.Published,
-                    Effects = [new HitDieEffect { Id = "test-hit-die", Die = 8 }],
-                };
-                revisions.Add(teacher);
-                classReference = teacher.Reference;
-            }
+            var classReference = new ContentReference(Guid.Parse("c1080000-0000-4000-8000-0000000000c4"), Guid.Parse("c1080000-0000-4000-8000-0000000000e4"));
             pack = pack with { Revisions = revisions };
             app.App.Store.InTransaction(() =>
             {
@@ -207,7 +184,7 @@ public class DownConversionGoldenTests
             character = character with
             {
                 // Tide Mark is pinned directly as well: reached only through class and subclass grants, its bonus did not reach the sheet.
-                Pins = [.. character.Pins.Where(p => p.RevisionId != BundledRevision && !BlockingInPacks.Contains(p.RevisionId)).Append(new ContentReference(Guid.Parse(target switch { "0.7.0" => "c1070000-0000-4000-8000-0000000000c8", "0.6.0" => "c1060000-0000-4000-8000-0000000000c8", _ => "c1050000-0000-4000-8000-0000000000c4" }), bonusRevision)).DistinctBy(p => p.RevisionId)],
+                Pins = [.. character.Pins.Where(p => p.RevisionId != BundledRevision && !BlockingInPacks.Contains(p.RevisionId)).Append(new ContentReference(Guid.Parse("c1080000-0000-4000-8000-0000000000c6"), bonusRevision)).DistinctBy(p => p.RevisionId)],
                 Classes = [new ClassLevel(classReference, 1)],
             };
             id = app.App.SaveCharacter(character).Character.Id;
@@ -227,7 +204,7 @@ public class DownConversionGoldenTests
             Add("package.sourcePackPreview", "package.sourcePackExport", $$"""{"sourceIds":["{{sourceId}}"],"target":"{{target}}"}""");
             Add("package.campaignPackPreview", "package.campaignPackExport", $$"""{"campaignId":"{{campaign.Id}}","target":"{{target}}"}""");
 
-            var row = ReleaseLadder.Target(target)!;
+            var row = ReleaseLadder.Row(target)!;
             using var backup = new MemoryStream();
             app.App.WriteLibraryBackup(backup, row, app.App.PreviewLibraryBackup(row).ChangesHash);
             zips[$"library-backup-for-{target}.tomestack.zip"] = KeepOnlySource(backup.ToArray(), sourceId); // the harness restores files named library-backup*
@@ -386,10 +363,10 @@ public class DownConversionGoldenTests
     [Fact]
     public void Cascade_rewritten_grant_points_at_the_subclass_copy_and_the_sheet_resolves_it()
     {
-        var (zips, _) = ProduceInputs("for-0.6.0", "0.6.0");
-        var share = zips["Compat-Hero-for-0.6.0.tomestack.zip"];
-        var classCopy = Guid.Parse("c1060000-0000-4000-8000-0000000000e6");
-        var subclassOriginal = Guid.Parse("c1060000-0000-4000-8000-0000000000e7");
+        var (zips, _) = ProduceInputs("for-0.8.0", "0.8.0");
+        var share = zips["Compat-Hero-for-0.8.0.tomestack.zip"];
+        var classCopy = Guid.Parse("c1080000-0000-4000-8000-0000000000e4");
+        var subclassOriginal = Guid.Parse("c1080000-0000-4000-8000-0000000000e5");
         JsonObject? path = null;
         JsonObject? walker = null;
         using (var zip = new ZipArchive(new MemoryStream(share)))
@@ -397,9 +374,9 @@ public class DownConversionGoldenTests
             {
                 using var stream = entry.Open();
                 var node = JsonNode.Parse(stream)!.AsObject();
-                if (node["name"]!.GetValue<string>() == "Compat Path of Tides")
+                if (node["name"]!.GetValue<string>() == "Compat Path of Kits")
                     path = node;
-                else if (node["name"]!.GetValue<string>() == "Compat Tide Walker")
+                else if (node["name"]!.GetValue<string>() == "Compat Kit Walker")
                     walker = node;
             }
 
@@ -412,13 +389,13 @@ public class DownConversionGoldenTests
         var grant = path["effects"]!.AsArray().Single(e => e!["id"]!.GetValue<string>() == "grant-walker")!;
         Assert.Equal(walkerId.ToString("D"), grant["content"]!["revisionId"]!.GetValue<string>());
 
-        // The lowered character's sheet resolves the subclass copy (Tide Mark is pinned too, so the subclass itself is what is looked for).
+        // The lowered character's sheet resolves the subclass copy (Kit Mark is pinned too, so the subclass itself is what is looked for).
         using var fresh = new TempApp(fresh: true);
         var dispatcher = new CommandDispatcher(fresh.App);
         Dispatch(dispatcher, "package.apply", $$"""{"base64":"{{Convert.ToBase64String(share)}}"}""");
         var id = fresh.App.Store.ListCharacters().Single().Id;
         var view = Dispatch(dispatcher, "character.get", $$"""{"id":"{{id}}"}""");
-        Assert.Contains("Compat Tide Walker", view.GetProperty("sheet").GetRawText(), StringComparison.Ordinal);
+        Assert.Contains("Compat Kit Walker", view.GetProperty("sheet").GetRawText(), StringComparison.Ordinal);
     }
 
     private static JsonElement Dispatch(CommandDispatcher dispatcher, string command, string payload)

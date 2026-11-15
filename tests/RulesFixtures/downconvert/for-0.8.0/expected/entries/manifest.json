@@ -1,0 +1,95 @@
+{
+  "format": "tomestack.package",
+  "formatVersion": 5,
+  "createdAt": "2026-09-24T12:00:00+00:00",
+  "appVersion": "{appVersion}",
+  "purpose": "share",
+  "characters": [
+    "c1080000-0000-4000-8000-0000000000a1"
+  ],
+  "entries": [
+    {
+      "path": "characters/c1080000-0000-4000-8000-0000000000a1.json",
+      "kind": "character",
+      "sha256": "d25ca4e1e51a684d5abf6d1fe9a4a676e5f3a11042da52fb34e9666d99ae60ae",
+      "size": 2225
+    },
+    {
+      "path": "content/251e309f-52e9-5dac-a507-18a19598c090.json",
+      "kind": "contentRevision",
+      "sha256": "417c3abf0ea6de9c00e8a4fbb55676c8d59ad0563a4eeb0025c0522f6b075d35",
+      "size": 741
+    },
+    {
+      "path": "content/4804a750-750e-5c82-bb1a-009d093111c4.json",
+      "kind": "contentRevision",
+      "sha256": "a33e1c7416f3f19ffd4821970610255abb0bab5751d1a9c75a5c90119b969d84",
+      "size": 1067
+    },
+    {
+      "path": "content/51e00000-0000-4000-8000-000000000001.json",
+      "kind": "contentRevision",
+      "sha256": "{bundled}",
+      "size": "{bundled}"
+    },
+    {
+      "path": "content/c1080000-0000-4000-8000-0000000000e1.json",
+      "kind": "contentRevision",
+      "sha256": "831cd133855a70e169e33ef1f962c08f1152dc8a775e11d23af4081c66971dc9",
+      "size": 662
+    },
+    {
+      "path": "content/c1080000-0000-4000-8000-0000000000e2.json",
+      "kind": "contentRevision",
+      "sha256": "1bdbe8d1ee9ffd61563c3f1fbb821c7b82fab59352eafa16b74e2ebd212356a0",
+      "size": 778
+    },
+    {
+      "path": "content/c1080000-0000-4000-8000-0000000000e3.json",
+      "kind": "contentRevision",
+      "sha256": "7c81df9790f1bcef41a8a98940d6fb3f5e3ed11c4070b7815d930387f137edd4",
+      "size": 642
+    },
+    {
+      "path": "content/d36650fa-c1b9-5798-bc2f-aaf4656a52e0.json",
+      "kind": "contentRevision",
+      "sha256": "68ee0b3d069a301254ec79f1dc7026efcc2b3db4468a6c999c2aa71fd7bd3d43",
+      "size": 837
+    },
+    {
+      "path": "content/dfb86ae3-bd02-5992-aac2-1348d086188f.json",
+      "kind": "contentRevision",
+      "sha256": "bec385420221e9f3759b15396930174cb5062adea71e9fb15978bf0a0813ef68",
+      "size": 911
+    },
+    {
+      "path": "sources/51500000-0000-4000-8000-000000000001.json",
+      "kind": "source",
+      "sha256": "{bundled}",
+      "size": "{bundled}"
+    },
+    {
+      "path": "sources/c1080000-0000-4000-8000-000000000001.json",
+      "kind": "source",
+      "sha256": "ff725dd4ac34638afb632f0314b724970f6cfc53382a7d63679c10a2b5eccdbb",
+      "size": 317
+    }
+  ],
+  "notices": [
+    {
+      "sourceId": "51500000-0000-4000-8000-000000000001",
+      "text": "{bundled}"
+    },
+    {
+      "sourceId": "c1080000-0000-4000-8000-000000000001",
+      "title": "Compat Homebrew A",
+      "publisher": "TomeStack project",
+      "license": "Original test fixture",
+      "redistributable": true,
+      "attribution": "Written for TomeStack tests."
+    }
+  ],
+  "omitted": [],
+  "madeFor": "0.8.0",
+  "attachmentPolicy": "PDF attachments are never included in packages; linked pages must be re-attached on the receiving machine."
+}

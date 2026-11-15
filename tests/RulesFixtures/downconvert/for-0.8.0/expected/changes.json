@@ -1,0 +1,12 @@
+[
+  {
+    "entry": "content/c1080000-0000-4000-8000-0000000000e8.json",
+    "kind": "content",
+    "id": "c1080000-0000-4000-8000-0000000000e8",
+    "name": "Compat Kit Satchel",
+    "sourceTitle": "Compat Homebrew A",
+    "action": "dropped",
+    "code": "package.target-drops",
+    "message": "'Compat Kit Satchel' (Compat Homebrew A): what a pack contains, which the older version cannot hold; the pack stays as one item."
+  }
+]

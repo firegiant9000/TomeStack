@@ -195,9 +195,9 @@ export function ImportPanel({ source, hasPdf, onError, onStatus, onOpenStudio }:
 
   return (
     <section aria-label={`Read the text of ${source.title}`} className="play-panel">
-      <h4>
+      <h3>
         Find entries in this PDF <span className="tag">Experimental</span>
-      </h4>
+      </h3>
       <p className="hint">
         {hasPdf ? 'TomeStack reads the PDF on this computer' : 'TomeStack reads a Markdown file you choose, on this computer,'} and proposes entries for you to review.
         The text is never exported. Experimental: it has not been proven on a real third-party book yet, so check every entry against its page. Nothing
@@ -351,7 +351,7 @@ export function ImportPanel({ source, hasPdf, onError, onStatus, onOpenStudio }:
       )}
       {viewing && (
         <section ref={viewer} tabIndex={-1} aria-label={`Stored text of page ${viewing.page} of ${source.title}`} className="play-panel">
-          <h5>Page {viewing.page} as TomeStack read it</h5>
+          <h4>Page {viewing.page} as TomeStack read it</h4>
           {viewing.stored.error && <p className="hint">This page could not be read.</p>}
           {viewing.stored.warnings.length > 0 && (
             <ul aria-label="Notes about this page" className="resources">

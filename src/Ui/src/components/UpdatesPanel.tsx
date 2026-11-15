@@ -35,7 +35,7 @@ export function UpdatesPanel({ view, onChanged, onError, onStatus }: Props) {
   if (offers.length === 0) return null;
   return (
     <section aria-labelledby="updates-heading" className="play-panel">
-      <h3 id="updates-heading">Updates available</h3>
+      <h2 id="updates-heading">Updates available</h2>
       <p className="hint">Newer versions of content this character uses. Nothing changes until you review an update and apply it.</p>
       {reviewing ? (
         <UpdateReviewPanel

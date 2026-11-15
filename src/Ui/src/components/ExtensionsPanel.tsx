@@ -201,7 +201,7 @@ function HookRun({ extension, hook, characters, rulesFamilies, onError, onStatus
 
   return (
     <section className="play-panel" aria-label={`Run ${hook.label}`}>
-      <h4>{hook.label}</h4>
+      <h3>{hook.label}</h3>
       {hook.kind === 'export' ? (
         <>
           {readsSheet && (
@@ -366,8 +366,8 @@ export function ExtensionsPanel(props: Props) {
   }
 
   return (
-    <section className="panel" aria-labelledby="extensions-heading">
-      <h2 id="extensions-heading">Extensions</h2>
+    <section aria-labelledby="extensions-heading">
+      <h2 id="extensions-heading">Add-ons</h2>
       <p className="hint">
         An extension adds an import or an export. It never runs code: TomeStack reads its instructions and does the work, and
         it can use only the permissions you grant. Every run shows you the result first.

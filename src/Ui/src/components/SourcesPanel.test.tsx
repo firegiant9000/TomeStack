@@ -149,7 +149,7 @@ it('shows no target control, and reports nothing, when the targets cannot be rea
   const onError = vi.fn();
   await openPreview(onError);
   await waitFor(() => expect(client.packageTargets).toHaveBeenCalled());
-  expect(screen.queryByText('Which TomeStack will open it?')).toBeNull();
+  expect(screen.queryByRole('group', { name: 'Which version will open this file?' })).toBeNull();
   expect(save().disabled).toBe(false);
   expect(onError).not.toHaveBeenCalled();
 });

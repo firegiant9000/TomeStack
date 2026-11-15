@@ -40,6 +40,29 @@ afterEach(() => {
 const candidateButton = (panel: () => HTMLElement, name: string) =>
   waitFor(() => within(within(panel()).getByRole('list', { name: 'Entries found' })).getByRole('button', { name }), { timeout: 10000 });
 
+/**
+ * Group 2 navigation: a new character goes "+ Add a character" (sidebar) > "Make a new one" > Continue. The sidebar button is
+ * enabled before app.info loads; the chooser disables "Make a new one" until it has, so the radio is waited on.
+ */
+async function startNewCharacter(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+  await user.click(await screen.findByRole('button', { name: '+ Add a character' }));
+  const make = await screen.findByRole<HTMLInputElement>('radio', { name: 'Make a new one' });
+  await waitFor(() => expect(make.disabled).toBe(false));
+  await user.click(make);
+  await user.click(screen.getByRole('button', { name: 'Continue' }));
+}
+
+/** Add-ons live in Settings now (no sidebar entry): opens Settings and waits for the lazy Add-ons section. */
+async function openAddOns(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+  await user.click(await screen.findByRole('button', { name: 'Settings' }));
+  await screen.findByRole('heading', { name: 'Add-ons' });
+}
+
+/** The brand button in the window title area always goes home (the sidebar's "All characters" shows only with 2+ characters). */
+async function goHome(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+  await user.click(await screen.findByRole('button', { name: 'TomeStack, your characters' }));
+}
+
 function bytesOf(base64: string): Uint8Array<ArrayBuffer> {
   return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
 }
@@ -79,7 +102,7 @@ it('creates a character, shows its traced sheet, overrides, exports and re-impor
 
   // Sheet with a source-aware trace: Dex 14 + 2 (Fixture Quickfoot, species under 2014 rules) = 16 -> +3
   const sheet = await screen.findByRole('article', { name: 'E2E Pell' });
-  await waitFor(() => expect(document.activeElement).toBe(within(sheet).getByRole('heading', { level: 2, name: 'E2E Pell' })));
+  await waitFor(() => expect(document.activeElement).toBe(within(sheet).getByRole('heading', { level: 1, name: 'E2E Pell' })));
   await openTab(user, sheet, 'Skills and saves');
   const initiative = within(sheet).getByRole('region', { name: /^Initiative:/ });
   expect(within(initiative).getByRole('heading').textContent).toContain('+3');
@@ -149,7 +172,7 @@ it('creates a character, shows its traced sheet, overrides, exports and re-impor
   // Import: preview first, then apply. The character already exists, so the local copy is backed up.
   const file = new File([bytesOf(base64)], fileName, { type: 'application/zip' });
   await user.upload(screen.getByLabelText('TomeStack file'), file);
-  const preview = await screen.findByRole('region', { name: `Import ${fileName}` });
+  const preview = await screen.findByRole('region', { name: 'Import a TomeStack file' });
   expect(within(preview).getByText(/already exists and will be replaced/)).toBeTruthy();
   await user.click(within(preview).getByRole('button', { name: 'Apply import' }));
 
@@ -180,10 +203,7 @@ async function createCharacter(
     other?: RegExp;
   },
 ) {
-  // "New character" is disabled until app.info has loaded, so a click is never silently ignored.
-  const newCharacter = await screen.findByRole<HTMLButtonElement>('button', { name: 'New character' });
-  await waitFor(() => expect(newCharacter.disabled).toBe(false));
-  await user.click(newCharacter);
+  await startNewCharacter(user);
   await user.type(await screen.findByRole('textbox', { name: 'Name' }), opts.name);
   if (opts.family) await user.click(screen.getByRole('radio', { name: opts.family === 'srd-5.2.1' ? /2024 rules/ : /2014 rules/ }));
   await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
@@ -277,8 +297,8 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   await user.click(within(changed).getByRole('button', { name: 'Dismiss' }));
   expect(within(sheet).queryByRole('region', { name: /^What changed at level/ })).toBeNull();
   // Gone for good: leaving the sheet and opening the character again shows no panel.
-  await user.click(screen.getByRole('button', { name: 'Characters' }));
-  await user.click(within(await screen.findByRole('navigation', { name: 'Characters' })).getByRole('button', { name: /E2E Brenna/ }));
+  await goHome(user);
+  await user.click(within(await screen.findByRole('navigation', { name: 'Main' })).getByRole('button', { name: /E2E Brenna/ }));
   sheet = await screen.findByRole('article', { name: 'E2E Brenna' });
   expect(within(sheet).queryByRole('region', { name: /^What changed at level/ })).toBeNull();
 
@@ -970,7 +990,7 @@ it('marks a source as shareable after confirming it is your own work, saves a so
 
   // Importing it: the preview says what a source pack is; here everything is already installed.
   await user.upload(screen.getByLabelText('TomeStack file'), new File([bytesOf(base64)], fileName, { type: 'application/zip' }));
-  const importing = await screen.findByRole('region', { name: `Import ${fileName}` });
+  const importing = await screen.findByRole('region', { name: 'Import a TomeStack file' });
   expect(within(importing).getByText(/This TomeStack file holds sources\. Its sender stated that each source is their own work/)).toBeTruthy();
   await user.click(within(importing).getByRole('button', { name: 'Apply import' }));
   await expectStatus(/unchanged/);
@@ -1040,7 +1060,7 @@ it('shares a campaign as a campaign pack that names what it leaves out, and impo
   // Here the campaign changes after the pack was made; importing it asks which version to keep.
   await client.saveCampaign({ ...campaign, name: 'E2E Harbor Table (local)', allowedSources: ['52500000-0000-4000-8000-000000000001', harbor.id] });
   await user.upload(screen.getByLabelText('TomeStack file'), new File([bytesOf(base64)], fileName, { type: 'application/zip' }));
-  const importing = await screen.findByRole('region', { name: `Import ${fileName}` });
+  const importing = await screen.findByRole('region', { name: 'Import a TomeStack file' });
   expect(within(importing).getByText(/This TomeStack file holds a campaign/)).toBeTruthy();
   const apply = within(importing).getByRole<HTMLButtonElement>('button', { name: 'Apply import' });
   expect(apply.disabled).toBe(true);
@@ -1062,7 +1082,7 @@ it('installs the sample extension after granting its permissions, runs its impor
   await client.createCharacter({ name: 'E2E Ext Hero', rulesFamily: 'srd-5.2.1', baseAbilities: { str: 10, dex: 14, con: 12, int: 10, wis: 10, cha: 10 }, pins: [] });
 
   render(<App />);
-  await user.click(await screen.findByRole('button', { name: 'Extensions' }));
+  await openAddOns(user);
   // DevHost has no native Open dialog, so the browser picker is used.
   await user.click(await screen.findByRole('button', { name: 'Install extension…' }));
   await user.upload(screen.getByLabelText('Extension file'), extension);
@@ -1174,7 +1194,7 @@ it('follows the authoring guides: the extension guide, packed as written, instal
   await client.createCharacter({ name: 'E2E Guide Reader', rulesFamily: 'srd-5.2.1', baseAbilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, pins: [], classes: [{ class: srd(11), level: 1 }] });
 
   render(<App />);
-  await user.click(await screen.findByRole('button', { name: 'Extensions' }));
+  await openAddOns(user);
   await user.click(await screen.findByRole('button', { name: 'Install extension…' }));
   await user.upload(screen.getByLabelText('Extension file'), new File([zip(files)], 'example-feature-list.tomestack-ext.zip', { type: 'application/zip' }));
   // "Tick the permissions and choose Install with these permissions."
@@ -1579,7 +1599,7 @@ it('adds the wizard list to a fixture spell candidate in bulk, accepts and publi
   // The published spell is on the wizard list, so the builder offers it to a wizard.
   const keys = await client.spellListKeys();
   expect(keys.find((k) => k.key === 'wizard')!.spells).toBeGreaterThan(0);
-  await user.click(screen.getByRole('button', { name: 'Characters' }));
+  await goHome(user);
   await createCharacter(user, { name: 'E2E Listed Wizard', family: 'srd-5.2.1', cls: /^Wizard/ });
   const picker = await screen.findByRole('group', { name: /^Spellcasting spells/ }); // the SRD wizard's rule is named "Spellcasting"
   expect(within(picker).getByRole('checkbox', { name: /^Fixture Ember Lance/ })).toBeTruthy();
@@ -1617,7 +1637,7 @@ it('authors a species with a Strength increase and a skill in the studio, publis
   expect(published.effects.filter((e) => e.type === 'modifier' && e.target === 'speed')).toMatchObject([{ operation: 'replace', value: '25' }]);
   expect(published.schemaVersion).toBe(10);
 
-  await user.click(screen.getByRole('button', { name: 'Characters' }));
+  await goHome(user);
   await createCharacter(user, { name: 'E2E Folk Child', family: 'srd-5.1', species: /^E2E Folk/ });
   expect(await screen.findByRole('heading', { name: /^Choices/ })).toBeTruthy();
 });
@@ -1652,7 +1672,7 @@ it('authors a newer-rules background with three ability increases: the option fe
   // The open editor showed the superseded draft: it closes with a status instead of saving over the published version.
   await waitFor(() => expect(screen.queryByRole('region', { name: /^New |^Edit / })).toBeNull());
 
-  await user.click(screen.getByRole('button', { name: 'Characters' }));
+  await goHome(user);
   await createCharacter(user, { name: 'E2E Wanderer Child', family: 'srd-5.2.1', background: /^E2E Wanderer/ });
   expect(await screen.findByRole('heading', { name: /^Choices/ })).toBeTruthy();
 });
@@ -1697,7 +1717,7 @@ it('shows different allowed content for two campaign profiles, and records a rea
 
   // The campaign is chosen on the Rules step; the backgrounds it governs are on the Background step (D32), so this flow
   // walks the steps by hand instead of through `createCharacter`.
-  await user.click(screen.getByRole('button', { name: 'New character' }));
+  await startNewCharacter(user);
   await user.type(await screen.findByRole('textbox', { name: 'Name' }), 'E2E Campaigner');
   const courier = () => screen.getByRole<HTMLInputElement>('radio', { name: /^Fixture Courier/ });
   const courierOff = () => courier().getAttribute('aria-disabled') === 'true'; // inert, never natively disabled (2.4.3)
@@ -2146,11 +2166,9 @@ it('takes a snapshot of a character, previews the restore, restores it and keeps
 it('drops picks that do not fit when the rules family changes, in the builder and in a campaign', async () => {
   const user = userEvent.setup();
   render(<App />);
-  const newCharacter = await screen.findByRole<HTMLButtonElement>('button', { name: 'New character' });
-  await waitFor(() => expect(newCharacter.disabled).toBe(false));
 
   // Builder: an SRD 5.1 species, then SRD 5.2.1. The 5.1 pick is cleared and no longer listed.
-  await user.click(newCharacter);
+  await startNewCharacter(user);
   await user.type(await screen.findByRole('textbox', { name: 'Name' }), 'E2E Switcher'); // the name is required to leave the Rules step
   await user.click(screen.getByRole('radio', { name: /2014 rules/ }));
   await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
@@ -2188,26 +2206,35 @@ it('drops picks that do not fit when the rules family changes, in the builder an
 it('reaches the primary actions by keyboard alone', async () => {
   const user = userEvent.setup();
   render(<App />);
-  const newCharacter = await screen.findByRole<HTMLButtonElement>('button', { name: 'New character' });
-  await waitFor(() => expect(newCharacter.disabled).toBe(false));
+  // user-event walks a radio group with CSS.escape, which jsdom lacks; the group name needs no escaping.
+  const w = window as unknown as { CSS?: { escape?: (s: string) => string } };
+  w.CSS ??= {};
+  w.CSS.escape ??= (s: string) => s;
+  const addCharacter = await screen.findByRole<HTMLButtonElement>('button', { name: '+ Add a character' });
 
   await user.tab();
-  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Hide sidebar' })); // the shell's one header control comes first
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Hide sidebar' })); // the shell's first header control
   // Owner (2026-10-12): no second close control inside the sidebar; the header's "Hide sidebar" is the only one.
   expect(screen.queryByRole('button', { name: 'Close sidebar' })).toBeNull();
-  // Owner (2026-10-06): the character list comes before the tools. Earlier tests leave characters behind in the shared
-  // DevHost, so the next stop is the first of them, or "Characters" (the first tool) when the list is empty; the bounded
-  // loop walks past "Characters" to "New character".
   await user.tab();
-  const list = within(screen.getByRole('navigation', { name: 'Characters' })).getByRole('list', { name: 'Characters' });
-  const charactersTool = within(screen.getByRole('navigation', { name: 'Characters' })).getByRole('button', { name: 'Characters' });
-  expect(list.contains(document.activeElement) || document.activeElement === charactersTool).toBe(true);
-  for (let i = 0; i < 200 && document.activeElement !== newCharacter; i++) await user.tab();
-  expect(document.activeElement).toBe(newCharacter);
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'TomeStack, your characters' })); // the way home
+  // Spec 3.1: "+ Add a character" heads the sidebar, ahead of the character list.
   await user.tab();
-  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'From a TomeStack file…' }));
+  expect(document.activeElement).toBe(addCharacter);
+  await user.keyboard('{Enter}');
+  expect(await screen.findByRole('heading', { level: 1, name: 'Add a character' })).toBeTruthy();
 
-  await user.keyboard('{Shift>}{Tab}{/Shift}{Enter}');
+  // The chooser's radio group is a single Tab stop. Nothing is chosen yet, so Continue does nothing until a radio is ticked.
+  const make = await screen.findByRole<HTMLInputElement>('radio', { name: 'Make a new one' });
+  await waitFor(() => expect(make.disabled).toBe(false));
+  for (let i = 0; i < 200 && document.activeElement !== make; i++) await user.tab();
+  expect(document.activeElement).toBe(make);
+  await user.keyboard(' ');
+  expect(make.checked).toBe(true);
+  await user.tab();
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Continue' }));
+  await user.keyboard('{Enter}');
+
   expect(await screen.findByRole('heading', { name: 'New character' })).toBeTruthy();
   await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Name' })));
 });
@@ -2377,7 +2404,7 @@ it('records a gap note on a field and a feature, resolves one, and deletes one a
 
   // M3 C5: the list across characters shows the open note with its character; resolved ones only on request.
   await user.click(screen.getByRole('button', { name: 'Gap notes' }));
-  const all = await screen.findByRole('region', { name: /^Gap notes of all characters/ });
+  const all = await screen.findByRole('region', { name: 'Gap notes' }); // the screen's h1 is just "Gap notes" now; its list keeps "of all characters"
   const allList = await within(all).findByRole('list', { name: 'Gap notes of all characters' });
   const mine = () => within(allList).getAllByRole('listitem').filter((li: HTMLElement) => li.textContent!.startsWith('E2E Gaps'));
   expect(mine().map((li: HTMLElement) => li.textContent)).toEqual([expect.stringContaining('Speed bonus should apply while unarmored only.')]);
@@ -2808,7 +2835,7 @@ it('archives a character after a preview, lists it apart, and brings it back (SP
   await createCharacter(user, { name: 'E2E Archivist', family: 'srd-5.1', scores: {}, species: /^Fixture Quickfoot/ });
   await user.click(await screen.findByRole('button', { name: 'Create and save' }));
   const sheet = await screen.findByRole('article', { name: 'E2E Archivist' });
-  const characters = screen.getByRole('navigation', { name: 'Characters' });
+  const characters = screen.getByRole('navigation', { name: 'Main' });
   await openTab(user, sheet, 'Manage');
 
   // Preview first: focus moves into it, and Escape (or "Keep it") changes nothing and returns focus.
@@ -2852,9 +2879,11 @@ it('archives a character after a preview, lists it apart, and brings it back (SP
 const ddbSheet = () => readFileSync(resolve(process.cwd(), '../../tests/RulesFixtures/pdf/fixture-ddb-sheet.pdf'));
 
 async function startDdbImport(user: ReturnType<typeof userEvent.setup>) {
-  const start = await screen.findByRole<HTMLButtonElement>('button', { name: 'From a character sheet (PDF or text)…' });
-  await waitFor(() => expect(start.disabled).toBe(false));
-  await user.click(start);
+  await user.click(await screen.findByRole('button', { name: '+ Add a character' }));
+  const sheet = await screen.findByRole<HTMLInputElement>('radio', { name: 'From a character sheet (PDF or text)' });
+  await waitFor(() => expect(sheet.disabled).toBe(false)); // needs app.info
+  await user.click(sheet);
+  await user.click(screen.getByRole('button', { name: 'Continue' }));
 }
 
 const wotcSheet = () => readFileSync(resolve(process.cwd(), '../../tests/RulesFixtures/pdf/fixture-wotc-sheet.pdf'));
@@ -3197,7 +3226,7 @@ it('keeps the theme picked in Settings when the app is rendered again (ADR-015)'
   const user = userEvent.setup();
   const { unmount } = render(<App />);
   await user.click(await screen.findByRole('button', { name: 'Settings' }));
-  await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { level: 2, name: 'Settings' })));
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { level: 1, name: 'Settings' })));
   await user.click(screen.getByRole('radio', { name: 'Violet' }));
   expect(document.documentElement.dataset.theme).toBe('violet');
   await user.click(screen.getByRole('radio', { name: 'Dark' }));
@@ -3242,36 +3271,34 @@ it('hides and shows the sidebar from the header and by Ctrl+B, moves focus out o
   const { unmount } = render(<App />);
   const toggle = await screen.findByRole('button', { name: 'Hide sidebar' });
   expect(toggle.getAttribute('aria-expanded')).toBe('true');
-  expect(screen.getByRole('navigation', { name: 'Characters' })).toBeTruthy();
+  expect(screen.getByRole('navigation', { name: 'Main' })).toBeTruthy();
 
   await user.click(toggle);
   expect(screen.getByRole('button', { name: 'Show sidebar' }).getAttribute('aria-expanded')).toBe('false');
-  expect(screen.queryByRole('navigation', { name: 'Characters' })).toBeNull();
+  expect(screen.queryByRole('navigation', { name: 'Main' })).toBeNull();
 
   await user.keyboard('{Control>}b{/Control}');
-  expect(screen.getByRole('navigation', { name: 'Characters' })).toBeTruthy();
+  expect(screen.getByRole('navigation', { name: 'Main' })).toBeTruthy();
 
   // Another keyboard layout: Ctrl + the physical B key reports a different character, so the shortcut follows `code`.
   fireEvent.keyDown(document, { key: 'и', code: 'KeyB', ctrlKey: true });
-  expect(screen.queryByRole('navigation', { name: 'Characters' })).toBeNull();
+  expect(screen.queryByRole('navigation', { name: 'Main' })).toBeNull();
   fireEvent.keyDown(document, { key: 'и', code: 'KeyB', ctrlKey: true });
-  expect(screen.getByRole('navigation', { name: 'Characters' })).toBeTruthy();
+  expect(screen.getByRole('navigation', { name: 'Main' })).toBeTruthy();
 
   // Owner (2026-10-12): the header toggle is the only close control; the sidebar has none of its own.
   expect(screen.queryByRole('button', { name: 'Close sidebar' })).toBeNull();
-  expect(within(screen.getByRole('navigation', { name: 'Characters' })).getByRole('heading', { level: 2, name: 'Characters' })).toBeTruthy();
+  expect(within(screen.getByRole('navigation', { name: 'Main' })).getByRole('list', { name: 'Characters' })).toBeTruthy();
 
   // Focus inside the sidebar, then hide it by the shortcut: focus must land on the toggle, not on <body>.
-  const newCharacter = screen.getByRole<HTMLButtonElement>('button', { name: 'New character' });
-  await waitFor(() => expect(newCharacter.disabled).toBe(false));
-  newCharacter.focus();
+  screen.getByRole<HTMLButtonElement>('button', { name: '+ Add a character' }).focus();
   await user.keyboard('{Control>}b{/Control}');
   await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Show sidebar' })));
 
   unmount();
   render(<App />);
   expect(await screen.findByRole('button', { name: 'Show sidebar' })).toBeTruthy();
-  expect(screen.queryByRole('navigation', { name: 'Characters' })).toBeNull();
+  expect(screen.queryByRole('navigation', { name: 'Main' })).toBeNull();
   await user.click(screen.getByRole('button', { name: 'Show sidebar' }));
   expect(localStorage.getItem('tomestack.sidebar')).toBeNull();
 
@@ -3280,22 +3307,22 @@ it('hides and shows the sidebar from the header and by Ctrl+B, moves focus out o
   for (const control of [screen.getByRole('checkbox', { name: 'Animate dice' }), screen.getByRole('radio', { name: 'Violet' })]) {
     control.focus();
     await user.keyboard('{Control>}b{/Control}');
-    expect(screen.queryByRole('navigation', { name: 'Characters' })).toBeNull();
+    expect(screen.queryByRole('navigation', { name: 'Main' })).toBeNull();
     await user.keyboard('{Control>}b{/Control}');
-    expect(screen.getByRole('navigation', { name: 'Characters' })).toBeTruthy();
+    expect(screen.getByRole('navigation', { name: 'Main' })).toBeTruthy();
   }
-  await user.click(screen.getByRole('button', { name: 'New character' }));
+  await startNewCharacter(user);
   const name = await screen.findByRole('textbox', { name: /^Name/ });
   name.focus();
   await user.keyboard('{Control>}b{/Control}');
-  expect(screen.getByRole('navigation', { name: 'Characters' })).toBeTruthy(); // ignored in a text field
+  expect(screen.getByRole('navigation', { name: 'Main' })).toBeTruthy(); // ignored in a text field
 });
 
 it('opens the Characters home screen with a card per character and opens one from it (D25)', async () => {
   const user = userEvent.setup();
   render(<App />);
-  const home = await screen.findByRole('region', { name: 'Characters' }); // the start screen; the sidebar's heading and list share the name
-  expect(within(home).getByRole('heading', { level: 2, name: 'Characters' })).toBeTruthy();
+  const home = await screen.findByRole('region', { name: 'Your characters' }); // the start screen
+  expect(within(home).getByRole('heading', { level: 1, name: 'Your characters' })).toBeTruthy();
   const cards = await within(home).findAllByRole('listitem'); // earlier tests created characters
   expect(cards.length).toBeGreaterThan(0);
   expect(within(home).getByRole('list', { name: 'Characters' })).toBeTruthy();
@@ -3304,9 +3331,9 @@ it('opens the Characters home screen with a card per character and opens one fro
   expect(first.textContent).toMatch(/Level \d+/);
   await user.click(within(first).getByRole('button', { name: `Open ${name}` }));
   expect(await screen.findByRole('article', { name })).toBeTruthy();
-  await user.click(screen.getByRole('button', { name: 'Characters' }));
-  const back = await screen.findByRole('region', { name: 'Characters' });
-  await waitFor(() => expect(document.activeElement).toBe(within(back).getByRole('heading', { level: 2, name: 'Characters' })));
+  await goHome(user);
+  const back = await screen.findByRole('region', { name: 'Your characters' });
+  await waitFor(() => expect(document.activeElement).toBe(within(back).getByRole('heading', { level: 1, name: 'Your characters' })));
 });
 
 it('creates a character with the standard array (D32)', async () => {
@@ -3323,9 +3350,7 @@ it('creates a character with the standard array (D32)', async () => {
 it('rolls ability scores through the dice engine and assigns them (D32)', async () => {
   const user = userEvent.setup();
   render(<App />);
-  const newCharacter = await screen.findByRole<HTMLButtonElement>('button', { name: 'New character' });
-  await waitFor(() => expect(newCharacter.disabled).toBe(false));
-  await user.click(newCharacter);
+  await startNewCharacter(user);
   await user.type(await screen.findByRole('textbox', { name: 'Name' }), 'E2E Rolled');
   await user.click(screen.getByRole('radio', { name: /2024 rules/ }));
   await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));

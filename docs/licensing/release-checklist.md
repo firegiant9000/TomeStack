@@ -13,6 +13,8 @@ The four items ADR-008 left open before the first published installer (LIVING_SP
 
 Over the changes since the `v0.8.0` tag. A patch: `git diff v0.8.0 HEAD -- src/AppService/Content` is empty, and `ReleaseLadder` gains no row (0.8.1 reads the 0.8.0 row; the 0.7.0 row is now offered as a "Save for an older TomeStack" target).
 
+After D103, main offers only the previous minor; cut any further 0.8.x patch from the v0.8.1 tag, not from main.
+
 - **Dependencies:** shipped, only React and React DOM 19.3.0 → 19.3.1 (`scheduler` unchanged; `ATTRIBUTION.md` updated in #150). Development-only: `@testing-library/user-event`, `@types/node`, `@vitejs/plugin-react`, ESLint, `globals`, `typescript-eslint`, and `minimatch` 11.0.7 through an npm `overrides` entry (#154, Dependabot alert #1). `Directory.Packages.props` and `.config/dotnet-tools.json` are unchanged, so every NuGet package and `vpk` 1.2.161 are as in 0.8.0. Workflows: `ci.yml` and `weekly.yml` pin every action by commit SHA, and the weekly Stryker job runs in four shards; `release.yml` is unchanged. `scripts/release-notes.ps1` rewrites relative changelog links to tagged GitHub URLs.
 - **`npm audit --omit=dev`: 0.**
 - **Trademark:** the same search as 0.8.0, over the lines added since `v0.8.0` in `src/` (excluding the SRD packs): no new "D&D", "Wizards of the Coast", "Dungeons", "fifth edition" or "5e". The Foundry export still names the `dnd5e` system id (now 6.0.6), as in §1. Product name, window title, installer title, exe metadata and README tagline unchanged.

@@ -79,12 +79,12 @@ export function CombatStrip({
   const pools = resources.filter((r) => (r.countsUp || r.allowance) && !r.companionId);
   return (
     <section aria-labelledby="combat-heading" className="play-panel combat-strip">
-      <h3 id="combat-heading" tabIndex={-1}>
+      <h2 id="combat-heading" tabIndex={-1}>
         Combat
-      </h3>
+      </h2>
       {toggles.some((t) => t.group) && (
         <section aria-labelledby="forms-heading">
-          <h4 id="forms-heading">Forms (a switch is a confirmed change)</h4>
+          <h3 id="forms-heading">Forms (a switch is a confirmed change)</h3>
           <FormGroups toggles={toggles} act={act} busy={false} resources={view.sheet.resources} />
         </section>
       )}

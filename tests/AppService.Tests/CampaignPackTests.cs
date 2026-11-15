@@ -83,7 +83,7 @@ public class CampaignPackTests
         using var temp = new TempApp();
         var guides = GuideOnlySource(temp, "Compat Guides Only");
         var campaign = Campaign(temp, "Compat Table", guides.Id);
-        var row = ReleaseLadder.Target("0.7.0")!;
+        var row = ReleaseLadder.Row("0.7.0")!;
 
         var preview = temp.App.PreviewCampaignPack(campaign.Id, row);
 
@@ -100,7 +100,7 @@ public class CampaignPackTests
         var guides = GuideOnlySource(temp, "Compat Guides Only");
         var normal = Homebrew(temp, "Compat Normal");
         var campaign = Campaign(temp, "Compat Table", guides.Id, normal.Id);
-        var row = ReleaseLadder.Target("0.7.0")!;
+        var row = ReleaseLadder.Row("0.7.0")!;
 
         var preview = temp.App.PreviewCampaignPack(campaign.Id, row);
 
@@ -131,7 +131,7 @@ public class CampaignPackTests
         foreach (var revision in new[] { Steady(1, false), Steady(2, true), Steady(3, false) })
             temp.App.Store.AddRevision(revision);
         var campaign = Campaign(temp, "Compat Table", shared.Id);
-        var row = ReleaseLadder.Target("0.6.0")!;
+        var row = ReleaseLadder.Row("0.6.0")!;
 
         var preview = temp.App.PreviewCampaignPack(campaign.Id, row);
         var pack = temp.App.ExportCampaignPack(campaign.Id, row, preview.ChangesHash);
@@ -170,7 +170,7 @@ public class CampaignPackTests
         var campaign = Campaign(temp, "Compat Table", shared.Id);
 
         var plain = temp.App.PreviewCampaignPack(campaign.Id);
-        var preview = temp.App.PreviewCampaignPack(campaign.Id, ReleaseLadder.Target("0.6.0")!);
+        var preview = temp.App.PreviewCampaignPack(campaign.Id, ReleaseLadder.Row("0.6.0")!);
 
         Assert.Contains(plain.Warnings, w => w.Code == "pack.reference-outside");
         Assert.DoesNotContain(preview.Warnings, w => w.Code == "pack.reference-outside");
@@ -194,7 +194,7 @@ public class CampaignPackTests
         };
         temp.App.Store.AddRevision(original);
         var campaign = Campaign(temp, "Compat Table", shared.Id);
-        var row = ReleaseLadder.Target("0.6.0")!;
+        var row = ReleaseLadder.Row("0.6.0")!;
 
         var plain = temp.App.PreviewCampaignPack(campaign.Id);
         var preview = temp.App.PreviewCampaignPack(campaign.Id, row);

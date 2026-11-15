@@ -66,7 +66,7 @@ export function SandboxPanel(props: { revision: ContentRevision; prepare: (r: Co
   const sheet = result?.view.sheet;
   return (
     <section aria-labelledby="sandbox-heading" className="effect-editor">
-      <h4 id="sandbox-heading">Try it</h4>
+      <h3 id="sandbox-heading">Try it</h3>
       <p className="hint">
         Calculates this {revision.kind} as if it were published, on a copy that is never saved. Your characters keep using published versions.
       </p>
@@ -122,7 +122,7 @@ export function SandboxPanel(props: { revision: ContentRevision; prepare: (r: Co
           </p>
           {result.changes.length > 0 && (
             <>
-              <h5>Calculated fields that change on the copy</h5>
+              <h4>Calculated fields that change on the copy</h4>
               <ul>
                 {result.changes.map((c) => (
                   <li key={c.field}>
@@ -132,7 +132,7 @@ export function SandboxPanel(props: { revision: ContentRevision; prepare: (r: Co
               </ul>
             </>
           )}
-          <h5>Values</h5>
+          <h4>Values</h4>
           <ul>
             {sheet.fields
               .filter((f) => shown.includes(f.field) && (f.field !== 'spellSaveDc' || (sheet.spellcasting ?? []).length > 0))
@@ -152,7 +152,7 @@ export function SandboxPanel(props: { revision: ContentRevision; prepare: (r: Co
               </li>
             ))}
           </ul>
-          <h5>Features</h5>
+          <h4>Features</h4>
           <ul>
             {(sheet.features ?? []).map((f) => (
               <li key={f.content.revisionId}>{f.name}</li>
@@ -160,7 +160,7 @@ export function SandboxPanel(props: { revision: ContentRevision; prepare: (r: Co
           </ul>
           {(sheet.diagnostics.length > 0 || result.validation.errors.length > 0) && (
             <>
-              <h5>Problems</h5>
+              <h4>Problems</h4>
               <ul>
                 {result.validation.errors.map((d, i) => (
                   <li key={`v-${d.code}-${i}`} className="error">
