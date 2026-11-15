@@ -42,6 +42,7 @@ import { GapNotesPanel, gapAboutFeature, gapAboutField } from './GapNotesPanel';
 import { PreflightPanel } from './PreflightPanel';
 import { canSaveAfter } from './preflightText';
 import { PrintView } from './PrintView';
+import { MoreMenu } from './sheet/MoreMenu';
 import { RestPanel } from './RestPanel';
 import { logged, rollLogLimit, type LoggedRoll } from './RollLog';
 import { SheetSummary } from './SheetSummary';
@@ -164,8 +165,6 @@ function FieldCard({ value, labels, onOverride, onRoll, onReportGap }: FieldProp
 
 interface ExportProps {
   characterId: string;
-  /** The Manage tab is shown: the preview loads only then. */
-  active: boolean;
   /** The character's stamp; a change reloads the preview. */
   updatedAt: string | undefined;
   onError: (error: unknown) => void;
@@ -173,7 +172,7 @@ interface ExportProps {
 }
 
 /** ADR-007: choose backup or share; a share first lists everything it will leave out. */
-export function ExportPanel({ characterId, active, updatedAt, onError, onStatus }: ExportProps) {
+export function ExportPanel({ characterId, updatedAt, onError, onStatus }: ExportProps) {
   const [purpose, setPurpose] = useState<ExportPurpose>('backup');
   const [preview, setPreview] = useState<ExportPreview>();
   // Import Lab L5: a share goes through the one sharing rule's preflight; a backup keeps its own rule (everything, personal).
@@ -188,7 +187,7 @@ export function ExportPanel({ characterId, active, updatedAt, onError, onStatus 
 
   // G6: both purposes are previewed, so the package's warnings (it needs a newer TomeStack) show before the file is saved. A share needs
   // its preview (the export button waits for it); a backup's is advisory, so a failure shows one plain line. The preview loads only while
-  // the Manage tab is shown and again when the character changes (updatedAt), so the warning never goes stale. A copy for an older
+  // the panel is mounted (More → Export…) and again when the character changes (updatedAt), so the warning never goes stale. A copy for an older
   // TomeStack always needs its preview: it lists what the copy leaves out, and its failure is one plain line too.
   const chosen = useRef<ExportPurpose>('backup');
   const chosenTarget = useRef<string | null>(null);
@@ -225,9 +224,8 @@ export function ExportPanel({ characterId, active, updatedAt, onError, onStatus 
     loadRef.current = load;
   }, [load]);
   useEffect(() => {
-    if (!active) return;
     void loadRef.current(chosen.current, chosenTarget.current);
-  }, [active, characterId, updatedAt]);
+  }, [characterId, updatedAt]);
 
   async function choose(next: ExportPurpose) {
     chosen.current = next;
@@ -315,7 +313,7 @@ export function ExportPanel({ characterId, active, updatedAt, onError, onStatus 
       )}
       {backupFailed && purpose === 'backup' && <p>Could not check whether this TomeStack file needs a newer TomeStack.</p>}
       {targetFailed && <p>Could not check what the copy for TomeStack {target} leaves out.</p>}
-      {purpose === 'share' && active && (
+      {purpose === 'share' && (
         <PreflightPanel kind="package" selection={[characterId]} label="shared TomeStack file" refreshKey={updatedAt} onReport={setReport} onError={onError} />
       )}
       <ExportConfirmation changes={preview?.changes} confirmed={confirmed} onConfirmedChange={setConfirmed} hintId={hintId} />
@@ -330,6 +328,8 @@ export function ExportPanel({ characterId, active, updatedAt, onError, onStatus 
     </section>
   );
 }
+
+type MorePanelId = 'print' | 'export' | 'snapshots' | 'updates' | 'archive';
 
 interface Props {
   view: CharacterView;
@@ -355,24 +355,19 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   const rulesLabel = useRulesLabel();
   // D43: `toggle.group-absent` is information (the toggle works as a group of one), not content that failed to apply.
   // An open choice is listed once, under "Choices to make"; internal ids never reach the player.
-  // A `choice.unresolved` is dropped only when that choice is in the list (same source, and its id in the message); otherwise it stays.
-  const choiceListed = (d: { content?: { contentId: string; revisionId: string }; message: string }) =>
+  // A `choice.unresolved` is dropped only when that choice is in the list (same source, and its choice effect's id in `effectId`, which
+  // may differ from the choice id); otherwise it stays. Match on the structured fields, never the message text: the service's wording is free to change (D99).
+  const choiceListed = (d: { content?: { contentId: string; revisionId: string }; effectId?: string }) =>
     (sheet.choices ?? []).some(
       (c) =>
         !c.resolved &&
         c.source.contentId === d.content?.contentId &&
         c.source.revisionId === d.content?.revisionId &&
-        d.message.includes(`('${c.choiceId}')`),
+        d.effectId === (c.effectId ?? c.choiceId),
     );
-  // STOPGAP: the GUID scrub below goes away when Group 2b rewrites the service's diagnostic text. Delete it then.
-  const notApplied = sheet.diagnostics
-    .filter((d) => d.code !== 'toggle.group-absent' && !(d.code === 'choice.unresolved' && choiceListed(d)))
-    .map((d) => ({
-      ...d,
-      message: d.message
-        .replace(/\b(revision|effect) [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, (m) => (m.charAt(0) === m.charAt(0).toUpperCase() ?'An entry' : 'an entry'))
-        .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, 'an entry'),
-    }));
+  const notApplied = sheet.diagnostics.filter(
+    (d) => d.code !== 'toggle.group-absent' && !(d.code === 'choice.unresolved' && choiceListed(d)),
+  );
   // R161/R182: one handler for every save path. A save refused as stale (the character changed since this sheet's copy was read)
   // shows its words in the usual alert and brings in the current copy, so the next edit starts from it. Focus is not touched: whatever
   // the user was on stays, and what they typed stays in its field for them to apply again.
@@ -405,7 +400,6 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   );
   const labels = new Map(sheet.fields.map((f) => [f.field, f.label]));
   const heading = useRef<HTMLHeadingElement>(null);
-  const printButton = useRef<HTMLButtonElement>(null);
   const shortRestButton = useRef<HTMLButtonElement>(null);
   const longRestButton = useRef<HTMLButtonElement>(null);
   /** MECH-X item 2: the sources whose picks may be replaced after the long rest just finished. Page state; Dismiss clears it. */
@@ -437,7 +431,26 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   const [compact, setCompact] = useState(compactPlay());
   // Wave 3 3.4: read on every render (Settings is another screen, so the sheet remounts after a change).
   const boxesTop = abilityBoxesTop();
-  const [printing, setPrinting] = useState(false);
+  // Wave 3 3.5: the panel a More item opened (one region under the header; choosing another item replaces it). `n` is a fresh
+  // number per choice so choosing the same item again moves focus to its heading again.
+  const [morePanel, setMorePanel] = useState<{ id: MorePanelId; n: number }>();
+  const moreCount = useRef(0);
+  const moreTrigger = useRef<HTMLButtonElement>(null);
+  const moreRegion = useRef<HTMLDivElement>(null);
+  function openMorePanel(id: MorePanelId) {
+    setMorePanel({ id, n: ++moreCount.current });
+  }
+  function closeMorePanel() {
+    setMorePanel(undefined);
+    moreTrigger.current?.focus(); // WCAG 2.4.3: the panel is gone, so back to the button that opened the list
+  }
+  useEffect(() => {
+    if (!morePanel || morePanel.id === 'print') return; // the print preview moves focus to its own heading
+    const first = moreRegion.current?.querySelector<HTMLElement>('h2');
+    if (!first) return;
+    first.tabIndex = -1;
+    first.focus();
+  }, [morePanel]);
   // D43 S3: the open turn panel (start or end of the turn) and the opener to return focus to when it closes (WCAG 2.4.3).
   const [turning, setTurning] = useState<TurnMoment>();
   const turnOpener = useRef<TurnMoment>(undefined);
@@ -482,7 +495,6 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
     { id: 'features', label: 'Features' },
     { id: 'stats', label: 'Skills and saves' },
     { id: 'notes', label: 'Journal' },
-    { id: 'manage', label: 'Manage' },
   ];
   // The sheet is keyed by character, so this runs once per opened character. A deep link wins over the memory.
   const [tab, setTabState] = useState<SheetTabId>(() => (panelTakesFocus ? 'features' : undefined) ?? initialTab ?? rememberedSheetTab(character.id) ?? 'play');
@@ -508,12 +520,12 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
     if (!focused || focused === document.body) document.getElementById(tabId('sheet', activeRef.current))?.focus();
   }, [showSpells]);
 
-  // M3 C5: "Report a gap" pre-fills the gap note form, opens Notes and moves focus to its text box. A counter, not a flag:
+  // M3 C5: "Report a gap" pre-fills the gap note form, opens Features and moves focus to its text box. A counter, not a flag:
   // setting the tab to the value it already has causes no render, so the focus must not depend on a tab change.
   const [gapFocus, setGapFocus] = useState(0);
   function reportGap(about: string) {
     setGapAbout(about);
-    setTab('notes');
+    setTab('features');
     setGapFocus((n) => n + 1);
   }
   useEffect(() => {
@@ -942,15 +954,19 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
             Already at level 20, the highest level.
           </span>
         )}
-        {/* MECH-X item 2 (owner, 2026-10-28): picks can always be changed; a swap outside its window gets the save notice. */}
-        {(sheet.choices?.length ?? 0) > 0 && (
-          <button type="button" onClick={onMakeChoices}>
-            Change picks
-          </button>
-        )}
-        <button type="button" ref={printButton} onClick={() => setPrinting((open) => !open)} aria-expanded={printing} aria-controls={printing ? 'print-preview' : undefined}>
-          Print…
-        </button>
+        {/* Wave 3 3.5: Manage is gone; its panels, Choices (was "Change picks") and Print live in More. MECH-X item 2 (owner,
+            2026-10-28): picks can always be changed; a swap outside its window gets the save notice. */}
+        <MoreMenu
+          triggerRef={moreTrigger}
+          items={[
+            ...((sheet.choices?.length ?? 0) > 0 ? [{ id: 'choices', label: 'Choices', onSelect: onMakeChoices }] : []),
+            { id: 'print', label: 'Print…', onSelect: () => openMorePanel('print') },
+            { id: 'export', label: 'Export…', onSelect: () => openMorePanel('export') },
+            { id: 'snapshots', label: 'Snapshots', onSelect: () => openMorePanel('snapshots') },
+            { id: 'updates', label: 'Updates', onSelect: () => openMorePanel('updates') },
+            { id: 'archive', label: 'Archive', onSelect: () => openMorePanel('archive') },
+          ]}
+        />
       </header>
 
       <SheetSummary view={view} rollMode={rollMode} onRollMode={setRollMode} lastRoll={lastRoll} rollLog={rollLog} act={act} onDamage={openDamage} spellsTab={showSpells} rulesFamilies={rulesFamilies}
@@ -1037,15 +1053,24 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
         />
       )}
 
-      {printing && (
-        <PrintView
-          view={view}
-          onError={onError}
-          onClose={() => {
-            setPrinting(false);
-            printButton.current?.focus();
-          }}
-        />
+      {morePanel?.id === 'print' && <PrintView key={morePanel.n} view={view} onError={onError} onClose={closeMorePanel} />}
+      {morePanel && morePanel.id !== 'print' && (
+        <div className="more-panel" ref={moreRegion} key={morePanel.n}>
+          {morePanel.id === 'export' && (
+            <>
+              <ExportPanel characterId={character.id} updatedAt={character.updatedAt} onError={onError} onStatus={onStatus} />
+              <VttExportPanel characterId={character.id} onError={onError} onStatus={onStatus} />
+            </>
+          )}
+          {morePanel.id === 'snapshots' && <SnapshotsPanel character={character} onChanged={onChanged} onError={onError} onStatus={onStatus} />}
+          {morePanel.id === 'updates' && <UpdatesPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} showEmpty />}
+          {morePanel.id === 'archive' && <ArchivePanel character={character} onError={onError} onStatus={onStatus} onChanged={onArchiveChanged} />}
+          <div className="actions">
+            <button type="button" onClick={closeMorePanel}>
+              Close
+            </button>
+          </div>
+        </div>
       )}
       <div className="sheet-body">
 
@@ -1074,7 +1099,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
               ))}
           </ul>
           <button type="button" onClick={onMakeChoices}>
-            Make choices
+            Choose now
           </button>
         </section>
       )}
@@ -1191,6 +1216,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
         {(sheet.features ?? []).length === 0 && <p className="hint">No features yet.</p>}
         <FeaturesPanel view={view} pdfSources={pdfSources} openPage={openPage} reportGap={(id) => reportGap(gapAboutFeature(id))} />
         <ByHandPanel characterId={character.id} sheet={sheet} active={active === 'features'} />
+        <GapNotesPanel view={view} onError={onError} onStatus={onStatus} about={gapAbout} onAboutChange={setGapAbout} textRef={gapText} />
       </TabPanel>
 
       <TabPanel idPrefix="sheet" id="stats" active={active === 'stats'}>
@@ -1216,16 +1242,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
 
       <TabPanel idPrefix="sheet" id="notes" active={active === 'notes'}>
         <SessionNotesPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} saveCharacter={saveCharacter} />
-        <GapNotesPanel view={view} onError={onError} onStatus={onStatus} about={gapAbout} onAboutChange={setGapAbout} textRef={gapText} />
         <DetailsPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} headingRef={detailsHeading} shown={active === 'notes'} saveCharacter={saveCharacter} />
-      </TabPanel>
-
-      <TabPanel idPrefix="sheet" id="manage" active={active === 'manage'}>
-        <UpdatesPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} />
-        <ExportPanel characterId={character.id} active={active === 'manage'} updatedAt={character.updatedAt} onError={onError} onStatus={onStatus} />
-        <VttExportPanel characterId={character.id} onError={onError} onStatus={onStatus} />
-        <ArchivePanel character={character} onError={onError} onStatus={onStatus} onChanged={onArchiveChanged} />
-        <SnapshotsPanel character={character} onChanged={onChanged} onError={onError} onStatus={onStatus} />
       </TabPanel>
       </div>
     </article>

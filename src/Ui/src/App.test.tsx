@@ -517,13 +517,13 @@ it('a level-up save that reset a companion adds that notice to the status (MECH-
 it('a choices-mode save with the notice shows its words as the status (MECH-X item 2)', async () => {
   const user = userEvent.setup();
   const { before, saved } = replacedViews(1);
-  before.sheet.choices![0]!.resolved = false; // so the sheet offers Make choices
+  before.sheet.choices![0]!.resolved = false; // so the sheet offers Choose now
   vi.mocked(client.getCharacter).mockResolvedValue(before);
   vi.mocked(client.saveCharacter).mockResolvedValue(saved);
   render(<App />);
   const list = await screen.findByRole('navigation', { name: 'Main' });
   await user.click(within(list).getByRole('button', { name: /Fixture Avery/ }));
-  await user.click(await screen.findByRole('button', { name: 'Make choices' }));
+  await user.click(await screen.findByRole('button', { name: 'Choose now' }));
   await user.click(await screen.findByRole('button', { name: 'Save choices' }));
   expect(await screen.findByText(moreThanMax)).toBeTruthy();
 });

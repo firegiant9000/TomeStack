@@ -104,6 +104,11 @@ const sheetElement = (v: CharacterView, initialTab?: Parameters<typeof Character
   <CharacterSheet view={v} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} initialTab={initialTab} focusChecklist={focusChecklist} />
 );
 const renderSheet = (v: CharacterView, initialTab?: Parameters<typeof CharacterSheet>[0]['initialTab'], focusChecklist?: boolean) => render(sheetElement(v, initialTab, focusChecklist));
+// Wave 3 3.5: Manage is gone; its panels and Print open from the header's More list.
+async function openMore(user: ReturnType<typeof userEvent.setup>, item: string) {
+  await user.click(screen.getByRole('button', { name: 'More' }));
+  await user.click(screen.getByRole('button', { name: item }));
+}
 
 function undoHarness() {
   const v = view();
@@ -572,26 +577,33 @@ it('leaves the information-only toggle.group-absent out of "Needs your attention
   expect(screen.queryByRole('heading', { name: 'Needs your attention' })).toBeNull();
 });
 
-it('keeps open choices out of "Needs your attention" and prints no id there (Wave 3 3.6)', () => {
-  const guid = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
-  const choices = [{ source: { contentId: 'fixture.feature', revisionId: 'r1' }, sourceName: 'Fixture feature', choiceId: 'pick', count: 1, options: [], selected: [], resolved: false }] as unknown as SheetModel['choices'];
+it('keeps open choices out of "Needs your attention" (Wave 3 3.6)', () => {
+  const choices = [{ source: { contentId: 'fixture.feature', revisionId: 'r1' }, sourceName: 'Fixture feature', choiceId: 'pick', effectId: 'pick-effect', count: 1, options: [], selected: [], resolved: false }] as unknown as SheetModel['choices'];
   renderSheet(
     view({
       choices,
       diagnostics: [
-        { code: 'choice.unresolved', message: "'Fixture feature' offers a choice ('pick') of 1; 0 selected.", content: { contentId: 'fixture.feature', revisionId: 'r1' } },
-        { code: 'effect.invalid-formula', message: `Effect ${guid} has a formula that does not read.` },
+        // D99 wording (Group 2b): the message carries no choice id; the choice effect's id (which differs from the choice id here) is in `effectId`.
+        { code: 'choice.unresolved', message: "'Fixture feature' offers a choice of 1; 0 picked.", content: { contentId: 'fixture.feature', revisionId: 'r1' }, effectId: 'pick-effect' },
+        { code: 'effect.invalid-formula', message: 'A modifier in Fixture feature has a formula that does not read.' },
       ],
     }),
   );
   const attention = screen.getByRole('heading', { name: 'Needs your attention' }).closest('section')!;
   expect(attention.textContent).toContain('formula that does not read');
   expect(attention.textContent).not.toContain('offers a choice');
-  expect(attention.textContent).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/);
   expect(screen.getByRole('heading', { name: 'Choices to make' })).toBeTruthy();
   cleanup();
-  renderSheet(view({ choices, diagnostics: [{ code: 'choice.unresolved', message: "'Fixture feature' offers a choice ('pick') of 1; 0 selected.", content: { contentId: 'fixture.feature', revisionId: 'r1' } }] }));
+  renderSheet(view({ choices, diagnostics: [{ code: 'choice.unresolved', message: "'Fixture feature' offers a choice of 1; 0 picked.", content: { contentId: 'fixture.feature', revisionId: 'r1' }, effectId: 'pick-effect' }] }));
   expect(screen.queryByRole('heading', { name: 'Needs your attention' })).toBeNull();
+});
+
+it('keeps a choice.unresolved whose choice id is not an open choice on the sheet', () => {
+  const choices = [{ source: { contentId: 'fixture.feature', revisionId: 'r1' }, sourceName: 'Fixture feature', choiceId: 'pick', effectId: 'pick-effect', count: 1, options: [], selected: [], resolved: false }] as unknown as SheetModel['choices'];
+  // Same source, different choice id: the sheet does not list this one, so the diagnostic is the only place the player learns of it.
+  renderSheet(view({ choices, diagnostics: [{ code: 'choice.unresolved', message: "'Fixture feature' offers a choice of 2; 0 picked.", content: { contentId: 'fixture.feature', revisionId: 'r1' }, effectId: 'other' }] }));
+  const attention = screen.getByRole('heading', { name: 'Needs your attention' }).closest('section')!;
+  expect(attention.textContent).toContain("'Fixture feature' offers a choice of 2");
 });
 
 it('Tab_order_is_header_bar_choices_tabs_panel', () => {
@@ -602,33 +614,13 @@ it('Tab_order_is_header_bar_choices_tabs_panel', () => {
   expect(container.querySelector('[tabindex]:not([tabindex="-1"]):not([tabindex="0"])')).toBeNull();
   const header = screen.getByRole('button', { name: 'Short rest…' });
   const barControl = within(screen.getByRole('region', { name: 'Status' })).getAllByRole('button')[0]!;
-  const choicesControl = within(screen.getByRole('heading', { name: 'Choices to make' }).closest('section')!).getByRole('button', { name: 'Make choices' });
+  const choicesControl = within(screen.getByRole('heading', { name: 'Choices to make' }).closest('section')!).getByRole('button', { name: 'Choose now' });
   const tab = screen.getByRole('tab', { selected: true });
   const panelControl = within(screen.getByRole('tabpanel')).getAllByRole('checkbox')[0]!;
   const ordered = [header, barControl, choicesControl, tab, panelControl];
   for (let i = 0; i < ordered.length - 1; i++) {
     expect(ordered[i]!.compareDocumentPosition(ordered[i + 1]!) & Node.DOCUMENT_POSITION_FOLLOWING, `element ${i} precedes ${i + 1}`).toBeTruthy();
   }
-});
-
-it('swallows the noun before an id in service text ("revision {id}", "Effect {id}") and keeps an unmatched choice.unresolved', () => {
-  const guid = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
-  renderSheet(
-    view({
-      choices: [],
-      diagnostics: [
-        { code: 'choice.invalid-option', message: `'Fixture feature' choice 'c': revision ${guid} is not one of its options; it is not applied.` },
-        { code: 'effect.invalid-formula', message: `Effect ${guid} has a formula that does not read.` },
-        { code: 'choice.unresolved', message: "'Other feature' offers a choice ('pick') of 1; 0 selected." },
-      ],
-    }),
-  );
-  const attention = screen.getByRole('heading', { name: 'Needs your attention' }).closest('section')!;
-  expect(attention.textContent).toContain("'Fixture feature' choice 'c': an entry is not one of its options; it is not applied.");
-  expect(attention.textContent).toContain('An entry has a formula that does not read.');
-  expect(attention.textContent).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/);
-  // No matching open choice on the sheet, so the diagnostic is the only place the player learns of it.
-  expect(attention.textContent).toContain("'Other feature' offers a choice");
 });
 
 it('keeps the standing explanations behind closed "?" notes that open on click (Wave 3 3.6)', async () => {
@@ -726,7 +718,7 @@ it('groups Features by what granted them, then by kind, and drops none (D25)', (
 
 it('offers Spells to a caster, or when a spell field has a value, and opens on Play', () => {
   renderSheet(view());
-  expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Play', 'Gear', 'Features', 'Skills and saves', 'Journal', 'Manage']);
+  expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Play', 'Gear', 'Features', 'Skills and saves', 'Journal']);
   expect(screen.getByRole('tab', { name: 'Play' }).getAttribute('aria-selected')).toBe('true');
   cleanup();
   renderSheet(view({ spellcasting: [] , spellSlots: [{ level: 1, maximum: 2, spent: 0, remaining: 2, field: 'spellSlots.1' }], fields: [...view().sheet.fields, field('spellSlots.1', 'Level 1 spell slots', 2, 'score')] }));
@@ -756,7 +748,7 @@ it('offers Spells to a caster, or when a spell field has a value, and opens on P
       ],
     }),
   );
-  expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Play', 'Spells', 'Gear', 'Features', 'Skills and saves', 'Journal', 'Manage']);
+  expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Play', 'Spells', 'Gear', 'Features', 'Skills and saves', 'Journal']);
 });
 
 it('announces a Prepared toggle on a spell removed meanwhile as a polite status, not an error, and keeps focus (H2/R144)', async () => {
@@ -791,14 +783,15 @@ it('falls back to Play when the requested tab is not offered', () => {
   expect(screen.getByRole('tabpanel', { name: 'Play' })).toBeTruthy();
 });
 
-it('"Report a gap" switches to Journal, pre-fills About and focuses the text, every time it is pressed', async () => {
+it('"Report a gap" switches to Features, pre-fills About and focuses the text, every time it is pressed', async () => {
   const user = userEvent.setup();
   renderSheet(view());
   await user.click(screen.getByRole('tab', { name: 'Skills and saves' }));
   const ac = screen.getByRole('region', { name: /^Armor Class:/ });
   await user.click(within(ac).getByRole('heading'));
   await user.click(within(ac).getByRole('button', { name: 'Report a gap: Armor Class' }));
-  expect(screen.getByRole('tab', { name: 'Journal' }).getAttribute('aria-selected')).toBe('true');
+  expect(screen.getByRole('tab', { name: 'Features' }).getAttribute('aria-selected')).toBe('true');
+  expect(within(screen.getByRole('tabpanel', { name: 'Features' })).getByRole('form', { name: 'New gap note' })).toBeTruthy();
   const form = screen.getByRole('form', { name: 'New gap note' });
   const text = within(form).getByRole('textbox', { name: /^What was missing or wrong/ });
   await waitFor(() => expect(document.activeElement).toBe(text));
@@ -816,14 +809,14 @@ it('"Report a gap" switches to Journal, pre-fills About and focuses the text, ev
 it('keeps typed text in the gap note box when switching tabs and back', async () => {
   const user = userEvent.setup();
   renderSheet(view());
-  await user.click(screen.getByRole('tab', { name: 'Journal' }));
-  // Choosing Notes by hand keeps focus on the tab (APG); only "Report a gap" moves focus into the text box.
-  expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Journal' }));
+  await user.click(screen.getByRole('tab', { name: 'Features' }));
+  // Choosing Features by hand keeps focus on the tab (APG); only "Report a gap" moves focus into the text box.
+  expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Features' }));
   const form = screen.getByRole('form', { name: 'New gap note' });
   const text = within(form).getByRole('textbox', { name: /^What was missing or wrong/ }) as HTMLTextAreaElement;
   await user.type(text, 'Fixture draft: the rule text is unclear');
   await user.click(screen.getByRole('tab', { name: 'Skills and saves' }));
-  await user.click(screen.getByRole('tab', { name: 'Journal' }));
+  await user.click(screen.getByRole('tab', { name: 'Features' }));
   expect((within(screen.getByRole('form', { name: 'New gap note' })).getByRole('textbox', { name: /^What was missing or wrong/ }) as HTMLTextAreaElement).value).toBe('Fixture draft: the rule text is unclear');
 });
 
@@ -832,14 +825,32 @@ const withDetails = (details: NonNullable<Character['details']>): CharacterView 
   return { ...v, character: { ...v.character, schemaVersion: 9, details } };
 };
 
-it('puts the Details form on Journal after session notes and gap notes, with no new tab', async () => {
+it('Journal holds session notes then Details and no gap form; the gap notes end the Features tab (Wave 3 4.3)', async () => {
   const user = userEvent.setup();
   renderSheet(view());
-  expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Play', 'Gear', 'Features', 'Skills and saves', 'Journal', 'Manage']);
+  expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Play', 'Gear', 'Features', 'Skills and saves', 'Journal']);
   await user.click(screen.getByRole('tab', { name: 'Journal' }));
   const panel = screen.getByRole('tabpanel', { name: 'Journal' });
-  expect(within(panel).getAllByRole('heading', { level: 2 }).map((h) => h.textContent?.replace(/: \d+ open$/, ''))).toEqual(['Session notes', 'Gap notes', 'Details']);
+  expect(within(panel).getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Session notes', 'Details']);
   expect(within(panel).getByRole('form', { name: 'Details' })).toBeTruthy();
+  expect(within(panel).queryByRole('form', { name: 'New gap note' })).toBeNull();
+  expectContinuousOutline(document.body);
+  await user.click(screen.getByRole('tab', { name: 'Features' }));
+  const features = screen.getByRole('tabpanel', { name: 'Features' });
+  const h2 = within(features).getAllByRole('heading', { level: 2 });
+  expect(h2[h2.length - 1]!.textContent).toMatch(/^Gap notes/);
+  expectContinuousOutline(document.body);
+});
+
+it('"Report a gap" on a feature lands in the gap form on Features', async () => {
+  const user = userEvent.setup();
+  const ref = { contentId: '00000000-0000-4000-8000-00000000c100', revisionId: '00000000-0000-4000-8000-00000000d100' };
+  renderSheet(view({ features: [{ content: ref, name: 'Fixture Feature', kind: 'feature', origin: { kind: 'content', rulesFamily: 'srd-5.1' }, automation: 'reference', effects: [], diagnostics: [] }] } as never));
+  await user.click(screen.getByRole('tab', { name: 'Features' }));
+  await user.click(screen.getByRole('button', { name: /^Report a gap: Fixture Feature/ }));
+  expect(screen.getByRole('tab', { name: 'Features' }).getAttribute('aria-selected')).toBe('true');
+  const form = within(screen.getByRole('tabpanel', { name: 'Features' })).getByRole('form', { name: 'New gap note' });
+  await waitFor(() => expect(document.activeElement).toBe(within(form).getByRole('textbox', { name: /^What was missing or wrong/ })));
 });
 
 it('keeps text typed in the Details form when switching tabs and back', async () => {
@@ -894,10 +905,104 @@ it('opens on the remembered tab, and an explicit initialTab wins over it', () =>
 it('remembers the tab chosen, so the next opening of the same character starts there', async () => {
   const user = userEvent.setup();
   renderSheet(view());
-  await user.click(screen.getByRole('tab', { name: 'Manage' }));
+  await user.click(screen.getByRole('tab', { name: 'Journal' }));
   cleanup();
   renderSheet(view());
-  expect(screen.getByRole('tab', { name: 'Manage' }).getAttribute('aria-selected')).toBe('true');
+  expect(screen.getByRole('tab', { name: 'Journal' }).getAttribute('aria-selected')).toBe('true');
+});
+
+it('opens on Play when the remembered tab is the removed Manage tab (Wave 3 3.5)', () => {
+  localStorage.setItem('tomestack.sheetTab.fixture-2', 'manage');
+  renderSheet(view());
+  expect(screen.getByRole('tab', { name: 'Play' }).getAttribute('aria-selected')).toBe('true');
+  expect(screen.queryByRole('tab', { name: 'Manage' })).toBeNull();
+});
+
+describe('the More list (Wave 3 3.5)', () => {
+  it.each([
+    ['Export…', 'Export'],
+    ['Snapshots', 'Snapshots'],
+    ['Updates', 'Updates'],
+    ['Archive', 'Archive'],
+  ])('%s opens its panel under the header with focus on its heading, and Close returns focus to More', async (item, heading) => {
+    const user = userEvent.setup();
+    renderSheet(view());
+    await openMore(user, item);
+    const title = await screen.findByRole('heading', { level: 2, name: heading });
+    await waitFor(() => expect(document.activeElement).toBe(title));
+    expect(title.closest('.more-panel')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Close' }));
+    expect(document.querySelector('.more-panel')).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'More' }));
+  });
+
+  it('shows the plain Export panel and the virtual tabletop export together', async () => {
+    const user = userEvent.setup();
+    renderSheet(view());
+    await openMore(user, 'Export…');
+    expect(await screen.findByRole('heading', { name: 'Export for a virtual tabletop' })).toBeTruthy();
+  });
+
+  it('replaces the open panel when another item is chosen, focuses the new heading, and leaves the tab list without Manage', async () => {
+    const user = userEvent.setup();
+    renderSheet(view());
+    await openMore(user, 'Snapshots');
+    await openMore(user, 'Archive');
+    expect(screen.queryByRole('heading', { name: 'Snapshots' })).toBeNull();
+    expect(document.querySelectorAll('.more-panel')).toHaveLength(1);
+    const title = await screen.findByRole('heading', { level: 2, name: 'Archive' });
+    await waitFor(() => expect(document.activeElement).toBe(title));
+    expect(screen.queryByRole('tab', { name: 'Manage' })).toBeNull();
+  });
+
+  it('choosing the same item twice moves focus back to its heading each time', async () => {
+    const user = userEvent.setup();
+    renderSheet(view());
+    await openMore(user, 'Archive');
+    const title = await screen.findByRole('heading', { level: 2, name: 'Archive' });
+    await waitFor(() => expect(document.activeElement).toBe(title));
+    await openMore(user, 'Archive'); // opening the list moves focus to More, so the heading must take it back
+    const again = await screen.findByRole('heading', { level: 2, name: 'Archive' });
+    await waitFor(() => expect(document.activeElement).toBe(again));
+  });
+
+  it('Updates shows a checking line until the request settles, then the empty text', async () => {
+    let resolve: (v: Awaited<ReturnType<typeof client.availableUpdates>>) => void = () => {};
+    vi.mocked(client.availableUpdates).mockReturnValue(new Promise((r) => { resolve = r; }));
+    const user = userEvent.setup();
+    renderSheet(view());
+    await openMore(user, 'Updates');
+    expect(await screen.findByText('Checking for newer versions…')).toBeTruthy();
+    expect(screen.queryByText(/No newer versions/)).toBeNull();
+    await act(async () => resolve([]));
+    expect(await screen.findByText('No newer versions of the content this character uses.')).toBeTruthy();
+    expect(screen.queryByText('Checking for newer versions…')).toBeNull();
+  });
+
+  it('Updates says it is checking again while a refreshed view asks again, not "none" from the last answer', async () => {
+    vi.mocked(client.availableUpdates).mockResolvedValueOnce([]);
+    const user = userEvent.setup();
+    const first = view();
+    const { rerender } = renderSheet(first);
+    await openMore(user, 'Updates');
+    expect(await screen.findByText('No newer versions of the content this character uses.')).toBeTruthy();
+    // A save or a rest hands the sheet a new copy of the character; its request is still pending.
+    vi.mocked(client.availableUpdates).mockReturnValueOnce(new Promise(() => {}));
+    rerender(sheetElement({ ...first, character: { ...first.character } }));
+    expect(await screen.findByText('Checking for newer versions…')).toBeTruthy();
+    expect(screen.queryByText(/No newer versions/)).toBeNull();
+  });
+
+  it('Updates with one offer shows the offers region', async () => {
+    vi.mocked(client.availableUpdates).mockResolvedValue([
+      { from: { contentId: 'c', revisionId: 'r1' }, to: { contentId: 'c', revisionId: 'r2' }, name: 'Fixture pack', role: 'class', sourceTitle: 'Fixture source', bundled: false } as Awaited<ReturnType<typeof client.availableUpdates>>[number],
+    ]);
+    const user = userEvent.setup();
+    renderSheet(view());
+    await openMore(user, 'Updates');
+    expect(await screen.findByRole('heading', { name: 'Updates available' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Review update: Fixture pack' })).toBeTruthy();
+  });
 });
 
 it('renders the print preview after the summary and before the body, matching the grid order', async () => {
@@ -905,7 +1010,7 @@ it('renders the print preview after the summary and before the body, matching th
   vi.mocked(client.info).mockResolvedValue({ version: '0.0.0-fixture' } as unknown as Awaited<ReturnType<typeof client.info>>);
   const user = userEvent.setup();
   renderSheet(view());
-  await user.click(screen.getByRole('button', { name: 'Print…' }));
+  await openMore(user, 'Print…');
   const article = document.querySelector('article.sheet') as HTMLElement;
   expect(Array.from(article.children).map((c) => `${c.tagName.toLowerCase()}.${c.className.split(' ')[0]}`)).toEqual(['header.sheet-header', 'section.sheet-summary', 'details.help-note', 'section.print-sheet', 'div.sheet-body']);
 });
@@ -915,10 +1020,7 @@ it('moves focus to the print preview heading when the preview opens (investigati
   vi.mocked(client.info).mockResolvedValue({ version: '0.0.0-fixture' } as unknown as Awaited<ReturnType<typeof client.info>>);
   const user = userEvent.setup();
   renderSheet(view());
-  const print = screen.getByRole('button', { name: 'Print…' });
-  expect(print.getAttribute('aria-controls')).toBeNull(); // 4.1.2: only while the preview exists
-  await user.click(print);
-  expect(print.getAttribute('aria-controls')).toBe('print-preview');
+  await openMore(user, 'Print…');
   const preview = screen.getByRole('region', { name: 'Print preview' });
   expect(preview.id).toBe('print-preview');
   await waitFor(() => expect(document.activeElement).toBe(within(preview).getByRole('heading', { name: 'Print character' })));
@@ -942,16 +1044,16 @@ it('moves focus to Play when the open tab stops being offered', async () => {
 });
 
 it('puts lost focus on the selected tab, not always Play, when Spells appears', () => {
-  const { rerender } = renderSheet(view(), 'manage');
-  expect(screen.getByRole('tab', { name: 'Manage' }).getAttribute('aria-selected')).toBe('true');
+  const { rerender } = renderSheet(view(), 'notes');
+  expect(screen.getByRole('tab', { name: 'Journal' }).getAttribute('aria-selected')).toBe('true');
   (document.activeElement as HTMLElement | null)?.blur();
   expect(document.activeElement).toBe(document.body);
 
   const fields = view().sheet.fields;
-  rerender(sheetElement(view({ fields: fields.map((f) => (f.field === 'spellAttack' ? { ...f, override: { field: 'spellAttack', value: 3 }, value: 3 } : f)) }), 'manage'));
+  rerender(sheetElement(view({ fields: fields.map((f) => (f.field === 'spellAttack' ? { ...f, override: { field: 'spellAttack', value: 3 }, value: 3 } : f)) }), 'notes'));
   expect(screen.getByRole('tab', { name: 'Spells' })).toBeTruthy();
-  expect(screen.getByRole('tab', { name: 'Manage' }).getAttribute('aria-selected')).toBe('true');
-  expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Manage' }));
+  expect(screen.getByRole('tab', { name: 'Journal' }).getAttribute('aria-selected')).toBe('true');
+  expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Journal' }));
 });
 
 it('says so on the Features tab when the character has no features', async () => {
@@ -1192,9 +1294,8 @@ it('does not report a print preview lookup that fails after the preview was clos
   vi.mocked(client.previewExport).mockReturnValue(new Promise((_, rej) => (rejectExport = rej)));
   vi.mocked(client.info).mockResolvedValue({ version: '0.0.0-fixture' } as unknown as Awaited<ReturnType<typeof client.info>>);
   render(<CharacterSheet view={view()} onChanged={noop} onError={onError} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
-  const print = screen.getByRole('button', { name: 'Print…' });
-  await user.click(print);
-  await user.click(print);
+  await openMore(user, 'Print…');
+  await user.click(screen.getByRole('button', { name: 'Close print preview' }));
   rejectExport(new Error('late'));
   await new Promise((r) => setTimeout(r, 20));
   expect(onError).not.toHaveBeenCalled();
@@ -1210,7 +1311,7 @@ it('shows the needs-newer-build warning of the export preview, for a backup and 
   } as Awaited<ReturnType<typeof client.previewExport>>);
   vi.mocked(client.packagePreflight).mockResolvedValue({ included: [], omitted: [], blocking: [], notices: [] });
   renderSheet(view());
-  await user.click(screen.getByRole('tab', { name: 'Manage' }));
+  await openMore(user, 'Export…');
   expect(await screen.findByText(text)).toBeTruthy();
   await user.click(screen.getByRole('radio', { name: /^Share with someone/ }));
   expect(await screen.findByText(text)).toBeTruthy();
@@ -1221,12 +1322,12 @@ it('shows no export warning when the preview has none', async () => {
   const user = userEvent.setup();
   vi.mocked(client.previewExport).mockResolvedValue({ purpose: 'backup', fileName: 'x', characters: [], included: [], omitted: [], gapNotes: 0 } as Awaited<ReturnType<typeof client.previewExport>>);
   renderSheet(view());
-  await user.click(screen.getByRole('tab', { name: 'Manage' }));
+  await openMore(user, 'Export…');
   await waitFor(() => expect(client.previewExport).toHaveBeenCalled());
   expect(screen.queryByText(/needs TomeStack/)).toBeNull();
 });
 
-it('loads the export preview only when Manage opens, and again when the character changes (G6)', async () => {
+it('loads the export preview only when Export opens, and again when the character changes (G6)', async () => {
   const user = userEvent.setup();
   const first = 'Needs 0.7.0 first.';
   const second = 'Needs 0.8.0 second.';
@@ -1238,7 +1339,7 @@ it('loads the export preview only when Manage opens, and again when the characte
   const { rerender } = renderSheet(v);
   await new Promise((r) => setTimeout(r, 20));
   expect(client.previewExport).not.toHaveBeenCalled();
-  await user.click(screen.getByRole('tab', { name: 'Manage' }));
+  await openMore(user, 'Export…');
   expect(await screen.findByText(first)).toBeTruthy();
   expect(client.previewExport).toHaveBeenCalledTimes(1);
   rerender(sheetElement({ ...v, character: { ...v.character, updatedAt: '2026-10-03T00:00:09Z' } }));
@@ -1251,7 +1352,7 @@ it('says so in plain text when the backup export preview cannot be read (G6)', a
   const onError = vi.fn();
   vi.mocked(client.previewExport).mockRejectedValue(new Error('boom'));
   render(<CharacterSheet view={view()} onChanged={noop} onError={onError} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
-  await user.click(screen.getByRole('tab', { name: 'Manage' }));
+  await openMore(user, 'Export…');
   const line = await screen.findByText('Could not check whether this TomeStack file needs a newer TomeStack.');
   expect(line.closest('[role="status"],[role="alert"]')).toBeNull();
   expect(onError).not.toHaveBeenCalled();
@@ -1275,16 +1376,16 @@ describe('export for an older TomeStack', () => {
     vi.mocked(client.saveExportAs).mockResolvedValue({ saved: true, fileName: 'x.tomestack.zip' } as Awaited<ReturnType<typeof client.saveExportAs>>);
   });
 
-  async function openManage() {
+  async function openExport() {
     const user = userEvent.setup();
     renderSheet(view());
-    await user.click(screen.getByRole('tab', { name: 'Manage' }));
+    await openMore(user, 'Export…');
     return user;
   }
   const exportButton = () => screen.getByRole('button', { name: 'Export TomeStack file' }) as HTMLButtonElement;
 
   it('re-runs the preview for the chosen release and again without a target for the first choice', async () => {
-    const user = await openManage();
+    const user = await openExport();
     await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
     await waitFor(() => expect(vi.mocked(client.previewExport).mock.lastCall).toEqual([['fixture-2'], 'backup', '0.6.0']));
     await user.click(screen.getByRole('radio', { name: firstRadio }));
@@ -1292,7 +1393,7 @@ describe('export for an older TomeStack', () => {
   });
 
   it('keeps focus on the radio that was chosen while the preview reloads', async () => {
-    const user = await openManage();
+    const user = await openExport();
     const radio = await screen.findByRole('radio', { name: '0.6.0' });
     await user.click(radio);
     await screen.findByRole('region', { name: 'Changed for TomeStack 0.6.0' });
@@ -1302,7 +1403,7 @@ describe('export for an older TomeStack', () => {
 
   it('disables Export while something blocks, and describes why', async () => {
     changesFor['0.6.0'] = [exportChange('blocks', 'Compat Hero needs 0.7.0.')];
-    const user = await openManage();
+    const user = await openExport();
     await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
     await screen.findByText('Compat Hero needs 0.7.0.');
     expect(exportButton().disabled).toBe(true);
@@ -1312,7 +1413,7 @@ describe('export for an older TomeStack', () => {
   it('needs the tick for a dropped item, and a new preview clears it', async () => {
     changesFor['0.6.0'] = [exportChange('dropped', 'Compat Tide Stance is left out.')];
     changesFor['0.5.0'] = [exportChange('dropped', 'Compat Steady Hands is left out.')];
-    const user = await openManage();
+    const user = await openExport();
     await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
     const box = (await screen.findByRole('checkbox', { name: confirmLabel })) as HTMLInputElement;
     expect(exportButton().disabled).toBe(true);
@@ -1326,7 +1427,7 @@ describe('export for an older TomeStack', () => {
 
   it('waits for the preview of a chosen release before Export is possible', async () => {
     let settle: (p: Preview) => void = () => {};
-    const user = await openManage();
+    const user = await openExport();
     await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
     await screen.findByRole('region', { name: 'Changed for TomeStack 0.6.0' });
     vi.mocked(client.previewExport).mockReturnValueOnce(new Promise<Preview>((r) => (settle = r)));
@@ -1337,7 +1438,7 @@ describe('export for an older TomeStack', () => {
   });
 
   it('sends the release and the preview hash when a release is chosen, and neither for the first choice', async () => {
-    const user = await openManage();
+    const user = await openExport();
     await waitFor(() => expect(exportButton().disabled).toBe(false));
     await user.click(exportButton());
     expect(vi.mocked(client.saveExportAs).mock.lastCall).toEqual([['fixture-2'], 'backup']);
@@ -1348,7 +1449,7 @@ describe('export for an older TomeStack', () => {
   });
 
   it('offers the control for a share too', async () => {
-    const user = await openManage();
+    const user = await openExport();
     await user.click(screen.getByRole('radio', { name: /^Share with someone/ }));
     await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
     await waitFor(() => expect(vi.mocked(client.previewExport).mock.lastCall).toEqual([['fixture-2'], 'share', '0.6.0']));
@@ -1356,11 +1457,11 @@ describe('export for an older TomeStack', () => {
 
   it('says which TomeStack opens the default file, and shows nothing when the service does not say', async () => {
     vi.mocked(client.previewExport).mockResolvedValue({ ...base, opensIn: '0.5.0' } as unknown as Preview);
-    await openManage();
+    await openExport();
     expect(await screen.findByText('This file opens in TomeStack 0.5.0 or newer.')).toBeTruthy();
     cleanup();
     vi.mocked(client.previewExport).mockResolvedValue(previewOf());
-    await openManage();
+    await openExport();
     await waitFor(() => expect(exportButton().disabled).toBe(false));
     expect(screen.queryByRole('region', { name: 'Compatibility' })).toBeNull();
   });
@@ -1370,7 +1471,7 @@ describe('export for an older TomeStack', () => {
     const onError = vi.fn();
     const user = userEvent.setup();
     render(<CharacterSheet view={view()} onChanged={noop} onError={onError} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
-    await user.click(screen.getByRole('tab', { name: 'Manage' }));
+    await openMore(user, 'Export…');
     await waitFor(() => expect(client.packageTargets).toHaveBeenCalled());
     await waitFor(() => expect(exportButton().disabled).toBe(false));
     expect(screen.queryByRole('group', { name: 'Which version will open this file?' })).toBeNull();
@@ -1385,7 +1486,7 @@ describe('export for an older TomeStack', () => {
     const onError = vi.fn();
     const user = userEvent.setup();
     render(<CharacterSheet view={view()} onChanged={noop} onError={onError} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
-    await user.click(screen.getByRole('tab', { name: 'Manage' }));
+    await openMore(user, 'Export…');
     await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
     expect(await screen.findByText(failedLine('0.6.0'))).toBeTruthy();
     expect(exportButton().disabled).toBe(true);
@@ -1394,7 +1495,7 @@ describe('export for an older TomeStack', () => {
 
   it('lets the last chosen release win when an earlier reply arrives late', async () => {
     changesFor['0.5.0'] = [exportChange('dropped', 'Compat Steady Hands is left out.')];
-    const user = await openManage();
+    const user = await openExport();
     await waitFor(() => expect(exportButton().disabled).toBe(false));
     let late: (p: Preview) => void = () => {};
     vi.mocked(client.previewExport).mockReturnValueOnce(new Promise<Preview>((r) => (late = r)));
@@ -1415,7 +1516,7 @@ describe('export for an older TomeStack', () => {
     const user = userEvent.setup();
     const v = view();
     const { rerender } = renderSheet(v);
-    await user.click(screen.getByRole('tab', { name: 'Manage' }));
+    await openMore(user, 'Export…');
     await user.click(await screen.findByRole('radio', { name: '0.6.0' }));
     await user.click(await screen.findByRole('checkbox', { name: confirmLabel }));
     expect(exportButton().disabled).toBe(false);
@@ -1568,13 +1669,11 @@ it('closes the print preview from its own button and keeps focus there (4.1.2)',
   vi.mocked(client.info).mockResolvedValue({ version: '0.0.0-fixture' } as unknown as Awaited<ReturnType<typeof client.info>>);
   const user = userEvent.setup();
   renderSheet(view());
-  const print = screen.getByRole('button', { name: 'Print…' });
-  await user.click(print);
+  await openMore(user, 'Print…');
   expect(screen.getByRole('region', { name: 'Print preview' })).toBeTruthy();
-  await user.click(print);
+  await user.click(screen.getByRole('button', { name: 'Close print preview' }));
   expect(screen.queryByRole('region', { name: 'Print preview' })).toBeNull();
-  expect(print.getAttribute('aria-expanded')).toBe('false');
-  expect(document.activeElement).toBe(print);
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'More' }));
 });
 
 it('returns focus to the opener and reports the result when a rest finishes (D29, 2.4.3)', async () => {
@@ -2685,16 +2784,27 @@ describe('after your long rest', () => {
   });
 
   // Owner 2026-10-28: a permanent way to change picks, even when every choice is resolved.
-  it('offers Change picks in the header while every choice is resolved, and none without choices', async () => {
+  it('offers Choices in More while every choice is resolved, and none without choices (Wave 3 3.5)', async () => {
     const user = userEvent.setup();
     const onMakeChoices = vi.fn();
     render(<CharacterSheet view={view({ choices: [picked('levelUp', 2)] })} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={onMakeChoices} onArchiveChanged={noop} />);
     expect(screen.queryByRole('button', { name: 'Make choices' })).toBeNull();
-    await user.click(screen.getByRole('button', { name: 'Change picks' }));
+    expect(screen.queryByRole('button', { name: 'Change picks' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'More' }));
+    await user.click(screen.getByRole('button', { name: 'Choices' }));
     expect(onMakeChoices).toHaveBeenCalledTimes(1);
     cleanup();
     render(<CharacterSheet view={view({ choices: [] })} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
-    expect(screen.queryByRole('button', { name: 'Change picks' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'More' }));
+    expect(screen.queryByRole('button', { name: 'Choices' })).toBeNull();
+  });
+
+  it('keeps the Choose now control on the Choices to make line working (Wave 3 3.5)', async () => {
+    const user = userEvent.setup();
+    const onMakeChoices = vi.fn();
+    render(<CharacterSheet view={view({ choices: [{ ...picked('levelUp', 2), resolved: false }] })} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={onMakeChoices} onArchiveChanged={noop} />);
+    await user.click(within(screen.getByRole('heading', { name: 'Choices to make' }).closest('section')!).getByRole('button', { name: 'Choose now' }));
+    expect(onMakeChoices).toHaveBeenCalledTimes(1);
   });
 });
 

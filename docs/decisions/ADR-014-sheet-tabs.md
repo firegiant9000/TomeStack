@@ -4,6 +4,8 @@ Status: accepted (owner, 2026-10-03; LIVING_SPECS D17)
 Date: 2026-10-03
 Implementation: all four slices (2026-10-03 to 2026-10-04; features/sheet-layout.md).
 
+Note (2026-11-15): D96 (Wave 3 Group 4) replaced the Manage tab with the header's More list, and the tabs are now Play, Spells, Gear, Features, Skills and saves, Journal. The decision below is kept as it was made.
+
 ## Context
 
 The character sheet (`src/Ui/src/components/CharacterSheet.tsx`) was one page of about 25 sections, with the admin panels at the top and the core numbers at the bottom in collapsed field cards. The owner asked for a summary area with focused pages below, as paper sheets and other digital sheets have. SPEC P-03 forbids mimicking D&D Beyond's trade dress. There is no router: `App.tsx` keeps one `screen` in state, and the sheet is keyed by character so every play action replaces the view in place. The e2e flow (`src/Ui/e2e/flow.e2e.tsx`) queries every section by role and name and asserts focus on the sheet heading, on the gap-note text box after "Report a gap", and on buttons after Archive, Snapshot and Print.

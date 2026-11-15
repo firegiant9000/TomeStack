@@ -144,7 +144,7 @@ export function SpellsPanel({
             />
           )}
           {entry.spells.length === 0 ? (
-            <p className="hint">No spells recorded. Pick them in the builder ("Make choices" or at level-up).</p>
+            <p className="hint">No spells recorded. Pick them in the builder ("Choose now" on the sheet, Choices under More, or at level-up).</p>
           ) : (
             shown.length > 0 && (
             <ul className="features" aria-label={`${entry.name} spells`}>
