@@ -110,7 +110,7 @@ tar -a -c -f example-feature-list.tomestack-ext.zip extension.json transforms
 
 ## 4. Install, grant and run
 
-On the **Extensions** screen choose **Install extension…** and pick the file. The review shows what it is, each permission in words (unticked until you tick it) and what it can do. Tick the permissions and choose **Install with these permissions**. Then choose the hook (**Export features as Markdown**), pick a character and what the file may hold, choose **Preview output**, and **Save output…**.
+Open **Settings**, go to **Add-ons** and choose **Install extension…** and pick the file. The review shows what it is, each permission in words (unticked until you tick it) and what it can do. Tick the permissions and choose **Install with these permissions**. Then choose the hook (**Export features as Markdown**), pick a character and what the file may hold, choose **Preview output**, and **Save output…**.
 
 What a user can count on, whatever an extension does:
 

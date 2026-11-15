@@ -307,6 +307,9 @@ export interface RecoveryInfo {
   on: RestPeriod;
   amount: string;
   text?: string;
+  value?: number;
+  /** `all` is sent as false unless the recovery restores the whole pool. */
+  all: boolean;
 }
 
 /** A limited-use resource; `maximum`/`current` are absent when it is tracked by hand. */
@@ -596,6 +599,8 @@ export interface EffectiveAutomation {
 export interface MechanicsReport {
   mechanics: MechanicEntry[];
   unsupported: MechanicEntry[];
+  hasLimitedUseAction: boolean;
+  hasReferenceOnlyFeature: boolean;
 }
 
 export interface HitPointState {
@@ -876,6 +881,9 @@ export interface PlayState {
   toggles?: { contentId: string; toggleId: string; roundsLeft?: number }[];
   /** Character schema v10 (D43): the encounter in progress. Round 0 means the first turn has not started; show max(1, round). */
   encounter?: { round: number };
+  /** Spell slots spent, by spell level. */
+  spellSlotsSpent: { level: number; spent: number }[];
+  pactSlotsSpent: number;
 }
 
 export type PlayActionKind =
@@ -1210,6 +1218,17 @@ export interface RulesFamilyPolicy {
   longRestExhaustionNeedsFoodAndDrink: boolean;
   /** What the sheet calls the inspiration toggle: "Inspiration" (2014) or "Heroic Inspiration" (2024). */
   inspirationName: string;
+  /** How many spent hit dice a long rest gives back: half the total (2014) or all (2024). */
+  longRestHitDice: 'halfTotal' | 'all';
+  hitDieHealingMinimum: number;
+  shortRestNeedsOneHitPoint?: boolean;
+  /** How a half caster's class levels round for the Multiclass Spellcaster table. */
+  halfCasterLevels: 'down' | 'up';
+  thirdCasterLevels?: 'down' | 'up';
+  /** The Multiclass Spellcaster table: slots per spell level, by caster level. */
+  multiclassSpellSlots: number[][];
+  untrainedShieldGivesArmorClass?: boolean;
+  concentrationSaveMaximumDc?: number;
 }
 
 /** BACKLOG B06: a recorded, deliberate use of a pinned revision outside its rules families. */
@@ -1227,6 +1246,8 @@ export interface AppInfo {
   warnings: Diagnostic[];
   /** Every calculated field and its label (homebrew studio targets). */
   fields: FieldInfo[];
+  /** The extension API versions this build runs (ADR-011). */
+  extensionApi?: number[];
 }
 
 export interface ContentOption {
@@ -1370,6 +1391,12 @@ export interface PackageManifest {
   scope?: 'characters' | 'library' | 'source' | 'campaign';
   /** Source packs: the sender's statement, per source, that it is their own work. TomeStack cannot verify it. */
   attestations?: { sourceId: string; statement: string; confirmedAt: string }[];
+  /** The files in the package. */
+  entries: { path: string; kind: string; sha256: string; size: number }[];
+  /** Library backups and source packs: the order revisions are applied in (ids). */
+  revisionOrder?: string[];
+  /** The older release the copy was made for, when it is a down-converted copy. */
+  madeFor?: string;
 }
 
 // ---- Import Lab L5 (`package.preflight`): the one sharing rule, as a list before any share export is saved ----
@@ -1436,6 +1463,9 @@ export interface ExtensionHook {
 }
 
 export interface ExtensionManifest {
+  /** Always `tomestack.extension`. */
+  format?: string;
+  formatVersion?: number;
   id: string;
   name: string;
   version: string;
@@ -1660,6 +1690,7 @@ export type ImportJobStatus = 'queued' | 'running' | 'completed' | 'cancelled' |
 /** An import job: extraction of one source's PDF, then candidate detection. Local only; never exported. */
 export interface ImportJob {
   id: string;
+  schemaVersion: number;
   sourceId: string;
   /** SHA-256 of the document the job read (the PDF, or the Markdown file's bytes); its pages are stored under it. */
   sha256: string;
@@ -1783,6 +1814,7 @@ export interface StoredCandidate {
   attachmentSha256?: string;
   /** R120: the compare-and-swap token of the stored row; sent back as `CandidateEdit.expected`. */
   etag?: string;
+  schemaVersion?: number;
   updatedAt: string;
 }
 
@@ -1900,6 +1932,8 @@ export interface PackagePreview {
   errors: Diagnostic[];
   warnings: Diagnostic[];
   campaignImpact?: CampaignImpact[];
+  /** D85: the copies of this build's own revisions that the file carried and import skipped. */
+  repinned?: { copyId: string; originalId: string; name: string }[];
 }
 
 // ---- homebrew studio (M2 item 5) ----
@@ -1925,12 +1959,58 @@ export interface EffectPayment {
   minSlotLevel?: number;
 }
 
+/** Content v13 (ADR-024): names one piece of content by id (any revision of it). */
+export interface GuideTarget {
+  contentId: string;
+}
+
+/** Content v13: the coins of a kit line; each denomination is written only when present. */
+export interface KitCoins {
+  cp?: number;
+  sp?: number;
+  ep?: number;
+  gp?: number;
+  pp?: number;
+}
+
+/** Content v13: one line of a kit option; exactly one of item, anyOf, coins or pack is set. */
+export interface KitLine {
+  item?: GuideTarget;
+  quantity?: number;
+  /** A proficiency key such as `weapon.simple`. */
+  anyOf?: string;
+  coins?: KitCoins;
+  pack?: GuideTarget;
+}
+
+/** Content v13: one option of a kit pick, offered only to a character with `requiresProficiency` when that is set. */
+export interface KitOption {
+  id: string;
+  lines: KitLine[];
+  requiresProficiency?: string;
+}
+
+/** Content v13: one choice in a kit: pick one of its options. */
+export interface KitPick {
+  id: string;
+  label?: string;
+  options: KitOption[];
+}
+
+/** Content v13: one line of a pack (an item's `contains`); an absent quantity means 1. */
+export interface PackLine {
+  item: GuideTarget;
+  quantity?: number;
+}
+
 export type Effect =
   | (EffectBase & {
       type: 'modifier';
       operation: 'bonus' | 'set' | 'replace';
       target: string;
       value: string;
+      stacking?: 'stack' | 'highestInGroup';
+      stackGroup?: string;
       toggle?: string;
       /** Content v11 (D43): the content that declares `toggle`. Absent: this revision. */
       toggleContent?: string;
@@ -2059,7 +2139,11 @@ export type Effect =
       resourceFull?: { text: string };
       allowance?: boolean;
     })
-  | (EffectBase & { type: 'item'; requiresAttunement?: boolean; charges?: { max: number; recovery?: { period: RestPeriod; regain?: string } } })
+  // Content v13 (ADR-024): a pack lists what it contains; a creation guide names its subject, its primary abilities and its starting equipment.
+  | (EffectBase & { type: 'item'; requiresAttunement?: boolean; charges?: { max: number; recovery?: { period: RestPeriod; regain?: string } }; contains?: PackLine[] })
+  | (EffectBase & { type: 'guideFor'; content: GuideTarget })
+  | (EffectBase & { type: 'primaryAbilities'; abilities: Ability[] })
+  | (EffectBase & { type: 'startingEquipment'; picks: KitPick[] })
   | (EffectBase & { type: 'itemMod'; appliesTo: 'weapon' | 'armor' | 'any'; bonus?: number; modifiers?: Extract<Effect, { type: 'modifier' }>[] })
   | (EffectBase & { type: 'companion'; companionId: string; label: string; armorClass: string; hitPointMaximum: string; speed?: string; attacks?: string[]; resourceIds?: string[] })
   | (EffectBase & { type: 'recovery'; resourceId: string; on: RestPeriod; amount: string })
@@ -2152,7 +2236,7 @@ export type Effect =
       mastery?: string;
       bonus?: number;
     })
-  | (EffectBase & { type: 'armor'; category: 'light' | 'medium' | 'heavy' | 'shield'; armorClass: number; dexterityCap?: number })
+  | (EffectBase & { type: 'armor'; category: 'light' | 'medium' | 'heavy' | 'shield'; armorClass: number; dexterityCap?: number; strength?: number; stealthDisadvantage?: boolean })
   | (EffectBase & { type: 'choice'; choiceId: string; count: number; options: ContentReference[]; level?: number; onlyAs?: ClassEntry; replaceable?: { when: 'levelUp' | 'longRest'; max?: number } })
   // M5 slice 1b: the class editor (content v3/v5 effects, and v9 scale and multiclassCasterTable; ADR-010).
   | (EffectBase & { type: 'hitDie'; die: number })
@@ -2224,6 +2308,15 @@ export interface SourceRecord {
   origin?: 'local' | 'received';
   /** M6 slice 1: when you confirmed the source is your own work ("Mark as shareable"). */
   shareConfirmedAt?: string;
+  attribution?: string;
+  /** CC-BY-4.0 section 3(a)(1)(B): how this source's material was modified; travels with `attribution` into package notices. */
+  modificationNotice?: string;
+  importedAt?: string;
+  sha256?: string;
+  /** Obsolete machine-local PDF path (M0/M1); superseded by `attachmentId`, never exported. */
+  pdfRef?: string;
+  /** ADR-005: the source's PDF attachment on this machine; never exported. */
+  attachmentId?: string;
 }
 
 /** ADR-005: a source's PDF, without any path. */
@@ -2384,6 +2477,8 @@ export interface ValidationReport {
   errors: Diagnostic[];
   warnings: Diagnostic[];
   canPublish: boolean;
+  /** The lowest content schema version a revision must have to be published. */
+  requiredSchemaVersion: number;
 }
 
 /** M5 slice 2 (B02): how much a debugger finding matters; errors block publishing. */
@@ -2582,6 +2677,8 @@ export interface LibraryBackupPreview {
   changes?: ExportChange[];
   /** Sent back with the save so the service can refuse a copy that differs from the one previewed. */
   changesHash?: string;
+  /** Installed extensions the copy carries (format v9); sent as 0 when none. */
+  extensions?: number;
 }
 
 export type LibraryBackupOutcome =

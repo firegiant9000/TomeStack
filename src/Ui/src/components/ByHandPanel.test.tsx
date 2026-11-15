@@ -44,7 +44,7 @@ function mech(name: string, effectType: string, automation: AutomationStatus, pa
   };
 }
 
-const report = (mechanics: MechanicEntry[], unsupported: MechanicEntry[] = []): MechanicsReport => ({ mechanics, unsupported });
+const report = (mechanics: MechanicEntry[], unsupported: MechanicEntry[] = []): MechanicsReport => ({ mechanics, unsupported, hasLimitedUseAction: false, hasReferenceOnlyFeature: false });
 
 const spender = feature('Fixture Surge', [{ type: 'roll', resourceId: 'pool', label: 'Surge die' }], 7);
 const plain = feature('Fixture Lore');
@@ -87,8 +87,8 @@ it('has the intro, lists as ul, a consistent heading level and no live region', 
   const { container } = render(<ByHandPanel characterId="char-1" sheet={sheet} active />);
   await screen.findByRole('heading', { name: 'Partly automatic' });
   expect(screen.getByText('TomeStack never acts on its own; these need you.')).toBeTruthy();
-  expect(screen.getByRole('heading', { name: "Things to remember yourself" }).tagName).toBe('H3');
-  expect(screen.getByRole('heading', { name: 'Partly automatic' }).tagName).toBe('H4');
+  expect(screen.getByRole('heading', { name: "Things to remember yourself" }).tagName).toBe('H2');
+  expect(screen.getByRole('heading', { name: 'Partly automatic' }).tagName).toBe('H3');
   expect(container.querySelectorAll('ul').length).toBe(2);
   expect(container.querySelector('[aria-live], [role="status"], [role="alert"], output')).toBeNull();
   expect(container.textContent?.toLowerCase()).not.toContain('trigger');

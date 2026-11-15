@@ -27,7 +27,7 @@ beforeEach(() => {
   vi.mocked(client.contentDuplicates).mockResolvedValue([]);
   vi.mocked(client.listCharacters).mockResolvedValue([]);
   vi.mocked(client.previewFormula).mockResolvedValue({ formula: '3', points: [] });
-  vi.mocked(client.validateRevision).mockResolvedValue({ revision: { contentId: 'id-m', revisionId: 'x' }, errors: [], warnings: [], canPublish: true });
+  vi.mocked(client.validateRevision).mockResolvedValue({ revision: { contentId: 'id-m', revisionId: 'x' }, errors: [], warnings: [], requiredSchemaVersion: 12, canPublish: true });
 });
 afterEach(cleanup);
 
@@ -111,7 +111,7 @@ it('opens on the source it was asked for, and takes focus on its heading', async
   render(<HomebrewStudio info={info} initialSourceId="b" onError={() => {}} onStatus={() => {}} />);
   const select = await screen.findByRole<HTMLSelectElement>('combobox', { name: 'Book or notebook' });
   await waitFor(() => expect(select.selectedOptions[0]?.textContent).toMatch(/^Testy Beta/));
-  expect(document.activeElement).toBe(screen.getByRole('heading', { level: 2, name: 'Homebrew' }));
+  expect(document.activeElement).toBe(screen.getByRole('heading', { level: 1, name: 'Homebrew' }));
 });
 
 it('falls back to the first source when the asked-for one is not there', async () => {
@@ -297,7 +297,7 @@ async function openFormDraft(user: ReturnType<typeof userEvent.setup>) {
   vi.mocked(client.contentBySource).mockImplementation((id) => Promise.resolve(id === 'a' ? [entry] : []));
   vi.mocked(client.listCharacters).mockResolvedValue([]);
   vi.mocked(client.previewFormula).mockResolvedValue({ formula: '3', points: [] });
-  vi.mocked(client.validateRevision).mockResolvedValue({ revision: { contentId: 'id-f', revisionId: 'x' }, errors: [], warnings: [], canPublish: true });
+  vi.mocked(client.validateRevision).mockResolvedValue({ revision: { contentId: 'id-f', revisionId: 'x' }, errors: [], warnings: [], requiredSchemaVersion: 12, canPublish: true });
   render(<HomebrewStudio info={info} onError={() => {}} onStatus={() => {}} />);
   await user.click(await screen.findByRole('button', { name: 'Edit Testy Forms' }));
   const rule = (name: RegExp) => within(screen.getByRole('group', { name }));
@@ -350,7 +350,7 @@ async function openUpkeepDraft(user: ReturnType<typeof userEvent.setup>, extra: 
   vi.mocked(client.contentBySource).mockImplementation((id) => Promise.resolve(id === 'a' ? [entry] : []));
   vi.mocked(client.listCharacters).mockResolvedValue([]);
   vi.mocked(client.previewFormula).mockResolvedValue({ formula: '3', points: [] });
-  vi.mocked(client.validateRevision).mockResolvedValue({ revision: { contentId: 'id-u', revisionId: 'x' }, errors: [], warnings: [], canPublish: true });
+  vi.mocked(client.validateRevision).mockResolvedValue({ revision: { contentId: 'id-u', revisionId: 'x' }, errors: [], warnings: [], requiredSchemaVersion: 12, canPublish: true });
   render(<HomebrewStudio info={info} onError={() => {}} onStatus={() => {}} />);
   await user.click(await screen.findByRole('button', { name: 'Edit Testy Upkeep' }));
   const rule = (name: RegExp) => within(screen.getByRole('group', { name }));

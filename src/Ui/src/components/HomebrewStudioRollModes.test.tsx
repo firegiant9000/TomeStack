@@ -20,7 +20,7 @@ beforeEach(() => {
   vi.mocked(client.listContent).mockResolvedValue([]);
   vi.mocked(client.contentRevisions).mockResolvedValue([]);
   vi.mocked(client.previewFormula).mockResolvedValue({ formula: '3', points: [] });
-  vi.mocked(client.validateRevision).mockResolvedValue({ revision: { contentId: 'id-m', revisionId: 'x' }, errors: [], warnings: [], canPublish: true });
+  vi.mocked(client.validateRevision).mockResolvedValue({ revision: { contentId: 'id-m', revisionId: 'x' }, errors: [], warnings: [], requiredSchemaVersion: 12, canPublish: true });
 });
 afterEach(cleanup);
 

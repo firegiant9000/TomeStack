@@ -1,0 +1,37 @@
+{
+  "id": "c1080000-0000-4000-8000-0000000000a1",
+  "schemaVersion": 11,
+  "name": "Compat Hero",
+  "rulesFamily": "srd-5.1",
+  "baseAbilities": { "str": 10, "dex": 14, "con": 12, "int": 10, "wis": 13, "cha": 8 },
+  "pins": [
+    { "contentId": "c1080000-0000-4000-8000-0000000000c1", "revisionId": "c1080000-0000-4000-8000-0000000000e1" },
+    { "contentId": "c1080000-0000-4000-8000-0000000000c4", "revisionId": "c1080000-0000-4000-8000-0000000000e4" },
+    { "contentId": "51c00000-0000-4000-8000-000000000001", "revisionId": "51e00000-0000-4000-8000-000000000001" }
+  ],
+  "equipment": [
+    {
+      "item": { "contentId": "c1080000-0000-4000-8000-0000000000c2", "revisionId": "c1080000-0000-4000-8000-0000000000e2" },
+      "equipped": true,
+      "quantity": 1,
+      "id": "c1080000-0000-4000-8000-0000000000b2",
+      "mods": [
+        { "contentId": "c1080000-0000-4000-8000-0000000000c3", "revisionId": "c1080000-0000-4000-8000-0000000000e3" }
+      ]
+    },
+    {
+      "item": { "contentId": "c1080000-0000-4000-8000-0000000000c8", "revisionId": "c1080000-0000-4000-8000-0000000000e8" },
+      "equipped": false,
+      "quantity": 1,
+      "id": "c1080000-0000-4000-8000-0000000000b3"
+    }
+  ],
+  "overrides": [],
+  "details": { "backstory": "Compat backstory." },
+  "play": {
+    "toggles": [
+      { "contentId": "c1080000-0000-4000-8000-0000000000c1", "toggleId": "surge", "roundsLeft": 3 }
+    ]
+  },
+  "updatedAt": "2026-11-10T00:00:00+00:00"
+}

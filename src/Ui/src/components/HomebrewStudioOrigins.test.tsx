@@ -71,7 +71,7 @@ beforeEach(() => {
   vi.mocked(client.listContent).mockResolvedValue([]);
   vi.mocked(client.spellListKeys).mockResolvedValue([]);
   vi.mocked(client.listCharacters).mockResolvedValue([]);
-  vi.mocked(client.validateRevision).mockResolvedValue({ revision: { contentId: 'c', revisionId: 'r' }, errors: [], warnings: [], canPublish: true });
+  vi.mocked(client.validateRevision).mockResolvedValue({ revision: { contentId: 'c', revisionId: 'r' }, errors: [], warnings: [], requiredSchemaVersion: 12, canPublish: true });
   vi.mocked(client.publishManyPreview).mockResolvedValue({ entries: [], dependents: [], canPublish: true });
 });
 afterEach(cleanup);

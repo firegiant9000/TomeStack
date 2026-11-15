@@ -136,7 +136,7 @@ it('shows the applied state and keeps focus when a later undo step fails (D23)',
   const { v, damaged, onChanged } = undoHarness();
   const first = { ...v, sheet: { ...v.sheet, hitPoints: { maximum: 8, current: 5, temporary: 0 } } };
   const onError = vi.fn();
-  const play = { temporaryHitPoints: 0, resources: [], conditions: [], exhaustion: 0 };
+  const play = { temporaryHitPoints: 0, resources: [], conditions: [], exhaustion: 0, spellSlotsSpent: [], pactSlotsSpent: 0 };
   const before = { ...v, character: { ...v.character, play: { ...play, concentration: { spell: { contentId: 's', revisionId: 'r' }, name: 'Fixture Ward' } } } };
   const after = { ...damaged, character: { ...v.character, play } };
   vi.mocked(client.play).mockResolvedValueOnce(after).mockResolvedValueOnce(first).mockRejectedValueOnce(new Error('play.spell-not-prepared'));
@@ -250,7 +250,7 @@ it('the service\'s Undo is disabled while a play change is in flight, so it cann
 const upkeepValue = { content: { contentId: 'c1', revisionId: 'r1' }, effectId: 'e-up', toggleId: 'iron', at: 'turnStart', resourceContent: 'c1', resourceId: 'breath', change: 'spend', amount: 2, all: false, ifShort: 'ask', label: 'Iron upkeep' };
 const combatView = (round?: number, over: Partial<CharacterView> = {}, stamp = '2026-10-03T00:00:00Z'): CharacterView => {
   const v = view({ upkeeps: [upkeepValue] as never });
-  const play = round === undefined ? undefined : { temporaryHitPoints: 0, resources: [], conditions: [], exhaustion: 0, encounter: { round } };
+  const play = round === undefined ? undefined : { temporaryHitPoints: 0, resources: [], conditions: [], exhaustion: 0, spellSlotsSpent: [], pactSlotsSpent: 0, encounter: { round } };
   return { ...v, character: { ...v.character, updatedAt: stamp, play }, ...over };
 };
 
@@ -712,7 +712,7 @@ it('groups Features by what granted them, then by kind, and drops none (D25)', (
     }),
     'features',
   );
-  expect(screen.getAllByRole('heading', { level: 4 }).map((h) => h.textContent)).toEqual(['Classes', 'Items', 'From Fixture Fighter', 'From Fixture Wayfarer']);
+  expect(screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual(['Classes', 'Items', 'From Fixture Fighter', 'From Fixture Wayfarer']);
   expect(Array.from(document.querySelectorAll('.feature .option-name')).map((n) => n.textContent)).toEqual(['Fixture Fighter', 'Fixture Torch', 'Fixture Rage', 'Fixture Alert']);
 });
 
@@ -830,7 +830,7 @@ it('puts the Details form on Journal after session notes and gap notes, with no 
   expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Play', 'Gear', 'Features', 'Skills and saves', 'Journal', 'Manage']);
   await user.click(screen.getByRole('tab', { name: 'Journal' }));
   const panel = screen.getByRole('tabpanel', { name: 'Journal' });
-  expect(within(panel).getAllByRole('heading', { level: 3 }).map((h) => h.textContent?.replace(/: \d+ open$/, ''))).toEqual(['Session notes', 'Gap notes', 'Details']);
+  expect(within(panel).getAllByRole('heading', { level: 2 }).map((h) => h.textContent?.replace(/: \d+ open$/, ''))).toEqual(['Session notes', 'Gap notes', 'Details']);
   expect(within(panel).getByRole('form', { name: 'Details' })).toBeTruthy();
 });
 
@@ -957,7 +957,7 @@ it('falls back from a remembered tab that is not offered, without taking focus f
   localStorage.setItem('tomestack.sheetTab.fixture-2', 'spells');
   renderSheet(view());
   expect(screen.getByRole('tab', { name: 'Play' }).getAttribute('aria-selected')).toBe('true');
-  expect(document.activeElement).toBe(screen.getByRole('heading', { level: 2 }));
+  expect(document.activeElement).toBe(screen.getByRole('heading', { level: 1 }));
   expect(localStorage.getItem('tomestack.sheetTab.fixture-2')).toBe('spells');
 });
 
@@ -1365,7 +1365,7 @@ describe('export for an older TomeStack', () => {
     await user.click(screen.getByRole('tab', { name: 'Manage' }));
     await waitFor(() => expect(client.packageTargets).toHaveBeenCalled());
     await waitFor(() => expect(exportButton().disabled).toBe(false));
-    expect(screen.queryByText('Which TomeStack will open it?')).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Which version will open this file?' })).toBeNull();
     expect(onError).not.toHaveBeenCalled();
   });
 
@@ -1974,7 +1974,7 @@ it('sends a save started while a play reply is pending with the play reply\'s up
   const hit = pending();
   const played: CharacterView = {
     ...v,
-    character: { ...v.character, updatedAt: '2026-10-03T00:00:05.5000000+00:00', play: { temporaryHitPoints: 3, resources: [], conditions: [], exhaustion: 0 } },
+    character: { ...v.character, updatedAt: '2026-10-03T00:00:05.5000000+00:00', play: { temporaryHitPoints: 3, resources: [], conditions: [], exhaustion: 0, spellSlotsSpent: [], pactSlotsSpent: 0 } },
   };
   vi.mocked(client.play).mockReset();
   vi.mocked(client.play).mockReturnValueOnce(hit.promise);

@@ -41,7 +41,7 @@ export function SpellBasicsEditor(props: BasicsProps) {
 
   return (
     <section aria-labelledby="spell-basics-heading" className="effect-editor origin-basics">
-      <h4 id="spell-basics-heading">Spell basics</h4>
+      <h3 id="spell-basics-heading">Spell basics</h3>
       <fieldset id="spell-basics-core" tabIndex={-1}>
         <legend>What the spell is</legend>
         <div className="origin-grid">

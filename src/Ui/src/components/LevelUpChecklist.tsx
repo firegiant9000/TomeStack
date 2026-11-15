@@ -39,9 +39,9 @@ export function LevelUpChecklist({
 
   return (
     <section aria-labelledby="level-up-heading" className="play-panel">
-      <h3 id="level-up-heading" tabIndex={-1} ref={heading}>
+      <h2 id="level-up-heading" tabIndex={-1} ref={heading}>
         What changed at level {checklist.level}
-      </h3>
+      </h2>
       {rows.length > 0 && (
         <ul>
           {rows.map((row, i) => {

@@ -13,6 +13,8 @@ The four items ADR-008 left open before the first published installer (LIVING_SP
 
 Over the changes since the `v0.8.0` tag. A patch: `git diff v0.8.0 HEAD -- src/AppService/Content` is empty, and `ReleaseLadder` gains no row (0.8.1 reads the 0.8.0 row; the 0.7.0 row is now offered as a "Save for an older TomeStack" target).
 
+After D103, main offers only the previous minor; cut any further 0.8.x patch from the v0.8.1 tag, not from main.
+
 - **Dependencies:** shipped, only React and React DOM 19.3.0 → 19.3.1 (`scheduler` unchanged; `ATTRIBUTION.md` updated in #150). Development-only: `@testing-library/user-event`, `@types/node`, `@vitejs/plugin-react`, ESLint, `globals`, `typescript-eslint`, and `minimatch` 11.0.7 through an npm `overrides` entry (#154, Dependabot alert #1). `Directory.Packages.props` and `.config/dotnet-tools.json` are unchanged, so every NuGet package and `vpk` 1.2.161 are as in 0.8.0. Workflows: `ci.yml` and `weekly.yml` pin every action by commit SHA, and the weekly Stryker job runs in four shards; `release.yml` is unchanged. `scripts/release-notes.ps1` rewrites relative changelog links to tagged GitHub URLs.
 - **`npm audit --omit=dev`: 0.**
 - **Trademark:** the same search as 0.8.0, over the lines added since `v0.8.0` in `src/` (excluding the SRD packs): no new "D&D", "Wizards of the Coast", "Dungeons", "fifth edition" or "5e". The Foundry export still names the `dnd5e` system id (now 6.0.6), as in §1. Product name, window title, installer title, exe metadata and README tagline unchanged.
@@ -156,7 +158,7 @@ Velopack (MIT, Caelan Sayler) builds `Setup.exe` and `Update.exe` in Rust, with 
    2. the self-contained publish and `vpk pack`;
    3. an install, smoke and uninstall on the runner;
    4. it writes `SHA256SUMS` over those files, attests each file it lists (build provenance) and creates a **draft** release with `Setup.exe`, the portable zip, the `.nupkg`, the Velopack feed files, `SHA256SUMS` and notes from the changelog.
-4. Review the draft on GitHub (assets, notes, the unsigned note), check that its tag's commit is on `main` (`git fetch origin --tags`, then `git merge-base --is-ancestor vX.Y.Z origin/main` must succeed; a draft from any other commit is rejected as below), then **Publish**. The release page is not public before that, but the workflow run's artifacts (`release-assets`, the same files; `release-notes`; `release-smoke-result`) can be downloaded from the public run page for one day.
+4. Review the draft on GitHub (assets, notes, the unsigned note; the draft must list `tomestack-X.Y.Z-nuget.cdx.json` and `tomestack-X.Y.Z-npm.cdx.json`, and `SHA256SUMS` must have a line for each), check that its tag's commit is on `main` (`git fetch origin --tags`, then `git merge-base --is-ancestor vX.Y.Z origin/main` must succeed; a draft from any other commit is rejected as below), then **Publish**. The release page is not public before that, but the workflow run's artifacts (`release-assets`, the same files; `release-notes`; `release-smoke-result`) can be downloaded from the public run page for one day.
 5. After publishing: run the upgrade test and the install checks on the published `Setup.exe` (`docs/features/release-0.4.0-verification.md`).
 
 6. Two GitHub rulesets (repository settings, the owner's; check with `gh api repos/firegiant9000/TomeStack/rulesets`): `Default` protects `main` from force-push and deletion, and `Release Tags` (since 2026-11-03) lets only a repository admin create, move or delete a `refs/tags/v*` tag. The workflow runs as it stands at the tag, so the ruleset is what limits who can start a release; step 4's check that the tag's commit is on `main` stays as the second line.
@@ -165,7 +167,7 @@ Velopack (MIT, Caelan Sayler) builds `Setup.exe` and `Update.exe` in Rust, with 
 
 The **Release** workflow has three jobs, so no step that runs the repo's code or npm packages holds a write or OIDC token:
 
-- `build` (`contents: read`, checkout without a persisted token): the version check, the full gate, pack, installer smoke, then `SHA256SUMS` (`<sha256>  <file>` per asset, lower-case hex). Signing, when it lands, goes after the pack and before the hash file.
+- `build` (`contents: read`, checkout without a persisted token): the version check, the full gate, pack, installer smoke, the two CycloneDX SBOMs (`tomestack-X.Y.Z-nuget.cdx.json`, which also lists the bundled .NET runtime packs read from the published `TomeStack.deps.json`, and `tomestack-X.Y.Z-npm.cdx.json`), then `SHA256SUMS` (`<sha256>  <file>` per asset including the SBOMs, lower-case hex). Signing, when it lands, goes after the pack and before the hash file.
 - `attest` (`id-token: write`, `attestations: write`): checks the files against `SHA256SUMS`, then `actions/attest-build-provenance` with `subject-checksums: SHA256SUMS`.
 - `publish` (`contents: write`): checks the files again and creates the draft with the listed files and `SHA256SUMS`. It runs no repo code.
 

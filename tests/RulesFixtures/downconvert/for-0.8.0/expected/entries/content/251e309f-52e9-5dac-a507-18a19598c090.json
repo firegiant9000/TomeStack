@@ -1,0 +1,30 @@
+{
+  "contentId": "c1080000-0000-4000-8000-0000000000c8",
+  "revisionId": "251e309f-52e9-5dac-a507-18a19598c090",
+  "schemaVersion": 12,
+  "kind": "item",
+  "name": "Compat Kit Satchel",
+  "rulesFamilies": [
+    "srd-5.1"
+  ],
+  "provenance": {
+    "sourceId": "c1080000-0000-4000-8000-000000000001",
+    "page": {
+      "start": 8
+    }
+  },
+  "status": "published",
+  "summary": "A v13 test pack: two ropes. A 0.8.0 copy loses the list and keeps the item.",
+  "effects": [
+    {
+      "type": "item",
+      "id": "satchel-item",
+      "automation": "automatic",
+      "timing": "always"
+    }
+  ],
+  "downConvertedFrom": {
+    "revisionId": "c1080000-0000-4000-8000-0000000000e8",
+    "schemaVersion": 13
+  }
+}

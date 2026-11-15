@@ -59,9 +59,9 @@ export function ExperiencePanel({ view, onChanged, onError, saveCharacter }: Pro
 
   return (
     <section aria-labelledby="experience-heading" className="field-group experience">
-      <h3 id="experience-heading" tabIndex={-1} ref={heading}>
+      <h2 id="experience-heading" tabIndex={-1} ref={heading}>
         Experience points
-      </h3>
+      </h2>
       <label>
         <input type="checkbox" checked={tracked} onChange={(e) => toggle(e.target.checked)} /> Track XP
       </label>

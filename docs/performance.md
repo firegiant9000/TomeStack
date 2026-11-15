@@ -178,7 +178,15 @@ Not measured yet. Method, so the result can be compared later:
 |---|---|---|---|---|
 | — | — | owed | owed | — |
 
-The smoke script's `processStartToReadyMs` is not first paint: it is taken when the whole smoke script finishes (`MainWindow.xaml.cs`). `dailyCopyMs` is how long the D77 daily copy held the window back before it showed (`dailyCopy` says what it did; a fresh smoke folder normally writes one). The smoke's 30 s budget starts once the window has shown, so it does not include that copy; the script's 90 s exit limit does (raised from 60 s, so a copy of up to about 55 s still leaves the app time to write its own report).
+The smoke script's `processStartToReadyMs` is not first paint: it is taken when the whole smoke script finishes (`MainWindow.xaml.cs`); its budget is in [Smoke ready-time budget](#smoke-ready-time-budget) below. `dailyCopyMs` is how long the D77 daily copy held the window back before it showed (`dailyCopy` says what it did; a fresh smoke folder normally writes one). The smoke's in-app 30 s limit (a different budget from D102) starts once the window has shown, so it does not include that copy; the script's 90 s exit limit does (raised from 60 s, so a copy of up to about 55 s still leaves the app time to write its own report).
+
+## Smoke ready-time budget
+
+The smoke run checks its ready time against a budget (D102; `scripts/ready-budget.ps1`, called by `scripts/smoke.ps1`). The figure is the report's `processStartToReadyMs`: the time from process start to the end of the in-app smoke script. That includes first paint plus the smoke's own commands, so it is an upper bound on first paint, not first paint itself. It is an automated check, not the manual method above, so its numbers are not comparable with the owed cold and warm medians. A plain smoke run (no `-SkipCrashCheck`, no extra arguments) passes `-Require`, so a current build that stops writing the field fails the run instead of silently skipping the budget.
+
+- **Budget:** 15 s locally and 30 s in CI (`CI=true`), owner ruling 2026-11-12. `-MaxReadyMs` sets another budget; a negative value skips the check. A report from a build without the field is not checked.
+- **0.8.0 measurement:** about 8.5 s on the dev machine, WebView2 cold.
+- **CI:** 7278 ms in the smoke of main, run 43189478437 (2026-11-12).
 
 ## What the numbers say (the roadmap's questions)
 

@@ -121,6 +121,23 @@ public sealed class ReleaseNotesScriptTests
         Assert.Contains("[GitHub CLI](https://cli.github.com/)", notes);
     }
 
+    private static void AssertNamesTheSboms(string host)
+    {
+        var notes = Run(host, "- [a](a.md)").Replace("\r\n", "\n");
+        Assert.Contains("tomestack-9.9.9-nuget.cdx.json", notes);
+        Assert.Contains("tomestack-9.9.9-npm.cdx.json", notes);
+        Assert.Contains("CycloneDX", notes);
+        Assert.Contains("software bills of materials", notes);
+        Assert.Contains("`SHA256SUMS` and attested", notes);
+    }
+
+    [Fact]
+    public void DownloadListNamesTheSboms() => AssertNamesTheSboms("powershell");
+
+    [PwshTheory]
+    [InlineData("pwsh")]
+    public void DownloadListNamesTheSbomsUnderPwsh(string host) => AssertNamesTheSboms(host);
+
     [Theory]
     [MemberData(nameof(Cases))]
     public void RelativeLinksAreRewritten(string input, string expected) => AssertRewritten("powershell", input, expected);

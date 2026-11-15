@@ -17,7 +17,7 @@ it('lists active characters as cards with level and last change, newest first, a
   const user = userEvent.setup();
   const onOpen = vi.fn();
   render(<HomePanel characters={summaries} onOpen={onOpen} onNew={() => {}} canCreate />);
-  expect(document.activeElement).toBe(screen.getByRole('heading', { level: 2, name: 'Characters' }));
+  expect(document.activeElement).toBe(screen.getByRole('heading', { level: 1, name: 'Your characters' }));
   const cards = within(screen.getByRole('list', { name: 'Characters' })).getAllByRole('listitem');
   expect(cards).toHaveLength(1); // the archived one is not a card
   expect(cards[0]!.textContent).toContain('Level 4');
@@ -28,7 +28,7 @@ it('lists active characters as cards with level and last change, newest first, a
 
 it('does not take focus on mount when focusOnMount is false (the app start screen)', () => {
   render(<HomePanel characters={summaries} onOpen={() => {}} onNew={() => {}} canCreate focusOnMount={false} />);
-  expect(document.activeElement).not.toBe(screen.getByRole('heading', { level: 2, name: 'Characters' }));
+  expect(document.activeElement).not.toBe(screen.getByRole('heading', { level: 1, name: 'Your characters' }));
 });
 
 it('orders cards newest change first', () => {
@@ -45,7 +45,7 @@ it('shows the empty state and a Create a character button when there is nothing 
   const user = userEvent.setup();
   const onNew = vi.fn();
   render(<HomePanel characters={[]} onOpen={() => {}} onNew={onNew} canCreate />);
-  expect(screen.getByText(/No characters yet\./)).toBeTruthy();
+  expect(screen.getByText('Choose + Add a character in the sidebar, or create one here.')).toBeTruthy();
   await user.click(screen.getByRole('button', { name: 'Create a character' }));
   expect(onNew).toHaveBeenCalled();
 });

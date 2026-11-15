@@ -193,7 +193,7 @@ it('keeps the result visible and focused after the restricted panel publishes (r
   });
   const draft = { contentId: 's1', revisionId: 'rev-s1-draft' };
   vi.mocked(client.publishManyPreview).mockResolvedValue({
-    entries: [{ draft, name: 'Testy Spark', kind: 'spell', report: { revision: draft, errors: [], warnings: [], canPublish: true }, findings: [], replacesPublished: true, rePointings: [] }],
+    entries: [{ draft, name: 'Testy Spark', kind: 'spell', report: { revision: draft, errors: [], warnings: [], requiredSchemaVersion: 12, canPublish: true }, findings: [], replacesPublished: true, rePointings: [] }],
     dependents: [],
     canPublish: true,
   });

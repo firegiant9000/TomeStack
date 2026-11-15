@@ -97,6 +97,10 @@ const policy = (id: RulesFamilyPolicy['id'], displayName: string): RulesFamilyPo
   backgroundGrantsFeat: id !== 'srd-5.1',
   longRestExhaustionNeedsFoodAndDrink: id === 'srd-5.1',
   inspirationName: id === 'srd-5.1' ? 'Inspiration' : 'Heroic Inspiration',
+  longRestHitDice: id === 'srd-5.1' ? 'halfTotal' : 'all',
+  hitDieHealingMinimum: 1,
+  halfCasterLevels: id === 'srd-5.1' ? 'down' : 'up',
+  multiclassSpellSlots: [],
 });
 const families = [policy('srd-5.1', 'SRD 5.1'), policy('srd-5.2.1', 'SRD 5.2.1')];
 const content = (n: number, kind: ContentOption['kind'], name: string, family: 'srd-5.1' | 'srd-5.2.1', over: Partial<ContentOption> = {}): ContentOption => ({

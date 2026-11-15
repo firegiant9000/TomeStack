@@ -241,7 +241,7 @@ export function CompanionsPanel({ view, act, roll, rollMode = 'normal', onChange
           {pools.length > 0 && (
             <ul className="resources">
               {pools.map((resource) => (
-                <ResourceCard key={`${resource.content.revisionId}-${resource.resourceId}`} resource={resource} act={act} level={5} />
+                <ResourceCard key={`${resource.content.revisionId}-${resource.resourceId}`} resource={resource} act={act} level={4} />
               ))}
             </ul>
           )}
@@ -253,9 +253,9 @@ export function CompanionsPanel({ view, act, roll, rollMode = 'normal', onChange
 
   return (
     <section aria-labelledby="companions-heading" className="play-panel">
-      <h3 id="companions-heading" tabIndex={-1}>
+      <h2 id="companions-heading" tabIndex={-1}>
         Companions
-      </h3>
+      </h2>
       <HelpNote topic="companions">
         Familiars, mounts and the like, kept as free text. TomeStack applies no rules to them: you type their numbers and press the buttons.
         Their hit points change only here, and a rest does not change them. A companion marked &quot;From&quot; a feature or item is calculated
@@ -420,9 +420,9 @@ function CompanionCard({
 
   return (
     <section aria-labelledby={`${key}-heading`}>
-      <h4 id={`${key}-heading`} tabIndex={-1}>
+      <h3 id={`${key}-heading`} tabIndex={-1}>
         {model.name}
-      </h4>
+      </h3>
       {editing ? (
         form
       ) : (

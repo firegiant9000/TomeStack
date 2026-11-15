@@ -426,7 +426,8 @@ public class SrdRogueTests
         foreach (var file in TomeStackApp.BundledPacks.Except(rogueFiles))
         {
             var pack = TomeStackApp.LoadBundledPack(file);
-            var json = TempApp.Json(pack.Revisions);
+            // A creation guide (ADR-024) only advises the builder and changes no calculation, so it may name the Rogue (guideFor).
+            var json = TempApp.Json(pack.Revisions.Where(r => r.Kind != ContentKind.CreationGuide).ToList());
             // C2-6: the v12 Monk's Evasion names the v12 Rogue's (`supersedes`), so a Rogue/Monk halves once. That is the one allowed mention.
             var allowed = file.EndsWith("-monk-v12.json", StringComparison.Ordinal)
                 ? new[] { Ref(file.Contains("5.1", StringComparison.Ordinal) ? RulesFamilies.Srd51 : RulesFamilies.Srd521, 410110).ContentId.ToString("D") }

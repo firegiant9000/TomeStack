@@ -26,8 +26,8 @@ vi.mock('../../api/client', () => ({
 }));
 
 const families: RulesFamilyPolicy[] = [
-  { id: 'srd-5.1', displayName: 'SRD 5.1 (2014 rules)', shortLabel: '2014 rules', abilityIncreaseSource: 'species', backgroundGrantsFeat: false, longRestExhaustionNeedsFoodAndDrink: true, inspirationName: 'Inspiration' },
-  { id: 'srd-5.2.1', displayName: 'SRD 5.2.1 (2024 rules)', shortLabel: '2024 rules', abilityIncreaseSource: 'background', backgroundGrantsFeat: true, longRestExhaustionNeedsFoodAndDrink: false, inspirationName: 'Heroic Inspiration' },
+  { id: 'srd-5.1', displayName: 'SRD 5.1 (2014 rules)', shortLabel: '2014 rules', abilityIncreaseSource: 'species', backgroundGrantsFeat: false, longRestExhaustionNeedsFoodAndDrink: true, inspirationName: 'Inspiration', longRestHitDice: 'halfTotal', hitDieHealingMinimum: 0, halfCasterLevels: 'down', multiclassSpellSlots: [] },
+  { id: 'srd-5.2.1', displayName: 'SRD 5.2.1 (2024 rules)', shortLabel: '2024 rules', abilityIncreaseSource: 'background', backgroundGrantsFeat: true, longRestExhaustionNeedsFoodAndDrink: false, inspirationName: 'Heroic Inspiration', longRestHitDice: 'all', hitDieHealingMinimum: 1, halfCasterLevels: 'up', multiclassSpellSlots: [] },
 ];
 
 const read: DdbReadResult = {
@@ -151,6 +151,7 @@ it('shows Needs a choice rows first under the filter and requires a pick before 
   await user.click(screen.getByRole('radio', { name: 'Needs a choice' }));
   const shown = within(region).getAllByRole('rowheader').map((h) => h.textContent);
   expect(shown).toEqual(['Fixture Veil']);
+  expect(within(region).getByText('2 possible matches')).toBeTruthy();
 
   await user.click(screen.getByRole('button', { name: 'Next: numbers' }));
   await user.click(await screen.findByRole('button', { name: 'Next: summary' }));

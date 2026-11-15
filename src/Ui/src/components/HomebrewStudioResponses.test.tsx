@@ -20,7 +20,7 @@ beforeEach(() => {
   vi.mocked(client.listContent).mockResolvedValue([]);
   vi.mocked(client.contentRevisions).mockResolvedValue([]);
   vi.mocked(client.previewFormula).mockResolvedValue({ formula: '3', points: [] });
-  vi.mocked(client.validateRevision).mockResolvedValue({ revision: { contentId: 'id-m', revisionId: 'x' }, errors: [], warnings: [], canPublish: true });
+  vi.mocked(client.validateRevision).mockResolvedValue({ revision: { contentId: 'id-m', revisionId: 'x' }, errors: [], warnings: [], requiredSchemaVersion: 12, canPublish: true });
 });
 afterEach(cleanup);
 
@@ -76,7 +76,7 @@ it('the response editor offers the phase-dependent fields and blocks HP.MAX outs
     revision: { contentId: 'id-m', revisionId: 'x' },
     errors: [{ code: 'validate.formula-invalid', message: "Response 'response-2' amount: HP.MAX can only be read in a threshold.", effectId: 'response-2' }],
     warnings: [],
-    canPublish: false,
+    requiredSchemaVersion: 12, canPublish: false,
   });
   expect((await checked()).effect('response-2')).toMatchObject({ phase: 'damageReduction', amount: 'HP.MAX' });
   expect(await r.findByText(/HP\.MAX can only be read in a threshold/)).toBeTruthy();
@@ -216,7 +216,7 @@ it('a check\'s warnings are listed apart from its errors', async () => {
     revision: { contentId: 'id-m', revisionId: 'x' },
     errors: [],
     warnings: [{ code: 'validate.toggle-content-missing', message: 'Response response-2 names a toggle of content that is not installed.', effectId: 'response-2' }],
-    canPublish: true,
+    requiredSchemaVersion: 12, canPublish: true,
   });
 
   await user.click(screen.getByRole('button', { name: 'Check' }));

@@ -21,6 +21,8 @@ scripts/smoke.ps1 -Exe src/DesktopShell/bin/Release/net10.0-windows/TomeStack.ex
 scripts/single-instance-check.ps1 -Exe src/DesktopShell/bin/Release/net10.0-windows/TomeStack.exe   # two processes on one data folder (M2.1)
 ```
 
+When changing a package version, run `dotnet restore TomeStack.slnx` and commit the updated `packages.lock.json` files (CI restores in locked mode).
+
 ## Invariants
 
 - `RulesCore` stays free of persistence, UI and Windows references (enforced by `RulesCoreBoundaryTests`).

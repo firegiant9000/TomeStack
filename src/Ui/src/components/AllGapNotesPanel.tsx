@@ -42,8 +42,8 @@ export function AllGapNotesPanel({ onError, onOpenCharacter }: Props) {
 
   return (
     <section aria-labelledby="all-gaps-heading" className="panel">
-      <h2 id="all-gaps-heading">Gap notes of all characters{listed ? `: ${open} open` : ''}</h2>
-      <p className="hint">Where TomeStack fell short at the table, for every character. Notes stay on this computer.</p>
+      <h1 id="all-gaps-heading">Gap notes</h1>
+      <p className="hint">{listed ? `${open} open, across all characters. ` : ''}Where TomeStack fell short at the table, for every character. Notes stay on this computer.</p>
       <label>
         <input type="checkbox" checked={showResolved} onChange={(e) => setShowResolved(e.target.checked)} /> Show resolved notes
       </label>
