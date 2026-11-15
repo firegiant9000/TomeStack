@@ -69,7 +69,7 @@ public class SampleCharacterTests
         using var temp = new TempApp();
         using var barrier = new Barrier(4);
 
-        var results = await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => Task.Run(() =>
+        var results = await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => Task.Factory.StartNew(() =>
         {
             barrier.SignalAndWait();
             try
@@ -81,7 +81,7 @@ public class SampleCharacterTests
             {
                 return e.Problems[0].Code;
             }
-        })));
+        }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default)));
 
         Assert.Equal(1, results.Count(r => r == "ok"));
         Assert.Equal(3, results.Count(r => r == "character.sample-exists"));

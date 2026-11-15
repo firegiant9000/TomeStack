@@ -62,7 +62,7 @@ public sealed partial class TomeStackApp
                 throw new AppValidationException([new("character.sample-exists", "The sample character already exists.")]);
             view = SaveCharacter(BuildSample());
             if (!_store.SetCharacterOrigin(view.Character.Id, SampleOrigin))
-                throw new InvalidOperationException("The sample character could not be marked.");
+                throw SampleUnavailable();
         });
         return view!;
     }
