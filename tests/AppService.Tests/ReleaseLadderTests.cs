@@ -261,6 +261,27 @@ public class ReleaseLadderTests
         Assert.Equal(Row("0.6.0"), ReleaseLadder.CurrentRowOrLast("0.6.2"));
     }
 
+    [Theory]
+    [InlineData("x.y")]
+    [InlineData("")]
+    [InlineData("0")]
+    [InlineData("0.8.x")]
+    public void A_malformed_build_stamp_fails_loudly_and_names_the_stamp(string stamp)
+    {
+        var offered = Assert.Throws<InvalidOperationException>(() => ReleaseLadder.OfferedFor(stamp));
+        Assert.Contains($"\"{stamp}\"", offered.Message, StringComparison.Ordinal);
+        var current = Assert.Throws<InvalidOperationException>(() => ReleaseLadder.CurrentRowOrLast(stamp));
+        Assert.Contains($"\"{stamp}\"", current.Message, StringComparison.Ordinal);
+        Assert.Throws<InvalidOperationException>(() => ReleaseLadder.PreviousMinorFor(stamp));
+    }
+
+    [Fact]
+    public void A_two_part_build_stamp_still_parses()
+    {
+        Assert.Equal(["0.8.0"], ReleaseLadder.OfferedFor("0.9").Select(r => r.Release.ToString(3)));
+        Assert.Equal(Row("0.6.0"), ReleaseLadder.CurrentRowOrLast("0.6"));
+    }
+
     [Fact]
     public void Evaluate_gives_a_bundled_revision_that_is_also_new_content_one_cause()
     {

@@ -191,10 +191,17 @@ public class CreationGuideV13ValidationTests
     }
 
     [Fact]
-    public void More_than_20_options_in_a_pick_are_refused()
+    public void More_than_30_options_in_a_pick_are_refused()
     {
-        var options = Enumerable.Range(0, 21).Select(i => new KitOption($"o{i}", [Item()])).ToArray();
+        var options = Enumerable.Range(0, 31).Select(i => new KitOption($"o{i}", [Item()])).ToArray();
         AssertError(ValidateGuide(Kit(new KitPick("p", null, options))), "validate.guide-picks");
+    }
+
+    [Fact]
+    public void Thirty_options_in_a_pick_are_accepted()
+    {
+        var options = Enumerable.Range(0, 30).Select(i => new KitOption($"o{i}", [Item()])).ToArray();
+        AssertNoCode(ValidateGuide(Kit(new KitPick("p", null, options))), "validate.guide-picks");
     }
 
     [Fact]
