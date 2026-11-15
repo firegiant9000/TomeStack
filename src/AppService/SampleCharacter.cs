@@ -30,9 +30,21 @@ public sealed partial class TomeStackApp
     ];
 
     private static readonly string[] SampleEquipped = ["Mace", "Scale mail", "Shield"];
-    private static readonly string[] SampleSkills = ["Medicine", "Persuasion"];
-    private static readonly string[] SampleCantrips = ["Guidance", "Sacred Flame", "Spare the Dying"];
-    private static readonly string[] SamplePrepared = ["Healing Word", "Guiding Bolt", "Shield of Faith", "Sanctuary", "Aid", "Prayer of Healing"];
+    // The Cleric's "Cleric Skill: Medicine" and "Cleric Skill: Persuasion" options.
+    private static readonly Guid[] SampleSkills =
+    [
+        Guid.Parse("51c00000-0000-4000-8000-000000401802"), Guid.Parse("51c00000-0000-4000-8000-000000401803"),
+    ];
+
+    // srd-5.1 spells by content id: Guidance, Sacred Flame, Spare the Dying.
+    private static readonly Guid[] SampleCantrips = [SpellId(146), SpellId(250), SpellId(271)];
+    // Healing Word, Guiding Bolt, Shield of Faith, Sanctuary, Aid, Prayer of Healing.
+    private static readonly Guid[] SamplePrepared = [SpellId(154), SpellId(147), SpellId(262), SpellId(251), SpellId(3), SpellId(226)];
+
+    private static Guid SpellId(int n) => Guid.Parse($"51c00000-0000-4000-8000-000000100{n:000}");
+
+    private static AppValidationException SampleUnavailable() =>
+        new([new("character.sample-unavailable", "The sample character needs the bundled 2014 rules, which are not available.")]);
 
     /// <summary>
     /// <c>character.createSample</c> (Wave 3, D95): saves the bundled sample character (a level 3 Hill Dwarf Cleric of the Life
@@ -41,14 +53,14 @@ public sealed partial class TomeStackApp
     /// </summary>
     public CharacterView CreateSample()
     {
-        if (_store.ListCharacters().Any(c => _store.CharacterOrigin(c.Id) == SampleOrigin))
-            throw new AppValidationException([new("character.sample-exists", "The sample character already exists.")]);
-        var sample = BuildSample();
         CharacterView? view = null;
-        // One transaction (nested saves join it): a failed mark rolls the character back, so no unmarked "Wren Ashdown" is left.
+        // One transaction (it holds the store gate; nested saves join it): the exists check, the save and the mark are atomic, so
+        // two calls cannot both pass the check, and a failed mark rolls the character back (no unmarked "Wren Ashdown" is left).
         _store.InTransaction(() =>
         {
-            view = SaveCharacter(sample);
+            if (_store.SampleCharacterId() is not null)
+                throw new AppValidationException([new("character.sample-exists", "The sample character already exists.")]);
+            view = SaveCharacter(BuildSample());
             if (!_store.SetCharacterOrigin(view.Character.Id, SampleOrigin))
                 throw new InvalidOperationException("The sample character could not be marked.");
         });
@@ -84,7 +96,7 @@ public sealed partial class TomeStackApp
     private Character BuildSample()
     {
         ContentReference Newest(Guid contentId) =>
-            _store.NewestPublished(contentId)?.Reference ?? throw new InvalidOperationException($"Bundled content {contentId} is not installed.");
+            _store.NewestPublished(contentId)?.Reference ?? throw SampleUnavailable();
 
         var cleric = Newest(SampleCleric);
         var dwarf = Newest(SampleDwarf);
@@ -106,10 +118,10 @@ public sealed partial class TomeStackApp
 
         // The class skills are picked by name from what the sheet offers.
         var offered = CharacterCalculator.Calculate(draft, _store).Choices?.FirstOrDefault(c => c.Source == cleric && c.ChoiceId == "cleric-skills")
-            ?? throw new InvalidOperationException("The Cleric offers no skill choice.");
-        var skills = offered.Options.Where(o => _store.FindRevision(o) is { } r && SampleSkills.Any(s => r.Name.EndsWith(": " + s, StringComparison.OrdinalIgnoreCase))).ToList();
+            ?? throw SampleUnavailable();
+        var skills = offered.Options.Where(o => SampleSkills.Contains(o.ContentId)).ToList();
         if (skills.Count != SampleSkills.Length)
-            throw new InvalidOperationException("The sample's skills are not offered.");
+            throw SampleUnavailable();
 
         return draft with
         {
@@ -122,15 +134,11 @@ public sealed partial class TomeStackApp
 
     private List<KnownSpell> SampleSpells()
     {
-        var spells = _store.ListRevisionsInOrder()
-            .Where(r => r.Kind == ContentKind.Spell && r.Status == RevisionStatus.Published && r.RulesFamilies.Contains(RulesFamilies.Srd51))
-            .GroupBy(r => r.ContentId).Select(g => g.Last())
-            .ToDictionary(r => r.Name, r => r.Reference, StringComparer.OrdinalIgnoreCase);
-        ContentReference Find(string name) => spells.TryGetValue(name, out var found) ? found : throw new InvalidOperationException($"Sample spell '{name}' is not installed.");
+        ContentReference Find(Guid id) => _store.NewestPublished(id)?.Reference ?? throw SampleUnavailable();
         return
         [
-            .. SampleCantrips.Select(n => new KnownSpell(SampleCasting, Find(n), true)),
-            .. SamplePrepared.Select(n => new KnownSpell(SampleCasting, Find(n), true)),
+            .. SampleCantrips.Select(id => new KnownSpell(SampleCasting, Find(id), true)),
+            .. SamplePrepared.Select(id => new KnownSpell(SampleCasting, Find(id), true)),
         ];
     }
 
@@ -143,7 +151,7 @@ public sealed partial class TomeStackApp
         {
             var result = KitExpansion.Expand(kit, [.. kit.Picks.Select(p => new KitChoice(p.Id, "a"))], _store);
             if (result.Problems.Count > 0)
-                throw new InvalidOperationException("The Cleric guide's first options do not expand.");
+                throw SampleUnavailable();
             entries = [.. result.Equipment];
             coins = result.Coins;
         }
@@ -152,7 +160,7 @@ public sealed partial class TomeStackApp
             entries = [.. SampleFallbackGear.Select(id => new EquipmentEntry(Newest(id)))];
         }
 
-        ContentReference Newest(Guid id) => _store.NewestPublished(id)?.Reference ?? throw new InvalidOperationException($"Bundled content {id} is not installed.");
+        ContentReference Newest(Guid id) => _store.NewestPublished(id)?.Reference ?? throw SampleUnavailable();
         return [.. entries.Select(e => _store.FindRevision(e.Item) is { } item && SampleEquipped.Contains(item.Name, StringComparer.OrdinalIgnoreCase) ? e with { Equipped = true } : e)];
     }
 }

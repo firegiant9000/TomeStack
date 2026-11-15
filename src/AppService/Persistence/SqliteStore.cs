@@ -907,6 +907,24 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
     public string? CharacterOrigin(Guid id) =>
         QueryScalar("SELECT origin FROM characters WHERE id = $id;", ("$id", Key(id)));
 
+    /// <summary>The id of the character marked as the bundled sample, active or archived, or null when there is none.</summary>
+    public Guid? SampleCharacterId() =>
+        QueryScalar("SELECT id FROM characters WHERE origin = 'sample' LIMIT 1;") is { } id ? Guid.Parse(id) : null;
+
+    /// <summary>Every marked character's origin by id, in one query (the character list reads it once, not per row).</summary>
+    public IReadOnlyDictionary<Guid, string> CharacterOrigins()
+    {
+        lock (_gate)
+        {
+            var origins = new Dictionary<Guid, string>();
+            using var command = Command("SELECT id, origin FROM characters WHERE origin IS NOT NULL;", []);
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+                origins[Guid.Parse(reader.GetString(0))] = reader.GetString(1);
+            return origins;
+        }
+    }
+
     /// <summary>Marks an existing character's origin (SaveCharacter never touches it). Returns false, changing nothing, for an unknown id.</summary>
     public bool SetCharacterOrigin(Guid id, string origin)
     {

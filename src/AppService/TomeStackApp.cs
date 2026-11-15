@@ -289,8 +289,11 @@ public sealed partial class TomeStackApp : IDisposable
         return ContentValidator.Validate(target, _store);
     }
 
-    public IReadOnlyList<CharacterSummary> ListCharacters() =>
-        [.. _store.ListCharacters().Select(Summary)];
+    public IReadOnlyList<CharacterSummary> ListCharacters()
+    {
+        var origins = _store.CharacterOrigins();
+        return [.. _store.ListCharacters().Select(c => Summary(c, origins.GetValueOrDefault(c.Id)))];
+    }
 
     public CharacterView GetCharacter(Guid id) =>
         _store.FindCharacter(id) is { } character

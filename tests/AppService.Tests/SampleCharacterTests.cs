@@ -64,6 +64,31 @@ public class SampleCharacterTests
     }
 
     [Fact]
+    public async Task Concurrent_creates_make_exactly_one_sample()
+    {
+        using var temp = new TempApp();
+        using var barrier = new Barrier(4);
+
+        var results = await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => Task.Run(() =>
+        {
+            barrier.SignalAndWait();
+            try
+            {
+                temp.App.CreateSample();
+                return "ok";
+            }
+            catch (AppValidationException e)
+            {
+                return e.Problems[0].Code;
+            }
+        })));
+
+        Assert.Equal(1, results.Count(r => r == "ok"));
+        Assert.Equal(3, results.Count(r => r == "character.sample-exists"));
+        Assert.Single(temp.App.ListCharacters(), c => c.Origin == "sample");
+    }
+
+    [Fact]
     public void Deleting_a_normal_character_is_refused_and_it_survives()
     {
         using var temp = new TempApp();
