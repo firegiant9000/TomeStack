@@ -2,7 +2,7 @@
 
 MVP "Separate replacement milestone (M3)" ("printable backup") · SPEC P-03 · owner decision 2026-09-28: a print view of the sheet, printed with WebView2's own print dialog, with gap notes opt-in · status: **implemented**.
 
-UI: `src/Ui/src/components/PrintView.tsx`, opened by "Print…" in the sheet header (`CharacterSheet.tsx`), and the `@media print` rules in `src/Ui/src/styles.css`. Acceptance: the e2e test "prints a sheet with its license notices, and gap notes only when ticked".
+UI: `src/Ui/src/components/PrintView.tsx`, opened by "Print…" in the sheet header's "More" list (`CharacterSheet.tsx`), and the `@media print` rules in `src/Ui/src/styles.css`. Acceptance: the e2e test "prints a sheet with its license notices, and gap notes only when ticked".
 
 ## What it is
 
@@ -10,7 +10,7 @@ A paper (or "Microsoft Print to PDF") copy of the character to play from if the 
 
 ## Flow
 
-1. **Print…** in the sheet header opens the "Print preview" region after the summary, in the main column (ADR-015). The preview scrolls to the top of the window and focus moves to its "Print character" heading; focus returns to the button when it closes.
+1. **Print…** in the header's "More" list opens the "Print preview" region after the summary, in the main column (ADR-015). The preview scrolls to the top of the window and focus moves to its "Print character" heading; focus returns to "More" when it closes.
 2. **Include gap notes** is off by default, because notes may describe private homebrew (`gap-notes.md`). **Include session notes (private)** is off by default too (D22), and so is **Include details (personality, appearance, backstory, languages and tools)** (item 17, D36).
 3. **Print…** in the preview calls `window.print()`. WebView2 shows its print dialog, and the printed page contains only the preview, because the print CSS hides the rest of the app.
 
