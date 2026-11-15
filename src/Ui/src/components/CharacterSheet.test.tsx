@@ -3023,6 +3023,31 @@ describe('sample note', () => {
     expect(document.activeElement).toBe(screen.getByRole('heading', { level: 1 }));
   });
 
+  it('a second refusal with the same words moves focus to Archive instead again', async () => {
+    const user = userEvent.setup();
+    vi.mocked(client.deleteSample).mockRejectedValue(new TomeStackError({ code: 'character.sample-has-snapshots', message: 'This sample has snapshots, so it can only be archived' }));
+    renderSample();
+    await user.click(screen.getByRole('button', { name: 'Remove sample' }));
+    await user.click(screen.getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Archive instead' })));
+    await user.click(screen.getByRole('button', { name: 'Remove sample' }));
+    await user.click(screen.getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(client.deleteSample).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Archive instead' })));
+  });
+
+  it('a failure after the delete (refreshing the list) goes to onError', async () => {
+    const user = userEvent.setup();
+    vi.mocked(client.deleteSample).mockResolvedValue({ deleted: true });
+    const failure = new Error('list failed');
+    const onRemoved = vi.fn().mockRejectedValue(failure);
+    const onError = vi.fn();
+    renderSample({ onRemoved, onError });
+    await user.click(screen.getByRole('button', { name: 'Remove sample' }));
+    await user.click(screen.getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(onError).toHaveBeenCalledWith(failure));
+  });
+
   it('a double click on Remove deletes once', async () => {
     const user = userEvent.setup();
     vi.mocked(client.deleteSample).mockImplementation(() => new Promise((resolve) => setTimeout(() => resolve({ deleted: true }), 20)));

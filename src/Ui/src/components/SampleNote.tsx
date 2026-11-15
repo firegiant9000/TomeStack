@@ -36,7 +36,8 @@ export function SampleNote({ characterId, name, onError, onStatus, onRemoved, on
   const [dismissed, setDismissed] = useState(() => noteDismissed(characterId));
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [blocked, setBlocked] = useState<string>();
+  // A fresh object per refusal, so a second refusal with the same words still moves focus to "Archive instead".
+  const [blocked, setBlocked] = useState<{ message: string }>();
   const removeButton = useRef<HTMLButtonElement>(null);
   const keepButton = useRef<HTMLButtonElement>(null);
   const archiveButton = useRef<HTMLButtonElement>(null);
@@ -81,7 +82,7 @@ export function SampleNote({ characterId, name, onError, onStatus, onRemoved, on
       await onRemoved();
     } catch (error) {
       if (error instanceof TomeStackError && error.code === 'character.sample-has-snapshots') {
-        setBlocked(error.message);
+        setBlocked({ message: error.message });
         setConfirming(false);
       } else {
         onError(error);
@@ -143,7 +144,7 @@ export function SampleNote({ characterId, name, onError, onStatus, onRemoved, on
       )}
       {blocked && (
         <div role="alert">
-          <p>{blocked}</p>
+          <p>{blocked.message}</p>
           <button type="button" ref={archiveButton} aria-disabled={busy || undefined} onClick={archiveInstead}>
             Archive instead
           </button>
