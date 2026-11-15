@@ -53,6 +53,7 @@ it('shows plain words, not a blank page, when a lazy screen fails to load, and k
     </div>,
   );
   expect(await screen.findByText('Your saved characters are safe.')).toBeTruthy();
+  expect(document.activeElement).toBe(screen.getByRole('heading', { level: 1, name: 'Something went wrong on this screen' }));
   expect(document.body.textContent).not.toContain('Fixture-abc'); // no text of the error
   expect(screen.getByRole('button', { name: 'Fixture nav' })).toBeTruthy();
 });
@@ -86,6 +87,8 @@ it('shows the diagnostics text selected after Copy diagnostics', async () => {
   await user.click(screen.getByRole('button', { name: 'Copy diagnostics' }));
   const box = (await screen.findByLabelText('Diagnostics text')) as HTMLTextAreaElement;
   expect(box.value).toBe('Fixture diagnostics');
+  expect(box.selectionStart).toBe(0);
+  expect(box.selectionEnd).toBe(box.value.length);
 });
 
 it('says so in plain words when the diagnostics cannot be read, and Back still works', async () => {

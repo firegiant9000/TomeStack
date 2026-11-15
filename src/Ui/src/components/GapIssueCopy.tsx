@@ -51,7 +51,7 @@ export function GapIssueCopy({ note }: { note: GapNote }) {
             <textarea ref={box} readOnly rows={6} value={text} />
           </label>
           <p className="hint">The text is selected: press Ctrl+C to copy it.</p>
-          <p className="hint">This may include text from your books or homebrew; check before posting.</p>
+          <p className="hint">This may include text from your books or homebrew, or names; check before posting.</p>
           <button type="button" onClick={close}>
             Close
           </button>

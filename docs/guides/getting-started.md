@@ -10,21 +10,6 @@ From the front page you can start in three ways.
 - **Make my own.** The builder walks you through species, class, background and your choices. You can save a draft at any point and come back later.
 - **Bring one in.** Open a file shared from another TomeStack, a backup, or a PDF sheet you already have. You see a preview and decide what to keep before anything is added.
 
-## The sheet
-
-Each character has six tabs along the top.
-
-- **Play** holds hit points, rolls, resources, conditions and rests. This is the tab you use at the table.
-- **Spells** lists spells and slots. It only appears for characters that cast spells.
-- **Gear** is your equipment and what you carry.
-- **Features** lists what your class, species and background give you.
-- **Skills and saves** shows every skill, save and calculated number.
-- **Journal** is for notes, details and the story so far.
-
-The **More** list next to the tabs holds the rest: Choices (when the character has some to change), Print, Export, Snapshots, Updates and Archive.
-
-Click a number to see a trace of where it came from. If a number is wrong for your table, you can set it by hand. The sheet marks it as set by hand.
-
 ## Rolling and the status bar
 
 Press a roll button to roll with the right bonus already added. The result and the last few rolls show in the status bar at the bottom of the window. The status bar also says when something was saved, or when something needs your attention.

@@ -1,7 +1,3 @@
-## Known gaps
-
-TomeStack does not do everything yet. Where it falls short, it shows the rule as text and leaves the step to you. If you hit something not listed here, write it down as a gap note.
-
 ## Spells
 
 - Spells that are always prepared because of your subclass (domain, oath, patron or circle spells) are text only. Add them yourself.
@@ -23,4 +19,4 @@ TomeStack does not do everything yet. Where it falls short, it shows the rule as
 ## Homebrew and notes
 
 - Some homebrew edits need a second step. For example, a roll from another entry can be stored but not yet chosen in Homebrew.
-- Gap notes cannot be exported as text yet. The print view can include them.
+- Gap notes are not part of a TomeStack file. You can copy one as text from its note, and the print view can include them.

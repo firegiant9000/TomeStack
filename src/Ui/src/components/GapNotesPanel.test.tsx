@@ -83,7 +83,7 @@ it('shows the issue text selected and focused, with the hint and the warning', a
   expect(box.selectionStart).toBe(0);
   expect(box.selectionEnd).toBe(box.value.length);
   expect(screen.getByText(/press Ctrl\+C to copy it/)).toBeTruthy();
-  expect(screen.getByText('This may include text from your books or homebrew; check before posting.')).toBeTruthy();
+  expect(screen.getByText('This may include text from your books or homebrew, or names; check before posting.')).toBeTruthy();
 });
 
 it('still shows the text when the version cannot be read, and Close returns focus to the button', async () => {
