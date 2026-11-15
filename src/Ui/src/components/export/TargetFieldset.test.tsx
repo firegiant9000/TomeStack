@@ -59,8 +59,12 @@ it('renders nothing until the service has answered', () => {
 });
 
 it('says there is no older version when the list is empty', () => {
-  render(<TargetFieldset targets={{ ...targets, targets: [] }} value={null} onChange={() => {}} />);
-  expect(screen.getByText('This TomeStack has no older version to save for.')).toBeTruthy();
+  const { container } = render(<TargetFieldset targets={{ ...targets, targets: [] }} value={null} onChange={() => {}} />);
+  const only = container.firstElementChild;
+  expect(container.childElementCount).toBe(1);
+  expect(only?.tagName).toBe('P');
+  expect(only?.className).toBe('hint');
+  expect(only?.textContent).toBe('This TomeStack has no older version to save for.');
   expect(screen.queryAllByRole('radio')).toHaveLength(0);
   expect(screen.queryByRole('group')).toBeNull();
   expect(screen.queryByText(hint)).toBeNull();
