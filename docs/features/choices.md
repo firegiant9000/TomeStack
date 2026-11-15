@@ -19,7 +19,7 @@ It is advisory. Nothing stops a replacement; the player is told. The service cou
 - a `levelUp` choice has a pick replaced and the character's level did not rise; or
 - either kind has more picks replaced than its `max`.
 
-A long rest's timing is not checked, because nothing records a rest, so a `longRest` choice only warns about more than `max`. The save always goes through. The sheet's status line shows the notice once, worded from the sheets ("{source}: you replaced 2 picks, more than the 1 it allows at once." or "… outside its window (at a level-up)."); it is not stored. The sheet header's "Change picks" button (shown whenever the character has a choice, owner 2026-10-28) opens Make choices at any time, so picks can always be changed; a swap outside its window then gets the notice. There is no studio field: `replaceable` is written in the content JSON, and the class and background editors keep it when they save. Tested in `ReplaceableChoice*` tests, `replaceable.test.ts` and the e2e `a replaceable choice offers a swap at level-up and notes one made outside it`.
+A long rest's timing is not checked, because nothing records a rest, so a `longRest` choice only warns about more than `max`. The save always goes through. The sheet's status line shows the notice once, worded from the sheets ("{source}: you replaced 2 picks, more than the 1 it allows at once." or "… outside its window (at a level-up)."); it is not stored. "Choices" in the sheet header's More list (shown whenever the character has a choice, owner 2026-10-28) and "Choose now" on the "Choices to make" line open Make choices at any time, so picks can always be changed; a swap outside its window then gets the notice. There is no studio field: `replaceable` is written in the content JSON, and the class and background editors keep it when they save. Tested in `ReplaceableChoice*` tests, `replaceable.test.ts` and the e2e `a replaceable choice offers a swap at level-up and notes one made outside it`.
 
 ## Character
 
@@ -27,7 +27,7 @@ A long rest's timing is not checked, because nothing records a rest, so a `longR
 
 ## Calculation
 
-- Every choice offered by an active revision whose level is reached appears in `sheet.choices`, with its options, what was selected and `resolved`.
+- Every choice offered by an active revision whose level is reached appears in `sheet.choices`, with its options, what was selected, `resolved` and `effectId` (the id of the choice effect, which `choice.unresolved` names; it can differ from `choiceId` when content authored them differently).
 - An unresolved choice (fewer selections than `count`) is flagged with `choice.unresolved` and listed on the sheet ("Choices to make").
 - A selection not in the options is not applied (`choice.invalid-option`). Selections beyond `count` are not applied (`choice.too-many`). A choice whose `count` is below 1 (which validation refuses on publish and import) is not offered, and nothing selected for it applies (`choice.invalid-count`).
 - An option must be usable under the character's rules family. Otherwise it is refused (`content.rules-family-mismatch`, message "Chosen from …"), and the choice stays unresolved. A cross-family exception (B06) recorded for that exact option admits it, and the character's own policy then governs it. Content *granted* by another revision cannot have its own exception: it follows its granter.

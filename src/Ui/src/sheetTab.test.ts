@@ -10,11 +10,16 @@ afterEach(() => {
 
 it('remembers a tab per character and forgets nothing else', () => {
   expect(rememberedSheetTab('fixture-a')).toBeUndefined();
-  rememberSheetTab('fixture-a', 'manage');
+  rememberSheetTab('fixture-a', 'notes');
   rememberSheetTab('fixture-b', 'spells');
-  expect(rememberedSheetTab('fixture-a')).toBe('manage');
+  expect(rememberedSheetTab('fixture-a')).toBe('notes');
   expect(rememberedSheetTab('fixture-b')).toBe('spells');
-  expect(localStorage.getItem('tomestack.sheetTab.fixture-a')).toBe('manage');
+  expect(localStorage.getItem('tomestack.sheetTab.fixture-a')).toBe('notes');
+});
+
+it('ignores a remembered "manage", the tab Wave 3 removed, so the sheet opens on Play', () => {
+  localStorage.setItem('tomestack.sheetTab.fixture-a', 'manage');
+  expect(rememberedSheetTab('fixture-a')).toBeUndefined();
 });
 
 it('ignores a stored value that is not a tab', () => {

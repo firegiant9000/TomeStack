@@ -28,7 +28,7 @@ Fixture Ward gives +1 AC while it is switched on. The studio has no "add toggle"
 ### Getting it onto a character
 
 - **A new character:** in the builder's Background step, open "Other content" and tick Fixture Ward.
-- **An existing character:** put it in a class. In the class's draft, use "Grant a feature" and pick Fixture Ward, then "Save draft" and "Publish". On the character's sheet, open the Manage tab. Under "Updates available", choose "Review update: <class name>", check what would change, then "Apply update".
+- **An existing character:** put it in a class. In the class's draft, use "Grant a feature" and pick Fixture Ward, then "Save draft" and "Publish". On the character's sheet, choose "More" in the sheet header, then "Updates". Under "Updates available", choose "Review update: <class name>", check what would change, then "Apply update".
 
 On the sheet you switch Ward on and off yourself. The AC changes only while it is on.
 
@@ -63,7 +63,7 @@ A spell that was accepted or published without a list: in the studio, tick it an
 
 ## Companions, your own attacks and backstory
 
-Familiars and mounts have a Companions card on Play. Your own attacks (name, bonus, damage) are entered under "Your own attacks", and personality and background story go in the Notes tab's "Details" form. Session notes (a "Session date" and a "Note", then "Save session note") stay on this computer and in your personal backups.
+Familiars and mounts have a Companions card on Play. Your own attacks (name, bonus, damage) are entered under "Your own attacks", and personality and background story go in the Journal tab's "Details" form. Session notes (a "Session date" and a "Note", then "Save session note") stay on this computer and in your personal backups.
 
 ## What is still manual at the table
 
