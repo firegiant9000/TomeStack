@@ -72,6 +72,7 @@ public sealed partial class TomeStackApp : IDisposable
         "TomeStack.Content.srd-5.1-guides.json",
         // Wave 3 G7: the 2024-rules gear catalogue, after the armor pack beside it.
         "TomeStack.Content.srd-5.2.1-gear.json",
+        "TomeStack.Content.srd-5.2.1-guides.json",
     ];
 
     /// <summary>

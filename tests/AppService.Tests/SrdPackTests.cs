@@ -41,7 +41,8 @@ public class SrdPackTests
     private static readonly ContentPack Guides51 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.1-guides.json"); // Wave 3 G6
     private static readonly ContentPack Srd51 = Merge(Base51, Spells51, Equipment51, Classes51, Armor51, Fighter51, Origins51, Barbarian51, Rogue51, Monk51, BarbarianV1251, RogueV1251, MonkV1251, Gear51, Guides51);
     private static readonly ContentPack Gear521 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.2.1-gear.json"); // Wave 3 G7
-    private static readonly ContentPack Srd521 = Merge(Base521, Spells521, Equipment521, Classes521, Armor521, Fighter521, Feats521, Origins521, Barbarian521, Rogue521, Monk521, BarbarianV12521, RogueV12521, MonkV12521, Gear521);
+    private static readonly ContentPack Guides521 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.2.1-guides.json"); // Wave 3 G7
+    private static readonly ContentPack Srd521 = Merge(Base521, Spells521, Equipment521, Classes521, Armor521, Fighter521, Feats521, Origins521, Barbarian521, Rogue521, Monk521, BarbarianV12521, RogueV12521, MonkV12521, Gear521, Guides521);
 
     private static ContentPack Merge(params ContentPack[] packs) => new()
     {
