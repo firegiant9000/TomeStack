@@ -3015,10 +3015,48 @@ describe('sample note', () => {
     expect(alert.textContent).toContain('This sample has snapshots, so it can only be archived');
     expect(onError).not.toHaveBeenCalled();
     expect(onRemoved).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(within(alert).getByRole('button', { name: 'Archive instead' }));
     await user.click(within(alert).getByRole('button', { name: 'Archive instead' }));
     await waitFor(() => expect(onArchiveChanged).toHaveBeenCalledTimes(1));
     expect(client.archiveCharacter).toHaveBeenCalledWith('fixture-2');
     expect(onStatus).toHaveBeenCalled();
+    expect(document.activeElement).toBe(screen.getByRole('heading', { level: 1 }));
+  });
+
+  it('a double click on Remove deletes once', async () => {
+    const user = userEvent.setup();
+    vi.mocked(client.deleteSample).mockImplementation(() => new Promise((resolve) => setTimeout(() => resolve({ deleted: true }), 20)));
+    renderSample();
+    await user.click(screen.getByRole('button', { name: 'Remove sample' }));
+    await user.dblClick(screen.getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(client.deleteSample).toHaveBeenCalled());
+    expect(client.deleteSample).toHaveBeenCalledTimes(1);
+  });
+
+  it('Dismiss moves focus to the sheet heading', async () => {
+    const user = userEvent.setup();
+    renderSample();
+    await user.click(screen.getByRole('button', { name: 'Dismiss sample note' }));
+    expect(document.activeElement).toBe(screen.getByRole('heading', { level: 1 }));
+  });
+
+  it('an archived sample shows no note', () => {
+    const v = sampleView();
+    render(
+      <CharacterSheet view={{ ...v, character: { ...v.character, archivedAt: '2026-11-01T00:00:00Z' } }} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} origin="sample" onRemoved={noop} />,
+    );
+    expect(screen.queryByText('This is a sample character.')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Remove sample' })).toBeNull();
+  });
+
+  it('has no axe violations with the snapshots alert showing', async () => {
+    const user = userEvent.setup();
+    vi.mocked(client.deleteSample).mockRejectedValue(new TomeStackError({ code: 'character.sample-has-snapshots', message: 'This sample has snapshots, so it can only be archived' }));
+    const { container } = renderSample();
+    await user.click(screen.getByRole('button', { name: 'Remove sample' }));
+    await user.click(screen.getByRole('button', { name: 'Remove' }));
+    await screen.findByRole('alert');
+    await expectNoAxeViolations(container);
   });
 
   it('another error goes to onError and the note stays', async () => {

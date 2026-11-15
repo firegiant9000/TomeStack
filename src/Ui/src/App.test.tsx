@@ -809,6 +809,7 @@ it('Remove sample on the sample sheet goes home and the sample is gone from the 
   await user.click(screen.getByRole('button', { name: 'Remove sample' }));
   await user.click(screen.getByRole('button', { name: 'Remove' }));
   await screen.findByRole('heading', { name: 'Welcome to TomeStack' });
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { level: 1, name: 'Your characters' })));
   expect(client.deleteSample).toHaveBeenCalledWith('fixture-sample');
   expect(screen.queryByRole('article', { name: 'Fixture Wren' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Open Fixture Wren' })).toBeNull();
