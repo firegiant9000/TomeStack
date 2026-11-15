@@ -1,0 +1,282 @@
+{
+  "packId": "compat-for-0-8-0",
+  "formatVersion": 1,
+  "notice": "Original TomeStack test fixtures for the down-conversion goldens. Invented; no SRD or third-party rules text.",
+  "sources": [
+    {
+      "id": "c1080000-0000-4000-8000-000000000001",
+      "title": "Compat Homebrew A",
+      "publisher": "TomeStack project",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "editionVersion": "fixture-1",
+      "license": "Original test fixture",
+      "redistributable": true,
+      "attribution": "Written for TomeStack tests."
+    }
+  ],
+  "revisions": [
+    {
+      "contentId": "c1080000-0000-4000-8000-0000000000c1",
+      "revisionId": "c1080000-0000-4000-8000-0000000000e1",
+      "schemaVersion": 12,
+      "kind": "feature",
+      "name": "Compat Steady Hands",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "c1080000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 1
+        }
+      },
+      "status": "published",
+      "summary": "A v12 test feature that a 0.8.0 copy carries over unchanged.",
+      "effects": [
+        {
+          "type": "toggle",
+          "id": "surge",
+          "toggleId": "surge",
+          "label": "Surge"
+        }
+      ]
+    },
+    {
+      "contentId": "c1080000-0000-4000-8000-0000000000c2",
+      "revisionId": "c1080000-0000-4000-8000-0000000000e2",
+      "schemaVersion": 12,
+      "kind": "item",
+      "name": "Compat Test Blade",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "c1080000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 2
+        }
+      },
+      "status": "published",
+      "summary": "A v12 test weapon with a bonus of its own.",
+      "effects": [
+        {
+          "type": "weapon",
+          "id": "blade",
+          "category": "simple",
+          "attack": "melee",
+          "damage": "1d6",
+          "damageType": "slashing",
+          "weaponKey": "compat-blade",
+          "bonus": 1
+        }
+      ]
+    },
+    {
+      "contentId": "c1080000-0000-4000-8000-0000000000c3",
+      "revisionId": "c1080000-0000-4000-8000-0000000000e3",
+      "schemaVersion": 12,
+      "kind": "item",
+      "name": "Compat Edge Mod",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "c1080000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 3
+        }
+      },
+      "status": "published",
+      "summary": "A v12 test mod for a weapon; a 0.8.0 copy keeps it.",
+      "effects": [
+        {
+          "type": "itemMod",
+          "id": "edge",
+          "appliesTo": "weapon",
+          "bonus": 1
+        }
+      ]
+    },
+    {
+      "contentId": "c1080000-0000-4000-8000-0000000000c4",
+      "revisionId": "c1080000-0000-4000-8000-0000000000e4",
+      "schemaVersion": 13,
+      "kind": "class",
+      "name": "Compat Path of Kits",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "c1080000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 4
+        }
+      },
+      "status": "published",
+      "summary": "A v13 test class that gives its subclass at level 1.",
+      "effects": [
+        {
+          "type": "hitDie",
+          "id": "path-hit-die",
+          "die": 8
+        },
+        {
+          "type": "grant",
+          "id": "grant-walker",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "c1080000-0000-4000-8000-0000000000c5",
+            "revisionId": "c1080000-0000-4000-8000-0000000000e5"
+          }
+        }
+      ]
+    },
+    {
+      "contentId": "c1080000-0000-4000-8000-0000000000c5",
+      "revisionId": "c1080000-0000-4000-8000-0000000000e5",
+      "schemaVersion": 13,
+      "kind": "subclass",
+      "name": "Compat Kit Walker",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "c1080000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 5
+        }
+      },
+      "status": "published",
+      "summary": "A v13 test subclass that gives one feature.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "grant-mark",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "c1080000-0000-4000-8000-0000000000c6",
+            "revisionId": "c1080000-0000-4000-8000-0000000000e6"
+          }
+        }
+      ]
+    },
+    {
+      "contentId": "c1080000-0000-4000-8000-0000000000c6",
+      "revisionId": "c1080000-0000-4000-8000-0000000000e6",
+      "schemaVersion": 13,
+      "kind": "feature",
+      "name": "Compat Kit Mark",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "c1080000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 6
+        }
+      },
+      "status": "published",
+      "summary": "A v13 test feature with advantage on the character's attack rolls.",
+      "effects": [
+        {
+          "type": "rollMode",
+          "id": "mark-attack",
+          "target": "attack",
+          "mode": "advantage",
+          "tags": [
+            "all"
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "c1080000-0000-4000-8000-0000000000c7",
+      "revisionId": "c1080000-0000-4000-8000-0000000000e7",
+      "schemaVersion": 1,
+      "kind": "item",
+      "name": "Compat Spare Rope",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "c1080000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 7
+        }
+      },
+      "status": "published",
+      "summary": "Plain test gear that sits inside the test satchel.",
+      "effects": []
+    },
+    {
+      "contentId": "c1080000-0000-4000-8000-0000000000c8",
+      "revisionId": "c1080000-0000-4000-8000-0000000000e8",
+      "schemaVersion": 13,
+      "kind": "item",
+      "name": "Compat Kit Satchel",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "c1080000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 8
+        }
+      },
+      "status": "published",
+      "summary": "A v13 test pack: two ropes. A 0.8.0 copy loses the list and keeps the item.",
+      "effects": [
+        {
+          "type": "item",
+          "id": "satchel-item",
+          "contains": [
+            {
+              "item": {
+                "contentId": "c1080000-0000-4000-8000-0000000000c7"
+              },
+              "quantity": 2
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "c1080000-0000-4000-8000-0000000000c9",
+      "revisionId": "c1080000-0000-4000-8000-0000000000e9",
+      "schemaVersion": 13,
+      "kind": "creationGuide",
+      "name": "Compat Kit Guide",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "c1080000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 9
+        }
+      },
+      "status": "published",
+      "summary": "A v13 test guide for the test class; a 0.8.0 copy leaves it out.",
+      "effects": [
+        {
+          "type": "guideFor",
+          "id": "for",
+          "content": {
+            "contentId": "c1080000-0000-4000-8000-0000000000c4"
+          }
+        },
+        {
+          "type": "primaryAbilities",
+          "id": "primary",
+          "abilities": [
+            "wis"
+          ]
+        }
+      ]
+    }
+  ]
+}

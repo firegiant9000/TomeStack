@@ -46,11 +46,24 @@ it('reports the release, and null for the first radio', async () => {
   expect(onChange).toHaveBeenLastCalledWith(null);
 });
 
-it('renders nothing without targets', () => {
-  const { container, rerender } = render(<TargetFieldset targets={null} value={null} onChange={() => {}} />);
+const hint = 'Only the version before this one is listed. To open the file in an older TomeStack, update that TomeStack first.';
+
+it('explains that only the previous version is listed', () => {
+  render(<TargetFieldset targets={targets} value={null} onChange={() => {}} />);
+  expect(screen.getByText(hint)).toBeTruthy();
+});
+
+it('renders nothing until the service has answered', () => {
+  const { container } = render(<TargetFieldset targets={null} value={null} onChange={() => {}} />);
   expect(container.firstChild).toBeNull();
-  rerender(<TargetFieldset targets={{ ...targets, targets: [] }} value={null} onChange={() => {}} />);
-  expect(container.firstChild).toBeNull();
+});
+
+it('says there is no older version when the list is empty', () => {
+  render(<TargetFieldset targets={{ ...targets, targets: [] }} value={null} onChange={() => {}} />);
+  expect(screen.getByText('This TomeStack has no older version to save for.')).toBeTruthy();
+  expect(screen.queryAllByRole('radio')).toHaveLength(0);
+  expect(screen.queryByRole('group')).toBeNull();
+  expect(screen.queryByText(hint)).toBeNull();
 });
 
 it('has no axe violations', async () => {

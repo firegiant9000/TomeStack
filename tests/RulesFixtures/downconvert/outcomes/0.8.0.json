@@ -1,0 +1,58 @@
+{
+    "harnessVersion":  1,
+    "tag":  "v0.8.0",
+    "tagCommit":  "0752782fbb5290497b147c9fdf369cccaddc8851",
+    "inputs":  [
+                   {
+                       "path":  "tests/RulesFixtures/downconvert/for-0.8.0/Compat-Campaign-campaign-pack-for-0.8.0.tomestack.zip",
+                       "sha256":  "4f73b51c9786f1152e00fb8aaa80a2fde185948371d0c169f2583ce1712d8375"
+                   },
+                   {
+                       "path":  "tests/RulesFixtures/downconvert/for-0.8.0/Compat-Hero-for-0.8.0-personal-backup.tomestack.zip",
+                       "sha256":  "c5f80e9a9f886946b62fc18d03de2971da738686cb4c8fabc4039521fd63c5c1"
+                   },
+                   {
+                       "path":  "tests/RulesFixtures/downconvert/for-0.8.0/Compat-Hero-for-0.8.0.tomestack.zip",
+                       "sha256":  "44dac562827babdfdf6beb35291156d9caae4e670efd3d3b0c5ee788a7ef9d81"
+                   },
+                   {
+                       "path":  "tests/RulesFixtures/downconvert/for-0.8.0/Compat-Homebrew-A-source-pack-for-0.8.0.tomestack.zip",
+                       "sha256":  "9f89ff0ec755d4f4908ed4493037010553300e0238b58006858258fa3ea97a02"
+                   },
+                   {
+                       "path":  "tests/RulesFixtures/downconvert/for-0.8.0/library-backup-for-0.8.0.tomestack.zip",
+                       "sha256":  "e65e2d0d1b815a15b1dc42d601b85d6f3e5a793097b4f74e169b1e93844c2aec"
+                   },
+                   {
+                       "path":  "tests/RulesFixtures/downconvert/for-0.8.0/expected.json",
+                       "sha256":  "f0c1f5668a6a38b5b96eb2a4e9590ec819f68a991c1bf858ce2f69fd127f9f65"
+                   }
+               ],
+    "results":  [
+                    {
+                        "package":  "Compat-Campaign-campaign-pack-for-0.8.0.tomestack.zip",
+                        "status":  "pass",
+                        "detail":  ""
+                    },
+                    {
+                        "package":  "Compat-Hero-for-0.8.0-personal-backup.tomestack.zip",
+                        "status":  "pass",
+                        "detail":  ""
+                    },
+                    {
+                        "package":  "Compat-Hero-for-0.8.0.tomestack.zip",
+                        "status":  "pass",
+                        "detail":  ""
+                    },
+                    {
+                        "package":  "Compat-Homebrew-A-source-pack-for-0.8.0.tomestack.zip",
+                        "status":  "pass",
+                        "detail":  ""
+                    },
+                    {
+                        "package":  "library-backup-for-0.8.0.tomestack.zip",
+                        "status":  "pass",
+                        "detail":  ""
+                    }
+                ]
+}
