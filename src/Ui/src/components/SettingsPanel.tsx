@@ -3,6 +3,7 @@ import { hueName } from '../accentClamp';
 import { client } from '../api/client';
 import type { AppInfo, CharacterSummary } from '../api/types';
 import {
+  abilityBoxesTop,
   abilityOrder,
   abilityOrderIds,
   accentHue,
@@ -15,6 +16,7 @@ import {
   focusRing,
   motion,
   motionIds,
+  setAbilityBoxesTop,
   setAbilityOrder,
   setAccentHue,
   setAnnounceRolls,
@@ -96,6 +98,7 @@ export function SettingsPanel({
   const [big, setBig] = useState<TargetsId>(targets());
   const [lines, setLines] = useState<UnderlineId>(underline());
   const [announce, setAnnounce] = useState(announceRollsOn());
+  const [boxesTop, setBoxesTop] = useState(abilityBoxesTop());
   // The count re-runs the selection when a second click brings back the same text.
   const [diagnostics, setDiagnostics] = useState<{ text: string; shown: number }>();
   const heading = useRef<HTMLHeadingElement>(null);
@@ -179,6 +182,9 @@ export function SettingsPanel({
       </label>
       <p className="hint">Text size scales the whole app; Ctrl + and Ctrl − zoom the window on top of it.</p>
       <Choice legend="Ability boxes" ids={abilityOrderIds} labels={abilityOrderLabels} value={order} onPick={pick(setAbilityOrder, setOrder)} />
+      <label className="choice">
+        <input type="checkbox" checked={boxesTop} onChange={(e) => pick(setAbilityBoxesTop, setBoxesTop)(e.target.checked)} /> Ability boxes at the top of the sheet
+      </label>
       <label className="choice">
         <input type="checkbox" checked={dice} onChange={(e) => toggleDice(e.target.checked)} /> Animate dice
       </label>

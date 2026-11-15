@@ -29,7 +29,7 @@ import { CombatStrip } from './CombatStrip';
 import { DamagePanel } from './DamagePanel';
 import { TurnPanel } from './TurnPanel';
 import { SnapshotsPanel } from './SnapshotsPanel';
-import { ActionsPanel, ClassColumnsPanel, ConcentrationPanel, ConditionsPanel, DeathSavesPanel, FeaturesPanel, HitPointsPanel, ResourcesPanel } from './PlayPanels';
+import { AbilitiesPanel, ActionsPanel, ClassColumnsPanel, ConcentrationPanel, ConditionsPanel, DeathSavesPanel, FeaturesPanel, HitPointsPanel, ResourcesPanel } from './PlayPanels';
 import { CompanionsPanel } from './CompanionsPanel';
 import { CustomAttacksPanel, CustomItemsPanel } from './CustomEntries';
 import { CurrencyPanel, EquipmentPanel } from './EquipmentPanel';
@@ -46,8 +46,7 @@ import { RestPanel } from './RestPanel';
 import { logged, rollLogLimit, type LoggedRoll } from './RollLog';
 import { SheetSummary } from './SheetSummary';
 import { SpellsPanel } from './SpellsPanel';
-import { ExplainList } from './ExplainList';
-import { TraceTable } from './TraceTable';
+import { FieldWhy } from './sheet/FieldWhy';
 import { UpdatesPanel } from './UpdatesPanel';
 import { VttExportPanel } from './VttExportPanel';
 import { ByHandPanel } from './ByHandPanel';
@@ -60,7 +59,7 @@ import { inverseOf, isCompound, type UndoEntry } from '../undo';
 import { recordSpend } from '../actionRows';
 import { editPins, readPins, resolvePin, visiblePins, writePins, type Pin, type QuickAction } from '../quickbar';
 import { Quickbar } from './Quickbar';
-import { applyPreferences, compactPlay, setCompactPlay } from '../settings';
+import { abilityBoxesTop, applyPreferences, compactPlay, setCompactPlay } from '../settings';
 import { useRulesLabel } from '../rulesLabel';
 
 import { assistedNotes, rollButtonSuffix } from '../rollModes';
@@ -138,15 +137,7 @@ function FieldCard({ value, labels, onOverride, onRoll, onReportGap }: FieldProp
             ))}
           </ul>
         )}
-        <ExplainList label={value.label} steps={value.trace} />
-        <TraceTable label={value.label} trace={value.trace} labels={labels} />
-        {value.warnings.length > 0 && (
-          <ul className="warnings" aria-label={`${value.label} warnings`}>
-            {value.warnings.map((w) => (
-              <li key={`${w.code}-${w.content?.revisionId ?? ''}-${w.effectId ?? ''}`}>{w.message}</li>
-            ))}
-          </ul>
-        )}
+        <FieldWhy field={value} label={value.label} labels={labels} />
         <form className="override" onSubmit={submit}>
           <label className="field">
             Number to set by hand
@@ -363,7 +354,25 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   const { character, sheet } = view;
   const rulesLabel = useRulesLabel();
   // D43: `toggle.group-absent` is information (the toggle works as a group of one), not content that failed to apply.
-  const notApplied = sheet.diagnostics.filter((d) => d.code !== 'toggle.group-absent');
+  // An open choice is listed once, under "Choices to make"; internal ids never reach the player.
+  // A `choice.unresolved` is dropped only when that choice is in the list (same source, and its id in the message); otherwise it stays.
+  const choiceListed = (d: { content?: { contentId: string; revisionId: string }; message: string }) =>
+    (sheet.choices ?? []).some(
+      (c) =>
+        !c.resolved &&
+        c.source.contentId === d.content?.contentId &&
+        c.source.revisionId === d.content?.revisionId &&
+        d.message.includes(`('${c.choiceId}')`),
+    );
+  // STOPGAP: the GUID scrub below goes away when Group 2b rewrites the service's diagnostic text. Delete it then.
+  const notApplied = sheet.diagnostics
+    .filter((d) => d.code !== 'toggle.group-absent' && !(d.code === 'choice.unresolved' && choiceListed(d)))
+    .map((d) => ({
+      ...d,
+      message: d.message
+        .replace(/\b(revision|effect) [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, (m) => (m.charAt(0) === m.charAt(0).toUpperCase() ?'An entry' : 'an entry'))
+        .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, 'an entry'),
+    }));
   // R161/R182: one handler for every save path. A save refused as stale (the character changed since this sheet's copy was read)
   // shows its words in the usual alert and brings in the current copy, so the next edit starts from it. Focus is not touched: whatever
   // the user was on stays, and what they typed stays in its field for them to apply again.
@@ -426,6 +435,8 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   const lastLogged = useRef<LoggedRoll | undefined>(undefined);
   const [resting, setResting] = useState<RestPeriod>();
   const [compact, setCompact] = useState(compactPlay());
+  // Wave 3 3.4: read on every render (Settings is another screen, so the sheet remounts after a change).
+  const boxesTop = abilityBoxesTop();
   const [printing, setPrinting] = useState(false);
   // D43 S3: the open turn panel (start or end of the turn) and the opener to return focus to when it closes (WCAG 2.4.3).
   const [turning, setTurning] = useState<TurnMoment>();
@@ -943,6 +954,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
       </header>
 
       <SheetSummary view={view} rollMode={rollMode} onRollMode={setRollMode} lastRoll={lastRoll} rollLog={rollLog} act={act} onDamage={openDamage} spellsTab={showSpells} rulesFamilies={rulesFamilies}
+        fields={sheet.fields} abilityBoxesTop={boxesTop}
         onRoll={(f) => roll({ field: f, mode: rollMode })}
         onRollDice={rollDice}
         quickbar={<Quickbar actions={quickActions} busy={quickBusy} run={quickRun} />}
@@ -1136,7 +1148,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
         )}
         {/* Investigation 2026-10-06 item 8: two plain wrappers, side by side at 60rem and up, stacked below it. Visual order is DOM order. */}
         <div className="play-column">
-          <HitPointsPanel view={view} act={act} damageType={damageType} onDamageType={setDamageType} onDamage={openDamage} panelOpen={damaging !== undefined} rulesFamilies={rulesFamilies} />
+          <HitPointsPanel view={view} act={act} damageType={damageType} onDamageType={setDamageType} onDamage={openDamage} panelOpen={damaging !== undefined} />
           <DeathSavesPanel view={view} act={act} roll={roll} lastRoll={lastRoll} />
           <ConcentrationPanel view={view} act={act} roll={roll} />
           <ConditionsPanel view={view} act={act} />
@@ -1144,6 +1156,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
           <ClassColumnsPanel view={view} />
         </div>
         <div className="play-column">
+          {!boxesTop && <AbilitiesPanel view={view} onRoll={(f) => roll({ field: f, mode: rollMode })} />}
           <ActionsPanel view={view} roll={roll} act={act} rollMode={rollMode} onDamageType={setDamageType} pins={visible} onPin={pinAction} />
           <CompanionsPanel view={view} act={act} roll={roll} rollMode={rollMode} onChanged={onChanged} onError={onError} onStatus={onStatus} saveCharacter={saveCharacter} />
         </div>

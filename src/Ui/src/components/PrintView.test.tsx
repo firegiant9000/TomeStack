@@ -263,6 +263,18 @@ it('shows a dash, not 0, for a field the sheet does not have', async () => {
   expect(within(preview).getAllByText('—')).toHaveLength(14); // plus six saves and three passives
 });
 
+it('prints no row or line for a spell level with no slots, in the card and the full sheet', async () => {
+  const slotless = { ...combatView, sheet: { ...combatView.sheet, spellSlots: [{ level: 1, maximum: 2, spent: 0, remaining: 2, field: 'spellSlots.1' }, { level: 2, maximum: 0, spent: 0, remaining: 0, field: 'spellSlots.2' }] } } as unknown as CharacterView;
+  const user = userEvent.setup();
+  render(<PrintView view={slotless} onError={() => {}} onClose={() => {}} />);
+  const preview = screen.getByRole('region', { name: 'Print preview' });
+  expect(preview.textContent).toContain('level 1: 2 of 2');
+  expect(preview.textContent).not.toContain('level 2:');
+  await user.click(within(preview).getByRole('radio', { name: 'Combat card' }));
+  expect(within(preview).getByRole('rowheader', { name: 'Level 1' })).toBeTruthy();
+  expect(within(preview).queryByRole('rowheader', { name: 'Level 2' })).toBeNull();
+});
+
 it('caps tick boxes at maxTickBoxes: a bigger pool prints its size and one write-in box', async () => {
   const preview = await openCombat(userEvent.setup());
   const row = (name: string) => within(preview).getByRole('rowheader', { name }).closest('tr')!;

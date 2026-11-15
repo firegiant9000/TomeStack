@@ -9,6 +9,12 @@
 
 - **2014 starting equipment and key abilities ([ADR-024](decisions/ADR-024-content-v13.md)):** TomeStack now bundles a gear catalogue (73 items and the seven adventuring packs) and a creation guide for each of the 12 classes and the Acolyte background under the 2014 rules. A guide holds the class's starting equipment as choices and its key abilities. No screen uses them yet, and they change no saved character. Item names and quantities only; no descriptions are copied ([licensing review](licensing/srd-pack-review.md)). Saving for TomeStack 0.6.0 or later leaves the guides out and turns the gear into custom items; saving for 0.5.0 is blocked while a character holds any of this gear (0.5.0 has no custom items).
 - **Save for an older TomeStack, a held item (ADR-023):** the preview lists an item that still blocks the save once, as the blocker, instead of also saying it "becomes a custom item" (for example a rope held with an attunement by another character).
+- **One status bar on the sheet (D96):** Hit points, Armor Class, Initiative, Speed, Heroic Inspiration (Inspiration in the 2014 rules), conditions and the last roll now sit in one bar under the sheet header. It stays at the top while you scroll when it fits in a third of the window (in a window narrower or shorter than 40rem it stays in place), and the last roll shows there from every tab. Keyboard order is the sheet header, the bar, the "?" help on rolling, "Choices to make", the tabs, then the tab's page.
+- **Ability boxes setting (D96):** by default the six ability boxes are an "Abilities" panel on Play. Settings has "Ability boxes at the top of the sheet" (`tomestack.abilityBoxesTop`) to put them above the bar again.
+- **Conditions and Inspiration (D96):** you add a condition from an "Add condition" list and take it off with its own Remove button; focus stays on a sensible control after each. Inspiration is one checkbox, in the bar, not repeated on Play.
+- **Help notes (D96):** the standing explanations are closed "?" notes you open when you want them.
+- **Empty slot levels hidden (D96):** spell slot levels with a maximum of 0 are no longer listed.
+- **"Earlier rolls":** the list under the last roll was "Previous rolls". "Needs your attention" no longer repeats open choices (they stay under "Choices to make") and no longer shows internal ids.
 
 ### Changed
 - Development only: the old-release upgrade suite now includes a data folder and packages made by 0.8.1, the release 0.9.0 upgrades from.

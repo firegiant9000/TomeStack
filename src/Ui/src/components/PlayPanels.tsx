@@ -21,18 +21,19 @@ import type {
   RollMode,
   RollRecord,
   RollTarget,
-  RulesFamilyPolicy,
   ToggleValue,
 } from '../api/types';
 import { attackAvailability, dicelessUse, hasDice, poolFor, recordPayment, recordSpend, rollAvailability, toggleAvailability, type Availability } from '../actionRows';
 import { castsText, paying, paymentText } from '../payment';
 import { explainSteps } from '../explain';
-import { hitDiceText, inspirationLabel, rollBonus } from '../format';
+import { hitDiceText, rollBonus } from '../format';
 import { attackPin, customPin, maxPins, pinKey, rollPin, togglePin, weaponTarget, type Pin } from '../quickbar';
 import { assistedNotes, rollButtonSuffix } from '../rollModes';
 import { diceLine, rollKey, rollModeText } from '../rollText';
 import { announceRollsOn, diceAnimationOn } from '../settings';
 import { damageTypeLabel, damageTypes, normalizeDamageType } from './customModel';
+import { HelpNote } from './HelpNote';
+import { AbilityBoxes } from './AbilityBoxes';
 import { ExplainList } from './ExplainList';
 import { Pips } from './Pips';
 import { conditionLabels } from './conditionLabels';
@@ -119,12 +120,9 @@ export function HitPointsPanel({
   onDamageType,
   onDamage,
   panelOpen = false,
-  rulesFamilies = [],
 }: {
   view: CharacterView;
   act: Act;
-  /** The families from `app.info`; the inspiration checkbox is named by the character's family policy. */
-  rulesFamilies?: RulesFamilyPolicy[];
   damageType?: string;
   onDamageType?: (type: string) => void;
   /** D43 S7: opens the damage panel (amount, type '' for untyped). Used instead of a one-step damage when the sheet has damage responses. */
@@ -253,23 +251,15 @@ export function HitPointsPanel({
         </>
       )}
       {!panelOpen && skippedResponseLabels(view).length > 0 && <p className="hint">Available and not chosen: {skippedResponseLabels(view).join(', ')}.</p>}
-      <p className="hint">
+      <HelpNote topic="damage types">
         A damage type applies the character&apos;s resistances, immunities and vulnerabilities first (Untyped ignores them). Temporary hit points absorb the
         rest. They do not stack: setting them replaces the old value.
-      </p>
+      </HelpNote>
       {(view.sheet.hitDice ?? []).length > 0 && (
         <p>
           Hit dice: {hitDiceText(view.sheet.hitDice ?? [])}
         </p>
       )}
-      <label className="choice">
-        <input
-          type="checkbox"
-          checked={view.character.play?.inspiration ?? false}
-          onChange={(e) => act({ action: 'setInspiration', amount: e.target.checked ? 1 : 0 })}
-        />
-        {inspirationLabel(rulesFamilies, view.character.rulesFamily)}
-      </label>
     </section>
   );
 }
@@ -398,22 +388,83 @@ export function ConditionsPanel({ view, act }: { view: CharacterView; act: Act }
   const play = view.character.play;
   const active = play?.conditions ?? [];
   const immune = new Set((view.sheet.conditionImmunities ?? []).map((i) => i.condition));
+  const labelOf = (key: string) => {
+    const label = conditionLabels[key] ?? key;
+    return immune.has(key) ? `${label} (immune)` : label;
+  };
+  // Focus after a change: adding lands on the new condition's Remove button; removing returns to the "Add condition" select
+  // (it always exists then, since the removed condition is inactive again). Applied once the new list arrives.
+  const panelRef = useRef<HTMLElement>(null);
+  const pending = useRef<{ kind: 'added'; key: string } | { kind: 'removed' } | null>(null);
+  const activeKey = active.join(',');
+  // A refused change leaves the list as it was: its pending focus is dropped so a later list change does not move focus.
+  const run = (next: NonNullable<typeof pending.current>, action: PlayAction) => {
+    pending.current = next;
+    void Promise.resolve(act(action)).then((ok) => {
+      if (ok === false && pending.current === next) pending.current = null;
+    });
+  };
+  useEffect(() => {
+    const p = pending.current;
+    if (!p) return;
+    const here = document.activeElement;
+    if (here && here !== document.body && !panelRef.current?.contains(here)) {
+      pending.current = null;
+      return;
+    }
+    pending.current = null;
+    if (p.kind === 'added') document.getElementById(`remove-condition-${p.key}`)?.focus();
+    else document.getElementById('add-condition')?.focus(); // removing always frees a condition, so the select exists
+  }, [activeKey]);
+  const inactive = Object.keys(conditionLabels).filter((key) => !active.includes(key));
   return (
-    <section aria-labelledby="conditions-heading" className="play-panel">
-      <h2 id="conditions-heading">Conditions</h2>
-      <fieldset className="conditions">
-        <legend>Conditions (reminders; a condition you are immune to has no effect)</legend>
-        {Object.entries(conditionLabels).map(([key, label]) => (
-          <label key={key} className="choice">
-            <input
-              type="checkbox"
-              checked={active.includes(key)}
-              onChange={() => act({ action: active.includes(key) ? 'removeCondition' : 'addCondition', condition: key })}
-            />
-            {immune.has(key) ? `${label} (immune)` : label}
-          </label>
-        ))}
-      </fieldset>
+    <section ref={panelRef} aria-labelledby="conditions-heading" className="play-panel">
+      <h2 id="conditions-heading" tabIndex={-1}>
+        Conditions
+      </h2>
+      {active.length === 0 ? (
+        <p>None.</p>
+      ) : (
+        <ul className="conditions" aria-label="Active conditions">
+          {active.map((key) => (
+            <li key={key}>
+              <span className="option-name">{labelOf(key)}</span>{' '}
+              <button
+                type="button"
+                id={`remove-condition-${key}`}
+                aria-label={`Remove ${conditionLabels[key] ?? key}`}
+                onClick={() => {
+                  run({ kind: 'removed' }, { action: 'removeCondition', condition: key });
+                }}
+              >
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {inactive.length > 0 && (
+        <label className="field">
+          Add condition
+          <select
+            id="add-condition"
+            value=""
+            onChange={(e) => {
+              const key = e.target.value;
+              if (!key) return;
+              run({ kind: 'added', key }, { action: 'addCondition', condition: key });
+            }}
+          >
+            <option value="">Choose a condition</option>
+            {inactive.map((key) => (
+              <option key={key} value={key}>
+                {labelOf(key)}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      <p className="hint">Conditions are reminders; a condition you are immune to has no effect.</p>
       <label className="field">
         Exhaustion level
         <select value={play?.exhaustion ?? 0} onChange={(e) => act({ action: 'setExhaustion', amount: Number(e.target.value) })}>
@@ -650,6 +701,16 @@ function PinButton({ name, pinned, full, onPin }: Pinning) {
         </span>
       )}
     </>
+  );
+}
+
+/** Wave 3 3.4: the six ability boxes on Play (the "Ability boxes at the top of the sheet" setting moves them above the status bar instead). */
+export function AbilitiesPanel({ view, onRoll }: { view: CharacterView; onRoll: (field: string) => void }) {
+  return (
+    <section aria-labelledby="abilities-heading" className="play-panel">
+      <h2 id="abilities-heading">Abilities</h2>
+      <AbilityBoxes fields={view.sheet.fields} onRoll={onRoll} />
+    </section>
   );
 }
 
@@ -1291,7 +1352,7 @@ export type RecordSpent = {
   spendOnce: (record: RollRecord, action: PlayAction, refused?: () => void) => Promise<boolean>;
 };
 
-/** The last roll's record (SPEC C-04): formula, every die, modifiers and provenance. Announced politely. */
+/** The last roll's record (SPEC C-04): formula, every die, modifiers and provenance. Its status is announced politely only while "Announce each roll" is on; the DiceBox error line (aria-live polite) is an error message outside that setting. */
 export function RollResult({
   record,
   resources,
@@ -1335,9 +1396,11 @@ export function RollResult({
         refused?.();
       });
   }
-  // Toggling aria-live on a mounted region is unreliable in some screen readers; the "Announce each roll" setting takes
-  // full effect on the next sheet open, which the Settings hint says.
-  if (!record) return <div role="region" aria-label="Last roll" aria-live={announceRollsOn() ? 'polite' : undefined} className="roll-result" />;
+  // The one roll status of the status bar: always rendered (empty too), so a screen reader hears the roll that arrives. 'off' rather than
+  // absent when "Announce each roll" is off. The DiceBox error line (aria-live polite) is an error message outside that setting; only this
+  // RollResult status follows it. Toggling aria-live on a mounted node is
+  // unreliable in some screen readers; the setting takes full effect on the next sheet open, which the Settings hint says.
+  if (!record) return <div role="status" aria-label="Last roll" aria-live={announceRollsOn() ? 'polite' : 'off'} className="roll-result" />;
   const p = record.provenance;
   // D73: which pool a record spends, what it costs and the action that spends it are worked out in actionRows.ts.
   const { linked, cost, costUnavailable, cantUse, variableCost, stockText, most, spendAction, autoAction } = recordSpend(record, resources, features, attacks);
@@ -1347,7 +1410,7 @@ export function RollResult({
   const chosen = Number(amount);
   const validChoice = amount !== '' && Number.isInteger(chosen) && chosen >= 1 && chosen <= most;
   return (
-    <div role="region" aria-label="Last roll" aria-live={announceRollsOn() ? 'polite' : undefined} className="roll-result">
+    <div role="status" aria-label="Last roll" aria-live={announceRollsOn() ? 'polite' : 'off'} className="roll-result">
       {/* ADR-015: the service's dice, drawn. aria-hidden and textless (faces come from CSS attr()), so the text below is
           the result for everyone and the region announces once. Nothing is rolled here. */}
       <div key={rollKey(record)} className={diceAnimationOn() ? 'dice' : 'dice dice-still'} aria-hidden="true">

@@ -26,6 +26,7 @@ const keys = {
   underline: 'tomestack.underline',
   announceRolls: 'tomestack.announceRolls',
   compactPlay: 'tomestack.compactPlay',
+  abilityBoxesTop: 'tomestack.abilityBoxesTop',
 } as const;
 
 /** This session's choices, read only while storage is unavailable, so a pick still applies and lasts until the app closes. */
@@ -179,13 +180,17 @@ export type UnderlineId = (typeof underlineIds)[number];
 export const underline = (): UnderlineId => oneOf(underlineIds, read(keys.underline), 'off');
 export const setUnderline = (id: UnderlineId): void => write(keys.underline, id === 'off' ? null : id);
 
-/** Off removes `aria-live` from the Last roll region (the text stays): a screen-reader user then reads it on demand (4.1.3). */
+/** Off sets `aria-live` off on the Last roll region (the text stays): a screen-reader user then reads it on demand (4.1.3). */
 export const announceRollsOn = (): boolean => read(keys.announceRolls) !== 'off';
 export const setAnnounceRolls = (on: boolean): void => write(keys.announceRolls, on ? null : 'off');
 
 /** D20: the compact combat layout of the Play tab (CSS hides traces, hints and class columns). Off is the default: no attribute. */
 export const compactPlay = (): boolean => read(keys.compactPlay) === 'on';
 export const setCompactPlay = (on: boolean): void => write(keys.compactPlay, on ? 'on' : null);
+
+/** Wave 3 3.4: keep the six ability boxes above the status bar (the old layout). Off is the default: they live in the Abilities panel on Play. */
+export const abilityBoxesTop = (): boolean => read(keys.abilityBoxesTop) === 'on';
+export const setAbilityBoxesTop = (on: boolean): void => write(keys.abilityBoxesTop, on ? 'on' : null);
 
 /** Applied once at start (`App.tsx`) and by the Settings screen after every change. */
 export function applyPreferences(): void {

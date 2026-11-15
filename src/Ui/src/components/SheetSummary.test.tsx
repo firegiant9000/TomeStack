@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // The summary bar: a <dl> of the core numbers (no headings, no regions named like the panels'), an overridden value
 // says so, inspiration follows the family, conditions appear only when present, and the ability roll buttons roll.
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { act, cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { Character, CharacterSheet, CharacterView, DerivedValue, FieldOverride, PlayState, RollRecord, RulesFamilyPolicy } from '../api/types';
@@ -76,7 +76,9 @@ function fixtureView(sheetOver: Partial<CharacterSheet> = {}, play?: PlayState, 
   return { character, sheet };
 }
 
-const dd = (term: string) => within(screen.getByRole('region', { name: 'Summary' })).getByText(term, { selector: 'dt' }).nextElementSibling!.textContent!.trim();
+const statusBar = () => screen.getByRole('region', { name: 'Status' });
+/** The text of one status-bar item's value (the item is a label and a value; a number's button holds both). */
+const dd = (term: string) => within(statusBar()).getByText(term, { selector: '.status-label' }).parentElement!.querySelector('.status-value')!.textContent!.trim();
 
 it('names the Spells tab in the rolling hint only when it is offered', () => {
   const { rerender } = render(<SheetSummary view={fixtureView()} rollMode="normal" onRollMode={() => {}} rollLog={[]} act={() => {}} onRoll={() => {}} onRollDice={async () => {}} />);
@@ -89,22 +91,135 @@ it('names the Spells tab in the rolling hint only when it is offered', () => {
   expect(screen.getByText('Rolling from here never spends anything; a quickbar button that says "and spend" rolls and then spends. Roll a check here; a save, skill or initiative from its field on Skills and saves; or an attack or feature on Play.')).toBeTruthy();
 });
 
-it('lists the core numbers as terms and definitions, with no heading or named region of its own', () => {
-  render(<SheetSummary view={fixtureView()} rulesFamilies={policies} rollMode="normal" onRollMode={() => {}} rollLog={[]} act={() => {}} onRoll={() => {}} onRollDice={async () => {}} />);
-  const summary = screen.getByRole('region', { name: 'Summary' });
-  expect(within(summary).queryAllByRole('heading')).toHaveLength(0);
-  expect(within(summary).getAllByRole('region').map((r) => r.getAttribute('aria-label'))).toEqual(['Last roll']);
+it('is a named Status section with the core numbers, no heading, no hit dice and no ability boxes by default', () => {
+  const { container } = render(<SheetSummary view={fixtureView()} rulesFamilies={policies} rollMode="normal" onRollMode={() => {}} rollLog={[]} act={() => {}} onRoll={() => {}} onRollDice={async () => {}} />);
+  const bar = statusBar();
+  expect(bar.tagName).toBe('SECTION');
+  expect(bar.classList.contains('status-bar')).toBe(true);
+  expect(within(bar).queryAllByRole('heading')).toHaveLength(0);
+  expect(within(bar).queryAllByRole('region')).toHaveLength(0);
+  expect(within(bar).getAllByRole('status').map((r) => r.getAttribute('aria-label'))).toEqual(['Last roll']);
   expect(dd('Proficiency bonus')).toBe('+2');
   expect(dd('Armor Class')).toBe('16 (set by hand)');
   expect(dd('Initiative')).toBe('+2');
   expect(dd('Speed')).toBe('30 ft.');
   expect(dd('Hit points')).toBe('28 of 35, 5 temporary');
-  expect(dd('Hit dice')).toBe('2 of 3 (d12)');
-  expect(within(summary).getByRole<HTMLInputElement>('checkbox', { name: 'Heroic Inspiration' }).checked).toBe(false);
-  expect(within(summary).queryByText('Conditions', { selector: 'dt' })).toBeNull();
-  expect(within(summary).getByText('Strength', { selector: 'dt' })).toBeTruthy();
-  expect(within(summary).getByText('+3', { selector: '.derived' })).toBeTruthy(); // the modifier is the large number (owner: modifier first by default)
-  expect(within(summary).getByText('16', { selector: '.score' })).toBeTruthy();
+  expect(within(bar).getByRole<HTMLInputElement>('checkbox', { name: 'Heroic Inspiration' }).checked).toBe(false);
+  expect(within(bar).queryByText('Conditions', { selector: '.status-label' })).toBeNull();
+  expect(within(bar).queryByText('Hit dice')).toBeNull();
+  expect(container.querySelector('.summary-abilities')).toBeNull();
+  expect(screen.queryByText('Strength')).toBeNull();
+  expect(screen.queryByRole('button', { name: /^Roll [A-Za-z]+ check/ })).toBeNull();
+});
+
+it('renders the six ability boxes before the bar, not inside it, only with abilityBoxesTop', () => {
+  const { container } = render(<SheetSummary view={fixtureView()} abilityBoxesTop {...plain} />);
+  const boxes = container.querySelector('dl.summary-abilities')!;
+  expect(boxes).toBeTruthy();
+  expect(statusBar().contains(boxes)).toBe(false);
+  expect(boxes.compareDocumentPosition(statusBar()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(within(boxes as HTMLElement).getByText('+3', { selector: '.derived' })).toBeTruthy(); // the modifier is the large number (owner: modifier first by default)
+  expect(within(boxes as HTMLElement).getByText('16', { selector: '.score' })).toBeTruthy();
+});
+
+it('keeps the bar in the specified DOM order', () => {
+  const view = fixtureView({}, { temporaryHitPoints: 0, resources: [], conditions: ['poisoned'], exhaustion: 0, inspiration: false, spellSlotsSpent: [], pactSlotsSpent: 0 });
+  render(<SheetSummary view={view} rulesFamilies={policies} {...plain} />);
+  const bar = statusBar();
+  const at = (el: Element) => Array.from(bar.querySelectorAll('*')).indexOf(el);
+  const names = [
+    screen.getByRole('button', { name: 'Lose 1 hit point' }),
+    screen.getByRole('button', { name: /^Armor Class/ }),
+    screen.getByRole('button', { name: /^Initiative/ }),
+    screen.getByRole('button', { name: /^Speed/ }),
+    screen.getByText('Proficiency bonus', { selector: '.status-label' }),
+    screen.getByRole('checkbox', { name: 'Heroic Inspiration' }),
+    screen.getByText('Conditions', { selector: '.status-label' }),
+    screen.getByRole('radio', { name: 'Advantage' }),
+    screen.getByRole('form', { name: 'Roll dice' }),
+    screen.getByRole('status'),
+  ];
+  const positions = names.map(at);
+  expect(positions).toEqual([...positions].sort((a, b) => a - b));
+  expect(new Set(positions).size).toBe(positions.length);
+  expect(screen.getByRole('button', { name: /^Hit points 28 of 35, 5 temporary, show why$/ })).toBeTruthy();
+});
+
+it('names each number as a button with aria-expanded and aria-controls, "Armor Class 16 (set by hand), show why"', () => {
+  render(<SheetSummary view={fixtureView()} {...plain} />);
+  const ac = screen.getByRole('button', { name: 'Armor Class 16 (set by hand), show why' });
+  expect(ac.getAttribute('aria-expanded')).toBe('false');
+  expect(ac.getAttribute('aria-controls')).toBe('status-why');
+  for (const name of [/^Initiative \+2, show why$/, /^Speed 30 ft\., show why$/, /^Hit points 28 of 35.*, show why$/]) {
+    expect(screen.getByRole('button', { name }).getAttribute('aria-controls')).toBe('status-why');
+  }
+  expect(document.querySelectorAll('#status-why')).toHaveLength(1);
+});
+
+it('opens a number\'s trace in the one status-why region, switches on another number and closes on the same one', async () => {
+  const user = userEvent.setup();
+  const base = fixtureView();
+  const traced = (f: DerivedValue): DerivedValue => ({ ...f, trace: [{ order: 1, operation: 'base', description: 'Fixture step', result: f.value, origin: { kind: 'rulesPolicy', rulesFamily: 'srd-5.2.1' } }] });
+  const fields = base.sheet.fields.map((f) => (f.field === 'armorClass' || f.field === 'initiative' ? traced(f) : f));
+  render(<SheetSummary view={{ ...base, sheet: { ...base.sheet, fields } }} fields={fields} {...plain} />);
+  const ac = screen.getByRole('button', { name: /^Armor Class/ });
+  const init = screen.getByRole('button', { name: /^Initiative/ });
+  const why = () => document.getElementById('status-why')!;
+  expect(why().textContent).toBe('');
+  await user.click(ac);
+  expect(ac.getAttribute('aria-expanded')).toBe('true');
+  expect(why().querySelector('[aria-label="Why Armor Class"]')).toBeTruthy();
+  await user.click(init);
+  expect(ac.getAttribute('aria-expanded')).toBe('false');
+  expect(init.getAttribute('aria-expanded')).toBe('true');
+  expect(why().querySelector('[aria-label="Why Initiative"]')).toBeTruthy();
+  expect(why().querySelector('[aria-label="Why Armor Class"]')).toBeNull();
+  expect(document.querySelectorAll('#status-why')).toHaveLength(1);
+  await user.click(init);
+  expect(init.getAttribute('aria-expanded')).toBe('false');
+  expect(why().textContent).toBe('');
+});
+
+it('always has the one last-roll status node, and it holds the roll after lastRoll changes; Why and the log sit outside it', () => {
+  const record: RollRecord = {
+    formula: '1d20+3', mode: 'normal', critical: false,
+    dice: [{ term: 0, sides: 20, value: 14, kept: true, fromCritical: false }],
+    diceTotal: 14, expressionConstant: 0, modifiers: [{ label: 'Strength modifier', amount: 3 }], total: 17,
+  };
+  const { rerender, container } = render(<SheetSummary view={fixtureView()} {...plain} />);
+  const status = screen.getByRole('status', { name: 'Last roll' });
+  expect(status.getAttribute('aria-live')).toBe('polite');
+  expect(container.querySelectorAll('[role=status]')).toHaveLength(1);
+  expect(status.parentElement!.classList.contains('last-roll')).toBe(true);
+  expect(status.textContent).not.toContain('17');
+  rerender(<SheetSummary view={fixtureView()} {...plain} lastRoll={record} rollLog={[{ at: Date.now(), record }]} />);
+  expect(screen.getByRole('status', { name: 'Last roll' })).toBe(status);
+  expect(container.querySelectorAll('[role=status]')).toHaveLength(1);
+  expect(status.textContent).toContain('17');
+  for (const el of [container.querySelector('details.roll-why')!, container.querySelector('details.roll-log')!]) {
+    expect(el).toBeTruthy();
+    expect(status.contains(el)).toBe(false);
+    expect(el.closest('[role=status],[aria-live]')).toBeNull();
+  }
+  expect(within(container).getByText(/Earlier rolls/)).toBeTruthy();
+});
+
+it('with Announce each roll off there is no polite roll region in the bar', () => {
+  localStorage.setItem('tomestack.announceRolls', 'off');
+  try {
+    const { container } = render(<SheetSummary view={fixtureView()} {...plain} />);
+    expect(screen.getByRole('status', { name: 'Last roll' }).getAttribute('aria-live')).toBe('off');
+    expect(container.querySelector('.last-roll [aria-live=polite]')).toBeNull(); // the dice box's own error line is a separate, empty polite region
+  } finally {
+    localStorage.removeItem('tomestack.announceRolls');
+  }
+});
+
+it('has no axe violations with a trace open and ability boxes on top', async () => {
+  const user = userEvent.setup();
+  const { container } = render(<SheetSummary view={fixtureView()} abilityBoxesTop {...plain} />);
+  await user.click(screen.getByRole('button', { name: /^Speed/ }));
+  await expectNoAxeViolations(container);
 });
 
 it('has no axe violations in the summary bar with a roll result', async () => {
@@ -121,7 +236,7 @@ it('has no axe violations in the summary bar with a roll result', async () => {
   const { container } = render(
     <SheetSummary view={fixtureView()} rollMode="normal" onRollMode={() => {}} lastRoll={record} rollLog={[{ at: Date.now(), record }]} act={() => {}} onRoll={() => {}} onRollDice={async () => {}} />,
   );
-  expect(screen.getByRole('region', { name: 'Last roll' }).textContent).toContain('17');
+  expect(screen.getByRole('status', { name: 'Last roll' }).textContent).toContain('17');
   await expectNoAxeViolations(container);
 });
 
@@ -144,11 +259,11 @@ it('names inspiration by family and lists conditions and exhaustion when present
 it('rolls an ability check from its button, named apart from the field card\'s "Roll … modifier"', async () => {
   const user = userEvent.setup();
   const onRoll = vi.fn();
-  render(<SheetSummary view={fixtureView()} rollMode="normal" onRollMode={() => {}} rollLog={[]} act={() => {}} onRoll={onRoll} onRollDice={async () => {}} />);
+  render(<SheetSummary view={fixtureView()} abilityBoxesTop rollMode="normal" onRollMode={() => {}} rollLog={[]} act={() => {}} onRoll={onRoll} onRollDice={async () => {}} />);
   await user.click(screen.getByRole('button', { name: 'Roll Strength check (+3)' }));
   expect(onRoll).toHaveBeenCalledWith('ability.str.mod');
-  // The summary's roll buttons are exactly the six ability checks, none of them the field cards' "Roll … modifier".
-  const rollButtons = within(screen.getByRole('region', { name: 'Summary' })).getAllByRole('button', { name: /^Roll [A-Za-z]+ check/ });
+  // The boxes' roll buttons are exactly the six ability checks, none of them the field cards' "Roll … modifier".
+  const rollButtons = screen.getAllByRole('button', { name: /^Roll [A-Za-z]+ check/ });
   expect(rollButtons).toHaveLength(6);
   for (const button of rollButtons) {
     expect(button.textContent!.replace(/\s+/g, ' ').trim()).toMatch(/^Roll (Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma) check \([+-]\d+\)$/);
@@ -158,7 +273,7 @@ it('rolls an ability check from its button, named apart from the field card\'s "
 });
 
 it('shows "Roll" on the button and keeps the full accessible name (2.5.3 label in name; D28)', () => {
-  render(<SheetSummary view={fixtureView()} rollMode="normal" onRollMode={() => {}} rollLog={[]} act={() => {}} onRoll={() => {}} onRollDice={async () => {}} />);
+  render(<SheetSummary view={fixtureView()} abilityBoxesTop rollMode="normal" onRollMode={() => {}} rollLog={[]} act={() => {}} onRoll={() => {}} onRollDice={async () => {}} />);
   const button = screen.getByRole('button', { name: 'Roll Strength check (+3)' });
   const visible = Array.from(button.childNodes).filter((n) => !(n instanceof HTMLElement && n.classList.contains('visually-hidden'))).map((n) => n.textContent).join('').trim();
   expect(visible).toBe('Roll');
@@ -170,14 +285,15 @@ it('puts the dice box beside the d20 mode, outside the fixed roll strip (item 8)
   const user = userEvent.setup();
   const onRollDice = vi.fn().mockResolvedValue(undefined);
   render(<SheetSummary view={fixtureView()} rollMode="normal" onRollMode={() => {}} rollLog={[]} act={() => {}} onRoll={() => {}} onRollDice={onRollDice} />);
-  const summary = screen.getByRole('region', { name: 'Summary' });
+  const summary = statusBar();
   const strip = summary.querySelector('.roll-strip')!;
   const box = within(summary).getByRole('form', { name: 'Roll dice' });
   expect(strip.contains(box)).toBe(false);
   expect(box.previousElementSibling?.classList.contains('roll-mode')).toBe(true);
   expect(strip.children[0]?.getAttribute('aria-label')).toBe('Last roll');
   expect(strip.querySelector('input, form')).toBeNull();
-  expect(within(summary).getAllByRole('region').map((r) => r.getAttribute('aria-label'))).toEqual(['Last roll']);
+  expect(within(summary).queryAllByRole('region')).toHaveLength(0);
+  expect(within(summary).getAllByRole('status').map((r) => r.getAttribute('aria-label'))).toEqual(['Last roll']);
   await user.type(within(box).getByRole('textbox', { name: 'Dice to roll' }), '1d4{Enter}');
   expect(onRollDice).toHaveBeenCalledWith('1d4');
 });
@@ -256,17 +372,16 @@ function overriddenView(id: string, value: number): CharacterView {
   return { ...view, sheet: { ...view.sheet, fields } };
 }
 
-const strengthDd = () =>
-  within(screen.getByRole('region', { name: 'Summary' })).getByText('Strength', { selector: 'dt' }).nextElementSibling!.textContent!;
+const strengthDd = () => screen.getByText('Strength', { selector: 'dt' }).nextElementSibling!.textContent!;
 
 it('marks an overridden ability score in text, and not the modifier', () => {
-  render(<SheetSummary view={overriddenView('ability.str.score', 16)} rollMode="normal" onRollMode={() => {}} rollLog={[]} act={() => {}} onRoll={() => {}} onRollDice={async () => {}} />);
+  render(<SheetSummary view={overriddenView('ability.str.score', 16)} abilityBoxesTop rollMode="normal" onRollMode={() => {}} rollLog={[]} act={() => {}} onRoll={() => {}} onRollDice={async () => {}} />);
   expect(strengthDd()).toContain('16 (set by hand)');
   expect(strengthDd()).not.toContain('modifier set by hand');
 });
 
 it('marks an overridden ability modifier in text outside the button, whose name stays the contract', () => {
-  render(<SheetSummary view={overriddenView('ability.str.mod', 5)} rollMode="normal" onRollMode={() => {}} rollLog={[]} act={() => {}} onRoll={() => {}} onRollDice={async () => {}} />);
+  render(<SheetSummary view={overriddenView('ability.str.mod', 5)} abilityBoxesTop rollMode="normal" onRollMode={() => {}} rollLog={[]} act={() => {}} onRoll={() => {}} onRollDice={async () => {}} />);
   expect(screen.getByRole('button', { name: 'Roll Strength check (+5)' })).toBeTruthy();
   expect(strengthDd()).toContain('(modifier set by hand)');
   expect(strengthDd()).not.toContain('16 (set by hand)');
@@ -280,7 +395,7 @@ it('marks an overridden hit point maximum in text, before the temporary part', (
 });
 
 it('styles the six ability roll buttons as buttons, not as link text (investigation 2026-10-05)', () => {
-  render(<SheetSummary view={fixtureView()} rollMode="normal" onRollMode={() => {}} rollLog={[]} act={() => {}} onRoll={() => {}} onRollDice={async () => {}} />);
+  render(<SheetSummary view={fixtureView()} abilityBoxesTop rollMode="normal" onRollMode={() => {}} rollLog={[]} act={() => {}} onRoll={() => {}} onRollDice={async () => {}} />);
   const rolls = screen.getAllByRole('button', { name: /^Roll [A-Za-z]+ check/ });
   expect(rolls).toHaveLength(6);
   for (const button of rolls) {
@@ -290,8 +405,8 @@ it('styles the six ability roll buttons as buttons, not as link text (investigat
 });
 
 it('keeps one markup for both ability-box orders: modifier, then score, then the roll button (CSS reorders)', () => {
-  render(<SheetSummary view={fixtureView()} rollMode="normal" onRollMode={() => {}} rollLog={[]} act={() => {}} onRoll={() => {}} onRollDice={async () => {}} />);
-  const strength = within(screen.getByRole('region', { name: 'Summary' })).getByText('Strength', { selector: 'dt' }).nextElementSibling as HTMLElement;
+  render(<SheetSummary view={fixtureView()} abilityBoxesTop rollMode="normal" onRollMode={() => {}} rollLog={[]} act={() => {}} onRoll={() => {}} onRollDice={async () => {}} />);
+  const strength = screen.getByText('Strength', { selector: 'dt' }).nextElementSibling as HTMLElement;
   expect(strength.classList.contains('ability')).toBe(true);
   expect(Array.from(strength.children).map((c) => c.className || c.tagName.toLowerCase())).toEqual(['derived', 'score', 'roll']);
   expect(strength.textContent!.replace(/\s+/g, ' ').trim()).toBe('+3 16 Roll Strength check (+3)');
@@ -310,7 +425,7 @@ it('a check with automatic advantage says so on its button and in its accessible
   const user = userEvent.setup();
   const onRoll = vi.fn();
   const mode = { automatic: 'advantage' as const, reasons: [reason('advantage', 'Fixture Swift Instinct'), reason('advantage', 'Fixture Light Step')] };
-  render(<SheetSummary view={withMode('ability.dex.mod', mode)} {...plain} onRoll={onRoll} />);
+  render(<SheetSummary view={withMode('ability.dex.mod', mode)} abilityBoxesTop {...plain} onRoll={onRoll} />);
   const button = screen.getByRole('button', { name: 'Roll (advantage: Fixture Swift Instinct, Fixture Light Step) Dexterity check (+2)' });
   expect(button.textContent!.replace(/\s+/g, ' ').trim()).toBe('Roll (advantage: Fixture Swift Instinct, Fixture Light Step) Dexterity check (+2)');
   expect(button.querySelector('.visually-hidden')?.textContent).toBe(' Dexterity check (+2)');
@@ -321,13 +436,13 @@ it('a check with automatic advantage says so on its button and in its accessible
 
 it('advantage and disadvantage together read as normal with the reason, on the summary button', () => {
   const mode = { automatic: 'normal' as const, reasons: [reason('advantage', 'Fixture Swift Instinct'), reason('disadvantage', 'Fixture Heavy Armor')] };
-  render(<SheetSummary view={withMode('ability.dex.mod', mode)} {...plain} />);
+  render(<SheetSummary view={withMode('ability.dex.mod', mode)} abilityBoxesTop {...plain} />);
   expect(screen.getByRole('button', { name: /^Roll \(normal: advantage and disadvantage cancel\) Dexterity check/ })).toBeTruthy();
 });
 
 it('an assisted mode leaves the summary button as it was', () => {
   const mode = { automatic: 'normal' as const, reasons: [reason('advantage', 'Fixture Swift Instinct', ['paralyzed'])] };
-  render(<SheetSummary view={withMode('ability.dex.mod', mode)} {...plain} />);
+  render(<SheetSummary view={withMode('ability.dex.mod', mode)} abilityBoxesTop {...plain} />);
   expect(screen.getByRole('button', { name: 'Roll Dexterity check (+2)' })).toBeTruthy();
 });
 
@@ -419,12 +534,12 @@ it('shows a "Bloodied" chip as text when the sheet says bloodied, in the hit poi
     <SheetSummary view={{ ...base, sheet: { ...base.sheet, hitPoints: { maximum: 35, current: bloodied ? 17 : 18, temporary: 0 }, bloodied } }} rollMode="normal" onRollMode={() => {}} rollLog={[]} act={() => {}} onRoll={() => {}} onRollDice={async () => {}} />
   );
   const { rerender } = render(summary(undefined));
-  const region = screen.getByRole('region', { name: 'Summary' });
+  const region = statusBar();
   expect(within(region).queryByText('Bloodied')).toBeNull();
 
   rerender(summary(true));
   const chip = within(region).getByText('Bloodied');
-  expect(chip.closest('dl > div')!.querySelector('dt')!.textContent).toBe('Hit points');
+  expect(chip.closest('.status-hp')!.querySelector('.status-label')!.textContent).toBe('Hit points');
   expect(chip.closest('[aria-live]')).toBeNull();
   expect(chip.getAttribute('role')).toBeNull();
   expect(dd('Hit points')).toBe('17 of 35'); // the Hit points text itself is unchanged
@@ -447,11 +562,11 @@ it('puts the Why? disclosure in the roll strip, outside the Last roll live regio
   const why = container.querySelector('details.roll-why') as HTMLElement;
   expect(why).toBeTruthy();
   expect(why.closest('.roll-strip')).toBeTruthy();
-  expect(screen.getByRole('region', { name: 'Last roll' }).contains(why)).toBe(false);
-  expect(why.closest('[aria-live]')).toBeNull();
+  expect(screen.getByRole('status', { name: 'Last roll' }).contains(why)).toBe(false);
+  expect(why.closest('[role=status],[aria-live]')).toBeNull();
 });
 
-it('puts a quickbar slot inside the summary, after the summary line and outside the roll strip (D73)', () => {
+it('puts a quickbar slot inside the bar, after the numbers, before the roll controls and outside the roll strip (D73)', () => {
   const { container } = render(
     <SheetSummary
       view={fixtureView()}
@@ -469,8 +584,99 @@ it('puts a quickbar slot inside the summary, after the summary line and outside 
     />,
   );
   const bar = screen.getByRole('region', { name: 'Quickbar' });
-  expect(bar.closest('.sheet-summary')).toBeTruthy();
+  expect(bar.closest('.status-bar')).toBeTruthy();
   expect(bar.closest('.roll-strip')).toBeNull();
-  expect(bar.parentElement).toBe(container.querySelector('.sheet-summary')); // a direct child: the grid's `quick` row
-  expect(container.querySelector('.summary-line')!.nextElementSibling).toBe(bar);
+  expect(bar.parentElement).toBe(container.querySelector('.status-bar')); // a direct child: the grid's `quick` row
+  expect(container.querySelector('.status-line')!.nextElementSibling).toBe(bar);
+  expect(bar.nextElementSibling!.classList.contains('roll-controls')).toBe(true);
+});
+
+// Task 3.3: the observer behind the sticky bar (jsdom has no layout, so ResizeObserver and the height are stubbed).
+function stubObserver(height: number, viewport: number) {
+  const instances: { callback: () => void; disconnect: ReturnType<typeof vi.fn> }[] = [];
+  class FakeObserver {
+    callback: () => void;
+    disconnect = vi.fn();
+    constructor(callback: () => void) {
+      this.callback = callback;
+      instances.push(this);
+    }
+    observe() {}
+    unobserve() {}
+  }
+  vi.stubGlobal('ResizeObserver', FakeObserver);
+  vi.stubGlobal('innerHeight', viewport);
+  const heightSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect');
+  const set = (h: number) => heightSpy.mockReturnValue({ height: h } as DOMRect);
+  set(height);
+  return { instances, set };
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+  document.documentElement.style.removeProperty('--status-bar-height');
+  document.documentElement.style.removeProperty('--status-bar-pin');
+});
+const rootVar = (name: string) => document.documentElement.style.getPropertyValue(name);
+
+it('sets --status-bar-height from the bar, flags data-tall over a third of the viewport, and cleans up on unmount', () => {
+  const { instances, set } = stubObserver(120, 600);
+  const { unmount } = render(<SheetSummary view={fixtureView()} {...plain} />);
+  const bar = statusBar();
+  expect(document.documentElement.style.getPropertyValue('--status-bar-height')).toBe('120px');
+  expect(bar.hasAttribute('data-tall')).toBe(false);
+  set(250); // over 600 / 3
+  act(() => instances[0]!.callback());
+  expect(document.documentElement.style.getPropertyValue('--status-bar-height')).toBe('250px');
+  expect(bar.hasAttribute('data-tall')).toBe(true);
+  set(100);
+  act(() => instances[0]!.callback());
+  expect(bar.hasAttribute('data-tall')).toBe(false);
+  unmount();
+  expect(instances[0]!.disconnect).toHaveBeenCalled();
+  expect(rootVar('--status-bar-height')).toBe('');
+  expect(rootVar('--status-bar-pin')).toBe('');
+});
+
+it('--status-bar-pin is the height while pinned and 0px while tall; --status-bar-height keeps the full height', () => {
+  const { instances, set } = stubObserver(120, 600);
+  render(<SheetSummary view={fixtureView()} {...plain} />);
+  expect(rootVar('--status-bar-pin')).toBe('120px');
+  set(250);
+  act(() => instances[0]!.callback());
+  expect(rootVar('--status-bar-height')).toBe('250px');
+  expect(rootVar('--status-bar-pin')).toBe('0px');
+});
+
+it('without ResizeObserver the bar is still measured once and on window resize', () => {
+  vi.stubGlobal('ResizeObserver', undefined);
+  vi.stubGlobal('innerHeight', 600);
+  const heightSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect');
+  heightSpy.mockReturnValue({ height: 120 } as DOMRect);
+  render(<SheetSummary view={fixtureView()} {...plain} />);
+  expect(rootVar('--status-bar-height')).toBe('120px');
+  expect(rootVar('--status-bar-pin')).toBe('120px');
+  heightSpy.mockReturnValue({ height: 300 } as DOMRect);
+  act(() => {
+    window.dispatchEvent(new Event('resize'));
+  });
+  expect(statusBar().hasAttribute('data-tall')).toBe(true);
+});
+
+it('a window resize re-evaluates data-tall even when the bar itself did not resize, and the listener goes on unmount', () => {
+  stubObserver(150, 600);
+  const { unmount } = render(<SheetSummary view={fixtureView()} {...plain} />);
+  const bar = statusBar();
+  expect(bar.hasAttribute('data-tall')).toBe(false);
+  vi.stubGlobal('innerHeight', 300); // 150 > 300 / 3
+  act(() => {
+    window.dispatchEvent(new Event('resize'));
+  });
+  expect(bar.hasAttribute('data-tall')).toBe(true);
+  expect(rootVar('--status-bar-pin')).toBe('0px');
+  unmount();
+  vi.stubGlobal('innerHeight', 900);
+  window.dispatchEvent(new Event('resize'));
+  expect(rootVar('--status-bar-pin')).toBe('');
 });

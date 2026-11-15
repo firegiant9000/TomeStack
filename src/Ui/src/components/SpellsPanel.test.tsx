@@ -70,6 +70,18 @@ it('sends the chosen mode with a spell attack roll and none with its dice (R93)'
   expect(roll).toHaveBeenLastCalledWith({ spell: ref(20) });
 });
 
+it('does not list a slot level whose maximum is 0 (Wave 3 3.6)', () => {
+  const v = view();
+  v.sheet.spellSlots = [
+    { level: 1, maximum: 2, spent: 0, remaining: 2, field: 'slots.1' },
+    { level: 2, maximum: 0, spent: 0, remaining: 0, field: 'slots.2' },
+  ];
+  panel(v);
+  const list = screen.getByRole('list', { name: 'Spell slots' });
+  expect(within(list).getByText(/Level 1 slots/)).toBeTruthy();
+  expect(within(list).queryByText(/Level 2 slots/)).toBeNull();
+});
+
 it('spell attack button shows the automatic attack mode', () => {
   const v = view();
   const caster = v.sheet.spellcasting![0]!;

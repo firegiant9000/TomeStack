@@ -24,7 +24,7 @@ export function RollLog({ rolls }: { rolls: LoggedRoll[] }) {
   if (shown.length === 0) return null;
   return (
     <details className="roll-log">
-      <summary>Previous rolls ({shown.length})</summary>
+      <summary>Earlier rolls ({shown.length})</summary>
       <ol>
         {shown.map((r, i) => (
           <li key={`${r.at}-${i}-${r.record.total}-${r.record.formula}`}>

@@ -20,7 +20,7 @@ it('renders nothing with no previous rolls', () => {
 
 it('is a collapsed disclosure named by its count, with the entries newest first and no heading or region', () => {
   render(<RollLog rolls={[logged('Fixture Bow attack', 11), logged('Strength check', 17)]} />);
-  const details = screen.getByText('Previous rolls (2)').closest('details')!;
+  const details = screen.getByText('Earlier rolls (2)').closest('details')!;
   expect(details.open).toBe(false);
   const items = within(details).getAllByRole('listitem').map((li) => li.textContent);
   expect(items[0]).toMatch(/\d{1,2}:\d{2}.*Fixture Bow attack: 11 \(1d20\)/);
@@ -43,5 +43,5 @@ it('falls back to "Roll" when the label is an empty string (Review Focus 2)', ()
 it('shows at most ten entries', () => {
   render(<RollLog rolls={Array.from({ length: 12 }, (_, i) => logged(`Roll ${i}`, i))} />);
   expect(screen.getAllByRole('listitem')).toHaveLength(10);
-  expect(screen.getByText('Previous rolls (10)')).toBeTruthy();
+  expect(screen.getByText('Earlier rolls (10)')).toBeTruthy();
 });

@@ -10,6 +10,8 @@ import { client } from '../api/client';
 import type { Character, CharacterSheet as SheetModel, CharacterView, DerivedValue, FeatureEntry, RollRecord } from '../api/types';
 import { TomeStackError } from '../api/transport';
 import { blockedHint, confirmLabel, describedBy, exportChange, failedLine, firstRadio, packageTargetsFixture } from '../test/downConversion';
+import { expectNoAxeViolations } from '../test/axe';
+import { expectContinuousOutline } from '../test/outline';
 import { CharacterSheet } from './CharacterSheet';
 import { writeChecklist } from '../levelUpChecklist';
 import { RollResult } from './PlayPanels';
@@ -92,6 +94,12 @@ function view(sheetOver: Partial<SheetModel> = {}): CharacterView {
 }
 
 const noop = () => {};
+/** The status bar no longer holds ability boxes (Task 3.4 restores them in a Play panel), so a d20 roll comes from the Dexterity field card on Skills and saves. */
+async function rollDexterity(user: ReturnType<typeof userEvent.setup>) {
+  const tab = screen.getByRole('tab', { name: 'Skills and saves' });
+  if (tab.getAttribute('aria-selected') !== 'true') await user.click(tab);
+  await user.click(screen.getByRole('button', { name: 'Roll Dexterity modifier' }));
+}
 const sheetElement = (v: CharacterView, initialTab?: Parameters<typeof CharacterSheet>[0]['initialTab'], focusChecklist?: boolean) => (
   <CharacterSheet view={v} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} initialTab={initialTab} focusChecklist={focusChecklist} />
 );
@@ -564,6 +572,77 @@ it('leaves the information-only toggle.group-absent out of "Needs your attention
   expect(screen.queryByRole('heading', { name: 'Needs your attention' })).toBeNull();
 });
 
+it('keeps open choices out of "Needs your attention" and prints no id there (Wave 3 3.6)', () => {
+  const guid = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
+  const choices = [{ source: { contentId: 'fixture.feature', revisionId: 'r1' }, sourceName: 'Fixture feature', choiceId: 'pick', count: 1, options: [], selected: [], resolved: false }] as unknown as SheetModel['choices'];
+  renderSheet(
+    view({
+      choices,
+      diagnostics: [
+        { code: 'choice.unresolved', message: "'Fixture feature' offers a choice ('pick') of 1; 0 selected.", content: { contentId: 'fixture.feature', revisionId: 'r1' } },
+        { code: 'effect.invalid-formula', message: `Effect ${guid} has a formula that does not read.` },
+      ],
+    }),
+  );
+  const attention = screen.getByRole('heading', { name: 'Needs your attention' }).closest('section')!;
+  expect(attention.textContent).toContain('formula that does not read');
+  expect(attention.textContent).not.toContain('offers a choice');
+  expect(attention.textContent).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/);
+  expect(screen.getByRole('heading', { name: 'Choices to make' })).toBeTruthy();
+  cleanup();
+  renderSheet(view({ choices, diagnostics: [{ code: 'choice.unresolved', message: "'Fixture feature' offers a choice ('pick') of 1; 0 selected.", content: { contentId: 'fixture.feature', revisionId: 'r1' } }] }));
+  expect(screen.queryByRole('heading', { name: 'Needs your attention' })).toBeNull();
+});
+
+it('Tab_order_is_header_bar_choices_tabs_panel', () => {
+  const choices = [{ source: { contentId: 'fixture.feature', revisionId: 'r1' }, sourceName: 'Fixture feature', choiceId: 'pick', count: 1, options: [], selected: [], resolved: false }] as unknown as SheetModel['choices'];
+  const { container } = renderSheet(view({ choices }));
+  // Spec section 5: sheet header, status bar controls, "Choices to make", the tab list, then the active panel. All are plain
+  // buttons, inputs and tabs in the DOM, so DOM order is the Tab order (no positive tabindex anywhere in between).
+  expect(container.querySelector('[tabindex]:not([tabindex="-1"]):not([tabindex="0"])')).toBeNull();
+  const header = screen.getByRole('button', { name: 'Short rest…' });
+  const barControl = within(screen.getByRole('region', { name: 'Status' })).getAllByRole('button')[0]!;
+  const choicesControl = within(screen.getByRole('heading', { name: 'Choices to make' }).closest('section')!).getByRole('button', { name: 'Make choices' });
+  const tab = screen.getByRole('tab', { selected: true });
+  const panelControl = within(screen.getByRole('tabpanel')).getAllByRole('checkbox')[0]!;
+  const ordered = [header, barControl, choicesControl, tab, panelControl];
+  for (let i = 0; i < ordered.length - 1; i++) {
+    expect(ordered[i]!.compareDocumentPosition(ordered[i + 1]!) & Node.DOCUMENT_POSITION_FOLLOWING, `element ${i} precedes ${i + 1}`).toBeTruthy();
+  }
+});
+
+it('swallows the noun before an id in service text ("revision {id}", "Effect {id}") and keeps an unmatched choice.unresolved', () => {
+  const guid = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
+  renderSheet(
+    view({
+      choices: [],
+      diagnostics: [
+        { code: 'choice.invalid-option', message: `'Fixture feature' choice 'c': revision ${guid} is not one of its options; it is not applied.` },
+        { code: 'effect.invalid-formula', message: `Effect ${guid} has a formula that does not read.` },
+        { code: 'choice.unresolved', message: "'Other feature' offers a choice ('pick') of 1; 0 selected." },
+      ],
+    }),
+  );
+  const attention = screen.getByRole('heading', { name: 'Needs your attention' }).closest('section')!;
+  expect(attention.textContent).toContain("'Fixture feature' choice 'c': an entry is not one of its options; it is not applied.");
+  expect(attention.textContent).toContain('An entry has a formula that does not read.');
+  expect(attention.textContent).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/);
+  // No matching open choice on the sheet, so the diagnostic is the only place the player learns of it.
+  expect(attention.textContent).toContain("'Other feature' offers a choice");
+});
+
+it('keeps the standing explanations behind closed "?" notes that open on click (Wave 3 3.6)', async () => {
+  const user = userEvent.setup();
+  renderSheet(view());
+  for (const topic of ['rolling', 'damage types', 'companions']) {
+    const summary = screen.getByLabelText(`Help: ${topic}`);
+    const details = summary.closest('details') as HTMLDetailsElement;
+    expect(details.open).toBe(false);
+    await user.click(summary);
+    expect(details.open).toBe(true);
+  }
+});
+
 it('offers a compact view on Play that is remembered as a preference (D20)', async () => {
   const user = userEvent.setup();
   renderSheet(view());
@@ -572,6 +651,41 @@ it('offers a compact view on Play that is remembered as a preference (D20)', asy
   await user.click(toggle);
   expect(localStorage.getItem('tomestack.compactPlay')).toBe('on');
   expect(document.documentElement.dataset.compactPlay).toBe('on');
+});
+
+describe('Abilities panel (Wave 3 3.4)', () => {
+  it('Play_tab_outline_is_continuous_with_the_status_bar_and_Abilities_panel', () => {
+    renderSheet(view());
+    // Wave 3 G2/G3 heading pass: the sheet's h1, then the Play panels (Abilities and Conditions included) at h2.
+    expectContinuousOutline(document.body);
+    expect(screen.getByRole('heading', { name: 'Conditions', level: 2 })).toBeTruthy();
+  });
+
+  it('shows the boxes in an Abilities panel on Play, none above the status bar, and Roll rolls the ability field', async () => {
+    const user = userEvent.setup();
+    const { container } = renderSheet(view());
+    expect(container.querySelector('dl.summary-abilities')!.closest('section.status-bar')).toBeNull();
+    const panel = screen.getByRole('region', { name: 'Abilities' });
+    expect(panel.querySelector('dl.summary-abilities')).not.toBeNull();
+    expect(container.querySelectorAll('dl.summary-abilities')).toHaveLength(1);
+    expect(screen.getByRole('heading', { name: 'Abilities', level: 2 }).id).toBe('abilities-heading');
+    const roll = within(panel).getByRole('button', { name: /^Roll/ });
+    roll.focus();
+    await user.keyboard('{Enter}');
+    expect(client.roll).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ field: 'ability.dex.mod' }));
+    await expectNoAxeViolations(panel);
+  });
+
+  it('with the setting on, the boxes sit above the bar and there is no Play panel', () => {
+    localStorage.setItem('tomestack.abilityBoxesTop', 'on');
+    const { container } = renderSheet(view());
+    expect(screen.queryByRole('region', { name: 'Abilities' })).toBeNull();
+    const boxes = container.querySelector('dl.summary-abilities')!;
+    const bar = container.querySelector('section.status-bar')!;
+    expect(container.querySelectorAll('dl.summary-abilities')).toHaveLength(1);
+    expect(boxes.compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(boxes.closest('section.status-bar')).toBeNull();
+  });
 });
 
 it('marks proficient and expert fields on Skills and saves and lists passive scores and Speed (D24)', () => {
@@ -793,7 +907,7 @@ it('renders the print preview after the summary and before the body, matching th
   renderSheet(view());
   await user.click(screen.getByRole('button', { name: 'Print…' }));
   const article = document.querySelector('article.sheet') as HTMLElement;
-  expect(Array.from(article.children).map((c) => `${c.tagName.toLowerCase()}.${c.className.split(' ')[0]}`)).toEqual(['header.sheet-header', 'section.sheet-summary', 'section.print-sheet', 'div.sheet-body']);
+  expect(Array.from(article.children).map((c) => `${c.tagName.toLowerCase()}.${c.className.split(' ')[0]}`)).toEqual(['header.sheet-header', 'section.sheet-summary', 'details.help-note', 'section.print-sheet', 'div.sheet-body']);
 });
 
 it('moves focus to the print preview heading when the preview opens (investigation 2026-10-06 item 9)', async () => {
@@ -859,7 +973,7 @@ it('keeps the header, print preview slot and summary as direct children of the a
   renderSheet(view());
   const article = screen.getByRole('article');
   const children = Array.from(article.children).map((c) => `${c.tagName.toLowerCase()}.${c.className.split(' ')[0]}`);
-  expect(children).toEqual(['header.sheet-header', 'section.sheet-summary', 'div.sheet-body']);
+  expect(children).toEqual(['header.sheet-header', 'section.sheet-summary', 'details.help-note', 'div.sheet-body']);
   const body = article.querySelector('.sheet-body')!;
   expect(within(body as HTMLElement).getByRole('tablist', { name: 'Sheet sections' })).toBeTruthy();
 });
@@ -874,7 +988,7 @@ it('opens a rest from the header above the body, focuses its heading, and return
   expect(short.getAttribute('aria-expanded')).toBe('false');
   expect(within(screen.getByRole('tabpanel', { name: 'Play' })).queryByRole('button', { name: /rest…$/ })).toBeNull();
   await user.click(short);
-  expect(childShape(screen.getByRole('article'))).toEqual(['header.sheet-header', 'section.sheet-summary', 'div.rest-sheet', 'div.sheet-body']);
+  expect(childShape(screen.getByRole('article'))).toEqual(['header.sheet-header', 'section.sheet-summary', 'details.help-note', 'div.rest-sheet', 'div.sheet-body']);
   const panel = screen.getByRole('region', { name: 'Short rest' });
   expect(panel.parentElement!.id).toBe('rest-panel');
   expect(short.getAttribute('aria-controls')).toBe('rest-panel');
@@ -969,7 +1083,7 @@ it('a late finish after the sheet is gone shows no rest-finished status', async 
   expect(onStatus).not.toHaveBeenCalled();
 });
 
-it('keeps Previous rolls through a rest (spec 2.4c)', async () => {
+it('keeps Earlier rolls through a rest (spec 2.4c)', async () => {
   const user = userEvent.setup();
   const v = view();
   const rested = changedView(v);
@@ -981,15 +1095,15 @@ it('keeps Previous rolls through a rest (spec 2.4c)', async () => {
     return <CharacterSheet view={shown} onChanged={setShown} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />;
   }
   render(<Host />);
-  await user.click(screen.getByRole('button', { name: 'Roll Dexterity check (+1)' }));
-  await user.click(screen.getByRole('button', { name: 'Roll Dexterity check (+1)' }));
-  await screen.findByText('Previous rolls (1)');
+  await rollDexterity(user);
+  await rollDexterity(user);
+  await screen.findByText('Earlier rolls (1)');
   await user.click(screen.getByRole('button', { name: 'Short rest…' }));
   const finish = await screen.findByRole('button', { name: 'Finish short rest' });
   await waitFor(() => expect(finish.getAttribute('aria-disabled')).toBe('false'));
   await user.click(finish);
   await waitFor(() => expect(screen.queryByRole('region', { name: 'Short rest' })).toBeNull());
-  expect(screen.getByText('Previous rolls (1)')).toBeTruthy();
+  expect(screen.getByText('Earlier rolls (1)')).toBeTruthy();
 });
 
 it('a late finish after the opener closed the rest does not steal focus (D29, 2.4.3)', async () => {
@@ -1703,7 +1817,7 @@ describe('a record Spend after a failed play change', () => {
     vi.mocked(client.play).mockRejectedValue(failure);
     const v = view();
     renderSheet({ ...v, sheet: { ...v.sheet, resources: [pool] } });
-    await user.click(screen.getByRole('button', { name: 'Roll Dexterity check (+1)' }));
+    await rollDexterity(user);
     const spend = await screen.findByRole<HTMLButtonElement>('button', { name: 'Spend 1 Fixture pool (3 left)' });
     await user.click(spend);
     await waitFor(() => expect(client.play).toHaveBeenCalledTimes(1));
@@ -1722,16 +1836,16 @@ describe('a record Spend after a failed play change', () => {
   });
 });
 
-it('moves the replaced Last roll into Previous rolls (D28)', async () => {
+it('moves the replaced Last roll into Earlier rolls (D28)', async () => {
   const user = userEvent.setup();
   vi.mocked(client.roll).mockReset();
   vi.mocked(client.roll).mockResolvedValueOnce(rollRecord('Dexterity check', 9)).mockResolvedValueOnce(rollRecord('Dexterity check', 15));
   renderSheet(view());
-  await user.click(screen.getByRole('button', { name: 'Roll Dexterity check (+1)' }));
-  expect(screen.queryByText(/^Previous rolls/)).toBeNull();
-  await user.click(screen.getByRole('button', { name: 'Roll Dexterity check (+1)' }));
-  const log = await screen.findByText('Previous rolls (1)');
-  expect(within(screen.getByRole('region', { name: 'Last roll' })).getByText(/Dexterity check: 15/)).toBeTruthy();
+  await rollDexterity(user);
+  expect(screen.queryByText(/^Earlier rolls/)).toBeNull();
+  await rollDexterity(user);
+  const log = await screen.findByText('Earlier rolls (1)');
+  expect(within(screen.getByRole('status', { name: 'Last roll' })).getByText(/Dexterity check: 15/)).toBeTruthy();
   expect(log.closest('details')!.textContent).toMatch(/Dexterity check: 9/);
 });
 
@@ -1742,12 +1856,12 @@ it('rolls typed dice into Last roll, labelled Dice, and moves the field roll int
   vi.mocked(client.rollDice).mockReset();
   vi.mocked(client.rollDice).mockResolvedValueOnce(rollRecord('Dice', 11, 6));
   renderSheet(view());
-  await user.click(screen.getByRole('button', { name: 'Roll Dexterity check (+1)' }));
+  await rollDexterity(user);
   await user.type(screen.getByRole('textbox', { name: 'Dice to roll' }), '2d6+3');
   await user.click(screen.getByRole('button', { name: 'Roll dice' }));
   expect(vi.mocked(client.rollDice)).toHaveBeenCalledWith('2d6+3', undefined, 'Dice');
-  const log = await screen.findByText('Previous rolls (1)');
-  expect(within(screen.getByRole('region', { name: 'Last roll' })).getByText(/Dice: 11/)).toBeTruthy();
+  const log = await screen.findByText('Earlier rolls (1)');
+  expect(within(screen.getByRole('status', { name: 'Last roll' })).getByText(/Dice: 11/)).toBeTruthy();
   expect(log.closest('details')!.textContent).toMatch(/Dexterity check: 9/);
 });
 
@@ -1760,7 +1874,7 @@ it('a refused dice roll changes neither Last roll nor the log, and the sheet sho
   await user.type(screen.getByRole('textbox', { name: 'Dice to roll' }), '1000d6{Enter}');
   expect(await screen.findByText('Too many dice.')).toBeTruthy();
   expect(onError).not.toHaveBeenCalled();
-  expect(screen.queryByText(/^Previous rolls/)).toBeNull();
+  expect(screen.queryByText(/^Earlier rolls/)).toBeNull();
   expect(vi.mocked(client.rollDice)).toHaveBeenCalledWith('1000d6', undefined, 'Dice');
 });
 
@@ -1775,15 +1889,15 @@ it('logs a rest hit die without showing it, and keeps the log newest first by ti
     .mockResolvedValueOnce(rollRecord('Roll B', 15));
   vi.mocked(client.restPreview).mockResolvedValue({ kind: 'shortRest', changes: [], manual: [], basis: 'fixture' });
   renderSheet(view({ hitDice: [{ die: 8, total: 2, spent: 0, remaining: 2, classes: ['Fixture'] }] }));
-  await user.click(screen.getByRole('button', { name: 'Roll Dexterity check (+1)' }));
+  await rollDexterity(user);
   await user.click(screen.getByRole('button', { name: 'Short rest…' }));
   await user.click(await screen.findByRole('button', { name: 'Roll a d8' }));
-  const lastRoll = screen.getByRole('region', { name: 'Last roll' });
+  const lastRoll = screen.getByRole('status', { name: 'Last roll' });
   expect(within(lastRoll).getByText(/Roll A: 9/)).toBeTruthy();
   expect(within(lastRoll).queryByText(/Hit die H/)).toBeNull();
-  expect((await screen.findByText('Previous rolls (1)')).closest('details')!.textContent).toMatch(/Hit die H: 5/);
-  await user.click(screen.getByRole('button', { name: 'Roll Dexterity check (+1)' }));
-  const log = (await screen.findByText('Previous rolls (2)')).closest('details')!;
+  expect((await screen.findByText('Earlier rolls (1)')).closest('details')!.textContent).toMatch(/Hit die H: 5/);
+  await rollDexterity(user);
+  const log = (await screen.findByText('Earlier rolls (2)')).closest('details')!;
   expect(within(lastRoll).getByText(/Roll B: 15/)).toBeTruthy();
   const items = within(log).getAllByRole('listitem').map((li) => li.textContent ?? '');
   expect(items[0]).toMatch(/Hit die H: 5/);
@@ -2610,4 +2724,72 @@ it('says once when a saved view reset a companion, and leaves the view it opened
   rerender(<CharacterSheet view={saved} {...props} onStatus={onStatus} />);
   rerender(<CharacterSheet view={view()} {...props} />);
   expect(onStatus.mock.calls.filter(([text]) => text === pruned)).toHaveLength(1);
+});
+
+// Task 3.5: the Play tab has one Inspiration control (the status bar's), a short conditions panel and keeps its focus-return ids.
+describe('Play tab: hit points, Inspiration and conditions', () => {
+  const withConditions = (conditions: string[]): CharacterView => {
+    const v = view();
+    return { ...v, character: { ...v.character, play: { temporaryHitPoints: 0, resources: [], conditions, exhaustion: 0, spellSlotsSpent: [], pactSlotsSpent: 0 } } };
+  };
+  const sheetOf = (v: CharacterView) => <CharacterSheet view={v} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />;
+
+  it('has exactly one Inspiration control on the sheet, in the status bar and not in the Play panels', () => {
+    renderSheet(view());
+    const boxes = screen.getAllByRole('checkbox', { name: /Inspiration/ });
+    expect(boxes).toHaveLength(1);
+    expect(within(screen.getByRole('region', { name: 'Status' })).getAllByRole('checkbox', { name: /Inspiration/ })).toHaveLength(1);
+    const panel = screen.getByRole('heading', { name: /^Hit points:/ }).closest('section')!;
+    expect(within(panel).queryByRole('checkbox', { name: /Inspiration/ })).toBeNull();
+  });
+
+  it('keeps the focus-return targets: the hit points heading and the Lose 1 hit point button', () => {
+    renderSheet(view());
+    expect(document.getElementById('hp-heading')).toBe(screen.getByRole('heading', { name: /^Hit points:/ }));
+    expect(document.querySelector('[aria-label="Lose 1 hit point"]')).toBe(screen.getByRole('button', { name: 'Lose 1 hit point' }));
+  });
+
+  it('lists active conditions with Remove, says None. when empty and offers only inactive ones in the select', () => {
+    const { rerender } = renderSheet(withConditions([]));
+    const panel = () => screen.getByRole('heading', { name: 'Conditions' }).closest('section')!;
+    expect(within(panel()).getByText('None.')).toBeTruthy();
+    const select = within(panel()).getByRole('combobox', { name: 'Add condition' });
+    expect(within(select).getAllByRole('option')).toHaveLength(15); // placeholder + 14
+    rerender(sheetOf(withConditions(['poisoned', 'prone'])));
+    expect(within(panel()).queryByText('None.')).toBeNull();
+    expect(within(panel()).getAllByRole('button', { name: /^Remove / }).map((b) => b.getAttribute('aria-label'))).toEqual(['Remove Poisoned', 'Remove Prone']);
+    const options = within(within(panel()).getByRole('combobox', { name: 'Add condition' })).getAllByRole('option').map((o) => o.textContent);
+    expect(options).toHaveLength(13);
+    expect(options).not.toContain('Poisoned');
+    expect(options.slice(1, 4)).toEqual(['Blinded', 'Charmed', 'Deafened']);
+  });
+
+  it('adds a condition from the select and focuses its Remove button; removing returns focus to the select', async () => {
+    const user = userEvent.setup();
+    vi.mocked(client.play).mockClear();
+    const { rerender } = renderSheet(withConditions([]));
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Add condition' }), 'prone');
+    expect(client.play).toHaveBeenLastCalledWith('fixture-2', { action: 'addCondition', condition: 'prone' });
+    rerender(sheetOf(withConditions(['prone'])));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Remove Prone' })));
+    await user.click(screen.getByRole('button', { name: 'Remove Prone' }));
+    expect(client.play).toHaveBeenLastCalledWith('fixture-2', { action: 'removeCondition', condition: 'prone' });
+    rerender(sheetOf(withConditions([])));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('combobox', { name: 'Add condition' })));
+  });
+
+  it('brings the select back and focuses it when a condition is removed from a full list', async () => {
+    const user = userEvent.setup();
+    const all = ['blinded', 'charmed', 'deafened', 'frightened', 'grappled', 'incapacitated', 'invisible', 'paralyzed', 'petrified', 'poisoned', 'prone', 'restrained', 'stunned', 'unconscious'];
+    const { rerender } = renderSheet(withConditions(all));
+    expect(screen.queryByRole('combobox', { name: 'Add condition' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Remove Prone' }));
+    rerender(sheetOf(withConditions(all.filter((c) => c !== 'prone'))));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('combobox', { name: 'Add condition' })));
+  });
+
+  it('has no axe violations on the conditions panel', async () => {
+    const { container } = renderSheet(withConditions(['poisoned']));
+    await expectNoAxeViolations(container);
+  });
 });
