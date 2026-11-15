@@ -572,26 +572,33 @@ it('leaves the information-only toggle.group-absent out of "Needs your attention
   expect(screen.queryByRole('heading', { name: 'Needs your attention' })).toBeNull();
 });
 
-it('keeps open choices out of "Needs your attention" and prints no id there (Wave 3 3.6)', () => {
-  const guid = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
+it('keeps open choices out of "Needs your attention" (Wave 3 3.6)', () => {
   const choices = [{ source: { contentId: 'fixture.feature', revisionId: 'r1' }, sourceName: 'Fixture feature', choiceId: 'pick', count: 1, options: [], selected: [], resolved: false }] as unknown as SheetModel['choices'];
   renderSheet(
     view({
       choices,
       diagnostics: [
-        { code: 'choice.unresolved', message: "'Fixture feature' offers a choice ('pick') of 1; 0 selected.", content: { contentId: 'fixture.feature', revisionId: 'r1' } },
-        { code: 'effect.invalid-formula', message: `Effect ${guid} has a formula that does not read.` },
+        // D99 wording (Group 2b): the message carries no choice id; the id is in `effectId`.
+        { code: 'choice.unresolved', message: "'Fixture feature' offers a choice of 1; 0 picked.", content: { contentId: 'fixture.feature', revisionId: 'r1' }, effectId: 'pick' },
+        { code: 'effect.invalid-formula', message: 'A modifier in Fixture feature has a formula that does not read.' },
       ],
     }),
   );
   const attention = screen.getByRole('heading', { name: 'Needs your attention' }).closest('section')!;
   expect(attention.textContent).toContain('formula that does not read');
   expect(attention.textContent).not.toContain('offers a choice');
-  expect(attention.textContent).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/);
   expect(screen.getByRole('heading', { name: 'Choices to make' })).toBeTruthy();
   cleanup();
-  renderSheet(view({ choices, diagnostics: [{ code: 'choice.unresolved', message: "'Fixture feature' offers a choice ('pick') of 1; 0 selected.", content: { contentId: 'fixture.feature', revisionId: 'r1' } }] }));
+  renderSheet(view({ choices, diagnostics: [{ code: 'choice.unresolved', message: "'Fixture feature' offers a choice of 1; 0 picked.", content: { contentId: 'fixture.feature', revisionId: 'r1' }, effectId: 'pick' }] }));
   expect(screen.queryByRole('heading', { name: 'Needs your attention' })).toBeNull();
+});
+
+it('keeps a choice.unresolved whose choice id is not an open choice on the sheet', () => {
+  const choices = [{ source: { contentId: 'fixture.feature', revisionId: 'r1' }, sourceName: 'Fixture feature', choiceId: 'pick', count: 1, options: [], selected: [], resolved: false }] as unknown as SheetModel['choices'];
+  // Same source, different choice id: the sheet does not list this one, so the diagnostic is the only place the player learns of it.
+  renderSheet(view({ choices, diagnostics: [{ code: 'choice.unresolved', message: "'Fixture feature' offers a choice of 2; 0 picked.", content: { contentId: 'fixture.feature', revisionId: 'r1' }, effectId: 'other' }] }));
+  const attention = screen.getByRole('heading', { name: 'Needs your attention' }).closest('section')!;
+  expect(attention.textContent).toContain("'Fixture feature' offers a choice of 2");
 });
 
 it('Tab_order_is_header_bar_choices_tabs_panel', () => {
@@ -609,26 +616,6 @@ it('Tab_order_is_header_bar_choices_tabs_panel', () => {
   for (let i = 0; i < ordered.length - 1; i++) {
     expect(ordered[i]!.compareDocumentPosition(ordered[i + 1]!) & Node.DOCUMENT_POSITION_FOLLOWING, `element ${i} precedes ${i + 1}`).toBeTruthy();
   }
-});
-
-it('swallows the noun before an id in service text ("revision {id}", "Effect {id}") and keeps an unmatched choice.unresolved', () => {
-  const guid = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
-  renderSheet(
-    view({
-      choices: [],
-      diagnostics: [
-        { code: 'choice.invalid-option', message: `'Fixture feature' choice 'c': revision ${guid} is not one of its options; it is not applied.` },
-        { code: 'effect.invalid-formula', message: `Effect ${guid} has a formula that does not read.` },
-        { code: 'choice.unresolved', message: "'Other feature' offers a choice ('pick') of 1; 0 selected." },
-      ],
-    }),
-  );
-  const attention = screen.getByRole('heading', { name: 'Needs your attention' }).closest('section')!;
-  expect(attention.textContent).toContain("'Fixture feature' choice 'c': an entry is not one of its options; it is not applied.");
-  expect(attention.textContent).toContain('An entry has a formula that does not read.');
-  expect(attention.textContent).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/);
-  // No matching open choice on the sheet, so the diagnostic is the only place the player learns of it.
-  expect(attention.textContent).toContain("'Other feature' offers a choice");
 });
 
 it('keeps the standing explanations behind closed "?" notes that open on click (Wave 3 3.6)', async () => {
