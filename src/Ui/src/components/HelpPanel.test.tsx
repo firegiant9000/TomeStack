@@ -85,6 +85,12 @@ it('embeds every character’s gap notes, and Open <character> goes to that char
   expect(onOpen).toHaveBeenCalledWith('fixture-a');
 });
 
+it('offers Copy as issue text on every note', async () => {
+  render(<HelpPanel onError={() => {}} onOpenCharacter={() => {}} />);
+  const section = screen.getByRole('region', { name: 'Gap notes' });
+  expect(await within(section).findAllByRole('button', { name: /^Copy as issue text/ })).toHaveLength(1);
+});
+
 it('defines exactly the glossary terms', async () => {
   render(<HelpPanel onError={() => {}} onOpenCharacter={() => {}} />);
   const section = screen.getByRole('region', { name: 'Glossary' });

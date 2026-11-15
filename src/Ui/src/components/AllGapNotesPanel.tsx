@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { client } from '../api/client';
 import type { GapNoteListing } from '../api/types';
+import { GapIssueCopy } from './GapIssueCopy';
 
 interface Props {
   onError: (error: unknown) => void;
@@ -58,6 +59,7 @@ export function AllGapNotesPanel({ onError, onOpenCharacter }: Props) {
               <button type="button" onClick={() => toggle(entry)}>
                 {entry.note.status === 'open' ? `Mark resolved: ${entry.note.target.label}` : `Reopen: ${entry.note.target.label}`}
               </button>
+              <GapIssueCopy note={entry.note} />
               <button type="button" onClick={() => onOpenCharacter(entry.note.characterId)}>
                 Open {entry.characterName}
               </button>
