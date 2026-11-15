@@ -67,7 +67,7 @@ public static partial class CharacterCalculator
                 if (scale.Values.Count != Character.MaxLevel || !ScaleEffect.IsValidScaleId(scale.ScaleId) || scale.Values.Any(v => v is < 0 or > FormulaLimits.MaxLiteral))
                 {
                     // Validation refuses this on publish and import; stored content from elsewhere is isolated here (SPEC C-03).
-                    diagnostics.Add(new("scale.invalid", $"'{owner.Revision.Name}' scale '{scale.Id}' needs a valid scale id and {Character.MaxLevel} values of 0 to {FormulaLimits.MaxLiteral}; it is ignored.", owner.Revision.Reference, scale.Id));
+                    diagnostics.Add(new("scale.invalid", $"'{owner.Revision.Name}' has a class-table column that needs a name and {Character.MaxLevel} values of 0 to {FormulaLimits.MaxLiteral}; it is ignored.", owner.Revision.Reference, scale.Id));
                     continue;
                 }
                 if (!classLevels.Scales.TryAdd((owner.ClassRoot!, scale.ScaleId), (owner, scale)))
@@ -121,13 +121,13 @@ public static partial class CharacterCalculator
         var readerRevision = reader.Revision;
         if (reader.ClassRoot is not { } root)
         {
-            ReportValue(classLevels, new("value.no-class", $"'{readerRevision.Name}' reads {identifier}, but it is not part of a class; named values are read within a class, so the formula is disabled.", readerRevision.Reference));
+            ReportValue(classLevels, new("value.no-class", $"'{readerRevision.Name}' reads {identifier}, but it is not part of a class; named values are read within a class, so the formula isn't applied.", readerRevision.Reference));
             return null;
         }
         var key = (root, valueId);
         if (!classLevels.NamedValues.TryGetValue(key, out var declared))
         {
-            ReportValue(classLevels, new("value.unknown", $"'{readerRevision.Name}' reads {identifier}, which no content of this class declares; the formula is disabled.", readerRevision.Reference));
+            ReportValue(classLevels, new("value.unknown", $"'{readerRevision.Name}' reads {identifier}, which no content of this class declares; the formula isn't applied.", readerRevision.Reference));
             return null;
         }
 
@@ -185,7 +185,7 @@ public static partial class CharacterCalculator
         {
             ReportValue(classLevels, new(
                 "value.cycle",
-                $"'{readerRevision.Name}' reads {identifier}, which depends on itself through '{declared.Content.Revision.Name}'; the value and every formula reading it are disabled.",
+                $"'{readerRevision.Name}' reads {identifier}, which depends on itself through '{declared.Content.Revision.Name}'; the value and every formula reading it aren't applied.",
                 readerRevision.Reference));
         }
         return result;
@@ -230,6 +230,14 @@ public static partial class CharacterCalculator
         return fields;
     }
 
+    private const string UnavailableEntry = "an entry that is not available";
+
+    /// <summary>D99: a rules family as a player reads it, article included ("the 2014 rules"); an id this app does not know stays in the text so the author can find the typo.</summary>
+    private static string FamilyLabel(string id) => RulesFamilies.IsKnown(id) ? $"the {RulesFamilies.Get(id).ShortLabel}" : $"'{id}' (rules this app does not know)";
+
+    private static string FamilyLabels(IEnumerable<string> ids) =>
+        ids.Select(FamilyLabel).Distinct().ToList() is { Count: > 0 } labels ? string.Join(" and ", labels) : "no set of rules";
+
     private sealed record ResolvedContent(
         List<ActiveContent> Active, List<ClassInfo> Classes, ClassLevelMap ClassLevels, List<ChoiceStatus> Choices, IReadOnlyList<ModdedEntry> ModdedEntries);
 
@@ -271,17 +279,17 @@ public static partial class CharacterCalculator
             var revision = catalog.FindRevision(reference);
             if (revision is null)
             {
-                diagnostics.Add(new("content.missing", $"{prefix}Revision {reference.RevisionId} of content {reference.ContentId} is not available.", reference));
+                diagnostics.Add(new("content.missing", $"{prefix}A version of this content is not available (it may be missing from your library).", reference));
                 return null;
             }
             if (revision.SchemaVersion is < 1 or > ContentRevision.CurrentSchemaVersion)
             {
-                diagnostics.Add(new("content.schema-unsupported", $"{prefix}'{revision.Name}' uses content schema v{revision.SchemaVersion}; this version supports up to v{ContentRevision.CurrentSchemaVersion}. It is not applied.", reference));
+                diagnostics.Add(new("content.schema-unsupported", $"{prefix}'{revision.Name}' uses file version {revision.SchemaVersion}; this app reads up to file version {ContentRevision.CurrentSchemaVersion}. It is not applied.", reference));
                 return null;
             }
             if (revision.Status != RevisionStatus.Published)
             {
-                diagnostics.Add(new("content.unpublished", $"{prefix}'{revision.Name}' is a {revision.Status.ToString().ToLowerInvariant()} revision and is not active until it is reviewed and published.", reference));
+                diagnostics.Add(new("content.unpublished", $"{prefix}'{revision.Name}' is a {revision.Status.ToString().ToLowerInvariant()} version and is not active until it is reviewed and published.", reference));
                 return null;
             }
             if (!revision.RulesFamilies.Contains(character.RulesFamily))
@@ -290,12 +298,12 @@ public static partial class CharacterCalculator
                 var exception = grantedBy is null ? character.CrossFamilyExceptions.LastOrDefault(e => e.Content == reference) : null;
                 if (exception is null)
                 {
-                    diagnostics.Add(new("content.rules-family-mismatch", $"{prefix}'{revision.Name}' supports {string.Join(", ", revision.RulesFamilies)}, not {character.RulesFamily}; it is not applied.", reference));
+                    diagnostics.Add(new("content.rules-family-mismatch", $"{prefix}'{revision.Name}' is written for {FamilyLabels(revision.RulesFamilies)}, not {FamilyLabel(character.RulesFamily)}; it is not applied.", reference));
                     return null;
                 }
                 diagnostics.Add(new(
                     "content.cross-family-exception",
-                    $"'{revision.Name}' is written for {string.Join(", ", revision.RulesFamilies)} but is used under {character.RulesFamily} by a recorded exception: {exception.Reason}. It follows {policy.DisplayName} rules.",
+                    $"'{revision.Name}' is written for {FamilyLabels(revision.RulesFamilies)} but is used under {FamilyLabel(character.RulesFamily)} by a recorded exception: {exception.Reason}. It follows the {policy.ShortLabel}.",
                     reference));
             }
             var source = catalog.FindSource(revision.Provenance.SourceId);
@@ -319,7 +327,7 @@ public static partial class CharacterCalculator
             var what = offering.Revision.Kind == ContentKind.Background ? "background" : $"{offering.Revision.Kind.ToString().ToLowerInvariant()} from a background";
             diagnostics.Add(new(
                 "policy.background-feat",
-                $"'{offering.Revision.Name}' ({what}) cannot {verb} a feat under {policy.DisplayName}; the {(verb == "grant" ? "grant" : "selection")} is ignored.",
+                $"'{offering.Revision.Name}' ({what}) cannot {verb} a feat under the {policy.ShortLabel}; the {(verb == "grant" ? "grant" : "selection")} is ignored.",
                 offering.Revision.Reference,
                 effectId));
             return true;
@@ -441,7 +449,11 @@ public static partial class CharacterCalculator
 
         var referenced = character.AllReferences().ToHashSet();
         foreach (var exception in character.CrossFamilyExceptions.Where(e => !referenced.Contains(e.Content)))
-            diagnostics.Add(new("character.exception-unused", $"A cross-family exception is recorded for revision {exception.Content.RevisionId}, which this character does not pin or choose.", exception.Content));
+            diagnostics.Add(new("character.exception-unused",
+                catalog.FindRevision(exception.Content)?.Name is { } name
+                    ? $"An exception to the rules is saved for '{name}', but this character does not use it."
+                    : "An exception to the rules is saved for content that is not available, but this character does not use it.",
+                exception.Content));
 
         var pending = new Queue<ActiveContent>(active);
         while (pending.Count > 0)
@@ -460,7 +472,7 @@ public static partial class CharacterCalculator
                         continue; // D04: only for the starting class, or only for a later class
                     if (grant.Content is not { } reference)
                     {
-                        diagnostics.Add(new("effect.grant-content-missing", $"'{revision.Name}' effect '{grant.Id}' grants content but names none; it is ignored.", revision.Reference, grant.Id));
+                        diagnostics.Add(new("effect.grant-content-missing", $"'{revision.Name}' has a grant that names no content; it is ignored.", revision.Reference, grant.Id));
                         continue;
                     }
                     // Only feats are restricted: a 2014 background may still grant other content, such as its feature.
@@ -476,7 +488,7 @@ public static partial class CharacterCalculator
                         active.Add(granted);
                         pending.Enqueue(granted);
                         foreach (var nested in granted.Revision.Effects.OfType<GrantEffect>().Where(g => g.Grant == GrantKind.Content))
-                            diagnostics.Add(new("grant.nested-ignored", $"'{granted.Revision.Name}' was granted by '{revision.Name}'; its own content grant '{nested.Id}' is not followed (grants are one level deep).", granted.Revision.Reference, nested.Id));
+                            diagnostics.Add(new("grant.nested-ignored", $"'{granted.Revision.Name}' was granted by '{revision.Name}'; one of its own grants is not followed (grants are one level deep).", granted.Revision.Reference, nested.Id));
                     }
                 }
             }
@@ -493,7 +505,7 @@ public static partial class CharacterCalculator
                 if (choice.Count < 1)
                 {
                     // Validation refuses this on publish and import; a count below 1 would otherwise accept any number of selections.
-                    diagnostics.Add(new("choice.invalid-count", $"'{revision.Name}' choice '{choice.ChoiceId}' asks for {choice.Count} selection(s); it is not offered and nothing selected for it is applied.", revision.Reference, choice.Id));
+                    diagnostics.Add(new("choice.invalid-count", $"'{revision.Name}' asks for {choice.Count} choice(s) it cannot offer; nothing chosen for it is applied.", revision.Reference, choice.Id));
                     continue;
                 }
                 var selected = character.Choices.LastOrDefault(c => c.Source == revision.Reference && c.ChoiceId == choice.ChoiceId)?.Selected ?? [];
@@ -512,12 +524,12 @@ public static partial class CharacterCalculator
                 {
                     if (!options.Contains(option))
                     {
-                        diagnostics.Add(new("choice.invalid-option", $"'{revision.Name}' choice '{choice.ChoiceId}': revision {option.RevisionId} is not one of its options; it is not applied.", option, choice.Id));
+                        diagnostics.Add(new("choice.invalid-option", $"'{revision.Name}': '{catalog.FindRevision(option)?.Name ?? UnavailableEntry}' is not one of its options, so it is not applied.", option, choice.Id));
                         continue;
                     }
                     if (applied.Count >= choice.Count)
                     {
-                        diagnostics.Add(new("choice.too-many", $"'{revision.Name}' choice '{choice.ChoiceId}' allows {choice.Count} selection(s); the extra selection {option.RevisionId} is not applied.", option, choice.Id));
+                        diagnostics.Add(new("choice.too-many", $"'{revision.Name}' allows {choice.Count} pick(s); '{catalog.FindRevision(option)?.Name ?? UnavailableEntry}' is one too many, so it is not applied.", option, choice.Id));
                         continue;
                     }
                     if (BackgroundFeatRefused(item, option, choice.Id, "offer"))
@@ -547,7 +559,7 @@ public static partial class CharacterCalculator
                 {
                     diagnostics.Add(new(
                         "choice.unresolved",
-                        $"'{revision.Name}' offers a choice ('{choice.ChoiceId}') of {choice.Count}; {applied.Count} selected.{(choice.Text is { } text ? $" {text}" : "")}",
+                        $"'{revision.Name}' offers a choice of {choice.Count}; {applied.Count} picked.{(choice.Text is { } text ? $" {text}" : "")}",
                         revision.Reference,
                         choice.Id));
                 }
@@ -560,7 +572,9 @@ public static partial class CharacterCalculator
         }
 
         foreach (var orphan in character.Choices.Where(c => !answered.Contains((c.Source, c.ChoiceId))))
-            diagnostics.Add(new("choice.orphaned", $"A selection is recorded for choice '{orphan.ChoiceId}' of revision {orphan.Source.RevisionId}, which is not active or does not offer that choice (yet); it is not applied.", orphan.Source));
+            diagnostics.Add(new("choice.orphaned", catalog.FindRevision(orphan.Source)?.Name is { } orphanName
+                ? $"A pick is saved for '{orphanName}', which is not active or does not offer that choice (yet); it is not applied."
+                : "A pick is saved for content that is not active; it is not applied.", orphan.Source));
         CollectScales(active, classLevels, diagnostics);
         CollectValues(active, classLevels, diagnostics);
         return new(active, classes, classLevels, choices, modded);

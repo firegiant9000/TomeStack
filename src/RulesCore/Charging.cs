@@ -30,14 +30,16 @@ public static class PoolChanges
         foreach (var change in changes)
         {
             var pool = sheet.Resources?.FirstOrDefault(r => r.Content.ContentId == change.ResourceContent && r.ResourceId == change.ResourceId);
+            // D99: the pool's own label, never its id; "That pool" when the sheet does not list it.
+            var name = pool is null || string.IsNullOrWhiteSpace(pool.Label) ? "That pool" : $"'{pool.Label}'";
             if (pool is not { Maximum: { } maximum })
             {
-                errors.Add(new("use.unavailable", $"Pool '{change.ResourceId}' of content {change.ResourceContent:D} is not tracked on this character.", pool?.Content));
+                errors.Add(new("use.unavailable", $"{name} is not tracked on this character.", pool?.Content));
                 continue;
             }
             if (change.Amount < 0)
             {
-                errors.Add(new("use.unavailable", $"Pool '{change.ResourceId}' cannot change by {change.Amount}.", pool.Content, pool.EffectId));
+                errors.Add(new("use.unavailable", $"{name} cannot change by {change.Amount}.", pool.Content, pool.EffectId));
                 continue;
             }
             var spent = running.SpentOf(change.ResourceContent, change.ResourceId);
@@ -47,12 +49,12 @@ public static class PoolChanges
                 after = spent + change.Amount;
                 if (pool.CountsUp && after > maximum)
                 {
-                    errors.Add(new("use.pool-full", $"Pool '{change.ResourceId}' has {spent} of {maximum} built up; {change.Amount} more would pass its maximum.", pool.Content, pool.EffectId));
+                    errors.Add(new("use.pool-full", $"{name} has {spent} of {maximum} built up; {change.Amount} more would pass its maximum.", pool.Content, pool.EffectId));
                     continue;
                 }
                 if (!pool.CountsUp && change.Amount > Math.Max(maximum - spent, 0))
                 {
-                    errors.Add(new("use.unaffordable", $"Pool '{change.ResourceId}' has {Math.Max(maximum - spent, 0)} of {maximum} left; {change.Amount} cannot be spent.", pool.Content, pool.EffectId));
+                    errors.Add(new("use.unaffordable", $"{name} has {Math.Max(maximum - spent, 0)} of {maximum} left; {change.Amount} cannot be spent.", pool.Content, pool.EffectId));
                     continue;
                 }
             }
@@ -61,7 +63,7 @@ public static class PoolChanges
                 after = spent - change.Amount;
                 if (after < 0 && pool.CountsUp)
                 {
-                    errors.Add(new("use.unaffordable", $"Pool '{change.ResourceId}' has {spent} built up; {change.Amount} cannot be taken off.", pool.Content, pool.EffectId));
+                    errors.Add(new("use.unaffordable", $"{name} has {spent} built up; {change.Amount} cannot be taken off.", pool.Content, pool.EffectId));
                     continue;
                 }
                 after = Math.Max(after, 0);

@@ -110,7 +110,9 @@ public class SpellcastingTests
         var slots = sheet.Field(FieldIds.SpellSlots(1));
         Assert.Equal((4, AutomationStatus.Assisted), (slots.Value, slots.Automation)); // the Arcanist's 4, not combined
         Assert.Contains(slots.Warnings, w => w.Code == "spellcasting.multiclass-slots");
-        Assert.Contains(sheet.Field(FieldIds.SpellAttack).Warnings, w => w.Code == "spellcasting.multiclass");
+        var multiclass = Assert.Single(sheet.Field(FieldIds.SpellAttack).Warnings, w => w.Code == "spellcasting.multiclass");
+        ServiceWordingTests.AssertPlain(multiclass.Message, ["are those of 'Fixture Arcanist'; each"], "''");
+        ServiceWordingTests.AssertPlain(Assert.Single(slots.Warnings, w => w.Code == "spellcasting.multiclass-slots").Message, ["shows the slots of 'Fixture Arcanist'"], "''");
 
         // The manual step: the total recorded as an override (SPEC C-06); play uses it.
         var overridden = Sheet(character with { Overrides = [new(FieldIds.SpellSlots(1), 6, "Multiclass spellcaster table")] });
@@ -252,6 +254,41 @@ public class SpellcastingTests
         Assert.Contains(ContentValidator.Validate(old, catalog).Errors, e => e.Code == "validate.requires-v5");
         Assert.True(ContentValidator.Validate(arcanist, catalog).CanPublish);
         Assert.True(ContentValidator.Validate(catalog.FindRevision(Fixtures.EmberWave)!, catalog).CanPublish);
+    }
+
+    [Fact]
+    public void A_bad_slot_table_is_reported_in_plain_words()
+    {
+        var (m0, m1, spells) = (Fixtures.Pack(), Fixtures.M1Pack(), Fixtures.SpellPack());
+        var revisions = new List<ContentRevision>([.. m0.Revisions, .. m1.Revisions, .. spells.Revisions]);
+        var arcanist = revisions.Single(r => r.Reference == Fixtures.Arcanist);
+        var spellcasting = arcanist.Effects.OfType<SpellcastingEffect>().Single();
+        revisions[revisions.IndexOf(arcanist)] = arcanist with { Effects = [arcanist.Effects[0], spellcasting with { Slots = spellcasting.Slots.Take(5).ToList() }] };
+        var catalog = new InMemoryContentCatalog([.. m0.Sources, .. m1.Sources, .. spells.Sources], revisions);
+
+        var sheet = CharacterCalculator.Calculate(Caster(RulesFamilies.Srd521, [], null, new ClassLevel(Fixtures.Arcanist, 1)), catalog);
+
+        var message = Assert.Single(sheet.Diagnostics, d => d.Code == "spellcasting.table-invalid").Message;
+        ServiceWordingTests.AssertPlain(message, ["Fixture Arcanist", "the slot table needs"]);
+    }
+
+    [Fact]
+    public void A_spell_of_a_caster_with_no_spellcasting_is_named_in_the_message()
+    {
+        var sheet = Sheet(Caster(RulesFamilies.Srd521, [Arcane(Fixtures.FrostRing)], null, new ClassLevel(Fixtures.Warden, 1)));
+
+        var message = Assert.Single(sheet.Diagnostics, d => d.Code == "spells.caster-missing").Message;
+        ServiceWordingTests.AssertPlain(message, ["Spell '", "is recorded for a caster that gives this character no spellcasting"]);
+    }
+
+    [Fact]
+    public void A_missing_spell_of_a_caster_with_no_spellcasting_is_unnamed_and_has_no_ids()
+    {
+        var gone = new ContentReference(Guid.NewGuid(), Guid.NewGuid());
+        var sheet = Sheet(Caster(RulesFamilies.Srd521, [Arcane(gone)], null, new ClassLevel(Fixtures.Warden, 1)));
+
+        var message = Assert.Single(sheet.Diagnostics, d => d.Code == "spells.caster-missing").Message;
+        Assert.Equal("A spell is recorded for a caster that gives this character no spellcasting; it is not listed.", message);
     }
 
     [Fact]

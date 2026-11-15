@@ -249,7 +249,7 @@ public class SpellListTests
         Assert.Equal([ward.ContentId, spark.ContentId], result.Drafts.Select(d => d.ContentId));
         Assert.Empty(result.Skipped);
         Assert.Equal(before + 2, temp.App.Store.ListRevisions().Count);
-        Assert.Contains("keep the spell revisions", result.Note, StringComparison.Ordinal);
+        Assert.Contains("keep the spell versions", result.Note, StringComparison.Ordinal);
         var wardDraft = temp.App.Store.FindRevision(result.Drafts[0])!;
         Assert.Equal(RevisionStatus.Draft, wardDraft.Status);
         Assert.Equal(["wizard"], Assert.IsType<SpellEffect>(Assert.Single(wardDraft.Effects)).Lists);

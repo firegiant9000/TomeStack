@@ -517,6 +517,9 @@ public static partial class CharacterCalculator
 
     public static bool IsField(string field) => SpecIndex.ContainsKey(field);
 
+    /// <summary>The label a player reads for a calculated field ("Speed" for <c>speed</c>); an unknown id is returned as is.</summary>
+    private static string FieldLabel(string field) => SpecIndex.TryGetValue(field, out var i) ? Specs[i].Label : field;
+
     /// <summary>
     /// D24 (2026-10-06): speed and the passive scores are calculated and overridable on the sheet, but a build before
     /// content schema v10 would read content that targets them as supported and drop its bonus silently. So content may
@@ -654,7 +657,7 @@ public static partial class CharacterCalculator
                 {
                     yield return new(
                         "effect.unknown-target",
-                        $"'{revision.Name}' restriction '{restriction.Id}' checks '{restriction.Field}', which is not a calculated field; the content is not applied.",
+                        $"'{revision.Name}' prerequisite checks '{restriction.Field}', which is not something the sheet calculates; the content is not applied.",
                         revision.Reference, restriction.Id);
                     continue;
                 }
@@ -663,7 +666,7 @@ public static partial class CharacterCalculator
                     // As in an older build, where the field is not a content target: the content is not applied.
                     yield return new(
                         "effect.character-only-field",
-                        $"'{revision.Name}' restriction '{restriction.Id}' checks '{restriction.Field}', which content may not target yet; the content is not applied.",
+                        $"'{revision.Name}' prerequisite checks {FieldLabel(restriction.Field)}, which a prerequisite cannot check yet; the content is not applied.",
                         revision.Reference, restriction.Id);
                     continue;
                 }
@@ -672,7 +675,7 @@ public static partial class CharacterCalculator
                     // As in an older build, where the field does not exist: the content is not applied.
                     yield return new(
                         "effect.schema-field-ignored",
-                        $"'{revision.Name}' restriction '{restriction.Id}' checks '{restriction.Field}', a content schema v8 field, but the revision declares v{revision.SchemaVersion}; the content is not applied.",
+                        $"'{revision.Name}' prerequisite checks {FieldLabel(restriction.Field)}, which needs file version 8, but this entry is file version {revision.SchemaVersion}; the content is not applied.",
                         revision.Reference, restriction.Id);
                     continue;
                 }
@@ -714,7 +717,7 @@ public static partial class CharacterCalculator
             {
                 diagnostics.Add(new(
                     "effect.unsupported",
-                    $"'{item.Revision.Name}' effect '{effect.Id}' of type '{effect.Type}' is not automated; its text is kept for reference.",
+                    $"'{item.Revision.Name}' has an effect of type '{effect.Type}' that is not automated; its text is kept for reference.",
                     item.Revision.Reference,
                     effect.Id));
             }
@@ -1079,13 +1082,16 @@ public static partial class CharacterCalculator
                 var formOwner = active.FirstOrDefault(a => a.Revision.ContentId == (form.ContentId ?? own));
                 var formToggle = formOwner?.Revision.Effects.OfType<ToggleEffect>().FirstOrDefault(t => t.ToggleId == form.ToggleId);
                 if (formOwner is null || formToggle is null || !ToggleIsOn(formOwner.Revision, formToggle, effective, autoOn))
-                    reason = $"Available in {formOwner?.Revision.Name ?? form.ToggleId}";
+                    reason = $"Available in {formToggle?.Label ?? "another form"}";
             }
             if (reason is null && cost is { } needed && response.ResourceId is { } poolId)
             {
                 var pool = resources.FirstOrDefault(r => r.Content.ContentId == poolContent && r.ResourceId == poolId);
                 if (pool is null)
-                    reason = $"Needs {needed} {poolId} (0 left)";
+                {
+                    var poolLabel = active.FirstOrDefault(a => a.Revision.ContentId == poolContent)?.Revision.Effects.OfType<ResourceEffect>().FirstOrDefault(r => r.ResourceId == poolId)?.Label;
+                    reason = poolLabel is null ? $"Needs {needed} from a pool this character does not have" : $"Needs {needed} {poolLabel} (0 left)";
+                }
                 else if (pool.Current is not { } left)
                     reason = $"Needs {needed} {pool.Label} (not tracked)";
                 else if (left < needed)
@@ -1317,14 +1323,14 @@ public static partial class CharacterCalculator
     /// <summary>
     /// Content v11 (D43): why a form-only action (<c>whileToggle</c>) is unavailable now, or null when its toggle is on. The toggle belongs to
     /// the named content, or to <paramref name="item"/> when none is named. A toggle that is not declared by active content is off and is
-    /// named by its id (the validator already warns about the reference).
+    /// reported as "another form" (the validator already warns about the reference).
     /// </summary>
     private static string? OutOfForm(List<ActiveContent> active, ActiveContent item, ToggleRef whileToggle, EffectiveToggles effective, bool autoOn)
     {
         var owner = active.FirstOrDefault(a => a.Revision.ContentId == (whileToggle.ContentId ?? item.Revision.ContentId));
         var toggle = owner?.Revision.Effects.OfType<ToggleEffect>().FirstOrDefault(t => t.ToggleId == whileToggle.ToggleId);
         if (owner is null || toggle is null)
-            return $"Available in {whileToggle.ToggleId}";
+            return "Available in another form";
         return ToggleIsOn(owner.Revision, toggle, effective, autoOn) ? null : $"Available in {toggle.Label}";
     }
 

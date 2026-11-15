@@ -214,7 +214,9 @@ public class FormulaTests
         Assert.Equal(["bad", "deep"], problems.Select(p => p.EffectId));
         Assert.All(problems, p => Assert.Equal(broken.Reference, p.Content));
         Assert.Contains("Fixture Broken Formula", problems[0].Message, StringComparison.Ordinal);
-        Assert.Contains("formula.invalid-character", problems[0].Message, StringComparison.Ordinal);
-        Assert.Contains("formula.too-deep", problems[1].Message, StringComparison.Ordinal);
+        Assert.Contains("is not allowed in a formula", problems[0].Message, StringComparison.Ordinal);
+        Assert.Contains("nests more than", problems[1].Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("(formula.", problems[0].Message + problems[1].Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("'bad'", problems[0].Message, StringComparison.Ordinal);
     }
 }

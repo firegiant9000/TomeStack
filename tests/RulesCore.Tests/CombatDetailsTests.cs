@@ -289,6 +289,19 @@ public class CombatDetailsTests
     }
 
     [Fact]
+    public void An_untrained_shield_warning_names_the_shield_and_the_rules_by_their_labels()
+    {
+        var untrained = Revision(3, ContentKind.Class, "Test Unshielded", new HitDieEffect { Id = "hit-die", Die = 8 }, Training("light"));
+        var catalog = Catalog(untrained);
+        foreach (var (family, label) in new[] { (RulesFamilies.Srd51, "the 2014 rules"), (RulesFamilies.Srd521, "the 2024 rules") })
+        {
+            var ac = CharacterCalculator.Calculate(Fighter(family, [Worn(Coat), Worn(Buckler)], new ClassLevel(untrained.Reference, 1)), catalog).Field(FieldIds.ArmorClass);
+            var message = Assert.Single(ac.Warnings, w => w.Code == "equipment.shield-untrained").Message;
+            ServiceWordingTests.AssertPlain(message, ["no training with shields", Buckler.Name, label]);
+        }
+    }
+
+    [Fact]
     public void A_roll_bonus_formula_is_evaluated_for_the_character()
     {
         var sheet = Sheet(Fighter(RulesFamilies.Srd521, null, new ClassLevel(Vanguard.Reference, 7)));

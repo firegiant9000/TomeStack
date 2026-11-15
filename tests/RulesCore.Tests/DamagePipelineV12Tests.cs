@@ -170,6 +170,26 @@ public class DamagePipelineV12Tests
     }
 
     [Fact]
+    public void Roll_notes_name_the_response_by_its_label_and_never_a_content_id()
+    {
+        // Labels differ from the ids, so a regression that prints the response id fails.
+        var c = Sheet(68, R("dice", amount: 4, dice: "1d10") with { Label = "Die ward" }, R("flat", amount: 3) with { Label = "Flat ward" });
+
+        var outsideNote = Assert.Single(Run(c, new(20, null), Pick("dice", 11)).Notes);
+        var notDiceNote = Assert.Single(Run(c, new(20, null), Pick("flat", 4)).Notes);
+        var (outside, notDice) = (outsideNote.Message, notDiceNote.Message);
+
+        // The UI finds the note's response by these fields, not by the text (which names the label).
+        Assert.Equal("dice", outsideNote.EffectId);
+        Assert.Equal("flat", notDiceNote.EffectId);
+
+        Assert.Equal("'Die ward' needs a roll between 1 and 10.", outside);
+        Assert.Equal("'Flat ward' cannot use the roll given.", notDice);
+        ServiceWordingTests.AssertPlain(outside, [], Holder.ToString(), "'dice'");
+        ServiceWordingTests.AssertPlain(notDice, [], Holder.ToString(), "'flat'");
+    }
+
+    [Fact]
     public void Save_trigger_missing_its_ability_or_result_matches_nothing()
     {
         var c = Sheet(68, R("noAbility", trigger: new(ResponseSource.Save, null, SaveResult.Success)), R("noResult", trigger: new(ResponseSource.Save, "dex", null)));

@@ -59,7 +59,7 @@ A caster can use only a spell that names the caster's list. A spell that names n
 4. Accept the spells as drafts ("Accept selected as drafts").
 5. In the studio, "Publish all drafts in this source…" and confirm the preview.
 
-A spell that was accepted or published without a list: in the studio, tick it and choose "Add N spells to a spell list…". That saves a new draft of each spell with the key and opens the publish panel on exactly those drafts, all ticked; nothing is published until you confirm. Characters keep the spell revisions they recorded until you review an update for each one.
+A spell that was accepted or published without a list: in the studio, tick it and choose "Add N spells to a spell list…". That saves a new draft of each spell with the key and opens the publish panel on exactly those drafts, all ticked; nothing is published until you confirm. Characters keep the spell versions they recorded until you review an update for each one.
 
 ## Companions, your own attacks and backstory
 

@@ -562,6 +562,7 @@ public class CandidateReviewTests
         var refused = Assert.Throws<AppValidationException>(() => temp.App.EditCandidate(new(coat.Id, Expected: temp.EtagOf(coat.Id), Name: "Fixture Other", RulesFamilies: [RulesFamilies.Srd521])));
 
         Assert.Equal("import.family-not-in-source", refused.Problems[0].Code);
+        Assert.Equal("An entry found can only be written for the rules its source covers (the 2014 rules).", refused.Problems[0].Message);
         Assert.All(refused.Problems, p => Assert.DoesNotContain("Fixture", p.Message, StringComparison.Ordinal));
         var after = Named(temp, job.Id, "Fixture Quilted Coat");
         Assert.Null(after.Edited);
