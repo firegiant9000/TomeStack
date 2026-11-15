@@ -59,7 +59,9 @@ A note never changes the character, and has no effect on the sheet.
 
 **"Report a gap: <name>" (M3 C5)** is a button on each feature (in "Features") and in each field's details. It picks that feature or field in "About" and moves focus to "What was missing or wrong?", so a note takes one click and typing. The form is at the end of the sheet's Features tab (it was on Notes until D96), which "Report a gap" opens before focusing the text. It saves nothing by itself: "Save note" still does.
 
-**"Gap notes" in the sidebar (M3 C5)** lists every character's notes (`gap.listAll`), with the character's name, open first. "Show resolved notes" adds the resolved ones. Each note has "Mark resolved" / "Reopen" and "Open <character>", which opens the sheet on its Features tab, where the notes are (D96). Deleting stays on the character's sheet, with its confirmation.
+**"Gap notes" in Help (M3 C5; a section of Help since Wave 3 Group 11, D94; it was a sidebar screen)** lists every character's notes (`gap.listAll`), with the character's name, open first. "Show resolved notes" adds the resolved ones. Each note has "Mark resolved" / "Reopen" and "Open <character>", which opens the sheet on its Features tab, where the notes are (D96). Deleting stays on the character's sheet, with its confirmation.
+
+**"Copy as issue text" (Wave 3 Group 11.4)** is a button on each note (on the sheet's Features tab and in Help). It shows a read-only, already selected box with "press Ctrl+C to copy it" (the app has no clipboard route and sends nothing) and the warning "This may include text from your books or homebrew, or names; check before posting." The text is the note's target label, the note text and "TomeStack <version>"; the app adds neither the character's name nor its id. It writes nothing.
 
 Acceptance for C5: `GapNoteTests.Notes_of_every_character_list_together_with_their_names_open_first_and_the_list_writes_nothing` and the "Report a gap" and "Gap notes of all characters" steps of the e2e test "records a gap note on a field and a feature…".
 

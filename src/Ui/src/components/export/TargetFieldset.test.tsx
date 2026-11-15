@@ -46,6 +46,33 @@ it('reports the release, and null for the first radio', async () => {
   expect(onChange).toHaveBeenLastCalledWith(null);
 });
 
+const detailsOf = (container: HTMLElement) => container.querySelector('details') as HTMLDetailsElement;
+
+it('sits behind a closed disclosure by default', () => {
+  const { container } = render(<TargetFieldset targets={targets} value={null} onChange={() => {}} />);
+  expect(detailsOf(container).open).toBe(false);
+  expect(screen.getByText('Opening this in an older TomeStack?').tagName).toBe('SUMMARY');
+  expect(detailsOf(container).contains(screen.getByRole('group', { name: 'Which version will open this file?' }))).toBe(true);
+});
+
+it('opens the disclosure when an older version is selected', () => {
+  const { container } = render(<TargetFieldset targets={targets} value="0.6.0" onChange={() => {}} />);
+  expect(detailsOf(container).open).toBe(true);
+  expect(screen.getByText('Opening this in an older TomeStack? (0.6.0)').tagName).toBe('SUMMARY');
+});
+
+it('opens the disclosure when an older version is picked, and lets the user close it', async () => {
+  const onChange = vi.fn();
+  const user = userEvent.setup();
+  const { container, rerender } = render(<TargetFieldset targets={targets} value={null} onChange={onChange} />);
+  await user.click(screen.getByRole('radio', { name: '0.7.0' }));
+  expect(onChange).toHaveBeenLastCalledWith('0.7.0');
+  rerender(<TargetFieldset targets={targets} value="0.7.0" onChange={onChange} />);
+  expect(detailsOf(container).open).toBe(true);
+  await user.click(screen.getByText('Opening this in an older TomeStack? (0.7.0)'));
+  expect(detailsOf(container).open).toBe(false);
+});
+
 const hint = 'Only the version before this one is listed. To open the file in an older TomeStack, update that TomeStack first.';
 
 it('explains that only the previous version is listed', () => {
@@ -59,8 +86,12 @@ it('renders nothing until the service has answered', () => {
 });
 
 it('says there is no older version when the list is empty', () => {
-  render(<TargetFieldset targets={{ ...targets, targets: [] }} value={null} onChange={() => {}} />);
-  expect(screen.getByText('This TomeStack has no older version to save for.')).toBeTruthy();
+  const { container } = render(<TargetFieldset targets={{ ...targets, targets: [] }} value={null} onChange={() => {}} />);
+  const only = container.firstElementChild;
+  expect(container.childElementCount).toBe(1);
+  expect(only?.tagName).toBe('P');
+  expect(only?.className).toBe('hint');
+  expect(only?.textContent).toBe('This TomeStack has no older version to save for.');
   expect(screen.queryAllByRole('radio')).toHaveLength(0);
   expect(screen.queryByRole('group')).toBeNull();
   expect(screen.queryByText(hint)).toBeNull();

@@ -1,0 +1,384 @@
+{
+  "packId": "srd-5.2.1-guides",
+  "formatVersion": 1,
+  "notice": "Creation guides (starting equipment and primary abilities) for the twelve 2024-rules classes and the four backgrounds of the System Reference Document 5.2.1 (CC-BY-4.0), pp. 28-83 of the PDF: item names, quantities, gold and ability keys only, from each class's Primary Ability and Starting Equipment rows and each background's Equipment row. Each guide is one pick (kit) whose options are the SRD's A and B (Fighter also C); a kit with an 'of your choice' item has one option per choice (a-lute, a-amulet, a-smith, a-dice); the Monk's choice offers the 17 artisan's tools and the 10 musical instruments (28 options with gold). Ids use the 52c0/52e0 block 000000600001-000000600016 (guides: the twelve classes in the order Barbarian, Bard, Cleric, Druid, Fighter, Monk, Paladin, Ranger, Rogue, Sorcerer, Warlock, Wizard, then the backgrounds Acolyte, Criminal, Sage, Soldier). Taken from SRD_CC_v5.2.1.pdf (SHA-256 8974902d109d6e63672d7c490bde9ccf052410503d9cfa768237154fbc5e3d87). See docs/licensing/srd-pack-review.md.",
+  "sources": [
+    {
+      "id": "52500000-0000-4000-8000-000000000001",
+      "title": "System Reference Document 5.2.1",
+      "publisher": "SRD 5.2.1 (CC-BY-4.0)",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "editionVersion": "5.2.1",
+      "license": "CC-BY-4.0",
+      "redistributable": true,
+      "attribution": "This work includes material from the System Reference Document 5.2.1 (\"SRD 5.2.1\") by Wizards of the Coast LLC, available at https://www.dndbeyond.com/srd. The SRD 5.2.1 is licensed under the Creative Commons Attribution 4.0 International License, available at https://creativecommons.org/licenses/by/4.0/legalcode.",
+      "modificationNotice": "Modified: TomeStack adapted this material into structured data. Selected passages are excerpted or shortened, with line breaks and hyphenation repaired, and rules are encoded as machine-readable effects.",
+      "sha256": "8974902d109d6e63672d7c490bde9ccf052410503d9cfa768237154fbc5e3d87"
+    }
+  ],
+  "revisions": [
+    {
+      "contentId": "52c00000-0000-4000-8000-000000600001",
+      "revisionId": "52e00000-0000-4000-8000-000000600001",
+      "schemaVersion": 13,
+      "kind": "creationGuide",
+      "name": "Barbarian starting guide",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": {"sourceId": "52500000-0000-4000-8000-000000000001", "page": {"start": 28, "end": 28}},
+      "status": "published",
+      "summary": "Starting equipment and key ability.",
+      "effects": [
+        {"type": "guideFor", "id": "for", "content": {"contentId": "52c00000-0000-4000-8000-000000000011"}},
+        {"type": "primaryAbilities", "id": "primary", "abilities": ["str"]},
+        { "type": "startingEquipment", "id": "kit", "picks": [
+          { "id": "kit", "label": "Starting equipment", "options": [
+            {"id": "a", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000200018"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200004"}, "quantity": 4}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530105"}}, {"coins": {"gp": 15}}]},
+            {"id": "b", "lines": [{"coins": {"gp": 75}}]} ] }
+        ] }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000600002",
+      "revisionId": "52e00000-0000-4000-8000-000000600002",
+      "schemaVersion": 13,
+      "kind": "creationGuide",
+      "name": "Bard starting guide",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": {"sourceId": "52500000-0000-4000-8000-000000000001", "page": {"start": 31, "end": 31}},
+      "status": "published",
+      "summary": "Starting equipment and key ability.",
+      "effects": [
+        {"type": "guideFor", "id": "for", "content": {"contentId": "52c00000-0000-4000-8000-000000400000"}},
+        {"type": "primaryAbilities", "id": "primary", "abilities": ["cha"]},
+        { "type": "startingEquipment", "id": "kit", "picks": [
+          { "id": "kit", "label": "Starting equipment", "options": [
+            {"id": "a-bagpipes", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000201002"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 2}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530080"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530104"}}, {"coins": {"gp": 19}}]},
+            {"id": "a-drum", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000201002"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 2}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530081"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530104"}}, {"coins": {"gp": 19}}]},
+            {"id": "a-dulcimer", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000201002"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 2}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530082"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530104"}}, {"coins": {"gp": 19}}]},
+            {"id": "a-flute", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000201002"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 2}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530083"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530104"}}, {"coins": {"gp": 19}}]},
+            {"id": "a-horn", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000201002"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 2}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530084"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530104"}}, {"coins": {"gp": 19}}]},
+            {"id": "a-lute", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000201002"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 2}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530085"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530104"}}, {"coins": {"gp": 19}}]},
+            {"id": "a-lyre", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000201002"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 2}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530086"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530104"}}, {"coins": {"gp": 19}}]},
+            {"id": "a-pan-flute", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000201002"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 2}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530087"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530104"}}, {"coins": {"gp": 19}}]},
+            {"id": "a-shawm", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000201002"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 2}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530088"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530104"}}, {"coins": {"gp": 19}}]},
+            {"id": "a-viol", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000201002"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 2}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530089"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530104"}}, {"coins": {"gp": 19}}]},
+            {"id": "b", "lines": [{"coins": {"gp": 90}}]} ] }
+        ] }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000600003",
+      "revisionId": "52e00000-0000-4000-8000-000000600003",
+      "schemaVersion": 13,
+      "kind": "creationGuide",
+      "name": "Cleric starting guide",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": {"sourceId": "52500000-0000-4000-8000-000000000001", "page": {"start": 36, "end": 36}},
+      "status": "published",
+      "summary": "Starting equipment and key ability.",
+      "effects": [
+        {"type": "guideFor", "id": "for", "content": {"contentId": "52c00000-0000-4000-8000-000000401000"}},
+        {"type": "primaryAbilities", "id": "primary", "abilities": ["wis"]},
+        { "type": "startingEquipment", "id": "kit", "picks": [
+          { "id": "kit", "label": "Starting equipment", "options": [
+            {"id": "a-amulet", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000201005"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000201013"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200007"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530014"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530106"}}, {"coins": {"gp": 7}}]},
+            {"id": "a-emblem", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000201005"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000201013"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200007"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530015"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530106"}}, {"coins": {"gp": 7}}]},
+            {"id": "a-reliquary", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000201005"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000201013"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200007"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530016"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530106"}}, {"coins": {"gp": 7}}]},
+            {"id": "b", "lines": [{"coins": {"gp": 110}}]} ] }
+        ] }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000600004",
+      "revisionId": "52e00000-0000-4000-8000-000000600004",
+      "schemaVersion": 13,
+      "kind": "creationGuide",
+      "name": "Druid starting guide",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": {"sourceId": "52500000-0000-4000-8000-000000000001", "page": {"start": 41, "end": 41}},
+      "status": "published",
+      "summary": "Starting equipment and key ability.",
+      "effects": [
+        {"type": "guideFor", "id": "for", "content": {"contentId": "52c00000-0000-4000-8000-000000402000"}},
+        {"type": "primaryAbilities", "id": "primary", "abilities": ["wis"]},
+        { "type": "startingEquipment", "id": "kit", "picks": [
+          { "id": "kit", "label": "Starting equipment", "options": [
+            {"id": "a", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000201002"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000201013"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200009"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200008"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530105"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530072"}}, {"coins": {"gp": 9}}]},
+            {"id": "b", "lines": [{"coins": {"gp": 50}}]} ] }
+        ] }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000600005",
+      "revisionId": "52e00000-0000-4000-8000-000000600005",
+      "schemaVersion": 13,
+      "kind": "creationGuide",
+      "name": "Fighter starting guide",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": {"sourceId": "52500000-0000-4000-8000-000000000001", "page": {"start": 47, "end": 47}},
+      "status": "published",
+      "summary": "Starting equipment and key abilities.",
+      "effects": [
+        {"type": "guideFor", "id": "for", "content": {"contentId": "52c00000-0000-4000-8000-000000408000"}},
+        {"type": "primaryAbilities", "id": "primary", "abilities": ["str", "dex"]},
+        { "type": "startingEquipment", "id": "kit", "picks": [
+          { "id": "kit", "label": "Starting equipment", "options": [
+            {"id": "a", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000201010"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200019"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200016"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200005"}, "quantity": 8}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530103"}}, {"coins": {"gp": 4}}]},
+            {"id": "b", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000201003"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200027"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200028"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200036"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530001"}, "quantity": 20}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530046"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530103"}}, {"coins": {"gp": 11}}]},
+            {"id": "c", "lines": [{"coins": {"gp": 155}}]} ] }
+        ] }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000600006",
+      "revisionId": "52e00000-0000-4000-8000-000000600006",
+      "schemaVersion": 13,
+      "kind": "creationGuide",
+      "name": "Monk starting guide",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": {"sourceId": "52500000-0000-4000-8000-000000000001", "page": {"start": 49, "end": 49}},
+      "status": "published",
+      "summary": "Starting equipment and key abilities.",
+      "effects": [
+        {"type": "guideFor", "id": "for", "content": {"contentId": "52c00000-0000-4000-8000-000000420001"}},
+        {"type": "primaryAbilities", "id": "primary", "abilities": ["dex", "wis"]},
+        { "type": "startingEquipment", "id": "kit", "picks": [
+          { "id": "kit", "label": "Starting equipment", "options": [
+            {"id": "a-alchemist", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000200010"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 5}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530053"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530105"}}, {"coins": {"gp": 11}}]},
+            {"id": "a-brewer", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000200010"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 5}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530054"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530105"}}, {"coins": {"gp": 11}}]},
+            {"id": "a-calligrapher", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000200010"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 5}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530055"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530105"}}, {"coins": {"gp": 11}}]},
+            {"id": "a-carpenter", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000200010"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 5}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530056"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530105"}}, {"coins": {"gp": 11}}]},
+            {"id": "a-cartographer", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000200010"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 5}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530057"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530105"}}, {"coins": {"gp": 11}}]},
+            {"id": "a-cobbler", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000200010"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 5}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530058"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530105"}}, {"coins": {"gp": 11}}]},
+            {"id": "a-cook", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000200010"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 5}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530059"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530105"}}, {"coins": {"gp": 11}}]},
+            {"id": "a-glassblower", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000200010"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 5}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530060"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530105"}}, {"coins": {"gp": 11}}]},
+            {"id": "a-jeweler", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000200010"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 5}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530061"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530105"}}, {"coins": {"gp": 11}}]},
+            {"id": "a-leatherworker", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000200010"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 5}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530062"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530105"}}, {"coins": {"gp": 11}}]},
+            {"id": "a-mason", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000200010"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 5}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530063"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530105"}}, {"coins": {"gp": 11}}]},
+            {"id": "a-painter", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000200010"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 5}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530064"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530105"}}, {"coins": {"gp": 11}}]},
+            {"id": "a-potter", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000200010"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 5}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530065"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530105"}}, {"coins": {"gp": 11}}]},
+            {"id": "a-smith", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000200010"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 5}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530066"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530105"}}, {"coins": {"gp": 11}}]},
+            {"id": "a-tinker", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000200010"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 5}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530067"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530105"}}, {"coins": {"gp": 11}}]},
+            {"id": "a-weaver", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000200010"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 5}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530068"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530105"}}, {"coins": {"gp": 11}}]},
+            {"id": "a-woodcarver", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000200010"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 5}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530069"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530105"}}, {"coins": {"gp": 11}}]},
+            {"id": "a-bagpipes", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000200010"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 5}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530080"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530105"}}, {"coins": {"gp": 11}}]},
+            {"id": "a-drum", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000200010"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 5}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530081"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530105"}}, {"coins": {"gp": 11}}]},
+            {"id": "a-dulcimer", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000200010"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 5}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530082"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530105"}}, {"coins": {"gp": 11}}]},
+            {"id": "a-flute", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000200010"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 5}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530083"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530105"}}, {"coins": {"gp": 11}}]},
+            {"id": "a-horn", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000200010"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 5}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530084"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530105"}}, {"coins": {"gp": 11}}]},
+            {"id": "a-lute", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000200010"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 5}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530085"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530105"}}, {"coins": {"gp": 11}}]},
+            {"id": "a-lyre", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000200010"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 5}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530086"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530105"}}, {"coins": {"gp": 11}}]},
+            {"id": "a-pan-flute", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000200010"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 5}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530087"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530105"}}, {"coins": {"gp": 11}}]},
+            {"id": "a-shawm", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000200010"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 5}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530088"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530105"}}, {"coins": {"gp": 11}}]},
+            {"id": "a-viol", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000200010"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 5}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530089"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530105"}}, {"coins": {"gp": 11}}]},
+            {"id": "b", "lines": [{"coins": {"gp": 50}}]} ] }
+        ] }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000600007",
+      "revisionId": "52e00000-0000-4000-8000-000000600007",
+      "schemaVersion": 13,
+      "kind": "creationGuide",
+      "name": "Paladin starting guide",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": {"sourceId": "52500000-0000-4000-8000-000000000001", "page": {"start": 53, "end": 53}},
+      "status": "published",
+      "summary": "Starting equipment and key abilities.",
+      "effects": [
+        {"type": "guideFor", "id": "for", "content": {"contentId": "52c00000-0000-4000-8000-000000403000"}},
+        {"type": "primaryAbilities", "id": "primary", "abilities": ["str", "cha"]},
+        { "type": "startingEquipment", "id": "kit", "picks": [
+          { "id": "kit", "label": "Starting equipment", "options": [
+            {"id": "a-amulet", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000201010"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000201013"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200022"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200005"}, "quantity": 6}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530014"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530106"}}, {"coins": {"gp": 9}}]},
+            {"id": "a-emblem", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000201010"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000201013"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200022"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200005"}, "quantity": 6}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530015"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530106"}}, {"coins": {"gp": 9}}]},
+            {"id": "a-reliquary", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000201010"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000201013"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200022"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200005"}, "quantity": 6}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530016"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530106"}}, {"coins": {"gp": 9}}]},
+            {"id": "b", "lines": [{"coins": {"gp": 150}}]} ] }
+        ] }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000600008",
+      "revisionId": "52e00000-0000-4000-8000-000000600008",
+      "schemaVersion": 13,
+      "kind": "creationGuide",
+      "name": "Ranger starting guide",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": {"sourceId": "52500000-0000-4000-8000-000000000001", "page": {"start": 57, "end": 57}},
+      "status": "published",
+      "summary": "Starting equipment and key abilities.",
+      "effects": [
+        {"type": "guideFor", "id": "for", "content": {"contentId": "52c00000-0000-4000-8000-000000404000"}},
+        {"type": "primaryAbilities", "id": "primary", "abilities": ["dex", "wis"]},
+        { "type": "startingEquipment", "id": "kit", "picks": [
+          { "id": "kit", "label": "Starting equipment", "options": [
+            {"id": "a", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000201003"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200027"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200028"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200036"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530001"}, "quantity": 20}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530046"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530011"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530105"}}, {"coins": {"gp": 7}}]},
+            {"id": "b", "lines": [{"coins": {"gp": 150}}]} ] }
+        ] }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000600009",
+      "revisionId": "52e00000-0000-4000-8000-000000600009",
+      "schemaVersion": 13,
+      "kind": "creationGuide",
+      "name": "Rogue starting guide",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": {"sourceId": "52500000-0000-4000-8000-000000000001", "page": {"start": 61, "end": 61}},
+      "status": "published",
+      "summary": "Starting equipment and key ability.",
+      "effects": [
+        {"type": "guideFor", "id": "for", "content": {"contentId": "52c00000-0000-4000-8000-000000410001"}},
+        {"type": "primaryAbilities", "id": "primary", "abilities": ["dex"]},
+        { "type": "startingEquipment", "id": "kit", "picks": [
+          { "id": "kit", "label": "Starting equipment", "options": [
+            {"id": "a", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000201002"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 2}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200028"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200013"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530001"}, "quantity": 20}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530046"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530075"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530101"}}, {"coins": {"gp": 8}}]},
+            {"id": "b", "lines": [{"coins": {"gp": 100}}]} ] }
+        ] }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000600010",
+      "revisionId": "52e00000-0000-4000-8000-000000600010",
+      "schemaVersion": 13,
+      "kind": "creationGuide",
+      "name": "Sorcerer starting guide",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": {"sourceId": "52500000-0000-4000-8000-000000000001", "page": {"start": 64, "end": 64}},
+      "status": "published",
+      "summary": "Starting equipment and key ability.",
+      "effects": [
+        {"type": "guideFor", "id": "for", "content": {"contentId": "52c00000-0000-4000-8000-000000405000"}},
+        {"type": "primaryAbilities", "id": "primary", "abilities": ["cha"]},
+        { "type": "startingEquipment", "id": "kit", "picks": [
+          { "id": "kit", "label": "Starting equipment", "options": [
+            {"id": "a", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000200010"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 2}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530006"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530103"}}, {"coins": {"gp": 28}}]},
+            {"id": "b", "lines": [{"coins": {"gp": 50}}]} ] }
+        ] }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000600011",
+      "revisionId": "52e00000-0000-4000-8000-000000600011",
+      "schemaVersion": 13,
+      "kind": "creationGuide",
+      "name": "Warlock starting guide",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": {"sourceId": "52500000-0000-4000-8000-000000000001", "page": {"start": 70, "end": 70}},
+      "status": "published",
+      "summary": "Starting equipment and key ability.",
+      "effects": [
+        {"type": "guideFor", "id": "for", "content": {"contentId": "52c00000-0000-4000-8000-000000406000"}},
+        {"type": "primaryAbilities", "id": "primary", "abilities": ["cha"]},
+        { "type": "startingEquipment", "id": "kit", "picks": [
+          { "id": "kit", "label": "Starting equipment", "options": [
+            {"id": "a", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000201002"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200009"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 2}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530007"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530024"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530107"}}, {"coins": {"gp": 15}}]},
+            {"id": "b", "lines": [{"coins": {"gp": 100}}]} ] }
+        ] }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000600012",
+      "revisionId": "52e00000-0000-4000-8000-000000600012",
+      "schemaVersion": 13,
+      "kind": "creationGuide",
+      "name": "Wizard starting guide",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": {"sourceId": "52500000-0000-4000-8000-000000000001", "page": {"start": 77, "end": 77}},
+      "status": "published",
+      "summary": "Starting equipment and key ability.",
+      "effects": [
+        {"type": "guideFor", "id": "for", "content": {"contentId": "52c00000-0000-4000-8000-000000407000"}},
+        {"type": "primaryAbilities", "id": "primary", "abilities": ["int"]},
+        { "type": "startingEquipment", "id": "kit", "picks": [
+          { "id": "kit", "label": "Starting equipment", "options": [
+            {"id": "a", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 2}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200008"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530048"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530018"}}, {"pack": {"contentId": "52c00000-0000-4000-8000-000000530107"}}, {"coins": {"gp": 5}}]},
+            {"id": "b", "lines": [{"coins": {"gp": 55}}]} ] }
+        ] }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000600013",
+      "revisionId": "52e00000-0000-4000-8000-000000600013",
+      "schemaVersion": 13,
+      "kind": "creationGuide",
+      "name": "Acolyte starting guide",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": {"sourceId": "52500000-0000-4000-8000-000000000001", "page": {"start": 83, "end": 83}},
+      "status": "published",
+      "summary": "Starting equipment.",
+      "effects": [
+        {"type": "guideFor", "id": "for", "content": {"contentId": "52c00000-0000-4000-8000-000000510100"}},
+        { "type": "startingEquipment", "id": "kit", "picks": [
+          { "id": "kit", "label": "Starting equipment", "options": [
+            {"id": "a-amulet", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000530055"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530024"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530014"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530043"}, "quantity": 10}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530048"}}, {"coins": {"gp": 8}}]},
+            {"id": "a-emblem", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000530055"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530024"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530015"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530043"}, "quantity": 10}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530048"}}, {"coins": {"gp": 8}}]},
+            {"id": "a-reliquary", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000530055"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530024"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530016"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530043"}, "quantity": 10}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530048"}}, {"coins": {"gp": 8}}]},
+            {"id": "b", "lines": [{"coins": {"gp": 50}}]} ] }
+        ] }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000600014",
+      "revisionId": "52e00000-0000-4000-8000-000000600014",
+      "schemaVersion": 13,
+      "kind": "creationGuide",
+      "name": "Criminal starting guide",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": {"sourceId": "52500000-0000-4000-8000-000000000001", "page": {"start": 83, "end": 83}},
+      "status": "published",
+      "summary": "Starting equipment.",
+      "effects": [
+        {"type": "guideFor", "id": "for", "content": {"contentId": "52c00000-0000-4000-8000-000000511100"}},
+        { "type": "startingEquipment", "id": "kit", "picks": [
+          { "id": "kit", "label": "Starting equipment", "options": [
+            {"id": "a", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000200002"}, "quantity": 2}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530075"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530032"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530045"}, "quantity": 2}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530030"}}, {"coins": {"gp": 16}}]},
+            {"id": "b", "lines": [{"coins": {"gp": 50}}]} ] }
+        ] }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000600015",
+      "revisionId": "52e00000-0000-4000-8000-000000600015",
+      "schemaVersion": 13,
+      "kind": "creationGuide",
+      "name": "Sage starting guide",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": {"sourceId": "52500000-0000-4000-8000-000000000001", "page": {"start": 83, "end": 83}},
+      "status": "published",
+      "summary": "Starting equipment.",
+      "effects": [
+        {"type": "guideFor", "id": "for", "content": {"contentId": "52c00000-0000-4000-8000-000000512100"}},
+        { "type": "startingEquipment", "id": "kit", "picks": [
+          { "id": "kit", "label": "Starting equipment", "options": [
+            {"id": "a", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000200008"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530055"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530024"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530043"}, "quantity": 8}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530048"}}, {"coins": {"gp": 8}}]},
+            {"id": "b", "lines": [{"coins": {"gp": 50}}]} ] }
+        ] }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000600016",
+      "revisionId": "52e00000-0000-4000-8000-000000600016",
+      "schemaVersion": 13,
+      "kind": "creationGuide",
+      "name": "Soldier starting guide",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": {"sourceId": "52500000-0000-4000-8000-000000000001", "page": {"start": 83, "end": 83}},
+      "status": "published",
+      "summary": "Starting equipment.",
+      "effects": [
+        {"type": "guideFor", "id": "for", "content": {"contentId": "52c00000-0000-4000-8000-000000000002"}},
+        { "type": "startingEquipment", "id": "kit", "picks": [
+          { "id": "kit", "label": "Starting equipment", "options": [
+            {"id": "a-dice", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000200010"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200013"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530001"}, "quantity": 20}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530076"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530033"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530046"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530030"}}, {"coins": {"gp": 14}}]},
+            {"id": "a-dragonchess", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000200010"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200013"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530001"}, "quantity": 20}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530077"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530033"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530046"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530030"}}, {"coins": {"gp": 14}}]},
+            {"id": "a-playing-cards", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000200010"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200013"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530001"}, "quantity": 20}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530078"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530033"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530046"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530030"}}, {"coins": {"gp": 14}}]},
+            {"id": "a-three-dragon-ante", "lines": [{"item": {"contentId": "52c00000-0000-4000-8000-000000200010"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000200013"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530001"}, "quantity": 20}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530079"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530033"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530046"}}, {"item": {"contentId": "52c00000-0000-4000-8000-000000530030"}}, {"coins": {"gp": 14}}]},
+            {"id": "b", "lines": [{"coins": {"gp": 50}}]} ] }
+        ] }
+      ]
+    }
+  ]
+}

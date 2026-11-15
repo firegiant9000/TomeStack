@@ -102,6 +102,13 @@ async function openMore(user: ReturnType<typeof userEvent.setup>, sheet: HTMLEle
   await user.click(within(sheet).getByRole('button', { name: item }));
 }
 
+/** Opens the "Opening this in an older TomeStack?" disclosure inside `scope`, then picks the radio for `release` (e.g. "0.7.0"). */
+async function chooseOlderTarget(user: ReturnType<typeof userEvent.setup>, scope: HTMLElement, release: string): Promise<void> {
+  const summary = within(scope).getByText(/^Opening this in an older TomeStack\?/);
+  if (!summary.closest('details')!.open) await user.click(summary);
+  await user.click(within(scope).getByRole('radio', { name: release }));
+}
+
 /** One value of the sheet's status bar: the `.status-value` beside the `.status-label` named `term` (button or plain item). */
 function summaryValue(sheet: HTMLElement, term: string): string {
   const summary = within(sheet).getByRole('region', { name: 'Status' });
@@ -2428,8 +2435,8 @@ it('records a gap note on a field and a feature, resolves one, and deletes one a
   await openTab(user, sheet, 'Play');
 
   // M3 C5: the list across characters shows the open note with its character; resolved ones only on request.
-  await user.click(screen.getByRole('button', { name: 'Gap notes' }));
-  const all = await screen.findByRole('region', { name: 'Gap notes' }); // the screen's h1 is just "Gap notes" now; its list keeps "of all characters"
+  await user.click(within(screen.getByRole('navigation', { name: 'Main' })).getByRole('button', { name: 'Help' }));
+  const all = await screen.findByRole('region', { name: 'Gap notes' }); // a section of the Help screen; its list keeps "of all characters"
   const allList = await within(all).findByRole('list', { name: 'Gap notes of all characters' });
   const mine = () => within(allList).getAllByRole('listitem').filter((li: HTMLElement) => li.textContent!.startsWith('E2E Gaps'));
   expect(mine().map((li: HTMLElement) => li.textContent)).toEqual([expect.stringContaining('Speed bonus should apply while unarmored only.')]);
@@ -2437,7 +2444,7 @@ it('records a gap note on a field and a feature, resolves one, and deletes one a
   await waitFor(() => expect(mine()).toHaveLength(2));
   await user.click(within(all).getAllByRole('button', { name: 'Open E2E Gaps' })[0]!);
   await screen.findByRole('article', { name: 'E2E Gaps' });
-  // "Open <character>" from the Gap notes screen opens the sheet on Features, where the notes are.
+  // "Open <character>" from the Help screen's Gap notes section opens the sheet on Features, where the notes are.
   expect(within(screen.getByRole('article', { name: 'E2E Gaps' })).getByRole('tab', { name: 'Features' }).getAttribute('aria-selected')).toBe('true');
   // The reopened sheet loads its notes again; wait for them before using them.
   await within(gaps()).findByText('Speed bonus should apply while unarmored only.');
@@ -2455,6 +2462,44 @@ it('records a gap note on a field and a feature, resolves one, and deletes one a
   expect(summaryValue(screen.getByRole('article', { name: 'E2E Gaps' }), 'Armor Class')).toBe(armorClass);
   await openTab(user, screen.getByRole('article', { name: 'E2E Gaps' }), 'Skills and saves');
   expect(screen.getByRole('heading', { name: /^Armor Class:/ }).textContent).toBe(armorClassHeading);
+});
+
+it('opens Help from the sidebar with its h1 focused, lists a sheet gap note there, and Open <character> lands on Features', async () => {
+  const user = userEvent.setup();
+  const created = await client.createCharacter({ name: 'E2E Help Gaps', rulesFamily: 'srd-5.1', baseAbilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, pins: [] });
+  // A field every sheet has (the service refuses a field the sheet does not show).
+  await client.addGapNote(created.character.id, { kind: 'field', fieldId: 'initiative' }, 'Help screen note from the sheet.');
+  render(<App />);
+  await user.click(within(await screen.findByRole('navigation', { name: 'Main' })).getByRole('button', { name: 'Help' }));
+  const h1 = await screen.findByRole('heading', { level: 1, name: 'Help' });
+  await waitFor(() => expect(document.activeElement).toBe(h1));
+  const section = screen.getByRole('region', { name: 'Gap notes' });
+  expect(await within(section).findByText('Help screen note from the sheet.')).toBeTruthy();
+  await user.click(within(section).getAllByRole('button', { name: 'Open E2E Help Gaps' })[0]!);
+  const sheet = await screen.findByRole('article', { name: 'E2E Help Gaps' });
+  expect(within(sheet).getByRole('tab', { name: 'Features' }).getAttribute('aria-selected')).toBe('true');
+});
+
+it('keeps the older-version choice behind a disclosure on the sheet export, and picks a release once opened', async () => {
+  const user = userEvent.setup();
+  await client.createCharacter({ name: 'E2E Older Target', rulesFamily: 'srd-5.1', baseAbilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, pins: [] });
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: /^E2E Older Target/ }));
+  const sheet = await screen.findByRole('article', { name: 'E2E Older Target' });
+  await openMore(user, sheet, 'Export…');
+  const panel = within(sheet).getByRole('region', { name: 'Export' });
+  // D103: only the previous minor is offered, so a build with no such release (the DevHost of an unreleased minor
+  // may have none) shows a plain hint and no choice at all.
+  await waitFor(() => expect(within(panel).queryByText(/^This TomeStack has no older version to save for\.$|^Opening this in an older TomeStack\?/)).not.toBeNull());
+  if (within(panel).queryByText('This TomeStack has no older version to save for.')) {
+    expect(panel.querySelector('details')).toBeNull();
+    expect(within(panel).queryByRole('group', { name: 'Which version will open this file?' })).toBeNull();
+    return;
+  }
+  const release = within(panel).getAllByText(/^\d+\.\d+\.\d+$/, { selector: 'label' })[0]!.textContent!;
+  expect(panel.querySelector('details')!.open).toBe(false);
+  await chooseOlderTarget(user, panel, release);
+  expect((within(panel).getByRole('radio', { name: release }) as HTMLInputElement).checked).toBe(true);
 });
 
 it('prints a sheet with its license notices, and gap notes only when ticked', async () => {

@@ -7,6 +7,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { client } from './api/client';
 import type { Character, CharacterSummary, CharacterView, ChoiceStatus } from './api/types';
+import { GuideText } from './components/help/GuideText';
 import { diffLevelUp, writeChecklist } from './levelUpChecklist';
 import { noticeText } from './replaceable';
 import { expectContinuousOutline } from './test/outline';
@@ -21,6 +22,12 @@ vi.mock('./levelUpChecklist', async (importOriginal) => {
 vi.mock('./replaceable', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./replaceable')>();
   return { ...actual, noticeText: vi.fn(actual.noticeText) };
+});
+
+// The real component, except that it is a spy (it throws once in the screen-boundary test).
+vi.mock('./components/help/GuideText', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./components/help/GuideText')>();
+  return { ...actual, GuideText: vi.fn(actual.GuideText) };
 });
 
 vi.mock('./api/client', () => ({
@@ -92,9 +99,43 @@ beforeEach(() => {
   vi.mocked(client.listExtensions).mockResolvedValue([]); // the Settings screen lists installed extensions
   vi.mocked(client.snapshots).mockResolvedValue({ items: [], hasMore: false });
 });
-afterEach(() => {
+afterEach(async () => {
   cleanup();
   localStorage.clear();
+  // A failed fallback test must not leave the throwing GuideText for the next test.
+  const { GuideText: realGuideText } = await vi.importActual<typeof import('./components/help/GuideText')>('./components/help/GuideText');
+  vi.mocked(GuideText).mockImplementation(realGuideText);
+});
+
+it('the sidebar Help item opens the Help screen with focus on its h1, and there is no separate Gap notes screen', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  const nav = await screen.findByRole('navigation', { name: 'Main' });
+  await user.click(within(nav).getByRole('button', { name: 'Help' }));
+  const h1 = await screen.findByRole('heading', { level: 1, name: 'Help' });
+  expect(document.activeElement).toBe(h1);
+  expect(screen.getByRole('heading', { level: 2, name: 'Gap notes' })).toBeTruthy();
+});
+
+it('a screen that throws shows the boundary fallback, and "Back to your characters" goes home', async () => {
+  const user = userEvent.setup();
+  const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
+  const { GuideText: realGuideText } = await vi.importActual<typeof import('./components/help/GuideText')>('./components/help/GuideText');
+  vi.mocked(GuideText).mockImplementation(() => {
+    throw new Error('fixture failure'); // thrown while the Help screen renders (React retries once, so not "once"): the boundary catches it
+  });
+  try {
+    render(<App />);
+    const nav = await screen.findByRole('navigation', { name: 'Main' });
+    await user.click(within(nav).getByRole('button', { name: 'Help' }));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Something went wrong on this screen' })).toBeTruthy();
+    expect(within(nav).getByRole('button', { name: 'Settings' })).toBeTruthy(); // the navigation stays usable
+    vi.mocked(GuideText).mockImplementation(realGuideText);
+    await user.click(screen.getByRole('button', { name: 'Back to your characters' }));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Your characters' })).toBeTruthy();
+  } finally {
+    quiet.mockRestore();
+  }
 });
 
 it('shows the rules family id before app.info arrives, then the label the service sent', async () => {
@@ -158,12 +199,16 @@ it('Every_screen_has_one_h1_matching_the_title', async () => {
   await within(nav).findByRole('button', { name: /Fixture Avery/ });
   const main = () => document.querySelector('.app') as HTMLElement;
   const expectOneH1 = async (place: string) => {
-    await waitFor(() => expect(document.title).toBe(`${place} – TomeStack`));
-    await waitFor(() => {
-      const h1s = within(main()).getAllByRole('heading', { level: 1, hidden: true });
-      expect(h1s.map((h) => h.textContent)).toEqual([place]);
-      expectContinuousOutline(main());
-    });
+    // Lazy screens (Homebrew, ...) show "Loading…" until their chunk arrives, which can take longer than 1 s under load.
+    await waitFor(() => expect(document.title).toBe(`${place} – TomeStack`), { timeout: 5000 });
+    await waitFor(
+      () => {
+        const h1s = within(main()).getAllByRole('heading', { level: 1, hidden: true });
+        expect(h1s.map((h) => h.textContent)).toEqual([place]);
+        expectContinuousOutline(main());
+      },
+      { timeout: 5000 },
+    );
   };
   const sidebar = (name: string | RegExp) => user.click(within(nav).getByRole('button', { name }));
 
@@ -173,7 +218,7 @@ it('Every_screen_has_one_h1_matching_the_title', async () => {
     ['Homebrew', 'Homebrew'],
     ['Campaigns', 'Campaigns'],
     ['Backups', 'Backups'],
-    ['Gap notes', 'Gap notes'],
+    ['Help', 'Help'],
     ['Settings', 'Settings'],
     ['All characters', 'Your characters'],
   ] as const) {
@@ -579,7 +624,8 @@ it('the sidebar has an add button, then Characters, Library and App as labelled 
   const names = (list: HTMLElement) => within(list).getAllByRole('button').map((b) => b.textContent?.replace(/\s+/g, ' ').trim());
   expect(names(lists[0]!)[0]).toBe('All characters');
   expect(names(lists[1]!)).toEqual(['Books and PDFs', 'Homebrew', 'Campaigns']);
-  expect(names(lists[2]!)).toEqual(['Backups', 'Gap notes', 'Settings']);
+  expect(names(lists[2]!)).toEqual(['Backups', 'Help', 'Settings']);
+  expect(within(nav).queryByRole('button', { name: 'Gap notes' })).toBeNull();
   const buttons = within(nav).getAllByRole('button');
   expect(buttons[0]!.textContent).toBe('+ Add a character');
   for (const gone of ['Extensions', 'New character', /^Import package/, /^From a TomeStack file/]) expect(within(nav).queryByRole('button', { name: gone })).toBeNull();

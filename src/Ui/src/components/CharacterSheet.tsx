@@ -343,7 +343,7 @@ interface Props {
   onMakeChoices: () => void;
   /** After the character was archived or unarchived (SPEC C-08). */
   onArchiveChanged: () => Promise<void> | void;
-  /** The tab to open on (a deep link, for example from the Gap notes screen); Play when absent (ADR-014). */
+  /** The tab to open on (a deep link, for example from Help's Gap notes section); Play when absent (ADR-014). */
   initialTab?: SheetTabId;
   /** D74 R19: true only right after a level-up save; the "What changed" heading takes focus instead of the sheet heading. */
   focusChecklist?: boolean;
