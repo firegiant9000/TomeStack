@@ -2990,6 +2990,8 @@ describe('sample note', () => {
     vi.mocked(client.deleteSample).mockResolvedValue({ deleted: true });
     localStorage.setItem('tomestack.sheetTab.fixture-2', 'stats');
     localStorage.setItem('tomestack.sampleNote.fixture-2', 'stale'); // any leftover value; a dismissed note would hide the button
+    localStorage.setItem('tomestack.levelUpChecklist.fixture-2', '{}');
+    localStorage.setItem('tomestack.quickbar.fixture-2', '[{"kind":"custom","attackId":"a"}]');
     const onRemoved = vi.fn();
     renderSample({ onRemoved });
     await user.click(screen.getByRole('button', { name: 'Remove sample' }));
@@ -2998,6 +3000,8 @@ describe('sample note', () => {
     expect(client.deleteSample).toHaveBeenCalledWith('fixture-2');
     expect(localStorage.getItem('tomestack.sheetTab.fixture-2')).toBeNull();
     expect(localStorage.getItem('tomestack.sampleNote.fixture-2')).toBeNull();
+    expect(localStorage.getItem('tomestack.levelUpChecklist.fixture-2')).toBeNull();
+    expect(localStorage.getItem('tomestack.quickbar.fixture-2')).toBeNull();
   });
 
   it('a sample with snapshots shows the service message and Archive instead, which archives', async () => {

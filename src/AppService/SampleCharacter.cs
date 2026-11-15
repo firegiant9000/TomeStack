@@ -89,7 +89,7 @@ public sealed partial class TomeStackApp
         }
         catch (SampleHasSnapshotsException)
         {
-            throw new AppValidationException([new("character.sample-has-snapshots", "This sample has snapshots, so it can only be archived")]);
+            throw new AppValidationException([new("character.sample-has-snapshots", "This sample has snapshots, so it can only be archived.")]);
         }
     }
 

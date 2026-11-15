@@ -63,6 +63,7 @@ export function App() {
 
 function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (info: AppInfo) => void }) {
   const [characters, setCharacters] = useState<CharacterSummary[]>([]);
+  const [charactersLoaded, setCharactersLoaded] = useState(false);
   const [screen, setScreen] = useState<Screen>({ kind: 'home', focus: false });
   const [message, setMessage] = useState<{ tone: 'error' | 'status'; text: string }>();
   const fileInput = useRef<HTMLInputElement>(null);
@@ -112,7 +113,13 @@ function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (in
 
   useEffect(() => {
     applyPreferences(); // ADR-015 §4: every preference is an html[data-*] attribute the CSS keys on
-    Promise.all([client.info().then(setInfo), client.listCharacters().then(setCharacters)]).catch(onError);
+    Promise.all([
+      client.info().then(setInfo),
+      client.listCharacters().then((list) => {
+        setCharacters(list);
+        setCharactersLoaded(true);
+      }),
+    ]).catch(onError);
   }, [onError, setInfo]);
 
   // Only the latest open applies: two quick opens can be answered out of order.
@@ -300,6 +307,7 @@ function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (in
           {screen.kind === 'home' && (
             <HomePanel
               characters={characters}
+              loaded={charactersLoaded}
               onOpen={(id) => void open(id)}
               onNew={startCreate}
               canCreate={!!info}

@@ -14,6 +14,8 @@ interface Props {
   onTrySample?: () => void;
   /** First run: "Bring in a character" opens the chooser on its import choices. */
   onBringIn?: () => void;
+  /** False until the first character list has loaded: an empty list then is not yet "no characters", so no welcome card. */
+  loaded?: boolean;
 }
 
 const changed = (iso: string) => new Date(iso).toLocaleDateString();
@@ -23,7 +25,7 @@ const changed = (iso: string) => new Date(iso).toLocaleDateString();
  * with an "Open {name}" button each: a name distinct from the sidebar's "{name} {family}" so the e2e lookups stay unique.
  * Archived characters stay in the sidebar's "Archived" list only (SPEC C-08).
  */
-export function HomePanel({ characters, onOpen, onNew, canCreate, focusOnMount = true, onTrySample, onBringIn }: Props) {
+export function HomePanel({ characters, onOpen, onNew, canCreate, focusOnMount = true, onTrySample, onBringIn, loaded = true }: Props) {
   const rulesLabel = useRulesLabel();
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
@@ -35,7 +37,7 @@ export function HomePanel({ characters, onOpen, onNew, canCreate, focusOnMount =
       <h1 id="home-heading" tabIndex={-1} ref={heading}>
         Your characters
       </h1>
-      {characters.length === 0 ? (
+      {characters.length === 0 && !loaded ? null : characters.length === 0 ? (
         <section className="welcome-card" aria-labelledby="welcome-heading">
           <h2 id="welcome-heading">Welcome to TomeStack</h2>
           <p>TomeStack keeps your characters on this computer and shows how every number is worked out.</p>

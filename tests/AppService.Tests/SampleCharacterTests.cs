@@ -142,7 +142,7 @@ public class SampleCharacterTests
         var error = Assert.Throws<AppValidationException>(() => temp.App.DeleteSample(new(sample.Id, true)));
 
         Assert.Equal("character.sample-has-snapshots", error.Problems[0].Code);
-        Assert.Equal("This sample has snapshots, so it can only be archived", error.Problems[0].Message);
+        Assert.Equal("This sample has snapshots, so it can only be archived.", error.Problems[0].Message);
         Assert.NotNull(store.FindCharacter(sample.Id));
     }
 

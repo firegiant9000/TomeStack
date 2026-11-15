@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { client } from '../api/client';
 import { TomeStackError } from '../api/transport';
+import { dismissChecklist } from '../levelUpChecklist';
+import { writePins } from '../quickbar';
 
 interface Props {
   characterId: string;
@@ -79,6 +81,8 @@ export function SampleNote({ characterId, name, onError, onStatus, onRemoved, on
       } catch {
         // storage unavailable: nothing to clear
       }
+      dismissChecklist(characterId);
+      writePins(characterId, []); // an empty list removes the key
       await onRemoved();
     } catch (error) {
       if (error instanceof TomeStackError && error.code === 'character.sample-has-snapshots') {

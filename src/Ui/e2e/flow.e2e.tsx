@@ -9,6 +9,7 @@ import { afterEach, expect, inject, it, vi } from 'vitest';
 import { readZipEntry, zip } from './zip';
 import { App } from '../src/App';
 import { client } from '../src/api/client';
+import { TomeStackError } from '../src/api/transport';
 import { downloadBase64 } from '../src/files';
 import { fromTemplate, templates } from '../src/templates';
 
@@ -3693,7 +3694,18 @@ it('tries the sample from the chooser, plays it and removes it (D95)', async () 
   const user = userEvent.setup();
   // The DevHost is shared, so Home is not empty here (the welcome card is covered by HomePanel's tests): the sample is reached
   // through the chooser, which offers it while no sample exists. A leftover sample from a failed run is removed first.
-  for (const c of await client.listCharacters()) if (c.origin === 'sample') await client.deleteSample(c.id);
+  for (const c of await client.listCharacters()) {
+    if (c.origin !== 'sample') continue;
+    try {
+      await client.deleteSample(c.id);
+    } catch (error) {
+      // Archiving it would hide "Try the sample" in the chooser, so the test cannot go on either way.
+      if (error instanceof TomeStackError && error.code === 'character.sample-has-snapshots') {
+        throw new Error('A leftover sample with snapshots is in the DevHost data; remove it by hand.', { cause: error });
+      }
+      throw error;
+    }
+  }
 
   render(<App />);
   await user.click(await screen.findByRole('button', { name: '+ Add a character' }));

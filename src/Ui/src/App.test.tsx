@@ -768,6 +768,16 @@ it('on a narrow window the sidebar is hidden again on the sheet after a visit to
   }
 });
 
+it('first run: no welcome card while the list is still loading', async () => {
+  let release: (list: CharacterSummary[]) => void = () => undefined;
+  vi.mocked(client.listCharacters).mockReturnValue(new Promise<CharacterSummary[]>((r) => (release = r)));
+  render(<App />);
+  await screen.findByRole('heading', { level: 1, name: 'Your characters' });
+  expect(screen.queryByRole('heading', { name: 'Welcome to TomeStack' })).toBeNull();
+  release([]);
+  await screen.findByRole('heading', { level: 2, name: 'Welcome to TomeStack' });
+});
+
 it('first run: the welcome card shows with no characters, and not with only an archived one', async () => {
   vi.mocked(client.listCharacters).mockResolvedValue([]);
   const { unmount } = render(<App />);
