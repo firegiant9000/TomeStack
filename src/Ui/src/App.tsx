@@ -449,6 +449,12 @@ function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (in
               initialTab={screen.tab}
               focusChecklist={screen.levelledUp}
               rulesFamilies={info?.rulesFamilies}
+              origin={characters.find((c) => c.id === screen.view.character.id)?.origin}
+              onRemoved={async () => {
+                setMessage(undefined);
+                setScreen({ kind: 'home', focus: true });
+                await refresh();
+              }}
               onError={onError}
               onLevelUp={() => {
                 setMessage(undefined);

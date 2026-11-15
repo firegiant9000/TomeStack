@@ -37,6 +37,7 @@ vi.mock('./api/client', () => ({
     preview: vi.fn(),
     createCharacter: vi.fn(),
     createSample: vi.fn(),
+    deleteSample: vi.fn(),
     saveCharacter: vi.fn(),
     snapshots: vi.fn(),
     previewExport: vi.fn(),
@@ -791,6 +792,26 @@ it('first run: one click on Try a sample character opens the sample on Play', as
   await screen.findByRole('article', { name: 'Fixture Wren' });
   expect(client.createSample).toHaveBeenCalledTimes(1);
   expect(screen.getByRole('tab', { name: /Play/ }).getAttribute('aria-selected')).toBe('true');
+});
+
+it('Remove sample on the sample sheet goes home and the sample is gone from the list', async () => {
+  const user = userEvent.setup();
+  const sample = viewOf('fixture-sample', 'Fixture Wren');
+  vi.mocked(client.listCharacters).mockResolvedValue([{ ...summary('fixture-sample', 'Fixture Wren'), origin: 'sample' }]);
+  vi.mocked(client.getCharacter).mockResolvedValue(sample);
+  vi.mocked(client.deleteSample).mockImplementation(async () => {
+    vi.mocked(client.listCharacters).mockResolvedValue([]);
+    return { deleted: true };
+  });
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: 'Open Fixture Wren' }));
+  await screen.findByRole('article', { name: 'Fixture Wren' });
+  await user.click(screen.getByRole('button', { name: 'Remove sample' }));
+  await user.click(screen.getByRole('button', { name: 'Remove' }));
+  await screen.findByRole('heading', { name: 'Welcome to TomeStack' });
+  expect(client.deleteSample).toHaveBeenCalledWith('fixture-sample');
+  expect(screen.queryByRole('article', { name: 'Fixture Wren' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Open Fixture Wren' })).toBeNull();
 });
 
 it('first run: a refused sample shows the error and stays on the card', async () => {
