@@ -20,7 +20,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
 
     public static IReadOnlyList<string> Commands { get; } =
     [
-        "app.info", "content.list", "content.draftCounts","campaign.list", "campaign.save", "campaign.delete","content.validate", "content.saveDraft", "content.publish", "content.publishManyPreview", "content.publishMany", "content.addToSpellList", "content.spellListKeys", "content.revisions", "content.affected",
+        "app.info", "content.list", "content.guides","content.draftCounts","campaign.list", "campaign.save", "campaign.delete","content.validate", "content.saveDraft", "content.publish", "content.publishManyPreview", "content.publishMany", "content.addToSpellList", "content.spellListKeys", "content.revisions", "content.affected",
         "content.bySource", "content.diagnose", "content.sandbox", "content.compare", "content.tree", "content.feedback", "source.list", "source.createHomebrew", "source.setShareable",
         "source.attachment", "source.attachPdf", "source.attachPdfData", "source.detachPreview", "source.detach", "source.openPage", "source.importPages",
         "character.list", "character.get", "character.create", "character.save", "character.choose", "character.preview", "character.previewChoice",
@@ -99,6 +99,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     {
         "app.info" => app.GetInfo(),
         "content.list" => ListContent(Payload<RulesFamilyPayload>(payload)),
+        "content.guides" => app.ListGuides(Payload<RulesFamilyPayload>(payload).RulesFamily, Payload<RulesFamilyPayload>(payload).CampaignId),
         "content.draftCounts" => app.DraftCounts(Payload<RulesFamilyPayload>(payload).RulesFamily),
         "campaign.list" => app.ListCampaigns(),
         "campaign.save" => app.SaveCampaign(Payload<Campaign>(payload)),

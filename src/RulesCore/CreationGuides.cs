@@ -332,7 +332,8 @@ public static class KitExpansion
         ["armor.shield"] = item => item.Effects.OfType<ArmorEffect>().Any(a => a.Category == ArmorCategory.Shield),
     };
 
-    internal static bool InCategory(ContentRevision item, string category) => CategoryTests.TryGetValue(category, out var test) && test(item);
+    /// <summary>True when <paramref name="item"/> is in the proficiency category <paramref name="category"/> (such as <c>weapon.simple</c>); an unknown key matches nothing.</summary>
+    public static bool InCategory(ContentRevision item, string category) => CategoryTests.TryGetValue(category, out var test) && test(item);
 
     /// <summary>Equal items (same pinned revision) in first-seen order; quantities are summed in long arithmetic and clamped to <see cref="EquipmentEntry.MaxQuantity"/> (each capped item is reported once).</summary>
     private sealed class ItemTally(Func<Guid> newId)
