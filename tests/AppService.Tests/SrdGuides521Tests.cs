@@ -3,7 +3,7 @@ using TomeStack.RulesCore;
 namespace TomeStack.AppService.Tests;
 
 /// <summary>
-/// Wave 3 G7 (task 7.2): the 2024-rules creation guides for Barbarian, Bard, Cleric, Druid, Fighter and Monk.
+/// Wave 3 G7 (tasks 7.2 and 7.3): the 2024-rules creation guides for the twelve classes and the four backgrounds.
 /// Each guide is one pick ("kit") whose options are the SRD's A, B (Fighter also C); a kit with an "of your choice" item has one option per choice.
 /// </summary>
 public class SrdGuides521Tests
@@ -13,11 +13,13 @@ public class SrdGuides521Tests
     private static readonly List<ContentPack> All = [.. TomeStackApp.BundledPacks.Select(TomeStackApp.LoadBundledPack)];
     private static readonly InMemoryContentCatalog Catalog = new([.. All.SelectMany(p => p.Sources).DistinctBy(s => s.Id)], [.. All.SelectMany(p => p.Revisions)]);
 
-    private static readonly string[] Classes = ["Barbarian", "Bard", "Cleric", "Druid", "Fighter", "Monk"];
+    private static readonly string[] Classes = ["Barbarian", "Bard", "Cleric", "Druid", "Fighter", "Monk", "Paladin", "Ranger", "Rogue", "Sorcerer", "Warlock", "Wizard"];
+    private static readonly string[] Backgrounds = ["Acolyte", "Criminal", "Sage", "Soldier"];
 
     private static readonly Dictionary<string, string[]> Abilities = new()
     {
         ["Barbarian"] = ["str"], ["Bard"] = ["cha"], ["Cleric"] = ["wis"], ["Druid"] = ["wis"], ["Fighter"] = ["str", "dex"], ["Monk"] = ["dex", "wis"],
+        ["Paladin"] = ["str", "cha"], ["Ranger"] = ["dex", "wis"], ["Rogue"] = ["dex"], ["Sorcerer"] = ["cha"], ["Warlock"] = ["cha"], ["Wizard"] = ["int"],
     };
 
     private static ContentRevision ClassNamed(string name) =>
@@ -26,6 +28,16 @@ public class SrdGuides521Tests
     private static StartingEquipmentEffect Kit(ContentRevision guide) => guide.Effects.OfType<StartingEquipmentEffect>().Single();
 
     private static ContentRevision GuideFor(string className) => Assert.Single(Catalog.GuidesFor(ClassNamed(className).ContentId));
+
+    private static void AssertEveryOptionExpands(ContentRevision guide)
+    {
+        var kit = Kit(guide);
+        foreach (var option in Assert.Single(kit.Picks).Options)
+        {
+            var result = KitExpansion.Expand(kit, [new KitChoice(kit.Picks[0].Id, option.Id)], Catalog);
+            Assert.True(result.Problems.Count == 0, $"{guide.Name} {option.Id}: {string.Join("; ", result.Problems.Select(p => p.Message))}");
+        }
+    }
 
     private static string Plain(string name) => name.Replace('’', '\'');
 
@@ -54,9 +66,9 @@ public class SrdGuides521Tests
     }
 
     [Fact]
-    public void There_are_exactly_six_class_guides_in_the_unused_block_each_valid_and_published()
+    public void There_are_exactly_sixteen_guides_in_the_unused_block_each_valid_and_published()
     {
-        Assert.Equal(Classes.Select(c => c + " starting guide").Order(), Guides.Revisions.Select(r => r.Name).Order());
+        Assert.Equal(Classes.Concat(Backgrounds).Select(c => c + " starting guide").Order(), Guides.Revisions.Select(r => r.Name).Order());
         Assert.All(Guides.Revisions, r =>
         {
             Assert.Equal(ContentKind.CreationGuide, r.Kind);
@@ -155,6 +167,18 @@ public class SrdGuides521Tests
     [InlineData("Fighter", "a", 4, "Chain Mail=1;Greatsword=1;Flail=1;Javelin=8")]
     [InlineData("Monk", "a-smith", 11, "Spear=1;Dagger=5;Smith’s Tools=1")]
     [InlineData("Monk", "b", 50, "")]
+    [InlineData("Paladin", "a-emblem", 9, "Chain Mail=1;Shield=1;Longsword=1;Javelin=6;Holy Symbol (Emblem)=1")]
+    [InlineData("Paladin", "b", 150, "")]
+    [InlineData("Ranger", "a", 7, "Studded Leather Armor=1;Scimitar=1;Shortsword=1;Longbow=1;Arrow=20;Quiver=1;Druidic Focus (Sprig of Mistletoe)=1")]
+    [InlineData("Ranger", "b", 150, "")]
+    [InlineData("Rogue", "a", 8, "Leather Armor=1;Dagger=2;Shortsword=1;Shortbow=1;Arrow=20;Quiver=1;Thieves’ Tools=1")]
+    [InlineData("Rogue", "b", 100, "")]
+    [InlineData("Sorcerer", "a", 28, "Spear=1;Dagger=2;Arcane Focus (Crystal)=1")]
+    [InlineData("Sorcerer", "b", 50, "")]
+    [InlineData("Warlock", "a", 15, "Leather Armor=1;Sickle=1;Dagger=2;Arcane Focus (Orb)=1;Book=2")]
+    [InlineData("Warlock", "b", 100, "")]
+    [InlineData("Wizard", "a", 5, "Dagger=2;Quarterstaff=1;Robe=1;Spellbook=1")]
+    [InlineData("Wizard", "b", 55, "")]
     public void Options_expand_to_the_SRD_items_and_gold(string className, string optionId, int gp, string loose)
     {
         var (items, coins, problems) = Expand(className, optionId);
@@ -175,5 +199,57 @@ public class SrdGuides521Tests
         // The Monk's musical-instrument choice is not modelled: a pick holds at most 20 options (17 artisan's tools + gold here).
         Assert.Equal(18, Assert.Single(Kit(GuideFor("Monk")).Picks).Options.Count);
         Assert.Equal(3, Assert.Single(Kit(GuideFor("Fighter")).Picks).Options.Count);
+        Assert.Equal(4, Assert.Single(Kit(GuideFor("Paladin")).Picks).Options.Count);
+    }
+
+    [Fact]
+    public void Every_bundled_class_and_background_has_a_guide_whose_every_line_resolves()
+    {
+        var published = All.SelectMany(p => p.Revisions)
+            .Where(r => r.Status == RevisionStatus.Published && r.RulesFamilies.Contains("srd-5.2.1") && r.Kind is ContentKind.Class or ContentKind.Background)
+            .DistinctBy(r => r.ContentId)
+            .ToList();
+        Assert.Equal(Classes.Length + Backgrounds.Length, published.Count);
+        foreach (var target in published)
+            AssertEveryOptionExpands(Assert.Single(Catalog.GuidesFor(target.ContentId)));
+    }
+
+    [Theory]
+    [InlineData("Acolyte", "a-reliquary", 8, "Calligrapher’s Supplies=1;Book=1;Holy Symbol (Reliquary)=1;Parchment (one sheet)=10;Robe=1")]
+    [InlineData("Criminal", "a", 16, "Dagger=2;Thieves’ Tools=1;Crowbar=1;Pouch=2;Clothes, Traveler’s=1")]
+    [InlineData("Sage", "a", 8, "Quarterstaff=1;Calligrapher’s Supplies=1;Book=1;Parchment (one sheet)=8;Robe=1")]
+    [InlineData("Soldier", "a-dice", 14, "Spear=1;Shortbow=1;Arrow=20;Gaming Set (Dice)=1;Healer’s Kit=1;Quiver=1;Clothes, Traveler’s=1")]
+    public void Background_option_a_expands_to_the_SRD_items_and_gold(string background, string optionId, int gp, string loose)
+    {
+        var (items, coins, problems) = ExpandBackground(background, optionId);
+        Assert.Empty(problems);
+        Assert.Equal(new Currency { Gp = gp }, coins);
+        var expected = loose.Split(';').Select(s => s.Split('=')).ToDictionary(p => Plain(p[0]), p => int.Parse(p[1]));
+        Assert.Equal(expected.OrderBy(e => e.Key, StringComparer.Ordinal), items.OrderBy(e => e.Key, StringComparer.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("Acolyte")]
+    [InlineData("Criminal")]
+    [InlineData("Sage")]
+    [InlineData("Soldier")]
+    public void Background_option_b_is_fifty_gold_and_no_items(string background)
+    {
+        var (items, coins, problems) = ExpandBackground(background, "b");
+        Assert.Empty(problems);
+        Assert.Empty(items);
+        Assert.Equal(new Currency { Gp = 50 }, coins);
+    }
+
+    private static (SortedDictionary<string, int> Items, Currency Coins, IReadOnlyList<string> Problems) ExpandBackground(string name, string optionId)
+    {
+        var background = All.SelectMany(p => p.Revisions).First(r => r.Kind == ContentKind.Background && r.Name == name && r.RulesFamilies.Contains("srd-5.2.1"));
+        var kit = Kit(Assert.Single(Catalog.GuidesFor(background.ContentId)));
+        var result = KitExpansion.Expand(kit, [new KitChoice(Assert.Single(kit.Picks).Id, optionId)], Catalog);
+        var byRevision = All.SelectMany(p => p.Revisions).ToDictionary(r => r.RevisionId, r => Plain(r.Name));
+        var items = new SortedDictionary<string, int>(StringComparer.Ordinal);
+        foreach (var e in result.Equipment)
+            items[byRevision[e.Item.RevisionId]] = items.GetValueOrDefault(byRevision[e.Item.RevisionId]) + e.Quantity;
+        return (items, result.Coins, [.. result.Problems.Select(p => p.Message)]);
     }
 }
