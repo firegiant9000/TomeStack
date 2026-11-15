@@ -1,5 +1,5 @@
 import { useId, useRef, useState } from 'react';
-import type { KeyboardEvent, RefObject } from 'react';
+import type { FocusEvent, KeyboardEvent, RefObject } from 'react';
 
 export interface MoreMenuItem {
   id: string;
@@ -26,8 +26,13 @@ export function MoreMenu({ items, triggerRef }: { items: MoreMenuItem[]; trigger
     trigger.current?.focus();
   }
 
+  // Focus leaving the whole disclosure (Tab past the last item, a click elsewhere) closes the list without moving focus.
+  function onBlur(event: FocusEvent<HTMLDivElement>) {
+    if (open && !event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false);
+  }
+
   return (
-    <div className="more-menu" onKeyDown={onKeyDown}>
+    <div className="more-menu" onKeyDown={onKeyDown} onBlur={onBlur}>
       <button ref={trigger} type="button" aria-expanded={open} aria-controls={listId} onClick={() => setOpen((o) => !o)}>
         More
       </button>
@@ -39,7 +44,10 @@ export function MoreMenu({ items, triggerRef }: { items: MoreMenuItem[]; trigger
                 type="button"
                 disabled={item.disabled}
                 onClick={() => {
+                  // The chosen button unmounts when the list closes; focus "More" first so focus is never lost to the page,
+                  // and a caller that moves focus (to the panel it opens) still wins because it runs after this.
                   setOpen(false);
+                  trigger.current?.focus();
                   item.onSelect();
                 }}
               >
