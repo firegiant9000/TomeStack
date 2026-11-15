@@ -95,6 +95,12 @@ async function openTab(user: ReturnType<typeof userEvent.setup>, sheet: HTMLElem
   if (tab.getAttribute('aria-selected') !== 'true') await user.click(tab);
 }
 
+/** Opens the sheet's More disclosure and chooses one item (Choices, Print…, Export…, Snapshots, Updates, Archive). */
+async function openMore(user: ReturnType<typeof userEvent.setup>, sheet: HTMLElement, item: string): Promise<void> {
+  await user.click(within(sheet).getByRole('button', { name: 'More' }));
+  await user.click(within(sheet).getByRole('button', { name: item }));
+}
+
 /** One value of the sheet's status bar: the `.status-value` beside the `.status-label` named `term` (button or plain item). */
 function summaryValue(sheet: HTMLElement, term: string): string {
   const summary = within(sheet).getByRole('region', { name: 'Status' });
@@ -154,7 +160,7 @@ it('creates a character, shows its traced sheet, overrides, exports and re-impor
   await waitFor(() => expect(document.activeElement).toBe(within(sheet).getByRole('heading', { name: 'Details' })));
 
   // Export (DevHost has no native dialog: package.saveAs -> unsupported -> download fallback)
-  await openTab(user, sheet, 'Manage');
+  await openMore(user, sheet, 'Export…');
   await user.click(screen.getByRole('button', { name: 'Export TomeStack file' }));
   await waitFor(() => expect(downloadBase64).toHaveBeenCalledTimes(1));
   const [fileName, base64] = vi.mocked(downloadBase64).mock.calls[0]!;
@@ -318,7 +324,7 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   expect(open.textContent).toMatch(/Primal Knowledge: choose 1 \(0 chosen\)/);
 
   // Answer it from the sheet: Survival is already chosen elsewhere, so pick Animal Handling.
-  await user.click(within(open).getByRole('button', { name: 'Make choices' }));
+  await user.click(within(open).getByRole('button', { name: 'Choose now' }));
   await pick(user, /^Primal Knowledge: choose 1/, /^Barbarian Skill: Animal Handling/);
   expect(await screen.findByRole('checkbox', { name: /^Barbarian Skill: Animal Handling/, checked: true })).toBeTruthy();
   await user.click(await screen.findByRole('button', { name: 'Save choices' }));
@@ -617,7 +623,7 @@ it('authors a homebrew subclass in the studio, plays it, and reviews an update',
   // Play it: the homebrew subclass is an option of the SRD choice.
   await user.click(screen.getByRole('button', { name: /^E2E Storm/ }));
   let sheet = await screen.findByRole('article', { name: 'E2E Storm' });
-  await user.click(within(sheet).getByRole('button', { name: 'Make choices' }));
+  await user.click(within(sheet).getByRole('button', { name: 'Choose now' }));
   await pick(user, /^Barbarian: choose 1/, /^Path of the E2E Storm/);
   await user.click(await screen.findByRole('button', { name: 'Save choices' }));
   sheet = await screen.findByRole('article', { name: 'E2E Storm' });
@@ -650,7 +656,7 @@ it('authors a homebrew subclass in the studio, plays it, and reviews an update',
   sheet = await screen.findByRole('article', { name: 'E2E Storm' });
   await openTab(user, sheet, 'Skills and saves');
   expect(within(sheet).getByRole('heading', { name: /^Initiative: \+2/ })).toBeTruthy();
-  await openTab(user, sheet, 'Manage');
+  await openMore(user, sheet, 'Updates');
   const updates = await within(sheet).findByRole('region', { name: 'Updates available' });
   // The setup pins the M1 SRD Barbarian revision, so the newer bundled revision is offered as well.
   expect(within(updates).getByRole('button', { name: 'Review update: Barbarian' }).closest('li')!.textContent).toMatch(/bundled/);
@@ -1157,7 +1163,7 @@ it('exports a character for Foundry VTT and as sheet JSON after a preview, with 
   render(<App />);
   await user.click(await screen.findByRole('button', { name: /^E2E VTT Hero/ }));
   const sheet = await screen.findByRole('article', { name: 'E2E VTT Hero' });
-  await openTab(user, sheet, 'Manage');
+  await openMore(user, sheet, 'Export…');
   const panel = within(sheet).getByRole('region', { name: 'Export for a virtual tabletop' });
   const dataDir = inject('devHost').dataDir.toLowerCase().replaceAll('\\', '/');
 
@@ -2138,7 +2144,7 @@ it('takes a snapshot of a character, previews the restore, restores it and keeps
 
   render(<App />);
   await user.click(await screen.findByRole('button', { name: /^E2E Snapshot Hero/ }));
-  await openTab(user, await screen.findByRole('article', { name: 'E2E Snapshot Hero' }), 'Manage');
+  await openMore(user, await screen.findByRole('article', { name: 'E2E Snapshot Hero' }), 'Snapshots');
   const panel = () => screen.getByRole('region', { name: 'Snapshots' });
   await user.type(await within(await screen.findByRole('region', { name: 'Snapshots' })).findByRole('textbox', { name: /^Snapshot name/ }), 'E2E with the feat');
   await user.click(within(panel()).getByRole('button', { name: 'Take snapshot' }));
@@ -2150,8 +2156,11 @@ it('takes a snapshot of a character, previews the restore, restores it and keeps
   render(<App />);
   await user.click(await screen.findByRole('button', { name: /^E2E Snapshot Hero/ }));
 
-  // ADR-014: the sheet reopens on the tab used last for this character (kept in the page's own storage).
-  expect(within(await screen.findByRole('article', { name: 'E2E Snapshot Hero' })).getByRole('tab', { name: 'Manage' }).getAttribute('aria-selected')).toBe('true');
+  // ADR-014: the sheet reopens on the tab used last for this character; a remembered "manage" (the retired tab) opens Play, and
+  // the Snapshots panel is not kept open, so it is opened again from More.
+  const reopened = await screen.findByRole('article', { name: 'E2E Snapshot Hero' });
+  expect(within(reopened).getByRole('tab', { name: 'Play' }).getAttribute('aria-selected')).toBe('true');
+  await openMore(user, reopened, 'Snapshots');
   await user.click(await within(await screen.findByRole('region', { name: 'Snapshots' })).findByRole('button', { name: 'Restore E2E with the feat…' }));
   const preview = await within(panel()).findByRole('region', { name: 'Restore E2E with the feat?' });
   await waitFor(() => expect(document.activeElement).toBe(within(preview).getByRole('heading', { name: 'Restore E2E with the feat?' })));
@@ -2377,7 +2386,7 @@ it('records a gap note on a field and a feature, resolves one, and deletes one a
   await openTab(user, sheet, 'Skills and saves');
   const armorClassHeading = screen.getByRole('heading', { name: /^Armor Class:/ }).textContent;
 
-  await openTab(user, sheet, 'Journal');
+  await openTab(user, sheet, 'Features'); // gap notes end the Features tab
   const gaps = () => screen.getByRole('region', { name: /^Gap notes/ });
   expect(await within(gaps()).findByText('No gap notes yet.')).toBeTruthy();
   const form = within(gaps()).getByRole('form', { name: 'New gap note' });
@@ -2396,7 +2405,7 @@ it('records a gap note on a field and a feature, resolves one, and deletes one a
   await user.click(within(features).getByRole('button', { name: 'Report a gap: Fixture Quickfoot' }));
   expect((about as HTMLSelectElement).selectedOptions[0]!.textContent).toBe('Fixture Quickfoot');
   await waitFor(() => expect(document.activeElement).toBe(text));
-  expect(within(sheet).getByRole('tab', { name: 'Journal' }).getAttribute('aria-selected')).toBe('true');
+  expect(within(sheet).getByRole('tab', { name: 'Features' }).getAttribute('aria-selected')).toBe('true');
   await user.type(text, 'Speed bonus should apply while unarmored only.');
   await user.click(within(form).getByRole('button', { name: 'Save note' }));
   await waitFor(() => expect(within(gaps()).getByRole('heading').textContent).toBe('Gap notes: 2 open'));
@@ -2412,7 +2421,7 @@ it('records a gap note on a field and a feature, resolves one, and deletes one a
   await user.click(within(armor).getByRole('button', { name: 'Report a gap: Armor Class' }));
   expect((about as HTMLSelectElement).selectedOptions[0]!.textContent).toBe('Armor Class');
   await waitFor(() => expect(document.activeElement).toBe(text));
-  // "Report a gap" left Notes as the remembered tab; move the memory off it so the deep link below is what selects Notes.
+  // "Report a gap" left Features as the remembered tab; move the memory off it so the deep link below is what selects Features.
   await openTab(user, sheet, 'Play');
 
   // M3 C5: the list across characters shows the open note with its character; resolved ones only on request.
@@ -2425,8 +2434,8 @@ it('records a gap note on a field and a feature, resolves one, and deletes one a
   await waitFor(() => expect(mine()).toHaveLength(2));
   await user.click(within(all).getAllByRole('button', { name: 'Open E2E Gaps' })[0]!);
   await screen.findByRole('article', { name: 'E2E Gaps' });
-  // "Open <character>" from the Gap notes screen opens the sheet on Notes.
-  expect(within(screen.getByRole('article', { name: 'E2E Gaps' })).getByRole('tab', { name: 'Journal' }).getAttribute('aria-selected')).toBe('true');
+  // "Open <character>" from the Gap notes screen opens the sheet on Features, where the notes are.
+  expect(within(screen.getByRole('article', { name: 'E2E Gaps' })).getByRole('tab', { name: 'Features' }).getAttribute('aria-selected')).toBe('true');
   // The reopened sheet loads its notes again; wait for them before using them.
   await within(gaps()).findByText('Speed bonus should apply while unarmored only.');
 
@@ -2454,13 +2463,14 @@ it('prints a sheet with its license notices, and gap notes only when ticked', as
   await user.click(await screen.findByRole('button', { name: 'Create and save' }));
   const sheet = await screen.findByRole('article', { name: 'E2E Print' });
 
-  await openTab(user, sheet, 'Journal');
+  await openTab(user, sheet, 'Features');
   const gaps = within(sheet).getByRole('region', { name: /^Gap notes/ });
   const form = within(gaps).getByRole('form', { name: 'New gap note' });
   await user.selectOptions(within(form).getByRole('combobox', { name: /^About/ }), 'Armor Class');
   await user.type(within(form).getByRole('textbox', { name: /^What was missing or wrong/ }), 'Private note for the print test.');
   await user.click(within(form).getByRole('button', { name: 'Save note' }));
   await within(gaps).findByText('Private note for the print test.');
+  await openTab(user, sheet, 'Journal');
   const journal = within(sheet).getByRole('form', { name: 'New session note' });
   await user.type(within(journal).getByRole('textbox', { name: 'Note' }), 'Private session note for the print test.');
   await user.click(within(journal).getByRole('button', { name: 'Save session note' }));
@@ -2470,7 +2480,7 @@ it('prints a sheet with its license notices, and gap notes only when ticked', as
   await user.click(within(detailsForm).getByRole('button', { name: 'Save details' }));
   await expectStatus(/Details saved/);
 
-  await user.click(within(sheet).getByRole('button', { name: 'Print…' }));
+  await openMore(user, sheet, 'Print…');
   const preview = await within(sheet).findByRole('region', { name: 'Print preview' });
   await waitFor(() => expect(document.activeElement).toBe(within(preview).getByRole('heading', { name: 'Print character' }))); // focus moves to the preview on open
   expect(within(preview).getByRole('heading', { name: 'E2E Print' })).toBeTruthy();
@@ -2499,7 +2509,7 @@ it('prints a sheet with its license notices, and gap notes only when ticked', as
   expect(print).toHaveBeenCalledTimes(1);
   await user.click(within(preview).getByRole('button', { name: 'Close print preview' }));
   expect(within(sheet).queryByRole('region', { name: 'Print preview' })).toBeNull();
-  await waitFor(() => expect(document.activeElement).toBe(within(sheet).getByRole('button', { name: 'Print…' })));
+  await waitFor(() => expect(document.activeElement).toBe(within(sheet).getByRole('button', { name: 'More' })));
   print.mockRestore();
 });
 
@@ -2695,7 +2705,7 @@ it('adds a homebrew Fighter subclass through the studio and plays it: the Stardu
   // Choose it on the sheet, next to the SRD Champion, then play.
   await user.click(screen.getByRole('button', { name: /^E2E Warden/ }));
   let sheet = await screen.findByRole('article', { name: 'E2E Warden' });
-  await user.click(within(sheet).getByRole('button', { name: 'Make choices' }));
+  await user.click(within(sheet).getByRole('button', { name: 'Choose now' }));
   const subclass = await screen.findByRole('group', { name: /^Fighter: choose 1/ });
   expect(await within(subclass).findByRole('checkbox', { name: /^Champion/ })).toBeTruthy();
   await pick(user, /^Fighter: choose 1/, /^E2E Starward Warden/);
@@ -2890,7 +2900,7 @@ it('archives a character after a preview, lists it apart, and brings it back (SP
   await user.click(await screen.findByRole('button', { name: 'Create and save' }));
   const sheet = await screen.findByRole('article', { name: 'E2E Archivist' });
   const characters = screen.getByRole('navigation', { name: 'Main' });
-  await openTab(user, sheet, 'Manage');
+  await openMore(user, sheet, 'Archive');
 
   // Preview first: focus moves into it, and Escape (or "Keep it") changes nothing and returns focus.
   await user.click(within(sheet).getByRole('button', { name: 'Archive…' }));
