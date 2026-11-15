@@ -1,6 +1,7 @@
 import { useEffect, useState, type RefObject, type SubmitEvent } from 'react';
 import { client } from '../api/client';
 import type { CharacterView, GapNote, GapTarget } from '../api/types';
+import { GapIssueCopy } from './GapIssueCopy';
 
 interface Props {
   view: CharacterView;
@@ -131,6 +132,7 @@ export function GapNotesPanel({ view, onError, onStatus, about, onAboutChange, t
               <button type="button" onClick={() => setStatus(note)}>
                 {note.status === 'open' ? `Mark resolved: ${note.target.label}` : `Reopen: ${note.target.label}`}
               </button>
+              <GapIssueCopy note={note} />
               {deleting === note.id ? (
                 <span role="group" aria-label="Confirm deleting the note">
                   Delete this note? It cannot be undone.{' '}

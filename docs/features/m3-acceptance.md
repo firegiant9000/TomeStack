@@ -31,7 +31,7 @@ Not played. The procedure, for when the material is in place:
 1. Put the personal backup in `tests/RulesFixtures/local/stardust-guardian/` (see `m3-stardust-guardian.md`). Run `dotnet test --filter StardustGuardianAcceptanceTests`, and read `report.md` there.
 2. Automate what the report shows missing (C2), or accept it as assisted or reference.
 3. Restore the same backup into the installed app, play a whole session, and record every shortfall with "Report a gap".
-4. Work through **Gap notes** in the sidebar: fix each note or accept it, then mark it resolved.
+4. Work through **Gap notes** in Help: fix each note or accept it, then mark it resolved.
 5. Record here, as counts only: the notes written, fixed and accepted, and that no D&D Beyond was used.
 
 | Date | Build | Notes written | Fixed | Accepted | Result |

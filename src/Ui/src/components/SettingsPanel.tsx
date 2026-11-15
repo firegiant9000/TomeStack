@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { hueName } from '../accentClamp';
-import { client } from '../api/client';
+import { DiagnosticsBox } from './DiagnosticsBox';
 import type { AppInfo, CharacterSummary } from '../api/types';
 import {
   abilityBoxesTop,
@@ -72,7 +72,7 @@ function Choice<Id extends string>({ legend, ids, labels, value, onPick }: { leg
 /**
  * ADR-015 §4: the app's own preferences, kept in the page's storage on this computer; in no backup or package. Each one is
  * an `html[data-*]` attribute the CSS keys on (investigation 2026-10-06: Appearance, Text size, Ability boxes; the
- * Accessibility section; a static list of the keyboard shortcuts so they can be found).
+ * Accessibility section). The keyboard shortcuts are listed on the Help screen.
  */
 export function SettingsPanel({
   info,
@@ -99,34 +99,10 @@ export function SettingsPanel({
   const [lines, setLines] = useState<UnderlineId>(underline());
   const [announce, setAnnounce] = useState(announceRollsOn());
   const [boxesTop, setBoxesTop] = useState(abilityBoxesTop());
-  // The count re-runs the selection when a second click brings back the same text.
-  const [diagnostics, setDiagnostics] = useState<{ text: string; shown: number }>();
   const heading = useRef<HTMLHeadingElement>(null);
-  const diagnosticsBox = useRef<HTMLTextAreaElement>(null);
 
   // WCAG 2.4.3: like the other screens, opening Settings moves focus to its heading.
   useEffect(() => heading.current?.focus(), []);
-
-  // The app has no clipboard route, so the text is shown selected and the user presses Ctrl+C.
-  useEffect(() => {
-    if (diagnostics === undefined) return;
-    diagnosticsBox.current?.focus();
-    diagnosticsBox.current?.select();
-  }, [diagnostics]);
-
-  function selectDiagnostics() {
-    diagnosticsBox.current?.focus();
-    diagnosticsBox.current?.select();
-  }
-
-  async function showDiagnostics() {
-    try {
-      const { text } = await client.copyDiagnostics();
-      setDiagnostics((previous) => ({ text, shown: (previous?.shown ?? 0) + 1 }));
-    } catch (error) {
-      onError?.(error);
-    }
-  }
 
   function pick<T>(store: (value: T) => void, set: (value: T) => void) {
     return (value: T) => {
@@ -215,18 +191,6 @@ export function SettingsPanel({
         </Suspense>
       )}
 
-      <h2>Keyboard shortcuts</h2>
-      <dl className="shortcuts">
-        <dt>Ctrl+B</dt>
-        <dd>Hide or show the sidebar</dd>
-        <dt>Ctrl + / Ctrl − / Ctrl 0</dt>
-        <dd>Zoom the window in, out, or back to normal</dd>
-        <dt>Left, Right, Home, End</dt>
-        <dd>Move between the sheet's pages on the tab strip</dd>
-        <dt>Tab, Shift+Tab</dt>
-        <dd>Move between controls</dd>
-      </dl>
-
       <h2>About</h2>
       <p className="hint">Settings are kept in this app's own storage on this computer and are in no backup or TomeStack file.</p>
       {info && (
@@ -240,21 +204,7 @@ export function SettingsPanel({
         For a bug report: the app and Windows versions and the newest entries of the error log. Error messages and folder paths are left out, and your user name
         and source titles are replaced. Nothing is sent anywhere; you paste it where you choose.
       </p>
-      <button type="button" onClick={() => void showDiagnostics()}>
-        Copy diagnostics
-      </button>
-      {diagnostics !== undefined && (
-        <div className="diagnostics-copy">
-          <label className="field">
-            Diagnostics text
-            <textarea ref={diagnosticsBox} readOnly rows={12} value={diagnostics.text} />
-          </label>
-          <p className="hint">The text is selected: press Ctrl+C to copy it.</p>
-          <button type="button" onClick={selectDiagnostics}>
-            Select all
-          </button>
-        </div>
-      )}
+      <DiagnosticsBox onError={onError} />
     </section>
   );
 }

@@ -49,6 +49,8 @@ export default defineConfig({
     host: '127.0.0.1',
     port: 5173,
     strictPort: true,
+    // The Help screen imports the guides under docs/guides with ?raw; they sit outside the Vite root.
+    fs: { allow: ['.', '../../docs/guides'] },
     proxy: {
       '/api': {
         target: `http://127.0.0.1:${devHostPort}`,

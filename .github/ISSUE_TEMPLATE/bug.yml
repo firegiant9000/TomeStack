@@ -48,6 +48,13 @@ body:
       description: What happened instead, with any message TomeStack showed.
     validations:
       required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: Optional. Settings > Copy diagnostics, or a gap note's "Copy as issue text". Check it for anything personal before you paste it.
+    validations:
+      required: false
   - type: checkboxes
     id: content
     attributes:
