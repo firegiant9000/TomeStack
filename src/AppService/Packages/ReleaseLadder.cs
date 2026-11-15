@@ -64,10 +64,16 @@ public static class ReleaseLadder
 
     private static int IndexOrLast(string version)
     {
-        var current = new Version(version);
+        var current = ParseStamp(version);
         var index = Rows.ToList().FindIndex(r => r.Release.Major == current.Major && r.Release.Minor == current.Minor);
         return index >= 0 ? index : Rows.Count - 1;
     }
+
+    /// <summary>Parses a build version stamp ("0.8.1"); a malformed stamp is a broken build, so it fails loudly and names the stamp.</summary>
+    private static Version ParseStamp(string? version) =>
+        Version.TryParse(version, out var parsed)
+            ? parsed
+            : throw new InvalidOperationException($"The build version stamp \"{version}\" is not a version (expected major.minor.patch).");
 
     /// <summary>The offered row whose release is exactly <paramref name="release"/> ("0.6.0"), or null.</summary>
     public static LadderRow? Target(string? release) =>
@@ -80,7 +86,7 @@ public static class ReleaseLadder
     /// <summary>The newest offered row older than the build's own (major, minor): at most one row (D103).</summary>
     public static IReadOnlyList<LadderRow> OfferedFor(string buildVersion)
     {
-        var build = new Version(buildVersion);
+        var build = ParseStamp(buildVersion);
         return Rows
             .Where(r => r.OfferedAsTarget && (r.Release.Major, r.Release.Minor).CompareTo((build.Major, build.Minor)) < 0)
             .Reverse()
@@ -113,7 +119,7 @@ public static class ReleaseLadder
     {
         get
         {
-            var current = new Version(AppVersionStamp.CurrentVersion);
+            var current = ParseStamp(AppVersionStamp.CurrentVersion);
             var index = Rows.ToList().FindIndex(r => r.Release.Major == current.Major && r.Release.Minor == current.Minor);
             return index >= 0
                 ? index
