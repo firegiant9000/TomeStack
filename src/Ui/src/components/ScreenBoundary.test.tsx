@@ -52,8 +52,7 @@ it('shows plain words, not a blank page, when a lazy screen fails to load, and k
       </ScreenBoundary>
     </div>,
   );
-  const alert = await screen.findByRole('alert');
-  expect(alert.textContent).toContain('Your saved characters are safe.');
+  expect(await screen.findByText('Your saved characters are safe.')).toBeTruthy();
   expect(document.body.textContent).not.toContain('Fixture-abc'); // no text of the error
   expect(screen.getByRole('button', { name: 'Fixture nav' })).toBeTruthy();
 });
@@ -63,7 +62,8 @@ it('a throwing screen shows the fallback with its heading, the diagnostics and t
   const heading = screen.getByRole('heading', { level: 1 });
   expect(heading.textContent).toBe('Something went wrong on this screen');
   expect(document.activeElement).toBe(heading);
-  expect(screen.getByRole('alert').textContent).toBe('Your saved characters are safe.');
+  expect(screen.getByText('Your saved characters are safe.').tagName).toBe('P');
+  expect(screen.queryByRole('alert')).toBeNull();
   expect(screen.getByRole('button', { name: 'Copy diagnostics' })).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Back to your characters' })).toBeTruthy();
   expect(document.body.textContent).not.toContain('Fixture failure');

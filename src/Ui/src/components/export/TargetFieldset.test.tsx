@@ -58,6 +58,7 @@ it('sits behind a closed disclosure by default', () => {
 it('opens the disclosure when an older version is selected', () => {
   const { container } = render(<TargetFieldset targets={targets} value="0.6.0" onChange={() => {}} />);
   expect(detailsOf(container).open).toBe(true);
+  expect(screen.getByText('Opening this in an older TomeStack? (0.6.0)').tagName).toBe('SUMMARY');
 });
 
 it('opens the disclosure when an older version is picked, and lets the user close it', async () => {
@@ -68,7 +69,7 @@ it('opens the disclosure when an older version is picked, and lets the user clos
   expect(onChange).toHaveBeenLastCalledWith('0.7.0');
   rerender(<TargetFieldset targets={targets} value="0.7.0" onChange={onChange} />);
   expect(detailsOf(container).open).toBe(true);
-  await user.click(screen.getByText('Opening this in an older TomeStack?'));
+  await user.click(screen.getByText('Opening this in an older TomeStack? (0.7.0)'));
   expect(detailsOf(container).open).toBe(false);
 });
 

@@ -42,7 +42,7 @@ export class ScreenBoundary extends Component<Props, { failed: boolean }> {
         <h1 id="screen-error-heading" tabIndex={-1} ref={this.heading}>
           Something went wrong on this screen
         </h1>
-        <p role="alert">Your saved characters are safe.</p>
+        <p>Your saved characters are safe.</p>
         <p className="hint">If it keeps happening, copy the diagnostics for a bug report.</p>
         <DiagnosticsBox />
         <p>

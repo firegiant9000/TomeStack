@@ -23,7 +23,7 @@ export function TargetFieldset({ targets, value, onChange }: Props) {
   if (targets.targets.length === 0) return <p className="hint">This TomeStack has no older version to save for.</p>;
   return (
     <details open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
-      <summary>Opening this in an older TomeStack?</summary>
+      <summary>{value === null ? 'Opening this in an older TomeStack?' : `Opening this in an older TomeStack? (${value})`}</summary>
       <fieldset>
         <legend>Which version will open this file?</legend>
         <label>
