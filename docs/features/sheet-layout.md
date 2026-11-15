@@ -50,6 +50,7 @@ It shows, in order:
 - **Proficiency bonus**;
 - the **Inspiration** checkbox (Heroic Inspiration by family; the confirmed `setInspiration` play action);
 - **Conditions** and exhaustion, only when there are any, and **Attacks against you**, when the sheet has any;
+- the **quickbar** (D73), in its own row, only when it has buttons;
 - the d20 **roll mode** (Normal, Advantage, Disadvantage) and the **dice box**;
 - the **Last roll** region (`role="status"`, the one live node) with **Earlier rolls** under it (called "Previous rolls" before Wave 3): a collapsed list of the last ten rolls of this sheet session (newest first, the current roll excluded, hit dice from a rest included, and a hit die stays there even if it is removed from the rest or the rest is cancelled, because it was rolled), with the time; not announced, not stored, cleared when the sheet closes (D28).
 
