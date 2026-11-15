@@ -75,7 +75,7 @@ it('shows the issue text selected and focused, with the hint and the warning', a
   const user = userEvent.setup();
   renderPanel();
   await user.click(await screen.findByRole('button', { name: /Copy as issue text/ }));
-  const box = (await screen.findByLabelText('Issue text')) as HTMLTextAreaElement;
+  const box = (await screen.findByLabelText('Issue text: Armor Class')) as HTMLTextAreaElement;
   expect(box.readOnly).toBe(true);
   expect(box.value).toBe('Gap note: Armor Class\nThe table grants a cover bonus here.\n\nTomeStack 0.8.1');
   expect(box.value).not.toContain('Fixture Avery');
@@ -92,9 +92,9 @@ it('still shows the text when the version cannot be read, and Close returns focu
   renderPanel();
   const button = await screen.findByRole('button', { name: /Copy as issue text/ });
   await user.click(button);
-  expect(((await screen.findByLabelText('Issue text')) as HTMLTextAreaElement).value).toContain('TomeStack unknown version');
+  expect(((await screen.findByLabelText('Issue text: Armor Class')) as HTMLTextAreaElement).value).toContain('TomeStack unknown version');
   await user.click(screen.getByRole('button', { name: 'Close' }));
-  expect(screen.queryByLabelText('Issue text')).toBeNull();
+  expect(screen.queryByLabelText('Issue text: Armor Class')).toBeNull();
   expect(document.activeElement).toBe(button);
 });
 
@@ -102,6 +102,6 @@ it('has no axe violations with the issue text open', async () => {
   const user = userEvent.setup();
   const { container } = renderPanel();
   await user.click(await screen.findByRole('button', { name: /Copy as issue text/ }));
-  await screen.findByLabelText('Issue text');
+  await screen.findByLabelText('Issue text: Armor Class');
   await expectNoAxeViolations(container);
 });

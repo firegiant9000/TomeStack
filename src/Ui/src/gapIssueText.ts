@@ -4,8 +4,9 @@ import type { GapNote } from './api/types';
 const FALLBACK_LABEL = { feature: 'a feature', field: 'a field', import: 'an import' } as const;
 
 /**
- * A gap note as text to paste into a GitHub issue: the target's label, the note and the app version. It never carries the
- * character's name or id, or any other id (the label is a feature or field name from the sheet, not an identifier).
+ * A gap note as text to paste into a GitHub issue: the target's label, the note and the app version. Guaranteed: it holds
+ * no character name and no character id (or note/content/effect id field). Not guaranteed: the note's own text is the
+ * person's and appears as written, and the label can fall back to "<feature>: <effect id>" for an unlabelled effect.
  */
 export function gapIssueText(note: GapNote, version: string): string {
   const label = note.target.label?.trim() || FALLBACK_LABEL[note.target.kind] || 'something';

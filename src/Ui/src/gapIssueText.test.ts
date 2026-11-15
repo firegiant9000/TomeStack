@@ -23,11 +23,6 @@ it('carries no id, even when the target holds ids', () => {
   for (const id of ['note-id-1', 'char-id-1', 'content-id-9', 'effect-id-9']) expect(text).not.toContain(id);
 });
 
-it('never names the character', () => {
-  const text = gapIssueText({ ...note({ kind: 'field', fieldId: 'ac', label: 'Armor Class' }), characterName: 'Fixture Avery' } as GapNote, '0.8.1');
-  expect(text).not.toContain('Fixture Avery');
-});
-
 it('falls back to a plain word when the target has no label', () => {
   expect(gapIssueText(note({ kind: 'field', fieldId: 'ac' }), '1.0.0')).toContain('Gap note: a field\n');
 });
