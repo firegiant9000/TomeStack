@@ -213,20 +213,31 @@ public sealed class OldReleaseImportTests : IDisposable
     public void The_v0_8_1_fixture_carries_a_v11_character()
     {
         const string release = "v0.8.1";
+        // Pinned to 11, not CurrentSchemaVersion: the fixture is frozen, and must keep proving v11 data loads after a later bump.
+        const int v11 = Character.ItemModsSchemaVersion;
+        var blade = Guid.Parse("c0a7c000-0000-4000-8000-000000000011");
         var keen = Guid.Parse("c0a7c000-0000-4000-8000-000000000012");
-        var armorer = Expected(release)["characters"]!.AsObject()
-            .Single(c => c.Value!["schemaVersion"]!.GetValue<int>() == Character.CurrentSchemaVersion);
+        var armorer = Expected(release)["characters"]!.AsObject().Single(c => c.Value!["schemaVersion"]!.GetValue<int>() == v11);
         Assert.Equal("Compat Armorer", armorer.Value!["name"]!.GetValue<string>());
         var id = Guid.Parse(armorer.Key);
 
+        // The number 0.8.1 stored, not only the one this build computes from the data.
+        using (var zip = System.IO.Compression.ZipFile.OpenRead(Fixture(release, "character-backup.tomestack.zip")))
+        using (var stored = zip.GetEntry($"characters/{id:D}.json")!.Open())
+            Assert.Equal(v11, JsonNode.Parse(stored)!["schemaVersion"]!.GetValue<int>());
+
         void AssertCarried(TomeStackApp app, string path)
         {
-            var character = app.GetCharacter(id).Character;
-            Assert.True(character.SchemaVersion == Character.CurrentSchemaVersion, $"{path}: schema {character.SchemaVersion}");
-            var entry = Assert.Single(character.Equipment);
+            var view = app.GetCharacter(id);
+            Assert.True(view.Character.SchemaVersion == v11, $"{path}: schema {view.Character.SchemaVersion}");
+            var entry = Assert.Single(view.Character.Equipment);
             Assert.True(entry.Equipped, path);
+            Assert.Equal(blade, entry.Item.ContentId);
             Assert.Equal(keen, Assert.Single(entry.Mods!).ContentId);
             Assert.Equal("Compat Keen Edge", app.Store.ListRevisions(keen).Single(r => r.Status == RevisionStatus.Published).Name);
+            // The mod still reaches the calculation: Strength 16 (+3), no class so not proficient, Keen Edge +1.
+            var attack = Assert.Single(view.Sheet.Attacks!, a => a.Item == entry.Item);
+            Assert.True(attack.ToHit == 4, $"{path}: to hit {attack.ToHit}");
         }
 
         foreach (var package in new[] { "character-backup.tomestack.zip", "character-share.tomestack.zip" })
