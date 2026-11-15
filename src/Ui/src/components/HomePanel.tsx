@@ -10,6 +10,14 @@ interface Props {
   canCreate: boolean;
   /** Focus the heading on mount (WCAG 2.4.3). The app start screen passes false so the first Tab reaches the header. */
   focusOnMount?: boolean;
+  /** First run: "Try a sample character" (one click to a playable sheet). Without it the button is hidden. */
+  onTrySample?: () => void;
+  /** First run: "Bring in a character" opens the chooser on its import choices. */
+  onBringIn?: () => void;
+  /** False until the first character list has loaded: an empty list then is not yet "no characters", so no welcome card. */
+  loaded?: boolean;
+  /** Set when the first list failed: Home says so and offers "Try again" instead of an empty page. */
+  onRetry?: () => void;
 }
 
 const changed = (iso: string) => new Date(iso).toLocaleDateString();
@@ -19,7 +27,7 @@ const changed = (iso: string) => new Date(iso).toLocaleDateString();
  * with an "Open {name}" button each: a name distinct from the sidebar's "{name} {family}" so the e2e lookups stay unique.
  * Archived characters stay in the sidebar's "Archived" list only (SPEC C-08).
  */
-export function HomePanel({ characters, onOpen, onNew, canCreate, focusOnMount = true }: Props) {
+export function HomePanel({ characters, onOpen, onNew, canCreate, focusOnMount = true, onTrySample, onBringIn, loaded = true, onRetry }: Props) {
   const rulesLabel = useRulesLabel();
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
@@ -31,7 +39,39 @@ export function HomePanel({ characters, onOpen, onNew, canCreate, focusOnMount =
       <h1 id="home-heading" tabIndex={-1} ref={heading}>
         Your characters
       </h1>
-      {active.length === 0 ? (
+      {characters.length === 0 && !loaded ? (
+        onRetry && (
+          <p>
+            Your characters could not be loaded.{' '}
+            <button type="button" onClick={onRetry}>
+              Try again
+            </button>
+          </p>
+        )
+      ) : characters.length === 0 ? (
+        <section className="welcome-card" aria-labelledby="welcome-heading">
+          <h2 id="welcome-heading">Welcome to TomeStack</h2>
+          <p>TomeStack keeps your characters on this computer and shows how every number is worked out.</p>
+          <div className="actions">
+            {onTrySample && (
+              <button type="button" className="primary" onClick={onTrySample}>
+                Try a sample character
+              </button>
+            )}
+            <button type="button" disabled={!canCreate} onClick={onNew}>
+              Make my own
+            </button>
+          </div>
+          {onBringIn && (
+            <p>
+              Already have one?{' '}
+              <button type="button" onClick={onBringIn}>
+                Bring in a character
+              </button>
+            </p>
+          )}
+        </section>
+      ) : active.length === 0 ? (
         <>
           <p className="hint">Choose + Add a character in the sidebar, or create one here.</p>
           <button type="button" disabled={!canCreate} onClick={onNew}>

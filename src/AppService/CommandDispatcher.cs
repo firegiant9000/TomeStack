@@ -25,7 +25,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "source.attachment", "source.attachPdf", "source.attachPdfData", "source.detachPreview", "source.detach", "source.openPage", "source.importPages",
         "character.list", "character.get", "character.create", "character.save", "character.choose", "character.preview", "character.previewChoice",
         "character.play", "character.undoPlay", "character.restPreview", "character.rest", "character.turnPreview", "character.turn", "character.damagePreview", "character.reviewUpdate", "character.applyUpdate", "character.updates", "character.mechanics", "roll", "dice.roll",
-        "character.archivePreview", "character.archive", "character.unarchive",
+        "character.archivePreview", "character.archive", "character.unarchive", "character.createSample", "character.deleteSample",
         "character.snapshot", "character.snapshots", "character.restorePreview", "character.restoreSnapshot",
         "gap.list", "gap.listAll", "gap.add", "gap.setStatus", "gap.delete",
         "import.start", "import.startMarkdown", "import.startMarkdownData", "import.status", "import.list", "import.cancel", "import.resume", "import.audit", "import.search", "import.page", "import.candidates",
@@ -161,6 +161,8 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "character.archivePreview" => app.PreviewArchive(Payload<CharacterIdPayload>(payload).CharacterId),
         "character.archive" => app.Archive(Payload<ArchiveRequest>(payload)),
         "character.unarchive" => app.Unarchive(Payload<CharacterIdPayload>(payload).CharacterId),
+        "character.createSample" => app.CreateSample(),
+        "character.deleteSample" => DeleteSample(Payload<DeleteSampleRequest>(payload)),
         "character.snapshot" => app.Snapshot(Payload<SnapshotRequest>(payload)),
         "character.snapshots" => ListSnapshots(Payload<SnapshotsPayload>(payload)),
         "character.restorePreview" => app.PreviewRestore(Payload<RestorePreviewRequest>(payload)),
@@ -249,6 +251,12 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     private object DeleteCampaign(IdPayload payload)
     {
         app.DeleteCampaign(payload.Id);
+        return new { deleted = true };
+    }
+
+    private object DeleteSample(DeleteSampleRequest payload)
+    {
+        app.DeleteSample(payload);
         return new { deleted = true };
     }
 

@@ -43,6 +43,8 @@ vi.mock('./api/client', () => ({
     listCampaigns: vi.fn(),
     preview: vi.fn(),
     createCharacter: vi.fn(),
+    createSample: vi.fn(),
+    deleteSample: vi.fn(),
     saveCharacter: vi.fn(),
     snapshots: vi.fn(),
     previewExport: vi.fn(),
@@ -810,4 +812,105 @@ it('on a narrow window the sidebar is hidden again on the sheet after a visit to
   } finally {
     window.matchMedia = original;
   }
+});
+
+it('first run: no welcome card while the list is still loading', async () => {
+  let release: (list: CharacterSummary[]) => void = () => undefined;
+  vi.mocked(client.listCharacters).mockReturnValue(new Promise<CharacterSummary[]>((r) => (release = r)));
+  render(<App />);
+  await screen.findByRole('heading', { level: 1, name: 'Your characters' });
+  expect(screen.queryByRole('heading', { name: 'Welcome to TomeStack' })).toBeNull();
+  release([]);
+  await screen.findByRole('heading', { level: 2, name: 'Welcome to TomeStack' });
+});
+
+it('first run: a failed first list says so and offers Try again, which loads the list', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listCharacters).mockRejectedValueOnce(new Error('list failed')).mockResolvedValue([]);
+  render(<App />);
+  const retry = await screen.findByRole('button', { name: 'Try again' });
+  expect(screen.getByText(/^Your characters could not be loaded\./)).toBeTruthy();
+  expect(screen.queryByRole('heading', { name: 'Welcome to TomeStack' })).toBeNull();
+  await user.click(retry);
+  await screen.findByRole('heading', { level: 2, name: 'Welcome to TomeStack' });
+  expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+});
+
+it('first run: the welcome card shows with no characters, and not with only an archived one', async () => {
+  vi.mocked(client.listCharacters).mockResolvedValue([]);
+  const { unmount } = render(<App />);
+  await screen.findByRole('heading', { level: 2, name: 'Welcome to TomeStack' });
+  unmount();
+  vi.mocked(client.listCharacters).mockResolvedValue([{ ...summary('fixture-a', 'Fixture Avery'), archivedAt: '2026-10-04T00:00:00Z' }]);
+  render(<App />);
+  await screen.findByText('Choose + Add a character in the sidebar, or create one here.');
+  expect(screen.queryByRole('heading', { name: 'Welcome to TomeStack' })).toBeNull();
+});
+
+it('first run: one click on Try a sample character opens the sample on Play', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listCharacters).mockResolvedValue([]);
+  const sample = viewOf('fixture-sample', 'Fixture Wren');
+  vi.mocked(client.createSample).mockImplementation(async () => {
+    vi.mocked(client.listCharacters).mockResolvedValue([{ ...summary('fixture-sample', 'Fixture Wren'), origin: 'sample' }]);
+    return sample;
+  });
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: 'Try a sample character' }));
+  await screen.findByRole('article', { name: 'Fixture Wren' });
+  expect(client.createSample).toHaveBeenCalledTimes(1);
+  expect(screen.getByRole('tab', { name: /Play/ }).getAttribute('aria-selected')).toBe('true');
+});
+
+it('Remove sample on the sample sheet goes home and the sample is gone from the list', async () => {
+  const user = userEvent.setup();
+  const sample = viewOf('fixture-sample', 'Fixture Wren');
+  vi.mocked(client.listCharacters).mockResolvedValue([{ ...summary('fixture-sample', 'Fixture Wren'), origin: 'sample' }]);
+  vi.mocked(client.getCharacter).mockResolvedValue(sample);
+  vi.mocked(client.deleteSample).mockImplementation(async () => {
+    vi.mocked(client.listCharacters).mockResolvedValue([]);
+    return { deleted: true };
+  });
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: 'Open Fixture Wren' }));
+  await screen.findByRole('article', { name: 'Fixture Wren' });
+  await user.click(screen.getByRole('button', { name: 'Remove sample' }));
+  await user.click(screen.getByRole('button', { name: 'Remove' }));
+  await screen.findByRole('heading', { name: 'Welcome to TomeStack' });
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { level: 1, name: 'Your characters' })));
+  expect(client.deleteSample).toHaveBeenCalledWith('fixture-sample');
+  expect(screen.queryByRole('article', { name: 'Fixture Wren' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Open Fixture Wren' })).toBeNull();
+});
+
+it('first run: a refused sample shows the error and stays on the card', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listCharacters).mockResolvedValue([]);
+  vi.mocked(client.createSample).mockRejectedValue(new Error('fixture sample refusal'));
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: 'Try a sample character' }));
+  expect((await screen.findByRole('alert')).textContent).toContain('fixture sample refusal');
+  expect(screen.getByRole('heading', { name: 'Welcome to TomeStack' })).toBeTruthy();
+});
+
+it('first run: Bring in a character opens the chooser on its import choices', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listCharacters).mockResolvedValue([]);
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: 'Bring in a character' }));
+  await screen.findByRole('heading', { level: 1, name: 'Add a character' });
+  expect((screen.getByRole('radio', { name: 'From a TomeStack file' }) as HTMLInputElement).checked).toBe(true);
+});
+
+it('the chooser offers Try the sample only while no sample exists, archived or not', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: '+ Add a character' }));
+  expect(await screen.findByRole('radio', { name: 'Try the sample' })).toBeTruthy();
+  cleanup();
+  vi.mocked(client.listCharacters).mockResolvedValue([{ ...summary('fixture-s', 'Fixture Wren'), origin: 'sample', archivedAt: '2026-10-04T00:00:00Z' }]);
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: '+ Add a character' }));
+  await screen.findByRole('radio', { name: 'Make a new one' });
+  expect(screen.queryByRole('radio', { name: 'Try the sample' })).toBeNull();
 });

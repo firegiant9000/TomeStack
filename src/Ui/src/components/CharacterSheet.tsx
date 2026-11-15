@@ -21,6 +21,7 @@ import type {
 import { companionPrunedText } from '../companionNotice';
 import { downloadBase64 } from '../files';
 import { ArchivePanel } from './ArchivePanel';
+import { SampleNote } from './SampleNote';
 import { ChangeRegion } from './export/ChangeRegion';
 import { ExportConfirmation, hasBlocker, needsConfirmation } from './export/ExportConfirmation';
 import { TargetFieldset } from './export/TargetFieldset';
@@ -348,9 +349,13 @@ interface Props {
   focusChecklist?: boolean;
   /** The families from `app.info`; the inspiration checkbox and summary line are named by the character's family policy. */
   rulesFamilies?: RulesFamilyPolicy[];
+  /** Wave 3 3.2: 'sample' shows the sample note under the header. */
+  origin?: 'sample';
+  /** After the sample was removed (the note shows only when this is given too). */
+  onRemoved?: () => Promise<void> | void;
 }
 
-export function CharacterSheet({ view, onChanged, onError: reportError, onStatus, onLevelUp, onMakeChoices, onArchiveChanged, initialTab, focusChecklist, rulesFamilies }: Props) {
+export function CharacterSheet({ view, onChanged, onError: reportError, onStatus, onLevelUp, onMakeChoices, onArchiveChanged, initialTab, focusChecklist, rulesFamilies, origin, onRemoved }: Props) {
   const { character, sheet } = view;
   const rulesLabel = useRulesLabel();
   // D43: `toggle.group-absent` is information (the toggle works as a group of one), not content that failed to apply.
@@ -968,6 +973,10 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
           ]}
         />
       </header>
+
+      {origin === 'sample' && onRemoved && (
+        <SampleNote characterId={character.id} name={characterNameOf(character.name)} onError={onError} onStatus={onStatus} onRemoved={onRemoved} onArchiveChanged={onArchiveChanged} archived={character.archivedAt !== undefined} focusHeading={() => heading.current?.focus()} />
+      )}
 
       <SheetSummary view={view} rollMode={rollMode} onRollMode={setRollMode} lastRoll={lastRoll} rollLog={rollLog} act={act} onDamage={openDamage} spellsTab={showSpells} rulesFamilies={rulesFamilies}
         fields={sheet.fields} abilityBoxesTop={boxesTop}

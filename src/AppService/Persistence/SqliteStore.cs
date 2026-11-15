@@ -6,6 +6,9 @@ using TomeStack.RulesCore;
 
 namespace TomeStack.AppService.Persistence;
 
+/// <summary>A sample character with snapshots cannot be deleted: snapshots are insert-only.</summary>
+public sealed class SampleHasSnapshotsException() : InvalidOperationException("The sample character has snapshots, which cannot be removed.");
+
 /// <summary>
 /// Local SQLite store. Entities are stored as versioned JSON documents with indexed key columns.
 /// Published content revisions are insert-only: re-adding identical JSON is a no-op, different JSON is rejected.
@@ -160,6 +163,8 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
         ALTER TABLE import_candidates ADD COLUMN confidence REAL NOT NULL DEFAULT 0;
         CREATE INDEX ix_import_candidates_page ON import_candidates (job_id, status, kind, page, page_end, name, confidence, id);
         """, store => store.BackfillImportCandidateColumns()),
+        // v12 (Wave 3, D95): characters.origin marks the bundled sample character ('sample'); null for every other character.
+        new("ALTER TABLE characters ADD COLUMN origin TEXT NULL;"),
     ];
 
     private readonly SqliteConnection _connection;
@@ -896,6 +901,74 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
             ("$family", character.RulesFamily),
             ("$updated", character.UpdatedAt.ToString("O", System.Globalization.CultureInfo.InvariantCulture)),
             ("$json", Serialize(character)));
+    }
+
+    /// <summary>The character's origin mark ('sample' for the bundled sample), or null for any other character or an unknown id.</summary>
+    public string? CharacterOrigin(Guid id) =>
+        QueryScalar("SELECT origin FROM characters WHERE id = $id;", ("$id", Key(id)));
+
+    /// <summary>The id of the character marked as the bundled sample, active or archived, or null when there is none.</summary>
+    public Guid? SampleCharacterId() =>
+        QueryScalar("SELECT id FROM characters WHERE origin = 'sample' LIMIT 1;") is { } id ? Guid.Parse(id) : null;
+
+    /// <summary>Every marked character's origin by id, in one query (the character list reads it once, not per row).</summary>
+    public IReadOnlyDictionary<Guid, string> CharacterOrigins()
+    {
+        lock (_gate)
+        {
+            var origins = new Dictionary<Guid, string>();
+            using var command = Command("SELECT id, origin FROM characters WHERE origin IS NOT NULL;", []);
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+                origins[Guid.Parse(reader.GetString(0))] = reader.GetString(1);
+            return origins;
+        }
+    }
+
+    /// <summary>Marks an existing character's origin (SaveCharacter never touches it). Returns false, changing nothing, for an unknown id.</summary>
+    public bool SetCharacterOrigin(Guid id, string origin)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(origin);
+        lock (_gate)
+        {
+            using var command = Command("UPDATE characters SET origin = $origin WHERE id = $id;", [("$id", Key(id)), ("$origin", origin)]);
+            return command.ExecuteNonQuery() > 0;
+        }
+    }
+
+    /// <summary>How many snapshots (insert-only, never removable) the character has.</summary>
+    public int SnapshotCount(Guid id)
+    {
+        lock (_gate)
+        {
+            using var command = Command("SELECT COUNT(*) FROM character_snapshots WHERE character_id = $id;", [("$id", Key(id))]);
+            return Convert.ToInt32(command.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture);
+        }
+    }
+
+    /// <summary>
+    /// Removes the sample character and its gap notes in one transaction; true when the character went. Anything that is not a
+    /// sample (or does not exist) is left whole, gap notes included, and returns false. A sample that has snapshots is refused
+    /// with <see cref="SampleHasSnapshotsException"/> and nothing is removed: snapshots are insert-only (v7), so deleting the
+    /// character would orphan them. Callers check <see cref="SnapshotCount"/> first.
+    /// </summary>
+    public bool DeleteSampleCharacter(Guid id)
+    {
+        var deleted = false;
+        InTransaction(() =>
+        {
+            if (CharacterOrigin(id) != "sample")
+                return;
+            if (SnapshotCount(id) > 0)
+                throw new SampleHasSnapshotsException();
+            Execute("DELETE FROM gap_notes WHERE character_id = $id;", ("$id", Key(id)));
+            lock (_gate)
+            {
+                using var command = Command("DELETE FROM characters WHERE id = $id AND origin = 'sample';", [("$id", Key(id))]);
+                deleted = command.ExecuteNonQuery() > 0;
+            }
+        });
+        return deleted;
     }
 
     public Character? FindCharacter(Guid id) =>

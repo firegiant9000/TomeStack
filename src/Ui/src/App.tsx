@@ -63,6 +63,8 @@ export function App() {
 
 function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (info: AppInfo) => void }) {
   const [characters, setCharacters] = useState<CharacterSummary[]>([]);
+  const [charactersLoaded, setCharactersLoaded] = useState(false);
+  const [charactersFailed, setCharactersFailed] = useState(false);
   const [screen, setScreen] = useState<Screen>({ kind: 'home', focus: false });
   const [message, setMessage] = useState<{ tone: 'error' | 'status'; text: string }>();
   const fileInput = useRef<HTMLInputElement>(null);
@@ -112,8 +114,32 @@ function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (in
 
   useEffect(() => {
     applyPreferences(); // ADR-015 §4: every preference is an html[data-*] attribute the CSS keys on
-    Promise.all([client.info().then(setInfo), client.listCharacters().then(setCharacters)]).catch(onError);
+    Promise.all([
+      client.info().then(setInfo),
+      client.listCharacters().then(
+        (list) => {
+          setCharacters(list);
+          setCharactersLoaded(true);
+        },
+        (error: unknown) => {
+          setCharactersFailed(true);
+          throw error;
+        },
+      ),
+    ]).catch(onError);
   }, [onError, setInfo]);
+
+  // Home offers this after the first list failed: no welcome card is shown for a list that never loaded.
+  const retryList = useCallback(async () => {
+    try {
+      await refresh();
+      setCharactersLoaded(true);
+      setCharactersFailed(false);
+      setMessage(undefined);
+    } catch (error) {
+      onError(error);
+    }
+  }, [refresh, onError]);
 
   // Only the latest open applies: two quick opens can be answered out of order.
   // R40: every "New character" mounts a fresh builder, so a draft that is being saved is never offered again.
@@ -153,6 +179,21 @@ function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (in
       if (request === openSeq.current.n) onError(error);
     }
   }
+
+  // First run (D95): one click saves the sample and opens it on Play. The service refuses a second sample (character.sample-exists).
+  async function trySample() {
+    const request = openSeq.current.next();
+    try {
+      setMessage(undefined);
+      const view = await client.createSample();
+      await refresh();
+      if (request !== openSeq.current.n) return;
+      setScreen({ kind: 'sheet', view, tab: 'play' });
+    } catch (error) {
+      if (request === openSeq.current.n) onError(error);
+    }
+  }
+  const sampleExists = characters.some((c) => c.origin === 'sample');
 
   const active = characters.filter((c) => !c.archivedAt);
   const archived = characters.filter((c) => c.archivedAt);
@@ -284,9 +325,13 @@ function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (in
           {screen.kind === 'home' && (
             <HomePanel
               characters={characters}
+              loaded={charactersLoaded}
+              onRetry={charactersFailed && !charactersLoaded ? () => void retryList() : undefined}
               onOpen={(id) => void open(id)}
               onNew={startCreate}
               canCreate={!!info}
+              onTrySample={sampleExists ? undefined : () => void trySample()}
+              onBringIn={() => go({ kind: 'add', start: 'import' })}
               focusOnMount={screen.focus !== false}
             />
           )}
@@ -396,6 +441,7 @@ function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (in
             <AddCharacterPanel
               canCreate={!!info}
               start={screen.start}
+              onTrySample={sampleExists ? undefined : () => void trySample()}
               onNew={startCreate}
               onSheetImport={() => go({ kind: 'ddb-import' })}
               onFileImport={() => fileInput.current?.click()}
@@ -430,6 +476,12 @@ function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (in
               initialTab={screen.tab}
               focusChecklist={screen.levelledUp}
               rulesFamilies={info?.rulesFamilies}
+              origin={characters.find((c) => c.id === screen.view.character.id)?.origin}
+              onRemoved={async () => {
+                setMessage(undefined);
+                setScreen({ kind: 'home', focus: true });
+                await refresh();
+              }}
               onError={onError}
               onLevelUp={() => {
                 setMessage(undefined);

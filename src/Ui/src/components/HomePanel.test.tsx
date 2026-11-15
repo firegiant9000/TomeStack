@@ -4,6 +4,7 @@ import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { CharacterSummary } from '../api/types';
+import { expectNoAxeViolations } from '../test/axe';
 import { HomePanel } from './HomePanel';
 
 afterEach(cleanup);
@@ -41,11 +42,40 @@ it('orders cards newest change first', () => {
   expect(cards[0]!.textContent).toContain('Fixture Rook');
 });
 
-it('shows the empty state and a Create a character button when there is nothing to open', async () => {
+it('shows the empty state and a Create a character button when only archived characters exist', async () => {
   const user = userEvent.setup();
   const onNew = vi.fn();
-  render(<HomePanel characters={[]} onOpen={() => {}} onNew={onNew} canCreate />);
+  render(<HomePanel characters={[summaries[1]!]} onOpen={() => {}} onNew={onNew} canCreate />);
+  expect(screen.queryByRole('heading', { name: 'Welcome to TomeStack' })).toBeNull();
   expect(screen.getByText('Choose + Add a character in the sidebar, or create one here.')).toBeTruthy();
   await user.click(screen.getByRole('button', { name: 'Create a character' }));
   expect(onNew).toHaveBeenCalled();
+});
+
+it('first run: with no characters at all it shows the welcome card and its three buttons', async () => {
+  const user = userEvent.setup();
+  const handlers = { onNew: vi.fn(), onTrySample: vi.fn(), onBringIn: vi.fn() };
+  const { container } = render(<HomePanel characters={[]} onOpen={() => {}} canCreate focusOnMount={false} {...handlers} />);
+  expect(screen.getByRole('heading', { level: 2, name: 'Welcome to TomeStack' })).toBeTruthy();
+  expect(screen.getByText('TomeStack keeps your characters on this computer and shows how every number is worked out.')).toBeTruthy();
+  await expectNoAxeViolations(container);
+  // Tab order: sample, make my own, bring in; Enter activates.
+  await user.tab();
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Try a sample character' }));
+  await user.tab();
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Make my own' }));
+  await user.tab();
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Bring in a character' }));
+  await user.keyboard('{Enter}');
+  expect(handlers.onBringIn).toHaveBeenCalledTimes(1);
+  await user.click(screen.getByRole('button', { name: 'Try a sample character' }));
+  expect(handlers.onTrySample).toHaveBeenCalledTimes(1);
+  await user.click(screen.getByRole('button', { name: 'Make my own' }));
+  expect(handlers.onNew).toHaveBeenCalledTimes(1);
+});
+
+it('first run: the card is not shown when one archived character exists', () => {
+  render(<HomePanel characters={[summaries[1]!]} onOpen={() => {}} onNew={() => {}} canCreate onTrySample={() => {}} onBringIn={() => {}} />);
+  expect(screen.queryByRole('heading', { name: 'Welcome to TomeStack' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Try a sample character' })).toBeNull();
 });

@@ -1199,6 +1199,8 @@ export interface CharacterSummary {
   exceptionContentIds?: string[];
   /** D25: the character's total level. */
   level: number;
+  /** D95: 'sample' marks the bundled sample character; absent for every other character. */
+  origin?: 'sample';
 }
 
 /** SPEC C-08: `character.archivePreview`. Nothing is removed by archiving. */

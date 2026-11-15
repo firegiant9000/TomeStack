@@ -292,8 +292,11 @@ public sealed partial class TomeStackApp : IDisposable
         return ContentValidator.Validate(target, _store);
     }
 
-    public IReadOnlyList<CharacterSummary> ListCharacters() =>
-        [.. _store.ListCharacters().Select(Summary)];
+    public IReadOnlyList<CharacterSummary> ListCharacters()
+    {
+        var origins = _store.CharacterOrigins();
+        return [.. _store.ListCharacters().Select(c => Summary(c, origins.GetValueOrDefault(c.Id)))];
+    }
 
     public CharacterView GetCharacter(Guid id) =>
         _store.FindCharacter(id) is { } character
@@ -638,7 +641,7 @@ public sealed record ContentOption(
 public sealed record SpellSummary(int Level, IReadOnlyList<string> Lists, string? School, bool Concentration, bool Ritual, IReadOnlyList<string>? Tags = null);
 
 /// <param name="ArchivedAt">SPEC C-08: set while the character is archived; the UI lists it apart, collapsed.</param>
-public sealed record CharacterSummary(Guid Id, string Name, string RulesFamily, DateTimeOffset UpdatedAt, DateTimeOffset? ArchivedAt = null, IReadOnlyList<Guid>? ExceptionContentIds = null, int Level = 1);
+public sealed record CharacterSummary(Guid Id, string Name, string RulesFamily, DateTimeOffset UpdatedAt, DateTimeOffset? ArchivedAt = null, IReadOnlyList<Guid>? ExceptionContentIds = null, int Level = 1, string? Origin = null);
 
 /// <param name="Campaign">SPEC P-01: the character's campaign and its warnings (allowed sources, rules family), when it has one.</param>
 /// <param name="Damage">Wave 3 item 21: set only on the view a typed or untyped <see cref="PlayActionKind.Damage"/> command returns; never stored.</param>

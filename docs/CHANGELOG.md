@@ -35,6 +35,9 @@
 - **Save for an older TomeStack** now offers only the version before this one (0.8); for an older TomeStack, update it first.
 - **Development only:** the 0.8.1 upgrade fixture was made again by 0.8.1 with a third character stored at character schema 11 (an equipped homebrew weapon carrying an item mod), and a test checks that every import path keeps it at 11 with its mod. A malformed build version stamp now stops the export target list with an error naming the stamp, instead of a bare parse error. No app change.
 
+### Migration
+- **Release note: the database moves to version 12.** The first start of this version adds a column to the characters table (`origin`, empty for every existing character; it marks the sample character, D95). After this version opens a data folder, 0.8.x and older refuse to open it. To go back, restore the pre-upgrade backup the first start writes (`tomestack.db.v11.bak`, and the `tomestack.db.app-<from>-to-<to>.bak` copy of the database as the earlier version left it); anything you added after upgrading is not in those copies. Character, content and package formats do not change.
+
 ## 0.8.1 (save for 0.7.0, Foundry dnd5e 6.0.6, release and CI hygiene)
 
 A patch on 0.8.0: "Save for an older TomeStack" now offers 0.7.0, and the Foundry export targets dnd5e 6.0.6. The rest is release, CI and documentation work, plus a development-only `minimatch` override for a moderate advisory.

@@ -37,6 +37,8 @@ vi.mock('../api/client', () => ({
     rest: vi.fn(),
     saveCharacter: vi.fn(),
     getCharacter: vi.fn(),
+    deleteSample: vi.fn(),
+    archiveCharacter: vi.fn(),
     turnPreview: vi.fn(),
     turn: vi.fn(),
     damagePreview: vi.fn(),
@@ -2900,6 +2902,209 @@ describe('Play tab: hit points, Inspiration and conditions', () => {
 
   it('has no axe violations on the conditions panel', async () => {
     const { container } = renderSheet(withConditions(['poisoned']));
+    await expectNoAxeViolations(container);
+  });
+});
+
+// Wave 3 3.2 (Task 9.4): the sample note under the header.
+describe('sample note', () => {
+  const sampleView = () => {
+    const v = view();
+    return { ...v, character: { ...v.character, name: 'Wren Ashdown' } };
+  };
+  const renderSample = (props: { origin?: 'sample'; onRemoved?: () => void; onError?: (e: unknown) => void; onStatus?: (t: string) => void; onArchiveChanged?: () => void } = {}) =>
+    render(
+      <CharacterSheet
+        view={sampleView()}
+        onChanged={noop}
+        onError={props.onError ?? noop}
+        onStatus={props.onStatus ?? noop}
+        onLevelUp={noop}
+        onMakeChoices={noop}
+        onArchiveChanged={props.onArchiveChanged ?? noop}
+        origin={'origin' in props ? props.origin : 'sample'}
+        onRemoved={props.onRemoved ?? noop}
+      />,
+    );
+
+  it('shows only for a sample', () => {
+    renderSample();
+    expect(screen.getByText('This is a sample character.')).toBeTruthy();
+    cleanup();
+    renderSample({ origin: undefined });
+    expect(screen.queryByText('This is a sample character.')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Remove sample' })).toBeNull();
+  });
+
+  it('sits after the header and before the summary, in the tab order', () => {
+    renderSample();
+    const note = screen.getByRole('region', { name: 'Sample character' });
+    const header = screen.getByRole('heading', { level: 1 }).closest('header')!;
+    expect(header.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(header.contains(note)).toBe(false);
+  });
+
+  it('dismisses, and stays dismissed across a re-render and a remount', async () => {
+    const user = userEvent.setup();
+    const { rerender, unmount } = renderSample();
+    await user.click(screen.getByRole('button', { name: 'Dismiss sample note' }));
+    expect(screen.queryByText('This is a sample character.')).toBeNull();
+    expect(localStorage.getItem('tomestack.sampleNote.fixture-2')).not.toBeNull();
+    rerender(<CharacterSheet view={sampleView()} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} origin="sample" onRemoved={noop} />);
+    expect(screen.queryByText('This is a sample character.')).toBeNull();
+    unmount();
+    renderSample();
+    expect(screen.queryByText('This is a sample character.')).toBeNull();
+  });
+
+  it('Remove sample asks by name with Keep focused; Keep closes and refocuses Remove sample', async () => {
+    const user = userEvent.setup();
+    renderSample();
+    await user.click(screen.getByRole('button', { name: 'Remove sample' }));
+    const dialog = screen.getByRole('alertdialog', { name: 'Remove Wren Ashdown?' });
+    expect(within(dialog).getByText('Remove Wren Ashdown? This cannot be undone.')).toBeTruthy();
+    expect(document.activeElement).toBe(within(dialog).getByRole('button', { name: 'Keep' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Keep' }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Remove sample' }));
+    expect(client.deleteSample).not.toHaveBeenCalled();
+  });
+
+  it('works from the keyboard: Enter opens the confirm, Space on Keep closes it, Escape closes it', async () => {
+    const user = userEvent.setup();
+    renderSample();
+    screen.getByRole('button', { name: 'Remove sample' }).focus();
+    await user.keyboard('{Enter}');
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Keep' }));
+    await user.keyboard(' ');
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    await user.keyboard('{Enter}');
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Remove sample' }));
+  });
+
+  it('Remove deletes the sample, clears both remembered keys and calls onRemoved', async () => {
+    const user = userEvent.setup();
+    vi.mocked(client.deleteSample).mockResolvedValue({ deleted: true });
+    localStorage.setItem('tomestack.sheetTab.fixture-2', 'stats');
+    localStorage.setItem('tomestack.sampleNote.fixture-2', 'stale'); // any leftover value; a dismissed note would hide the button
+    localStorage.setItem('tomestack.levelUpChecklist.fixture-2', '{}');
+    localStorage.setItem('tomestack.quickbar.fixture-2', '[{"kind":"custom","attackId":"a"}]');
+    const onRemoved = vi.fn();
+    renderSample({ onRemoved });
+    await user.click(screen.getByRole('button', { name: 'Remove sample' }));
+    await user.click(screen.getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(onRemoved).toHaveBeenCalledTimes(1));
+    expect(client.deleteSample).toHaveBeenCalledWith('fixture-2');
+    expect(localStorage.getItem('tomestack.sheetTab.fixture-2')).toBeNull();
+    expect(localStorage.getItem('tomestack.sampleNote.fixture-2')).toBeNull();
+    expect(localStorage.getItem('tomestack.levelUpChecklist.fixture-2')).toBeNull();
+    expect(localStorage.getItem('tomestack.quickbar.fixture-2')).toBeNull();
+  });
+
+  it('a sample with snapshots shows the service message and Archive instead, which archives', async () => {
+    const user = userEvent.setup();
+    vi.mocked(client.deleteSample).mockRejectedValue(new TomeStackError({ code: 'character.sample-has-snapshots', message: 'This sample has snapshots, so it can only be archived' }));
+    vi.mocked(client.archiveCharacter).mockResolvedValue({} as never);
+    const onError = vi.fn();
+    const onStatus = vi.fn();
+    const onArchiveChanged = vi.fn();
+    const onRemoved = vi.fn();
+    renderSample({ onError, onStatus, onArchiveChanged, onRemoved });
+    await user.click(screen.getByRole('button', { name: 'Remove sample' }));
+    await user.click(screen.getByRole('button', { name: 'Remove' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('This sample has snapshots, so it can only be archived');
+    expect(onError).not.toHaveBeenCalled();
+    expect(onRemoved).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(within(alert).getByRole('button', { name: 'Archive instead' }));
+    await user.click(within(alert).getByRole('button', { name: 'Archive instead' }));
+    await waitFor(() => expect(onArchiveChanged).toHaveBeenCalledTimes(1));
+    expect(client.archiveCharacter).toHaveBeenCalledWith('fixture-2');
+    expect(onStatus).toHaveBeenCalled();
+    expect(document.activeElement).toBe(screen.getByRole('heading', { level: 1 }));
+  });
+
+  it('a second refusal with the same words moves focus to Archive instead again', async () => {
+    const user = userEvent.setup();
+    vi.mocked(client.deleteSample).mockRejectedValue(new TomeStackError({ code: 'character.sample-has-snapshots', message: 'This sample has snapshots, so it can only be archived' }));
+    renderSample();
+    await user.click(screen.getByRole('button', { name: 'Remove sample' }));
+    await user.click(screen.getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Archive instead' })));
+    await user.click(screen.getByRole('button', { name: 'Remove sample' }));
+    await user.click(screen.getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(client.deleteSample).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Archive instead' })));
+  });
+
+  it('a failure after the delete (refreshing the list) goes to onError', async () => {
+    const user = userEvent.setup();
+    vi.mocked(client.deleteSample).mockResolvedValue({ deleted: true });
+    const failure = new Error('list failed');
+    const onRemoved = vi.fn().mockRejectedValue(failure);
+    const onError = vi.fn();
+    renderSample({ onRemoved, onError });
+    await user.click(screen.getByRole('button', { name: 'Remove sample' }));
+    await user.click(screen.getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(onError).toHaveBeenCalledWith(failure));
+  });
+
+  it('a double click on Remove deletes once', async () => {
+    const user = userEvent.setup();
+    vi.mocked(client.deleteSample).mockImplementation(() => new Promise((resolve) => setTimeout(() => resolve({ deleted: true }), 20)));
+    renderSample();
+    await user.click(screen.getByRole('button', { name: 'Remove sample' }));
+    await user.dblClick(screen.getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(client.deleteSample).toHaveBeenCalled());
+    expect(client.deleteSample).toHaveBeenCalledTimes(1);
+  });
+
+  it('Dismiss moves focus to the sheet heading', async () => {
+    const user = userEvent.setup();
+    renderSample();
+    await user.click(screen.getByRole('button', { name: 'Dismiss sample note' }));
+    expect(document.activeElement).toBe(screen.getByRole('heading', { level: 1 }));
+  });
+
+  it('an archived sample shows no note', () => {
+    const v = sampleView();
+    render(
+      <CharacterSheet view={{ ...v, character: { ...v.character, archivedAt: '2026-11-01T00:00:00Z' } }} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} origin="sample" onRemoved={noop} />,
+    );
+    expect(screen.queryByText('This is a sample character.')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Remove sample' })).toBeNull();
+  });
+
+  it('has no axe violations with the snapshots alert showing', async () => {
+    const user = userEvent.setup();
+    vi.mocked(client.deleteSample).mockRejectedValue(new TomeStackError({ code: 'character.sample-has-snapshots', message: 'This sample has snapshots, so it can only be archived' }));
+    const { container } = renderSample();
+    await user.click(screen.getByRole('button', { name: 'Remove sample' }));
+    await user.click(screen.getByRole('button', { name: 'Remove' }));
+    await screen.findByRole('alert');
+    await expectNoAxeViolations(container);
+  });
+
+  it('another error goes to onError and the note stays', async () => {
+    const user = userEvent.setup();
+    const failure = new TomeStackError({ code: 'character.not-found', message: 'fixture gone' });
+    vi.mocked(client.deleteSample).mockRejectedValue(failure);
+    const onError = vi.fn();
+    const onRemoved = vi.fn();
+    renderSample({ onError, onRemoved });
+    await user.click(screen.getByRole('button', { name: 'Remove sample' }));
+    await user.click(screen.getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(onError).toHaveBeenCalledWith(failure));
+    expect(onRemoved).not.toHaveBeenCalled();
+  });
+
+  it('has no axe violations with the confirm open', async () => {
+    const user = userEvent.setup();
+    const { container } = renderSample();
+    await user.click(screen.getByRole('button', { name: 'Remove sample' }));
     await expectNoAxeViolations(container);
   });
 });
