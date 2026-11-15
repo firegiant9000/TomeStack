@@ -20,3 +20,4 @@
 
 - Some homebrew edits need a second step. For example, a roll from another entry can be stored but not yet chosen in Homebrew.
 - Gap notes are not part of a TomeStack file. You can copy one as text from its note, and the print view can include them.
+- If you hit something not listed here, write it down as a gap note: "Report a gap" on the sheet's Features tab.
