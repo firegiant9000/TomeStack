@@ -280,7 +280,7 @@ function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (in
             </p>
           )}
         </div>
-        <ScreenBoundary key={screen.kind}>
+        <ScreenBoundary key={screen.kind} onHome={() => go({ kind: 'home', focus: true })}>
         <Suspense fallback={<p role="status">Loading…</p>}>
           {screen.kind === 'home' && (
             <HomePanel
