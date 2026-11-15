@@ -104,6 +104,7 @@ public sealed partial class ContractParityTests
     private static readonly Dictionary<string, string> UntypedCommands = new()
     {
         ["campaign.delete"] = "private helper returns object (anonymous result)",
+        ["character.deleteSample"] = "private helper returns object (anonymous result)",
         ["content.diagnose"] = "private helper returns object",
         ["content.sandbox"] = "private helper returns an anonymous object; its View, Draft and Changes types are walked via character.get (CharacterView), content.publish (ContentReference) and content.compare (FieldDelta)",
         ["content.validate"] = "private helper returns object",

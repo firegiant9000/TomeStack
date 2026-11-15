@@ -15,6 +15,8 @@ public sealed partial class TomeStackApp
 
     // 2014 rules (srd-5.1) content ids; revisions are resolved through the store, never named here.
     private static readonly Guid SampleCleric = Guid.Parse("51c00000-0000-4000-8000-000000401000");
+    // The content that carries the spellcasting effect (the caster of a KnownSpell), here the Cleric's "Spellcasting" feature.
+    private static readonly Guid SampleCasting = Guid.Parse("51c00000-0000-4000-8000-000000401001");
     private static readonly Guid SampleLifeDomain = Guid.Parse("51c00000-0000-4000-8000-000000401500");
     private static readonly Guid SampleDwarf = Guid.Parse("51c10000-0000-4000-8000-000000000101");
     private static readonly Guid SampleHillDwarf = Guid.Parse("51c10000-0000-4000-8000-000000000102");
@@ -41,10 +43,16 @@ public sealed partial class TomeStackApp
     {
         if (_store.ListCharacters().Any(c => _store.CharacterOrigin(c.Id) == SampleOrigin))
             throw new AppValidationException([new("character.sample-exists", "The sample character already exists.")]);
-        var view = SaveCharacter(BuildSample());
-        if (!_store.SetCharacterOrigin(view.Character.Id, SampleOrigin))
-            throw new InvalidOperationException("The sample character could not be marked.");
-        return view;
+        var sample = BuildSample();
+        CharacterView? view = null;
+        // One transaction (nested saves join it): a failed mark rolls the character back, so no unmarked "Wren Ashdown" is left.
+        _store.InTransaction(() =>
+        {
+            view = SaveCharacter(sample);
+            if (!_store.SetCharacterOrigin(view.Character.Id, SampleOrigin))
+                throw new InvalidOperationException("The sample character could not be marked.");
+        });
+        return view!;
     }
 
     /// <summary>
@@ -121,8 +129,8 @@ public sealed partial class TomeStackApp
         ContentReference Find(string name) => spells.TryGetValue(name, out var found) ? found : throw new InvalidOperationException($"Sample spell '{name}' is not installed.");
         return
         [
-            .. SampleCantrips.Select(n => new KnownSpell(SampleCleric, Find(n), true)),
-            .. SamplePrepared.Select(n => new KnownSpell(SampleCleric, Find(n), true)),
+            .. SampleCantrips.Select(n => new KnownSpell(SampleCasting, Find(n), true)),
+            .. SamplePrepared.Select(n => new KnownSpell(SampleCasting, Find(n), true)),
         ];
     }
 

@@ -26,7 +26,8 @@ public class SampleCharacterTests
         var sheet = view.Sheet;
         Assert.Empty(sheet.Diagnostics);
         Assert.All(sheet.Choices!, c => Assert.True(c.Resolved, $"{c.SourceName} {c.ChoiceId}"));
-        Assert.Empty(sheet.Fields.SelectMany(f => f.Warnings));
+        // Scale mail's Stealth disadvantage is a rules reminder the armour always carries, not a defect in the sample.
+        Assert.DoesNotContain(sheet.Fields.SelectMany(f => f.Warnings), w => w.Code != "equipment.stealth-disadvantage");
         Assert.Empty(sheet.Spellcasting!.SelectMany(s => s.Warnings));
         Assert.Equal(16, sheet.Field(FieldIds.ArmorClass).Value);
         Assert.Contains(sheet.Attacks!, a => a.Name == "Mace");
@@ -140,8 +141,15 @@ public class SampleCharacterTests
 
         var content = temp.App.ExportCharacters([sample.Id]).Content;
 
-        using var document = JsonDocument.Parse(content);
-        Assert.False(HasOrigin(document.RootElement));
+        using var zip = new System.IO.Compression.ZipArchive(new MemoryStream(content));
+        var json = zip.Entries.Where(e => e.FullName.EndsWith(".json", StringComparison.OrdinalIgnoreCase)).ToList();
+        Assert.NotEmpty(json);
+        foreach (var entry in json)
+        {
+            using var stream = entry.Open();
+            using var document = JsonDocument.Parse(stream);
+            Assert.False(HasOrigin(document.RootElement), entry.FullName);
+        }
     }
 
     private static bool HasOrigin(JsonElement element) => element.ValueKind switch
@@ -166,7 +174,7 @@ public class SampleCharacterTests
 
         var again = Send("character.createSample", new { });
         Assert.False(again.GetProperty("ok").GetBoolean());
-        Assert.Equal("character.sample-exists", again.GetProperty("problems")[0].GetProperty("code").GetString());
+        Assert.Equal("character.sample-exists", again.GetProperty("error").GetProperty("diagnostics")[0].GetProperty("code").GetString());
 
         Assert.False(Send("character.deleteSample", new { characterId = id }).GetProperty("ok").GetBoolean());
         var deleted = Send("character.deleteSample", new { characterId = id, confirm = true });
