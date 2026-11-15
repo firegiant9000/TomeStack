@@ -355,15 +355,15 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   const rulesLabel = useRulesLabel();
   // D43: `toggle.group-absent` is information (the toggle works as a group of one), not content that failed to apply.
   // An open choice is listed once, under "Choices to make"; internal ids never reach the player.
-  // A `choice.unresolved` is dropped only when that choice is in the list (same source, and its choice id in `effectId`); otherwise it
-  // stays. Match on the structured fields, never the message text: the service's wording is free to change (D99).
+  // A `choice.unresolved` is dropped only when that choice is in the list (same source, and its choice effect's id in `effectId`, which
+  // may differ from the choice id); otherwise it stays. Match on the structured fields, never the message text: the service's wording is free to change (D99).
   const choiceListed = (d: { content?: { contentId: string; revisionId: string }; effectId?: string }) =>
     (sheet.choices ?? []).some(
       (c) =>
         !c.resolved &&
         c.source.contentId === d.content?.contentId &&
         c.source.revisionId === d.content?.revisionId &&
-        d.effectId === c.choiceId,
+        d.effectId === (c.effectId ?? c.choiceId),
     );
   const notApplied = sheet.diagnostics.filter(
     (d) => d.code !== 'toggle.group-absent' && !(d.code === 'choice.unresolved' && choiceListed(d)),

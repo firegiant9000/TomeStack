@@ -196,6 +196,8 @@ export interface ChoiceStatus {
   source: ContentReference;
   sourceName: string;
   choiceId: string;
+  /** The choice effect's id; a `choice.unresolved` diagnostic's `effectId` carries it (it may differ from `choiceId`). */
+  effectId?: string;
   text?: string;
   count: number;
   options: ContentReference[];

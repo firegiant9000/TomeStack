@@ -578,13 +578,13 @@ it('leaves the information-only toggle.group-absent out of "Needs your attention
 });
 
 it('keeps open choices out of "Needs your attention" (Wave 3 3.6)', () => {
-  const choices = [{ source: { contentId: 'fixture.feature', revisionId: 'r1' }, sourceName: 'Fixture feature', choiceId: 'pick', count: 1, options: [], selected: [], resolved: false }] as unknown as SheetModel['choices'];
+  const choices = [{ source: { contentId: 'fixture.feature', revisionId: 'r1' }, sourceName: 'Fixture feature', choiceId: 'pick', effectId: 'pick-effect', count: 1, options: [], selected: [], resolved: false }] as unknown as SheetModel['choices'];
   renderSheet(
     view({
       choices,
       diagnostics: [
-        // D99 wording (Group 2b): the message carries no choice id; the id is in `effectId`.
-        { code: 'choice.unresolved', message: "'Fixture feature' offers a choice of 1; 0 picked.", content: { contentId: 'fixture.feature', revisionId: 'r1' }, effectId: 'pick' },
+        // D99 wording (Group 2b): the message carries no choice id; the choice effect's id (which differs from the choice id here) is in `effectId`.
+        { code: 'choice.unresolved', message: "'Fixture feature' offers a choice of 1; 0 picked.", content: { contentId: 'fixture.feature', revisionId: 'r1' }, effectId: 'pick-effect' },
         { code: 'effect.invalid-formula', message: 'A modifier in Fixture feature has a formula that does not read.' },
       ],
     }),
@@ -594,12 +594,12 @@ it('keeps open choices out of "Needs your attention" (Wave 3 3.6)', () => {
   expect(attention.textContent).not.toContain('offers a choice');
   expect(screen.getByRole('heading', { name: 'Choices to make' })).toBeTruthy();
   cleanup();
-  renderSheet(view({ choices, diagnostics: [{ code: 'choice.unresolved', message: "'Fixture feature' offers a choice of 1; 0 picked.", content: { contentId: 'fixture.feature', revisionId: 'r1' }, effectId: 'pick' }] }));
+  renderSheet(view({ choices, diagnostics: [{ code: 'choice.unresolved', message: "'Fixture feature' offers a choice of 1; 0 picked.", content: { contentId: 'fixture.feature', revisionId: 'r1' }, effectId: 'pick-effect' }] }));
   expect(screen.queryByRole('heading', { name: 'Needs your attention' })).toBeNull();
 });
 
 it('keeps a choice.unresolved whose choice id is not an open choice on the sheet', () => {
-  const choices = [{ source: { contentId: 'fixture.feature', revisionId: 'r1' }, sourceName: 'Fixture feature', choiceId: 'pick', count: 1, options: [], selected: [], resolved: false }] as unknown as SheetModel['choices'];
+  const choices = [{ source: { contentId: 'fixture.feature', revisionId: 'r1' }, sourceName: 'Fixture feature', choiceId: 'pick', effectId: 'pick-effect', count: 1, options: [], selected: [], resolved: false }] as unknown as SheetModel['choices'];
   // Same source, different choice id: the sheet does not list this one, so the diagnostic is the only place the player learns of it.
   renderSheet(view({ choices, diagnostics: [{ code: 'choice.unresolved', message: "'Fixture feature' offers a choice of 2; 0 picked.", content: { contentId: 'fixture.feature', revisionId: 'r1' }, effectId: 'other' }] }));
   const attention = screen.getByRole('heading', { name: 'Needs your attention' }).closest('section')!;

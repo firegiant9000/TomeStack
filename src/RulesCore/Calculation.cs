@@ -89,7 +89,8 @@ public sealed record ChoiceStatus(
     IReadOnlyList<ContentReference> Options,
     IReadOnlyList<ContentReference> Selected,
     bool Resolved,
-    ChoiceReplaceable? Replaceable = null);
+    ChoiceReplaceable? Replaceable = null,
+    string EffectId = "");
 
 /// <param name="Active">Every content revision that applies to the character (pinned, class, granted or chosen), in resolution order.</param>
 /// <param name="Resources">M2 item 2: every resource an active revision defines, with its calculated maximum and what is spent.</param>

@@ -567,7 +567,7 @@ public static partial class CharacterCalculator
                 var replaceable = revision.SchemaVersion >= ContentRevision.ReplaceableChoiceSchemaVersion && choice.Replaceable is { } window
                     ? window with { Max = window.Max ?? 1 }
                     : null;
-                choices.Add(new(revision.Reference, revision.Name, choice.ChoiceId, choice.Text, choice.Count, options, applied, resolved, replaceable));
+                choices.Add(new(revision.Reference, revision.Name, choice.ChoiceId, choice.Text, choice.Count, options, applied, resolved, replaceable, choice.Id));
             }
         }
 
