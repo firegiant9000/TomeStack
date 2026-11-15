@@ -2152,14 +2152,16 @@ it('takes a snapshot of a character, previews the restore, restores it and keeps
 
   // The character changes: the feat goes, and the coins change.
   await client.saveCharacter({ ...(await client.getCharacter(hero.id)).character, pins: [], currency: { cp: 0, sp: 0, ep: 0, gp: 40, pp: 0 } });
+  // Leave the character on a real tab (not the Play default), so the reopen below proves the tab is remembered.
+  await openTab(user, await screen.findByRole('article', { name: 'E2E Snapshot Hero' }), 'Features');
   cleanup();
   render(<App />);
   await user.click(await screen.findByRole('button', { name: /^E2E Snapshot Hero/ }));
 
-  // ADR-014: the sheet reopens on the tab used last for this character; a remembered "manage" (the retired tab) opens Play, and
-  // the Snapshots panel is not kept open, so it is opened again from More.
+  // ADR-014: the sheet reopens on the tab used last for this character. (The retired "manage" id falling back to Play is covered
+  // by sheetTab.test.ts and CharacterSheet.test.tsx.) The Snapshots panel is not kept open, so it is opened again from More.
   const reopened = await screen.findByRole('article', { name: 'E2E Snapshot Hero' });
-  expect(within(reopened).getByRole('tab', { name: 'Play' }).getAttribute('aria-selected')).toBe('true');
+  expect(within(reopened).getByRole('tab', { name: 'Features' }).getAttribute('aria-selected')).toBe('true');
   await openMore(user, reopened, 'Snapshots');
   await user.click(await within(await screen.findByRole('region', { name: 'Snapshots' })).findByRole('button', { name: 'Restore E2E with the feat…' }));
   const preview = await within(panel()).findByRole('region', { name: 'Restore E2E with the feat?' });

@@ -279,6 +279,22 @@ it('character sheet, More → Export, with the version choice', async () => {
   expectPlainWords(container);
 });
 
+// The old Manage tab scanned Updates, Archive and Snapshots with Export; each More panel keeps that coverage.
+it.each([
+  ['Snapshots', 'Snapshots'],
+  ['Updates', 'Updates'],
+  ['Archive', /^Archive/],
+  ['Print…', 'Print character'],
+] as const)('character sheet, More → %s', async (item, heading) => {
+  const user = userEvent.setup();
+  const { container } = render(labelled(<CharacterSheet view={view} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} rulesFamilies={families} />));
+  await user.click(await screen.findByRole('button', { name: 'More' }));
+  await user.click(screen.getByRole('button', { name: item }));
+  expect(await screen.findByRole('heading', { name: heading })).toBeTruthy();
+  if (item === 'Updates') await screen.findByText('No newer versions of the content this character uses.');
+  expectPlainWords(container);
+});
+
 it('Backups, with the version choice', async () => {
   vi.mocked(client.packageTargets).mockResolvedValue(packageTargetsFixture);
   const { container } = render(labelled(<BackupsPanel onError={noop} onStatus={noop} onRestored={noop} />));

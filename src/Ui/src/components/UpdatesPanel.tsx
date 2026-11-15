@@ -24,6 +24,9 @@ export function UpdatesPanel({ view, onChanged, onError, onStatus, showEmpty }: 
   // list means "not known yet", not "none": a refreshed view (a save, a rest) starts a new request with a new copy.
   const [settledFor, setSettledFor] = useState<CharacterView['character']>();
   const loaded = settledFor === character;
+  // The copy whose request failed: the app's alert says so too, and the panel must not claim "none" when the check never ran.
+  const [failedFor, setFailedFor] = useState<CharacterView['character']>();
+  const failed = failedFor === character;
 
   useEffect(() => {
     let current = true;
@@ -32,7 +35,10 @@ export function UpdatesPanel({ view, onChanged, onError, onStatus, showEmpty }: 
       .then((found) => {
         if (current) setOffers(found);
       })
-      .catch(onError)
+      .catch((error: unknown) => {
+        if (current) setFailedFor(character);
+        onError(error);
+      })
       .finally(() => {
         if (current) setSettledFor(character);
       });
@@ -46,7 +52,7 @@ export function UpdatesPanel({ view, onChanged, onError, onStatus, showEmpty }: 
     return (
       <section aria-labelledby="updates-heading" className="play-panel">
         <h2 id="updates-heading">Updates</h2>
-        <p className="hint">{loaded ? 'No newer versions of the content this character uses.' : 'Checking for newer versions…'}</p>
+        <p className="hint">{failed ? "Couldn't check for newer versions." : loaded ? 'No newer versions of the content this character uses.' : 'Checking for newer versions…'}</p>
       </section>
     );
   }
