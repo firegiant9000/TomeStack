@@ -70,6 +70,8 @@ public sealed partial class TomeStackApp : IDisposable
         // Wave 3 G6: the 2014-rules gear catalogue (items and equipment packs); the creation guides that name them come after.
         "TomeStack.Content.srd-5.1-gear.json",
         "TomeStack.Content.srd-5.1-guides.json",
+        // Wave 3 G7: the 2024-rules gear catalogue, after the armor pack beside it.
+        "TomeStack.Content.srd-5.2.1-gear.json",
     ];
 
     /// <summary>
