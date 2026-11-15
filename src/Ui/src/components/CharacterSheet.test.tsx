@@ -979,6 +979,20 @@ describe('the More list (Wave 3 3.5)', () => {
     expect(screen.queryByText('Checking for newer versions…')).toBeNull();
   });
 
+  it('Updates says it is checking again while a refreshed view asks again, not "none" from the last answer', async () => {
+    vi.mocked(client.availableUpdates).mockResolvedValueOnce([]);
+    const user = userEvent.setup();
+    const first = view();
+    const { rerender } = renderSheet(first);
+    await openMore(user, 'Updates');
+    expect(await screen.findByText('No newer versions of the content this character uses.')).toBeTruthy();
+    // A save or a rest hands the sheet a new copy of the character; its request is still pending.
+    vi.mocked(client.availableUpdates).mockReturnValueOnce(new Promise(() => {}));
+    rerender(sheetElement({ ...first, character: { ...first.character } }));
+    expect(await screen.findByText('Checking for newer versions…')).toBeTruthy();
+    expect(screen.queryByText(/No newer versions/)).toBeNull();
+  });
+
   it('Updates with one offer shows the offers region', async () => {
     vi.mocked(client.availableUpdates).mockResolvedValue([
       { from: { contentId: 'c', revisionId: 'r1' }, to: { contentId: 'c', revisionId: 'r2' }, name: 'Fixture pack', role: 'class', sourceTitle: 'Fixture source', bundled: false } as Awaited<ReturnType<typeof client.availableUpdates>>[number],

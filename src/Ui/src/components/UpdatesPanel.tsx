@@ -20,8 +20,10 @@ export function UpdatesPanel({ view, onChanged, onError, onStatus, showEmpty }: 
   const { character } = view;
   const [offers, setOffers] = useState<UpdateOffer[]>([]);
   const [reviewing, setReviewing] = useState<UpdateOffer>();
-  // The request has settled (success or error): until then an empty list means "not known yet", not "none".
-  const [loaded, setLoaded] = useState(false);
+  // The character copy whose request has settled (success or error). Until the request for the current copy settles, an empty
+  // list means "not known yet", not "none": a refreshed view (a save, a rest) starts a new request with a new copy.
+  const [settledFor, setSettledFor] = useState<CharacterView['character']>();
+  const loaded = settledFor === character;
 
   useEffect(() => {
     let current = true;
@@ -32,7 +34,7 @@ export function UpdatesPanel({ view, onChanged, onError, onStatus, showEmpty }: 
       })
       .catch(onError)
       .finally(() => {
-        if (current) setLoaded(true);
+        if (current) setSettledFor(character);
       });
     return () => {
       current = false;
