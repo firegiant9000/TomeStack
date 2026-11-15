@@ -292,6 +292,25 @@ With the M1 Dwarf, Soldier and Savage Attacker and the four Fighting Style feats
 - **Not taken:** the rest of the equipment tables (costs, weights, tools and items no kit or pack names), starting gold alternatives, and any background other than the Acolyte (the only 2014 background bundled).
 - **Checks:** `SrdGear51Tests` and `SrdGuides51Tests` (every option of every guide expands to the SRD's items and quantities, written independently from the SRD text; all pack contents are pinned), `SrdPackTests` and `BundledContentInsertOnlyTests`.
 
+## 2024 gear catalogue and creation guides (2026-11-15, wave 3 Group 7, ADR-024)
+
+**Documents:** the 5.2.1 PDF only (`SRD_CC_v5.2.1.pdf`, SHA-256 `8974902d109d6e63672d7c490bde9ccf052410503d9cfa768237154fbc5e3d87`, the hash in the table above, checked again on 2026-11-15). The file stays outside the repository.
+
+**Scope:** two new pack files, `src/AppService/Content/srd-5.2.1-gear.json` and `src/AppService/Content/srd-5.2.1-guides.json`, with the same attribution and modification notice as the other 5.2.1 packs and the same CC-BY-4.0 source record. Nothing outside these pages.
+
+| Pack file | Content | Pages |
+| --- | --- | --- |
+| `srd-5.2.1-gear.json` | 89 item names (ammunition, arcane, druidic and holy-symbol focuses, the component pouch, the spellbook, adventuring gear named by a pack or a class or background kit, the artisan's tools, the other tools, the gaming sets and the ten musical instruments) and the seven equipment packs with their contents (item names and quantities) | 5.2.1 pp. 93, 94, 96, 97, 98, 99, 100 (equipment), and p. 78 (the Wizard's Spellbook) |
+| `srd-5.2.1-guides.json` | 16 creation guides, one per class and for the Acolyte, Criminal, Sage and Soldier backgrounds: each one's starting equipment as structured data (picks, options, item names and quantities, coins), and each class's primary abilities | 5.2.1 pp. 28, 31, 36, 41, 47, 49, 53, 57, 61, 64, 70, 77 (classes) and p. 83 (backgrounds) |
+
+- **What was taken:** item names, pack contents (names and quantities), and each class and background starting-equipment choice recorded as picks, options and lines. No costs or weights are stored. Weapons and armour are not repeated: guides point at the weapon and armour revisions already bundled.
+- **Primary abilities:** from each class's own table (its "Primary Ability" row, on the same page as the class's starting equipment). Only the ability keys are stored as a plain list (Fighter: `str`, `dex`; Monk: `dex`, `wis`; Paladin: `str`, `cha`; Ranger: `dex`, `wis`); the list cannot say "or", so a guide only suggests where the highest scores go. Backgrounds have none.
+- **Monk:** the Monk's choice of one Artisan's Tools or Musical Instrument is one pick with 28 options: the 17 artisan's tools, the 10 musical instruments and the gold option. This is why a pick may hold 30 options (ADR-024).
+- **Tests:** `tests/AppService.Tests/SrdGear521Tests.cs` and `SrdGuides521Tests.cs` repeat item names, quantities and gold to pin the bundled data against the SRD, as the other `Srd*Tests` already do with SRD names. They hold no SRD prose.
+- **No SRD prose.** Every `summary` is one original line (for example "Adventuring gear." or "Starting equipment and key ability."). No item or pack description, and no class or background text, is copied.
+- **Not taken:** the rest of the equipment tables (costs, weights, tools and items no kit or pack names), the Totem (the SRD 5.2.1 Druidic Focus table has only the sprig of mistletoe, the wooden staff and the yew wand), and the weapon and armour tables (already bundled).
+- **Checks:** `SrdGear521Tests` and `SrdGuides521Tests` (every option of every guide expands to the SRD's items and quantities; all pack contents are pinned), `SrdPackTests` (the same source record as the other 5.2.1 packs) and `BundledContentInsertOnlyTests`.
+
 ## README screenshots (docs/media, reviewed 2026-09-30)
 
 Two screenshots of the app, shown in the README, reproduce bundled SRD 5.2.1 content as the app renders it. They add no SRD text that the packs above do not already hold, and nothing from outside the two checked PDFs.

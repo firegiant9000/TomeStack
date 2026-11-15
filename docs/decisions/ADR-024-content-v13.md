@@ -40,7 +40,7 @@ Content schema v12 cannot express this. A guide is advice used only while creati
    - `validate.guide-target`: a guide without exactly one `guideFor`, or one that targets itself or something that is not a published class or background of the revision's rules family.
    - `validate.guide-duplicate`: another guide already guides the same target in a shared rules family.
    - `validate.guide-abilities`: not one or two different ability keys.
-   - `validate.guide-picks`: too many picks (at most 12), too many options in a pick (at most 20), too many lines in an option (`MaxGuideLines`, 30), a repeated pick or option id, a pick with no options, or a line that is not exactly one kind.
+   - `validate.guide-picks`: too many picks (at most 12), too many options in a pick (at most 30; raised from 20 to 30 before release so the 2024 Monk can offer every tool and instrument; owner, 2026-11-15), too many lines in an option (`MaxGuideLines`, 30), a repeated pick or option id, a pick with no options, or a line that is not exactly one kind.
    - `validate.guide-item`: a fixed item or pack line naming something that is not a published item (or pack) of the family, or the guide itself.
    - `validate.guide-quantity`: a quantity outside 1 to 999.
    - `validate.guide-category`: an `anyOf` category outside the six, or a `requiresProficiency` that is not a `weapon.` or `armor.` key.
@@ -74,7 +74,7 @@ Content schema v12 cannot express this. A guide is advice used only while creati
    - Validate-then-insert is not one transaction. The app is single-user and runs one command at a time, so a rival guide cannot appear between the two steps; if that ever changes, the check needs a transaction.
    - Callers of `GuidesFor` must tolerate more than one guide for a target (for example after a restore brings in a guide that a rival already covers). They should choose deterministically, not assume one.
    - Current-version export leaves a source with no published content out, while a lowered-empty source blocks the file. The first is a choice about what to share; the second would write a file a reader refuses.
-   - No bundled guides or gear ship in the engine change. The 2014 (SRD 5.1) catalogue and guides arrive with Group 6 (item 9); the 2024 ones come later. The licensing review has a section for the 2014 files (SPEC Q-03).
+   - No bundled guides or gear ship in the engine change. The 2014 (SRD 5.1) catalogue and guides arrive with Group 6 (item 9) and the 2024 (SRD 5.2.1) ones with Group 7 (section 10). The licensing review has a section for each set of files (SPEC Q-03).
    - The 0.9.0 release ladder row and `BundledAt/0.9.0.txt` arrive with the release PR. Until then `ReleaseLadder.OpensIn` returns null for content at schema 13 and the preview says "a newer TomeStack", which is correct for an unreleased build.
 
 9. **The 2014 bundled content (Group 6).** `srd-5.1-gear.json` (73 items, 7 packs) and `srd-5.1-guides.json` (13 guides: the 12 classes and the Acolyte). Ids, all `51c00000-0000-4000-8000-000000NNNNNN` (revisions `51e00000-...`): items 500001 to 500073, packs 500101 to 500107, guides 600001 to 600013. Modelling rulings:
@@ -83,6 +83,11 @@ Content schema v12 cannot express this. A guide is advice used only while creati
    - A line the SRD gives without a choice is a pick with a single option, which expansion takes without a choice; the builder shows it pre-selected.
    - The Druid's wooden shield is the bundled Shield.
    - The Acolyte's 15 gp is a `coins` line; its pouch is an item.
+
+10. **The 2024 bundled content (Group 7).** `srd-5.2.1-gear.json` (89 items, 7 packs) and `srd-5.2.1-guides.json` (16 guides: the 12 classes and the Acolyte, Criminal, Sage and Soldier backgrounds). Ids, all `52c00000-0000-4000-8000-000000NNNNNN` (revisions `52e00000-...`): items 530001 to 530089, packs 530101 to 530107, guides 600001 to 600016. Same modelling rulings as section 9, plus:
+   - The Monk's one artisan's tool or musical instrument is a single pick with 28 options (17 tools, 10 instruments, and the gold option). That is why the options-per-pick cap is 30, not 20.
+   - The 2024 Druidic Focus has three items (sprig of mistletoe, wooden staff, yew wand); there is no Totem.
+   - The firearm bullet is its own ammunition item, since the bundled Musket and Pistol use it.
 
 ## Consequences
 
@@ -93,7 +98,7 @@ Content schema v12 cannot express this. A guide is advice used only while creati
 
 ## Not doing
 
-- **Bundled 2024 (SRD 5.2.1) guides or gear** in this change.
+- **Bundled 2024 (SRD 5.2.1) guides or gear** in the engine change (they arrive with Group 7, section 10).
 - **Characters pinning a guide**, or a guide changing a calculation.
 - **Packs inside packs**, and expanding a pack's contents when saving for an older TomeStack.
 - **Enforcing `requiresProficiency` in the engine.**
