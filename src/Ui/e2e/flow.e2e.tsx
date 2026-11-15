@@ -2466,7 +2466,8 @@ it('records a gap note on a field and a feature, resolves one, and deletes one a
 it('opens Help from the sidebar with its h1 focused, lists a sheet gap note there, and Open <character> lands on Features', async () => {
   const user = userEvent.setup();
   const created = await client.createCharacter({ name: 'E2E Help Gaps', rulesFamily: 'srd-5.1', baseAbilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, pins: [] });
-  await client.addGapNote(created.character.id, { kind: 'field', fieldId: 'ac', label: 'Armor Class' }, 'Help screen note from the sheet.');
+  // A field every sheet has (the service refuses a field the sheet does not show).
+  await client.addGapNote(created.character.id, { kind: 'field', fieldId: 'initiative' }, 'Help screen note from the sheet.');
   render(<App />);
   await user.click(within(await screen.findByRole('navigation', { name: 'Main' })).getByRole('button', { name: 'Help' }));
   const h1 = await screen.findByRole('heading', { level: 1, name: 'Help' });
@@ -2486,7 +2487,15 @@ it('keeps the older-version choice behind a disclosure on the sheet export, and 
   const sheet = await screen.findByRole('article', { name: 'E2E Older Target' });
   await openMore(user, sheet, 'Export…');
   const panel = within(sheet).getByRole('region', { name: 'Export' });
-  const release = (await within(panel).findAllByText(/^\d+\.\d+\.\d+$/, { selector: 'label' }))[0]!.textContent!;
+  // D103: only the previous minor is offered, so a build with no such release (the DevHost of an unreleased minor
+  // may have none) shows a plain hint and no choice at all.
+  await waitFor(() => expect(within(panel).queryByText(/^This TomeStack has no older version to save for\.$|^Opening this in an older TomeStack\?/)).not.toBeNull());
+  if (within(panel).queryByText('This TomeStack has no older version to save for.')) {
+    expect(panel.querySelector('details')).toBeNull();
+    expect(within(panel).queryByRole('radio')).toBeNull();
+    return;
+  }
+  const release = within(panel).getAllByText(/^\d+\.\d+\.\d+$/, { selector: 'label' })[0]!.textContent!;
   expect(panel.querySelector('details')!.open).toBe(false);
   await chooseOlderTarget(user, panel, release);
   expect((within(panel).getByRole('radio', { name: release }) as HTMLInputElement).checked).toBe(true);
