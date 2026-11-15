@@ -97,9 +97,12 @@ beforeEach(() => {
   vi.mocked(client.listExtensions).mockResolvedValue([]); // the Settings screen lists installed extensions
   vi.mocked(client.snapshots).mockResolvedValue({ items: [], hasMore: false });
 });
-afterEach(() => {
+afterEach(async () => {
   cleanup();
   localStorage.clear();
+  // A failed fallback test must not leave the throwing GuideText for the next test.
+  const { GuideText: realGuideText } = await vi.importActual<typeof import('./components/help/GuideText')>('./components/help/GuideText');
+  vi.mocked(GuideText).mockImplementation(realGuideText);
 });
 
 it('the sidebar Help item opens the Help screen with focus on its h1, and there is no separate Gap notes screen', async () => {
@@ -119,15 +122,18 @@ it('a screen that throws shows the boundary fallback, and "Back to your characte
   vi.mocked(GuideText).mockImplementation(() => {
     throw new Error('fixture failure'); // thrown while the Help screen renders (React retries once, so not "once"): the boundary catches it
   });
-  render(<App />);
-  const nav = await screen.findByRole('navigation', { name: 'Main' });
-  await user.click(within(nav).getByRole('button', { name: 'Help' }));
-  expect(await screen.findByRole('heading', { level: 1, name: 'Something went wrong on this screen' })).toBeTruthy();
-  expect(within(nav).getByRole('button', { name: 'Settings' })).toBeTruthy(); // the navigation stays usable
-  vi.mocked(GuideText).mockImplementation(realGuideText);
-  await user.click(screen.getByRole('button', { name: 'Back to your characters' }));
-  expect(await screen.findByRole('heading', { level: 1, name: 'Your characters' })).toBeTruthy();
-  quiet.mockRestore();
+  try {
+    render(<App />);
+    const nav = await screen.findByRole('navigation', { name: 'Main' });
+    await user.click(within(nav).getByRole('button', { name: 'Help' }));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Something went wrong on this screen' })).toBeTruthy();
+    expect(within(nav).getByRole('button', { name: 'Settings' })).toBeTruthy(); // the navigation stays usable
+    vi.mocked(GuideText).mockImplementation(realGuideText);
+    await user.click(screen.getByRole('button', { name: 'Back to your characters' }));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Your characters' })).toBeTruthy();
+  } finally {
+    quiet.mockRestore();
+  }
 });
 
 it('shows the rules family id before app.info arrives, then the label the service sent', async () => {
