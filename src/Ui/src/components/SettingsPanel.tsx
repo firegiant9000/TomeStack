@@ -72,7 +72,7 @@ function Choice<Id extends string>({ legend, ids, labels, value, onPick }: { leg
 /**
  * ADR-015 §4: the app's own preferences, kept in the page's storage on this computer; in no backup or package. Each one is
  * an `html[data-*]` attribute the CSS keys on (investigation 2026-10-06: Appearance, Text size, Ability boxes; the
- * Accessibility section; a static list of the keyboard shortcuts so they can be found).
+ * Accessibility section). The keyboard shortcuts are listed on the Help screen.
  */
 export function SettingsPanel({
   info,
@@ -190,18 +190,6 @@ export function SettingsPanel({
           <ExtensionsPanel characters={characters ?? []} rulesFamilies={rulesFamilies} onError={onError ?? noop} onStatus={onStatus ?? noop} />
         </Suspense>
       )}
-
-      <h2>Keyboard shortcuts</h2>
-      <dl className="shortcuts">
-        <dt>Ctrl+B</dt>
-        <dd>Hide or show the sidebar</dd>
-        <dt>Ctrl + / Ctrl − / Ctrl 0</dt>
-        <dd>Zoom the window in, out, or back to normal</dd>
-        <dt>Left, Right, Home, End</dt>
-        <dd>Move between the sheet's pages on the tab strip</dd>
-        <dt>Tab, Shift+Tab</dt>
-        <dd>Move between controls</dd>
-      </dl>
 
       <h2>About</h2>
       <p className="hint">Settings are kept in this app's own storage on this computer and are in no backup or TomeStack file.</p>

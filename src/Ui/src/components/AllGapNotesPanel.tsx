@@ -9,7 +9,8 @@ interface Props {
 
 /**
  * M3 C5: every character's gap notes in one list, open first, to work through after a session. Notes stay on this
- * computer; this screen only reads them and changes a note's status. Deleting stays on the character's sheet.
+ * computer; this only reads them and changes a note's status. Deleting stays on the character's sheet. It sits under the
+ * Help screen's own "Gap notes" h2, so it renders no heading of its own.
  */
 export function AllGapNotesPanel({ onError, onOpenCharacter }: Props) {
   const [listed, setListed] = useState<GapNoteListing[]>();
@@ -41,8 +42,7 @@ export function AllGapNotesPanel({ onError, onOpenCharacter }: Props) {
   const shown = (listed ?? []).filter((l) => showResolved || l.note.status === 'open');
 
   return (
-    <section aria-labelledby="all-gaps-heading" className="panel">
-      <h1 id="all-gaps-heading">Gap notes</h1>
+    <div className="all-gap-notes">
       <p className="hint">{listed ? `${open} open, across all characters. ` : ''}Where TomeStack fell short at the table, for every character. Notes stay on this computer.</p>
       <label>
         <input type="checkbox" checked={showResolved} onChange={(e) => setShowResolved(e.target.checked)} /> Show resolved notes
@@ -65,6 +65,6 @@ export function AllGapNotesPanel({ onError, onOpenCharacter }: Props) {
           ))}
         </ul>
       )}
-    </section>
+    </div>
   );
 }

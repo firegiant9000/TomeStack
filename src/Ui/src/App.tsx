@@ -3,7 +3,7 @@ import { client } from './api/client';
 import { TomeStackError } from './api/transport';
 import type { AppInfo, CharacterSummary, CharacterView, PackagePreview } from './api/types';
 import { AddCharacterPanel } from './components/AddCharacterPanel';
-import { AllGapNotesPanel } from './components/AllGapNotesPanel';
+import { HelpPanel } from './components/HelpPanel';
 import { SettingsPanel } from './components/SettingsPanel';
 import type { BuilderMode } from './components/CharacterBuilder';
 import { CharacterSheet } from './components/CharacterSheet';
@@ -37,7 +37,7 @@ export type Screen =
   | { kind: 'studio'; sourceId?: string }
   | { kind: 'sources' }
   | { kind: 'campaigns' }
-  | { kind: 'gaps' }
+  | { kind: 'help' }
   | { kind: 'backups' }
   | { kind: 'add'; start?: 'import' } // start: 'import' opens the chooser on its import choices
   | { kind: 'settings' }
@@ -261,8 +261,7 @@ function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (in
         </p>
         <ul className="character-list" aria-labelledby="app-heading">
           {navItem('Backups', screen.kind === 'backups', () => go({ kind: 'backups' }))}
-          {/* Stays here until the Help screen (Group 2, G11) takes it. */}
-          {navItem('Gap notes', screen.kind === 'gaps', () => go({ kind: 'gaps' }))}
+          {navItem('Help', screen.kind === 'help', () => go({ kind: 'help' }))}
           {navItem('Settings', screen.kind === 'settings', () => go({ kind: 'settings' }))}
         </ul>
       </nav>
@@ -389,7 +388,7 @@ function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (in
               }}
             />
           )}
-          {screen.kind === 'gaps' && <AllGapNotesPanel onError={onError} onOpenCharacter={(id) => open(id, 'features')} />}
+          {screen.kind === 'help' && <HelpPanel onError={onError} onOpenCharacter={(id) => open(id, 'features')} />}
           {screen.kind === 'backups' && (
             <BackupsPanel onError={onError} onStatus={(text) => setMessage({ tone: 'status', text })} onRestored={() => void refresh()} />
           )}

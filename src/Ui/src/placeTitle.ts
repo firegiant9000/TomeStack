@@ -36,8 +36,8 @@ export function placeOf(screen: Screen): string {
       return 'Books and PDFs';
     case 'campaigns':
       return 'Campaigns';
-    case 'gaps':
-      return 'Gap notes';
+    case 'help':
+      return 'Help';
     case 'backups':
       return 'Backups';
     case 'settings':

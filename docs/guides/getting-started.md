@@ -12,7 +12,7 @@ From the front page you can start in three ways.
 
 ## The sheet
 
-Each character has tabs along the top.
+Each character has six tabs along the top.
 
 - **Play** holds hit points, rolls, resources, conditions and rests. This is the tab you use at the table.
 - **Spells** lists spells and slots. It only appears for characters that cast spells.
@@ -20,7 +20,8 @@ Each character has tabs along the top.
 - **Features** lists what your class, species and background give you.
 - **Skills and saves** shows every skill, save and calculated number.
 - **Journal** is for notes, details and the story so far.
-- **Manage** is for exporting, printing and leveling up.
+
+The **More** list next to the tabs holds the rest: Choices (when the character has some to change), Print, Export, Snapshots, Updates and Archive.
 
 Click a number to see a trace of where it came from. If a number is wrong for your table, you can set it by hand. The sheet marks it as set by hand.
 

@@ -73,10 +73,10 @@ it('switches the dice animation off and on', async () => {
   expect(localStorage.getItem('tomestack.diceAnimation')).toBeNull();
 });
 
-it('groups the screen under Appearance, Accessibility, Keyboard shortcuts, About and Diagnostics headings', () => {
+it('groups the screen under Appearance, Accessibility, About and Diagnostics headings; the shortcuts are on the Help screen', () => {
   render(<SettingsPanel />);
-  expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Appearance', 'Accessibility', 'Keyboard shortcuts', 'About', 'Diagnostics']);
-  expect(screen.getByText('Ctrl+B', { selector: 'dt' }).nextElementSibling!.textContent).toContain('sidebar');
+  expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Appearance', 'Accessibility', 'About', 'Diagnostics']);
+  expect(screen.queryByText('Ctrl+B')).toBeNull();
 });
 
 it('offers System, Light and Dark as the colour scheme, applies the pick at once and remembers it', async () => {

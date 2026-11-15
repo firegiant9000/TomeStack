@@ -95,6 +95,33 @@ afterEach(() => {
   localStorage.clear();
 });
 
+it('the sidebar Help item opens the Help screen with focus on its h1, and there is no separate Gap notes screen', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  const nav = await screen.findByRole('navigation', { name: 'Main' });
+  await user.click(within(nav).getByRole('button', { name: 'Help' }));
+  const h1 = await screen.findByRole('heading', { level: 1, name: 'Help' });
+  expect(document.activeElement).toBe(h1);
+  expect(screen.getByRole('heading', { level: 2, name: 'Gap notes' })).toBeTruthy();
+});
+
+it('a screen that throws shows the boundary fallback, and "Back to your characters" goes home', async () => {
+  const user = userEvent.setup();
+  const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
+  vi.mocked(client.listAllGapNotes).mockImplementation(() => {
+    throw new Error('fixture failure'); // thrown in the Help screen's effect: the boundary catches it
+  });
+  render(<App />);
+  const nav = await screen.findByRole('navigation', { name: 'Main' });
+  await user.click(within(nav).getByRole('button', { name: 'Help' }));
+  expect(await screen.findByRole('heading', { level: 1, name: 'Something went wrong on this screen' })).toBeTruthy();
+  expect(within(nav).getByRole('button', { name: 'Settings' })).toBeTruthy(); // the navigation stays usable
+  vi.mocked(client.listAllGapNotes).mockResolvedValue([]);
+  await user.click(screen.getByRole('button', { name: 'Back to your characters' }));
+  expect(await screen.findByRole('heading', { level: 1, name: 'Your characters' })).toBeTruthy();
+  quiet.mockRestore();
+});
+
 it('shows the rules family id before app.info arrives, then the label the service sent', async () => {
   let resolveInfo: (value: Awaited<ReturnType<typeof client.info>>) => void = () => {};
   vi.mocked(client.info).mockReturnValue(new Promise((resolve) => (resolveInfo = resolve)));
@@ -171,7 +198,7 @@ it('Every_screen_has_one_h1_matching_the_title', async () => {
     ['Homebrew', 'Homebrew'],
     ['Campaigns', 'Campaigns'],
     ['Backups', 'Backups'],
-    ['Gap notes', 'Gap notes'],
+    ['Help', 'Help'],
     ['Settings', 'Settings'],
     ['All characters', 'Your characters'],
   ] as const) {
@@ -577,7 +604,8 @@ it('the sidebar has an add button, then Characters, Library and App as labelled 
   const names = (list: HTMLElement) => within(list).getAllByRole('button').map((b) => b.textContent?.replace(/\s+/g, ' ').trim());
   expect(names(lists[0]!)[0]).toBe('All characters');
   expect(names(lists[1]!)).toEqual(['Books and PDFs', 'Homebrew', 'Campaigns']);
-  expect(names(lists[2]!)).toEqual(['Backups', 'Gap notes', 'Settings']);
+  expect(names(lists[2]!)).toEqual(['Backups', 'Help', 'Settings']);
+  expect(within(nav).queryByRole('button', { name: 'Gap notes' })).toBeNull();
   const buttons = within(nav).getAllByRole('button');
   expect(buttons[0]!.textContent).toBe('+ Add a character');
   for (const gone of ['Extensions', 'New character', /^Import package/, /^From a TomeStack file/]) expect(within(nav).queryByRole('button', { name: gone })).toBeNull();
