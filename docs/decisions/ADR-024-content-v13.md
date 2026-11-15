@@ -40,7 +40,7 @@ Content schema v12 cannot express this. A guide is advice used only while creati
    - `validate.guide-target`: a guide without exactly one `guideFor`, or one that targets itself or something that is not a published class or background of the revision's rules family.
    - `validate.guide-duplicate`: another guide already guides the same target in a shared rules family.
    - `validate.guide-abilities`: not one or two different ability keys.
-   - `validate.guide-picks`: too many picks (at most 12), too many options in a pick (at most 20), too many lines in an option (`MaxGuideLines`, 30), a repeated pick or option id, a pick with no options, or a line that is not exactly one kind.
+   - `validate.guide-picks`: too many picks (at most 12), too many options in a pick (at most 30; raised from 20 to 30 before release so the 2024 Monk can offer every tool and instrument; owner, 2026-11-15), too many lines in an option (`MaxGuideLines`, 30), a repeated pick or option id, a pick with no options, or a line that is not exactly one kind.
    - `validate.guide-item`: a fixed item or pack line naming something that is not a published item (or pack) of the family, or the guide itself.
    - `validate.guide-quantity`: a quantity outside 1 to 999.
    - `validate.guide-category`: an `anyOf` category outside the six, or a `requiresProficiency` that is not a `weapon.` or `armor.` key.

@@ -65,7 +65,7 @@ public static class ContentValidator
 
     /// <summary>Content v13 (ADR-024): the most picks in a guide's kit, options in a pick, lines in an option or a pack, and the largest quantity of a line.</summary>
     private const int MaxGuidePicks = 12;
-    private const int MaxGuideOptions = 20;
+    private const int MaxGuideOptions = 30;
     private const int MaxPackLines = 30;
     private const int MaxGuideLines = 30;
     private const int MaxGuideQuantity = 999;

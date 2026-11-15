@@ -134,9 +134,45 @@ public class SrdGuides521Tests
 
         var (kit, kitCoins, _) = Expand("Fighter", "b");
         Assert.Equal(new Currency { Gp = 11 }, kitCoins);
-        Assert.Equal(1, kit["Studded Leather Armor"]);
-        Assert.Equal(20, kit["Arrow"]);
-        Assert.Equal(1, kit["Quiver"]);
+        var dungeoneer = All.SelectMany(p => p.Revisions).Single(r => r.Name == "Dungeoneer’s Pack").Effects.OfType<ItemEffect>().Single().Contains!;
+        var names = NamesByContent();
+        var expected = new SortedDictionary<string, int>(StringComparer.Ordinal)
+        {
+            ["Studded Leather Armor"] = 1, ["Scimitar"] = 1, ["Shortsword"] = 1, ["Longbow"] = 1, ["Arrow"] = 20, ["Quiver"] = 1,
+        };
+        foreach (var line in dungeoneer)
+            expected[names[line.Item!.ContentId]] = expected.GetValueOrDefault(names[line.Item!.ContentId]) + (line.Quantity ?? 1);
+        Assert.Equal(expected, kit);
+    }
+
+    public static TheoryData<string, string> OfYourChoiceOptions()
+    {
+        var data = new TheoryData<string, string>();
+        foreach (var className in new[] { "Bard", "Monk" })
+        {
+            var guide = Assert.Single(Catalog.GuidesFor(ClassNamed(className).ContentId));
+            foreach (var option in Assert.Single(Kit(guide).Picks).Options.Where(o => o.Id.StartsWith("a-", StringComparison.Ordinal)))
+                data.Add(className, option.Id);
+        }
+        return data;
+    }
+
+    private static string TitleOf(string slug) =>
+        string.Join(' ', slug.Split('-').Select(w => char.ToUpperInvariant(w[0]) + w[1..]));
+
+    [Theory]
+    [MemberData(nameof(OfYourChoiceOptions))]
+    public void Every_of_your_choice_option_expands_to_the_item_named_by_its_id(string className, string optionId)
+    {
+        var title = TitleOf(optionId[2..]);
+        var gear = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.2.1-gear.json").Revisions.Where(r => r.Kind == ContentKind.Item).ToList();
+        // A Bard's choice is a musical instrument; a Monk's is an artisan's tool or an instrument. The catalogue entry gives the expected name.
+        var entry = Assert.Single(gear, r =>
+            Plain(r.Name) == $"Musical Instrument ({title})"
+            || (className == "Monk" && Plain(r.Name).StartsWith(title + "'s ", StringComparison.Ordinal)));
+        var (items, _, problems) = Expand(className, optionId);
+        Assert.Empty(problems);
+        Assert.Equal(1, items[Plain(entry.Name)]);
     }
 
     [Fact]
@@ -196,8 +232,8 @@ public class SrdGuides521Tests
     {
         Assert.Equal(11, Assert.Single(Kit(GuideFor("Bard")).Picks).Options.Count);
         Assert.Equal(4, Assert.Single(Kit(GuideFor("Cleric")).Picks).Options.Count);
-        // The Monk's musical-instrument choice is not modelled: a pick holds at most 20 options (17 artisan's tools + gold here).
-        Assert.Equal(18, Assert.Single(Kit(GuideFor("Monk")).Picks).Options.Count);
+        // The Monk offers 17 artisan's tools and 10 musical instruments, plus the gold option (a pick holds at most 30 options).
+        Assert.Equal(28, Assert.Single(Kit(GuideFor("Monk")).Picks).Options.Count);
         Assert.Equal(3, Assert.Single(Kit(GuideFor("Fighter")).Picks).Options.Count);
         Assert.Equal(4, Assert.Single(Kit(GuideFor("Paladin")).Picks).Options.Count);
     }
