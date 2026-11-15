@@ -708,7 +708,7 @@ function PinButton({ name, pinned, full, onPin }: Pinning) {
 export function AbilitiesPanel({ view, onRoll }: { view: CharacterView; onRoll: (field: string) => void }) {
   return (
     <section aria-labelledby="abilities-heading" className="play-panel">
-      <h3 id="abilities-heading">Abilities</h3>
+      <h2 id="abilities-heading">Abilities</h2>
       <AbilityBoxes fields={view.sheet.fields} onRoll={onRoll} />
     </section>
   );

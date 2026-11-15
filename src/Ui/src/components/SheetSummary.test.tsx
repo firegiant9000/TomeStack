@@ -123,7 +123,7 @@ it('renders the six ability boxes before the bar, not inside it, only with abili
 });
 
 it('keeps the bar in the specified DOM order', () => {
-  const view = fixtureView({}, { temporaryHitPoints: 0, resources: [], conditions: ['poisoned'], exhaustion: 0, inspiration: false });
+  const view = fixtureView({}, { temporaryHitPoints: 0, resources: [], conditions: ['poisoned'], exhaustion: 0, inspiration: false, spellSlotsSpent: [], pactSlotsSpent: 0 });
   render(<SheetSummary view={view} rulesFamilies={policies} {...plain} />);
   const bar = statusBar();
   const at = (el: Element) => Array.from(bar.querySelectorAll('*')).indexOf(el);

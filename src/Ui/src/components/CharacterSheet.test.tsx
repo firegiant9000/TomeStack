@@ -11,6 +11,7 @@ import type { Character, CharacterSheet as SheetModel, CharacterView, DerivedVal
 import { TomeStackError } from '../api/transport';
 import { blockedHint, confirmLabel, describedBy, exportChange, failedLine, firstRadio, packageTargetsFixture } from '../test/downConversion';
 import { expectNoAxeViolations } from '../test/axe';
+import { expectContinuousOutline } from '../test/outline';
 import { CharacterSheet } from './CharacterSheet';
 import { writeChecklist } from '../levelUpChecklist';
 import { RollResult } from './PlayPanels';
@@ -653,6 +654,13 @@ it('offers a compact view on Play that is remembered as a preference (D20)', asy
 });
 
 describe('Abilities panel (Wave 3 3.4)', () => {
+  it('Play_tab_outline_is_continuous_with_the_status_bar_and_Abilities_panel', () => {
+    renderSheet(view());
+    // Wave 3 G2/G3 heading pass: the sheet's h1, then the Play panels (Abilities and Conditions included) at h2.
+    expectContinuousOutline(document.body);
+    expect(screen.getByRole('heading', { name: 'Conditions', level: 2 })).toBeTruthy();
+  });
+
   it('shows the boxes in an Abilities panel on Play, none above the status bar, and Roll rolls the ability field', async () => {
     const user = userEvent.setup();
     const { container } = renderSheet(view());
@@ -660,7 +668,7 @@ describe('Abilities panel (Wave 3 3.4)', () => {
     const panel = screen.getByRole('region', { name: 'Abilities' });
     expect(panel.querySelector('dl.summary-abilities')).not.toBeNull();
     expect(container.querySelectorAll('dl.summary-abilities')).toHaveLength(1);
-    expect(screen.getByRole('heading', { name: 'Abilities' }).id).toBe('abilities-heading');
+    expect(screen.getByRole('heading', { name: 'Abilities', level: 2 }).id).toBe('abilities-heading');
     const roll = within(panel).getByRole('button', { name: /^Roll/ });
     roll.focus();
     await user.keyboard('{Enter}');
@@ -2722,7 +2730,7 @@ it('says once when a saved view reset a companion, and leaves the view it opened
 describe('Play tab: hit points, Inspiration and conditions', () => {
   const withConditions = (conditions: string[]): CharacterView => {
     const v = view();
-    return { ...v, character: { ...v.character, play: { temporaryHitPoints: 0, resources: [], conditions, exhaustion: 0 } } };
+    return { ...v, character: { ...v.character, play: { temporaryHitPoints: 0, resources: [], conditions, exhaustion: 0, spellSlotsSpent: [], pactSlotsSpent: 0 } } };
   };
   const sheetOf = (v: CharacterView) => <CharacterSheet view={v} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />;
 
