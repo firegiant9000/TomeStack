@@ -99,9 +99,9 @@ export function SnapshotsPanel({ character, onChanged, onError, onStatus }: Prop
 
   return (
     <section aria-labelledby="snapshots-heading">
-      <h3 id="snapshots-heading" tabIndex={-1} ref={heading}>
+      <h2 id="snapshots-heading" tabIndex={-1} ref={heading}>
         Snapshots
-      </h3>
+      </h2>
       <p className="hint">A copy of this character to come back to. Snapshots stay on this computer; exports and full backups leave them out. Session notes are not copied into a snapshot, and a restore keeps the notes you have.</p>
       <div className="inline-form">
         <label className="field">
@@ -139,9 +139,9 @@ export function SnapshotsPanel({ character, onChanged, onError, onStatus }: Prop
       )}
       {preview && (
         <div role="region" aria-labelledby="restore-heading" className="play-panel">
-          <h4 id="restore-heading" tabIndex={-1} ref={previewHeading}>
+          <h3 id="restore-heading" tabIndex={-1} ref={previewHeading}>
             Restore {name(preview.snapshot)}?
-          </h4>
+          </h3>
           {preview.fields.length === 0 ? (
             <p>No calculated value changes.</p>
           ) : (

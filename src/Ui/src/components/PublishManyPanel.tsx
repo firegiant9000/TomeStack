@@ -206,9 +206,9 @@ export function PublishManyPanel({ source, pending, onError, onClose, onPublishe
   const headingId = 'publish-many-heading';
   return (
     <section aria-labelledby={headingId} className="play-panel">
-      <h3 id={headingId} tabIndex={-1} ref={heading}>
+      <h2 id={headingId} tabIndex={-1} ref={heading}>
         Make drafts of {source.title} available to characters
-      </h3>
+      </h2>
       <p className="visually-hidden" aria-live="polite">
         {live}
       </p>

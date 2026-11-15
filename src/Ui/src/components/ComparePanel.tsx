@@ -82,7 +82,7 @@ export function ComparePanel(props: { entry?: StudioEntry; unsaved: ContentRevis
   const shown = result?.key === key ? result.comparison : undefined;
   return (
     <section aria-labelledby="compare-heading" className="effect-editor">
-      <h4 id="compare-heading">Compare versions</h4>
+      <h3 id="compare-heading">Compare versions</h3>
       <p className="hint">Nothing is saved or applied: characters keep their version until you review and apply an update.</p>
       <label className="field">
         From
@@ -156,7 +156,7 @@ export function ComparePanel(props: { entry?: StudioEntry; unsaved: ContentRevis
           {shown.text.length === 0 ? <p>The texts are the same.</p> : shown.text.map((t) => <TextDiff key={t.where} change={t} />)}
           {shown.runs.map((run, i) => (
             <section key={`${run.characterId ?? 'blank'}-${i}`} aria-label={`${run.name} with each version`}>
-              <h5>{run.name}</h5>
+              <h4>{run.name}</h4>
               {run.problems.length > 0 ? (
                 <p className="warn">Not run: {run.problems.map((p) => p.message).join(' ')}</p>
               ) : run.fields.length === 0 ? (

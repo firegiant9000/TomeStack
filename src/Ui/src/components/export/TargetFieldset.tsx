@@ -9,13 +9,13 @@ interface Props {
   onChange: (value: string | null) => void;
 }
 
-/** Which TomeStack will open the file: the current row first (everything), then each older release the service offers. */
+/** Which version will open the file: the current row first (everything), then each older release the service offers. */
 export function TargetFieldset({ targets, value, onChange }: Props) {
   const name = useId();
   if (!targets || targets.targets.length === 0) return null;
   return (
     <fieldset>
-      <legend>Which TomeStack will open it?</legend>
+      <legend>Which version will open this file?</legend>
       <label>
         <input type="radio" name={name} checked={value === null} onChange={() => onChange(null)} />
         {targets.currentRow} or newer (everything)
