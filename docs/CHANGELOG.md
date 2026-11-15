@@ -17,6 +17,7 @@
 - **"Earlier rolls":** the list under the last roll was "Previous rolls". "Needs your attention" no longer repeats open choices (they stay under "Choices to make") and no longer shows internal ids.
 - **Six tabs and a More list on the sheet (D96):** the Manage tab is gone. The sheet's tabs are Play, Spells, Gear, Features, Skills and saves, and Journal. The sheet header ends with **More**, a list holding Choices (when the character has choices), Print…, Export… (the TomeStack file and the virtual tabletop export together), Snapshots, Updates and Archive. Choosing one opens it under the header with focus on its heading, and "Close" puts focus back on More. Esc closes the list. Print… is no longer a header button, and the "Choices to make" button now reads "Choose now". A tab remembered as Manage opens Play. [features/sheet-layout.md](features/sheet-layout.md).
 - **Gap notes are on Features (D96):** the gap notes form and list moved from Journal to the end of Features. "Report a gap" opens Features and focuses the form, and "Open <character>" on the Gap notes screen opens Features. Journal holds Session notes and Details.
+- **A sample character for a first run (D95):** with no characters, Home shows a "Welcome to TomeStack" card with "Try a sample character", "Make my own" and "Bring in a character". The sample is a level 3 Hill Dwarf Cleric, Wren Ashdown (2014 rules), opened on Play. "+ Add a character" offers it too ("Try the sample") while no sample exists. The sheet shows "This is a sample character." with "Remove sample", which asks "Remove Wren Ashdown? This cannot be undone." first. A sample that has snapshots cannot be removed (snapshots are never deleted); archive it instead.
 
 ### Changed
 - **Fix:** open choices are listed once again. Since the plainer messages (Group 2b) an open choice showed twice, under "Choices to make" and under "Needs your attention". The sheet now matches the choice's problem report to the choice itself, not to its wording, and no longer rewrites the service's messages.
@@ -32,6 +33,9 @@
 - **Docs (owed checks):** the populated upgrade check is recorded as passed: a copy of a library went through the published 0.8.0 and then 0.8.1 with every count, table and sheet unchanged ([m2-acceptance.md](features/m2-acceptance.md)).
 - The smoke script fails when its ready time (process start to the end of the in-app smoke script, an upper bound on first paint) is over budget: 15 s locally, 45 s in CI (D102, `scripts/ready-budget.ps1`). Reports from older builds, which lack the field, are not checked. The script's messages say "smoke ready time", not "first paint".
 - **Save for an older TomeStack** now offers only the version before this one (0.8); for an older TomeStack, update it first.
+
+### Migration
+- **Release note: the database moves to version 12.** The first start of this version adds a column to the characters table (`origin`, empty for every existing character; it marks the sample character, D95). After this version opens a data folder, 0.8.x and older refuse to open it. To go back, restore the pre-upgrade backup the first start writes (`tomestack.db.v11.bak`, and the `tomestack.db.app-<from>-to-<to>.bak` copy of the database as the earlier version left it); anything you added after upgrading is not in those copies. Character, content and package formats do not change.
 
 ## 0.8.1 (save for 0.7.0, Foundry dnd5e 6.0.6, release and CI hygiene)
 

@@ -3688,3 +3688,38 @@ it('previews a Fighter 3 at level 5 from the level-up step: Extra Attack shows a
   expect(after.level).toBe(3);
   expect(after).toEqual(before); // the store received no write
 });
+
+it('tries the sample from the chooser, plays it and removes it (D95)', async () => {
+  const user = userEvent.setup();
+  // The DevHost is shared, so Home is not empty here (the welcome card is covered by HomePanel's tests): the sample is reached
+  // through the chooser, which offers it while no sample exists. A leftover sample from a failed run is removed first.
+  for (const c of await client.listCharacters()) if (c.origin === 'sample') await client.deleteSample(c.id);
+
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: '+ Add a character' }));
+  const choice = await screen.findByRole<HTMLInputElement>('radio', { name: /^Try the sample/ });
+  await user.click(choice);
+  await user.click(screen.getByRole('button', { name: 'Continue' }));
+
+  const sheet = await screen.findByRole('article', { name: 'Wren Ashdown' });
+  expect(within(sheet).getByRole('tab', { name: 'Play' }).getAttribute('aria-selected')).toBe('true');
+  await waitFor(() => expect(summaryValue(sheet, 'Armor Class')).toMatch(/^16/));
+  expect(within(sheet).getByText('This is a sample character.')).toBeTruthy();
+
+  // Remove sample asks first: focus goes to Keep, Keep puts it back on Remove sample and leaves the character alone.
+  await user.click(within(sheet).getByRole('button', { name: 'Remove sample' }));
+  const dialog = await within(sheet).findByRole('alertdialog', { name: 'Remove Wren Ashdown?' });
+  expect(within(dialog).getByText('Remove Wren Ashdown? This cannot be undone.')).toBeTruthy();
+  await waitFor(() => expect(document.activeElement).toBe(within(dialog).getByRole('button', { name: 'Keep' })));
+  await user.click(within(dialog).getByRole('button', { name: 'Keep' }));
+  expect(within(sheet).queryByRole('alertdialog')).toBeNull();
+  expect(document.activeElement).toBe(within(sheet).getByRole('button', { name: 'Remove sample' }));
+
+  await user.click(within(sheet).getByRole('button', { name: 'Remove sample' }));
+  await user.click(within(await within(sheet).findByRole('alertdialog')).getByRole('button', { name: 'Remove' }));
+
+  // Back home, the sample is gone from the sidebar and from the service.
+  await waitFor(() => expect(screen.queryByRole('article', { name: 'Wren Ashdown' })).toBeNull());
+  await waitFor(() => expect(screen.queryByRole('button', { name: /^Wren Ashdown/ })).toBeNull());
+  expect((await client.listCharacters()).some((c) => c.origin === 'sample')).toBe(false);
+});
