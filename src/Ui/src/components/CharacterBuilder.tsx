@@ -1266,6 +1266,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
   const [step, setStep] = useState<Step>(mode.kind === 'create' ? 'rules' : mode.kind === 'levelUp' ? 'level' : 'choices');
   const [basics, setBasics] = useState<Basics>(initialBasics);
   const [draftId] = useState(() => crypto.randomUUID());
+  const [passedLevel, setPassedLevel] = useState(false);
   const [view, setView] = useState<CharacterView | undefined>(mode.kind === 'create' ? undefined : mode.view);
   const [guides, setGuides] = useState<GuideView[]>([]);
   const [gear, setGear] = useState<GearValue>({ skipped: false, choices: {} });
@@ -1465,6 +1466,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
       const result = await client.preview(draft);
       if (!current()) return;
       setView(result);
+      if (from === 'level') setPassedLevel(true); // Next from the level step counts as a pick (ruling), even if the player goes Back
       setStep('choices');
     } catch (error) {
       if (current()) onError(error);
@@ -1611,7 +1613,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
         (view?.character.choices?.length ?? 0) > 0 ||
         (view?.character.spells?.length ?? 0) > 0
       : !!view &&
-        (view.character !== mode.view.character ||
+        ((mode.kind === 'levelUp' && passedLevel) ||
           !sameValue(view.character.choices, mode.view.character.choices) ||
           !sameValue(view.character.spells, mode.view.character.spells));
   const [confirming, setConfirming] = useState<Step | undefined>(undefined);

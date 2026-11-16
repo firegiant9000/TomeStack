@@ -1542,10 +1542,30 @@ describe('confirm before discard', () => {
     expect(onCancel).not.toHaveBeenCalled();
   });
 
-  it('a scores change alone makes Cancel ask', async () => {
+  it('a scores method change alone makes Cancel ask', async () => {
     const user = userEvent.setup();
     const onCancel = vi.fn();
     await onlyThisPick(user, onCancel, ['Next: class', 'Next: ability scores'], 'radio:Enter by hand', ['Back', 'Back']);
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it('editing a score value makes Cancel ask', async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn();
+    vi.mocked(client.listContent).mockResolvedValue(stepContent());
+    render(<CharacterBuilder mode={{ kind: 'create' }} rulesFamilies={families} onCommitted={() => {}} onCancel={onCancel} onError={() => {}} />);
+    await fill(user, screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
+    await press(user, 'Next: class');
+    await press(user, 'Next: ability scores');
+    await press(user, 'radio:Enter by hand');
+    const str = within(screen.getByRole('group', { name: 'Base ability scores' })).getByRole('spinbutton', { name: 'Strength' });
+    await user.clear(str);
+    await user.type(str, '17');
+    await press(user, 'Back');
+    await press(user, 'Back');
+    await user.clear(screen.getByRole('textbox', { name: 'Name' }));
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(screen.getByRole('alertdialog')).toBeTruthy();
     expect(onCancel).not.toHaveBeenCalled();
@@ -1628,6 +1648,7 @@ describe('confirm before discard', () => {
     const answer = (selected: ContentOption[]) => {
       const v = viewWith([]);
       v.sheet.choices = [{ source, sourceName: 'Fixture feature', choiceId: 'pick', count: 1, options: [mine.reference], selected: selected.map((o) => o.reference), resolved: selected.length === 1 }];
+      if (selected.length > 0) v.character = { ...v.character, choices: [{ source, choiceId: 'pick', selected: selected.map((o) => o.reference) }] };
       return v;
     };
     vi.mocked(client.previewChoice).mockReset();
@@ -1638,6 +1659,70 @@ describe('confirm before discard', () => {
     await waitFor(() => expect(vi.mocked(client.previewChoice)).toHaveBeenCalledTimes(1));
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(within(screen.getByRole('alertdialog')).getByText('Discard these changes? Your picks will be lost.')).toBeTruthy();
+  });
+
+  describe('Make choices mode compares by value', () => {
+    const mine = content(7, 'feature', 'Fixture Mine', 'srd-5.1');
+    const source = { contentId: 'fixture-feature', revisionId: 'fixture-feature-r1' };
+    const answer = (selected: ContentOption[]) => {
+      const v = viewWith([]);
+      v.sheet.choices = [{ source, sourceName: 'Fixture feature', choiceId: 'pick', count: 1, options: [mine.reference], selected: selected.map((o) => o.reference), resolved: selected.length === 1 }];
+      if (selected.length > 0) v.character = { ...v.character, choices: [{ source, choiceId: 'pick', selected: selected.map((o) => o.reference) }] };
+      return v;
+    };
+    const tick = async (user: ReturnType<typeof userEvent.setup>, calls: number) => {
+      const picker = await screen.findByRole('group', { name: /Fixture feature: choose 1/ });
+      await user.click(await within(picker).findByRole('checkbox', { name: /Fixture Mine/ }));
+      await waitFor(() => expect(vi.mocked(client.previewChoice)).toHaveBeenCalledTimes(calls));
+    };
+
+    it('ticking and then unticking a choice cancels at once', async () => {
+      const user = userEvent.setup();
+      const onCancel = vi.fn();
+      vi.mocked(client.listContent).mockResolvedValue([mine]);
+      vi.mocked(client.previewChoice).mockReset();
+      vi.mocked(client.previewChoice).mockResolvedValueOnce(answer([mine])).mockResolvedValueOnce(answer([]));
+      render(<CharacterBuilder mode={{ kind: 'choices', view: answer([]) }} rulesFamilies={families} onCommitted={() => {}} onCancel={onCancel} onError={() => {}} />);
+      await tick(user, 1);
+      await waitFor(() => expect((screen.getByRole('checkbox', { name: /Fixture Mine/ }) as HTMLInputElement).checked).toBe(true));
+      await tick(user, 2);
+      await waitFor(() => expect((screen.getByRole('checkbox', { name: /Fixture Mine/ }) as HTMLInputElement).checked).toBe(false));
+      await user.click(screen.getByRole('button', { name: 'Cancel' }));
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+      expect(onCancel).toHaveBeenCalledTimes(1);
+    });
+
+    it('a real choice change makes Cancel ask', async () => {
+      const user = userEvent.setup();
+      const onCancel = vi.fn();
+      vi.mocked(client.listContent).mockResolvedValue([mine]);
+      vi.mocked(client.previewChoice).mockReset();
+      vi.mocked(client.previewChoice).mockResolvedValue(answer([mine]));
+      render(<CharacterBuilder mode={{ kind: 'choices', view: answer([]) }} rulesFamilies={families} onCommitted={() => {}} onCancel={onCancel} onError={() => {}} />);
+      await tick(user, 1);
+      await waitFor(() => expect((screen.getByRole('checkbox', { name: /Fixture Mine/ }) as HTMLInputElement).checked).toBe(true));
+      await user.click(screen.getByRole('button', { name: 'Cancel' }));
+      expect(screen.getByRole('alertdialog')).toBeTruthy();
+      expect(onCancel).not.toHaveBeenCalled();
+    });
+  });
+
+  it('a save in flight leaves no Discard to press, and Cancel does nothing', async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn();
+    vi.mocked(client.listContent).mockResolvedValue(stepContent());
+    vi.mocked(client.preview).mockResolvedValue(draftView());
+    vi.mocked(client.createCharacter).mockReset();
+    vi.mocked(client.createCharacter).mockImplementation(() => new Promise(() => {}));
+    await toBackground(user, /^Fixture Warden/, { onCancel });
+    await toChoices(user);
+    await user.click(await screen.findByRole('button', { name: 'Cancel' }));
+    await user.click(screen.getByRole('button', { name: 'Create and save' }));
+    // Busy closes the question in the same render, so Discard is unreachable; the guards stay as a defensive check.
+    expect(screen.queryByRole('button', { name: 'Discard' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(onCancel).not.toHaveBeenCalled();
   });
 
   it('Cancel is the last button on every step', async () => {
