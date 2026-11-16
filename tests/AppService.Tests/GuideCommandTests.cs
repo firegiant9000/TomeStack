@@ -235,6 +235,29 @@ public class GuideCommandTests
         Assert.Equal(3, view.Preview.Character.Equipment!.Single().Quantity);
     }
 
+    [Fact]
+    public void A_gold_only_option_replaces_the_drafts_gear_with_coins_only()
+    {
+        using var temp = new TempApp();
+        var content = temp.App.ListContent(RulesFamilies.Srd521);
+        var barbarian = content.Last(o => o.Kind == ContentKind.Class && o.Reference.ContentId == Barbarian521 && o.Compatible).Reference;
+        var gear = content.First(o => o.Kind == ContentKind.Item).Reference;
+        var draft = new Character
+        {
+            Id = Guid.NewGuid(), Name = "Gold draft", RulesFamily = RulesFamilies.Srd521, Level = 1,
+            Classes = [new(barbarian, 1)], BaseAbilities = new(10, 10, 10, 10, 10, 10),
+            Equipment = [new(gear, true, 2)], Currency = new(Gp: 3),
+        };
+        var guide = temp.App.ListGuides(RulesFamilies.Srd521).Single(g => g.TargetContentId == Barbarian521);
+
+        var view = temp.App.Kit(new(draft, [new(guide.GuideContentId, [new KitChoice(guide.Picks.Single().Id, "b")])]));
+
+        Assert.Empty(view.Problems);
+        Assert.Empty(view.Equipment);
+        Assert.Equal(75, view.Coins.Gp);
+        Assert.Empty(view.Preview.Character.Equipment!);
+    }
+
     private static Character Draft(string className)
     {
         var classes = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.1-classes.json");

@@ -176,6 +176,39 @@ public class BuilderDraftTests
     }
 
     [Fact]
+    public void Create_reports_a_null_entry_or_null_item_as_unknown_not_a_crash()
+    {
+        using var temp = new TempApp();
+
+        var nullEntry = Assert.Throws<AppValidationException>(() => temp.App.CreateCharacter(Create(Draft(), [null!])));
+        Assert.Contains(nullEntry.Problems, p => p.Code == "character.equipment-unknown");
+
+        var nullItem = Assert.Throws<AppValidationException>(() => temp.App.CreateCharacter(Create(Draft(), [new EquipmentEntry(null!)])));
+        Assert.Contains(nullItem.Problems, p => p.Code == "character.equipment-unknown");
+    }
+
+    [Fact]
+    public void Create_refuses_a_mod_that_is_not_a_published_mod_in_the_family()
+    {
+        using var temp = new TempApp();
+        var items = Items(temp, RulesFamilies.Srd521);
+        var only51 = Items(temp, RulesFamilies.Srd51).First(o => !o.RulesFamilies.Contains(RulesFamilies.Srd521));
+
+        // Another family's revision as a mod: refused by Create's own family check.
+        var otherFamily = Assert.Throws<AppValidationException>(() => temp.App.CreateCharacter(Create(Draft(), [new EquipmentEntry(items[0].Reference, Mods: [only51.Reference])])));
+        Assert.Contains(otherFamily.Problems, p => p.Code == "character.equipment-unknown");
+
+        // A plain item as a mod: the save path (checkMods) already refuses it.
+        var plain = Assert.Throws<AppValidationException>(() => temp.App.CreateCharacter(Create(Draft(), [new EquipmentEntry(items[0].Reference, Mods: [items[1].Reference])])));
+        Assert.Contains(plain.Problems, p => p.Code == "character.equipment-mod-invalid");
+
+        // A reference to nothing.
+        var missing = Assert.Throws<AppValidationException>(() => temp.App.CreateCharacter(Create(Draft(), [new EquipmentEntry(items[0].Reference, Mods: [Srd(999)])])));
+        Assert.Contains(missing.Problems, p => p.Code == "character.equipment-unknown");
+        Assert.Empty(temp.App.ListCharacters());
+    }
+
+    [Fact]
     public void Create_without_gear_behaves_as_before()
     {
         using var temp = new TempApp();

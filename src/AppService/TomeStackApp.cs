@@ -306,11 +306,15 @@ public sealed partial class TomeStackApp : IDisposable
     public CharacterView CreateCharacter(CreateCharacterRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
+        // Published items of this family only. A mod's own fit to its host (and its kind/published state) is checked again by the save
+        // (checkMods); the family of the mod is not, so it is checked here.
+        bool Unusable(ContentReference? reference) =>
+            reference is null || _store.FindRevision(reference) is not { Kind: ContentKind.Item, Status: RevisionStatus.Published } item || !item.RulesFamilies.Contains(request.RulesFamily);
         var unknown = (request.Equipment ?? [])
-            .Where(e => _store.FindRevision(e.Item) is not { Kind: ContentKind.Item, Status: RevisionStatus.Published } item || !item.RulesFamilies.Contains(request.RulesFamily))
+            .SelectMany(IEnumerable<ContentReference?> (e) => e?.Item is null || Unusable(e.Item) ? [e?.Item] : (e.Mods ?? []).Where(m => Unusable(m)).Select(m => (ContentReference?)m))
             .ToList();
         if (unknown.Count > 0)
-            throw new AppValidationException([.. unknown.Select(e => new Diagnostic("character.equipment-unknown", "An item is not published content for this rules family.", e.Item))]);
+            throw new AppValidationException([.. unknown.Select(r => new Diagnostic("character.equipment-unknown", "An item or mod is not published content for this rules family.", r))]);
         return SaveCharacter(new Character
         {
             Id = Guid.NewGuid(),
