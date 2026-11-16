@@ -1494,7 +1494,153 @@ describe('confirm before discard', () => {
     expect(document.activeElement).toBe(cancel);
   });
 
-  it('a scores, species, class or gear pick counts, and Cancel is the last button on every step', async () => {
+  // The name is needed to leave the Rules step and counts as a pick itself, so each test makes one pick, goes back to
+  // the Rules step and clears the name: what is left is that one pick alone.
+  // Leaving the Ability scores step needs a method, so the steps after it pass through "Enter by hand" and then put
+  // "Standard array" back on the way out. A token is a button name, or "radio:" and a radio name.
+  const press = async (user: ReturnType<typeof userEvent.setup>, token: string) => {
+    if (token.startsWith('radio:')) await user.click(await screen.findByRole('radio', { name: new RegExp(`^${token.slice(6)}`) }));
+    else await user.click(await screen.findByRole('button', { name: new RegExp(`^${token}`) }));
+  };
+  const onlyThisPick = async (user: ReturnType<typeof userEvent.setup>, onCancel: () => void, forward: string[], pick: string, after: string[]) => {
+    vi.mocked(client.listContent).mockResolvedValue([...stepContent(), content(9, 'background', 'Fixture Hermit', 'srd-5.1')]);
+    vi.mocked(client.preview).mockResolvedValue(draftView());
+    render(<CharacterBuilder mode={{ kind: 'create' }} rulesFamilies={families} onCommitted={() => {}} onCancel={onCancel} onError={() => {}} />);
+    await fill(user, screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
+    for (const token of forward) await press(user, token);
+    await press(user, pick);
+    for (const token of after) await press(user, token);
+    await user.clear(screen.getByRole('textbox', { name: 'Name' }));
+  };
+  const viaScores = ['Next: class', 'Next: ability scores', 'radio:Enter by hand', 'Next: species'];
+  const backToRules = ['Back', 'radio:Standard array', 'Back', 'Back'];
+
+  it('a class pick alone makes Cancel ask', async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn();
+    await onlyThisPick(user, onCancel, ['Next: class'], 'radio:Fixture Warden', ['Back']);
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it('a species pick alone makes Cancel ask', async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn();
+    await onlyThisPick(user, onCancel, viaScores, 'radio:Fixture Hillfolk', backToRules);
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it('a background pick alone makes Cancel ask', async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn();
+    await onlyThisPick(user, onCancel, [...viaScores, 'Next: background'], 'radio:Fixture Hermit', ['Back', ...backToRules]);
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it('a scores change alone makes Cancel ask', async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn();
+    await onlyThisPick(user, onCancel, ['Next: class', 'Next: ability scores'], 'radio:Enter by hand', ['Back', 'Back']);
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it('a gear skip alone makes Cancel ask', async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn();
+    await onlyThisPick(user, onCancel, [...viaScores, 'Next: background', 'Next: gear'], "Skip: I'll add gear myself", ['Back', 'Back', ...backToRules]);
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it('a pick that is undone again cancels at once', async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn();
+    vi.mocked(client.listContent).mockResolvedValue(stepContent());
+    render(<CharacterBuilder mode={{ kind: 'create' }} rulesFamilies={families} onCommitted={() => {}} onCancel={onCancel} onError={() => {}} />);
+    await user.click(screen.getByRole('radio', { name: '2024 rules' }));
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Keep editing' }));
+    await user.click(screen.getByRole('radio', { name: '2014 rules' }));
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+  });
+
+  it('closes the question when the step changes', async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn();
+    vi.mocked(client.listContent).mockResolvedValue(stepContent());
+    vi.mocked(client.preview).mockResolvedValue(draftView());
+    await toBackground(user, /^Fixture Warden/, { onCancel });
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Next: background' }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it('closes the question when a save starts, and nothing is discarded', async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn();
+    vi.mocked(client.listContent).mockResolvedValue(stepContent());
+    vi.mocked(client.preview).mockResolvedValue(draftView());
+    vi.mocked(client.createCharacter).mockReset();
+    vi.mocked(client.createCharacter).mockImplementation(() => new Promise(() => {}));
+    await toBackground(user, /^Fixture Warden/, { onCancel });
+    await toChoices(user);
+    await user.click(await screen.findByRole('button', { name: 'Cancel' }));
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Create and save' }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Saving…' })).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Choices' })).toBeTruthy();
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it('asks "Discard this level-up?" for a level-up and "Discard these changes?" for Make choices', async () => {
+    const user = userEvent.setup();
+    vi.mocked(client.listCampaigns).mockResolvedValue([]);
+    vi.mocked(client.listContent).mockResolvedValue(stepContent());
+    vi.mocked(client.preview).mockResolvedValue(draftView());
+    const { unmount } = render(<CharacterBuilder mode={{ kind: 'levelUp', view: levelView() }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+    await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+    await screen.findByRole('group', { name: 'Choices' });
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(within(screen.getByRole('alertdialog')).getByText('Discard this level-up? Your picks will be lost.')).toBeTruthy();
+    unmount();
+
+    const mine = content(7, 'feature', 'Fixture Mine', 'srd-5.1');
+    vi.mocked(client.listContent).mockResolvedValue([mine]);
+    const source = { contentId: 'fixture-feature', revisionId: 'fixture-feature-r1' };
+    const answer = (selected: ContentOption[]) => {
+      const v = viewWith([]);
+      v.sheet.choices = [{ source, sourceName: 'Fixture feature', choiceId: 'pick', count: 1, options: [mine.reference], selected: selected.map((o) => o.reference), resolved: selected.length === 1 }];
+      return v;
+    };
+    vi.mocked(client.previewChoice).mockReset();
+    vi.mocked(client.previewChoice).mockResolvedValue(answer([mine]));
+    render(<CharacterBuilder mode={{ kind: 'choices', view: answer([]) }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+    const picker = await screen.findByRole('group', { name: /Fixture feature: choose 1/ });
+    await user.click(await within(picker).findByRole('checkbox', { name: /Fixture Mine/ }));
+    await waitFor(() => expect(vi.mocked(client.previewChoice)).toHaveBeenCalledTimes(1));
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(within(screen.getByRole('alertdialog')).getByText('Discard these changes? Your picks will be lost.')).toBeTruthy();
+  });
+
+  it('Cancel is the last button on every step', async () => {
     const user = userEvent.setup();
     vi.mocked(client.listContent).mockResolvedValue(stepContent());
     vi.mocked(client.preview).mockResolvedValue(draftView());

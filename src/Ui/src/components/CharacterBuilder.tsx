@@ -108,6 +108,19 @@ const initialBasics: Basics = {
   other: [],
 };
 
+/** Structural equality that ignores object key order (and keys whose value is undefined). */
+function sameValue(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((x, i) => sameValue(x, b[i]));
+  }
+  const left = a as Record<string, unknown>;
+  const right = b as Record<string, unknown>;
+  const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
+  return [...keys].every((k) => sameValue(left[k], right[k]));
+}
+
 interface Props {
   mode: BuilderMode;
   rulesFamilies: RulesFamilyPolicy[];
@@ -1592,28 +1605,30 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
   // Confirm before discard: "any pick made" is computed from state (a step value that differs from where the builder started).
   const pickMade =
     mode.kind === 'create'
-      ? JSON.stringify(basics) !== JSON.stringify(initialBasics) ||
+      ? !sameValue(basics, initialBasics) ||
         gear.skipped ||
         Object.keys(gear.choices).length > 0 ||
         (view?.character.choices?.length ?? 0) > 0 ||
         (view?.character.spells?.length ?? 0) > 0
       : !!view &&
         (view.character !== mode.view.character ||
-          JSON.stringify(view.character.choices) !== JSON.stringify(mode.view.character.choices) ||
-          JSON.stringify(view.character.spells) !== JSON.stringify(mode.view.character.spells));
-  const [confirming, setConfirming] = useState(false);
+          !sameValue(view.character.choices, mode.view.character.choices) ||
+          !sameValue(view.character.spells, mode.view.character.spells));
+  const [confirming, setConfirming] = useState<Step | undefined>(undefined);
+  // The question closes when a save starts or the step changes (adjusted while rendering, not in an effect).
+  if (confirming !== undefined && (busy || confirming !== step)) setConfirming(undefined);
   const panel = useRef<HTMLElement>(null);
   const keepEditing = useRef<HTMLButtonElement>(null);
   const cancelPressed = useCallback(() => {
     if (busy) return; // a save in flight cannot be discarded; the button says so with aria-disabled
-    if (pickMade) setConfirming(true);
+    if (pickMade) setConfirming(step);
     else onCancel();
-  }, [busy, pickMade, onCancel]);
+  }, [busy, pickMade, onCancel, step]);
   useEffect(() => {
     if (confirming) keepEditing.current?.focus();
   }, [confirming]);
   function keepGoing() {
-    setConfirming(false);
+    setConfirming(undefined);
     // The step's own Cancel button gets the focus back, so the player is where they were.
     const cancel = [...(panel.current?.querySelectorAll('.actions button') ?? [])].find((b) => b.textContent.trim() === 'Cancel');
     if (cancel instanceof HTMLElement) cancel.focus();
@@ -1747,12 +1762,19 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
             }
           }}
         >
-          <p id="discard-question">Discard this character? Your picks will be lost.</p>
+          <p id="discard-question">
+            {mode.kind === 'create' ? 'Discard this character?' : mode.kind === 'levelUp' ? 'Discard this level-up?' : 'Discard these changes?'} Your picks will be lost.
+          </p>
           <div className="actions">
             <button type="button" ref={keepEditing} onClick={keepGoing}>
               Keep editing
             </button>
-            <button type="button" onClick={onCancel}>
+            <button
+              type="button"
+              onClick={() => {
+                if (!busy) onCancel(); // a save in flight cannot be discarded
+              }}
+            >
               Discard
             </button>
           </div>

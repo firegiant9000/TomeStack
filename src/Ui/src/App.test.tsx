@@ -354,7 +354,8 @@ function levelUpViews() {
 }
 async function toSaveLevelUp(user: ReturnType<typeof userEvent.setup>, before: CharacterView) {
   vi.mocked(client.getCharacter).mockResolvedValue(before);
-  vi.mocked(client.preview).mockResolvedValue(before);
+  // The real service returns a new character each time, so Next from the level step leaves a draft that is not the opened one.
+  vi.mocked(client.preview).mockImplementation(() => Promise.resolve({ ...before, character: { ...before.character } }));
   render(<App />);
   const list = await screen.findByRole('navigation', { name: 'Main' });
   await user.click(within(list).getByRole('button', { name: /Fixture Avery/ }));
@@ -417,7 +418,9 @@ it('Cancel from a level-up writes no list (D74)', async () => {
   const user = userEvent.setup();
   const { before } = levelUpViews();
   await toSaveLevelUp(user, before);
-  await user.click(screen.getByRole('button', { name: 'Cancel' }));
+  await user.click(screen.getByRole('button', { name: 'Cancel' })); // the level was picked: Cancel asks first
+  expect(screen.queryByText('Draft discarded. Nothing was changed.')).toBeNull();
+  await user.click(screen.getByRole('button', { name: 'Discard' }));
   await screen.findByText('Draft discarded. Nothing was changed.');
   expect(localStorage.getItem('tomestack.levelUpChecklist.fixture-a')).toBeNull();
 });
