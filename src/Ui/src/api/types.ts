@@ -3,7 +3,7 @@
 
 export type RulesFamilyId = 'srd-5.1' | 'srd-5.2.1';
 export type Ability = 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha';
-export type ContentKind = 'species' | 'background' | 'class' | 'subclass' | 'feature' | 'feat' | 'spell' | 'item';
+export type ContentKind = 'species' | 'background' | 'class' | 'subclass' | 'feature' | 'feat' | 'spell' | 'item' | 'creationGuide';
 export type AutomationStatus = 'automatic' | 'assisted' | 'reference';
 
 export type AbilityScores = Record<Ability, number>;
@@ -2003,6 +2003,71 @@ export interface KitPick {
   id: string;
   label?: string;
   options: KitOption[];
+}
+
+/** Wave 3 G8 (GuideView): a class's or background's creation guide, as the builder shows it; the texts are the service's. */
+export interface GuideView {
+  guideContentId: string;
+  targetContentId: string;
+  primaryAbilities: string[];
+  picks: GuidePickView[];
+}
+
+/** Wave 3 G8 (GuidePickView): one choice of a guide, with the label the builder shows. */
+export interface GuidePickView {
+  id: string;
+  label: string;
+  options: GuideOptionView[];
+}
+
+/** Wave 3 G8 (GuideOptionView): one option of a pick; `text` is the sentence the builder shows for it. */
+export interface GuideOptionView {
+  id: string;
+  text: string;
+  requiresProficiency: string | null;
+  lines: GuideLineView[];
+}
+
+/**
+ * Wave 3 G8 (GuideLineView): one line of an option. A `missing` line is an item that is not published or not in the rules family:
+ * the builder shows it as unavailable and cannot take it (`name` is null when unknown).
+ */
+export interface GuideLineView {
+  kind: 'item' | 'anyOf' | 'coins' | 'pack' | 'missing';
+  itemContentId: string | null;
+  name: string | null;
+  quantity: number;
+  anyOf: string | null;
+  choices: ContentOption[] | null;
+  coins: Currency | null;
+  contents: GuideLineView[] | null;
+}
+
+/** Wave 3 G8 (KitChoice): the player's answer to one pick; `anyOf` maps each anyOf line (by index) to the item chosen. */
+export interface KitChoice {
+  pickId: string;
+  optionId: string;
+  anyOf?: Record<number, string>;
+}
+
+/** Wave 3 G8 (GuideKit): the choices made for one guide's starting equipment. */
+export interface GuideKit {
+  guideContentId: string;
+  choices: KitChoice[];
+}
+
+/** Wave 3 G8 (KitView): what the kits give; `preview` is the draft calculated with them. Nothing is stored. */
+export interface KitView {
+  equipment: EquipmentEntry[];
+  coins: Currency;
+  problems: Diagnostic[];
+  preview: CharacterView;
+}
+
+/** Wave 3 G8 (KitRequest), command `character.kit`: the builder draft and the kits taken, one per guide. */
+export interface KitRequest {
+  draft: Character;
+  kits: GuideKit[];
 }
 
 /** Content v13: one line of a pack (an item's `contains`); an absent quantity means 1. */
