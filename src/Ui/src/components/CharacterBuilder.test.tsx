@@ -497,8 +497,12 @@ describe('the listing for a changed rules family', () => {
   const newList = () => [content(13, 'class', 'Fixture Ranger', 'srd-5.2.1', { compatible: true })];
   function deferred<T>() {
     let resolve!: (value: T) => void;
-    const promise = new Promise<T>((r) => (resolve = r));
-    return { promise, resolve };
+    let reject!: (reason: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
   }
 
   it('shows a loading state, with nothing to pick, while the new family listing is pending', async () => {
@@ -525,9 +529,70 @@ describe('the listing for a changed rules family', () => {
     await fill(user, screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
     await user.click(screen.getByRole('radio', { name: /2024 rules/ }));
     await user.click(screen.getByRole('button', { name: 'Next: class' }));
-    expect(await screen.findByText(/Couldn't load the options\. Go back to Rules and try again/)).toBeTruthy();
+    expect(await screen.findByText(/Couldn't load the options\./)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
     expect(screen.queryByText(/Loading options/)).toBeNull();
     expect(document.querySelector('[aria-busy="true"]')).toBeNull();
+  });
+
+  it('asks again for the same listing on "Try again", and shows the options when it succeeds', async () => {
+    const user = userEvent.setup();
+    let calls = 0; // the first 2024 request is refused, the next one answers
+    vi.mocked(client.listContent).mockImplementation((family) => {
+      if (family === 'srd-5.1') return Promise.resolve(oldList());
+      calls += 1;
+      return calls === 1 ? Promise.reject(new Error('refused')) : Promise.resolve(newList());
+    });
+    renderCreate();
+    await fill(user, screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
+    await user.click(screen.getByRole('radio', { name: /2024 rules/ }));
+    await user.click(screen.getByRole('button', { name: 'Next: class' }));
+    await user.click(await screen.findByRole('button', { name: 'Try again' }));
+    expect(calls).toBe(2);
+    expect(await screen.findByRole('radio', { name: /^Fixture Ranger/ })).toBeTruthy();
+    expect(screen.queryByText(/Couldn't load the options/)).toBeNull();
+    expect(screen.queryByText(/Loading options/)).toBeNull();
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('shows the loading state, not the old failure, when returning to a family whose retry is pending', async () => {
+    const user = userEvent.setup();
+    const retry = deferred<ContentOption[]>();
+    let calls = 0;
+    vi.mocked(client.listContent).mockImplementation((family) => {
+      if (family === 'srd-5.2.1') return Promise.resolve(newList());
+      calls += 1;
+      return calls === 1 ? Promise.reject(new Error('refused')) : retry.promise;
+    });
+    renderCreate();
+    await fill(user, screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
+    await user.click(screen.getByRole('button', { name: 'Next: class' }));
+    await user.click(await screen.findByRole('button', { name: 'Try again' })); // 2014 retry now pending
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+    await user.click(screen.getByRole('radio', { name: /2024 rules/ }));
+    await user.click(screen.getByRole('button', { name: 'Next: class' }));
+    expect(await screen.findByRole('radio', { name: /^Fixture Ranger/ })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+    await user.click(screen.getByRole('radio', { name: /2014 rules/ }));
+    await user.click(screen.getByRole('button', { name: 'Next: class' }));
+    expect(screen.getByRole('status').textContent).toMatch(/Loading options/);
+    expect(screen.queryByText(/Couldn't load the options/)).toBeNull();
+  });
+
+  it('keeps the current family loaded when a late failure for an old family arrives', async () => {
+    const user = userEvent.setup();
+    const late = deferred<ContentOption[]>();
+    vi.mocked(client.listContent).mockImplementation((family) => (family === 'srd-5.2.1' ? Promise.resolve(newList()) : late.promise));
+    renderCreate();
+    await fill(user, screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
+    await user.click(screen.getByRole('radio', { name: /2024 rules/ }));
+    await user.click(screen.getByRole('button', { name: 'Next: class' }));
+    expect(await screen.findByRole('radio', { name: /^Fixture Ranger/ })).toBeTruthy();
+    late.reject(new Error('refused'));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.getByRole('radio', { name: /^Fixture Ranger/ })).toBeTruthy();
+    expect(screen.queryByText(/Couldn't load the options/)).toBeNull();
+    expect(screen.queryByRole('status')).toBeNull();
   });
 
   it('keeps a pick made from the new listing when a late reply for the old family arrives', async () => {

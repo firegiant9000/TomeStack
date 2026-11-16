@@ -627,6 +627,8 @@ interface PickStepProps {
   loaded: boolean;
   /** The listing for the current rules family and campaign was refused: say so instead of loading forever. */
   loadFailed: boolean;
+  /** Asks for the listing again (same rules family and campaign). */
+  onRetry: () => void;
   /** Item 1: what the builder hides for each kind; draft counts are 0 until they arrive (a failure shows no draft line). */
   missing: (kind: ContentKind) => Missing;
   /** R41: the names among these picks that need a campaign exception reason which is not given (now). */
@@ -638,12 +640,17 @@ interface PickStepProps {
 }
 
 /** Shown instead of the options while the listing for the current rules family is still on its way: nothing stale can be picked. */
-function LoadingOptions({ legend, failed }: { legend: string; failed?: boolean }) {
+function LoadingOptions({ legend, failed, onRetry }: { legend: string; failed?: boolean; onRetry: () => void }) {
   if (failed) {
     return (
       <fieldset>
         <legend>{legend}</legend>
-        <p className="hint">Couldn't load the options. Go back to Rules and try again, or close and reopen the builder.</p>
+        <p className="hint">
+          Couldn't load the options.{' '}
+          <button type="button" onClick={onRetry}>
+            Try again
+          </button>
+        </p>
       </fieldset>
     );
   }
@@ -671,7 +678,7 @@ function SpeciesStep(props: PickStepProps) {
       {props.loaded ? (
         <SinglePick legend="Species" name="species" options={list} value={basics.species} onChange={(species) => onChange({ ...basics, species })} />
       ) : (
-        <LoadingOptions legend="Species" failed={props.loadFailed} />
+        <LoadingOptions legend="Species" failed={props.loadFailed} onRetry={props.onRetry} />
       )}
       {missingHint('species', 'species', list.length, props.missing('species'), props.loaded, props.policy)}
     </StepForm>
@@ -695,7 +702,7 @@ function ClassStep(props: PickStepProps) {
           onChange={(startingClass) => onChange({ ...basics, startingClass })}
         />
       ) : (
-        <LoadingOptions legend="Class (level 1)" failed={props.loadFailed} />
+        <LoadingOptions legend="Class (level 1)" failed={props.loadFailed} onRetry={props.onRetry} />
       )}
       {missingHint('class', 'classes', list.length, props.missing('class'), props.loaded, props.policy)}
     </StepForm>
@@ -737,7 +744,7 @@ function BackgroundStep(props: PickStepProps) {
           onChange={(background) => onChange({ ...basics, background })}
         />
       ) : (
-        <LoadingOptions legend="Background" failed={props.loadFailed} />
+        <LoadingOptions legend="Background" failed={props.loadFailed} onRetry={props.onRetry} />
       )}
       {missingHint('background', 'backgrounds', list.length, props.missing('background'), props.loaded, props.policy)}
 
@@ -1314,10 +1321,10 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
   /** What the gear step gave when the player pressed Next: sent with the new character; undefined when skipped or nothing was given. */
   const [kitGiven, setKitGiven] = useState<{ equipment: EquipmentEntry[]; coins: Currency }>();
   const [listed, setListed] = useState<ContentOption[]>([]);
-  // Which rules family and campaign `listed` belongs to; until it matches, options are still loading.
-  const [listedFor, setListedFor] = useState<string>();
-  // The family|campaign key whose listing was refused; it stops the loading state from standing in for an error.
-  const [listFailedFor, setListFailedFor] = useState<string>();
+  // How the last listing request settled, and for which request key (family|campaign|retry). While the current key has no settled status, options are still loading.
+  const [listStatus, setListStatus] = useState<{ key: string; ok: boolean }>();
+  // "Try again" bumps this, which is part of the request key, so the same family and campaign are asked for again.
+  const [listRetry, setListRetry] = useState(0);
   // Item 1: how many entries per kind are still drafts, and the family they were counted for. A failure leaves it unset: the counts are only a hint.
   const [drafts, setDrafts] = useState<{ family: string; counts: Partial<Record<ContentKind, number>> }>();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -1355,6 +1362,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
   const campaignId = mode.kind === 'create' ? basics.campaignId : mode.view.character.campaignId;
   const campaign = campaigns.find((c) => c.id === campaignId);
   const creating = mode.kind === 'create';
+  const listKey = `${family}|${campaignId ?? ''}|${listRetry}`;
 
   useEffect(() => {
     client
@@ -1372,12 +1380,13 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
 
   useEffect(() => {
     let current = true;
+    const key = listKey;
     client
       .listContent(family, campaignId)
       .then((result) => {
         if (!current) return;
         setListed(result);
-        setListedFor(`${family}|${campaignId ?? ''}`);
+        setListStatus({ key, ok: true });
         // A pick that does not fit the (new) rules family is dropped, not left checked but disabled (SPEC S-02).
         const fits = (ref?: ContentReference) => !!ref && result.some((o) => o.compatible && sameRef(o.reference, ref));
         setBasics((b) => {
@@ -1393,7 +1402,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
         });
       })
       .catch((error) => {
-        if (current) setListFailedFor(`${family}|${campaignId ?? ''}`);
+        if (current) setListStatus({ key, ok: false });
         fail(error);
       });
     // Only the create flow shows guides: a guides failure must not put an error on the level-up or choices screens.
@@ -1414,7 +1423,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
     return () => {
       current = false;
     };
-  }, [family, campaignId, creating, fail]);
+  }, [family, campaignId, creating, fail, listKey]);
 
   // SPEC P-01: content outside the campaign is unavailable until the player says why they use it (a recorded exception).
   const outsideAllowed = outside.allow && outside.reason.trim().length > 0;
@@ -1637,8 +1646,8 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
   const back = () => setStep(createSteps[Math.max(at - 1, 0)]!);
   const next = () => setStep(createSteps[Math.min(at + 1, createSteps.length - 1)]!);
   const policy = rulesFamilies.find((f) => f.id === basics.rulesFamily);
-  const optionsLoaded = listedFor === `${family}|${campaignId ?? ''}`;
-  const optionsFailed = !optionsLoaded && listFailedFor === `${family}|${campaignId ?? ''}`;
+  const optionsLoaded = listStatus?.key === listKey && listStatus.ok;
+  const optionsFailed = listStatus?.key === listKey && !listStatus.ok;
   const otherFamily = rulesFamilies.find((f) => f.id !== family);
   const missing = (kind: ContentKind): Missing => ({
     drafts: drafts?.family === family ? (drafts.counts[kind] ?? 0) : 0,
@@ -1678,7 +1687,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
     const cancel = [...(panel.current?.querySelectorAll('.actions button') ?? [])].find((b) => b.textContent.trim() === 'Cancel');
     if (cancel instanceof HTMLElement) cancel.focus();
   }
-  const pickProps = { basics, policy, options: pickable, loaded: optionsLoaded, loadFailed: optionsFailed, missing, reasonNames, onChange: setBasics, onBack: back, onCancel: cancelPressed };
+  const pickProps = { basics, policy, options: pickable, loaded: optionsLoaded, loadFailed: optionsFailed, onRetry: () => setListRetry((n) => n + 1), missing, reasonNames, onChange: setBasics, onBack: back, onCancel: cancelPressed };
 
   const title = builderTitle(mode);
 
