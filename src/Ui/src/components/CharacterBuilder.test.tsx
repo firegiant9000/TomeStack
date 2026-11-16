@@ -491,6 +491,50 @@ it('walks seven steps with the heading focused on each, and reaches the choices 
   expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'New character' }));
 });
 
+// A rules family change and a quick class pick: options of the old family are never offered, and a late reply cannot clear a pick.
+describe('the listing for a changed rules family', () => {
+  const oldList = () => [content(3, 'class', 'Fixture Warden', 'srd-5.1')];
+  const newList = () => [content(13, 'class', 'Fixture Ranger', 'srd-5.2.1', { compatible: true })];
+  function deferred<T>() {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((r) => (resolve = r));
+    return { promise, resolve };
+  }
+
+  it('shows a loading state, with nothing to pick, while the new family listing is pending', async () => {
+    const user = userEvent.setup();
+    const pending = deferred<ContentOption[]>();
+    vi.mocked(client.listContent).mockImplementation((family) => (family === 'srd-5.1' ? Promise.resolve(oldList()) : pending.promise));
+    renderCreate();
+    await fill(user, screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
+    await user.click(screen.getByRole('radio', { name: /2024 rules/ }));
+    await user.click(screen.getByRole('button', { name: 'Next: class' }));
+    expect(screen.getByRole('status').textContent).toMatch(/Loading options/);
+    expect(screen.queryByRole('radio', { name: /^Fixture Warden/ })).toBeNull(); // the old family's class is not offered
+    expect(screen.queryByRole('radio', { name: /^Fixture Ranger/ })).toBeNull();
+    pending.resolve(newList());
+    await user.click(await screen.findByRole('radio', { name: /^Fixture Ranger/ }));
+    expect(screen.getByRole<HTMLInputElement>('radio', { name: /^Fixture Ranger/ }).checked).toBe(true);
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('keeps a pick made from the new listing when a late reply for the old family arrives', async () => {
+    const user = userEvent.setup();
+    const late = deferred<ContentOption[]>();
+    // The 2014 listing (the first request) answers only after the 2024 one has, and after the pick.
+    vi.mocked(client.listContent).mockImplementation((family) => (family === 'srd-5.2.1' ? Promise.resolve(newList()) : late.promise));
+    renderCreate();
+    await fill(user, screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
+    await user.click(screen.getByRole('radio', { name: /2024 rules/ }));
+    await user.click(screen.getByRole('button', { name: 'Next: class' }));
+    await user.click(await screen.findByRole('radio', { name: /^Fixture Ranger/ }));
+    late.resolve(oldList());
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.getByRole<HTMLInputElement>('radio', { name: /^Fixture Ranger/ }).checked).toBe(true);
+    expect(screen.queryByRole('radio', { name: /^Fixture Warden/ })).toBeNull();
+  });
+});
+
 // Wave 3 G8 task 8.6: the class's main abilities on the scores step, and the gear step's kit in the new character.
 const wardenGuide = (): GuideView => ({
   guideContentId: 'fixture-guide-warden',

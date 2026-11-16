@@ -236,16 +236,8 @@ async function createCharacter(
   await user.type(await screen.findByRole('textbox', { name: 'Name' }), opts.name);
   if (opts.family) await user.click(screen.getByRole('radio', { name: opts.family === 'srd-5.2.1' ? /2024 rules/ : /2014 rules/ }));
   await user.click(screen.getByRole('button', { name: 'Next: class' }));
-  if (opts.cls) {
-    // Class is now picked first, right after the rules family: a listing for the old family can still be on screen, and the
-    // pick is dropped when the new one arrives (SPEC S-02). Let it settle, and pick again if it was dropped.
-    for (let attempt = 0; attempt < 3; attempt++) {
-      await user.click(await screen.findByRole('radio', { name: opts.cls }));
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      if (screen.getByRole<HTMLInputElement>('radio', { name: opts.cls }).checked) break;
-    }
-    expect(screen.getByRole<HTMLInputElement>('radio', { name: opts.cls }).checked).toBe(true);
-  }
+  // The class options only appear once the listing for the chosen rules family has arrived, so this pick is never dropped.
+  if (opts.cls) await user.click(await screen.findByRole('radio', { name: opts.cls }));
   await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
   if (opts.scores) {
     await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
@@ -2904,8 +2896,8 @@ it('authors a class in the studio and builds it at levels 1, 20 and 5/3 with an 
 
   // Level 1 in the builder: the class is offered like any other, with its skill choice.
   await createCharacter(user, { name: 'E2E Scribe', family: 'srd-5.2.1', scores: { Intelligence: 16 }, cls: /^E2E Chronicler/ });
-  await pick(user, /^E2E Chronicler: choose 2/, /^E2E Chronicler: History/);
-  await pick(user, /^E2E Chronicler: choose 2/, /^E2E Chronicler: Arcana/);
+  await pick(user, /^Choose 2 skills/, /^E2E Chronicler: History/);
+  await pick(user, /^Choose 2 skills/, /^E2E Chronicler: Arcana/);
   await user.click(await screen.findByRole('button', { name: 'Create and save' }));
   let sheet = await screen.findByRole('article', { name: 'E2E Scribe' });
   await openTab(user, sheet, 'Skills and saves');

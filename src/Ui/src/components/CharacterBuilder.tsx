@@ -635,8 +635,21 @@ interface PickStepProps {
   onCancel: () => void;
 }
 
+/** Shown instead of the options while the listing for the current rules family is still on its way: nothing stale can be picked. */
+function LoadingOptions({ legend }: { legend: string }) {
+  return (
+    <fieldset aria-busy="true">
+      <legend>{legend}</legend>
+      <p className="hint" role="status">
+        Loading options…
+      </p>
+    </fieldset>
+  );
+}
+
 function SpeciesStep(props: PickStepProps) {
-  const { basics, options, onChange } = props;
+  const { basics, onChange } = props;
+  const options = props.loaded ? props.options : [];
   const list = ofKind(options, 'species');
   const hint = reasonHint(props.reasonNames([basics.species]));
   return (
@@ -645,33 +658,43 @@ function SpeciesStep(props: PickStepProps) {
       {props.policy?.abilityIncreaseSource === 'species' && (
         <p className="hint">Under these rules your species raises your ability scores. Where an option says so, "What it gives" shows how.</p>
       )}
-      <SinglePick legend="Species" name="species" options={list} value={basics.species} onChange={(species) => onChange({ ...basics, species })} />
+      {props.loaded ? (
+        <SinglePick legend="Species" name="species" options={list} value={basics.species} onChange={(species) => onChange({ ...basics, species })} />
+      ) : (
+        <LoadingOptions legend="Species" />
+      )}
       {missingHint('species', 'species', list.length, props.missing('species'), props.loaded, props.policy)}
     </StepForm>
   );
 }
 
 function ClassStep(props: PickStepProps) {
-  const { basics, options, onChange } = props;
+  const { basics, onChange } = props;
+  const options = props.loaded ? props.options : [];
   const hint = reasonHint(props.reasonNames([basics.startingClass]));
   const list = ofKind(options, 'class');
   return (
     <StepForm label="Class" next="Next: ability scores" nextDisabled={!!hint} nextHint={hint} onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
       <p className="hint">Open "What it gives" on an option to see what it grants and where it comes from.</p>
-      <SinglePick
-        legend="Class (level 1)"
-        name="startingClass"
-        options={list}
-        value={basics.startingClass}
-        onChange={(startingClass) => onChange({ ...basics, startingClass })}
-      />
+      {props.loaded ? (
+        <SinglePick
+          legend="Class (level 1)"
+          name="startingClass"
+          options={list}
+          value={basics.startingClass}
+          onChange={(startingClass) => onChange({ ...basics, startingClass })}
+        />
+      ) : (
+        <LoadingOptions legend="Class (level 1)" />
+      )}
       {missingHint('class', 'classes', list.length, props.missing('class'), props.loaded, props.policy)}
     </StepForm>
   );
 }
 
 function BackgroundStep(props: PickStepProps) {
-  const { basics, options, onChange } = props;
+  const { basics, onChange } = props;
+  const options = props.loaded ? props.options : [];
   const list = ofKind(options, 'background');
   // Spells are picked per caster in the choices step, never pinned as content. Content another revision grants or
   // offers (class features, skill options) arrives through it, so only standalone content is listed here.
@@ -695,13 +718,17 @@ function BackgroundStep(props: PickStepProps) {
           Backgrounds {props.policy.backgroundGrantsFeat ? 'can' : 'cannot'} grant a feat under these rules.
         </p>
       )}
-      <SinglePick
-        legend="Background"
-        name="background"
-        options={list}
-        value={basics.background}
-        onChange={(background) => onChange({ ...basics, background })}
-      />
+      {props.loaded ? (
+        <SinglePick
+          legend="Background"
+          name="background"
+          options={list}
+          value={basics.background}
+          onChange={(background) => onChange({ ...basics, background })}
+        />
+      ) : (
+        <LoadingOptions legend="Background" />
+      )}
       {missingHint('background', 'backgrounds', list.length, props.missing('background'), props.loaded, props.policy)}
 
       <details>
