@@ -294,12 +294,12 @@ function poolOf(basics: Basics, method: ScoreMethod): readonly number[] | undefi
   return method === 'array' ? standardArray : method === 'roll' ? basics.rolled.map((r) => r.total) : undefined;
 }
 
-/** Each pool value goes to one ability: a value already used is shown "(used)" and cannot be picked again. */
 /** Wave 3 G8: the text beside a score row of one of the class's main abilities; nothing for the others. */
 function MainMark({ text }: { text?: string }) {
   return text ? <span className="hint">{text}</span> : null;
 }
 
+/** Each pool value goes to one ability: a value already used is shown "(used)" and cannot be picked again. */
 function AssignPool(props: { legend: string; pool: readonly number[]; assignment: Assignment; mark: (key: Ability) => string | undefined; onChange: (a: Assignment) => void }) {
   const { pool, assignment } = props;
   const usedCount = (v: number) => abilityKeys.filter((k) => assignment[k] === v).length;
@@ -311,29 +311,29 @@ function AssignPool(props: { legend: string; pool: readonly number[]; assignment
       <div className="assign-grid">
         {abilities.map(({ key, label }) => (
           <div key={key}>
-          <label className="field">
-            {label}
-            <select
-              value={assignment[key] ?? ''}
-              onChange={(e) => {
-                const v = e.target.value === '' ? undefined : Number(e.target.value);
-                const next = { ...assignment, [key]: v };
-                // A value that is already used (a stale select) resets this one to "Choose" and assigns nothing twice.
-                props.onChange(assignmentValid(next, pool) ? next : { ...assignment, [key]: undefined });
-              }}
-            >
-              <option value="">Choose</option>
-              {values.map((v) => {
-                const free = poolCount(v) - usedCount(v) + (assignment[key] === v ? 1 : 0);
-                return (
-                  <option key={v} value={v} disabled={free <= 0}>
-                    {free <= 0 ? `${v} (used)` : v}
-                  </option>
-                );
-              })}
-            </select>
-          </label>
-          <MainMark text={props.mark(key)} />
+            <label className="field">
+              {label}
+              <select
+                value={assignment[key] ?? ''}
+                onChange={(e) => {
+                  const v = e.target.value === '' ? undefined : Number(e.target.value);
+                  const next = { ...assignment, [key]: v };
+                  // A value that is already used (a stale select) resets this one to "Choose" and assigns nothing twice.
+                  props.onChange(assignmentValid(next, pool) ? next : { ...assignment, [key]: undefined });
+                }}
+              >
+                <option value="">Choose</option>
+                {values.map((v) => {
+                  const free = poolCount(v) - usedCount(v) + (assignment[key] === v ? 1 : 0);
+                  return (
+                    <option key={v} value={v} disabled={free <= 0}>
+                      {free <= 0 ? `${v} (used)` : v}
+                    </option>
+                  );
+                })}
+              </select>
+            </label>
+            <MainMark text={props.mark(key)} />
           </div>
         ))}
       </div>
@@ -1256,10 +1256,12 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
     },
   });
   const committing = useRef(false);
+  const gearing = useRef(false);
 
   const family = mode.kind === 'create' ? basics.rulesFamily : mode.view.character.rulesFamily;
   const campaignId = mode.kind === 'create' ? basics.campaignId : mode.view.character.campaignId;
   const campaign = campaigns.find((c) => c.id === campaignId);
+  const creating = mode.kind === 'create';
 
   useEffect(() => {
     client
@@ -1298,12 +1300,15 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
         });
       })
       .catch(fail);
-    client
-      .listGuides(family, campaignId)
-      .then((result) => {
-        if (current) setGuides(result);
-      })
-      .catch(fail);
+    // Only the create flow shows guides: a guides failure must not put an error on the level-up or choices screens.
+    if (creating) {
+      client
+        .listGuides(family, campaignId)
+        .then((result) => {
+          if (current) setGuides(result);
+        })
+        .catch(fail);
+    }
     client
       .draftCounts(family)
       .then((counts) => {
@@ -1313,7 +1318,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
     return () => {
       current = false;
     };
-  }, [family, campaignId, fail]);
+  }, [family, campaignId, creating, fail]);
 
   // SPEC P-01: content outside the campaign is unavailable until the player says why they use it (a recorded exception).
   const outsideAllowed = outside.allow && outside.reason.trim().length > 0;
@@ -1350,6 +1355,10 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
   useEffect(() => {
     previewSeq.current.next();
   }, [draftName, draftFamily, draftScores, draftSpecies, draftBackground, draftClass, draftOther, draftCampaign]);
+  // A gear pick changed while the kit is pending likewise makes that reply stale.
+  useEffect(() => {
+    previewSeq.current.next();
+  }, [gear]);
 
   // SPEC I-06: new picks get the newest revision of each content; older ones only name what saved characters pin.
   const pickable = options.filter((o) => !o.superseded);
@@ -1499,18 +1508,28 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
 
   /** Gear's Next: ask the service what the kits give (nothing when skipped), keep it for the save, then preview the draft. */
   async function gearNext() {
-    const kits = kitsFor([classGuide, backgroundGuide], gear, guideCategories);
+    if (gearing.current) return; // a second press while the kit is pending does nothing
+    gearing.current = true;
     try {
-      if (!gear.skipped && kits.length > 0) {
-        const given = await client.kit(gearDraft, kits);
-        if (!mounted.current || stepNow.current !== 'gear') return;
-        setKitGiven(given.equipment.length > 0 || Object.values(given.coins).some((n) => n > 0) ? { equipment: given.equipment, coins: given.coins } : undefined);
-      } else setKitGiven(undefined);
-    } catch (error) {
-      fail(error);
-      return;
+      const kits = kitsFor([classGuide, backgroundGuide], gear, guideCategories);
+      // A pick changed (or the step left) while the kit is pending bumps previewSeq: the old reply is dropped, never saved.
+      const request = previewSeq.current.next();
+      try {
+        if (!gear.skipped && kits.length > 0) {
+          const given = await client.kit(gearDraft, kits);
+          if (!mounted.current || stepNow.current !== 'gear' || request !== previewSeq.current.n) return;
+          setKitGiven(given.equipment.length > 0 || Object.values(given.coins).some((n) => n > 0) ? { equipment: given.equipment, coins: given.coins } : undefined);
+        } else setKitGiven(undefined);
+      } catch {
+        if (mounted.current && stepNow.current === 'gear' && request === previewSeq.current.n) {
+          fail(new Error('The starting kit could not be worked out. You can press Skip and add gear later on the Gear tab.'));
+        }
+        return;
+      }
+      await preview(gearDraft, 'gear');
+    } finally {
+      gearing.current = false;
     }
-    await preview(gearDraft, 'gear');
   }
 
   const at = createSteps.indexOf(step);

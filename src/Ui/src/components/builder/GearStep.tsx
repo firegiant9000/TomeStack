@@ -209,14 +209,14 @@ export function GearStep({ draft, classGuide, backgroundGuide, className, backgr
       {!value.skipped &&
         (
           [
-            { guide: classGuide, heading: `From your class (${className})`, name: className },
-            { guide: backgroundGuide, heading: `From your background (${backgroundName})`, name: backgroundName },
+            { guide: classGuide, heading: `From your class (${className})`, name: className, whose: 'your class' },
+            { guide: backgroundGuide, heading: `From your background (${backgroundName})`, name: backgroundName, whose: 'your background' },
           ] as const
-        ).map(({ guide, heading, name }) =>
+        ).map(({ guide, heading, name, whose }) =>
           guide ? (
             <GuideSection key={heading} heading={heading} guide={guide} trained={trained} value={value} onChoose={choose} />
           ) : (
-            <p key={heading}>{`No starting kit for ${name}. Add gear on the Gear tab after saving.`}</p>
+            <p key={heading}>{name ? `No starting kit for ${name}. Add gear on the Gear tab after saving.` : `No starting kit from ${whose}. Add gear on the Gear tab after saving.`}</p>
           ),
         )}
       {wanted && (

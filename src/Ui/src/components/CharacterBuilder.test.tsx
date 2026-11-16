@@ -566,6 +566,106 @@ it('sends no equipment and no coins when the gear step is skipped (8.6)', async 
   expect(vi.mocked(client.kit).mock.calls).toHaveLength(kitCalls); // Next asked for no kit
 });
 
+it('marks the main abilities in standard array and point buy modes (8.6)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listContent).mockResolvedValue(stepContent());
+  vi.mocked(client.listGuides).mockResolvedValue([wardenGuide()]);
+  await toScores(user, undefined, /^Fixture Warden/);
+  await user.click(screen.getByRole('radio', { name: 'Standard array' }));
+  const group = screen.getByRole('group', { name: 'Assign the standard array' });
+  expect(within(group).getAllByText('main ability for Fixture Warden')).toHaveLength(2);
+  await user.click(screen.getByRole('radio', { name: 'Point buy' }));
+  const buy = screen.getByRole('group', { name: 'Point buy' });
+  expect(within(buy).getAllByText('main ability for Fixture Warden')).toHaveLength(2);
+});
+
+it('marks the one main ability of a class that has a single one (8.6)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listContent).mockResolvedValue(stepContent());
+  vi.mocked(client.listGuides).mockResolvedValue([{ ...wardenGuide(), primaryAbilities: ['wis'] }]);
+  await toScores(user, undefined, /^Fixture Warden/);
+  expect(await screen.findByText('Fixture Wardens rely most on: Wisdom')).toBeTruthy();
+  await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
+  expect(screen.getAllByText('main ability for Fixture Warden')).toHaveLength(1);
+});
+
+it('says there is no starting kit from the background, without an empty name, when none is picked (8.6)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listContent).mockResolvedValue(stepContent());
+  vi.mocked(client.listGuides).mockResolvedValue([wardenGuide()]);
+  await toBackground(user, /^Fixture Warden/);
+  await user.click(screen.getByRole('button', { name: 'Next: gear' }));
+  expect(await screen.findByText('No starting kit from your background. Add gear on the Gear tab after saving.')).toBeTruthy();
+  expect(screen.queryByText(/kit for \./)).toBeNull();
+});
+
+it('ignores a second Next while the kit is pending (8.6)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listContent).mockResolvedValue(stepContent());
+  vi.mocked(client.listGuides).mockResolvedValue([wardenGuide()]);
+  vi.mocked(client.preview).mockReset();
+  vi.mocked(client.preview).mockResolvedValue(draftView());
+  const replies: Array<(k: KitView) => void> = [];
+  vi.mocked(client.kit).mockImplementation(() => new Promise((resolve) => replies.push(resolve)));
+  await toBackground(user, /^Fixture Warden/);
+  await user.click(screen.getByRole('button', { name: 'Next: gear' }));
+  const next = await screen.findByRole('button', { name: 'Next: choices' });
+  await user.click(next);
+  const calls = vi.mocked(client.kit).mock.calls.length;
+  await user.click(next);
+  expect(vi.mocked(client.kit).mock.calls).toHaveLength(calls); // the second press asked for nothing
+  replies.forEach((r) => r(kitView()));
+  expect(await screen.findByRole('group', { name: 'Choices' })).toBeTruthy();
+  expect(vi.mocked(client.preview)).toHaveBeenCalledTimes(1);
+});
+
+it('does not save a kit whose gear pick changed while it was pending (8.6)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listContent).mockResolvedValue(stepContent());
+  vi.mocked(client.listGuides).mockResolvedValue([wardenGuide()]);
+  vi.mocked(client.preview).mockResolvedValue(draftView());
+  vi.mocked(client.createCharacter).mockReset();
+  vi.mocked(client.createCharacter).mockResolvedValue(draftView());
+  const replies: Array<(k: KitView) => void> = [];
+  vi.mocked(client.kit).mockImplementation(() => new Promise((resolve) => replies.push(resolve)));
+  await toBackground(user, /^Fixture Warden/);
+  await user.click(screen.getByRole('button', { name: 'Next: gear' }));
+  await user.click(await screen.findByRole('button', { name: 'Next: choices' }));
+  await user.click(screen.getByRole('button', { name: /^Skip: I'll add gear myself/ })); // the pick changes while the kit is pending
+  replies.forEach((r) => r(kitView()));
+  await new Promise((r) => setTimeout(r, 20));
+  expect(screen.getByRole('form', { name: 'Starting gear' })).toBeTruthy(); // the old reply did not move on
+  await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+  await user.click(await screen.findByRole('button', { name: 'Create and save' }));
+  await waitFor(() => expect(vi.mocked(client.createCharacter)).toHaveBeenCalledTimes(1));
+  const sent = vi.mocked(client.createCharacter).mock.calls[0]![0];
+  expect(sent).not.toHaveProperty('equipment');
+});
+
+it('keeps Skip usable when the kit cannot be worked out, and says so in plain words (8.6)', async () => {
+  const user = userEvent.setup();
+  const onError = vi.fn();
+  vi.mocked(client.listContent).mockResolvedValue(stepContent());
+  vi.mocked(client.listGuides).mockResolvedValue([wardenGuide()]);
+  vi.mocked(client.preview).mockResolvedValue(draftView());
+  vi.mocked(client.kit).mockRejectedValue(new Error('boom'));
+  await toBackground(user, /^Fixture Warden/, { onError });
+  await user.click(screen.getByRole('button', { name: 'Next: gear' }));
+  await user.click(await screen.findByRole('button', { name: 'Next: choices' }));
+  await waitFor(() => expect(onError).toHaveBeenCalled());
+  expect((onError.mock.calls[0]![0] as Error).message).toBe('The starting kit could not be worked out. You can press Skip and add gear later on the Gear tab.');
+  await user.click(screen.getByRole('button', { name: /^Skip: I'll add gear myself/ }));
+  await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+  expect(await screen.findByRole('group', { name: 'Choices' })).toBeTruthy();
+});
+
+it('does not ask for guides outside the create flow (8.6)', async () => {
+  vi.mocked(client.listGuides).mockClear();
+  render(<CharacterBuilder mode={{ kind: 'choices', view: viewWith([]) }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+  await waitFor(() => expect(vi.mocked(client.listContent)).toHaveBeenCalled());
+  expect(vi.mocked(client.listGuides)).not.toHaveBeenCalled();
+});
+
 it('moves focus to the heading when Back returns to the Rules step (R5, 2.4.3)', async () => {
   const user = userEvent.setup();
   vi.mocked(client.listContent).mockResolvedValue(stepContent());
