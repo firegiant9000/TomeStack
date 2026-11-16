@@ -41,8 +41,13 @@ public class RestrictionTests
         var unmet = MechanicsInventoryTests.Holder("Test Trained Unmet", 10,
             new GrantEffect { Id = "g", Grant = GrantKind.Proficiency, Target = "armor.heavy" },
             new RestrictionEffect { Id = "needs", Field = FieldIds.Score(Ability.Str), Minimum = 30 });
+        var source = new SourceRecord
+        {
+            Id = met.Provenance.SourceId, Title = "Test Homebrew", Publisher = "Personal homebrew", RulesFamilies = [RulesFamilies.Srd521],
+            EditionVersion = "homebrew", License = "Personal homebrew", Redistributable = false,
+        };
         var pack = Fixtures.Pack();
-        var catalog = new InMemoryContentCatalog(pack.Sources, [.. pack.Revisions, met, unmet]);
+        var catalog = new InMemoryContentCatalog([.. pack.Sources, source], [.. pack.Revisions, met, unmet]);
         var character = Fixtures.Srd521Character();
         Assert.DoesNotContain("armor.heavy", CharacterCalculator.TrainedCategories(character, catalog));
         Assert.DoesNotContain("armor.shield", CharacterCalculator.TrainedCategories(character, catalog));
