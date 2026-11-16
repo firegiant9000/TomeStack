@@ -2024,23 +2024,24 @@ export interface GuidePickView {
 export interface GuideOptionView {
   id: string;
   text: string;
-  requiresProficiency: string | null;
+  requiresProficiency?: string;
   lines: GuideLineView[];
 }
 
 /**
  * Wave 3 G8 (GuideLineView): one line of an option. A `missing` line is an item that is not published or not in the rules family:
- * the builder shows it as unavailable and cannot take it (`name` is null when unknown).
+ * the builder shows it as unavailable and cannot take it (`name` is absent when unknown).
+ * The service omits null members, so each optional member is absent rather than null.
  */
 export interface GuideLineView {
   kind: 'item' | 'anyOf' | 'coins' | 'pack' | 'missing';
-  itemContentId: string | null;
-  name: string | null;
+  itemContentId?: string;
+  name?: string;
   quantity: number;
-  anyOf: string | null;
-  choices: ContentOption[] | null;
-  coins: Currency | null;
-  contents: GuideLineView[] | null;
+  anyOf?: string;
+  choices?: ContentOption[];
+  coins?: Currency;
+  contents?: GuideLineView[];
 }
 
 /** Wave 3 G8 (KitChoice): the player's answer to one pick; `anyOf` maps each anyOf line (by index) to the item chosen. */
