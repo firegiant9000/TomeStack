@@ -323,9 +323,7 @@ public class GuideCommandTests
         using var temp = new TempApp();
         var view = temp.App.Kit(ClericKit(temp, Draft("Fighter")));
 
-        Assert.Contains("weapon.martial", view.Trained);
-        Assert.Contains("armor.heavy", view.Trained);
-        Assert.Equal(view.Trained.OrderBy(t => Array.IndexOf(["weapon.simple", "weapon.martial", "armor.light", "armor.medium", "armor.heavy", "armor.shield"], t)), view.Trained);
+        Assert.Equal(["weapon.simple", "weapon.martial", "armor.light", "armor.medium", "armor.heavy", "armor.shield"], view.Trained);
     }
 
     [Fact]
@@ -334,8 +332,7 @@ public class GuideCommandTests
         using var temp = new TempApp();
         var view = temp.App.Kit(ClericKit(temp, Draft("Wizard")));
 
-        Assert.DoesNotContain("weapon.martial", view.Trained);
-        Assert.DoesNotContain("armor.heavy", view.Trained);
+        Assert.Empty(view.Trained); // SRD 5.1 grants the Wizard named weapons, not the whole simple category
     }
 
     [Fact]
@@ -350,8 +347,8 @@ public class GuideCommandTests
         Assert.Equal("You aren't trained with martial weapons, so this option was left out.", problem.Message);
         var names = view.Equipment.Select(e => NameOf(temp, e)).ToList();
         Assert.DoesNotContain("Mace", names); // option a was not chosen either
-        Assert.True(trainedNames.Count > names.Count); // the martial option's items are the difference
-        Assert.NotEmpty(view.Equipment); // the other picks still apply
+        Assert.Equal(["Warhammer"], trainedNames.Except(names).Order().ToList()); // the martial option's items are the difference
+        Assert.NotEmpty(view.Equipment); // the other picks still apply (exact names: see the report, owed)
     }
 
     [Fact]
@@ -361,6 +358,7 @@ public class GuideCommandTests
         var view = temp.App.Kit(ClericKit(temp, Draft("Fighter"), new KitChoice("weapon", "b")));
 
         Assert.DoesNotContain(view.Problems, p => p.Code == TomeStackApp.KitOptionUntrained);
+        Assert.Contains(view.Equipment, e => NameOf(temp, e) == "Warhammer"); // exact full list owed (see the report)
         Assert.DoesNotContain(view.Equipment, e => NameOf(temp, e) == "Mace");
     }
 

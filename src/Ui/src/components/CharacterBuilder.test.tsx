@@ -565,6 +565,69 @@ it('offers the options the service says the draft is trained for, and settles wi
   expect(sent).toEqual([{ guideContentId: 'fixture-guide-warden', choices: [{ pickId: 'weapon', optionId: 'mace' }] }]);
 });
 
+const swordGuide = (target: string, id: string) => {
+  const guide = { ...wardenGuide(), guideContentId: id, targetContentId: target };
+  guide.picks = [{ id: 'weapon', label: 'Weapon', options: [...wardenGuide().picks[0]!.options, { id: 'sword', text: 'A fixture sword', requiresProficiency: 'weapon.martial', lines: [] }] }];
+  return guide;
+};
+
+it('does not use the old class\'s training after Back and a different class (8.6b)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listContent).mockResolvedValue(twoClasses());
+  vi.mocked(client.listGuides).mockResolvedValue([swordGuide('fixture-c3', 'g-warden'), swordGuide('fixture-c4', 'g-ranger')]);
+  vi.mocked(client.preview).mockResolvedValue(draftView());
+  const rangerReplies: Array<(k: KitView) => void> = [];
+  vi.mocked(client.kit).mockReset();
+  vi.mocked(client.kit).mockImplementation((draft) =>
+    JSON.stringify(draft).includes('fixture-c3') ? Promise.resolve({ ...kitView(), trained: ['weapon.martial'] }) : new Promise((resolve) => rangerReplies.push(resolve)));
+  await toBackground(user, /^Fixture Warden/);
+  await user.click(screen.getByRole('button', { name: 'Next: gear' }));
+  const sword = await screen.findByRole('radio', { name: /A fixture sword/ });
+  await waitFor(() => expect(sword.getAttribute('aria-disabled')).toBeNull()); // the Warden is trained
+  for (let i = 0; i < 4; i++) await user.click(screen.getByRole('button', { name: 'Back' })); // Background, Species, Ability scores, Class
+  await user.click(screen.getByRole('radio', { name: /^Fixture Ranger/ }));
+  await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
+  await user.click(screen.getByRole('button', { name: 'Next: species' }));
+  await user.click(screen.getByRole('button', { name: 'Next: background' }));
+  await user.click(screen.getByRole('button', { name: 'Next: gear' }));
+  const rangerSword = await screen.findByRole('radio', { name: /A fixture sword/ });
+  await waitFor(() => expect(rangerReplies.length).toBeGreaterThan(0));
+  expect(rangerSword.getAttribute('aria-disabled')).toBe('true'); // the Warden's list is not carried over
+  const next = screen.getByRole('button', { name: 'Next: choices' });
+  expect(next.getAttribute('aria-disabled')).toBe('true'); // and Next waits for this draft's own answer
+  const calls = vi.mocked(client.kit).mock.calls.length;
+  await user.click(next);
+  expect(vi.mocked(client.kit).mock.calls).toHaveLength(calls);
+  rangerReplies.splice(0).forEach((r) => r({ ...kitView(), trained: [] }));
+  await waitFor(() => expect(next.getAttribute('aria-disabled')).toBeNull());
+  await user.click(next);
+  const [, kits] = vi.mocked(client.kit).mock.calls.at(-1)!;
+  expect(kits).toEqual([{ guideContentId: 'g-ranger', choices: [{ pickId: 'weapon', optionId: 'mace' }] }]);
+});
+
+it('ignores a late older training reply once a newer one has answered (8.6b)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listContent).mockResolvedValue(stepContent());
+  vi.mocked(client.listGuides).mockResolvedValue([swordGuide('fixture-c3', 'g-warden')]);
+  vi.mocked(client.preview).mockResolvedValue(draftView());
+  const replies: Array<(k: KitView) => void> = [];
+  vi.mocked(client.kit).mockReset();
+  vi.mocked(client.kit).mockImplementation(() => new Promise((resolve) => replies.push(resolve)));
+  await toBackground(user, /^Fixture Warden/);
+  await user.click(screen.getByRole('button', { name: 'Next: gear' }));
+  await screen.findByRole('radio', { name: /A fixture sword/ });
+  await waitFor(() => expect(replies).toHaveLength(1)); // the older request
+  await user.click(screen.getByRole('button', { name: /^Skip: I'll add gear myself/ }));
+  await user.click(screen.getByRole('button', { name: /^Skip: I'll add gear myself/ })); // back to a kit: a newer request
+  await waitFor(() => expect(replies).toHaveLength(2));
+  const swordNow = () => screen.getByRole('radio', { name: /A fixture sword/ }); // Skip removes the options, so look again
+  replies[1]!({ ...kitView(), trained: ['weapon.martial'] });
+  await waitFor(() => expect(swordNow().getAttribute('aria-disabled')).toBeNull());
+  replies[0]!({ ...kitView(), trained: [] }); // the older reply arrives late
+  await new Promise((r) => setTimeout(r, 30));
+  expect(swordNow().getAttribute('aria-disabled')).toBeNull(); // it did not overwrite the newer list
+});
+
 it('keeps an option that needs training unavailable while the service says the draft lacks it (8.6b)', async () => {
   const user = userEvent.setup();
   const guide = wardenGuide();
@@ -646,6 +709,9 @@ it('ignores a second Next while the kit is pending (8.6)', async () => {
   await toBackground(user, /^Fixture Warden/);
   await user.click(screen.getByRole('button', { name: 'Next: gear' }));
   const next = await screen.findByRole('button', { name: 'Next: choices' });
+  await waitFor(() => expect(replies.length).toBeGreaterThan(0));
+  replies.splice(0).forEach((r) => r(kitView())); // the live preview answers: Next waits for it (the draft's training)
+  await waitFor(() => expect(next.getAttribute('aria-disabled')).toBeNull());
   await user.click(next);
   const calls = vi.mocked(client.kit).mock.calls.length;
   await user.click(next);
@@ -666,7 +732,11 @@ it('does not save a kit whose gear pick changed while it was pending (8.6)', asy
   vi.mocked(client.kit).mockImplementation(() => new Promise((resolve) => replies.push(resolve)));
   await toBackground(user, /^Fixture Warden/);
   await user.click(screen.getByRole('button', { name: 'Next: gear' }));
-  await user.click(await screen.findByRole('button', { name: 'Next: choices' }));
+  const next = await screen.findByRole('button', { name: 'Next: choices' });
+  await waitFor(() => expect(replies.length).toBeGreaterThan(0));
+  replies.splice(0).forEach((r) => r(kitView()));
+  await waitFor(() => expect(next.getAttribute('aria-disabled')).toBeNull());
+  await user.click(next);
   await user.click(screen.getByRole('button', { name: /^Skip: I'll add gear myself/ })); // the pick changes while the kit is pending
   replies.forEach((r) => r(kitView()));
   await new Promise((r) => setTimeout(r, 20));

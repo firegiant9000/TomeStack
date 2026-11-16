@@ -716,7 +716,9 @@ public static partial class CharacterCalculator
         ArgumentNullException.ThrowIfNull(character);
         ArgumentNullException.ThrowIfNull(catalog);
         var diagnostics = new List<Diagnostic>();
-        var resolved = ResolveActiveContent(character, catalog, RulesFamilies.Get(character.RulesFamily), diagnostics, new HashSet<ContentReference>());
+        // The sheet's own view: content whose prerequisite is unmet is left out, so it grants no training here either.
+        var (_, unmet) = FindUnmetPrerequisites(character, catalog, autoOn: false);
+        var resolved = ResolveActiveContent(character, catalog, RulesFamilies.Get(character.RulesFamily), diagnostics, unmet.Select(u => u.Content).ToHashSet());
         var weapons = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         var armor = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         var unseen = new Dictionary<string, Proficiency>(StringComparer.Ordinal);

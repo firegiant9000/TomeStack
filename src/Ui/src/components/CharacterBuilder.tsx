@@ -68,6 +68,8 @@ export type BuilderMode =
 type Step = 'rules' | 'scores' | 'species' | 'class' | 'background' | 'gear' | 'choices' | 'level';
 
 /** D32, Wave 3 G8: a new character is built in these seven steps (class before scores, gear after background); level-up and answering choices use `level` and `choices` alone. */
+/** One shared empty list, so "trained in nothing known" never changes identity between renders. */
+const noTraining: string[] = [];
 const createSteps: Step[] = ['rules', 'class', 'scores', 'species', 'background', 'gear', 'choices'];
 const stepTitles: Record<Step, string> = {
   rules: 'Rules',
@@ -1215,7 +1217,9 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
   const [guides, setGuides] = useState<GuideView[]>([]);
   const [gear, setGear] = useState<GearValue>({ skipped: false, choices: {} });
   // What the draft is trained in, as the service last said (the gear step's preview); none until the first preview answers.
-  const [trained, setTrained] = useState<string[]>([]);
+  // It belongs to the draft it was asked for: another class, background or pick makes a new draft, and a list for an old one is never used.
+  const [trainedFor, setTrained] = useState<{ draft: Character; list: string[] }>();
+  const trainedSeq = useRef(0);
   /** What the gear step gave when the player pressed Next: sent with the new character; undefined when skipped or nothing was given. */
   const [kitGiven, setKitGiven] = useState<{ equipment: EquipmentEntry[]; coins: Currency }>();
   const [listed, setListed] = useState<ContentOption[]>([]);
@@ -1501,10 +1505,14 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
   const backgroundName = basics.background ? nameOf(basics.background) : '';
   // GearStep asks for a new preview whenever this draft changes identity, so it is rebuilt only when what it is built from changes.
   const gearDraft = useMemo(() => draftOf(basics, draftId, view?.character), [basics, draftId, view?.character]);
+  const trainedFresh = trainedFor?.draft === gearDraft;
+  const trained = trainedFresh ? trainedFor.list : noTraining;
+  // Kits are asked for with the training of this very draft, so Next waits for its reply (a failed preview counts as an answer: none).
+  const gearWaiting = !gear.skipped && !trainedFresh && (classGuide !== undefined || backgroundGuide !== undefined);
 
   /** Gear's Next: ask the service what the kits give (nothing when skipped), keep it for the save, then preview the draft. */
   async function gearNext() {
-    if (gearing.current) return; // a second press while the kit is pending does nothing
+    if (gearing.current || gearWaiting) return; // a second press while the kit is pending does nothing
     gearing.current = true;
     try {
       const kits = kitsFor([classGuide, backgroundGuide], gear, trained);
@@ -1584,7 +1592,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
       {mode.kind === 'create' && step === 'class' && <ClassStep {...pickProps} onNext={next} />}
       {mode.kind === 'create' && step === 'background' && <BackgroundStep {...pickProps} onNext={next} />}
       {mode.kind === 'create' && step === 'gear' && (
-        <StepForm label="Starting gear" next="Next: choices" onNext={gearNext} onBack={back} onCancel={onCancel}>
+        <StepForm label="Starting gear" next="Next: choices" nextDisabled={gearWaiting} onNext={gearNext} onBack={back} onCancel={onCancel}>
           <GearStep
             draft={gearDraft}
             classGuide={classGuide}
@@ -1595,10 +1603,22 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
             value={gear}
             onChange={setGear}
             onPreview={async (kits) => {
-              const given = await client.kit(gearDraft, kits);
-              // Keep the same array while the contents are unchanged, so a new reply cannot re-trigger the gear step's preview.
-              setTrained((old) => (old.length === given.trained.length && old.every((t, i) => t === given.trained[i]) ? old : given.trained));
-              return given;
+              const asked = gearDraft;
+              const seq = ++trainedSeq.current;
+              // Only the latest request may set the training; an older reply arriving late is dropped.
+              const keep = (list: string[]) => {
+                if (seq !== trainedSeq.current || !mounted.current) return;
+                // Keep the same array while the contents are unchanged, so a new reply cannot re-trigger the gear step's preview.
+                setTrained((old) => (old?.draft === asked && old.list.length === list.length && old.list.every((t, i) => t === list[i]) ? old : { draft: asked, list }));
+              };
+              try {
+                const given = await client.kit(asked, kits);
+                keep(given.trained);
+                return given;
+              } catch (error) {
+                keep(noTraining); // no answer: the step stays usable, with no training known
+                throw error;
+              }
             }}
           />
         </StepForm>
