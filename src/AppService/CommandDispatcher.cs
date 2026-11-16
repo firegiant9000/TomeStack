@@ -99,7 +99,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     {
         "app.info" => app.GetInfo(),
         "content.list" => ListContent(Payload<RulesFamilyPayload>(payload)),
-        "content.guides" => app.ListGuides(Payload<RulesFamilyPayload>(payload).RulesFamily, Payload<RulesFamilyPayload>(payload).CampaignId),
+        "content.guides" => ListGuides(Payload<RulesFamilyPayload>(payload)),
         "content.draftCounts" => app.DraftCounts(Payload<RulesFamilyPayload>(payload).RulesFamily),
         "campaign.list" => app.ListCampaigns(),
         "campaign.save" => app.SaveCampaign(Payload<Campaign>(payload)),
@@ -247,6 +247,8 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         var validation = new { result.Validation.Revision, result.Validation.Errors, result.Validation.Warnings, result.Validation.CanPublish };
         return new { result.View, result.Draft, result.Changes, Validation = validation };
     }
+
+    private IReadOnlyList<GuideView> ListGuides(RulesFamilyPayload payload) => app.ListGuides(payload.RulesFamily, payload.CampaignId);
 
     private IReadOnlyList<ContentOption> ListContent(RulesFamilyPayload payload) => app.ListContent(payload.RulesFamily, payload.CampaignId);
 

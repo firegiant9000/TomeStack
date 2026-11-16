@@ -27,7 +27,7 @@ public class GuideCommandTests
         Assert.Equal("weapon.martial", weapon.Options.Single(o => o.Id == "b").RequiresProficiency);
 
         var ranged = guide.Picks.Single(p => p.Id == "ranged");
-        Assert.Equal("Light crossbow and 20 bolts", ranged.Options.Single(o => o.Id == "a").Text);
+        Assert.Equal("Light crossbow and 20 crossbow bolts", ranged.Options.Single(o => o.Id == "a").Text);
         Assert.Equal("Any simple weapon", ranged.Options.Single(o => o.Id == "b").Text);
 
         var pack = guide.Picks.Single(p => p.Id == "pack");
@@ -81,6 +81,123 @@ public class GuideCommandTests
     {
         using var temp = new TempApp();
         Assert.Throws<AppValidationException>(() => temp.App.ListGuides(RulesFamilies.Srd51, Guid.NewGuid()));
+    }
+
+    private static readonly Guid Barbarian521 = Guid.Parse("52c00000-0000-4000-8000-000000000011");
+
+    [Fact]
+    public void Coins_beside_items_read_and_15_gp_and_coins_alone_read_Instead()
+    {
+        using var temp = new TempApp();
+        var guide = temp.App.ListGuides(RulesFamilies.Srd521).Single(g => g.TargetContentId == Barbarian521);
+        var options = guide.Picks.Single().Options;
+
+        var a = options.Single(o => o.Id == "a").Text;
+        Assert.EndsWith(" and 15 gp", a);
+        Assert.DoesNotContain("Instead", a);
+        Assert.Contains("4 handaxes", a);
+        Assert.Equal("Instead: 75 gp", options.Single(o => o.Id == "b").Text);
+    }
+
+    [Theory]
+    [InlineData("Torch", 3, "3 torches")]
+    [InlineData("Ration (1 day)", 5, "5 rations (1 day)")]
+    [InlineData("Rations (1 day)", 5, "5 × Rations (1 day)")]
+    [InlineData("Crossbow, light", 2, "2 light crossbows")]
+    [InlineData("Light Crossbow", 2, "2 Light Crossbows")]
+    [InlineData("Crossbow bolt", 20, "20 crossbow bolts")]
+    [InlineData("Dagger", 2, "2 daggers")]
+    [InlineData("Clothes, common", 2, "2 × Common clothes")]
+    [InlineData("Vial of acid", 2, "2 × Vial of acid")]
+    [InlineData("Priest's pack", 2, "2 × Priest's pack")]
+    [InlineData("Caltrops", 2, "2 × Caltrops")]
+    [InlineData("Mace", 1, "Mace")]
+    [InlineData("Crossbow, light", 1, "Light crossbow")]
+    public void Several_of_an_item_keep_the_whole_name_with_a_sure_plural_or_use_a_times_sign(string name, int quantity, string expected) =>
+        Assert.Equal(expected, Guides.ItemText(name, quantity));
+
+    public static TheoryData<string, string, int> BundledMultiples()
+    {
+        var data = new TheoryData<string, string, int>();
+        using var temp = new TempApp();
+        var seen = new HashSet<(string, string, int)>();
+        foreach (var family in new[] { RulesFamilies.Srd51, RulesFamilies.Srd521 })
+        {
+            foreach (var line in temp.App.ListGuides(family).SelectMany(g => g.Picks).SelectMany(p => p.Options).SelectMany(o => o.Lines).Where(l => l.Kind == "item" && l.Quantity > 1))
+            {
+                if (seen.Add((family, line.Name!, line.Quantity)))
+                    data.Add(family, line.Name!, line.Quantity);
+            }
+        }
+        return data;
+    }
+
+    [Theory]
+    [MemberData(nameof(BundledMultiples))]
+    public void Every_bundled_item_line_with_several_reads_sensibly(string family, string name, int quantity)
+    {
+        var text = Guides.ItemText(name, quantity);
+        Assert.StartsWith(quantity + " ", text);
+        Assert.DoesNotMatch(@"\)s", text); // the plural never lands after a bracket
+        Assert.DoesNotMatch(@"[a-z]ss\b|\bs\b|chs\b|xs\b", text);
+        Assert.True(text.Length > quantity.ToString().Length + 2, $"{family}: '{name}' x{quantity} -> '{text}'");
+    }
+
+    private static ContentRevision Item(string name, params string[] families) => new()
+    {
+        ContentId = Guid.NewGuid(), RevisionId = Guid.NewGuid(), Kind = ContentKind.Item, Name = name,
+        RulesFamilies = families, Provenance = new(Guid.NewGuid(), new(1)), Status = RevisionStatus.Published, Effects = [],
+    };
+
+    [Fact]
+    public void A_line_that_does_not_resolve_or_is_in_another_family_is_marked_missing_and_the_rest_still_shows()
+    {
+        var mace = Item("Mace", RulesFamilies.Srd51);
+        var other = Item("Warhammer", RulesFamilies.Srd521);
+        var unknown = Guid.NewGuid();
+        var known = new Dictionary<Guid, ContentRevision> { [mace.ContentId] = mace, [other.ContentId] = other };
+        var kit = new StartingEquipmentEffect
+        {
+            Id = "kit",
+            Picks = [new("p", "Gear", [new("a", [new(new GuideTarget(mace.ContentId)), new(new GuideTarget(unknown)), new(new GuideTarget(other.ContentId))])])],
+        };
+        var guide = new ContentRevision
+        {
+            ContentId = Guid.NewGuid(), RevisionId = Guid.NewGuid(), Kind = ContentKind.CreationGuide, Name = "Test guide",
+            RulesFamilies = [RulesFamilies.Srd51], Provenance = new(Guid.NewGuid(), new(1)), Status = RevisionStatus.Published,
+            Effects = [new GuideForEffect { Id = "for", Content = new(Guid.NewGuid()) }, kit],
+        };
+
+        var view = Guides.Build(guide, RulesFamilies.Srd51, id => known.GetValueOrDefault(id), _ => []);
+
+        var option = view.Picks.Single().Options.Single();
+        Assert.Equal(["item", "missing", "missing"], option.Lines.Select(l => l.Kind));
+        Assert.Equal(unknown, option.Lines[1].ItemContentId);
+        Assert.Null(option.Lines[1].Name);
+        Assert.Equal("Warhammer", option.Lines[2].Name);
+        Assert.Equal("Mace and (unavailable: unknown item) and (unavailable: Warhammer)", option.Text);
+    }
+
+    [Fact]
+    public void A_pack_with_an_unresolved_inner_item_still_shows_and_counts_the_miss()
+    {
+        var rope = Item("Rope", RulesFamilies.Srd51);
+        var pack = Item("Test pack", RulesFamilies.Srd51) with
+        {
+            Effects = [new ItemEffect { Id = "i", Contains = [new(new GuideTarget(rope.ContentId)), new(new GuideTarget(Guid.NewGuid()))] }],
+        };
+        var known = new Dictionary<Guid, ContentRevision> { [rope.ContentId] = rope, [pack.ContentId] = pack };
+        var guide = new ContentRevision
+        {
+            ContentId = Guid.NewGuid(), RevisionId = Guid.NewGuid(), Kind = ContentKind.CreationGuide, Name = "Test guide",
+            RulesFamilies = [RulesFamilies.Srd51], Provenance = new(Guid.NewGuid(), new(1)), Status = RevisionStatus.Published,
+            Effects = [new GuideForEffect { Id = "for", Content = new(Guid.NewGuid()) }, new StartingEquipmentEffect { Id = "kit", Picks = [new("p", null, [new("a", [new(Pack: new GuideTarget(pack.ContentId))])])] }],
+        };
+
+        var option = Guides.Build(guide, RulesFamilies.Srd51, id => known.GetValueOrDefault(id), _ => []).Picks.Single().Options.Single();
+
+        Assert.Equal("Test pack (1 pack item unavailable)", option.Text);
+        Assert.Equal(["item", "missing"], option.Lines.Single().Contents!.Select(l => l.Kind));
     }
 
     // Task 8.2: character.kit.
