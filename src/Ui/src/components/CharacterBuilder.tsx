@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type Dispatch, type ReactNode, type SetStateAction, type SubmitEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction, type SubmitEvent } from 'react';
 import { client } from '../api/client';
 import { TomeStackError } from '../api/transport';
 import type {
@@ -13,6 +13,9 @@ import type {
   ContentKind,
   ContentOption,
   ContentReference,
+  Currency,
+  EquipmentEntry,
+  GuideView,
   KnownSpell,
   RulesFamilyId,
   RollRecord,
@@ -38,6 +41,13 @@ import { matchesSpell } from '../spellSearch';
 import { useRulesLabel } from '../rulesLabel';
 import { shown } from './SandboxPanel';
 import { SpellSearch } from './sheet/SpellSearch';
+import { GearStep, kitsFor, type GearValue } from './builder/GearStep';
+
+/**
+ * The guide categories `requiresProficiency` uses. The UI has no list of what the draft is trained in (the sheet carries none),
+ * so every category is offered; the service's kit leaves untrained armour unequipped and reports it as a problem.
+ */
+const guideCategories = ['weapon.simple', 'weapon.martial', 'armor.light', 'armor.medium', 'armor.heavy', 'armor.shield'];
 
 const abilities: { key: Ability; label: string }[] = [
   { key: 'str', label: 'Strength' },
@@ -61,16 +71,17 @@ export type BuilderMode =
   | { kind: 'levelUp'; view: CharacterView }
   | { kind: 'choices'; view: CharacterView };
 
-type Step = 'rules' | 'scores' | 'species' | 'class' | 'background' | 'choices' | 'level';
+type Step = 'rules' | 'scores' | 'species' | 'class' | 'background' | 'gear' | 'choices' | 'level';
 
-/** D32: a new character is built in these six steps; level-up and answering choices use `level` and `choices` alone. */
-const createSteps: Step[] = ['rules', 'scores', 'species', 'class', 'background', 'choices'];
+/** D32, Wave 3 G8: a new character is built in these seven steps (class before scores, gear after background); level-up and answering choices use `level` and `choices` alone. */
+const createSteps: Step[] = ['rules', 'class', 'scores', 'species', 'background', 'gear', 'choices'];
 const stepTitles: Record<Step, string> = {
   rules: 'Rules',
   scores: 'Ability scores',
   species: 'Species',
   class: 'Class',
   background: 'Background',
+  gear: 'Starting gear',
   choices: 'Choices and create',
   level: 'Level',
 };
@@ -220,7 +231,7 @@ function RulesStep(props: {
   return (
     <StepForm
       label="Rules"
-      next="Next: ability scores"
+      next="Next: class"
       nextDisabled={!basics.name.trim()}
       nextHint={basics.name.trim() ? undefined : 'Enter a name to continue.'}
       onNext={props.onNext}
@@ -284,7 +295,12 @@ function poolOf(basics: Basics, method: ScoreMethod): readonly number[] | undefi
 }
 
 /** Each pool value goes to one ability: a value already used is shown "(used)" and cannot be picked again. */
-function AssignPool(props: { legend: string; pool: readonly number[]; assignment: Assignment; onChange: (a: Assignment) => void }) {
+/** Wave 3 G8: the text beside a score row of one of the class's main abilities; nothing for the others. */
+function MainMark({ text }: { text?: string }) {
+  return text ? <span className="hint">{text}</span> : null;
+}
+
+function AssignPool(props: { legend: string; pool: readonly number[]; assignment: Assignment; mark: (key: Ability) => string | undefined; onChange: (a: Assignment) => void }) {
   const { pool, assignment } = props;
   const usedCount = (v: number) => abilityKeys.filter((k) => assignment[k] === v).length;
   const poolCount = (v: number) => pool.filter((p) => p === v).length;
@@ -294,7 +310,8 @@ function AssignPool(props: { legend: string; pool: readonly number[]; assignment
       <legend>{props.legend}</legend>
       <div className="assign-grid">
         {abilities.map(({ key, label }) => (
-          <label key={key} className="field">
+          <div key={key}>
+          <label className="field">
             {label}
             <select
               value={assignment[key] ?? ''}
@@ -316,6 +333,8 @@ function AssignPool(props: { legend: string; pool: readonly number[]; assignment
               })}
             </select>
           </label>
+          <MainMark text={props.mark(key)} />
+          </div>
         ))}
       </div>
       <p className="hint">Assigned: {abilityKeys.filter((k) => assignment[k] !== undefined).length} of 6</p>
@@ -333,6 +352,9 @@ const pointBuyCostOrZero = (score: number) => (Number.isFinite(pointBuyCost(scor
  * complete; Enter by hand keeps the last scores. Next stays disabled until the chosen method gives valid scores.
  */
 function ScoresStep(props: {
+  /** The chosen class's name and its guide's main abilities (ability keys); absent when the class has no guide. */
+  className?: string;
+  primaryAbilities?: string[];
   basics: Basics;
   policy?: RulesFamilyPolicy;
   onChange: Dispatch<SetStateAction<Basics>>;
@@ -410,8 +432,11 @@ function ScoresStep(props: {
   }
 
   const shown = (key: Ability) => (pool ? (basics.assignment[key] ?? '–') : basics.scores[key]);
+  const mains = props.className ? (props.primaryAbilities ?? []).filter((k): k is Ability => abilities.some((a) => a.key === k)) : [];
+  const mark = (key: Ability) => (mains.includes(key) ? `main ability for ${props.className}` : undefined);
   return (
     <StepForm label="Ability scores" next="Next: species" nextDisabled={!complete || rolling} nextHint={nextHint} onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
+      {mains.length > 0 && <p className="hint">{`${props.className}s rely most on: ${mains.map((k) => abilities.find((a) => a.key === k)!.label).join(', ')}`}</p>}
       <fieldset>
         <legend>How are the scores determined?</legend>
         {scoreMethods.map((m) => (
@@ -421,21 +446,24 @@ function ScoresStep(props: {
           </label>
         ))}
       </fieldset>
-      {method === 'array' && <AssignPool legend="Assign the standard array" pool={standardArray} assignment={basics.assignment} onChange={assign} />}
+      {method === 'array' && <AssignPool legend="Assign the standard array" pool={standardArray} assignment={basics.assignment} mark={mark} onChange={assign} />}
       {method === 'pointBuy' && (
         <fieldset className="abilities">
           <legend>Point buy</legend>
           {abilities.map(({ key, label }) => (
-            <label key={key} className="field">
-              {label}
-              <input
-                type="number"
-                min={pointBuyRange.min}
-                max={pointBuyRange.max}
-                value={basics.scores[key]}
-                onChange={(e) => onChange((b) => ({ ...b, scores: { ...b.scores, [key]: Number(e.target.value) } }))}
-              />
-            </label>
+            <div key={key}>
+              <label className="field">
+                {label}
+                <input
+                  type="number"
+                  min={pointBuyRange.min}
+                  max={pointBuyRange.max}
+                  value={basics.scores[key]}
+                  onChange={(e) => onChange((b) => ({ ...b, scores: { ...b.scores, [key]: Number(e.target.value) } }))}
+                />
+              </label>
+              <MainMark text={mark(key)} />
+            </div>
           ))}
         </fieldset>
       )}
@@ -472,7 +500,7 @@ function ScoresStep(props: {
                   </li>
                 ))}
               </ul>
-              <AssignPool legend="Assign the rolled scores" pool={pool!} assignment={basics.assignment} onChange={assign} />
+              <AssignPool legend="Assign the rolled scores" pool={pool!} assignment={basics.assignment} mark={mark} onChange={assign} />
             </>
           )}
         </>
@@ -481,17 +509,20 @@ function ScoresStep(props: {
         <fieldset className="abilities">
           <legend>Base ability scores</legend>
           {abilities.map(({ key, label }) => (
-            <label key={key} className="field">
-              {label}
-              <input
-                type="number"
-                min={1}
-                max={30}
-                required
-                value={basics.scores[key]}
-                onChange={(e) => onChange((b) => ({ ...b, scores: { ...b.scores, [key]: Number(e.target.value) } }))}
-              />
-            </label>
+            <div key={key}>
+              <label className="field">
+                {label}
+                <input
+                  type="number"
+                  min={1}
+                  max={30}
+                  required
+                  value={basics.scores[key]}
+                  onChange={(e) => onChange((b) => ({ ...b, scores: { ...b.scores, [key]: Number(e.target.value) } }))}
+                />
+              </label>
+              <MainMark text={mark(key)} />
+            </div>
           ))}
         </fieldset>
       )}
@@ -565,7 +596,7 @@ function SpeciesStep(props: PickStepProps) {
   const list = ofKind(options, 'species');
   const hint = reasonHint(props.reasonNames([basics.species]));
   return (
-    <StepForm label="Species" next="Next: class" nextDisabled={!!hint} nextHint={hint} onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
+    <StepForm label="Species" next="Next: background" nextDisabled={!!hint} nextHint={hint} onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
       <p className="hint">Every option shows its source and the rules it is for.</p>
       <SinglePick legend="Species" name="species" options={list} value={basics.species} onChange={(species) => onChange({ ...basics, species })} />
       {missingHint('species', 'species', list.length, props.missing('species'), props.loaded, props.policy)}
@@ -578,7 +609,7 @@ function ClassStep(props: PickStepProps) {
   const hint = reasonHint(props.reasonNames([basics.startingClass]));
   const list = ofKind(options, 'class');
   return (
-    <StepForm label="Class" next="Next: background" nextDisabled={!!hint} nextHint={hint} onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
+    <StepForm label="Class" next="Next: ability scores" nextDisabled={!!hint} nextHint={hint} onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
       <p className="hint">Every option shows its source and the rules it is for.</p>
       <SinglePick
         legend="Class (level 1)"
@@ -609,7 +640,7 @@ function BackgroundStep(props: PickStepProps) {
 
   const hint = reasonHint(props.reasonNames([basics.background, ...basics.other]));
   return (
-    <StepForm label="Background" next="Next: choices" nextDisabled={!!hint} nextHint={hint} onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
+    <StepForm label="Background" next="Next: gear" nextDisabled={!!hint} nextHint={hint} onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
       <p className="hint">Every option shows its source and the rules it is for.</p>
       <SinglePick
         legend="Background"
@@ -1187,6 +1218,10 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
   });
   const [draftId] = useState(() => crypto.randomUUID());
   const [view, setView] = useState<CharacterView | undefined>(mode.kind === 'create' ? undefined : mode.view);
+  const [guides, setGuides] = useState<GuideView[]>([]);
+  const [gear, setGear] = useState<GearValue>({ skipped: false, choices: {} });
+  /** What the gear step gave when the player pressed Next: sent with the new character; undefined when skipped or nothing was given. */
+  const [kitGiven, setKitGiven] = useState<{ equipment: EquipmentEntry[]; coins: Currency }>();
   const [listed, setListed] = useState<ContentOption[]>([]);
   // Which rules family and campaign `listed` belongs to; until it matches, options are still loading.
   const [listedFor, setListedFor] = useState<string>();
@@ -1261,6 +1296,12 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
             other,
           };
         });
+      })
+      .catch(fail);
+    client
+      .listGuides(family, campaignId)
+      .then((result) => {
+        if (current) setGuides(result);
       })
       .catch(fail);
     client
@@ -1355,7 +1396,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
    * Previews the draft and moves to the choices. The reply applies only if it is the latest request and the player is still
    * on the step that asked: Back while it is pending cancels the jump, so a late reply never carries an old class forward.
    */
-  async function preview(draft: Character, from: 'background' | 'level') {
+  async function preview(draft: Character, from: 'gear' | 'level') {
     const request = previewSeq.current.next();
     const current = () => mounted.current && request === previewSeq.current.n && stepNow.current === from;
     try {
@@ -1432,6 +1473,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
               campaignId: draft.campaignId,
               campaignExceptions: draft.campaignExceptions,
               spells: draft.spells,
+              ...(kitGiven ? { equipment: kitGiven.equipment, coins: kitGiven.coins } : {}),
             })
           : await client.saveCharacter(draft);
       // Always: the save happened, so the app says so even if the player has left (R36). The app switches the screen before it
@@ -1446,6 +1488,29 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
       committing.current = false;
       setBusy(false);
     }
+  }
+
+  const classGuide = guides.find((g) => g.targetContentId === basics.startingClass?.contentId);
+  const backgroundGuide = guides.find((g) => g.targetContentId === basics.background?.contentId);
+  const className = basics.startingClass ? nameOf(basics.startingClass) : '';
+  const backgroundName = basics.background ? nameOf(basics.background) : '';
+  // GearStep asks for a new preview whenever this draft changes identity, so it is rebuilt only when what it is built from changes.
+  const gearDraft = useMemo(() => draftOf(basics, draftId, view?.character), [basics, draftId, view?.character]);
+
+  /** Gear's Next: ask the service what the kits give (nothing when skipped), keep it for the save, then preview the draft. */
+  async function gearNext() {
+    const kits = kitsFor([classGuide, backgroundGuide], gear, guideCategories);
+    try {
+      if (!gear.skipped && kits.length > 0) {
+        const given = await client.kit(gearDraft, kits);
+        if (!mounted.current || stepNow.current !== 'gear') return;
+        setKitGiven(given.equipment.length > 0 || Object.values(given.coins).some((n) => n > 0) ? { equipment: given.equipment, coins: given.coins } : undefined);
+      } else setKitGiven(undefined);
+    } catch (error) {
+      fail(error);
+      return;
+    }
+    await preview(gearDraft, 'gear');
   }
 
   const at = createSteps.indexOf(step);
@@ -1498,12 +1563,25 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
         <RulesStep basics={basics} rulesFamilies={rulesFamilies} campaigns={campaigns} onChange={setBasics} onNext={next} onCancel={onCancel} />
       )}
       {mode.kind === 'create' && step === 'scores' && (
-        <ScoresStep basics={basics} policy={policy} onChange={setBasics} onNext={next} onBack={back} onCancel={onCancel} onError={onError} />
+        <ScoresStep className={classGuide ? className : undefined} primaryAbilities={classGuide?.primaryAbilities} basics={basics} policy={policy} onChange={setBasics} onNext={next} onBack={back} onCancel={onCancel} onError={onError} />
       )}
       {mode.kind === 'create' && step === 'species' && <SpeciesStep {...pickProps} onNext={next} />}
       {mode.kind === 'create' && step === 'class' && <ClassStep {...pickProps} onNext={next} />}
-      {mode.kind === 'create' && step === 'background' && (
-        <BackgroundStep {...pickProps} onNext={() => preview(draftOf(basics, draftId, view?.character), 'background')} />
+      {mode.kind === 'create' && step === 'background' && <BackgroundStep {...pickProps} onNext={next} />}
+      {mode.kind === 'create' && step === 'gear' && (
+        <StepForm label="Starting gear" next="Next: choices" onNext={gearNext} onBack={back} onCancel={onCancel}>
+          <GearStep
+            draft={gearDraft}
+            classGuide={classGuide}
+            backgroundGuide={backgroundGuide}
+            className={className}
+            backgroundName={backgroundName}
+            trained={guideCategories}
+            value={gear}
+            onChange={setGear}
+            onPreview={(kits) => client.kit(gearDraft, kits)}
+          />
+        </StepForm>
       )}
       {step === 'level' && mode.kind === 'levelUp' && (
         <LevelStep
@@ -1524,7 +1602,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
           spellOptions={pickable.filter((o) => o.kind === 'spell')}
           onChoose={choose}
           onSpells={toggleSpell}
-          onBack={mode.kind === 'create' ? () => setStep('background') : mode.kind === 'levelUp' ? () => setStep('level') : undefined}
+          onBack={mode.kind === 'create' ? () => setStep('gear') : mode.kind === 'levelUp' ? () => setStep('level') : undefined}
           onCommit={commit}
           onCancel={() => {
             if (!busy) onCancel(); // a save in flight cannot be discarded; the button says so with aria-disabled
