@@ -810,8 +810,9 @@ it('ends a species option\'s source line with the rules by short label', async (
   await user.click(screen.getByRole('button', { name: 'Next: species' }));
 
   const radio = await screen.findByRole('radio', { name: /^Fixture Hillfolk/ });
-  expect(radio.parentElement?.querySelector('.option-source')?.textContent).toMatch(/· 2014 rules$/);
-  expect(radio.parentElement?.textContent).not.toMatch(/srd-5|SRD 5/);
+  const optionRow = radio.closest('label')!.parentElement!;
+  expect(optionRow.querySelector('.option-source')?.textContent).toMatch(/· 2014 rules$/);
+  expect(optionRow.textContent).not.toMatch(/srd-5|SRD 5/);
 });
 
 it('keeps the species and class picks across Back and forth', async () => {
@@ -2192,12 +2193,29 @@ describe('what an option gives, legends and the rules notice (8.7)', () => {
     const user = userEvent.setup();
     await toStep(user, 'species');
     const radio = await screen.findByRole('radio', { name: /^Fixture Hillfolk/ });
-    const row = radio.parentElement!;
-    const details = row.querySelector('details')!;
+    const label = radio.closest('label')!;
+    const details = label.parentElement!.querySelector('details')!;
+    expect(label.contains(details)).toBe(false);
     expect(details.querySelector('summary')?.textContent).toBe('What it gives');
     expect(details.textContent).toContain('Fixture sturdy folk.');
     expect(details.textContent).toContain('Fixture pack, p. 4');
-    expect(Array.from(row.children).filter((c) => c.classList.contains('option-source')).length).toBe(0);
+    expect(Array.from(label.children).filter((c) => c.classList.contains('option-source')).length).toBe(0);
+  });
+
+  it('opening "What it gives" keeps the pick, and the radio is named by the option alone', async () => {
+    const user = userEvent.setup();
+    await toStep(user, 'species');
+    const radio = (await screen.findByRole('radio', { name: /^Fixture Hillfolk/ })) as HTMLInputElement;
+    await user.click(radio);
+    expect(radio.checked).toBe(true);
+    const details = radio.closest('label')!.parentElement!.querySelector('details')!;
+    await user.click(details.querySelector('summary')!);
+    expect(details.open).toBe(true);
+    expect(radio.checked).toBe(true);
+    expect((screen.getByRole('radio', { name: 'None' }) as HTMLInputElement).checked).toBe(false);
+    expect(radio.labels?.[0]?.textContent).not.toContain('Fixture sturdy folk.');
+    expect(screen.getByRole('radio', { name: /^Fixture Hillfolk/ }).getAttribute('name')).toBe('species');
+    expect(screen.queryByRole('radio', { name: /sturdy folk/ })).toBeNull();
   });
 
   it('keeps "not allowed in this campaign" in the row, outside the disclosure', async () => {
@@ -2210,7 +2228,7 @@ describe('what an option gives, legends and the rules notice (8.7)', () => {
     await user.click(screen.getByRole('button', { name: 'Next: class' }));
     const row = (await screen.findByRole('radio', { name: /^Fixture Outsider/ })).closest('label')!;
     expect(row.textContent).toMatch(/not allowed in this campaign/);
-    expect(row.querySelector('details')!.textContent).not.toMatch(/not allowed in this campaign/);
+    expect(row.parentElement!.querySelector('details')!.textContent).not.toMatch(/not allowed in this campaign/);
   });
 
   it('shows the species notice on the species step and not on the Rules step (2014 rules)', async () => {
@@ -2277,6 +2295,33 @@ describe('what an option gives, legends and the rules notice (8.7)', () => {
     pickerFor({ text: 'Choose 2 skills' });
     const group = await screen.findByRole('group', { name: /^Choose 2 skills/ });
     expect(group.querySelector('legend')?.textContent).not.toContain('Fixture feature');
+  });
+
+  it('keeps the source prefix on both legends when two sources share a label', async () => {
+    const mine = content(7, 'feature', 'Fixture Mine', 'srd-5.1');
+    vi.mocked(client.listContent).mockResolvedValue([mine]);
+    const view = viewWith([]);
+    const base = { options: [mine.reference], selected: [], resolved: false, count: 2, text: 'Skills' };
+    view.sheet.choices = [
+      { ...base, source: { contentId: 'fixture-a', revisionId: 'fixture-a-r1' }, sourceName: 'Fixture Alpha', choiceId: 'pick' },
+      { ...base, source: { contentId: 'fixture-b', revisionId: 'fixture-b-r1' }, sourceName: 'Fixture Beta', choiceId: 'pick' },
+    ];
+    render(<CharacterBuilder mode={{ kind: 'choices', view }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+    const alpha = await screen.findByRole('group', { name: /^Fixture Alpha: Skills: choose 2/ });
+    const beta = await screen.findByRole('group', { name: /^Fixture Beta: Skills: choose 2/ });
+    expect(alpha).not.toBe(beta);
+  });
+
+  it('adds the count when the label names a different number, and not when it says "a" for one', async () => {
+    pickerFor({ text: 'Choose 2 skills', count: 3 });
+    expect(await screen.findByRole('group', { name: /^Choose 2 skills: choose 3/ })).toBeTruthy();
+    cleanup();
+    pickerFor({ text: 'Choose a skill', count: 1 });
+    const group = await screen.findByRole('group', { name: /^Choose a skill/ });
+    expect(group.querySelector('legend')?.textContent).not.toMatch(/choose 1/);
+    cleanup();
+    pickerFor({ text: 'Choose a skill', count: 2 });
+    expect(await screen.findByRole('group', { name: /^Choose a skill: choose 2/ })).toBeTruthy();
   });
 
   it('keeps the source prefix when the choice has no short label', async () => {

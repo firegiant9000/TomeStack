@@ -321,17 +321,17 @@ describe('GearStep', () => {
           id: 'p',
           label: 'P',
           options: [
-            { id: 'a', text: 'Rope (unavailable: Rope)', lines: [line({ kind: 'missing', name: 'Rope' }), line({ kind: 'missing' })] },
+            { id: 'a', text: 'Rope (unavailable: Rope), Torch (unavailable: unknown item)', lines: [line({ kind: 'missing', name: 'Rope' }), line({ kind: 'missing' })] },
             { id: 'b', text: 'Pack', lines: [line({ kind: 'pack', name: 'Pack', contents: [line({ kind: 'missing', name: 'Lantern' })] })] },
           ],
         },
       ],
     };
     render(<Harness classGuide={guide} />);
-    // The option text already says "(unavailable: Rope)", so the step does not repeat it; the unnamed one is told once.
-    expect(screen.queryByText("Couldn't add: Rope")).toBeNull();
-    expect(screen.getByText(/Rope \(unavailable: Rope\)/)).toBeTruthy();
-    expect(screen.getByText("Couldn't add an item")).toBeTruthy();
+    // The option text already names every missing top-level line, named or not, so the step never repeats it.
+    expect(screen.queryByText(/Couldn't add/)).toBeNull();
+    expect(screen.getAllByText(/Rope/)).toHaveLength(1);
+    expect(screen.getAllByText(/unknown item/)).toHaveLength(1);
     await user.click(screen.getByRole('radio', { name: /^Pack/ }));
     expect(screen.getByText("Couldn't add: Lantern")).toBeTruthy();
   });

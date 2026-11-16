@@ -136,10 +136,18 @@ function choiceLabel(choice: { text?: string }): string | undefined {
 }
 
 /** The picker legend: a label that already says what is picked stands alone; otherwise the source's name leads ("{source}: choose 2"). */
-function choiceLegendName(choice: { text?: string; sourceName: string; count: number }): string {
+function choiceLegendName(choice: { text?: string; sourceName: string; count: number }, siblings: { text?: string }[] = []): string {
   const label = choiceLabel(choice);
   if (!label) return `${choice.sourceName}: choose ${choice.count}`;
-  return /\bchoose \d+/i.test(label) ? label : `${label}: choose ${choice.count}`;
+  const norm = (s?: string) => (s ? choiceLabel({ text: s })?.toLowerCase() : undefined);
+  const mine = label.toLowerCase();
+  // The source's name leads unless the label is unique among the choices on this step (or already is the source's name).
+  const unique = siblings.filter((s) => norm(s.text) === mine).length <= 1;
+  const named = unique || mine === choice.sourceName.trim().toLowerCase() ? label : `${choice.sourceName}: ${label}`;
+  // A label that already says how many is complete only when its number is this choice's count.
+  const said = /\bchoose (\d+)\b/i.exec(label);
+  const complete = said ? Number(said[1]) === choice.count : choice.count === 1 && /\bchoose (a|an|one)\b/i.test(label);
+  return complete ? named : `${named}: choose ${choice.count}`;
 }
 
 /** One origin or class pick: a radio group with "None", so the choice is explicit and keyboard-operable. */
@@ -158,7 +166,8 @@ function SinglePick(props: {
         None
       </label>
       {props.options.map((option) => (
-        <label key={option.reference.revisionId} className={`choice${option.compatible ? '' : ' incompatible'}`}>
+        <div key={option.reference.revisionId}>
+        <label className={`choice${option.compatible ? '' : ' incompatible'}`}>
           <input
             type="radio"
             name={props.name}
@@ -171,12 +180,14 @@ function SinglePick(props: {
           <span className="option-name">{option.name}</span>
           {option.outsideCampaign && <span className="option-source"> · not allowed in this campaign</span>}
           {!option.outsideCampaign && !option.compatible && <span className="option-source"> · not available for these rules</span>}
-          <details className="option-gives">
-            <summary>What it gives</summary>
-            {option.summary && <p>{option.summary}</p>}
-            <SourceLine option={option} bare />
-          </details>
         </label>
+        {/* Outside the label: the radio's name is the option's name, and opening this never changes the pick. */}
+        <details className="option-gives">
+          <summary>What it gives</summary>
+          {option.summary && <p>{option.summary}</p>}
+          <SourceLine option={option} bare />
+        </details>
+        </div>
       ))}
     </fieldset>
   );
@@ -606,9 +617,9 @@ function SpeciesStep(props: PickStepProps) {
   const hint = reasonHint(props.reasonNames([basics.species]));
   return (
     <StepForm label="Species" next="Next: background" nextDisabled={!!hint} nextHint={hint} onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
-      <p className="hint">Every option shows its source and the rules it is for.</p>
+      <p className="hint">Open "What it gives" on an option to see what it grants and where it comes from.</p>
       {props.policy?.abilityIncreaseSource === 'species' && (
-        <p className="hint">Under these rules your species raises your ability scores. Open "What it gives" on an option to see how.</p>
+        <p className="hint">Under these rules your species raises your ability scores. Where an option says so, "What it gives" shows how.</p>
       )}
       <SinglePick legend="Species" name="species" options={list} value={basics.species} onChange={(species) => onChange({ ...basics, species })} />
       {missingHint('species', 'species', list.length, props.missing('species'), props.loaded, props.policy)}
@@ -622,7 +633,7 @@ function ClassStep(props: PickStepProps) {
   const list = ofKind(options, 'class');
   return (
     <StepForm label="Class" next="Next: ability scores" nextDisabled={!!hint} nextHint={hint} onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
-      <p className="hint">Every option shows its source and the rules it is for.</p>
+      <p className="hint">Open "What it gives" on an option to see what it grants and where it comes from.</p>
       <SinglePick
         legend="Class (level 1)"
         name="startingClass"
@@ -653,7 +664,7 @@ function BackgroundStep(props: PickStepProps) {
   const hint = reasonHint(props.reasonNames([basics.background, ...basics.other]));
   return (
     <StepForm label="Background" next="Next: gear" nextDisabled={!!hint} nextHint={hint} onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
-      <p className="hint">Every option shows its source and the rules it is for.</p>
+      <p className="hint">Open "What it gives" on an option to see what it grants and where it comes from.</p>
       {props.policy && (
         <p className="hint">
           {props.policy.abilityIncreaseSource === 'background' ? 'Under these rules your background raises your ability scores. ' : ''}
@@ -940,13 +951,15 @@ function ChoicePicker(props: {
   onChange: (ref: ContentReference, add: boolean) => void;
   /** MECH-X item 2: "You may replace one pick now." (level-up) or the window hint (Make choices); real text in the group. */
   replaceNote?: string;
+  /** Every choice shown on this step, so a label shared by two sources keeps its source's name. */
+  siblings?: { text?: string }[];
 }) {
   const { choice } = props;
   const full = choice.selected.length >= choice.count;
   // R33 (2.4.3): an option ticked when the picker appeared stays rendered for as long as the picker does, so unticking the
   // focused checkbox never removes it; once unticked and not offerable it is aria-disabled, never `disabled` under focus.
   const [atMount] = useState(() => new Set(choice.selected.map((s) => s.revisionId)));
-  const legendName = choiceLegendName(choice);
+  const legendName = choiceLegendName(choice, props.siblings);
   if (!props.optionsLoaded) {
     return (
       <fieldset className="choice-picker" aria-busy="true">
@@ -1158,6 +1171,7 @@ function ChoicesStep(props: {
         <ChoicePicker
           key={`${choice.source.revisionId}-${choice.choiceId}`}
           choice={choice}
+          siblings={choices}
           optionOf={props.optionOf}
           optionsLoaded={props.optionsLoaded}
           onChange={(ref, add) => props.onChoose(choice, ref, add)}
