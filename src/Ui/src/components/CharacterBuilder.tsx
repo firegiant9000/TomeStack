@@ -43,12 +43,6 @@ import { shown } from './SandboxPanel';
 import { SpellSearch } from './sheet/SpellSearch';
 import { GearStep, kitsFor, type GearValue } from './builder/GearStep';
 
-/**
- * The guide categories `requiresProficiency` uses. The UI has no list of what the draft is trained in (the sheet carries none),
- * so every category is offered; the service's kit leaves untrained armour unequipped and reports it as a problem.
- */
-const guideCategories = ['weapon.simple', 'weapon.martial', 'armor.light', 'armor.medium', 'armor.heavy', 'armor.shield'];
-
 const abilities: { key: Ability; label: string }[] = [
   { key: 'str', label: 'Strength' },
   { key: 'dex', label: 'Dexterity' },
@@ -1220,6 +1214,8 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
   const [view, setView] = useState<CharacterView | undefined>(mode.kind === 'create' ? undefined : mode.view);
   const [guides, setGuides] = useState<GuideView[]>([]);
   const [gear, setGear] = useState<GearValue>({ skipped: false, choices: {} });
+  // What the draft is trained in, as the service last said (the gear step's preview); none until the first preview answers.
+  const [trained, setTrained] = useState<string[]>([]);
   /** What the gear step gave when the player pressed Next: sent with the new character; undefined when skipped or nothing was given. */
   const [kitGiven, setKitGiven] = useState<{ equipment: EquipmentEntry[]; coins: Currency }>();
   const [listed, setListed] = useState<ContentOption[]>([]);
@@ -1511,7 +1507,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
     if (gearing.current) return; // a second press while the kit is pending does nothing
     gearing.current = true;
     try {
-      const kits = kitsFor([classGuide, backgroundGuide], gear, guideCategories);
+      const kits = kitsFor([classGuide, backgroundGuide], gear, trained);
       // A pick changed (or the step left) while the kit is pending bumps previewSeq: the old reply is dropped, never saved.
       const request = previewSeq.current.next();
       try {
@@ -1595,10 +1591,15 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
             backgroundGuide={backgroundGuide}
             className={className}
             backgroundName={backgroundName}
-            trained={guideCategories}
+            trained={trained}
             value={gear}
             onChange={setGear}
-            onPreview={(kits) => client.kit(gearDraft, kits)}
+            onPreview={async (kits) => {
+              const given = await client.kit(gearDraft, kits);
+              // Keep the same array while the contents are unchanged, so a new reply cannot re-trigger the gear step's preview.
+              setTrained((old) => (old.length === given.trained.length && old.every((t, i) => t === given.trained[i]) ? old : given.trained));
+              return given;
+            }}
           />
         </StepForm>
       )}

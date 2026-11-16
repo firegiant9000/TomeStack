@@ -2063,6 +2063,8 @@ export interface KitView {
   coins: Currency;
   problems: Diagnostic[];
   preview: CharacterView;
+  /** The guide categories ("weapon.martial", "armor.heavy", ...) the draft is trained in: the vocabulary of `requiresProficiency`. */
+  trained: string[];
 }
 
 /** Wave 3 G8 (KitRequest), command `character.kit`: the builder draft and the kits taken, one per guide. */

@@ -33,7 +33,7 @@ public sealed record KitRequest(Character Draft, IReadOnlyList<GuideKit> Kits);
 public sealed record GuideKit(Guid GuideContentId, IReadOnlyList<KitChoice> Choices);
 
 /// <summary>What the kits give: the entries (armour, shield and weapons equipped where the draft is trained), the coins, what could not be given, and the draft calculated with them.</summary>
-public sealed record KitView(IReadOnlyList<EquipmentEntry> Equipment, Currency Coins, IReadOnlyList<Diagnostic> Problems, CharacterView Preview);
+public sealed record KitView(IReadOnlyList<EquipmentEntry> Equipment, Currency Coins, IReadOnlyList<Diagnostic> Problems, CharacterView Preview, IReadOnlyList<string> Trained);
 
 public sealed partial class TomeStackApp
 {
@@ -41,6 +41,9 @@ public sealed partial class TomeStackApp
 
     /// <summary>A kit's guide is not for the draft's rules family.</summary>
     public const string KitGuideWrongRules = "kit.guide-wrong-rules";
+
+    /// <summary>A chosen option needs training the draft does not have; its lines are left out.</summary>
+    public const string KitOptionUntrained = "kit.option-untrained";
 
     /// <summary>
     /// Command <c>character.kit</c>: expands each kit (a guide id listed twice counts once), merges the entries of the same item, and equips one
@@ -60,6 +63,8 @@ public sealed partial class TomeStackApp
         var coins = new Currency();
         var resolved = 0;
         var seen = new HashSet<Guid>();
+        // The same effects the calculation uses decide what the draft is trained in; the UI only reflects this list.
+        var trained = CharacterCalculator.TrainedCategories(draft, _store);
         foreach (var kit in request.Kits ?? [])
         {
             if (kit is not null && !seen.Add(kit.GuideContentId))
@@ -77,7 +82,7 @@ public sealed partial class TomeStackApp
                 continue;
             }
             resolved++;
-            var result = KitExpansion.Expand(effect, kit!.Choices ?? [], _store);
+            var result = KitExpansion.Expand(WithoutUntrained(effect, kit!.Choices ?? [], trained, problems), kit.Choices ?? [], _store);
             problems.AddRange(result.Problems);
             foreach (var entry in result.Equipment)
             {
@@ -96,11 +101,47 @@ public sealed partial class TomeStackApp
         {
             var own = draft.Equipment ?? [];
             var ownCoins = draft.Currency ?? new Currency();
-            return new(own, ownCoins, problems, Preview(draft));
+            return new(own, ownCoins, problems, Preview(draft), trained);
         }
         var equipped = Equip(draft, entries, coins);
-        return new(equipped, coins, problems, Preview(draft with { Equipment = equipped, Currency = coins }));
+        return new(equipped, coins, problems, Preview(draft with { Equipment = equipped, Currency = coins }), trained);
     }
+
+    /// <summary>The kit's picks with the lines of a chosen option the draft is not trained for taken out (and a problem for each); the other picks are untouched.</summary>
+    private static StartingEquipmentEffect WithoutUntrained(StartingEquipmentEffect effect, IReadOnlyList<KitChoice> choices, IReadOnlyList<string> trained, List<Diagnostic> problems)
+    {
+        var changed = false;
+        var picks = new List<KitPick>();
+        foreach (var pick in effect.Picks ?? [])
+        {
+            var options = pick?.Options ?? [];
+            var choice = pick is null ? null : choices.FirstOrDefault(c => c is not null && string.Equals(c.PickId, pick.Id, StringComparison.Ordinal));
+            var option = choice is not null
+                ? options.FirstOrDefault(o => o is not null && string.Equals(o.Id, choice.OptionId, StringComparison.Ordinal))
+                : options.Count == 1 ? options[0] : null;
+            if (pick is null || option?.RequiresProficiency is not { } need || trained.Contains(need, StringComparer.Ordinal))
+            {
+                if (pick is not null)
+                    picks.Add(pick);
+                continue;
+            }
+            problems.Add(new(KitOptionUntrained, $"You aren't trained with {TrainedText(need)}, so this option was left out."));
+            picks.Add(pick with { Options = [.. options.Select(o => ReferenceEquals(o, option) ? o with { Lines = [] } : o)] });
+            changed = true;
+        }
+        return changed ? effect with { Picks = picks } : effect;
+    }
+
+    private static string TrainedText(string category) => category switch
+    {
+        "weapon.simple" => "simple weapons",
+        "weapon.martial" => "martial weapons",
+        "armor.light" => "light armor",
+        "armor.medium" => "medium armor",
+        "armor.heavy" => "heavy armor",
+        "armor.shield" => "shields",
+        _ => category,
+    };
 
     private IReadOnlyList<EquipmentEntry> Equip(Character draft, List<EquipmentEntry> entries, Currency coins)
     {

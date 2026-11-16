@@ -260,7 +260,8 @@ public class GuideCommandTests
 
     private static Character Draft(string className)
     {
-        var classes = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.1-classes.json");
+        // The Fighter has a pack of its own; the rest are in the classes pack.
+        var classes = TomeStackApp.LoadBundledPack(className == "Fighter" ? "TomeStack.Content.srd-5.1-fighter.json" : "TomeStack.Content.srd-5.1-classes.json");
         // The pack holds each class once per schema version; the newest is the one that records armour training.
         var cls = classes.Revisions.Where(r => r.Kind == ContentKind.Class && r.Name == className).MaxBy(r => r.SchemaVersion)!;
         return new Character
@@ -314,6 +315,53 @@ public class GuideCommandTests
         Assert.DoesNotContain("Scale mail", worn);
         Assert.Contains(view.Equipment, e => NameOf(temp, e) == "Shield"); // still owned
         Assert.Contains(view.Equipment, e => e.Equipped && NameOf(temp, e) == "Mace");
+    }
+
+    [Fact]
+    public void A_Fighter_is_trained_in_martial_weapons_and_heavy_armor()
+    {
+        using var temp = new TempApp();
+        var view = temp.App.Kit(ClericKit(temp, Draft("Fighter")));
+
+        Assert.Contains("weapon.martial", view.Trained);
+        Assert.Contains("armor.heavy", view.Trained);
+        Assert.Equal(view.Trained.OrderBy(t => Array.IndexOf(["weapon.simple", "weapon.martial", "armor.light", "armor.medium", "armor.heavy", "armor.shield"], t)), view.Trained);
+    }
+
+    [Fact]
+    public void A_Wizard_is_not_trained_in_martial_weapons()
+    {
+        using var temp = new TempApp();
+        var view = temp.App.Kit(ClericKit(temp, Draft("Wizard")));
+
+        Assert.DoesNotContain("weapon.martial", view.Trained);
+        Assert.DoesNotContain("armor.heavy", view.Trained);
+    }
+
+    [Fact]
+    public void An_option_that_needs_martial_weapons_is_left_out_for_a_draft_without_them()
+    {
+        using var temp = new TempApp();
+        var trainedNames = temp.App.Kit(ClericKit(temp, Draft("Fighter"), new KitChoice("weapon", "b"))).Equipment.Select(e => NameOf(temp, e)).ToList();
+
+        var view = temp.App.Kit(ClericKit(temp, Draft("Wizard"), new KitChoice("weapon", "b")));
+
+        var problem = Assert.Single(view.Problems, p => p.Code == TomeStackApp.KitOptionUntrained);
+        Assert.Equal("You aren't trained with martial weapons, so this option was left out.", problem.Message);
+        var names = view.Equipment.Select(e => NameOf(temp, e)).ToList();
+        Assert.DoesNotContain("Mace", names); // option a was not chosen either
+        Assert.True(trainedNames.Count > names.Count); // the martial option's items are the difference
+        Assert.NotEmpty(view.Equipment); // the other picks still apply
+    }
+
+    [Fact]
+    public void A_Fighter_gets_the_martial_option_without_a_training_problem()
+    {
+        using var temp = new TempApp();
+        var view = temp.App.Kit(ClericKit(temp, Draft("Fighter"), new KitChoice("weapon", "b")));
+
+        Assert.DoesNotContain(view.Problems, p => p.Code == TomeStackApp.KitOptionUntrained);
+        Assert.DoesNotContain(view.Equipment, e => NameOf(temp, e) == "Mace");
     }
 
     [Fact]

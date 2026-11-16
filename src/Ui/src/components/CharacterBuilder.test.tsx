@@ -73,7 +73,7 @@ beforeEach(() => {
   vi.mocked(client.listCampaigns).mockResolvedValue([]);
   vi.mocked(client.listGuides).mockResolvedValue([]);
   vi.mocked(client.kit).mockReset();
-  vi.mocked(client.kit).mockResolvedValue({ equipment: [], coins: { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0 }, problems: [], preview: viewWith([]) });
+  vi.mocked(client.kit).mockResolvedValue({ equipment: [], coins: { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0 }, problems: [], preview: viewWith([]), trained: [] });
   vi.mocked(client.listContent).mockResolvedValue(spells);
   vi.mocked(client.draftCounts).mockResolvedValue({});
   vi.mocked(client.preview).mockImplementation(async (draft) => viewWith(draft.spells));
@@ -503,6 +503,7 @@ const kitView = (): KitView => ({
   coins: { cp: 0, sp: 0, ep: 0, gp: 15, pp: 0 },
   problems: [],
   preview: draftView(),
+  trained: [],
 });
 
 it('marks the class\'s main abilities on the scores step (8.6)', async () => {
@@ -543,6 +544,41 @@ it('sends the kit\'s equipment and coins when the character is created (8.6)', a
   const [draft, kits] = vi.mocked(client.kit).mock.calls.at(-1)!;
   expect(draft.name).toBe('Fixture New');
   expect(kits).toEqual([{ guideContentId: 'fixture-guide-warden', choices: [{ pickId: 'weapon', optionId: 'mace' }] }]);
+});
+
+it('offers the options the service says the draft is trained for, and settles without a preview loop (8.6b)', async () => {
+  const user = userEvent.setup();
+  const guide = wardenGuide();
+  guide.picks[0]!.options.push({ id: 'sword', text: 'A fixture sword', requiresProficiency: 'weapon.martial', lines: [] });
+  vi.mocked(client.listContent).mockResolvedValue(stepContent());
+  vi.mocked(client.listGuides).mockResolvedValue([guide]);
+  vi.mocked(client.preview).mockResolvedValue(draftView());
+  vi.mocked(client.kit).mockReset();
+  vi.mocked(client.kit).mockResolvedValue({ ...kitView(), trained: ['weapon.martial'] });
+  await toBackground(user, /^Fixture Warden/);
+  await user.click(screen.getByRole('button', { name: 'Next: gear' }));
+  const sword = await screen.findByRole('radio', { name: /A fixture sword/ });
+  await waitFor(() => expect(sword.getAttribute('aria-disabled')).toBeNull()); // the reply's trained list makes it available
+  await new Promise((r) => setTimeout(r, 30));
+  expect(vi.mocked(client.kit).mock.calls.length).toBeLessThanOrEqual(2); // the same list again asks for nothing more
+  const sent = vi.mocked(client.kit).mock.calls.at(-1)![1];
+  expect(sent).toEqual([{ guideContentId: 'fixture-guide-warden', choices: [{ pickId: 'weapon', optionId: 'mace' }] }]);
+});
+
+it('keeps an option that needs training unavailable while the service says the draft lacks it (8.6b)', async () => {
+  const user = userEvent.setup();
+  const guide = wardenGuide();
+  guide.picks[0]!.options.push({ id: 'sword', text: 'A fixture sword', requiresProficiency: 'weapon.martial', lines: [] });
+  vi.mocked(client.listContent).mockResolvedValue(stepContent());
+  vi.mocked(client.listGuides).mockResolvedValue([guide]);
+  vi.mocked(client.preview).mockResolvedValue(draftView());
+  vi.mocked(client.kit).mockReset();
+  vi.mocked(client.kit).mockResolvedValue({ ...kitView(), trained: [] });
+  await toBackground(user, /^Fixture Warden/);
+  await user.click(screen.getByRole('button', { name: 'Next: gear' }));
+  const sword = await screen.findByRole('radio', { name: /A fixture sword/ });
+  await waitFor(() => expect(vi.mocked(client.kit)).toHaveBeenCalled());
+  expect(sword.getAttribute('aria-disabled')).toBe('true');
 });
 
 it('sends no equipment and no coins when the gear step is skipped (8.6)', async () => {
