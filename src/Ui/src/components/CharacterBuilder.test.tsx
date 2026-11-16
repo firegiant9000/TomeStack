@@ -2165,3 +2165,123 @@ describe('preview at level (D82)', () => {
     expect(screen.getByRole('button', { name: 'Preview' }).getAttribute('aria-disabled')).toBeNull();
   });
 });
+
+// Task 8.7: "What it gives", the choice legend, and where the rules notice is shown.
+describe('what an option gives, legends and the rules notice (8.7)', () => {
+  const gives = [
+    content(1, 'species', 'Fixture Hillfolk', 'srd-5.1', { summary: 'Fixture sturdy folk.', page: 'p. 4' }),
+    content(3, 'class', 'Fixture Warden', 'srd-5.1'),
+    content(5, 'background', 'Fixture Drifter', 'srd-5.1'),
+  ];
+
+  async function toStep(user: ReturnType<typeof userEvent.setup>, next: 'species' | 'background') {
+    vi.mocked(client.listContent).mockResolvedValue(gives);
+    renderCreate();
+    await fill(user, screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
+    await user.click(screen.getByRole('button', { name: 'Next: class' }));
+    await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
+    await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
+    await user.click(screen.getByRole('button', { name: 'Next: species' }));
+    if (next === 'background') {
+      await screen.findByRole('radio', { name: /^Fixture Hillfolk/ });
+      await user.click(screen.getByRole('button', { name: 'Next: background' }));
+    }
+  }
+
+  it('puts the summary and the source line in a "What it gives" disclosure, off the row', async () => {
+    const user = userEvent.setup();
+    await toStep(user, 'species');
+    const radio = await screen.findByRole('radio', { name: /^Fixture Hillfolk/ });
+    const row = radio.parentElement!;
+    const details = row.querySelector('details')!;
+    expect(details.querySelector('summary')?.textContent).toBe('What it gives');
+    expect(details.textContent).toContain('Fixture sturdy folk.');
+    expect(details.textContent).toContain('Fixture pack, p. 4');
+    expect(Array.from(row.children).filter((c) => c.classList.contains('option-source')).length).toBe(0);
+  });
+
+  it('keeps "not allowed in this campaign" in the row, outside the disclosure', async () => {
+    const user = userEvent.setup();
+    vi.mocked(client.listCampaigns).mockResolvedValue([{ id: 'fixture-camp', name: 'Fixture Campaign', rulesFamily: 'srd-5.1', allowedSources: ['fixture-source'] }]);
+    vi.mocked(client.listContent).mockResolvedValue([content(4, 'class', 'Fixture Outsider', 'srd-5.1', { allowedInCampaign: false })]);
+    renderCreate();
+    await fill(user, screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
+    await user.selectOptions(await screen.findByRole('combobox', { name: 'Campaign' }), 'fixture-camp');
+    await user.click(screen.getByRole('button', { name: 'Next: class' }));
+    const row = (await screen.findByRole('radio', { name: /^Fixture Outsider/ })).closest('label')!;
+    expect(row.textContent).toMatch(/not allowed in this campaign/);
+    expect(row.querySelector('details')!.textContent).not.toMatch(/not allowed in this campaign/);
+  });
+
+  it('shows the species notice on the species step and not on the Rules step (2014 rules)', async () => {
+    const user = userEvent.setup();
+    vi.mocked(client.listContent).mockResolvedValue(gives);
+    renderCreate();
+    expect(screen.queryByText(/raises your ability scores/)).toBeNull();
+    expect(screen.queryByText(/grant a feat/)).toBeNull();
+    await fill(user, screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
+    await user.click(screen.getByRole('button', { name: 'Next: class' }));
+    await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
+    await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
+    await user.click(screen.getByRole('button', { name: 'Next: species' }));
+    expect(screen.getByText(/your species raises your ability scores/)).toBeTruthy();
+    expect(screen.queryByText(/grant a feat/)).toBeNull();
+  });
+
+  it('shows the feat sentence on the background step, without the ability line, when the species gives the increases', async () => {
+    const user = userEvent.setup();
+    await toStep(user, 'background');
+    expect(screen.getByText(/Backgrounds cannot grant a feat under these rules\./)).toBeTruthy();
+    expect(screen.queryByText(/your background raises your ability scores/)).toBeNull();
+    expect(screen.queryByText(/your species raises/)).toBeNull();
+  });
+
+  it('shows the background notice on the background step under 2024 rules', async () => {
+    const user = userEvent.setup();
+    vi.mocked(client.listContent).mockResolvedValue([
+      content(2, 'species', 'Fixture Newfolk', 'srd-5.2.1', { compatible: true }),
+      content(4, 'class', 'Fixture Knight', 'srd-5.2.1', { compatible: true }),
+      content(6, 'background', 'Fixture Wanderer', 'srd-5.2.1', { compatible: true }),
+    ]);
+    renderCreate();
+    await user.click(screen.getByRole('radio', { name: '2024 rules' }));
+    await fill(user, screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
+    await user.click(screen.getByRole('button', { name: 'Next: class' }));
+    await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
+    await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
+    await user.click(screen.getByRole('button', { name: 'Next: species' }));
+    expect(screen.queryByText(/your species raises/)).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Next: background' }));
+    expect(screen.getByText(/your background raises your ability scores/)).toBeTruthy();
+    expect(screen.getByText(/Backgrounds can grant a feat under these rules\./)).toBeTruthy();
+  });
+
+  const pickerFor = (choice: Record<string, unknown>) => {
+    const mine = content(7, 'feature', 'Fixture Mine', 'srd-5.1');
+    vi.mocked(client.listContent).mockResolvedValue([mine]);
+    const view = viewWith([]);
+    view.sheet.choices = [
+      { source: { contentId: 'fixture-feature', revisionId: 'fixture-feature-r1' }, sourceName: 'Fixture feature', choiceId: 'pick', count: 2, options: [mine.reference], selected: [], resolved: false, ...choice },
+    ];
+    render(<CharacterBuilder mode={{ kind: 'choices', view }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+  };
+
+  it('drops the source prefix from the legend when the choice label says what it is', async () => {
+    pickerFor({ text: 'History' });
+    const group = await screen.findByRole('group', { name: /^History: choose 2/ });
+    expect(group.querySelector('legend')?.textContent).not.toContain('Fixture feature');
+    expect(group.querySelectorAll('p.hint').length).toBe(0); // the label is not repeated as a hint
+  });
+
+  it('uses a label that already says how many to choose as it is', async () => {
+    pickerFor({ text: 'Choose 2 skills' });
+    const group = await screen.findByRole('group', { name: /^Choose 2 skills/ });
+    expect(group.querySelector('legend')?.textContent).not.toContain('Fixture feature');
+  });
+
+  it('keeps the source prefix when the choice has no short label', async () => {
+    pickerFor({ text: 'Pick two of these, each one as good as the other.' });
+    expect(await screen.findByRole('group', { name: /Fixture feature: choose 2/ })).toBeTruthy();
+    expect(screen.getByText('Pick two of these, each one as good as the other.')).toBeTruthy();
+  });
+});

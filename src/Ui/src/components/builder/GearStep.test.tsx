@@ -328,7 +328,9 @@ describe('GearStep', () => {
       ],
     };
     render(<Harness classGuide={guide} />);
-    expect(screen.getByText("Couldn't add: Rope")).toBeTruthy();
+    // The option text already says "(unavailable: Rope)", so the step does not repeat it; the unnamed one is told once.
+    expect(screen.queryByText("Couldn't add: Rope")).toBeNull();
+    expect(screen.getByText(/Rope \(unavailable: Rope\)/)).toBeTruthy();
     expect(screen.getByText("Couldn't add an item")).toBeTruthy();
     await user.click(screen.getByRole('radio', { name: /^Pack/ }));
     expect(screen.getByText("Couldn't add: Lantern")).toBeTruthy();

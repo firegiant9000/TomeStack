@@ -134,7 +134,11 @@ function GuideSection(props: {
               })}
             </fieldset>
             {chosen?.lines.map((line, index) => {
-              if (line.kind === 'missing') return <p key={index}>{couldntAdd(line)}</p>;
+              if (line.kind === 'missing') {
+                // The service's option text already says "(unavailable: Name)"; say it again only where nothing else tells the player.
+                if (line.name && chosen.text.includes(`unavailable: ${line.name}`)) return null;
+                return <p key={index}>{couldntAdd(line)}</p>;
+              }
               if (line.kind === 'anyOf' && line.choices) {
                 const kind = categoryWords[line.anyOf ?? ''] ?? line.name ?? 'item';
                 return (

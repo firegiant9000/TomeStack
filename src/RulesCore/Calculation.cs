@@ -604,11 +604,11 @@ public static partial class CharacterCalculator
         return itemUses.Count > 0 ? sheet with { ItemUses = itemUses } : sheet;
     }
 
-    /// <param name="autoOn">Whether the toggles that switch themselves (<c>autoWhen</c>) are on for this pass.</param>
     /// <summary>
     /// The first pass and the content whose prerequisites it does not meet (with the diagnostics). The one place that decides what is
     /// left out, shared by the sheet and <see cref="TrainedCategories"/> so both see the same active content.
     /// </summary>
+    /// <param name="autoOn">Whether the toggles that switch themselves (<c>autoWhen</c>) are on for this pass.</param>
     private static (Calculation First, List<(ContentReference Content, Diagnostic Diagnostic)> Unmet) FindUnmetPrerequisites(
         Character character, IContentCatalog catalog, bool autoOn)
     {
@@ -623,6 +623,7 @@ public static partial class CharacterCalculator
         return (first, unmet);
     }
 
+    /// <param name="autoOn">Whether the toggles that switch themselves (<c>autoWhen</c>) are on for this pass.</param>
     private static CharacterSheet CalculateSheet(Character character, IContentCatalog catalog, bool autoOn)
     {
         var (first, unmet) = FindUnmetPrerequisites(character, catalog, autoOn);

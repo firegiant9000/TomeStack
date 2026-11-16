@@ -67,9 +67,9 @@ export type BuilderMode =
 
 type Step = 'rules' | 'scores' | 'species' | 'class' | 'background' | 'gear' | 'choices' | 'level';
 
-/** D32, Wave 3 G8: a new character is built in these seven steps (class before scores, gear after background); level-up and answering choices use `level` and `choices` alone. */
 /** One shared empty list, so "trained in nothing known" never changes identity between renders. */
 const noTraining: string[] = [];
+/** D32, Wave 3 G8: a new character is built in these seven steps (class before scores, gear after background); level-up and answering choices use `level` and `choices` alone. */
 const createSteps: Step[] = ['rules', 'class', 'scores', 'species', 'background', 'gear', 'choices'];
 const stepTitles: Record<Step, string> = {
   rules: 'Rules',
@@ -112,13 +112,13 @@ interface Props {
  */
 type Shown = ContentOption & { outsideCampaign?: boolean; familyOk: boolean };
 
-function SourceLine({ option }: { option: Shown }) {
+function SourceLine({ option, bare }: { option: Shown; bare?: boolean }) {
   const rulesLabel = useRulesLabel();
   return (
     <span className="option-source">
       {option.sourceTitle}
       {option.page ? `, ${option.page}` : ''} · {option.rulesFamilies.map((f) => rulesLabel(f)).join(', ')}
-      {option.outsideCampaign ? ' · not allowed in this campaign' : !option.compatible && ' · not available for these rules'}
+      {!bare && (option.outsideCampaign ? ' · not allowed in this campaign' : !option.compatible && ' · not available for these rules')}
     </span>
   );
 }
@@ -128,6 +128,19 @@ function SourceLine({ option }: { option: Shown }) {
  * character's own family, only campaign-outside content is shown disabled with its reason (P-01).
  */
 const visible = (option: Shown) => option.familyOk && (option.compatible || option.outsideCampaign === true);
+
+/** A choice's own short label ("History", "Choose 2 skills"): a one-line text of at most 40 characters that is not a sentence. */
+function choiceLabel(choice: { text?: string }): string | undefined {
+  const text = choice.text?.trim();
+  return text && text.length <= 40 && !/[.!?]$/.test(text) && !text.includes('\n') ? text : undefined;
+}
+
+/** The picker legend: a label that already says what is picked stands alone; otherwise the source's name leads ("{source}: choose 2"). */
+function choiceLegendName(choice: { text?: string; sourceName: string; count: number }): string {
+  const label = choiceLabel(choice);
+  if (!label) return `${choice.sourceName}: choose ${choice.count}`;
+  return /\bchoose \d+/i.test(label) ? label : `${label}: choose ${choice.count}`;
+}
 
 /** One origin or class pick: a radio group with "None", so the choice is explicit and keyboard-operable. */
 function SinglePick(props: {
@@ -155,7 +168,14 @@ function SinglePick(props: {
               if (option.compatible) props.onChange(option.reference); // inert, not disabled: a reason typed elsewhere can flip this under focus (2.4.3)
             }}
           />
-          <span className="option-name">{option.name}</span> <SourceLine option={option} />
+          <span className="option-name">{option.name}</span>
+          {option.outsideCampaign && <span className="option-source"> · not allowed in this campaign</span>}
+          {!option.outsideCampaign && !option.compatible && <span className="option-source"> · not available for these rules</span>}
+          <details className="option-gives">
+            <summary>What it gives</summary>
+            {option.summary && <p>{option.summary}</p>}
+            <SourceLine option={option} bare />
+          </details>
         </label>
       ))}
     </fieldset>
@@ -221,7 +241,6 @@ function RulesStep(props: {
   onCancel: () => void;
 }) {
   const { basics, onChange } = props;
-  const policy = props.rulesFamilies.find((f) => f.id === basics.rulesFamily);
   const rulesLabel = useRulesLabel();
 
   return (
@@ -273,12 +292,6 @@ function RulesStep(props: {
             {rulesLabel(family.id)}
           </label>
         ))}
-        {policy && (
-          <p className="hint">
-            Ability score increases under these rules come from <strong>{policy.abilityIncreaseSource}</strong> content.
-            Backgrounds {policy.backgroundGrantsFeat ? 'can' : 'cannot'} grant a feat.
-          </p>
-        )}
       </fieldset>
 
     </StepForm>
@@ -594,6 +607,9 @@ function SpeciesStep(props: PickStepProps) {
   return (
     <StepForm label="Species" next="Next: background" nextDisabled={!!hint} nextHint={hint} onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
       <p className="hint">Every option shows its source and the rules it is for.</p>
+      {props.policy?.abilityIncreaseSource === 'species' && (
+        <p className="hint">Under these rules your species raises your ability scores. Open "What it gives" on an option to see how.</p>
+      )}
       <SinglePick legend="Species" name="species" options={list} value={basics.species} onChange={(species) => onChange({ ...basics, species })} />
       {missingHint('species', 'species', list.length, props.missing('species'), props.loaded, props.policy)}
     </StepForm>
@@ -638,6 +654,12 @@ function BackgroundStep(props: PickStepProps) {
   return (
     <StepForm label="Background" next="Next: gear" nextDisabled={!!hint} nextHint={hint} onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
       <p className="hint">Every option shows its source and the rules it is for.</p>
+      {props.policy && (
+        <p className="hint">
+          {props.policy.abilityIncreaseSource === 'background' ? 'Under these rules your background raises your ability scores. ' : ''}
+          Backgrounds {props.policy.backgroundGrantsFeat ? 'can' : 'cannot'} grant a feat under these rules.
+        </p>
+      )}
       <SinglePick
         legend="Background"
         name="background"
@@ -924,11 +946,12 @@ function ChoicePicker(props: {
   // R33 (2.4.3): an option ticked when the picker appeared stays rendered for as long as the picker does, so unticking the
   // focused checkbox never removes it; once unticked and not offerable it is aria-disabled, never `disabled` under focus.
   const [atMount] = useState(() => new Set(choice.selected.map((s) => s.revisionId)));
+  const legendName = choiceLegendName(choice);
   if (!props.optionsLoaded) {
     return (
       <fieldset className="choice-picker" aria-busy="true">
         <legend>
-          {choice.sourceName}: choose {choice.count}
+          {legendName}
         </legend>
         <p className="hint">Loading the options…</p>
         {props.replaceNote && <p className="hint">{props.replaceNote}</p>}
@@ -938,10 +961,10 @@ function ChoicePicker(props: {
   return (
     <fieldset className="choice-picker">
       <legend>
-        {choice.sourceName}: choose {choice.count}{' '}
+        {legendName}{' '}
         <span className={choice.resolved ? 'hint' : 'warn'}>{choice.resolved ? '(done)' : `(to do: ${choice.selected.length} of ${choice.count} chosen)`}</span>
       </legend>
-      {choice.text && <p className="hint">{choice.text}</p>}
+      {choice.text && choice.text !== choiceLabel(choice) && <p className="hint">{choice.text}</p>}
       {props.replaceNote && <p className="hint">{props.replaceNote}</p>}
       <ul className="options">
         {choice.options.map((ref) => {
