@@ -97,6 +97,17 @@ interface Basics {
   campaignId?: string;
 }
 
+/** Where a new character starts; a draft that still equals this has no pick in it (confirm before discard). */
+const initialBasics: Basics = {
+  name: '',
+  rulesFamily: 'srd-5.1',
+  scores: { str: 10, dex: 14, con: 12, int: 10, wis: 13, cha: 8 },
+  scoreMethod: 'array',
+  assignment: {},
+  rolled: [],
+  other: [],
+};
+
 interface Props {
   mode: BuilderMode;
   rulesFamilies: RulesFamilyPolicy[];
@@ -167,26 +178,26 @@ function SinglePick(props: {
       </label>
       {props.options.map((option) => (
         <div key={option.reference.revisionId}>
-        <label className={`choice${option.compatible ? '' : ' incompatible'}`}>
-          <input
-            type="radio"
-            name={props.name}
-            aria-disabled={!option.compatible || undefined}
-            checked={!!props.value && sameRef(props.value, option.reference)}
-            onChange={() => {
-              if (option.compatible) props.onChange(option.reference); // inert, not disabled: a reason typed elsewhere can flip this under focus (2.4.3)
-            }}
-          />
-          <span className="option-name">{option.name}</span>
-          {option.outsideCampaign && <span className="option-source"> · not allowed in this campaign</span>}
-          {!option.outsideCampaign && !option.compatible && <span className="option-source"> · not available for these rules</span>}
-        </label>
-        {/* Outside the label: the radio's name is the option's name, and opening this never changes the pick. */}
-        <details className="option-gives">
-          <summary>What it gives</summary>
-          {option.summary && <p>{option.summary}</p>}
-          <SourceLine option={option} bare />
-        </details>
+          <label className={`choice${option.compatible ? '' : ' incompatible'}`}>
+            <input
+              type="radio"
+              name={props.name}
+              aria-disabled={!option.compatible || undefined}
+              checked={!!props.value && sameRef(props.value, option.reference)}
+              onChange={() => {
+                if (option.compatible) props.onChange(option.reference); // inert, not disabled: a reason typed elsewhere can flip this under focus (2.4.3)
+              }}
+            />
+            <span className="option-name">{option.name}</span>
+            {option.outsideCampaign && <span className="option-source"> · not allowed in this campaign</span>}
+            {!option.outsideCampaign && !option.compatible && <span className="option-source"> · not available for these rules</span>}
+          </label>
+          {/* Outside the label: the radio's name is the option's name, and opening this never changes the pick. */}
+          <details className="option-gives">
+            <summary>What it gives</summary>
+            {option.summary && <p>{option.summary}</p>}
+            <SourceLine option={option} bare />
+          </details>
         </div>
       ))}
     </fieldset>
@@ -1240,15 +1251,7 @@ function draftOf(basics: Basics, id: string, previous?: Character): Character {
 export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, onError }: Props) {
   const rulesLabel = useRulesLabel();
   const [step, setStep] = useState<Step>(mode.kind === 'create' ? 'rules' : mode.kind === 'levelUp' ? 'level' : 'choices');
-  const [basics, setBasics] = useState<Basics>({
-    name: '',
-    rulesFamily: 'srd-5.1',
-    scores: { str: 10, dex: 14, con: 12, int: 10, wis: 13, cha: 8 },
-    scoreMethod: 'array',
-    assignment: {},
-    rolled: [],
-    other: [],
-  });
+  const [basics, setBasics] = useState<Basics>(initialBasics);
   const [draftId] = useState(() => crypto.randomUUID());
   const [view, setView] = useState<CharacterView | undefined>(mode.kind === 'create' ? undefined : mode.view);
   const [guides, setGuides] = useState<GuideView[]>([]);
@@ -1586,12 +1589,41 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
     otherFamilyName: otherFamily ? rulesLabel(otherFamily.id) : 'the other rules',
     familyName: rulesLabel(family),
   });
-  const pickProps = { basics, policy, options: pickable, loaded: optionsLoaded, missing, reasonNames, onChange: setBasics, onBack: back, onCancel };
+  // Confirm before discard: "any pick made" is computed from state (a step value that differs from where the builder started).
+  const pickMade =
+    mode.kind === 'create'
+      ? JSON.stringify(basics) !== JSON.stringify(initialBasics) ||
+        gear.skipped ||
+        Object.keys(gear.choices).length > 0 ||
+        (view?.character.choices?.length ?? 0) > 0 ||
+        (view?.character.spells?.length ?? 0) > 0
+      : !!view &&
+        (view.character !== mode.view.character ||
+          JSON.stringify(view.character.choices) !== JSON.stringify(mode.view.character.choices) ||
+          JSON.stringify(view.character.spells) !== JSON.stringify(mode.view.character.spells));
+  const [confirming, setConfirming] = useState(false);
+  const panel = useRef<HTMLElement>(null);
+  const keepEditing = useRef<HTMLButtonElement>(null);
+  const cancelPressed = useCallback(() => {
+    if (busy) return; // a save in flight cannot be discarded; the button says so with aria-disabled
+    if (pickMade) setConfirming(true);
+    else onCancel();
+  }, [busy, pickMade, onCancel]);
+  useEffect(() => {
+    if (confirming) keepEditing.current?.focus();
+  }, [confirming]);
+  function keepGoing() {
+    setConfirming(false);
+    // The step's own Cancel button gets the focus back, so the player is where they were.
+    const cancel = [...(panel.current?.querySelectorAll('.actions button') ?? [])].find((b) => b.textContent.trim() === 'Cancel');
+    if (cancel instanceof HTMLElement) cancel.focus();
+  }
+  const pickProps = { basics, policy, options: pickable, loaded: optionsLoaded, missing, reasonNames, onChange: setBasics, onBack: back, onCancel: cancelPressed };
 
   const title = builderTitle(mode);
 
   return (
-    <section className="panel" aria-labelledby="builder-heading">
+    <section className="panel" aria-labelledby="builder-heading" ref={panel}>
       <h1 id="builder-heading" tabIndex={-1} ref={heading}>
         {title}
       </h1>
@@ -1620,16 +1652,16 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
       )}
 
       {mode.kind === 'create' && step === 'rules' && (
-        <RulesStep basics={basics} rulesFamilies={rulesFamilies} campaigns={campaigns} onChange={setBasics} onNext={next} onCancel={onCancel} />
+        <RulesStep basics={basics} rulesFamilies={rulesFamilies} campaigns={campaigns} onChange={setBasics} onNext={next} onCancel={cancelPressed} />
       )}
       {mode.kind === 'create' && step === 'scores' && (
-        <ScoresStep className={classGuide ? className : undefined} primaryAbilities={classGuide?.primaryAbilities} basics={basics} policy={policy} onChange={setBasics} onNext={next} onBack={back} onCancel={onCancel} onError={onError} />
+        <ScoresStep className={classGuide ? className : undefined} primaryAbilities={classGuide?.primaryAbilities} basics={basics} policy={policy} onChange={setBasics} onNext={next} onBack={back} onCancel={cancelPressed} onError={onError} />
       )}
       {mode.kind === 'create' && step === 'species' && <SpeciesStep {...pickProps} onNext={next} />}
       {mode.kind === 'create' && step === 'class' && <ClassStep {...pickProps} onNext={next} />}
       {mode.kind === 'create' && step === 'background' && <BackgroundStep {...pickProps} onNext={next} />}
       {mode.kind === 'create' && step === 'gear' && (
-        <StepForm label="Starting gear" next="Next: choices" nextDisabled={gearWaiting} onNext={gearNext} onBack={back} onCancel={onCancel}>
+        <StepForm label="Starting gear" next="Next: choices" nextDisabled={gearWaiting} onNext={gearNext} onBack={back} onCancel={cancelPressed}>
           <GearStep
             draft={gearDraft}
             classGuide={classGuide}
@@ -1666,7 +1698,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
           options={pickable}
           nameOf={nameOf}
           onNext={(classes) => preview({ ...(view?.character ?? mode.view.character), classes }, 'level')}
-          onCancel={onCancel}
+          onCancel={cancelPressed}
           onError={fail}
         />
       )}
@@ -1681,9 +1713,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
           onSpells={toggleSpell}
           onBack={mode.kind === 'create' ? () => setStep('gear') : mode.kind === 'levelUp' ? () => setStep('level') : undefined}
           onCommit={commit}
-          onCancel={() => {
-            if (!busy) onCancel(); // a save in flight cannot be discarded; the button says so with aria-disabled
-          }}
+          onCancel={cancelPressed}
           busy={busy}
           startView={mode.kind === 'levelUp' ? mode.view : undefined}
           choicesMode={mode.kind === 'choices'}
@@ -1703,6 +1733,30 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
               : undefined
           }
         />
+      )}
+
+      {confirming && (
+        <div
+          role="alertdialog"
+          aria-labelledby="discard-question"
+          className="panel"
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.stopPropagation();
+              keepGoing();
+            }
+          }}
+        >
+          <p id="discard-question">Discard this character? Your picks will be lost.</p>
+          <div className="actions">
+            <button type="button" ref={keepEditing} onClick={keepGoing}>
+              Keep editing
+            </button>
+            <button type="button" onClick={onCancel}>
+              Discard
+            </button>
+          </div>
+        </div>
       )}
     </section>
   );

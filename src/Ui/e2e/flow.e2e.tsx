@@ -295,6 +295,7 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   await user.click(screen.getByRole('button', { name: 'Next: choices' }));
   expect(await screen.findByText('All choices are made.')).toBeTruthy(); // level 2 offers no new choice
   await user.click(screen.getByRole('button', { name: 'Cancel' }));
+  await user.click(await screen.findByRole('button', { name: 'Discard' })); // a level-up pick was made: Cancel asks first
   await expectStatus(/Draft discarded/);
   sheet = await screen.findByRole('article', { name: 'E2E Brenna' });
   expect(within(sheet).getByText('Level 1')).toBeTruthy();
@@ -2220,6 +2221,7 @@ it('drops picks that do not fit when the rules family changes, in the builder an
   await waitFor(() => expect(within(screen.getByRole('group', { name: 'Species' })).queryByRole('radio', { name: /^Half-Orc/ })).toBeNull());
   expect(within(screen.getByRole('group', { name: 'Species' })).getByRole<HTMLInputElement>('radio', { name: 'None' }).checked).toBe(true);
   await user.click(screen.getByRole('button', { name: 'Cancel' }));
+  await user.click(await screen.findByRole('button', { name: 'Discard' })); // the rules family was changed: Cancel asks first
 
   // Campaign: an SRD 5.1 source, then SRD 5.2.1. The hidden 5.1 source is not saved with the campaign.
   await user.click(screen.getByRole('button', { name: 'Campaigns' }));

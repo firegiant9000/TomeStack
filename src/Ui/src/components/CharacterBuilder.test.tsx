@@ -1428,6 +1428,125 @@ it('ignores a second Create press, keeps focus on the button when the save fails
   expect(create.textContent).toBe('Create and save');
 });
 
+describe('confirm before discard', () => {
+  const lastButton = () => {
+    const rows = document.querySelectorAll('.actions');
+    const buttons = [...rows[rows.length - 1]!.querySelectorAll('button')];
+    return buttons[buttons.length - 1]!;
+  };
+
+  it('cancels at once when nothing was picked', async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn();
+    render(<CharacterBuilder mode={{ kind: 'create' }} rulesFamilies={families} onCommitted={() => {}} onCancel={onCancel} onError={() => {}} />);
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+  });
+
+  it('a name typed and cleared again is not a pick', async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn();
+    render(<CharacterBuilder mode={{ kind: 'create' }} rulesFamilies={families} onCommitted={() => {}} onCancel={onCancel} onError={() => {}} />);
+    await user.type(screen.getByRole('textbox', { name: 'Name' }), 'x');
+    await user.clear(screen.getByRole('textbox', { name: 'Name' }));
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks first after a pick, focuses Keep editing, and keeps the state when it is chosen', async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn();
+    render(<CharacterBuilder mode={{ kind: 'create' }} rulesFamilies={families} onCommitted={() => {}} onCancel={onCancel} onError={() => {}} />);
+    await fill(user, screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    const question = screen.getByRole('alertdialog');
+    expect(question.getAttribute('aria-labelledby')).toBeTruthy();
+    expect(within(question).getByText('Discard this character? Your picks will be lost.')).toBeTruthy();
+    expect(document.activeElement).toBe(within(question).getByRole('button', { name: 'Keep editing' }));
+    expect(onCancel).not.toHaveBeenCalled();
+    await user.click(within(question).getByRole('button', { name: 'Keep editing' }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(onCancel).not.toHaveBeenCalled();
+    expect((screen.getByRole('textbox', { name: 'Name' }) as HTMLInputElement).value).toBe('Fixture New');
+  });
+
+  it('Discard cancels', async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn();
+    render(<CharacterBuilder mode={{ kind: 'create' }} rulesFamilies={families} onCommitted={() => {}} onCancel={onCancel} onError={() => {}} />);
+    await fill(user, screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await user.click(screen.getByRole('button', { name: 'Discard' }));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('Esc means keep editing and returns the focus to Cancel', async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn();
+    render(<CharacterBuilder mode={{ kind: 'create' }} rulesFamilies={families} onCommitted={() => {}} onCancel={onCancel} onError={() => {}} />);
+    await fill(user, screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
+    const cancel = screen.getByRole('button', { name: 'Cancel' });
+    await user.click(cancel);
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(onCancel).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(cancel);
+  });
+
+  it('a scores, species, class or gear pick counts, and Cancel is the last button on every step', async () => {
+    const user = userEvent.setup();
+    vi.mocked(client.listContent).mockResolvedValue(stepContent());
+    vi.mocked(client.preview).mockResolvedValue(draftView());
+    await toBackground(user, /^Fixture Warden/);
+    // toBackground passed Rules, Class, Scores and Species; Background, Gear and Choices remain.
+    expect(lastButton().textContent).toBe('Cancel');
+    await user.click(screen.getByRole('button', { name: 'Next: gear' }));
+    await screen.findByRole('form', { name: 'Starting gear' });
+    expect(lastButton().textContent).toBe('Cancel');
+    await user.click(await screen.findByRole('button', { name: 'Next: choices' }));
+    await screen.findByRole('group', { name: 'Choices' });
+    expect(lastButton().textContent).toBe('Cancel');
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+  });
+
+  it('Cancel is the last button on the first steps too', async () => {
+    const user = userEvent.setup();
+    vi.mocked(client.listContent).mockResolvedValue(stepContent());
+    render(<CharacterBuilder mode={{ kind: 'create' }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+    expect(lastButton().textContent).toBe('Cancel');
+    await fill(user, screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
+    for (const next of ['Next: class', 'Next: ability scores', 'Next: species']) {
+      await user.click(screen.getByRole('button', { name: next }));
+      expect(lastButton().textContent).toBe('Cancel');
+    }
+  });
+
+  it('level-up: cancels at once before a pick, asks after the level step is passed', async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn();
+    vi.mocked(client.listCampaigns).mockResolvedValue([]);
+    vi.mocked(client.listContent).mockResolvedValue(stepContent());
+    vi.mocked(client.preview).mockResolvedValue(draftView());
+    const view = levelView();
+    const { unmount } = render(<CharacterBuilder mode={{ kind: 'levelUp', view }} rulesFamilies={families} onCommitted={() => {}} onCancel={onCancel} onError={() => {}} />);
+    const levelButtons = within(screen.getByRole('form', { name: 'Level' })).getAllByRole('button');
+    expect(levelButtons[levelButtons.length - 1]!.textContent).toBe('Cancel');
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    unmount();
+    render(<CharacterBuilder mode={{ kind: 'levelUp', view }} rulesFamilies={families} onCommitted={() => {}} onCancel={onCancel} onError={() => {}} />);
+    await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+    await screen.findByRole('group', { name: 'Choices' });
+    expect(lastButton().textContent).toBe('Cancel');
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole('button', { name: 'Discard' }));
+    expect(onCancel).toHaveBeenCalledTimes(2);
+  });
+});
+
 it('still reports a save that lands after the builder is gone, and raises no error (R36)', async () => {
   const user = userEvent.setup();
   vi.mocked(client.listContent).mockResolvedValue(stepContent());
@@ -2058,6 +2177,7 @@ describe('preview at level (D82)', () => {
     await waitFor(() => expect(vi.mocked(client.preview)).toHaveBeenCalledTimes(2));
     expect(vi.mocked(client.preview).mock.calls[1]![0].classes).toEqual([{ class: fighterRef, level: 4 }]);
     await user.click(await screen.findByRole('button', { name: 'Cancel' }));
+    await user.click(screen.getByRole('button', { name: 'Discard' })); // the level was picked: Cancel asks first
     expect(onCancel).toHaveBeenCalledTimes(1);
     expect(view).toEqual(before);
     expect(client.saveCharacter).not.toHaveBeenCalled();
