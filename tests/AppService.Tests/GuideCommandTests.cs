@@ -284,6 +284,78 @@ public class GuideCommandTests
         Assert.Empty(temp.App.ListCharacters());
     }
 
+    private static GuideKit AllA(GuideView guide) => new(guide.GuideContentId, [.. guide.Picks.Select(p => new KitChoice(p.Id, "a"))]);
+
+    private static readonly Guid AcolyteTarget = Guid.Parse("51c00000-0000-4000-8000-000000000002");
+
+    [Fact]
+    public void Two_kits_merge_their_entries_and_sum_their_coins()
+    {
+        using var temp = new TempApp();
+        var cleric = AllA(Cleric(temp));
+        var acolyte = AllA(temp.App.ListGuides(RulesFamilies.Srd51).Single(g => g.TargetContentId == AcolyteTarget));
+        var draft = Draft("Cleric");
+
+        var one = temp.App.Kit(new(draft, [cleric]));
+        var two = temp.App.Kit(new(draft, [acolyte]));
+        var both = temp.App.Kit(new(draft, [cleric, acolyte]));
+
+        Assert.Empty(both.Problems);
+        Assert.True(two.Coins.Gp > 0);
+        Assert.Equal(one.Coins.Gp + two.Coins.Gp, both.Coins.Gp);
+        Assert.Equal(one.Equipment.Sum(e => e.Quantity) + two.Equipment.Sum(e => e.Quantity), both.Equipment.Sum(e => e.Quantity));
+        Assert.True(both.Equipment.Count < one.Equipment.Count + two.Equipment.Count); // the holy symbol is in both and merged
+        Assert.Equal(both.Coins, both.Preview.Character.Currency);
+    }
+
+    [Fact]
+    public void The_same_guide_twice_counts_once()
+    {
+        using var temp = new TempApp();
+        var cleric = AllA(Cleric(temp));
+        var draft = Draft("Cleric");
+
+        var once = temp.App.Kit(new(draft, [cleric]));
+        var twice = temp.App.Kit(new(draft, [cleric, cleric]));
+
+        Assert.Equal(once.Equipment.Sum(e => e.Quantity), twice.Equipment.Sum(e => e.Quantity));
+        Assert.Empty(twice.Problems);
+    }
+
+    [Fact]
+    public void A_guide_of_another_rules_family_is_skipped_with_a_problem()
+    {
+        using var temp = new TempApp();
+        var other = AllA(temp.App.ListGuides(RulesFamilies.Srd521).First());
+        var view = temp.App.Kit(new(Draft("Cleric"), [other]));
+
+        Assert.Contains(view.Problems, p => p.Code == TomeStackApp.KitGuideWrongRules);
+        Assert.Empty(view.Equipment);
+    }
+
+    [Fact]
+    public void With_no_kit_resolved_the_drafts_own_gear_is_kept_and_a_resolved_kit_replaces_it()
+    {
+        using var temp = new TempApp();
+        var guide = Cleric(temp);
+        var own = temp.App.Kit(new(Draft("Cleric"), [AllA(guide)]));
+        var draft = Draft("Cleric") with { Equipment = [new(own.Equipment[0].Item, true, 3)], Currency = new(Gp: 7) };
+
+        var none = temp.App.Kit(new(draft, [new(Guid.NewGuid(), [])]));
+        Assert.Contains(none.Problems, p => p.Code == TomeStackApp.KitGuideUnresolved);
+        Assert.Equal(draft.Equipment, none.Equipment);
+        Assert.Equal(new Currency(Gp: 7), none.Coins);
+        Assert.Equal(3, none.Preview.Character.Equipment!.Single().Quantity);
+
+        var wrong = temp.App.Kit(new(draft, [AllA(temp.App.ListGuides(RulesFamilies.Srd521).First())]));
+        Assert.Equal(draft.Equipment, wrong.Equipment);
+
+        var replaced = temp.App.Kit(new(draft, [AllA(guide)]));
+        Assert.NotEqual(draft.Equipment, replaced.Equipment);
+        Assert.Equal(replaced.Coins, replaced.Preview.Character.Currency ?? new Currency());
+        Assert.Equal(replaced.Equipment.Count, replaced.Preview.Character.Equipment!.Count);
+    }
+
     [Fact]
     public void The_command_is_registered_and_writes_nothing()
     {

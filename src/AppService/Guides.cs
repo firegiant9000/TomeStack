@@ -39,10 +39,16 @@ public sealed partial class TomeStackApp
 {
     public const string KitGuideUnresolved = "kit.guide-unresolved";
 
+    /// <summary>A kit's guide is not for the draft's rules family.</summary>
+    public const string KitGuideWrongRules = "kit.guide-wrong-rules";
+
     /// <summary>
-    /// Command <c>character.kit</c>: expands each kit, merges the entries of the same item, and equips one body armour and one shield the draft
-    /// is trained in plus every weapon. The result replaces the draft's equipment and coins in <see cref="KitView.Preview"/>. Nothing is stored.
-    /// A guide that is not a published creation guide, or a line that cannot be given, is a problem; the rest is still returned.
+    /// Command <c>character.kit</c>: expands each kit (a guide id listed twice counts once), merges the entries of the same item, and equips one
+    /// body armour and one shield the draft is trained in plus every weapon. When at least one kit resolves, the result replaces the draft's
+    /// equipment and coins in <see cref="KitView.Preview"/> (the gear step starts from the kit); when none does, the draft's own equipment and
+    /// coins are returned unchanged and the draft is previewed as is. Nothing is stored.
+    /// A guide that is not a published creation guide, is for another rules family, or a line that cannot be given, is a problem; the rest is still
+    /// returned. A trial that the checks refuse leaves that candidate unequipped; the final preview throws for an invalid draft, as <c>character.preview</c> does.
     /// </summary>
     public KitView Kit(KitRequest request)
     {
@@ -51,14 +57,25 @@ public sealed partial class TomeStackApp
         var problems = new List<Diagnostic>();
         var entries = new List<EquipmentEntry>();
         var coins = new Currency();
+        var resolved = 0;
+        var seen = new HashSet<Guid>();
         foreach (var kit in request.Kits ?? [])
         {
+            if (kit is not null && !seen.Add(kit.GuideContentId))
+                continue; // the same guide twice: the first wins
             var guide = kit?.GuideContentId is { } id && _store.NewestPublished(id) is { Kind: ContentKind.CreationGuide, Status: RevisionStatus.Published } found && found.ContentId == id ? found : null;
             if (guide?.Effects.OfType<StartingEquipmentEffect>().FirstOrDefault() is not { } effect)
             {
                 problems.Add(new(KitGuideUnresolved, $"{kit?.GuideContentId} is not a published creation guide with starting equipment."));
                 continue;
             }
+            // The same field ListGuides filters on: a guide of another rules family would equip that family's items.
+            if (!guide.RulesFamilies.Contains(draft.RulesFamily))
+            {
+                problems.Add(new(KitGuideWrongRules, $"Guide {kit!.GuideContentId} is not for the draft's rules family '{draft.RulesFamily}'; its kit is skipped."));
+                continue;
+            }
+            resolved++;
             var result = KitExpansion.Expand(effect, kit!.Choices ?? [], _store);
             problems.AddRange(result.Problems);
             foreach (var entry in result.Equipment)
@@ -72,6 +89,12 @@ public sealed partial class TomeStackApp
             coins = coins with { Cp = coins.Cp + result.Coins.Cp, Sp = coins.Sp + result.Coins.Sp, Ep = coins.Ep + result.Coins.Ep, Gp = coins.Gp + result.Coins.Gp, Pp = coins.Pp + result.Coins.Pp };
         }
 
+        if (resolved == 0)
+        {
+            var own = draft.Equipment ?? [];
+            var ownCoins = draft.Currency ?? new Currency();
+            return new(own, ownCoins, problems, Preview(draft));
+        }
         var equipped = Equip(draft, entries, coins);
         return new(equipped, coins, problems, Preview(draft with { Equipment = equipped, Currency = coins }));
     }
@@ -88,7 +111,15 @@ public sealed partial class TomeStackApp
         bool Trained(EquipmentEntry candidate, string untrainedCode)
         {
             var trial = entries.Select(e => e == candidate ? e with { Equipped = true } : e).ToList();
-            var warnings = Preview(draft with { Equipment = trial, Currency = coins }).Sheet.Field(FieldIds.ArmorClass).Warnings;
+            IReadOnlyList<Diagnostic> warnings;
+            try
+            {
+                warnings = Preview(draft with { Equipment = trial, Currency = coins }).Sheet.Field(FieldIds.ArmorClass).Warnings;
+            }
+            catch (AppValidationException)
+            {
+                return false; // a trial the checks refuse is not equipped
+            }
             return !warnings.Any(w => w.Code == untrainedCode && w.Content == candidate.Item);
         }
 
