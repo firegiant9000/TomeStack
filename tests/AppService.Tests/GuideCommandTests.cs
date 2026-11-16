@@ -82,4 +82,97 @@ public class GuideCommandTests
         using var temp = new TempApp();
         Assert.Throws<AppValidationException>(() => temp.App.ListGuides(RulesFamilies.Srd51, Guid.NewGuid()));
     }
+
+    // Task 8.2: character.kit.
+
+    private static Character Draft(string className)
+    {
+        var classes = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.1-classes.json");
+        // The pack holds each class once per schema version; the newest is the one that records armour training.
+        var cls = classes.Revisions.Where(r => r.Kind == ContentKind.Class && r.Name == className).MaxBy(r => r.SchemaVersion)!;
+        return new Character
+        {
+            Id = Guid.NewGuid(), Name = "Kit draft", RulesFamily = RulesFamilies.Srd51, Level = 1,
+            Classes = [new(cls.Reference, 1)],
+            BaseAbilities = new(10, 10, 10, 10, 10, 10),
+        };
+    }
+
+    private static KitRequest ClericKit(TempApp temp, Character draft, params KitChoice[] overrides)
+    {
+        var guide = Cleric(temp);
+        var choices = guide.Picks.Select(p => overrides.FirstOrDefault(o => o.PickId == p.Id) ?? new KitChoice(p.Id, "a")).ToList();
+        return new(draft, [new(guide.GuideContentId, choices)]);
+    }
+
+    private static readonly Lazy<Dictionary<Guid, string>> ItemNames = new(() =>
+        new[] { "equipment", "armor", "gear" }
+            .SelectMany(p => TomeStackApp.LoadBundledPack($"TomeStack.Content.srd-5.1-{p}.json").Revisions)
+            .Where(r => r.Kind == ContentKind.Item)
+            .ToDictionary(r => r.RevisionId, r => r.Name));
+
+    private static string NameOf(TempApp temp, EquipmentEntry entry) => ItemNames.Value[entry.Item.RevisionId];
+
+    [Fact]
+    public void The_Cleric_kit_a_equips_scale_mail_and_shield_and_gives_Armor_Class_16()
+    {
+        using var temp = new TempApp();
+        var view = temp.App.Kit(ClericKit(temp, Draft("Cleric")));
+
+        Assert.Empty(view.Problems);
+        Assert.Equal(16, view.Preview.Sheet.Field(FieldIds.ArmorClass).Value);
+        Assert.Contains(view.Preview.Sheet.Attacks!, a => a.Name == "Mace");
+        var equipped = view.Equipment.Where(e => e.Equipped).Select(e => NameOf(temp, e)).ToList();
+        Assert.Contains("Scale mail", equipped);
+        Assert.Contains("Shield", equipped);
+        Assert.Contains("Mace", equipped);
+        Assert.Contains("Crossbow, light", equipped);
+        Assert.Equal(view.Equipment, view.Preview.Character.Equipment!.Select(e => e with { Id = view.Equipment.First(x => x.Item == e.Item).Id }));
+    }
+
+    [Fact]
+    public void Without_shield_training_the_shield_stays_unequipped()
+    {
+        using var temp = new TempApp();
+        var view = temp.App.Kit(ClericKit(temp, Draft("Wizard")));
+
+        var worn = view.Equipment.Where(e => e.Equipped).Select(e => NameOf(temp, e)).ToList();
+        Assert.DoesNotContain("Shield", worn);
+        Assert.DoesNotContain("Scale mail", worn);
+        Assert.Contains(view.Equipment, e => NameOf(temp, e) == "Shield"); // still owned
+        Assert.Contains(view.Equipment, e => e.Equipped && NameOf(temp, e) == "Mace");
+    }
+
+    [Fact]
+    public void An_unresolved_line_is_a_problem_and_the_rest_is_returned()
+    {
+        using var temp = new TempApp();
+        // Option b of the ranged pick is "any simple weapon" and no item is chosen for it.
+        var view = temp.App.Kit(ClericKit(temp, Draft("Cleric"), new KitChoice("ranged", "b")));
+
+        Assert.NotEmpty(view.Problems);
+        Assert.Contains(view.Equipment, e => NameOf(temp, e) == "Mace");
+        Assert.DoesNotContain(view.Equipment, e => NameOf(temp, e) == "Light crossbow");
+    }
+
+    [Fact]
+    public void An_unknown_guide_is_a_problem_and_nothing_is_saved()
+    {
+        using var temp = new TempApp();
+        var draft = Draft("Cleric");
+        var view = temp.App.Kit(new(draft, [new(Guid.NewGuid(), [])]));
+
+        Assert.Contains(view.Problems, p => p.Code == "kit.guide-unresolved");
+        Assert.Empty(view.Equipment);
+        Assert.Empty(temp.App.ListCharacters());
+    }
+
+    [Fact]
+    public void The_command_is_registered_and_writes_nothing()
+    {
+        Assert.Contains("character.kit", CommandDispatcher.Commands);
+        using var temp = new TempApp();
+        temp.App.Kit(ClericKit(temp, Draft("Cleric")));
+        Assert.Empty(temp.App.ListCharacters());
+    }
 }

@@ -22,8 +22,82 @@ public sealed record GuideLineView(
     Currency? Coins,
     IReadOnlyList<GuideLineView>? Contents);
 
+/// <summary>Command <c>character.kit</c>: the builder draft and the kits taken, one per guide.</summary>
+public sealed record KitRequest(Character Draft, IReadOnlyList<GuideKit> Kits);
+
+/// <summary>The choices made for one guide's starting equipment.</summary>
+public sealed record GuideKit(Guid GuideContentId, IReadOnlyList<KitChoice> Choices);
+
+/// <summary>What the kits give: the entries (armour, shield and weapons equipped where the draft is trained), the coins, what could not be given, and the draft calculated with them.</summary>
+public sealed record KitView(IReadOnlyList<EquipmentEntry> Equipment, Currency Coins, IReadOnlyList<Diagnostic> Problems, CharacterView Preview);
+
 public sealed partial class TomeStackApp
 {
+    public const string KitGuideUnresolved = "kit.guide-unresolved";
+
+    /// <summary>
+    /// Command <c>character.kit</c>: expands each kit, merges the entries of the same item, and equips one body armour and one shield the draft
+    /// is trained in plus every weapon. The result replaces the draft's equipment and coins in <see cref="KitView.Preview"/>. Nothing is stored.
+    /// A guide that is not a published creation guide, or a line that cannot be given, is a problem; the rest is still returned.
+    /// </summary>
+    public KitView Kit(KitRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var draft = request.Draft ?? throw new AppValidationException([new("character.draft-required", "Send the draft character to give a kit to.")]);
+        var problems = new List<Diagnostic>();
+        var entries = new List<EquipmentEntry>();
+        var coins = new Currency();
+        foreach (var kit in request.Kits ?? [])
+        {
+            var guide = kit?.GuideContentId is { } id && _store.NewestPublished(id) is { Kind: ContentKind.CreationGuide, Status: RevisionStatus.Published } found && found.ContentId == id ? found : null;
+            if (guide?.Effects.OfType<StartingEquipmentEffect>().FirstOrDefault() is not { } effect)
+            {
+                problems.Add(new(KitGuideUnresolved, $"{kit?.GuideContentId} is not a published creation guide with starting equipment."));
+                continue;
+            }
+            var result = KitExpansion.Expand(effect, kit!.Choices ?? [], _store);
+            problems.AddRange(result.Problems);
+            foreach (var entry in result.Equipment)
+            {
+                var same = entries.FindIndex(e => e.Item == entry.Item && e.Mods is null);
+                if (same < 0)
+                    entries.Add(entry);
+                else
+                    entries[same] = entries[same] with { Quantity = entries[same].Quantity + entry.Quantity };
+            }
+            coins = coins with { Cp = coins.Cp + result.Coins.Cp, Sp = coins.Sp + result.Coins.Sp, Ep = coins.Ep + result.Coins.Ep, Gp = coins.Gp + result.Coins.Gp, Pp = coins.Pp + result.Coins.Pp };
+        }
+
+        var equipped = Equip(draft, entries, coins);
+        return new(equipped, coins, problems, Preview(draft with { Equipment = equipped, Currency = coins }));
+    }
+
+    private IReadOnlyList<EquipmentEntry> Equip(Character draft, List<EquipmentEntry> entries, Currency coins)
+    {
+        if (entries.Count == 0)
+            return entries;
+        bool IsArmor(EquipmentEntry e, bool shield) =>
+            _store.FindRevision(e.Item)?.Effects.OfType<ArmorEffect>().FirstOrDefault() is { } armor && (armor.Category == ArmorCategory.Shield) == shield;
+        var weapons = entries.Where(e => _store.FindRevision(e.Item)?.Effects.OfType<WeaponEffect>().Any() == true).ToList();
+
+        // The calculated sheet is the one authority on armour training: it warns on the item when the draft is not trained in it.
+        bool Trained(EquipmentEntry candidate, string untrainedCode)
+        {
+            var trial = entries.Select(e => e == candidate ? e with { Equipped = true } : e).ToList();
+            var warnings = Preview(draft with { Equipment = trial, Currency = coins }).Sheet.Field(FieldIds.ArmorClass).Warnings;
+            return !warnings.Any(w => w.Code == untrainedCode && w.Content == candidate.Item);
+        }
+
+        var chosen = new List<EquipmentEntry>(weapons);
+        var body = entries.Where(e => IsArmor(e, false)).FirstOrDefault(e => Trained(e, "equipment.armor-untrained"));
+        if (body is not null)
+            chosen.Add(body);
+        var shield = entries.Where(e => IsArmor(e, true)).FirstOrDefault(e => Trained(e, "equipment.shield-untrained"));
+        if (shield is not null)
+            chosen.Add(shield);
+        return [.. entries.Select(e => chosen.Contains(e) ? e with { Equipped = true } : e)];
+    }
+
     /// <summary>
     /// Command <c>content.guides</c>: the newest published creation guide of each class or background in <paramref name="rulesFamily"/>.
     /// An unknown family has no guides. <paramref name="campaignId"/> marks the item choices the campaign does not allow, as <see cref="ListContent"/> does.
