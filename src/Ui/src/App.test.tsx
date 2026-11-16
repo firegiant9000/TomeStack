@@ -39,6 +39,8 @@ vi.mock('./api/client', () => ({
     listGapNotes: vi.fn(),
     availableUpdates: vi.fn(),
     listContent: vi.fn(),
+    listGuides: vi.fn(),
+    kit: vi.fn(),
     draftCounts: vi.fn(),
     listCampaigns: vi.fn(),
     preview: vi.fn(),
@@ -90,6 +92,7 @@ beforeEach(() => {
   vi.mocked(client.listGapNotes).mockResolvedValue([]);
   vi.mocked(client.availableUpdates).mockResolvedValue([]);
   vi.mocked(client.listContent).mockResolvedValue([]);
+  vi.mocked(client.listGuides).mockResolvedValue([]);
   vi.mocked(client.draftCounts).mockResolvedValue({});
   vi.mocked(client.listCampaigns).mockResolvedValue([]);
   vi.mocked(client.listSources).mockResolvedValue([]);
@@ -288,9 +291,10 @@ async function chooseNew(user: ReturnType<typeof userEvent.setup>) {
 async function toCreate(user: ReturnType<typeof userEvent.setup>) {
   await startNew(user);
   await user.type(await screen.findByRole('textbox', { name: 'Name' }), 'Fixture New');
-  await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
+  await user.click(screen.getByRole('button', { name: 'Next: class' }));
+  await user.click(await screen.findByRole('button', { name: 'Next: ability scores' }));
   await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
-  for (const next of ['Next: species', 'Next: class', 'Next: background', 'Next: choices']) await user.click(await screen.findByRole('button', { name: next }));
+  for (const next of ['Next: species', 'Next: background', 'Next: gear', 'Next: choices']) await user.click(await screen.findByRole('button', { name: next }));
   return screen.findByRole('button', { name: 'Create and save' });
 }
 
@@ -432,7 +436,7 @@ it('pressing New character during a save mounts a fresh empty builder; the save 
   finish(created);
   // The new builder starts empty at step 1; the saved draft is not offered again.
   expect((screen.getByRole('textbox', { name: 'Name' }) as HTMLInputElement).value).toBe('');
-  expect(screen.getByText(/^Step 1 of 6/)).toBeTruthy();
+  expect(screen.getByText(/^Step 1 of 7/)).toBeTruthy();
   expect(await screen.findByText('Saved Fixture New.')).toBeTruthy();
   expect(screen.queryByRole('button', { name: 'Create and save' })).toBeNull();
   expect((screen.getByRole('textbox', { name: 'Name' }) as HTMLInputElement).value).toBe('');
@@ -720,9 +724,10 @@ it('Esc on the builder leaves the draft and the screen alone', async () => {
   render(<App />);
   await startNew(user);
   await user.type(await screen.findByRole('textbox', { name: 'Name' }), 'Fixture New');
-  await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
+  await user.click(screen.getByRole('button', { name: 'Next: class' }));
+  await user.click(await screen.findByRole('button', { name: 'Next: ability scores' }));
   await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
-  for (const next of ['Next: species', 'Next: class', 'Next: background']) await user.click(await screen.findByRole('button', { name: next }));
+  for (const next of ['Next: species', 'Next: background']) await user.click(await screen.findByRole('button', { name: next }));
   const summary = await screen.findByText(/Other content \(0 selected\)/);
   const details = summary.closest('details')!;
   await user.click(summary);

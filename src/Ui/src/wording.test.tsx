@@ -28,6 +28,8 @@ vi.mock('./api/client', () => ({
     listGapNotes: vi.fn(),
     availableUpdates: vi.fn(),
     listContent: vi.fn(),
+    listGuides: vi.fn(),
+    kit: vi.fn(),
     draftCounts: vi.fn(),
     listCampaigns: vi.fn(),
     snapshots: vi.fn(),
@@ -132,6 +134,7 @@ beforeEach(() => {
   vi.mocked(client.listGapNotes).mockResolvedValue([]);
   vi.mocked(client.availableUpdates).mockResolvedValue([]);
   vi.mocked(client.listContent).mockResolvedValue([]);
+  vi.mocked(client.listGuides).mockResolvedValue([]);
   vi.mocked(client.draftCounts).mockResolvedValue({});
   vi.mocked(client.listCampaigns).mockResolvedValue([campaign]);
   vi.mocked(client.snapshots).mockResolvedValue({ items: [], hasMore: false });
