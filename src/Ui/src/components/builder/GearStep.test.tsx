@@ -23,7 +23,7 @@ const classGuide: GuideView = {
         {
           id: 'b',
           text: 'Warhammer',
-          requiresProficiency: 'Martial weapons',
+          requiresProficiency: 'weapon.martial',
           lines: [line({ itemContentId: 'warhammer', name: 'Warhammer' })],
         },
       ],
@@ -45,7 +45,7 @@ const classGuide: GuideView = {
           lines: [
             line({
               kind: 'anyOf',
-              anyOf: 'simple weapon',
+              anyOf: 'weapon.simple',
               name: 'Simple weapon',
               choices: [
                 { reference: { contentId: 'club', revisionId: 'r1' }, name: 'Club' },
@@ -149,7 +149,7 @@ describe('GearStep', () => {
     render(<Harness spy={spy} />);
     const inert = screen.getByRole('radio', { name: /Warhammer/ });
     expect(inert.getAttribute('aria-disabled')).toBe('true');
-    expect(screen.getByText('needs Martial weapons proficiency')).toBeTruthy();
+    expect(screen.getByText('needs martial weapon proficiency')).toBeTruthy();
     await user.click(inert);
     expect(isChecked(screen.getByRole('radio', { name: /^Mace/ }))).toBe(true);
     expect(spy).not.toHaveBeenCalled();
@@ -236,5 +236,101 @@ describe('GearStep', () => {
       await user.tab(); // each group is one tab stop: its checked radio
       expect(document.activeElement).toBe(screen.getByRole('radio', { name }));
     }
+  });
+
+  const kitsOf = (fn: ReturnType<typeof vi.fn>, n = -1) => fn.mock.calls.at(n)![0] as { guideContentId: string; choices: KitChoice[] }[];
+  const rangedOf = (kits: ReturnType<typeof kitsOf>) => kits.find((k) => k.guideContentId === 'guide-cleric')?.choices.find((c) => c.pickId === 'ranged');
+
+  it('sends the shown anyOf item for a default option without the player touching the select', async () => {
+    const anyOfFirst: GuideView = {
+      ...classGuide,
+      picks: [{ ...classGuide.picks[1]!, options: [classGuide.picks[1]!.options[1]!, classGuide.picks[1]!.options[0]!].map((o, i) => ({ ...o, id: i === 0 ? 'a' : 'b' })) }],
+    };
+    const onPreview = vi.fn().mockResolvedValue(kitView(12));
+    render(<Harness classGuide={anyOfFirst} onPreview={onPreview} />);
+    await screen.findByText('AC with this gear: 12');
+    expect(rangedOf(kitsOf(onPreview))?.anyOf).toEqual({ 0: 'club' });
+    expect((screen.getByRole('combobox', { name: /simple weapon/i }) as HTMLSelectElement).value).toBe('club');
+  });
+
+  it('writes the shown anyOf item when the option is freshly chosen', async () => {
+    const user = userEvent.setup();
+    const spy = vi.fn();
+    const onPreview = vi.fn().mockResolvedValue(kitView(12));
+    render(<Harness spy={spy} onPreview={onPreview} />);
+    await user.click(screen.getByRole('radio', { name: /Any simple weapon/ }));
+    const saved = (spy.mock.calls.at(-1)![0] as GearValue).choices['guide-cleric']?.find((c) => c.pickId === 'ranged');
+    expect(saved).toEqual({ pickId: 'ranged', optionId: 'b', anyOf: { 0: 'club' } });
+    await screen.findByText('AC with this gear: 12');
+    expect(rangedOf(kitsOf(onPreview))?.anyOf).toEqual({ 0: 'club' });
+  });
+
+  it('defaults to the first option the character can take when option a is inert', async () => {
+    const guide: GuideView = {
+      ...classGuide,
+      picks: [
+        {
+          id: 'armor',
+          label: 'Armor',
+          options: [
+            { id: 'a', text: 'Plate', requiresProficiency: 'armor.heavy', lines: [] },
+            { id: 'b', text: 'Leather', lines: [] },
+          ],
+        },
+      ],
+    };
+    render(<Harness classGuide={guide} />);
+    expect(isChecked(screen.getByRole('radio', { name: /Leather/ }))).toBe(true);
+    expect(screen.getByText('needs heavy armor proficiency')).toBeTruthy();
+  });
+
+  it('never shows an id for an unknown proficiency', () => {
+    const guide: GuideView = {
+      ...classGuide,
+      picks: [{ id: 'x', label: 'X', options: [{ id: 'a', text: 'One', lines: [] }, { id: 'b', text: 'Two', requiresProficiency: 'weird.id', lines: [] }] }],
+    };
+    render(<Harness classGuide={guide} />);
+    expect(screen.getByText("needs a proficiency you don't have")).toBeTruthy();
+    expect(screen.queryByText(/weird\.id/)).toBeNull();
+  });
+
+  it('says so while updating and when the preview fails, never leaving a stale number', async () => {
+    const user = userEvent.setup();
+    let fail: (e: Error) => void = () => undefined;
+    const onPreview = vi
+      .fn()
+      .mockResolvedValueOnce(kitView(16))
+      .mockImplementationOnce(() => new Promise((_, reject) => (fail = reject)));
+    render(<Harness onPreview={onPreview} />);
+    expect(screen.getByText('Updating…')).toBeTruthy();
+    await screen.findByText('AC with this gear: 16');
+    await user.click(screen.getByRole('radio', { name: /Instead: 50 gp/ }));
+    expect(screen.queryByText('AC with this gear: 16')).toBeNull();
+    expect(screen.getByText('Updating…')).toBeTruthy();
+    fail(new Error('boom'));
+    expect(await screen.findByText("Couldn't work out Armor Class for this gear.")).toBeTruthy();
+    expect(screen.queryByText('AC with this gear: 16')).toBeNull();
+  });
+
+  it('shows a missing item as one the step could not add, also inside a pack', async () => {
+    const user = userEvent.setup();
+    const guide: GuideView = {
+      ...classGuide,
+      picks: [
+        {
+          id: 'p',
+          label: 'P',
+          options: [
+            { id: 'a', text: 'Rope (unavailable: Rope)', lines: [line({ kind: 'missing', name: 'Rope' }), line({ kind: 'missing' })] },
+            { id: 'b', text: 'Pack', lines: [line({ kind: 'pack', name: 'Pack', contents: [line({ kind: 'missing', name: 'Lantern' })] })] },
+          ],
+        },
+      ],
+    };
+    render(<Harness classGuide={guide} />);
+    expect(screen.getByText("Couldn't add: Rope")).toBeTruthy();
+    expect(screen.getByText("Couldn't add an item")).toBeTruthy();
+    await user.click(screen.getByRole('radio', { name: /^Pack/ }));
+    expect(screen.getByText("Couldn't add: Lantern")).toBeTruthy();
   });
 });

@@ -14,24 +14,65 @@ export interface GearStepProps {
   backgroundGuide?: GuideView;
   className: string;
   backgroundName: string;
-  /** What the character is trained in, as the guide names it (`requiresProficiency`). */
+  /** What the character is trained in, as guide category ids ("weapon.martial", "armor.heavy", ...): the vocabulary of `requiresProficiency`. */
   trained: string[];
   value: GearValue;
   onChange: (value: GearValue) => void;
   onPreview: (kits: GuideKit[]) => Promise<KitView>;
 }
 
-const defaultOption = (pick: GuidePickView) => pick.options.find((o) => o.id === 'a') ?? pick.options[0];
+/** Player wording for a guide category (the service words them the same way); never the id. */
+const categoryWords: Record<string, string> = {
+  'weapon.simple': 'simple weapon',
+  'weapon.martial': 'martial weapon',
+  'armor.light': 'light armor',
+  'armor.medium': 'medium armor',
+  'armor.heavy': 'heavy armor',
+  'armor.shield': 'shield',
+};
 
-/** The choice shown for a pick: the player's, or option `a` until they choose. */
-function choiceFor(guide: GuideView, pick: GuidePickView, value: GearValue): KitChoice {
-  const made = value.choices[guide.guideContentId]?.find((c) => c.pickId === pick.id);
-  return made ?? { pickId: pick.id, optionId: defaultOption(pick)?.id ?? '' };
+/** Why an option is inert, in player words. */
+export function proficiencyReason(id: string): string {
+  const words = categoryWords[id];
+  return words ? `needs ${words} proficiency` : "needs a proficiency you don't have";
 }
 
-const allChoices = (guide: GuideView, value: GearValue): KitChoice[] => guide.picks.map((pick) => choiceFor(guide, pick, value));
-
 const available = (option: GuideOptionView, trained: string[]) => option.requiresProficiency == null || trained.includes(option.requiresProficiency);
+
+/** Option `a` while the character can take it, else the first option they can. */
+function defaultOption(pick: GuidePickView, trained: string[]): GuideOptionView | undefined {
+  const a = pick.options.find((o) => o.id === 'a');
+  if (a && available(a, trained)) return a;
+  return pick.options.find((o) => available(o, trained)) ?? a ?? pick.options[0];
+}
+
+/** A choice with every anyOf line of its option filled: the item the player took, or the first on offer (what the select shows). */
+function complete(pick: GuidePickView, optionId: string, made?: Record<number, string>): KitChoice {
+  const anyOf: Record<number, string> = {};
+  pick.options
+    .find((o) => o.id === optionId)
+    ?.lines.forEach((line, index) => {
+      if (line.kind !== 'anyOf') return;
+      const item = made?.[index] ?? line.choices?.[0]?.reference.contentId;
+      if (item) anyOf[index] = item;
+    });
+  return Object.keys(anyOf).length > 0 ? { pickId: pick.id, optionId, anyOf } : { pickId: pick.id, optionId };
+}
+
+/** The choice shown for a pick, and so the one sent: the player's, or the default option, with every anyOf line filled. */
+function choiceFor(guide: GuideView, pick: GuidePickView, value: GearValue, trained: string[]): KitChoice {
+  const made = value.choices[guide.guideContentId]?.find((c) => c.pickId === pick.id);
+  return complete(pick, made?.optionId ?? defaultOption(pick, trained)?.id ?? '', made?.anyOf);
+}
+
+const allChoices = (guide: GuideView, value: GearValue, trained: string[]): KitChoice[] => guide.picks.map((pick) => choiceFor(guide, pick, value, trained));
+
+/** What the step previews and what the builder must save: every pick answered, defaults and anyOf items included. */
+export function kitsFor(guides: (GuideView | undefined)[], value: GearValue, trained: string[]): GuideKit[] {
+  return guides.filter((g): g is GuideView => g !== undefined).map((g) => ({ guideContentId: g.guideContentId, choices: allChoices(g, value, trained) }));
+}
+
+const couldntAdd = (line: GuideLineView) => (line.name ? `Couldn't add: ${line.name}` : "Couldn't add an item");
 
 function PackContents({ line }: { line: GuideLineView }) {
   if (line.kind !== 'pack' || !line.contents) return null;
@@ -40,7 +81,7 @@ function PackContents({ line }: { line: GuideLineView }) {
       <summary>What&apos;s in it?</summary>
       <ul aria-label={`${line.name ?? 'Pack'} contents`}>
         {line.contents.map((c, i) => (
-          <li key={`${c.itemContentId ?? 'x'}-${i}`}>{`${c.quantity} × ${c.name ?? 'unknown item'}`}</li>
+          <li key={`${c.itemContentId ?? 'x'}-${i}`}>{c.kind === 'missing' ? couldntAdd(c) : `${c.quantity} × ${c.name ?? 'unknown item'}`}</li>
         ))}
       </ul>
     </details>
@@ -52,14 +93,14 @@ function GuideSection(props: {
   guide: GuideView;
   trained: string[];
   value: GearValue;
-  onChoose: (guide: GuideView, choice: KitChoice) => void;
+  onChoose: (guide: GuideView, pick: GuidePickView, optionId: string, anyOf?: Record<number, string>) => void;
 }) {
   const { guide, value } = props;
   return (
     <section aria-label={props.heading}>
       <h3>{props.heading}</h3>
       {guide.picks.map((pick) => {
-        const choice = choiceFor(guide, pick, value);
+        const choice = choiceFor(guide, pick, value, props.trained);
         const chosen = pick.options.find((o) => o.id === choice.optionId);
         const name = `gear-${guide.guideContentId}-${pick.id}`;
         if (pick.options.length === 1) {
@@ -83,34 +124,37 @@ function GuideSection(props: {
                       aria-disabled={!ok || undefined}
                       checked={choice.optionId === option.id}
                       onChange={() => {
-                        if (ok) props.onChoose(guide, { pickId: pick.id, optionId: option.id }); // inert, not disabled (2.4.3)
+                        if (ok) props.onChoose(guide, pick, option.id); // inert, not disabled (2.4.3)
                       }}
                     />
                     <span className="option-name">{option.text}</span>
-                    {!ok && <span className="option-source">{`needs ${option.requiresProficiency} proficiency`}</span>}
+                    {!ok && <span className="option-source">{proficiencyReason(option.requiresProficiency ?? '')}</span>}
                   </label>
                 );
               })}
             </fieldset>
-            {chosen?.lines.map((line, index) =>
-              line.kind === 'anyOf' && line.choices ? (
-                <label key={index} className="field">
-                  {`Choose: ${line.anyOf ?? line.name ?? 'an item'}`}
-                  <select
-                    value={choice.anyOf?.[index] ?? line.choices[0]?.reference.contentId ?? ''}
-                    onChange={(e) => props.onChoose(guide, { ...choice, anyOf: { ...choice.anyOf, [index]: e.target.value } })}
-                  >
-                    {line.choices.map((c) => (
-                      <option key={c.reference.revisionId} value={c.reference.contentId}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : (
-                <PackContents key={index} line={line} />
-              ),
-            )}
+            {chosen?.lines.map((line, index) => {
+              if (line.kind === 'missing') return <p key={index}>{couldntAdd(line)}</p>;
+              if (line.kind === 'anyOf' && line.choices) {
+                const kind = categoryWords[line.anyOf ?? ''] ?? line.name ?? 'item';
+                return (
+                  <label key={index} className="field">
+                    {`Choose: ${kind}`}
+                    <select
+                      value={choice.anyOf?.[index] ?? ''}
+                      onChange={(e) => props.onChoose(guide, pick, choice.optionId, { ...choice.anyOf, [index]: e.target.value })}
+                    >
+                      {line.choices.map((c) => (
+                        <option key={c.reference.revisionId} value={c.reference.contentId}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                );
+              }
+              return <PackContents key={index} line={line} />;
+            })}
           </div>
         );
       })}
@@ -121,13 +165,11 @@ function GuideSection(props: {
 /** The builder's starting-equipment step: one kit per guide (class and background), a live Armor Class and a way to skip. */
 export function GearStep({ draft, classGuide, backgroundGuide, className, backgroundName, trained, value, onChange, onPreview }: GearStepProps) {
   const [shown, setShown] = useState<{ key: string; view: KitView } | undefined>();
+  const [failedKey, setFailedKey] = useState<string | undefined>();
   const [whyOpen, setWhyOpen] = useState(false);
   const whyId = useId();
 
-  const kits = useMemo<GuideKit[]>(
-    () => [classGuide, backgroundGuide].filter((g): g is GuideView => g !== undefined).map((g) => ({ guideContentId: g.guideContentId, choices: allChoices(g, value) })),
-    [classGuide, backgroundGuide, value],
-  );
+  const kits = useMemo<GuideKit[]>(() => kitsFor([classGuide, backgroundGuide], value, trained), [classGuide, backgroundGuide, value, trained]);
   const key = JSON.stringify(kits);
   const wanted = !value.skipped && kits.length > 0;
 
@@ -139,22 +181,25 @@ export function GearStep({ draft, classGuide, backgroundGuide, className, backgr
       (view) => {
         if (current) setShown({ key, view });
       },
-      () => undefined, // the step stays usable without a preview
+      () => {
+        if (current) setFailedKey(key); // the step stays usable without a preview
+      },
     );
     return () => {
       current = false;
     };
   }, [key, wanted, draft]);
 
-  function choose(guide: GuideView, choice: KitChoice) {
-    const rest = allChoices(guide, value).filter((c) => c.pickId !== choice.pickId);
-    const next = guide.picks.map((p) => (p.id === choice.pickId ? choice : rest.find((c) => c.pickId === p.id)!));
+  function choose(guide: GuideView, pick: GuidePickView, optionId: string, anyOf?: Record<number, string>) {
+    // Write every pick of the guide, defaults and anyOf items included, so what is shown is what is stored.
+    const next = allChoices(guide, value, trained).map((c) => (c.pickId === pick.id ? complete(pick, optionId, anyOf) : c));
     onChange({ ...value, choices: { ...value.choices, [guide.guideContentId]: next } });
   }
 
-  const view = shown?.key === key ? shown.view : shown?.view; // keep the last answer on screen while the next one loads
-  const ac = view?.preview.sheet.fields.find((f) => f.field === 'armorClass');
-  const labels = new Map(view?.preview.sheet.fields.map((f) => [f.field, f.label]));
+  const current = shown?.key === key ? shown.view : undefined;
+  const ac = current?.preview.sheet.fields.find((f) => f.field === 'armorClass');
+  const labels = new Map(current?.preview.sheet.fields.map((f) => [f.field, f.label]));
+  const failed = !current && failedKey === key;
 
   return (
     <div className="gear-step">
@@ -174,11 +219,11 @@ export function GearStep({ draft, classGuide, backgroundGuide, className, backgr
             <p key={heading}>{`No starting kit for ${name}. Add gear on the Gear tab after saving.`}</p>
           ),
         )}
-      {!value.skipped && view && (
-        <>
-          {view.problems.length > 0 && (
+      {wanted && (
+        <div aria-live="polite">
+          {current && current.problems.length > 0 && (
             <ul className="warnings" aria-label="Problems with this kit">
-              {view.problems.map((p, i) => (
+              {current.problems.map((p, i) => (
                 <li key={`${p.code}-${i}`}>{p.message}</li>
               ))}
             </ul>
@@ -194,7 +239,8 @@ export function GearStep({ draft, classGuide, backgroundGuide, className, backgr
               </span>
             </p>
           )}
-        </>
+          {!current && <p>{failed ? "Couldn't work out Armor Class for this gear." : 'Updating…'}</p>}
+        </div>
       )}
     </div>
   );
