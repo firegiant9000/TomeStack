@@ -215,7 +215,7 @@ async function pick(user: ReturnType<typeof userEvent.setup>, legend: RegExp, op
   await user.click(await within(group).findByRole('checkbox', { name: option })); // options load after the choices
 }
 
-/** D32: walks the six create steps. `scores` uses "Enter by hand" ({} keeps the default scores); otherwise the standard array is assigned in order. */
+/** D32: walks the seven create steps (rules, class, scores, species, background, gear, choices). `scores` uses "Enter by hand" ({} keeps the default scores); otherwise the standard array is assigned in order. */
 async function createCharacter(
   user: ReturnType<typeof userEvent.setup>,
   opts: {
@@ -227,11 +227,25 @@ async function createCharacter(
     background?: RegExp;
     /** A checkbox under "Other content" on the Background step. */
     other?: RegExp;
+    /** Keep the starting kits on the Gear step instead of skipping it; `beforeChoices` runs there first. */
+    kit?: boolean;
+    beforeChoices?: () => Promise<void>;
   },
 ) {
   await startNewCharacter(user);
   await user.type(await screen.findByRole('textbox', { name: 'Name' }), opts.name);
   if (opts.family) await user.click(screen.getByRole('radio', { name: opts.family === 'srd-5.2.1' ? /2024 rules/ : /2014 rules/ }));
+  await user.click(screen.getByRole('button', { name: 'Next: class' }));
+  if (opts.cls) {
+    // Class is now picked first, right after the rules family: a listing for the old family can still be on screen, and the
+    // pick is dropped when the new one arrives (SPEC S-02). Let it settle, and pick again if it was dropped.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await user.click(await screen.findByRole('radio', { name: opts.cls }));
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      if (screen.getByRole<HTMLInputElement>('radio', { name: opts.cls }).checked) break;
+    }
+    expect(screen.getByRole<HTMLInputElement>('radio', { name: opts.cls }).checked).toBe(true);
+  }
   await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
   if (opts.scores) {
     await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
@@ -248,14 +262,16 @@ async function createCharacter(
   }
   await user.click(screen.getByRole('button', { name: 'Next: species' }));
   if (opts.species) await user.click(await screen.findByRole('radio', { name: opts.species }));
-  await user.click(screen.getByRole('button', { name: 'Next: class' }));
-  if (opts.cls) await user.click(await screen.findByRole('radio', { name: opts.cls }));
   await user.click(screen.getByRole('button', { name: 'Next: background' }));
   if (opts.background) await user.click(await screen.findByRole('radio', { name: opts.background }));
   if (opts.other) {
     await user.click(screen.getByText(/^Other content \(/)); // the summary, not the legend inside it
     await user.click(await screen.findByRole('checkbox', { name: opts.other }));
   }
+  await user.click(screen.getByRole('button', { name: 'Next: gear' }));
+  // Gear: most walks skip it so inventories stay as the test expects; `kit` keeps the guides' defaults (option a) and `beforeChoices` runs on the step.
+  if (opts.kit) await opts.beforeChoices?.();
+  else await user.click(screen.getByRole('button', { name: /^Skip: I'll add gear myself/ }));
   await user.click(screen.getByRole('button', { name: 'Next: choices' }));
 }
 
@@ -1751,9 +1767,10 @@ it('shows different allowed content for two campaign profiles, and records a rea
   const courierOff = () => courier().getAttribute('aria-disabled') === 'true'; // inert, never natively disabled (2.4.3)
   const soldier = () => screen.getAllByRole<HTMLInputElement>('radio', { name: /^Soldier/ }).find((r) => r.getAttribute('aria-disabled') !== 'true');
   const toBackground = async () => {
+    await user.click(screen.getByRole('button', { name: 'Next: class' }));
     await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
     await user.click(screen.getByRole('radio', { name: 'Enter by hand' })); // the default method needs all six scores assigned
-    for (const next of ['Next: species', 'Next: class', 'Next: background']) await user.click(screen.getByRole('button', { name: next }));
+    for (const next of ['Next: species', 'Next: background']) await user.click(screen.getByRole('button', { name: next }));
   };
   const toRules = async () => {
     for (let i = 0; i < 4; i++) await user.click(screen.getByRole('button', { name: 'Back' }));
@@ -1783,6 +1800,7 @@ it('shows different allowed content for two campaign profiles, and records a rea
   await user.type(within(sources).getByRole('textbox', { name: /^Reason/ }), 'DM approved');
   await waitFor(() => expect(courierOff()).toBe(false));
   await user.click(courier());
+  await user.click(screen.getByRole('button', { name: 'Next: gear' }));
   await user.click(screen.getByRole('button', { name: 'Next: choices' }));
   await user.click(await screen.findByRole('button', { name: 'Create and save' }));
 
@@ -2204,6 +2222,7 @@ it('drops picks that do not fit when the rules family changes, in the builder an
   await startNewCharacter(user);
   await user.type(await screen.findByRole('textbox', { name: 'Name' }), 'E2E Switcher'); // the name is required to leave the Rules step
   await user.click(screen.getByRole('radio', { name: /2014 rules/ }));
+  await user.click(screen.getByRole('button', { name: 'Next: class' }));
   await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
   await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
   await user.click(screen.getByRole('button', { name: 'Next: species' }));
@@ -2212,9 +2231,9 @@ it('drops picks that do not fit when the rules family changes, in the builder an
   await waitFor(() => expect(halfOrc().getAttribute('aria-disabled')).toBeNull());
   await user.click(halfOrc());
   expect(halfOrc().checked).toBe(true);
-  await user.click(screen.getByRole('button', { name: 'Back' }));
-  await user.click(screen.getByRole('button', { name: 'Back' }));
+  for (let i = 0; i < 3; i++) await user.click(screen.getByRole('button', { name: 'Back' })); // species, scores, class, rules
   await user.click(screen.getByRole('radio', { name: /2024 rules/ }));
+  await user.click(screen.getByRole('button', { name: 'Next: class' }));
   await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
   await user.click(screen.getByRole('button', { name: 'Next: species' }));
   // D31: the 5.1 species leaves the list altogether, and the pick is cleared.
@@ -3467,6 +3486,8 @@ it('rolls ability scores through the dice engine and assigns them (D32)', async 
   await startNewCharacter(user);
   await user.type(await screen.findByRole('textbox', { name: 'Name' }), 'E2E Rolled');
   await user.click(screen.getByRole('radio', { name: /2024 rules/ }));
+  await user.click(screen.getByRole('button', { name: 'Next: class' }));
+  await user.click(await screen.findByRole('radio', { name: /^Barbarian/ }));
   await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
   await user.click(screen.getByRole('radio', { name: 'Roll' }));
   await user.click(screen.getByRole('button', { name: 'Roll six scores (4d6, drop the lowest)' }));
@@ -3494,9 +3515,9 @@ it('rolls ability scores through the dice engine and assigns them (D32)', async 
   expect(screen.getByText('Assigned: 6 of 6')).toBeTruthy();
   expect([...assigned.values()].sort((x, y) => x - y)).toEqual([...totals].sort((x, y) => x - y)); // every rolled total used once
   await user.click(screen.getByRole('button', { name: 'Next: species' }));
-  await user.click(screen.getByRole('button', { name: 'Next: class' }));
-  await user.click(await screen.findByRole('radio', { name: /^Barbarian/ }));
   await user.click(screen.getByRole('button', { name: 'Next: background' }));
+  await user.click(screen.getByRole('button', { name: 'Next: gear' }));
+  await user.click(screen.getByRole('button', { name: /^Skip: I'll add gear myself/ }));
   await user.click(screen.getByRole('button', { name: 'Next: choices' }));
   await user.click(await screen.findByRole('button', { name: 'Create and save' }));
   const sheet = await screen.findByRole('article', { name: 'E2E Rolled' });
@@ -3782,3 +3803,58 @@ it('tries the sample from the chooser, plays it and removes it (D95)', async () 
   await waitFor(() => expect(screen.queryByRole('button', { name: /^Wren Ashdown/ })).toBeNull());
   expect((await client.listCharacters()).some((c) => c.origin === 'sample')).toBe(false);
 });
+
+it('builds a 2014 Cleric with its kit: seven steps, option a gives AC 16 with the shield, Mace on Play, the kit on Gear (Wave 3, D97)', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  let preview = '';
+  await createCharacter(user, {
+    name: 'E2E Kitted',
+    family: 'srd-5.1',
+    scores: { Dexterity: 10 }, // scale mail 14 + 0 Dex + shield 2
+    cls: /^Cleric/,
+    kit: true,
+    beforeChoices: async () => {
+      // The Gear step shows the live Armor Class for the kit as chosen (option a for every pick).
+      await waitFor(() => expect(screen.getByText(/^AC with this gear: 16/)).toBeTruthy());
+      preview = screen.getByText(/^AC with this gear:/).textContent ?? '';
+    },
+  });
+  expect(preview).toMatch(/16/);
+  await user.click(await screen.findByRole('button', { name: 'Create and save' }));
+
+  const sheet = await screen.findByRole('article', { name: 'E2E Kitted' });
+  await waitFor(() => expect(summaryValue(sheet, 'Armor Class')).toMatch(/^16/));
+  await openTab(user, sheet, 'Play');
+  expect(within(sheet).getAllByText(/Mace/).length).toBeGreaterThan(0);
+  await openTab(user, sheet, 'Gear');
+  const equipment = screen.getByRole('region', { name: 'Equipment' });
+  for (const item of [/Mace/, /Scale mail/, /Shield/]) expect(within(equipment).getAllByText(item).length).toBeGreaterThan(0);
+}, 180_000);
+
+it('a 2024 class taking gold has coins and no kit items (Wave 3, D97)', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  await createCharacter(user, {
+    name: 'E2E Goldtaker',
+    family: 'srd-5.2.1',
+    cls: /^Barbarian/,
+    background: /^Soldier/,
+    kit: true,
+    beforeChoices: async () => {
+      // Option b of the Barbarian's kit is gold only, and so is the Soldier's.
+      const classKit = await screen.findByRole('region', { name: /^From your class/ });
+      await user.click(within(classKit).getByRole('radio', { name: /Instead: 75 gp/ }));
+      const backgroundKit = screen.getByRole('region', { name: /^From your background/ });
+      await user.click(within(backgroundKit).getByRole('radio', { name: /Instead: 50 gp/ }));
+    },
+  });
+  await user.click(await screen.findByRole('button', { name: 'Create and save' }));
+
+  const sheet = await screen.findByRole('article', { name: 'E2E Goldtaker' });
+  await openTab(user, sheet, 'Gear');
+  const equipment = screen.getByRole('region', { name: 'Equipment' });
+  expect(within(equipment).queryAllByRole('checkbox', { name: /^Equip / })).toHaveLength(0);
+  const gold = await screen.findByRole<HTMLInputElement>('spinbutton', { name: 'Gold (gp)' });
+  expect(gold.value).toBe('125');
+}, 180_000);
