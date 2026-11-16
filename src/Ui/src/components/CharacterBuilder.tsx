@@ -625,6 +625,8 @@ interface PickStepProps {
   options: Shown[];
   /** The listing for the current rules family and campaign has arrived. */
   loaded: boolean;
+  /** The listing for the current rules family and campaign was refused: say so instead of loading forever. */
+  loadFailed: boolean;
   /** Item 1: what the builder hides for each kind; draft counts are 0 until they arrive (a failure shows no draft line). */
   missing: (kind: ContentKind) => Missing;
   /** R41: the names among these picks that need a campaign exception reason which is not given (now). */
@@ -636,7 +638,15 @@ interface PickStepProps {
 }
 
 /** Shown instead of the options while the listing for the current rules family is still on its way: nothing stale can be picked. */
-function LoadingOptions({ legend }: { legend: string }) {
+function LoadingOptions({ legend, failed }: { legend: string; failed?: boolean }) {
+  if (failed) {
+    return (
+      <fieldset>
+        <legend>{legend}</legend>
+        <p className="hint">Couldn't load the options. Go back to Rules and try again, or close and reopen the builder.</p>
+      </fieldset>
+    );
+  }
   return (
     <fieldset aria-busy="true">
       <legend>{legend}</legend>
@@ -661,7 +671,7 @@ function SpeciesStep(props: PickStepProps) {
       {props.loaded ? (
         <SinglePick legend="Species" name="species" options={list} value={basics.species} onChange={(species) => onChange({ ...basics, species })} />
       ) : (
-        <LoadingOptions legend="Species" />
+        <LoadingOptions legend="Species" failed={props.loadFailed} />
       )}
       {missingHint('species', 'species', list.length, props.missing('species'), props.loaded, props.policy)}
     </StepForm>
@@ -685,7 +695,7 @@ function ClassStep(props: PickStepProps) {
           onChange={(startingClass) => onChange({ ...basics, startingClass })}
         />
       ) : (
-        <LoadingOptions legend="Class (level 1)" />
+        <LoadingOptions legend="Class (level 1)" failed={props.loadFailed} />
       )}
       {missingHint('class', 'classes', list.length, props.missing('class'), props.loaded, props.policy)}
     </StepForm>
@@ -727,7 +737,7 @@ function BackgroundStep(props: PickStepProps) {
           onChange={(background) => onChange({ ...basics, background })}
         />
       ) : (
-        <LoadingOptions legend="Background" />
+        <LoadingOptions legend="Background" failed={props.loadFailed} />
       )}
       {missingHint('background', 'backgrounds', list.length, props.missing('background'), props.loaded, props.policy)}
 
@@ -1306,6 +1316,8 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
   const [listed, setListed] = useState<ContentOption[]>([]);
   // Which rules family and campaign `listed` belongs to; until it matches, options are still loading.
   const [listedFor, setListedFor] = useState<string>();
+  // The family|campaign key whose listing was refused; it stops the loading state from standing in for an error.
+  const [listFailedFor, setListFailedFor] = useState<string>();
   // Item 1: how many entries per kind are still drafts, and the family they were counted for. A failure leaves it unset: the counts are only a hint.
   const [drafts, setDrafts] = useState<{ family: string; counts: Partial<Record<ContentKind, number>> }>();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -1380,7 +1392,10 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
           };
         });
       })
-      .catch(fail);
+      .catch((error) => {
+        if (current) setListFailedFor(`${family}|${campaignId ?? ''}`);
+        fail(error);
+      });
     // Only the create flow shows guides: a guides failure must not put an error on the level-up or choices screens.
     if (creating) {
       client
@@ -1623,6 +1638,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
   const next = () => setStep(createSteps[Math.min(at + 1, createSteps.length - 1)]!);
   const policy = rulesFamilies.find((f) => f.id === basics.rulesFamily);
   const optionsLoaded = listedFor === `${family}|${campaignId ?? ''}`;
+  const optionsFailed = !optionsLoaded && listFailedFor === `${family}|${campaignId ?? ''}`;
   const otherFamily = rulesFamilies.find((f) => f.id !== family);
   const missing = (kind: ContentKind): Missing => ({
     drafts: drafts?.family === family ? (drafts.counts[kind] ?? 0) : 0,
@@ -1662,7 +1678,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
     const cancel = [...(panel.current?.querySelectorAll('.actions button') ?? [])].find((b) => b.textContent.trim() === 'Cancel');
     if (cancel instanceof HTMLElement) cancel.focus();
   }
-  const pickProps = { basics, policy, options: pickable, loaded: optionsLoaded, missing, reasonNames, onChange: setBasics, onBack: back, onCancel: cancelPressed };
+  const pickProps = { basics, policy, options: pickable, loaded: optionsLoaded, loadFailed: optionsFailed, missing, reasonNames, onChange: setBasics, onBack: back, onCancel: cancelPressed };
 
   const title = builderTitle(mode);
 

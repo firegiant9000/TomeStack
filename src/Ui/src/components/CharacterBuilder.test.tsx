@@ -518,6 +518,18 @@ describe('the listing for a changed rules family', () => {
     expect(screen.queryByRole('status')).toBeNull();
   });
 
+  it('says the options could not be loaded, rather than loading forever, when the listing is refused', async () => {
+    const user = userEvent.setup();
+    vi.mocked(client.listContent).mockImplementation((family) => (family === 'srd-5.1' ? Promise.resolve(oldList()) : Promise.reject(new Error('refused'))));
+    renderCreate();
+    await fill(user, screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
+    await user.click(screen.getByRole('radio', { name: /2024 rules/ }));
+    await user.click(screen.getByRole('button', { name: 'Next: class' }));
+    expect(await screen.findByText(/Couldn't load the options\. Go back to Rules and try again/)).toBeTruthy();
+    expect(screen.queryByText(/Loading options/)).toBeNull();
+    expect(document.querySelector('[aria-busy="true"]')).toBeNull();
+  });
+
   it('keeps a pick made from the new listing when a late reply for the old family arrives', async () => {
     const user = userEvent.setup();
     const late = deferred<ContentOption[]>();
