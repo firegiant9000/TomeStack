@@ -143,6 +143,22 @@ public class GuideCommandTests
         Assert.True(text.Length > quantity.ToString().Length + 2, $"{family}: '{name}' x{quantity} -> '{text}'");
     }
 
+    private static IEnumerable<GuideLineView> AllLines(IEnumerable<GuideLineView> lines) =>
+        lines.SelectMany(l => new[] { l }.Concat(AllLines(l.Contents ?? [])));
+
+    [Theory]
+    [InlineData(RulesFamilies.Srd51)]
+    [InlineData(RulesFamilies.Srd521)]
+    public void Bundled_guides_have_no_missing_line_and_no_unavailable_text(string family)
+    {
+        using var temp = new TempApp();
+        var options = temp.App.ListGuides(family).SelectMany(g => g.Picks).SelectMany(p => p.Options).ToList();
+
+        Assert.NotEmpty(options);
+        Assert.DoesNotContain(options.SelectMany(o => AllLines(o.Lines)), l => l.Kind == "missing");
+        Assert.DoesNotContain(options, o => o.Text.Contains("unavailable", StringComparison.OrdinalIgnoreCase));
+    }
+
     private static ContentRevision Item(string name, params string[] families) => new()
     {
         ContentId = Guid.NewGuid(), RevisionId = Guid.NewGuid(), Kind = ContentKind.Item, Name = name,

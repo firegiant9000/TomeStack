@@ -1350,6 +1350,10 @@ export interface CreateCharacterRequest {
   campaignId?: string;
   campaignExceptions?: CampaignException[];
   spells?: KnownSpell[];
+  /** Starting gear from the builder's kit; each item must be published in the rules family. */
+  equipment?: EquipmentEntry[];
+  /** Starting coins from the builder's kit. */
+  coins?: Currency;
 }
 
 export interface LicenseNotice {

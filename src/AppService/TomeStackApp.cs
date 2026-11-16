@@ -306,6 +306,11 @@ public sealed partial class TomeStackApp : IDisposable
     public CharacterView CreateCharacter(CreateCharacterRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
+        var unknown = (request.Equipment ?? [])
+            .Where(e => _store.FindRevision(e.Item) is not { Kind: ContentKind.Item, Status: RevisionStatus.Published } item || !item.RulesFamilies.Contains(request.RulesFamily))
+            .ToList();
+        if (unknown.Count > 0)
+            throw new AppValidationException([.. unknown.Select(e => new Diagnostic("character.equipment-unknown", "An item is not published content for this rules family.", e.Item))]);
         return SaveCharacter(new Character
         {
             Id = Guid.NewGuid(),
@@ -318,6 +323,8 @@ public sealed partial class TomeStackApp : IDisposable
             CampaignId = request.CampaignId,
             CampaignExceptions = request.CampaignExceptions ?? [],
             Spells = request.Spells ?? [],
+            Equipment = request.Equipment ?? [],
+            Currency = request.Coins ?? new(),
         });
     }
 
@@ -651,6 +658,8 @@ public sealed record ChooseRequest(Guid CharacterId, ContentReference Source, st
 
 /// <param name="Classes">The starting class (and any further levels) from the builder draft (SPEC C-07).</param>
 /// <param name="Choices">Choices answered in the builder draft; the sheet flags any that are no longer valid.</param>
+/// <param name="Equipment">Starting gear from the builder's kit; each item must be a published item in the rules family.</param>
+/// <param name="Coins">Starting coins from the builder's kit.</param>
 public sealed record CreateCharacterRequest(
     string Name,
     string RulesFamily,
@@ -660,7 +669,9 @@ public sealed record CreateCharacterRequest(
     IReadOnlyList<ChoiceSelection>? Choices = null,
     Guid? CampaignId = null,
     IReadOnlyList<CampaignException>? CampaignExceptions = null,
-    IReadOnlyList<KnownSpell>? Spells = null);
+    IReadOnlyList<KnownSpell>? Spells = null,
+    IReadOnlyList<EquipmentEntry>? Equipment = null,
+    Currency? Coins = null);
 
 /// <summary>A choice answered on an unsaved builder draft (<c>character.previewChoice</c>).</summary>
 public sealed record PreviewChoiceRequest(Character Draft, ContentReference Source, string ChoiceId, IReadOnlyList<ContentReference>? Selected);
