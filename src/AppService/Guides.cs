@@ -44,9 +44,10 @@ public sealed partial class TomeStackApp
 
     /// <summary>
     /// Command <c>character.kit</c>: expands each kit (a guide id listed twice counts once), merges the entries of the same item, and equips one
-    /// body armour and one shield the draft is trained in plus every weapon. When at least one kit resolves, the result replaces the draft's
-    /// equipment and coins in <see cref="KitView.Preview"/> (the gear step starts from the kit); when none does, the draft's own equipment and
-    /// coins are returned unchanged and the draft is previewed as is. Nothing is stored.
+    /// body armour and one shield the draft is trained in plus every weapon. When at least one kit resolves and gives something (an entry or coins),
+    /// the result replaces the draft's equipment and coins in <see cref="KitView.Preview"/> (the gear step starts from the kit); when none does, or
+    /// every line of the resolved kits was dropped, the draft's own equipment and coins are returned unchanged and the draft is previewed as is
+    /// (the Problems still list what was dropped). Nothing is stored.
     /// A guide that is not a published creation guide, is for another rules family, or a line that cannot be given, is a problem; the rest is still
     /// returned. A trial that the checks refuse leaves that candidate unequipped; the final preview throws for an invalid draft, as <c>character.preview</c> does.
     /// </summary>
@@ -89,7 +90,9 @@ public sealed partial class TomeStackApp
             coins = coins with { Cp = coins.Cp + result.Coins.Cp, Sp = coins.Sp + result.Coins.Sp, Ep = coins.Ep + result.Coins.Ep, Gp = coins.Gp + result.Coins.Gp, Pp = coins.Pp + result.Coins.Pp };
         }
 
-        if (resolved == 0)
+        // No kit resolved, or the resolved ones gave nothing at all (every line dropped): that is "no kit", so the draft's gear stays.
+        // A kit that gives only coins still replaces it.
+        if (resolved == 0 || (entries.Count == 0 && coins == new Currency()))
         {
             var own = draft.Equipment ?? [];
             var ownCoins = draft.Currency ?? new Currency();

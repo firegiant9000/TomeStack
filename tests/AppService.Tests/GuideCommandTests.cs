@@ -218,6 +218,23 @@ public class GuideCommandTests
 
     // Task 8.2: character.kit.
 
+    [Fact]
+    public void A_kit_whose_lines_all_drop_keeps_the_drafts_gear_and_lists_the_problems()
+    {
+        using var temp = new TempApp();
+        var guide = Cleric(temp);
+        var own = temp.App.Kit(new(Draft("Cleric"), [new(guide.GuideContentId, [.. guide.Picks.Select(p => new KitChoice(p.Id, "a"))])]));
+        var draft = Draft("Cleric") with { Equipment = [new(own.Equipment[0].Item, true, 3)], Currency = new(Gp: 7) };
+
+        // Every pick names an option the guide does not have, so every line drops: the guide resolves but gives nothing.
+        var view = temp.App.Kit(new(draft, [new(guide.GuideContentId, [.. guide.Picks.Select(p => new KitChoice(p.Id, "no-such-option"))])]));
+
+        Assert.NotEmpty(view.Problems);
+        Assert.Equal(draft.Equipment, view.Equipment);
+        Assert.Equal(new Currency(Gp: 7), view.Coins);
+        Assert.Equal(3, view.Preview.Character.Equipment!.Single().Quantity);
+    }
+
     private static Character Draft(string className)
     {
         var classes = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.1-classes.json");
