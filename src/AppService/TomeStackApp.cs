@@ -309,7 +309,7 @@ public sealed partial class TomeStackApp : IDisposable
         // Published items of this family only. A mod's own fit to its host (and its kind/published state) is checked again by the save
         // (checkMods); the family of the mod is not, so it is checked here.
         bool Unusable(ContentReference? reference) =>
-            reference is null || _store.FindRevision(reference) is not { Kind: ContentKind.Item, Status: RevisionStatus.Published } item || !item.RulesFamilies.Contains(request.RulesFamily);
+            reference is null || _store.FindRevision(reference) is not { Kind: ContentKind.Item, Status: RevisionStatus.Published } item || !Guides.InFamily(item, request.RulesFamily);
         var unknown = (request.Equipment ?? [])
             .SelectMany(IEnumerable<ContentReference?> (e) => e?.Item is null || Unusable(e.Item) ? [e?.Item] : (e.Mods ?? []).Where(m => Unusable(m)).Select(m => (ContentReference?)m))
             .ToList();

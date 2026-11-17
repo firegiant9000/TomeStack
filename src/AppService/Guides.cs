@@ -42,6 +42,25 @@ public sealed partial class TomeStackApp
     /// <summary>A kit's guide is not for the draft's rules family.</summary>
     public const string KitGuideWrongRules = "kit.guide-wrong-rules";
 
+    /// <summary>A kit gives an item that is not in the draft's rules family; the item is left out (it would block the save).</summary>
+    public const string KitItemWrongRules = "kit.item-wrong-rules";
+
+    /// <summary>The player's wording for a RulesCore kit problem (the code is kept); the RulesCore text carries ids and category keys.</summary>
+    private Diagnostic PlayerKitProblem(Diagnostic problem, string? guideName)
+    {
+        var name = problem.Content is { } reference ? _store.FindRevision(reference)?.Name : null;
+        var text = problem.Code switch
+        {
+            KitExpansion.ItemUnresolved => name is null ? "An item in a starting kit isn't available, so it was left out." : $"{name} can't be given from a starting kit, so it was left out.",
+            KitExpansion.ChoiceMissing => guideName is null ? "A choice in a starting kit wasn't made, so it was left out." : $"A choice in the {guideName} starting kit wasn't made, so it was left out.",
+            KitExpansion.AnyOfMismatch => $"{name ?? "That item"} isn't the right kind of item for this choice, so it was left out.",
+            KitExpansion.QuantityCapped => $"{name ?? "An item"} adds up to more than {EquipmentEntry.MaxQuantity:N0}, so it was capped there.",
+            KitExpansion.CoinsCapped => $"The coins add up to more than {Currency.MaxCoins:N0} of one kind, so each kind was capped there.",
+            _ => "Part of a starting kit couldn't be given, so it was left out.",
+        };
+        return problem with { Message = text };
+    }
+
     /// <summary>A chosen option needs training the draft does not have; its lines are left out.</summary>
     public const string KitOptionUntrained = "kit.option-untrained";
 
@@ -59,8 +78,7 @@ public sealed partial class TomeStackApp
         ArgumentNullException.ThrowIfNull(request);
         var draft = request.Draft ?? throw new AppValidationException([new("character.draft-required", "Send the draft character to give a kit to.")]);
         var problems = new List<Diagnostic>();
-        var entries = new List<EquipmentEntry>();
-        var coins = new Currency();
+        var parts = new List<KitResult>();
         var resolved = 0;
         var seen = new HashSet<Guid>();
         // The same effects the calculation uses decide what the draft is trained in; the UI only reflects this list.
@@ -72,28 +90,36 @@ public sealed partial class TomeStackApp
             var guide = kit?.GuideContentId is { } id && _store.NewestPublished(id) is { Kind: ContentKind.CreationGuide, Status: RevisionStatus.Published } found && found.ContentId == id ? found : null;
             if (guide?.Effects.OfType<StartingEquipmentEffect>().FirstOrDefault() is not { } effect)
             {
-                problems.Add(new(KitGuideUnresolved, $"{kit?.GuideContentId} is not a published creation guide with starting equipment."));
+                problems.Add(new(KitGuideUnresolved, "A starting kit isn't available any more, so it was left out."));
                 continue;
             }
             // The same field ListGuides filters on: a guide of another rules family would equip that family's items.
             if (!guide.RulesFamilies.Contains(draft.RulesFamily))
             {
-                problems.Add(new(KitGuideWrongRules, $"Guide {kit!.GuideContentId} is not for the draft's rules family '{draft.RulesFamily}'; its kit is skipped."));
+                problems.Add(new(KitGuideWrongRules, $"{guide.Name} isn't for these rules, so its starting kit was left out."));
                 continue;
             }
             resolved++;
             var result = KitExpansion.Expand(WithoutUntrained(effect, kit!.Choices ?? [], trained, problems), kit.Choices ?? [], _store);
-            problems.AddRange(result.Problems);
+            var kept = new List<EquipmentEntry>();
+            var kitProblems = new List<Diagnostic>(result.Problems.Select(p => PlayerKitProblem(p, guide.Name)));
             foreach (var entry in result.Equipment)
             {
-                var same = entries.FindIndex(e => e.Item == entry.Item && e.Mods is null);
-                if (same < 0)
-                    entries.Add(entry);
+                // The same family check as ListGuides (Usable) and CreateCharacter (Unusable): an item of another family would block the save.
+                var item = _store.FindRevision(entry.Item);
+                if (item is null || !Guides.InFamily(item, draft.RulesFamily))
+                    kitProblems.Add(new(KitItemWrongRules, $"{item?.Name ?? "An item"} isn't available for these rules, so it was left out.", entry.Item));
                 else
-                    entries[same] = entries[same] with { Quantity = entries[same].Quantity + entry.Quantity };
+                    kept.Add(entry);
             }
-            coins = coins with { Cp = coins.Cp + result.Coins.Cp, Sp = coins.Sp + result.Coins.Sp, Ep = coins.Ep + result.Coins.Ep, Gp = coins.Gp + result.Coins.Gp, Pp = coins.Pp + result.Coins.Pp };
+            parts.Add(new KitResult(kept, result.Coins, kitProblems));
         }
+
+        // Equal items merge and both sums are capped (quantity and coins), with a problem for each cap, so the final preview cannot throw on size.
+        var merged = KitExpansion.Merge([.. parts]);
+        problems.AddRange(merged.Problems.Select(p => p.Code is KitExpansion.QuantityCapped or KitExpansion.CoinsCapped ? PlayerKitProblem(p, null) : p));
+        var entries = merged.Equipment.ToList();
+        var coins = merged.Coins;
 
         // No kit resolved, or the resolved ones gave nothing at all (every line dropped): that is "no kit", so the draft's gear stays.
         // A kit that gives only coins still replaces it.
@@ -140,7 +166,7 @@ public sealed partial class TomeStackApp
         "armor.medium" => "medium armor",
         "armor.heavy" => "heavy armor",
         "armor.shield" => "shields",
-        _ => category,
+        _ => "that kind of equipment",
     };
 
     private IReadOnlyList<EquipmentEntry> Equip(Character draft, List<EquipmentEntry> entries, Currency coins)
@@ -235,6 +261,9 @@ internal static class Guides
     /// <summary>A line that cannot be shown: its item is not published or not in the rules family. Its text says so, with the name when it is known.</summary>
     private static string Unavailable(string? name) => $"(unavailable: {name ?? "unknown item"})";
 
+    /// <summary>The one family check for items: used by the guide listing and by <c>character.kit</c>, and the same rule as the save's.</summary>
+    internal static bool InFamily(ContentRevision revision, string rulesFamily) => revision.RulesFamilies.Contains(rulesFamily);
+
     private static GuideOptionView BuildOption(KitOption option, string rulesFamily, Func<Guid, ContentRevision?> resolve, Func<string, IReadOnlyList<ContentOption>> choicesFor)
     {
         var lines = new List<GuideLineView>();
@@ -245,7 +274,7 @@ internal static class Guides
         ContentRevision? Usable(Guid id, out ContentRevision? found)
         {
             found = resolve(id);
-            return found is { } r && r.RulesFamilies.Contains(rulesFamily) ? r : null;
+            return found is { } r && InFamily(r, rulesFamily) ? r : null;
         }
 
         foreach (var line in option.Lines ?? [])

@@ -466,4 +466,104 @@ public class GuideCommandTests
         temp.App.Kit(ClericKit(temp, Draft("Cleric")));
         Assert.Empty(temp.App.ListCharacters());
     }
+
+    // Wave 3 G8 fix wave: family filter, player wording and capped merge. Fixtures are original (items and guides built here, installed in the temp store).
+
+    private static ContentRevision FixtureItem(TempApp temp, string name, params string[] families)
+    {
+        var template = temp.App.Store.FindRevision(temp.App.ListContent(RulesFamilies.Srd51).First(o => o.Kind == ContentKind.Item).Reference)!;
+        var item = template with { ContentId = Guid.NewGuid(), RevisionId = Guid.NewGuid(), Name = name, RulesFamilies = families, Effects = [] };
+        temp.App.Store.AddRevision(item);
+        return item;
+    }
+
+    private static ContentRevision FixtureGuide(TempApp temp, string name, string[] families, params KitPick[] picks)
+    {
+        var template = temp.App.Store.ListRevisionsInOrder().First(r => r.Kind == ContentKind.CreationGuide && r.Status == RevisionStatus.Published);
+        var guide = template with
+        {
+            ContentId = Guid.NewGuid(), RevisionId = Guid.NewGuid(), Name = name, RulesFamilies = families,
+            Effects = [new GuideForEffect { Id = "for", Content = new(Guid.NewGuid()) }, new StartingEquipmentEffect { Id = "kit", Picks = picks }],
+        };
+        temp.App.Store.AddRevision(guide);
+        return guide;
+    }
+
+    private static KitPick Pick(string id, params KitLine[] lines) => new(id, "Gear", [new("a", lines)]);
+
+    private static KitLine Of(ContentRevision item, int? quantity = null) => new(new GuideTarget(item.ContentId), quantity);
+
+    private static readonly System.Text.RegularExpressions.Regex Ids = new(
+        @"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-|\b(weapon|armor)\.[a-z]+|\bpick '|\boption '", System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromSeconds(2));
+
+    [Fact]
+    public void An_item_of_another_rules_family_is_left_out_with_a_problem_and_the_kit_still_saves()
+    {
+        using var temp = new TempApp();
+        var mace = FixtureItem(temp, "Fixture Mace", RulesFamilies.Srd51);
+        var axe = FixtureItem(temp, "Fixture Battleaxe", RulesFamilies.Srd521);
+        var simple51 = temp.App.Store.FindRevision(temp.App.ListContent(RulesFamilies.Srd51).First(o => o.Name == "Mace").Reference)!;
+        var simple521 = simple51 with { ContentId = Guid.NewGuid(), RevisionId = Guid.NewGuid(), Name = "Fixture Club 5.2.1", RulesFamilies = [RulesFamilies.Srd521] };
+        temp.App.Store.AddRevision(simple521);
+        var guide = FixtureGuide(temp, "Both rules guide", [RulesFamilies.Srd51, RulesFamilies.Srd521],
+            Pick("fixed", Of(mace), Of(axe)), Pick("any", new KitLine(AnyOf: "weapon.simple")));
+        var draft = Draft("Cleric");
+
+        var view = temp.App.Kit(new(draft, [new(guide.ContentId, [new("fixed", "a"), new("any", "a", new Dictionary<int, Guid> { [0] = simple521.ContentId })])]));
+
+        Assert.Equal([mace.Reference], view.Equipment.Select(e => e.Item));
+        var wrong = view.Problems.Where(p => p.Code == TomeStackApp.KitItemWrongRules).ToList();
+        Assert.Equal(2, wrong.Count);
+        Assert.Contains(wrong, p => p.Message.Contains("Fixture Battleaxe") && p.Content == axe.Reference);
+        Assert.Contains(wrong, p => p.Message.Contains("Fixture Club 5.2.1"));
+        // What the kit gives always passes the save.
+        var saved = temp.App.CreateCharacter(new CreateCharacterRequest("Kit saves", draft.RulesFamily, draft.BaseAbilities, [], draft.Classes, Equipment: view.Equipment, Coins: view.Coins));
+        Assert.Single(saved.Character.Equipment!);
+    }
+
+    [Fact]
+    public void Every_kit_problem_is_in_player_words_without_ids_or_category_keys()
+    {
+        using var temp = new TempApp();
+        var gear = FixtureItem(temp, "Fixture Rope", RulesFamilies.Srd51);
+        var other = FixtureItem(temp, "Fixture Spear", RulesFamilies.Srd521);
+        var broad = FixtureGuide(temp, "Broad guide", [RulesFamilies.Srd51],
+            new KitPick("two", "Two", [new("a", [Of(gear)]), new("b", [Of(gear)])]),
+            Pick("lost", Of(gear), new KitLine(new GuideTarget(Guid.NewGuid()))),
+            Pick("kind", new KitLine(AnyOf: "weapon.simple")),
+            new KitPick("martial", "Martial", [new("a", [Of(gear)], "weapon.martial")]),
+            Pick("big", Of(gear, 10_000), new KitLine(Coins: new KitCoins { Gp = 2_000_000 })));
+        var elsewhere = FixtureGuide(temp, "Other rules guide", [RulesFamilies.Srd521], Pick("x", Of(other)));
+        var odd = FixtureGuide(temp, "Odd guide", [RulesFamilies.Srd51], Pick("odd", Of(other)));
+
+        var view = temp.App.Kit(new(Draft("Cleric"),
+        [
+            new(broad.ContentId, [new("martial", "a"), new("kind", "a", new Dictionary<int, Guid> { [0] = gear.ContentId }), new("lost", "a"), new("big", "a"), new("two", "zzz")]),
+            new(elsewhere.ContentId, [new("x", "a")]),
+            new(odd.ContentId, [new("odd", "a")]),
+            new(Guid.NewGuid(), []),
+        ]));
+
+        string[] codes = [TomeStackApp.KitGuideUnresolved, TomeStackApp.KitGuideWrongRules, TomeStackApp.KitOptionUntrained, TomeStackApp.KitItemWrongRules,
+            KitExpansion.ItemUnresolved, KitExpansion.ChoiceMissing, KitExpansion.AnyOfMismatch, KitExpansion.QuantityCapped, KitExpansion.CoinsCapped];
+        Assert.All(codes, code => Assert.Contains(view.Problems, p => p.Code == code));
+        Assert.All(view.Problems, p => Assert.False(Ids.IsMatch(p.Message), p.Message));
+    }
+
+    [Fact]
+    public void Class_and_background_kits_that_together_pass_the_caps_are_capped_with_problems_and_do_not_throw()
+    {
+        using var temp = new TempApp();
+        var arrows = FixtureItem(temp, "Fixture Arrows", RulesFamilies.Srd51);
+        var first = FixtureGuide(temp, "Class guide", [RulesFamilies.Srd51], Pick("a", Of(arrows, 9_000), new KitLine(Coins: new KitCoins { Gp = 600_000 })));
+        var second = FixtureGuide(temp, "Background guide", [RulesFamilies.Srd51], Pick("b", Of(arrows, 9_000), new KitLine(Coins: new KitCoins { Gp = 600_000 })));
+
+        var view = temp.App.Kit(new(Draft("Cleric"), [new(first.ContentId, [new("a", "a")]), new(second.ContentId, [new("b", "a")])]));
+
+        Assert.Equal(EquipmentEntry.MaxQuantity, view.Equipment.Single().Quantity);
+        Assert.Equal(Currency.MaxCoins, view.Coins.Gp);
+        Assert.Contains(view.Problems, p => p.Code == KitExpansion.QuantityCapped && p.Message.Contains("Fixture Arrows"));
+        Assert.Contains(view.Problems, p => p.Code == KitExpansion.CoinsCapped);
+        Assert.Equal(EquipmentEntry.MaxQuantity, view.Preview.Character.Equipment!.Single().Quantity);
+    }
 }
