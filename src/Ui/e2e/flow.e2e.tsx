@@ -3754,7 +3754,7 @@ it('previews a Fighter 3 at level 5 from the level-up step: Extra Attack shows a
 it('levels a Cleric into Wizard: what each class gives, the prerequisite warning that never blocks, and the new class on the sheet (D99)', async () => {
   const user = userEvent.setup();
   const listed = await client.listContent('srd-5.2.1');
-  const named = (kind: string, name: RegExp) => listed.find((o) => o.compatible && o.kind === kind && name.test(o.name))!.reference; // the list holds both families
+  const named = (kind: string, name: RegExp) => listed.find((o) => o.compatible && !o.superseded && o.kind === kind && name.test(o.name))!.reference; // the list holds both families
   const wizard = named('class', /^Wizard/);
   const created = await client.createCharacter({
     name: 'E2E Multiclasser',

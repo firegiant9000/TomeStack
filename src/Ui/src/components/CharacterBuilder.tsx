@@ -1310,10 +1310,11 @@ function ChoicesStep(props: {
         );
         const start = props.startView;
         if (!start) return choices.map(picker);
-        // Level-up only: a choice the saved sheet did not have is new at this level; the rest wait in a closed disclosure.
+        // Level-up only: earlier = on the saved sheet, resolved now and with no replace offer; everything else (new, still open, or offering a replacement) is new at this level.
         const existed = (c: ChoiceStatus) => (start.sheet.choices ?? []).some((s) => s.source.contentId === c.source.contentId && s.choiceId === c.choiceId);
-        const earlier = choices.filter(existed);
-        const fresh = choices.filter((c) => !existed(c));
+        const isEarlier = (c: ChoiceStatus) => existed(c) && c.resolved && !(hadPicks(start, c) && replaceOffer(c));
+        const earlier = choices.filter(isEarlier);
+        const fresh = choices.filter((c) => !isEarlier(c));
         return (
           <>
             {fresh.length > 0 && (

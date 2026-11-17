@@ -2812,14 +2812,16 @@ describe('what an option gives, legends and the rules notice (8.7)', () => {
 // Wave 3 G10 (D99): level-up offers the character's classes with what the level gives, then "Another class…".
 describe('choices grouped by level in a level-up (D99)', () => {
   const opts = [content(11, 'feature', 'Fixture Alpha', 'srd-5.1'), content(12, 'feature', 'Fixture Beta', 'srd-5.1')];
+  // A choice is resolved unless its name starts with "Open"; one named "Swap..." carries a level-up replace offer and has a pick.
   const choice = (id: string, name: string) => ({
     source: { contentId: `fixture-${id}`, revisionId: `fixture-${id}-r1` },
     sourceName: name,
     choiceId: 'pick',
     count: 1,
     options: opts.map((o) => o.reference),
-    selected: [],
-    resolved: false,
+    selected: name.startsWith('Swap') ? [opts[0]!.reference] : [],
+    resolved: !name.startsWith('Open'),
+    ...(name.startsWith('Swap') ? { replaceable: { when: 'levelUp' as const, max: 1 } } : {}),
   });
   const withChoices = (level: number, ...names: string[]): CharacterView => {
     const view = viewWith([]);
@@ -2844,8 +2846,34 @@ describe('choices grouped by level in a level-up (D99)', () => {
     const summary = screen.getByText('Earlier choices');
     const details = summary.closest('details')!;
     expect(details.open).toBe(false);
+    expect(within(details).getByRole('group', { name: /Old: choose 1/ })).toBeTruthy();
+    expect(within(details).queryByRole('group', { name: /Fresh/ })).toBeNull();
+  });
+
+  it('keeps an existing choice that is still open after the level-up under "New at level n"', async () => {
+    const user = userEvent.setup();
+    const saved = withChoices(3, 'Open');
+    saved.sheet.choices![0]!.resolved = true; // it was complete before; the level asks for more
+    vi.mocked(client.preview).mockResolvedValue(withChoices(4, 'Open'));
+    render(<CharacterBuilder mode={{ kind: 'levelUp', view: saved }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+    await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+    const open = await screen.findByRole('group', { name: /Open: choose 1/ });
+    expect(open.closest('details')).toBeNull();
+    expect(screen.getByRole('heading', { level: 3, name: 'New at level 4' })).toBeTruthy();
+    expect(screen.queryByText('Earlier choices')).toBeNull();
+  });
+
+  it('keeps an existing choice with a level-up replace offer under "New at level n"', async () => {
+    const user = userEvent.setup();
+    vi.mocked(client.preview).mockResolvedValue(withChoices(4, 'Swap', 'Old'));
+    render(<CharacterBuilder mode={{ kind: 'levelUp', view: withChoices(3, 'Swap', 'Old') }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+    await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+    const swap = await screen.findByRole('group', { name: /Swap: choose 1/ });
+    expect(swap.closest('details')).toBeNull();
+    expect(screen.getByText('You may replace one pick now.')).toBeTruthy();
+    const details = screen.getByText('Earlier choices').closest('details')!;
     expect(within(details).getByRole('group', { name: /Old: choose 1/, hidden: true })).toBeTruthy();
-    expect(within(details).queryByRole('group', { name: /Fresh/, hidden: true })).toBeNull();
+    expect(within(details).queryByRole('group', { name: /Swap/, hidden: true })).toBeNull();
   });
 
   it('shows no "Earlier choices" when everything is new, and no heading when nothing is', async () => {
