@@ -1,5 +1,7 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using TomeStack.AppService.Packages;
 using TomeStack.RulesCore;
 
@@ -178,8 +180,8 @@ public sealed partial class TomeStackApp
 
     /// <summary>
     /// What class level <paramref name="level"/> of <paramref name="revision"/> gives, by name: the content the class grants, then
-    /// what the subclass(es) the character has picked for it grant (the engine gates them by the class's level), then the choices the
-    /// class or a subclass presents at that level, labelled as the builder labels them. Only grants that apply on their own
+    /// what the options the character has picked in the class's own choices (a subclass) grant (the engine gates them by the class's
+    /// level), then the choices the class or such an option presents at that level, labelled as the builder labels them. Only grants that apply on their own
     /// (automatic, always) count, as the engine's. A grant or choice with no level is a level 1 one.
     /// </summary>
     private IReadOnlyList<string> GainsAt(ContentRevision revision, int level, bool startingClass, CharacterSheet sheet)
@@ -188,8 +190,7 @@ public sealed partial class TomeStackApp
         owners.AddRange((sheet.Choices ?? []).Where(c => c.Source == revision.Reference)
             .SelectMany(c => c.Selected)
             .Select(_store.FindRevision)
-            .OfType<ContentRevision>()
-            .Where(r => r.Kind == ContentKind.Subclass));
+            .OfType<ContentRevision>());
         bool Applies(ClassEntry? onlyAs) => onlyAs is null || (onlyAs == ClassEntry.StartingClass) == startingClass;
 
         var grants = owners.SelectMany(o => o.Effects.OfType<GrantEffect>())
@@ -203,14 +204,28 @@ public sealed partial class TomeStackApp
         return [.. grants.Concat(choices).Distinct(StringComparer.Ordinal)];
     }
 
-    /// <summary>The label the builder shows for a choice: its own short text, else "{source}: choose {count}".</summary>
+    /// <summary>
+    /// The legend the builder's choice step shows for a choice: its own short text when that already says how many (a number equal to
+    /// the count, or "choose a/an/one" for a count of 1), else the text with ": choose {count}"; with no short text, "{source}: choose
+    /// {count}". The builder also prefixes the source name to a label that is not unique among the step's choices; that cannot be known here.
+    /// </summary>
     private static string ChoiceLabel(string sourceName, ChoiceEffect choice)
     {
         var text = choice.Text?.Trim();
-        return text is { Length: > 0 and <= 40 } && !".!?".Contains(text[^1]) && !text.Contains('\n')
-            ? text
-            : $"{sourceName}: choose {choice.Count}";
+        if (text is not { Length: > 0 and <= 40 } || ".!?".Contains(text[^1]) || text.Contains('\n'))
+            return $"{sourceName}: choose {choice.Count}";
+        var said = ChooseNumber().Match(text);
+        var complete = said.Success
+            ? int.TryParse(said.Groups[1].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var n) && n == choice.Count
+            : choice.Count == 1 && ChooseOne().IsMatch(text);
+        return complete ? text : $"{text}: choose {choice.Count}";
     }
+
+    [GeneratedRegex(@"\bchoose (\d+)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 250)]
+    private static partial Regex ChooseNumber();
+
+    [GeneratedRegex(@"\bchoose (a|an|one)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 250)]
+    private static partial Regex ChooseOne();
 
     /// <summary>
     /// The unmet multiclass prerequisites of <paramref name="revision"/>, one phrase each: "Intelligence 13 (you have 8)", or for an

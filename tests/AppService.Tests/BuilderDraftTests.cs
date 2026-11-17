@@ -404,6 +404,28 @@ public class BuilderDraftTests
     }
 
     [Fact]
+    public void LevelUpOptions_labels_a_choice_as_the_builders_legend_does()
+    {
+        using var temp = new TempApp();
+        var source = temp.App.CreateHomebrewSource(new("Test Choice Classes", [RulesFamilies.Srd521]));
+        ContentRevision Draft(ContentKind kind, string name, params Effect[] effects) => new()
+        {
+            ContentId = Guid.NewGuid(), RevisionId = Guid.Empty, Kind = kind, Name = name, RulesFamilies = [RulesFamilies.Srd521],
+            Provenance = new(source.Id), Status = RevisionStatus.Draft, Effects = effects,
+        };
+        ContentReference[] features = [.. new[] { "Test Option A", "Test Option B", "Test Option C" }.Select(n => temp.App.Publish(temp.App.SaveDraft(Draft(ContentKind.Feature, n))).Published)];
+        ChoiceEffect Choice(string id, string? text, int count) => new() { Id = id, ChoiceId = id, Text = text, Count = count, Level = 2, Options = features };
+        var cls = temp.App.Publish(temp.App.SaveDraft(Draft(
+            ContentKind.Class, "Test Chooser", new HitDieEffect { Id = "hit-die", Die = 8 },
+            Choice("said", "Choose 2 skills", 2), Choice("short", "History", 1), Choice("plain", null, 3)))).Published;
+
+        var chooser = Options(temp, Cleric2(temp) with { Classes = [new(cls, 1)] })[0];
+
+        // A short label that already says how many stands alone; one that does not gets ": choose {count}", as the builder's legend does.
+        Assert.Equal(["Choose 2 skills", "History: choose 1", "Test Chooser: choose 3"], chooser.Gains);
+    }
+
+    [Fact]
     public void LevelUpOptions_still_lists_classes_when_the_characters_campaign_no_longer_exists()
     {
         using var temp = new TempApp();
