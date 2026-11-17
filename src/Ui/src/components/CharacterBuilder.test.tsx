@@ -2372,7 +2372,7 @@ describe('level-up Next states its reason (R43)', () => {
   it('with no class to gain a level in says "Choose a class to continue." until one is picked', async () => {
     const user = userEvent.setup();
     vi.mocked(client.listContent).mockResolvedValue([content(3, 'class', 'Fixture Warden', 'srd-5.1')]);
-    vi.mocked(client.levelUpOptions).mockResolvedValue([{ contentId: 'fixture-c3', name: 'Fixture Warden', current: false, nextLevel: 1, gains: [], unmet: [] }]);
+    vi.mocked(client.levelUpOptions).mockResolvedValue([{ contentId: 'fixture-c3', name: 'Fixture Warden', current: false, nextLevel: 1, gains: [], unmet: [], outsideCampaign: false }]);
     render(<CharacterBuilder mode={{ kind: 'levelUp', view: viewWith([]) }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
     const next = screen.getByRole('button', { name: 'Next: choices' });
     expect(next.getAttribute('aria-disabled')).toBe('true');
@@ -2469,8 +2469,8 @@ describe('preview at level (D82)', () => {
 
   /** The service's list for these tests: the Fighter to level, and the Warden as another class. */
   const levelOptions = (): LevelUpOption[] => [
-    { contentId: 'fixture-c1', name: 'Fixture Fighter', current: true, nextLevel: 4, gains: [], unmet: [] },
-    { contentId: 'fixture-c3', name: 'Fixture Warden', current: false, nextLevel: 1, gains: [], unmet: [] },
+    { contentId: 'fixture-c1', name: 'Fixture Fighter', current: true, nextLevel: 4, gains: [], unmet: [], outsideCampaign: false },
+    { contentId: 'fixture-c3', name: 'Fixture Warden', current: false, nextLevel: 1, gains: [], unmet: [], outsideCampaign: false },
   ];
   async function pickOther(user: ReturnType<typeof userEvent.setup>, contentId: string) {
     await user.click(await screen.findByRole('radio', { name: 'Another class…' }));
@@ -2824,6 +2824,7 @@ describe('level-up class picker (D99)', () => {
     nextLevel: 1,
     gains: [],
     unmet: [],
+    outsideCampaign: false,
     ...over,
   });
   const offered = [
@@ -2890,6 +2891,39 @@ describe('level-up class picker (D99)', () => {
     expect(screen.queryByText(/You can still take it/)).toBeTruthy();
     await user.click(screen.getByRole('radio', { name: /^Fixture Fighter 4/ }));
     expect(screen.queryByText(/You can still take it/)).toBeNull();
+  });
+
+  it('says why Next: choices waits when the picked new class needs a campaign reason (R38 d)', async () => {
+    const user = userEvent.setup();
+    vi.mocked(client.listCampaigns).mockResolvedValue([{ id: 'fixture-camp', name: 'Fixture Campaign', rulesFamily: 'srd-5.1', allowedSources: ['fixture-source'] }]);
+    vi.mocked(client.listContent).mockResolvedValue([content(5, 'class', 'Fixture Outsider', 'srd-5.1', { allowedInCampaign: false })]);
+    vi.mocked(client.levelUpOptions).mockResolvedValue([option(5, 'Fixture Outsider', { outsideCampaign: true })]);
+    vi.mocked(client.preview).mockClear();
+    render(<CharacterBuilder mode={{ kind: 'levelUp', view: levelView('fixture-camp') }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+    await user.click(await screen.findByRole('radio', { name: 'Another class…' }));
+    // Not offered until the campaign exception is on.
+    expect(within(screen.getByRole('combobox', { name: 'Class to start' })).queryByRole('option', { name: /Fixture Outsider/ })).toBeNull();
+    await user.click(await screen.findByRole('checkbox', { name: 'Use content from outside the campaign' }));
+    await fill(user, screen.getByRole('textbox', { name: /Reason/ }), 'DM approved');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Class to start' }), 'fixture-c5');
+    expect(within(screen.getByRole('combobox', { name: 'Class to start' })).getByRole('option', { name: 'Fixture Outsider (outside the campaign)' })).toBeTruthy();
+    const next = screen.getByRole('button', { name: 'Next: choices' });
+    expect(next.getAttribute('aria-disabled')).toBeNull();
+    await user.clear(screen.getByRole('textbox', { name: /Reason/ })); // the reason goes after the class was picked
+    expect(next.getAttribute('aria-disabled')).toBe('true');
+    expect(next.getAttribute('aria-describedby')).toBe('next-hint');
+    expect(screen.getByText('This class needs a campaign exception reason.')).toBeTruthy();
+    await user.click(next);
+    expect(vi.mocked(client.preview)).not.toHaveBeenCalled();
+  });
+
+  it('lists only classes the content list can resolve, so a visible choice always yields a class', async () => {
+    const user = userEvent.setup();
+    vi.mocked(client.levelUpOptions).mockResolvedValue([...offered, option(9, 'Fixture Ghost')]); // the service names a class the list lacks
+    renderIt();
+    await user.click(await screen.findByRole('radio', { name: 'Another class…' }));
+    const select = screen.getByRole('combobox', { name: 'Class to start' });
+    expect(within(select).getAllByRole('option').map((o) => o.textContent)).toEqual(['Choose a class', 'Fixture Warden', 'Fixture Sage']);
   });
 
   it('waits for a class to be chosen after "Another class…", saying so', async () => {

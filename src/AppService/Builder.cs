@@ -139,9 +139,10 @@ public sealed partial class TomeStackApp
 
     /// <summary>
     /// <c>character.levelUpOptions</c> (D99): the classes a saved character can take its next level in. Its own classes come first, in
-    /// the order it has them; the others follow by name. Another rules family's classes and those a campaign does not allow
-    /// (<see cref="ContentOption.AllowedInCampaign"/>, as <see cref="ListContent"/> marks them) are left out; the character's own classes
-    /// stay. A character at level 20 has no next level, so the list is empty (the sheet offers no level-up there either).
+    /// the order it has them; the others follow by name. Another rules family's classes are left out. A class the character's campaign
+    /// does not allow (<see cref="ContentOption.AllowedInCampaign"/>, as <see cref="ListContent"/> marks it) is listed with
+    /// <see cref="LevelUpOption.OutsideCampaign"/> set, for the player to take with a campaign exception (R38 d); the character's own
+    /// classes are never flagged. A character at level 20 has no next level, so the list is empty (the sheet offers no level-up there either).
     /// A class the character already has uses its pinned revision, a new one the newest published revision.
     /// </summary>
     public IReadOnlyList<LevelUpOption> LevelUpOptions(Guid characterId)
@@ -168,13 +169,13 @@ public sealed partial class TomeStackApp
         // A campaign deleted since the character was saved no longer restricts anything.
         var campaignId = character.CampaignId is { } id && _store.FindCampaign(id) is not null ? id : (Guid?)null;
         var others = ListContent(character.RulesFamily, campaignId)
-            .Where(o => o.Kind == ContentKind.Class && o.Compatible && !o.Superseded && o.AllowedInCampaign != false && !have.Contains(o.Reference.ContentId))
-            .Select(o => _store.FindRevision(o.Reference))
-            .OfType<ContentRevision>()
-            .OrderBy(r => r.Name, StringComparer.CurrentCultureIgnoreCase)
-            .Select(r => new LevelUpOption(
-                r.ContentId, r.Name, false, 1, GainsAt(r, 1, startingClass: owned.Count == 0, sheet),
-                [.. ShortfallPhrases(sheet, r).Concat(outgoing).Distinct(StringComparer.Ordinal)]));
+            .Where(o => o.Kind == ContentKind.Class && o.Compatible && !o.Superseded && !have.Contains(o.Reference.ContentId))
+            .Select(o => (Revision: _store.FindRevision(o.Reference), Outside: o.AllowedInCampaign == false))
+            .Where(o => o.Revision is not null)
+            .OrderBy(o => o.Revision!.Name, StringComparer.CurrentCultureIgnoreCase)
+            .Select(o => new LevelUpOption(
+                o.Revision!.ContentId, o.Revision.Name, false, 1, GainsAt(o.Revision, 1, startingClass: owned.Count == 0, sheet),
+                [.. ShortfallPhrases(sheet, o.Revision).Concat(outgoing).Distinct(StringComparer.Ordinal)], o.Outside));
         return [.. options, .. others];
     }
 
@@ -243,5 +244,6 @@ public sealed partial class TomeStackApp
 /// <summary>
 /// One class a character can take its next level in (D99). <see cref="Gains"/> names what that level gives; <see cref="Unmet"/> is
 /// player-ready wording for the multiclass prerequisites not met (empty for a class the character already has).
+/// <see cref="OutsideCampaign"/>: the character's campaign does not allow the class's source.
 /// </summary>
-public sealed record LevelUpOption(Guid ContentId, string Name, bool Current, int NextLevel, IReadOnlyList<string> Gains, IReadOnlyList<string> Unmet);
+public sealed record LevelUpOption(Guid ContentId, string Name, bool Current, int NextLevel, IReadOnlyList<string> Gains, IReadOnlyList<string> Unmet, bool OutsideCampaign = false);

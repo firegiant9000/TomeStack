@@ -2445,6 +2445,8 @@ export interface LevelUpOption {
   nextLevel: number;
   gains: string[];
   unmet: string[];
+  /** The character's campaign does not allow this class's source; taking it needs a campaign exception (never set for the character's own classes). */
+  outsideCampaign: boolean;
 }
 
 /** `character.updates` (M3 C7): a newer published revision of content the character uses; an offer, never applied by itself. */

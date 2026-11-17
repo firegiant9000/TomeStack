@@ -307,14 +307,39 @@ public class BuilderDraftTests
     }
 
     [Fact]
-    public void LevelUpOptions_leaves_out_classes_a_campaign_does_not_allow_but_keeps_the_characters_own()
+    public void LevelUpOptions_flags_classes_a_campaign_does_not_allow_and_never_the_characters_own()
     {
         using var temp = new TempApp();
-        var campaign = temp.App.SaveCampaign(new Campaign { Id = Guid.Empty, Name = "Closed table", RulesFamily = RulesFamilies.Srd521, AllowedSources = [] });
+        var closed = temp.App.SaveCampaign(new Campaign { Id = Guid.Empty, Name = "Closed table", RulesFamily = RulesFamilies.Srd521, AllowedSources = [] });
+
+        var excluded = Options(temp, Cleric2(temp, campaign: closed.Id));
+
+        Assert.Equal("Cleric", excluded[0].Name);
+        Assert.False(excluded[0].OutsideCampaign);
+        Assert.Contains(excluded, o => o.Name == "Wizard");
+        Assert.All(excluded.Skip(1), o => Assert.True(o.OutsideCampaign));
+
+        // Without a campaign nothing is outside it.
+        Assert.All(Options(temp, Cleric2(temp)), o => Assert.False(o.OutsideCampaign));
+    }
+
+    [Fact]
+    public void LevelUpOptions_flags_only_the_classes_the_campaign_leaves_out()
+    {
+        using var temp = new TempApp();
+        var source = temp.App.CreateHomebrewSource(new("Test Allowed Classes", [RulesFamilies.Srd521]));
+        var homebrew = temp.App.Publish(temp.App.SaveDraft(new ContentRevision
+        {
+            ContentId = Guid.NewGuid(), RevisionId = Guid.Empty, Kind = ContentKind.Class, Name = "Test Allowed Class", RulesFamilies = [RulesFamilies.Srd521],
+            Provenance = new(source.Id), Status = RevisionStatus.Draft, Effects = [new HitDieEffect { Id = "hit-die", Die = 8 }],
+        })).Published;
+        var campaign = temp.App.SaveCampaign(new Campaign { Id = Guid.Empty, Name = "Homebrew table", RulesFamily = RulesFamilies.Srd521, AllowedSources = [source.Id] });
 
         var options = Options(temp, Cleric2(temp, campaign: campaign.Id));
 
-        Assert.Equal(["Cleric"], options.Select(o => o.Name));
+        Assert.False(options.Single(o => o.ContentId == homebrew.ContentId).OutsideCampaign);
+        Assert.True(options.Single(o => o.Name == "Wizard").OutsideCampaign);
+        Assert.False(options[0].OutsideCampaign); // the character's own class, though its source is not allowed
     }
 
     [Fact]
@@ -401,6 +426,31 @@ public class BuilderDraftTests
 
         Assert.Equal("Test Gainer", gainer.Name);
         Assert.Equal(["Test Plain Feature"], gainer.Gains);
+    }
+
+    [Fact]
+    public void LevelUpOptions_gates_what_any_option_picked_in_a_class_choice_grants_by_the_class_level()
+    {
+        using var temp = new TempApp();
+        var source = temp.App.CreateHomebrewSource(new("Test Option Classes", [RulesFamilies.Srd521]));
+        ContentRevision Draft(ContentKind kind, string name, params Effect[] effects) => new()
+        {
+            ContentId = Guid.NewGuid(), RevisionId = Guid.Empty, Kind = kind, Name = name, RulesFamilies = [RulesFamilies.Srd521],
+            Provenance = new(source.Id), Status = RevisionStatus.Draft, Effects = effects,
+        };
+        ContentReference Feature(string name) => temp.App.Publish(temp.App.SaveDraft(Draft(ContentKind.Feature, name))).Published;
+        GrantEffect Grant(string id, ContentReference feature, int level) => new() { Id = id, Grant = GrantKind.Content, Level = level, Content = feature };
+        var soon = Feature("Test Soon Feature");
+        var later = Feature("Test Later Feature");
+        // A plain feature (not a subclass) offered by the class's choice, which itself grants one thing at class level 2 and another at 3.
+        var style = temp.App.Publish(temp.App.SaveDraft(Draft(ContentKind.Feature, "Test Style", Grant("soon", soon, 2), Grant("later", later, 3)))).Published;
+        var cls = temp.App.Publish(temp.App.SaveDraft(Draft(
+            ContentKind.Class, "Test Styled", new HitDieEffect { Id = "hit-die", Die = 8 },
+            new ChoiceEffect { Id = "style", ChoiceId = "style", Count = 1, Level = 1, Options = [style] }))).Published;
+
+        var options = Options(temp, Cleric2(temp) with { Classes = [new(cls, 1)], Choices = [new(cls, "style", [style])] });
+
+        Assert.Equal(["Test Soon Feature"], options[0].Gains);
     }
 
     [Fact]

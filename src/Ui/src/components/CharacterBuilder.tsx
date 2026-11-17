@@ -789,6 +789,9 @@ function LevelStep(props: {
   character: Character;
   options: Shown[];
   nameOf: (ref: ContentReference) => string;
+  /** The campaign exception ("Use content from outside the campaign") is ticked / has a reason (R38 d). */
+  exceptionOn: boolean;
+  reasonGiven: boolean;
   onNext: (classes: ClassLevel[]) => void;
   onCancel: () => void;
   onError: (error: unknown) => void;
@@ -821,20 +824,29 @@ function LevelStep(props: {
   const currentOptions: { contentId: string; name: string; nextLevel: number; gains: string[] }[] = list?.some((o) => o.current)
     ? list.filter((o) => o.current)
     : character.classes.map((c) => ({ contentId: c.class.contentId, name: props.nameOf(c.class), nextLevel: c.level + 1, gains: [] }));
-  const otherOptions = (list ?? []).filter((o) => !o.current);
+  // A new class is the newest revision the content list offers; a class of the character is its own pinned revision.
+  const resolve = (id: string): ContentReference | undefined =>
+    character.classes.find((c) => c.class.contentId === id)?.class ?? props.options.find((o) => o.kind === 'class' && o.reference.contentId === id)?.reference;
   const otherPicked = picked === otherNew;
   const targetId = otherPicked ? otherId : picked;
-  // A new class is the newest revision the content list offers; a class of the character is its own pinned revision.
-  const target: ContentReference | undefined = !targetId
-    ? undefined
-    : (character.classes.find((c) => c.class.contentId === targetId)?.class ??
-      props.options.find((o) => o.kind === 'class' && o.reference.contentId === targetId)?.reference);
+  // R38 d: a class the campaign leaves out is listed only while the campaign exception is on (and while it is the pick, so the
+  // select never shows a value it lacks); only a class the content list resolves is listed, so a visible choice always yields a target.
+  const resolvable = (list ?? []).filter((o) => !o.current && resolve(o.contentId));
+  const otherOptions = resolvable.filter((o) => !o.outsideCampaign || props.exceptionOn || o.contentId === otherId);
+  const target: ContentReference | undefined = targetId ? resolve(targetId) : undefined;
+  const needsReason = otherPicked && !props.reasonGiven && !!otherOptions.find((o) => o.contentId === otherId)?.outsideCampaign;
   const unmet = otherPicked ? (otherOptions.find((o) => o.contentId === otherId)?.unmet ?? []) : [];
   const warning = unmet.length > 0 ? `${otherOptions.find((o) => o.contentId === otherId)!.name} — needs ${unmet.join(' and ')}. You can still take it.` : '';
 
   // R43: Next is never natively `disabled` and always says why it waits (3.3.2, 4.1.2). A class that needs more than the
   // character has never blocks it: the warning is advice, not a rule (D99).
-  const blocked = atMaximum ? `Already at level ${maxLevel}, the highest level.` : !target ? 'Choose a class to continue.' : undefined;
+  const blocked = atMaximum
+    ? `Already at level ${maxLevel}, the highest level.`
+    : !target
+      ? 'Choose a class to continue.'
+      : needsReason
+        ? 'This class needs a campaign exception reason.'
+        : undefined;
 
   // The service takes the level from the class levels; a character whose level they do not add up to (an import with a level
   // and no class) would preview at another level than the one asked for, so it is not offered a preview.
@@ -869,7 +881,7 @@ function LevelStep(props: {
                 {o.gains.length > 0 ? `${o.name} ${o.nextLevel} — what you get: ${o.gains.join(', ')}` : `${o.name} ${o.nextLevel}`}
               </label>
             ))}
-            {otherOptions.length > 0 && (
+            {resolvable.length > 0 && (
               <>
                 <label className="choice">
                   <input type="radio" name="levelClass" checked={otherPicked} onChange={() => setPicked(otherNew)} />
@@ -882,7 +894,7 @@ function LevelStep(props: {
                       <option value="">Choose a class</option>
                       {otherOptions.map((o) => (
                         <option key={o.contentId} value={o.contentId}>
-                          {o.name}
+                          {o.outsideCampaign ? `${o.name} (outside the campaign)` : o.name}
                         </option>
                       ))}
                     </select>
@@ -1807,6 +1819,8 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
           character={mode.view.character}
           options={pickable}
           nameOf={nameOf}
+          exceptionOn={outside.allow}
+          reasonGiven={outsideAllowed}
           onNext={(classes) => preview({ ...(view?.character ?? mode.view.character), classes }, 'level')}
           onCancel={cancelPressed}
           onError={fail}
