@@ -8,7 +8,7 @@ Note (2026-11-15): D96 (Wave 3 Group 4) replaced the Manage tab with the header'
 
 ## Context
 
-The character sheet (`src/Ui/src/components/CharacterSheet.tsx`) was one page of about 25 sections, with the admin panels at the top and the core numbers at the bottom in collapsed field cards. The owner asked for a summary area with focused pages below, as paper sheets and other digital sheets have. SPEC P-03 forbids mimicking D&D Beyond's trade dress. There is no router: `App.tsx` keeps one `screen` in state, and the sheet is keyed by character so every play action replaces the view in place. The e2e flow (`src/Ui/e2e/flow.e2e.tsx`) queries every section by role and name and asserts focus on the sheet heading, on the gap-note text box after "Report a gap", and on buttons after Archive, Snapshot and Print.
+The character sheet (`src/Ui/src/components/CharacterSheet.tsx`) was one page of about 25 sections, with the admin panels at the top and the core numbers at the bottom in collapsed field cards. The owner asked for a summary area with focused pages below, as paper sheets and other digital sheets have. SPEC P-03 forbids mimicking D&D Beyond's trade dress. There is no router: `App.tsx` keeps one `screen` in state, and the sheet is keyed by character so every play action replaces the view in place. The e2e flow (`src/Ui/e2e/*.e2e.tsx`) queries every section by role and name and asserts focus on the sheet heading, on the gap-note text box after "Report a gap", and on buttons after Archive, Snapshot and Print.
 
 ## Decision
 
