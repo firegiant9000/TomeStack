@@ -35,7 +35,7 @@ public class CharacterOriginTests
 
         using var migrated = new SqliteStore(database);
 
-        Assert.Equal(12, migrated.SchemaVersion);
+        Assert.Equal(SqliteStore.LatestSchemaVersion, migrated.SchemaVersion);
         Assert.NotNull(migrated.FindCharacter(hero.Id));
         Assert.Null(migrated.CharacterOrigin(hero.Id));
     }

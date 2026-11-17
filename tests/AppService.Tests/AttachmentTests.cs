@@ -79,7 +79,7 @@ public class AttachmentTests
         using (var app = TomeStackApp.Open(directory, new FixedTime(TempApp.Now), syncRoots: []))
         {
             Assert.Equal(SqliteStore.LatestSchemaVersion, app.GetInfo().SchemaVersion); // through v3 and on
-            Assert.True(File.Exists(SqliteStore.BackupPath(database, 2)));
+            Assert.Contains(".v2-", Assert.Single(SqliteStore.PreUpgradeCopies(database)), StringComparison.Ordinal);
 
             var first = app.GetAttachment(ids[0])!;
             var second = app.GetAttachment(ids[1])!;

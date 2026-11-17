@@ -29,7 +29,7 @@ public sealed partial class TomeStackApp : IDisposable
         DataDirectory = dataDirectory;
         _time = time;
         _warnings = warnings;
-        _store = new SqliteStore(Path.Combine(dataDirectory, DatabaseFileName));
+        _store = new SqliteStore(Path.Combine(dataDirectory, DatabaseFileName), time);
         _packages = new PackageService(_store, time, Path.Combine(dataDirectory, PackageService.BackupFolderName));
         ErrorLog = new FileErrorLog(Path.Combine(dataDirectory, "logs"), time);
     }
