@@ -2,7 +2,9 @@
 
 **Every number explains itself.** A local-first Windows character sheet for 5E-compatible play and homebrew: tap any value to see the rule, the source page and the choice behind it. It works offline, with no account.
 
-> **Status: v0.8.1**, an unsigned installer on the [Releases page](https://github.com/firegiant9000/TomeStack/releases) (Windows asks you to confirm the first run). What each release added is in the [CHANGELOG](docs/CHANGELOG.md).
+> **Status: v0.8.1**, an unsigned installer on the [Releases page](https://github.com/firegiant9000/TomeStack/releases) (Windows asks you to confirm the first run). What each release added is in the [CHANGELOG](docs/CHANGELOG.md); `main` is ahead of that release (see Unreleased there).
+>
+> **Stack:** .NET 10 (WPF shell hosting WebView2), a React 19 and TypeScript UI, SQLite through `Microsoft.Data.Sqlite`. The rules engine ([`src/RulesCore`](src/RulesCore)) is plain C# with no persistence, UI or Windows references.
 
 ![The Strength score expanded on a character sheet: a table traces the value from the chosen base score of 15, plus 2 from the Soldier background's ability score choice, to 17, citing System Reference Document 5.2.1, page 83](docs/media/calculation-trace.png)
 
@@ -24,7 +26,7 @@ Characters are built as a cancelable draft. Every option cites its source, and o
 
 Screenshots are from the browser development host (`src/DevHost`) running the same UI and application service as the desktop shell, with a throwaway data folder.
 
-Specs live in [`docs/`](docs/). [SPEC](docs/SPEC.md) is the behavioral source of truth. [MVP](docs/MVP.md) sets the release boundary, [ROADMAP](docs/ROADMAP.md) the milestones, and [LIVING_SPECS](docs/LIVING_SPECS.md) covers the change process and open decisions. Decisions are in [`docs/decisions/`](docs/decisions/).
+Specs live in [`docs/`](docs/). [SPEC](docs/SPEC.md) is the behavioral source of truth. [MVP](docs/MVP.md) sets the release boundary, [ROADMAP](docs/ROADMAP.md) the milestones, and [LIVING_SPECS](docs/LIVING_SPECS.md) covers the change process and open decisions. Decisions are in [`docs/decisions/`](docs/decisions/), and the layers and message bridge are described in [ARCHITECTURE](docs/ARCHITECTURE.md).
 
 ## Layout
 
@@ -32,6 +34,7 @@ Specs live in [`docs/`](docs/). [SPEC](docs/SPEC.md) is the behavioral source of
 src/RulesCore/      Pure rules: rules-family policies, content/character/provenance types, calculator + trace
 src/AppService/     Application service: SQLite store, package export/import, CommandDispatcher (JSON protocol)
 src/ImportWorker/   Import contracts; candidates can only become inactive drafts
+src/ImportWorker.Host/  Separate worker process for PDF text and OCR; one request on stdin, JSON lines on stdout
 src/DesktopShell/   WPF + WebView2 shell (TomeStack.exe); in-process service over the message bridge
 src/DevHost/        Development-only loopback host for running the UI in a browser; also the restore-drill counter (--drill-report)
 src/Ui/             React + TypeScript (Vite)
@@ -64,6 +67,8 @@ npm run test:e2e --prefix src/Ui       # UI flow against the real DevHost (needs
 ```
 
 CI runs these steps as parallel jobs on `windows-latest` (`ui-build`, `ui-test`, `dotnet`, `gui`); the required `build-test` check is an aggregate job on `ubuntu-latest` that passes only if all four succeed ([.github/workflows/ci.yml](.github/workflows/ci.yml)).
+
+On `main` at `d9e5c49` (2026-11-16) that run passed 6,196 xUnit tests across four test projects (11 more skipped), 1,968 Vitest UI tests and 79 UI flow tests against the DevHost.
 
 Performance: the measured baseline (a level-20 multiclass sheet, a 500-revision pack import, every SRD formula, update reviews across 100 characters) and how to run the benchmarks are in [docs/performance.md](docs/performance.md).
 
