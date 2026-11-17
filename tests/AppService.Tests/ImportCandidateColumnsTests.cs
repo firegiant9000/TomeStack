@@ -69,12 +69,12 @@ public class ImportCandidateColumnsTests
     [Fact]
     public void The_migration_is_the_next_version_and_adds_the_columns_and_the_index()
     {
-        Assert.Equal(12, SqliteStore.LatestSchemaVersion);
+        Assert.True(SqliteStore.LatestSchemaVersion >= 12);
         var database = PreMigrationDatabase();
         Assert.DoesNotContain(Rows(database, "SELECT name FROM pragma_table_info('import_candidates')"), r => (string?)r[0] is "kind" or "page");
 
         using (var migrated = new SqliteStore(database))
-            Assert.Equal(12, migrated.SchemaVersion);
+            Assert.Equal(SqliteStore.LatestSchemaVersion, migrated.SchemaVersion);
 
         var columns = Rows(database, "SELECT name FROM pragma_table_info('import_candidates')").Select(r => (string)r[0]!).ToList();
         Assert.Contains("kind", columns);
@@ -144,7 +144,7 @@ public class ImportCandidateColumnsTests
         }
 
         using (var migrated = new SqliteStore(database))
-            Assert.Equal(12, migrated.SchemaVersion);
+            Assert.Equal(SqliteStore.LatestSchemaVersion, migrated.SchemaVersion);
 
         var rows = Rows(database, "SELECT id, kind, page, name FROM import_candidates ORDER BY id");
         Assert.Equal(7, rows.Count);

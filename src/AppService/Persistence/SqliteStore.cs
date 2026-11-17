@@ -165,7 +165,21 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
         """, store => store.BackfillImportCandidateColumns()),
         // v12 (Wave 3, D95): characters.origin marks the bundled sample character ('sample'); null for every other character.
         new("ALTER TABLE characters ADD COLUMN origin TEXT NULL;"),
+        // v13 (D104): content revisions are insert-only in the database itself, the same triggers as character_snapshots (v7).
+        // Every row is covered, drafts included. There is no runtime exception: the ADR-003 rewrite (v2) always runs before
+        // v13 exists, and nothing else updates or deletes a revision. A future migration that must rewrite revisions drops
+        // both triggers, rewrites, and re-creates them with ContentRevisionsInsertOnlySql, all in its own migration.
+        // Forward-only, with the usual single copy first.
+        new(ContentRevisionsInsertOnlySql),
     ];
+
+    /// <summary>The v13 triggers: any UPDATE or DELETE of a content revision aborts (D104). Re-used by a future rewrite migration and by tests.</summary>
+    internal const string ContentRevisionsInsertOnlySql = """
+        CREATE TRIGGER content_revisions_insert_only_update BEFORE UPDATE ON content_revisions
+        BEGIN SELECT RAISE(ABORT, 'content revisions are insert-only'); END;
+        CREATE TRIGGER content_revisions_insert_only_delete BEFORE DELETE ON content_revisions
+        BEGIN SELECT RAISE(ABORT, 'content revisions are insert-only'); END;
+        """;
 
     private readonly SqliteConnection _connection;
     private readonly Lock _gate = new();
@@ -1050,7 +1064,7 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
 
     /// <summary>
     /// The one sanctioned rewrite of published revisions: a lossless change of representation, not of content
-    /// (ADR-003 "Migration"). Runs inside the migration's transaction.
+    /// (ADR-003 "Migration"). Runs inside the migration's transaction, at v2, before the v13 insert-only triggers exist.
     /// </summary>
     private void RewriteUpgradedRevisions()
     {

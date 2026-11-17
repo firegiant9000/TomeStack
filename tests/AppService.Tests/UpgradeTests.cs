@@ -131,11 +131,18 @@ public class UpgradeTests
             connection.Open();
             using var command = connection.CreateCommand();
             // Another revision's data under the bundled id, as the older build would have stored it.
+            // The v13 trigger refuses this, so drop it for the plant and put it back with the shipped SQL.
+            command.CommandText = "DROP TRIGGER content_revisions_insert_only_update;";
+            command.ExecuteNonQuery();
+            // (the update trigger is gone; the matching re-create below drops the delete trigger first so the constant applies whole)
             command.CommandText = "UPDATE content_revisions SET json = replace(json, $name, $planted), sha256 = 'planted' WHERE revision_id = $id;";
             command.Parameters.AddWithValue("$name", $"\"name\":\"{padded.Name}\"");
             command.Parameters.AddWithValue("$planted", "\"name\":\"Test Planted Name\"");
             command.Parameters.AddWithValue("$id", padded.RevisionId.ToString("D"));
             Assert.Equal(1, command.ExecuteNonQuery());
+            command.Parameters.Clear();
+            command.CommandText = "DROP TRIGGER content_revisions_insert_only_delete;" + SqliteStore.ContentRevisionsInsertOnlySql;
+            command.ExecuteNonQuery();
         }
 
         using var app = TomeStackApp.Open(directory, new FixedTime(TempApp.Now), syncRoots: []);
