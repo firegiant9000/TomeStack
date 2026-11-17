@@ -723,10 +723,12 @@ public static partial class CharacterCalculator
         var armor = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         var unseen = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         CollectProficiencies(resolved.Active, character, diagnostics, [], content => GateLevel(content, character, resolved.ClassLevels), weapons, armor, unseen);
+        // Unseen armor training (assisted, reference or conditional) turns the sheet's armor check off, so every armor category counts as trained here too.
+        var anyUnseenArmor = unseen.Count > 0;
         return [.. ContentValidator.GuideCategories.Where(category =>
             category.StartsWith(WeaponProficiencyPrefix, StringComparison.Ordinal)
                 ? weapons.ContainsKey(category[WeaponProficiencyPrefix.Length..])
-                : armor.ContainsKey(category[ArmorTrainingPrefix.Length..]))];
+                : anyUnseenArmor || armor.ContainsKey(category[ArmorTrainingPrefix.Length..]))];
     }
 
     /// <param name="unseenArmor">

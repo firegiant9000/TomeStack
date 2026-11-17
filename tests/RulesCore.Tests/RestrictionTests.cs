@@ -58,6 +58,28 @@ public class RestrictionTests
         Assert.DoesNotContain("armor.heavy", trained);
     }
 
+    /// <summary>An armor grant the calculator cannot apply turns the sheet's armor check off, so every armor category counts as trained; weapons are unchanged.</summary>
+    [Fact]
+    public void Trained_categories_treat_every_armor_category_as_trained_when_an_armor_grant_is_unseen()
+    {
+        var assisted = MechanicsInventoryTests.Holder("Test Trained Assisted", 10,
+            new GrantEffect { Id = "g", Grant = GrantKind.Proficiency, Target = "armor.shield", Automation = AutomationStatus.Assisted });
+        var source = new SourceRecord
+        {
+            Id = assisted.Provenance.SourceId, Title = "Test Homebrew", Publisher = "Personal homebrew", RulesFamilies = [RulesFamilies.Srd521],
+            EditionVersion = "homebrew", License = "Personal homebrew", Redistributable = false,
+        };
+        var pack = Fixtures.Pack();
+        var catalog = new InMemoryContentCatalog([.. pack.Sources, source], [.. pack.Revisions, assisted]);
+        var character = Fixtures.Srd521Character();
+        var before = CharacterCalculator.TrainedCategories(character, catalog);
+
+        var trained = CharacterCalculator.TrainedCategories(character with { Pins = [.. character.Pins, assisted.Reference] }, catalog);
+
+        Assert.All(ContentValidator.GuideCategories.Where(c => c.StartsWith("armor.", StringComparison.Ordinal)), c => Assert.Contains(c, trained));
+        Assert.Equal(before.Where(c => c.StartsWith("weapon.", StringComparison.Ordinal)), trained.Where(c => c.StartsWith("weapon.", StringComparison.Ordinal)));
+    }
+
     [Fact]
     public void Content_whose_prerequisite_is_not_met_is_not_applied_and_the_diagnostic_names_it()
     {
