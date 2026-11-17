@@ -72,6 +72,7 @@ NUMBER  := [0-9]+
 - **Database migration v2** rewrites each upgraded row's `json` and `sha256` in the new representation and keeps the original bytes in `legacy_json`. This is the one sanctioned rewrite of published revisions: a lossless change of representation, not of content. Without it, every M0 data folder would fail to open, because re-seeding the fixtures would hit the insert-only hash check (`UpgradeTests.Schema_v1_data_folder_with_v1_revision_json_migrates_to_typed_effects` first failed with `ImmutableRevisionException`). The pre-upgrade backup (`tomestack.db.v1.bak`) is taken first.
 - **Packages:** `formatVersion` 2. v1 packages still import and are upcast. Builds that only know v1 refuse v2 with `package.unsupported-format` instead of misreading typed effects.
 - Calculation is proven identical before and after (`EffectModelTests.Calculation_is_identical_before_and_after_the_v1_to_v2_migration`).
+- **2026-11-17 note:** the v2 rewrite is the single exception to insert-only revisions. It predates database migration v13, whose triggers refuse every update and delete of `content_revisions`; a future rewrite must drop and re-create those triggers in its own migration. See LIVING_SPECS D104.
 
 ## Content schema v3 (M1, 2026-09-26)
 
