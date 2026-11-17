@@ -28,6 +28,7 @@ vi.mock('./api/client', () => ({
     listGapNotes: vi.fn(),
     availableUpdates: vi.fn(),
     listContent: vi.fn(),
+    levelUpOptions: vi.fn(async () => []),
     listGuides: vi.fn(),
     kit: vi.fn(),
     draftCounts: vi.fn(),

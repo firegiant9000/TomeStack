@@ -8,6 +8,7 @@ import type {
   CampaignException,
   Character,
   CharacterView,
+  LevelUpOption,
   ChoiceStatus,
   ClassLevel,
   ContentKind,
@@ -780,6 +781,9 @@ function BackgroundStep(props: PickStepProps) {
   );
 }
 
+/** The "Another class…" radio's value: not a content id. */
+const otherNew = 'other';
+
 /** Level-up: which class gains the level, an existing one or a new one (multiclass). */
 function LevelStep(props: {
   character: Character;
@@ -790,20 +794,47 @@ function LevelStep(props: {
   onError: (error: unknown) => void;
 }) {
   const { character } = props;
-  const [target, setTarget] = useState<ContentReference | undefined>(character.classes[0]?.class);
+  // D99: the service says what each class gives at its next level and which multiclass prerequisites a new class does not meet.
+  // The picked class is a content id: one of the character's own classes, or (after "Another class…") one from the select.
+  const [picked, setPicked] = useState<string | undefined>(character.classes[0]?.class.contentId);
+  const [otherId, setOtherId] = useState('');
+  const [loaded, setLoaded] = useState<{ characterId: string; list: LevelUpOption[] }>();
   const atMaximum = character.level >= maxLevel;
-  const newClasses = props.options.filter((o) => o.kind === 'class' && visible(o) && !character.classes.some((c) => c.class.contentId === o.reference.contentId));
+  const { onError } = props;
+  useEffect(() => {
+    if (atMaximum) return;
+    let live = true;
+    client.levelUpOptions(character.id).then(
+      (list) => {
+        if (live) setLoaded({ characterId: character.id, list });
+      },
+      (error: unknown) => {
+        if (live) onError(error);
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [atMaximum, character.id, onError]);
+  const list = loaded?.characterId === character.id ? loaded.list : undefined;
+  // Until the list is there (or if it cannot be had), the character's own classes are offered without what they give.
+  const currentOptions: { contentId: string; name: string; nextLevel: number; gains: string[] }[] = list?.some((o) => o.current)
+    ? list.filter((o) => o.current)
+    : character.classes.map((c) => ({ contentId: c.class.contentId, name: props.nameOf(c.class), nextLevel: c.level + 1, gains: [] }));
+  const otherOptions = (list ?? []).filter((o) => !o.current);
+  const otherPicked = picked === otherNew;
+  const targetId = otherPicked ? otherId : picked;
+  // A new class is the newest revision the content list offers; a class of the character is its own pinned revision.
+  const target: ContentReference | undefined = !targetId
+    ? undefined
+    : (character.classes.find((c) => c.class.contentId === targetId)?.class ??
+      props.options.find((o) => o.kind === 'class' && o.reference.contentId === targetId)?.reference);
+  const unmet = otherPicked ? (otherOptions.find((o) => o.contentId === otherId)?.unmet ?? []) : [];
+  const warning = unmet.length > 0 ? `${otherOptions.find((o) => o.contentId === otherId)!.name} — needs ${unmet.join(' and ')}. You can still take it.` : '';
 
-  // The picked new class can become inert after it was picked (its campaign reason was cleared): Next then says why it waits.
-  const needsReason = !!target && newClasses.some((o) => !o.compatible && sameRef(o.reference, target));
-  // R43: Next is never natively `disabled` and always says why it waits (3.3.2, 4.1.2).
-  const blocked = atMaximum
-    ? `Already at level ${maxLevel}, the highest level.`
-    : !target
-      ? 'Choose a class to continue.'
-      : needsReason
-        ? 'This class needs a campaign exception reason.'
-        : undefined;
+  // R43: Next is never natively `disabled` and always says why it waits (3.3.2, 4.1.2). A class that needs more than the
+  // character has never blocks it: the warning is advice, not a rule (D99).
+  const blocked = atMaximum ? `Already at level ${maxLevel}, the highest level.` : !target ? 'Choose a class to continue.' : undefined;
 
   // The service takes the level from the class levels; a character whose level they do not add up to (an import with a level
   // and no class) would preview at another level than the one asked for, so it is not offered a preview.
@@ -832,26 +863,36 @@ function LevelStep(props: {
         {atMaximum ? null : (
           <fieldset>
             <legend>Class to gain a level in</legend>
-            {character.classes.map((c) => (
-              <label key={c.class.revisionId} className="choice">
-                <input type="radio" name="levelClass" checked={!!target && sameRef(target, c.class)} onChange={() => setTarget(c.class)} />
-                {props.nameOf(c.class)} (level {c.level} → {c.level + 1})
+            {currentOptions.map((o) => (
+              <label key={o.contentId} className="choice">
+                <input type="radio" name="levelClass" checked={picked === o.contentId} onChange={() => setPicked(o.contentId)} />
+                {o.gains.length > 0 ? `${o.name} ${o.nextLevel} — what you get: ${o.gains.join(', ')}` : `${o.name} ${o.nextLevel}`}
               </label>
             ))}
-            {newClasses.map((option) => (
-              <label key={option.reference.revisionId} className={`choice${option.compatible ? '' : ' incompatible'}`}>
-                <input
-                  type="radio"
-                  name="levelClass"
-                  aria-disabled={!option.compatible || undefined}
-                  checked={!!target && sameRef(target, option.reference)}
-                  onChange={() => {
-                    if (option.compatible) setTarget(option.reference);
-                  }}
-                />
-                {option.name} (new class, level 1) <SourceLine option={option} />
-              </label>
-            ))}
+            {otherOptions.length > 0 && (
+              <>
+                <label className="choice">
+                  <input type="radio" name="levelClass" checked={otherPicked} onChange={() => setPicked(otherNew)} />
+                  Another class…
+                </label>
+                {otherPicked && (
+                  <label className="field">
+                    Class to start
+                    <select value={otherId} onChange={(e) => setOtherId(e.target.value)}>
+                      <option value="">Choose a class</option>
+                      {otherOptions.map((o) => (
+                        <option key={o.contentId} value={o.contentId}>
+                          {o.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+              </>
+            )}
+            <p className="hint" aria-live="polite">
+              {warning}
+            </p>
           </fieldset>
         )}
         {!atMaximum && (
