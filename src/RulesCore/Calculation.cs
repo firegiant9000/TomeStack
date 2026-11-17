@@ -604,8 +604,13 @@ public static partial class CharacterCalculator
         return itemUses.Count > 0 ? sheet with { ItemUses = itemUses } : sheet;
     }
 
+    /// <summary>
+    /// The first pass and the content whose prerequisites it does not meet (with the diagnostics). The one place that decides what is
+    /// left out, shared by the sheet and <see cref="TrainedCategories"/> so both see the same active content.
+    /// </summary>
     /// <param name="autoOn">Whether the toggles that switch themselves (<c>autoWhen</c>) are on for this pass.</param>
-    private static CharacterSheet CalculateSheet(Character character, IContentCatalog catalog, bool autoOn)
+    private static (Calculation First, List<(ContentReference Content, Diagnostic Diagnostic)> Unmet) FindUnmetPrerequisites(
+        Character character, IContentCatalog catalog, bool autoOn)
     {
         var first = Calculate(character, catalog, excluded: new HashSet<ContentReference>(), autoOn);
         var unmet = new List<(ContentReference Content, Diagnostic Diagnostic)>();
@@ -615,6 +620,13 @@ public static partial class CharacterCalculator
             foreach (var failed in Unmet(restricted.Revision, restricted.Revision.Effects.OfType<RestrictionEffect>().Where(IsPrerequisite), without.Sheet, "without it", "Its effects are not applied."))
                 unmet.Add((restricted.Revision.Reference, failed));
         }
+        return (first, unmet);
+    }
+
+    /// <param name="autoOn">Whether the toggles that switch themselves (<c>autoWhen</c>) are on for this pass.</param>
+    private static CharacterSheet CalculateSheet(Character character, IContentCatalog catalog, bool autoOn)
+    {
+        var (first, unmet) = FindUnmetPrerequisites(character, catalog, autoOn);
         var final = unmet.Count == 0 ? first : Calculate(character, catalog, excluded: unmet.Select(u => u.Content).ToHashSet(), autoOn);
 
         // D04: multiclass prerequisites are checked once the character has two or more classes, against the sheet as it is

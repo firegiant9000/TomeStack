@@ -706,6 +706,31 @@ public static partial class CharacterCalculator
     private static Diagnostic V8FieldIgnored(ContentRevision revision, Effect effect, string field) =>
         new("effect.schema-field-ignored", $"'{revision.Name}' has an effect that uses {FieldLabel(field)}, which needs file version 8, but this entry is file version {revision.SchemaVersion}; it is ignored.", revision.Reference, effect.Id);
 
+    /// <summary>
+    /// The creation-guide proficiency categories (<c>weapon.simple</c>, <c>armor.heavy</c> and so on, in the order of the guide categories) the
+    /// character is trained in, from the same active content and automatic always-on grants the weapon and armor calculations use.
+    /// Read-only: nothing is calculated or stored.
+    /// </summary>
+    public static IReadOnlyList<string> TrainedCategories(Character character, IContentCatalog catalog)
+    {
+        ArgumentNullException.ThrowIfNull(character);
+        ArgumentNullException.ThrowIfNull(catalog);
+        var diagnostics = new List<Diagnostic>();
+        // The sheet's own view: content whose prerequisite is unmet is left out, so it grants no training here either.
+        var (_, unmet) = FindUnmetPrerequisites(character, catalog, autoOn: false);
+        var resolved = ResolveActiveContent(character, catalog, RulesFamilies.Get(character.RulesFamily), diagnostics, unmet.Select(u => u.Content).ToHashSet());
+        var weapons = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
+        var armor = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
+        var unseen = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
+        CollectProficiencies(resolved.Active, character, diagnostics, [], content => GateLevel(content, character, resolved.ClassLevels), weapons, armor, unseen);
+        // Unseen armor training (assisted, reference or conditional) turns the sheet's armor check off, so every armor category counts as trained here too.
+        var anyUnseenArmor = unseen.Count > 0;
+        return [.. ContentValidator.GuideCategories.Where(category =>
+            category.StartsWith(WeaponProficiencyPrefix, StringComparison.Ordinal)
+                ? weapons.ContainsKey(category[WeaponProficiencyPrefix.Length..])
+                : anyUnseenArmor || armor.ContainsKey(category[ArmorTrainingPrefix.Length..]))];
+    }
+
     /// <param name="unseenArmor">
     /// Armor training grants that apply to the character but that the calculator cannot apply (assisted, reference or
     /// conditional), on any content. Their training is unknown, so they turn the armor training check off.

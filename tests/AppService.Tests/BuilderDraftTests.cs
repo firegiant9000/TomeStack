@@ -128,4 +128,107 @@ public class BuilderDraftTests
 
         Assert.Equal(before, TempApp.Json(temp.App.GetCharacter(created.Character.Id).Character));
     }
+
+    private static CreateCharacterRequest Create(Character draft, IReadOnlyList<EquipmentEntry>? equipment = null, Currency? coins = null) =>
+        new(draft.Name, draft.RulesFamily, draft.BaseAbilities, draft.Pins, draft.Classes, Equipment: equipment, Coins: coins);
+
+    private static IReadOnlyList<ContentOption> Items(TempApp temp, string family) =>
+        [.. temp.App.ListContent(family).Where(o => o.Kind == ContentKind.Item && o.RulesFamilies.Contains(family))];
+
+    [Fact]
+    public void Create_carries_the_kit_gear_and_coins_into_the_saved_character()
+    {
+        using var temp = new TempApp();
+        var items = Items(temp, RulesFamilies.Srd521);
+        var entries = new[] { new EquipmentEntry(items[0].Reference, Quantity: 2), new EquipmentEntry(items[1].Reference) };
+
+        var view = temp.App.CreateCharacter(Create(Draft(), entries, new Currency { Gp = 15 }));
+
+        var saved = temp.App.GetCharacter(view.Character.Id).Character;
+        Assert.Equal(2, saved.Equipment.Count);
+        Assert.Equal(2, saved.Equipment[0].Quantity);
+        Assert.Equal(items[1].Reference, saved.Equipment[1].Item);
+        Assert.Equal(15, saved.Currency.Gp);
+    }
+
+    [Fact]
+    public void Create_refuses_an_item_from_the_other_rules_family()
+    {
+        using var temp = new TempApp();
+        var only51 = Items(temp, RulesFamilies.Srd51).First(o => !o.RulesFamilies.Contains(RulesFamilies.Srd521));
+
+        var ex = Assert.Throws<AppValidationException>(() => temp.App.CreateCharacter(Create(Draft(), [new EquipmentEntry(only51.Reference)])));
+
+        Assert.Contains(ex.Problems, p => p.Code == "character.equipment-unknown");
+        Assert.Empty(temp.App.ListCharacters());
+    }
+
+    [Fact]
+    public void Create_refuses_a_reference_that_is_no_published_item()
+    {
+        using var temp = new TempApp();
+
+        var ex = Assert.Throws<AppValidationException>(() => temp.App.CreateCharacter(Create(Draft(), [new EquipmentEntry(Srd(999))])));
+        Assert.Contains(ex.Problems, p => p.Code == "character.equipment-unknown");
+
+        var notItem = Assert.Throws<AppValidationException>(() => temp.App.CreateCharacter(Create(Draft(), [new EquipmentEntry(Barbarian)])));
+        Assert.Contains(notItem.Problems, p => p.Code == "character.equipment-unknown");
+    }
+
+    [Fact]
+    public void Create_reports_a_null_entry_or_null_item_as_unknown_not_a_crash()
+    {
+        using var temp = new TempApp();
+
+        var nullEntry = Assert.Throws<AppValidationException>(() => temp.App.CreateCharacter(Create(Draft(), [null!])));
+        Assert.Contains(nullEntry.Problems, p => p.Code == "character.equipment-unknown");
+
+        var nullItem = Assert.Throws<AppValidationException>(() => temp.App.CreateCharacter(Create(Draft(), [new EquipmentEntry(null!)])));
+        Assert.Contains(nullItem.Problems, p => p.Code == "character.equipment-unknown");
+    }
+
+    [Fact]
+    public void Create_refuses_a_mod_that_is_not_a_published_mod_in_the_family()
+    {
+        using var temp = new TempApp();
+        var items = Items(temp, RulesFamilies.Srd521);
+        var only51 = Items(temp, RulesFamilies.Srd51).First(o => !o.RulesFamilies.Contains(RulesFamilies.Srd521));
+
+        // Another family's revision as a mod: refused by Create's own family check.
+        var otherFamily = Assert.Throws<AppValidationException>(() => temp.App.CreateCharacter(Create(Draft(), [new EquipmentEntry(items[0].Reference, Mods: [only51.Reference])])));
+        Assert.Contains(otherFamily.Problems, p => p.Code == "character.equipment-unknown");
+
+        // A plain item as a mod: the save path (checkMods) already refuses it.
+        var plain = Assert.Throws<AppValidationException>(() => temp.App.CreateCharacter(Create(Draft(), [new EquipmentEntry(items[0].Reference, Mods: [items[1].Reference])])));
+        Assert.Contains(plain.Problems, p => p.Code == "character.equipment-mod-invalid");
+
+        // A reference to nothing.
+        var missing = Assert.Throws<AppValidationException>(() => temp.App.CreateCharacter(Create(Draft(), [new EquipmentEntry(items[0].Reference, Mods: [Srd(999)])])));
+        Assert.Contains(missing.Problems, p => p.Code == "character.equipment-unknown");
+        Assert.Empty(temp.App.ListCharacters());
+    }
+
+    [Fact]
+    public void Create_without_gear_behaves_as_before()
+    {
+        using var temp = new TempApp();
+
+        var view = temp.App.CreateCharacter(Create(Draft()));
+
+        Assert.Empty(view.Character.Equipment);
+        Assert.Equal(new Currency(), view.Character.Currency);
+    }
+
+    [Fact]
+    public void Create_keeps_the_quantity_and_coin_limits()
+    {
+        using var temp = new TempApp();
+        var item = Items(temp, RulesFamilies.Srd521)[0];
+
+        var quantity = Assert.Throws<AppValidationException>(() => temp.App.CreateCharacter(Create(Draft(), [new EquipmentEntry(item.Reference, Quantity: 0)])));
+        Assert.Contains(quantity.Problems, p => p.Code == "character.equipment-quantity");
+
+        var coins = Assert.Throws<AppValidationException>(() => temp.App.CreateCharacter(Create(Draft(), null, new Currency { Gp = -1 })));
+        Assert.Contains(coins.Problems, p => p.Code == "character.currency-out-of-range");
+    }
 }

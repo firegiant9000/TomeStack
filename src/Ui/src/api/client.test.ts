@@ -10,6 +10,29 @@ function recorder() {
   return { client, calls };
 }
 
+describe('client: creation guides and kit (Wave 3 G8)', () => {
+  it('listGuides dispatches content.guides with the family and campaign', async () => {
+    const { client, calls } = recorder();
+    await client.listGuides('srd-5.1', 'c1');
+    await client.listGuides('srd-5.2.1');
+    expect(calls).toStrictEqual([
+      { command: 'content.guides', payload: { rulesFamily: 'srd-5.1', campaignId: 'c1' } },
+      { command: 'content.guides', payload: { rulesFamily: 'srd-5.2.1', campaignId: undefined } },
+    ]);
+  });
+
+  it('kit dispatches character.kit with the draft and the kits taken', async () => {
+    const { client, calls } = recorder();
+    const draft = { rulesFamily: 'srd-5.1' } as unknown as Parameters<typeof client.kit>[0];
+    const kits = [
+      { guideContentId: 'g1', choices: [{ pickId: 'p1', optionId: 'o1', anyOf: { 0: 'w1' } }] },
+      { guideContentId: 'g2', choices: [] },
+    ];
+    await client.kit(draft, kits);
+    expect(calls).toStrictEqual([{ command: 'character.kit', payload: { draft, kits } }]);
+  });
+});
+
 describe('client: down-conversion target and changesHash', () => {
   it('packageTargets dispatches package.targets with an empty payload', async () => {
     const { client, calls } = recorder();

@@ -100,6 +100,9 @@ import type {
   SaveOutcome,
   SourceChoice,
   ValidationReport,
+  GuideKit,
+  GuideView,
+  KitView,
 } from './types';
 
 /** The optional down-conversion payload keys: each is present only when its argument is given. */
@@ -123,6 +126,8 @@ export function createClient(transport: Transport) {
     info: () => call<AppInfo>('app.info'),
     /** With a campaign, every option says whether the campaign allows its source (SPEC P-01). */
     listContent: (rulesFamily: RulesFamilyId, campaignId?: string) => call<ContentOption[]>('content.list', { rulesFamily, campaignId }),
+    /** Wave 3 G8: the newest published creation guide of each class or background in the family; `campaignId` marks the items the campaign does not allow. */
+    listGuides: (rulesFamily: RulesFamilyId, campaignId?: string) => call<GuideView[]>('content.guides', { rulesFamily, campaignId }),
     /** Item 1: entries of each kind in the family with no published revision (counts only). */
     draftCounts: (rulesFamily: RulesFamilyId) => call<Partial<Record<ContentKind, number>>>('content.draftCounts', { rulesFamily }),
     listCampaigns: () => call<Campaign[]>('campaign.list'),
@@ -267,6 +272,8 @@ export function createClient(transport: Transport) {
       call<CharacterView>('character.choose', { characterId, source, choiceId, selected }),
     /** The sheet of an unsaved builder draft, checked like a save; writes nothing (SPEC C-07). */
     preview: (draft: Character) => call<CharacterView>('character.preview', draft),
+    /** Wave 3 G8: the gear step's kit (guides' starting equipment and coins) on an unsaved draft; the preview is the draft with it. Nothing is stored. */
+    kit: (draft: Character, kits: GuideKit[]) => call<KitView>('character.kit', { draft, kits }),
     /** A choice answered on an unsaved draft, checked like `choose`; the result is the next draft. Writes nothing. */
     previewChoice: (draft: Character, source: ContentReference, choiceId: string, selected: ContentReference[]) =>
       call<CharacterView>('character.previewChoice', { draft, source, choiceId, selected }),
