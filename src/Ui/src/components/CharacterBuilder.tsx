@@ -802,6 +802,7 @@ function LevelStep(props: {
   const [picked, setPicked] = useState<string | undefined>(character.classes[0]?.class.contentId);
   const [otherId, setOtherId] = useState('');
   const [loaded, setLoaded] = useState<{ characterId: string; list: LevelUpOption[] }>();
+  const [failedFor, setFailedFor] = useState<string>();
   const atMaximum = character.level >= maxLevel;
   const { onError } = props;
   useEffect(() => {
@@ -812,7 +813,9 @@ function LevelStep(props: {
         if (live) setLoaded({ characterId: character.id, list });
       },
       (error: unknown) => {
-        if (live) onError(error);
+        if (!live) return;
+        setFailedFor(character.id);
+        onError(error);
       },
     );
     return () => {
@@ -820,6 +823,14 @@ function LevelStep(props: {
     };
   }, [atMaximum, character.id, onError]);
   const list = loaded?.characterId === character.id ? loaded.list : undefined;
+  // If the service's list cannot be had, new classes come from the content list as before D99 (compatible, newest revision, none the
+  // character has), with nothing said about what they need; the error is still reported.
+  const fallbackNew: LevelUpOption[] =
+    failedFor === character.id && !list
+      ? props.options
+          .filter((o) => o.kind === 'class' && visible(o) && !o.superseded && !character.classes.some((c) => c.class.contentId === o.reference.contentId))
+          .map((o) => ({ contentId: o.reference.contentId, name: o.name, current: false, nextLevel: 1, gains: [], unmet: [], outsideCampaign: o.outsideCampaign === true }))
+      : [];
   // Until the list is there (or if it cannot be had), the character's own classes are offered without what they give.
   const currentOptions: { contentId: string; name: string; nextLevel: number; gains: string[] }[] = list?.some((o) => o.current)
     ? list.filter((o) => o.current)
@@ -830,7 +841,7 @@ function LevelStep(props: {
   const otherPicked = picked === otherNew;
   // R38 d: a class the campaign leaves out is listed only while the campaign exception is on (and while it is the pick, so the
   // select never shows a value it lacks); only a class the content list resolves is listed, so a visible choice always yields a target.
-  const resolvable = (list ?? []).filter((o) => !o.current && resolve(o.contentId));
+  const resolvable = (list ?? fallbackNew).filter((o) => !o.current && resolve(o.contentId));
   // A pick the reloaded list no longer holds counts as no pick, so Next never proceeds with a class the select does not show.
   const otherChosen = resolvable.some((o) => o.contentId === otherId) ? otherId : '';
   const targetId = otherPicked ? otherChosen : picked;
