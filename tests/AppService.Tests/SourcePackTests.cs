@@ -1251,7 +1251,7 @@ public class SourcePackTests
                 Assert.Null(app.Store.FindSource(srd)!.ImportDerived);
                 Assert.Null(app.Store.FindSource(clean)!.Origin); // not known for a source stored before v8
             }
-            Assert.True(File.Exists(SqliteStore.BackupPath(database, 7)));
+            Assert.Contains(".v7-", Assert.Single(SqliteStore.PreUpgradeCopies(database)), StringComparison.Ordinal);
         }
         finally
         {

@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
 using TomeStack.RulesCore;
 
@@ -13,7 +14,7 @@ public sealed class SampleHasSnapshotsException() : InvalidOperationException("T
 /// Local SQLite store. Entities are stored as versioned JSON documents with indexed key columns.
 /// Published content revisions are insert-only: re-adding identical JSON is a no-op, different JSON is rejected.
 /// </summary>
-public sealed class SqliteStore : IContentCatalog, IDisposable
+public sealed partial class SqliteStore : IContentCatalog, IDisposable
 {
     /// <summary>A numbered, forward-only migration: SQL, plus an optional data step in the same transaction.</summary>
     internal sealed record Migration(string Sql, Action<SqliteStore>? Code = null);
@@ -132,7 +133,7 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
         // import already: a PDF attached now or before migration v3 (legacy_pdf_ref), or an import job (jobs and their
         // pages survive removing the PDF). Older builds refuse a v8 database, so none can rewrite a source without the
         // flag. Forward-only, with the usual copy first (BackupBeforeUpgrade: one copy, at the version the database was
-        // opened with, so a v6 database upgraded here leaves tomestack.db.v6.bak and no v7 copy).
+        // opened with, so a v6 database upgraded here leaves tomestack.db.v6-<UTC stamp>.bak and no v7 copy).
         new("ALTER TABLE sources ADD COLUMN import_derived INTEGER NOT NULL DEFAULT 0;", store => store.BackfillImportDerived()),
         // v9 (M6 slice 3, ADR-011): installed extensions. The row holds the manifest, the SHA-256 of the file the grants are
         // bound to, the grants and whether it is enabled; the file itself is <data dir>/extensions/<sha256>.zip, read-only.
@@ -192,17 +193,17 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
     /// <summary>Published guides by the content they guide; null until read or after a change (see <see cref="GuidesFor"/>).</summary>
     private Dictionary<Guid, IReadOnlyList<ContentRevision>>? _guides;
 
-    public SqliteStore(string databasePath)
-        : this(databasePath, Migrations)
+    public SqliteStore(string databasePath, TimeProvider? time = null)
+        : this(databasePath, Migrations, time)
     {
     }
 
     /// <summary>Test seam: run a different migration list (for example, a simulated future schema).</summary>
-    internal SqliteStore(string databasePath, IReadOnlyList<Migration> migrations)
+    internal SqliteStore(string databasePath, IReadOnlyList<Migration> migrations, TimeProvider? time = null)
     {
         DatabasePath = databasePath;
         _migrations = migrations;
-        BackupBeforeUpgrade(databasePath, migrations.Count);
+        BackupBeforeUpgrade(databasePath, migrations.Count, time ?? TimeProvider.System);
         _connection = new SqliteConnection(new SqliteConnectionStringBuilder
         {
             DataSource = databasePath,
@@ -1018,15 +1019,48 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
 
     private static string Key(Guid id) => id.ToString("D");
 
-    /// <summary>File name of the copy taken before migrating a database from schema <paramref name="version"/>.</summary>
-    public static string BackupPath(string databasePath, int version) => $"{databasePath}.v{version}.bak";
+    /// <summary>How many pre-upgrade copies are kept (the newest, across all versions).</summary>
+    public const int PreUpgradeCopiesKept = 3;
+
+    /// <summary>File name of the copy taken at <paramref name="takenAt"/> before migrating a database from schema <paramref name="version"/>.</summary>
+    public static string BackupPath(string databasePath, int version, DateTimeOffset takenAt) =>
+        $"{databasePath}.v{version}-{takenAt.UtcDateTime.ToString("yyyyMMdd'T'HHmmss'Z'", System.Globalization.CultureInfo.InvariantCulture)}.bak";
+
+    /// <summary>
+    /// Every pre-upgrade copy beside <paramref name="databasePath"/>, newest first: timestamped copies by stamp, then the
+    /// old-named <c>.v&lt;N&gt;.bak</c> copies by N (all older than any timestamped one). App-version copies
+    /// (<see cref="AppVersionStamp.CopyPath"/>) and unrecognised names are not listed.
+    /// </summary>
+    public static IReadOnlyList<string> PreUpgradeCopies(string databasePath)
+    {
+        var directory = Path.GetDirectoryName(Path.GetFullPath(databasePath))!;
+        if (!Directory.Exists(directory))
+            return [];
+        var prefix = Path.GetFileName(databasePath) + ".";
+        var found = new List<(string Path, string? Stamp, int Version)>();
+        foreach (var file in Directory.EnumerateFiles(directory, prefix + "v*.bak"))
+        {
+            var match = PreUpgradeCopyName().Match(Path.GetFileName(file)[prefix.Length..]);
+            if (!match.Success || !int.TryParse(match.Groups["n"].Value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var version))
+                continue;
+            found.Add((file, match.Groups["stamp"].Success ? match.Groups["stamp"].Value : null, version));
+        }
+        return [.. found
+            .OrderByDescending(copy => copy.Stamp is not null)
+            .ThenByDescending(copy => copy.Stamp, StringComparer.Ordinal)
+            .ThenByDescending(copy => copy.Version)
+            .Select(copy => copy.Path)];
+    }
+
+    [GeneratedRegex(@"^v(?<n>\d+)(?:-(?<stamp>\d{8}T\d{6}Z))?\.bak$", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex PreUpgradeCopyName();
 
     /// <summary>
     /// ARCHITECTURE: migrations are numbered and the user database is backed up before upgrading. Uses SQLite's
     /// online backup rather than a file copy: in WAL mode, committed data can still be in <c>-wal</c> after a crash,
     /// and a copy of the main file alone would silently miss it.
     /// </summary>
-    private static void BackupBeforeUpgrade(string databasePath, int latestVersion)
+    private static void BackupBeforeUpgrade(string databasePath, int latestVersion, TimeProvider time)
     {
         if (!File.Exists(databasePath))
             return;
@@ -1042,10 +1076,12 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
             throw new NewerDatabaseException(version, latestVersion, AppVersionStamp.Stamped(Path.GetDirectoryName(Path.GetFullPath(databasePath))!));
         if (version is > 0 && version < latestVersion)
         {
-            var backupPath = BackupPath(databasePath, version);
+            var backupPath = BackupPath(databasePath, version, time.GetUtcNow());
             File.Delete(backupPath);
-            using var backup = new SqliteConnection($"Data Source={backupPath};Pooling=False");
-            probe.BackupDatabase(backup);
+            using (var backup = new SqliteConnection($"Data Source={backupPath};Pooling=False"))
+                probe.BackupDatabase(backup);
+            foreach (var surplus in PreUpgradeCopies(databasePath).Skip(PreUpgradeCopiesKept))
+                File.Delete(surplus);
         }
     }
 

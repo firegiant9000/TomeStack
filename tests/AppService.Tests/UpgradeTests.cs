@@ -40,10 +40,105 @@ public class UpgradeTests
             Assert.NotNull(upgraded.FindCharacter(Fixture().Id));
         }
 
-        var backup = SqliteStore.BackupPath(database, SqliteStore.LatestSchemaVersion);
-        Assert.True(File.Exists(backup), "backup-before-migration file was not created");
+        var backup = Assert.Single(SqliteStore.PreUpgradeCopies(database));
+        Assert.Contains($".v{SqliteStore.LatestSchemaVersion}-", backup, StringComparison.Ordinal);
         Assert.Equal(SqliteStore.LatestSchemaVersion, Scalar(backup, "PRAGMA user_version;"));
         Assert.Equal(1, Scalar(backup, "SELECT COUNT(*) FROM characters;"));
+    }
+
+    private static string NewDatabase()
+    {
+        var directory = NewDirectory();
+        Directory.CreateDirectory(directory);
+        return Path.Combine(directory, TomeStackApp.DatabaseFileName);
+    }
+
+    private static void Upgrade(string database, int toVersion, DateTimeOffset at)
+    {
+        using var store = new SqliteStore(database, SqliteStore.Migrations[..toVersion], new FixedTime(at));
+    }
+
+    private static readonly DateTimeOffset Start = new(2026, 11, 17, 9, 5, 3, TimeSpan.Zero);
+
+    [Fact]
+    public void A_copy_is_named_for_the_version_and_the_UTC_second()
+    {
+        Assert.Equal(
+            Path.Combine("x", "tomestack.db.v12-20261117T090503Z.bak"),
+            SqliteStore.BackupPath(Path.Combine("x", "tomestack.db"), 12, new DateTimeOffset(2026, 11, 17, 11, 5, 3, TimeSpan.FromHours(2))));
+    }
+
+    [Fact]
+    public void Four_upgrades_leave_the_newest_three_copies()
+    {
+        var database = NewDatabase();
+        Upgrade(database, 2, Start); // a new file: no copy
+        for (var step = 0; step < 4; step++)
+            Upgrade(database, 3 + step, Start.AddMinutes(step + 1));
+
+        var names = SqliteStore.PreUpgradeCopies(database).Select(path => Path.GetFileName(path)).ToArray();
+        Assert.Equal(
+            [
+                "tomestack.db.v5-20261117T090903Z.bak",
+                "tomestack.db.v4-20261117T090803Z.bak",
+                "tomestack.db.v3-20261117T090703Z.bak",
+            ],
+            names);
+        Assert.Equal(3, Directory.GetFiles(Path.GetDirectoryName(database)!, "*.bak").Length);
+    }
+
+    [Fact]
+    public void Old_named_copies_count_and_go_first()
+    {
+        var database = NewDatabase();
+        Upgrade(database, 2, Start);
+        var directory = Path.GetDirectoryName(database)!;
+        foreach (var version in new[] { 6, 9, 10 })
+            File.Copy(database, Path.Combine(directory, $"tomestack.db.v{version}.bak"));
+
+        Upgrade(database, 3, Start);
+
+        Assert.Equal(
+            ["tomestack.db.v2-20261117T090503Z.bak", "tomestack.db.v10.bak", "tomestack.db.v9.bak"],
+            SqliteStore.PreUpgradeCopies(database).Select(Path.GetFileName));
+        Assert.False(File.Exists(Path.Combine(directory, "tomestack.db.v6.bak")));
+    }
+
+    [Fact]
+    public void Same_second_upgrade_overwrites_the_copy()
+    {
+        var database = NewDatabase();
+        Upgrade(database, 3, Start);
+        var atVersion3 = database + ".saved";
+        File.Copy(database, atVersion3);
+        Upgrade(database, 4, Start);
+        var copy = Assert.Single(SqliteStore.PreUpgradeCopies(database));
+        File.WriteAllText(copy, "stale"); // not even a database any more
+
+        File.Copy(atVersion3, database, overwrite: true); // the same database at version 3 again, at the same instant
+        Upgrade(database, 4, Start);
+
+        Assert.Equal(copy, Assert.Single(SqliteStore.PreUpgradeCopies(database)));
+        Assert.Equal(3, Scalar(copy, "PRAGMA user_version;"));
+    }
+
+    [Fact]
+    public void App_version_copies_and_unrecognised_names_are_untouched()
+    {
+        var database = NewDatabase();
+        Upgrade(database, 2, Start);
+        var directory = Path.GetDirectoryName(database)!;
+        var appCopy = Path.Combine(directory, "tomestack.db.app-0.8.1-to-0.9.0.bak");
+        var other = Path.Combine(directory, "tomestack.db.vX.bak");
+        File.Copy(database, appCopy);
+        File.Copy(database, other);
+
+        for (var step = 0; step < 4; step++)
+            Upgrade(database, 3 + step, Start.AddMinutes(step + 1));
+
+        Assert.True(File.Exists(appCopy));
+        Assert.True(File.Exists(other));
+        Assert.Equal(3, SqliteStore.PreUpgradeCopies(database).Count);
     }
 
     [Fact]
@@ -114,7 +209,7 @@ public class UpgradeTests
 
         using (new SqliteStore(database, FutureMigrations)) { }
 
-        Assert.Equal(1, Scalar(SqliteStore.BackupPath(database, SqliteStore.LatestSchemaVersion), "SELECT COUNT(*) FROM characters;"));
+        Assert.Equal(1, Scalar(Assert.Single(SqliteStore.PreUpgradeCopies(database)), "SELECT COUNT(*) FROM characters;"));
     }
 
     [Fact]
@@ -221,7 +316,7 @@ public class UpgradeTests
         using var app = TomeStackApp.Open(directory, new FixedTime(TempApp.Now), devFixtures: true); // re-seeds the fixture pack
 
         Assert.Equal(SqliteStore.LatestSchemaVersion, app.GetInfo().SchemaVersion);
-        Assert.True(File.Exists(SqliteStore.BackupPath(database, 1)));
+        Assert.Contains(".v1-", Assert.Single(SqliteStore.PreUpgradeCopies(database)), StringComparison.Ordinal);
         var quickfoot = app.Store.ListRevisions().Single(r => r.Name == "Fixture Quickfoot");
         var bonus = Assert.IsType<ModifierEffect>(Assert.Single(quickfoot.Effects));
         Assert.Equal((ModifierOperation.Bonus, "ability.dex.score", "2"), (bonus.Operation, bonus.Target, bonus.Value));
@@ -282,8 +377,8 @@ public class UpgradeTests
         Assert.True(File.Exists(copy), "the one-time app-version copy was not written");
         // R75: two copies on this first open, since 0.5.0's database is at version 10 and this build migrates it to 11: the app-version
         // copy (R87) and BackupBeforeUpgrade's copy at the version it was opened with. Both are of the 0.5.0 database, and both open.
-        var schemaCopy = SqliteStore.BackupPath(database, 10);
-        Assert.True(File.Exists(schemaCopy), "the copy before the schema migration was not written");
+        var schemaCopy = Assert.Single(SqliteStore.PreUpgradeCopies(database));
+        Assert.Contains(".v10-", schemaCopy, StringComparison.Ordinal);
         Assert.Equal([Path.GetFileName(copy), Path.GetFileName(schemaCopy)], Directory.GetFiles(directory, "*.bak").Select(Path.GetFileName).Order(StringComparer.Ordinal));
         foreach (var backup in new[] { copy, schemaCopy })
         {

@@ -226,7 +226,8 @@ public class MigrationProperties
                 }
 
                 var backups = Directory.GetFiles(directory, "*.bak");
-                Assert.Equal([SqliteStore.BackupPath(database, old.Version)], backups);
+                Assert.Equal(SqliteStore.PreUpgradeCopies(database), backups);
+                Assert.Contains($".v{old.Version}-", Assert.Single(backups), StringComparison.Ordinal);
                 Assert.Equal(old.Version, Count(backups[0], "PRAGMA user_version;"));
                 Assert.Equal(counts, Counts(backups[0], old.Version));
                 Assert.Equal(hashes, Hashes(backups[0]));

@@ -155,7 +155,7 @@ public class AppVersionCopyTests
 
         using (Open(crashed, "0.6.0")) { }
 
-        Assert.Equal(["tomestack.db.app-pre-0.6.0-to-0.6.0.bak", "tomestack.db.v9.bak"], Copies(crashed));
+        Assert.Equal(["tomestack.db.app-pre-0.6.0-to-0.6.0.bak", Path.GetFileName(SqliteStore.BackupPath(liveDatabase, 9, TempApp.Now))], Copies(crashed));
         var copy = Path.Combine(crashed, "tomestack.db.app-pre-0.6.0-to-0.6.0.bak");
         Assert.Equal(9, Scalar(copy, "PRAGMA user_version;")); // before any migration ran
         Assert.Equal(1, Scalar(copy, "SELECT COUNT(*) FROM characters;")); // WAL data included (a BackupDatabase copy, not a file copy)

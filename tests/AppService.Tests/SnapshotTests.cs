@@ -311,7 +311,8 @@ public class SnapshotTests
                 Assert.Equal(TempApp.Json(old), TempApp.Json(app.Store.FindCharacter(old.Id)));
                 Assert.Single([app.Snapshot(new(old.Id))]);
             }
-            var backup = SqliteStore.BackupPath(database, 6);
+            var backup = Assert.Single(SqliteStore.PreUpgradeCopies(database));
+            Assert.Contains(".v6-", backup, StringComparison.Ordinal);
             using var check = new SqliteConnection($"Data Source={backup};Mode=ReadOnly;Pooling=False");
             check.Open();
             using var count = check.CreateCommand();
