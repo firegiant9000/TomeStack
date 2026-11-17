@@ -636,14 +636,22 @@ public static partial class CharacterCalculator
         {
             foreach (var item in final.Active.Where(a => a.Revision.Effects.OfType<RestrictionEffect>().Any(IsMulticlassPrerequisite)))
             {
-                multiclass.AddRange(Unmet(item.Revision, item.Revision.Effects.OfType<RestrictionEffect>().Where(IsMulticlassPrerequisite), final.Sheet, "",
-                    "Multiclassing into or out of it needs it; the class stays applied, so check the character.", "restriction.multiclass-unmet"));
+                multiclass.AddRange(MulticlassPrerequisites(final.Sheet, item.Revision));
             }
         }
         if (unmet.Count == 0 && multiclass.Count == 0)
             return final.Sheet;
         return final.Sheet with { Diagnostics = [.. unmet.Select(u => u.Diagnostic), .. multiclass, .. final.Sheet.Diagnostics] };
     }
+
+    /// <summary>
+    /// The multiclass prerequisites of <paramref name="candidateClass"/> that <paramref name="sheet"/> does not meet (D04, D99), as
+    /// <c>restriction.multiclass-unmet</c> diagnostics. The one check: the sheet uses it for the classes a character has, and the
+    /// level-up picker asks it before a class is taken. It warns only; the class can still be taken.
+    /// </summary>
+    public static IReadOnlyList<Diagnostic> MulticlassPrerequisites(CharacterSheet sheet, ContentRevision candidateClass) =>
+        [.. Unmet(candidateClass, candidateClass.Effects.OfType<RestrictionEffect>().Where(IsMulticlassPrerequisite), sheet, "",
+            "Multiclassing into or out of it needs it; the class stays applied, so check the character.", "restriction.multiclass-unmet")];
 
     private static bool IsEvaluated(RestrictionEffect restriction) =>
         restriction.Automation == AutomationStatus.Automatic && restriction.Timing == EffectTiming.Always;
