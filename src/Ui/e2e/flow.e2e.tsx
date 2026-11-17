@@ -1769,7 +1769,8 @@ it('shows different allowed content for two campaign profiles, and records a rea
   };
 
   // Profile 1: SRD only. The fixture background is listed but not allowed; the SRD one is.
-  await user.selectOptions(screen.getByRole('combobox', { name: 'Campaign' }), 'E2E Strict (2024 rules)');
+  // The Campaign picker appears once the campaign list arrives, which can be after the name is typed.
+  await user.selectOptions(await screen.findByRole('combobox', { name: 'Campaign' }), 'E2E Strict (2024 rules)');
   await toBackground();
   await waitFor(() => expect(courierOff()).toBe(true));
   expect(courier().closest('label')!.textContent).toMatch(/not allowed in this campaign/);
