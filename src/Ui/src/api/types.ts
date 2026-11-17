@@ -2437,6 +2437,18 @@ export interface AffectedCharacter {
   via?: string;
 }
 
+/** `character.levelUpOptions` (D99): a class a saved character can take its next level in. `gains` names what that level gives; `unmet` is player-ready wording for multiclass prerequisites not met (empty for a class the character has). */
+export interface LevelUpOption {
+  contentId: string;
+  name: string;
+  current: boolean;
+  nextLevel: number;
+  gains: string[];
+  unmet: string[];
+  /** The character's campaign does not allow this class's source; taking it needs a campaign exception (never set for the character's own classes). */
+  outsideCampaign: boolean;
+}
+
 /** `character.updates` (M3 C7): a newer published revision of content the character uses; an offer, never applied by itself. */
 export interface UpdateOffer {
   from: ContentReference;

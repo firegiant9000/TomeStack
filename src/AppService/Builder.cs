@@ -1,5 +1,7 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using TomeStack.AppService.Packages;
 using TomeStack.RulesCore;
 
@@ -134,4 +136,114 @@ public sealed partial class TomeStackApp
             throw new AppValidationException(problems);
         return character;
     }
+
+    /// <summary>
+    /// <c>character.levelUpOptions</c> (D99): the classes a saved character can take its next level in. Its own classes come first, in
+    /// the order it has them; the others follow by name. Another rules family's classes are left out. A class the character's campaign
+    /// does not allow (<see cref="ContentOption.AllowedInCampaign"/>, as <see cref="ListContent"/> marks it) is listed with
+    /// <see cref="LevelUpOption.OutsideCampaign"/> set, for the player to take with a campaign exception (R38 d); the character's own
+    /// classes are never flagged. A character at level 20 has no next level, so the list is empty (the sheet offers no level-up there either).
+    /// A class the character already has uses its pinned revision, a new one the newest published revision.
+    /// </summary>
+    public IReadOnlyList<LevelUpOption> LevelUpOptions(Guid characterId)
+    {
+        var character = _store.FindCharacter(characterId)
+            ?? throw new AppValidationException([new("character.not-found", $"Character {characterId} does not exist.")]);
+        if (character.Classes.Sum(c => c.Level) >= Character.MaxLevel)
+            return [];
+
+        var sheet = CharacterCalculator.Calculate(character, _store);
+        var owned = character.Classes
+            .Select(c => (Entry: c, Revision: _store.FindRevision(c.Class)))
+            .Where(c => c.Revision is { Kind: ContentKind.Class })
+            .ToList();
+        // The multiclass rule applies into and out of a class: what the classes the character has need counts against a new one.
+        var outgoing = owned.SelectMany(c => ShortfallPhrases(sheet, c.Revision!)).ToList();
+
+        var options = owned
+            .Select(c => new LevelUpOption(
+                c.Revision!.ContentId, c.Revision.Name, true, c.Entry.Level + 1,
+                GainsAt(c.Revision, c.Entry.Level + 1, c.Entry.Class == character.Classes[0].Class, sheet), []))
+            .ToList();
+        var have = owned.Select(c => c.Revision!.ContentId).ToHashSet();
+        // A campaign deleted since the character was saved no longer restricts anything.
+        var campaignId = character.CampaignId is { } id && _store.FindCampaign(id) is not null ? id : (Guid?)null;
+        var others = ListContent(character.RulesFamily, campaignId)
+            .Where(o => o.Kind == ContentKind.Class && o.Compatible && !o.Superseded && !have.Contains(o.Reference.ContentId))
+            .Select(o => (Revision: _store.FindRevision(o.Reference), Outside: o.AllowedInCampaign == false))
+            .Where(o => o.Revision is not null)
+            .OrderBy(o => o.Revision!.Name, StringComparer.CurrentCultureIgnoreCase)
+            .Select(o => new LevelUpOption(
+                o.Revision!.ContentId, o.Revision.Name, false, 1, GainsAt(o.Revision, 1, startingClass: owned.Count == 0, sheet),
+                [.. ShortfallPhrases(sheet, o.Revision).Concat(outgoing).Distinct(StringComparer.Ordinal)], o.Outside));
+        return [.. options, .. others];
+    }
+
+    /// <summary>
+    /// What class level <paramref name="level"/> of <paramref name="revision"/> gives, by name: the content the class grants, then
+    /// what the options the character has picked in the class's own choices (a subclass) grant (the engine gates them by the class's
+    /// level), then the choices the class or such an option presents at that level, labelled as the builder labels them. Only grants that apply on their own
+    /// (automatic, always) count, as the engine's. A grant or choice with no level is a level 1 one.
+    /// </summary>
+    private IReadOnlyList<string> GainsAt(ContentRevision revision, int level, bool startingClass, CharacterSheet sheet)
+    {
+        var owners = new List<ContentRevision> { revision };
+        owners.AddRange((sheet.Choices ?? []).Where(c => c.Source == revision.Reference)
+            .SelectMany(c => c.Selected)
+            .Select(_store.FindRevision)
+            .OfType<ContentRevision>());
+        bool Applies(ClassEntry? onlyAs) => onlyAs is null || (onlyAs == ClassEntry.StartingClass) == startingClass;
+
+        var grants = owners.SelectMany(o => o.Effects.OfType<GrantEffect>())
+            .Where(g => g.Grant == GrantKind.Content && g.Content is not null && g.Automation == AutomationStatus.Automatic && g.Timing == EffectTiming.Always
+                && (g.Level ?? 1) == level && Applies(g.OnlyAs))
+            .Select(g => _store.FindRevision(g.Content!)?.Name)
+            .OfType<string>();
+        var choices = owners.SelectMany(o => o.Effects.OfType<ChoiceEffect>().Select(c => (Owner: o, Choice: c)))
+            .Where(x => (x.Choice.Level ?? 1) == level && Applies(x.Choice.OnlyAs))
+            .Select(x => ChoiceLabel(x.Owner.Name, x.Choice));
+        return [.. grants.Concat(choices).Distinct(StringComparer.Ordinal)];
+    }
+
+    /// <summary>
+    /// The legend the builder's choice step shows for a choice: its own short text when that already says how many (a number equal to
+    /// the count, or "choose a/an/one" for a count of 1), else the text with ": choose {count}"; with no short text, "{source}: choose
+    /// {count}". The builder also prefixes the source name to a label that is not unique among the step's choices; that cannot be known here.
+    /// </summary>
+    private static string ChoiceLabel(string sourceName, ChoiceEffect choice)
+    {
+        var text = choice.Text?.Trim();
+        if (text is not { Length: > 0 and <= 40 } || ".!?".Contains(text[^1]) || text.Contains('\n'))
+            return $"{sourceName}: choose {choice.Count}";
+        var said = ChooseNumber().Match(text);
+        var complete = said.Success
+            ? int.TryParse(said.Groups[1].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var n) && n == choice.Count
+            : choice.Count == 1 && ChooseOne().IsMatch(text);
+        return complete ? text : $"{text}: choose {choice.Count}";
+    }
+
+    [GeneratedRegex(@"\bchoose (\d+)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 250)]
+    private static partial Regex ChooseNumber();
+
+    [GeneratedRegex(@"\bchoose (a|an|one)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 250)]
+    private static partial Regex ChooseOne();
+
+    /// <summary>
+    /// The unmet multiclass prerequisites of <paramref name="revision"/>, one phrase each: "Intelligence 13 (you have 8)", or for an
+    /// either/or group "Strength 13 or Dexterity 13 (you have 10 and 12)".
+    /// </summary>
+    private static IEnumerable<string> ShortfallPhrases(CharacterSheet sheet, ContentRevision revision) =>
+        CharacterCalculator.MulticlassShortfalls(sheet, revision).Select(group =>
+            $"{string.Join(" or ", group.Select(s => $"{AbilityLabel(s.Label)} {s.Minimum}"))} (you have {string.Join(" and ", group.Select(s => s.Actual))})");
+
+    /// <summary>The sheet labels an ability's score field "Strength score"; the player is told "Strength".</summary>
+    private static string AbilityLabel(string fieldLabel) =>
+        fieldLabel.EndsWith(" score", StringComparison.Ordinal) ? fieldLabel[..^" score".Length] : fieldLabel;
 }
+
+/// <summary>
+/// One class a character can take its next level in (D99). <see cref="Gains"/> names what that level gives; <see cref="Unmet"/> is
+/// player-ready wording for the multiclass prerequisites not met (empty for a class the character already has).
+/// <see cref="OutsideCampaign"/>: the character's campaign does not allow the class's source.
+/// </summary>
+public sealed record LevelUpOption(Guid ContentId, string Name, bool Current, int NextLevel, IReadOnlyList<string> Gains, IReadOnlyList<string> Unmet, bool OutsideCampaign = false);

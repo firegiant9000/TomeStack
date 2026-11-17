@@ -636,13 +636,54 @@ public static partial class CharacterCalculator
         {
             foreach (var item in final.Active.Where(a => a.Revision.Effects.OfType<RestrictionEffect>().Any(IsMulticlassPrerequisite)))
             {
-                multiclass.AddRange(Unmet(item.Revision, item.Revision.Effects.OfType<RestrictionEffect>().Where(IsMulticlassPrerequisite), final.Sheet, "",
-                    "Multiclassing into or out of it needs it; the class stays applied, so check the character.", "restriction.multiclass-unmet"));
+                multiclass.AddRange(MulticlassPrerequisites(final.Sheet, item.Revision));
             }
         }
         if (unmet.Count == 0 && multiclass.Count == 0)
             return final.Sheet;
         return final.Sheet with { Diagnostics = [.. unmet.Select(u => u.Diagnostic), .. multiclass, .. final.Sheet.Diagnostics] };
+    }
+
+    /// <summary>
+    /// The multiclass prerequisites of <paramref name="candidateClass"/> that <paramref name="sheet"/> does not meet (D04, D99), as
+    /// <c>restriction.multiclass-unmet</c> diagnostics. The one check: the sheet uses it for the classes a character has, and the
+    /// level-up picker asks it before a class is taken. It warns only; the class can still be taken.
+    /// </summary>
+    public static IReadOnlyList<Diagnostic> MulticlassPrerequisites(CharacterSheet sheet, ContentRevision candidateClass) =>
+        [.. Unmet(candidateClass, candidateClass.Effects.OfType<RestrictionEffect>().Where(IsMulticlassPrerequisite), sheet, "",
+            "Multiclassing into or out of it needs it; the class stays applied, so check the character.", "restriction.multiclass-unmet")];
+
+    /// <summary>
+    /// The same multiclass check as <see cref="MulticlassPrerequisites"/>, as data for a caller that words it for the player: one entry
+    /// per unmet requirement group (a group's entries are alternatives, meeting any one is enough). Restrictions that cannot be
+    /// checked (a diagnostic of another code in <see cref="MulticlassPrerequisites"/>) are not listed.
+    /// </summary>
+    public static IReadOnlyList<IReadOnlyList<PrerequisiteShortfall>> MulticlassShortfalls(CharacterSheet sheet, ContentRevision candidateClass)
+    {
+        var result = new List<IReadOnlyList<PrerequisiteShortfall>>();
+        foreach (var group in candidateClass.Effects.OfType<RestrictionEffect>().Where(IsMulticlassPrerequisite).GroupBy(r => r.Group))
+        {
+            var failed = new List<PrerequisiteShortfall>();
+            var met = false;
+            foreach (var restriction in group)
+            {
+                if (!SpecIndex.TryGetValue(restriction.Field, out var index)
+                    || IsCharacterOnlyField(restriction.Field, candidateClass.SchemaVersion)
+                    || IsPlayMechanicsOnlyField(restriction.Field, candidateClass.SchemaVersion)
+                    || (IsV8Field(restriction.Field) && IgnoresV8(candidateClass)))
+                    continue;
+                var actual = sheet.Field(restriction.Field).Value;
+                if (actual >= restriction.Minimum)
+                    met = true;
+                else
+                    failed.Add(new(Specs[index].Label, restriction.Minimum, actual));
+            }
+            if (group.Key is null)
+                result.AddRange(failed.Select(f => (IReadOnlyList<PrerequisiteShortfall>)[f]));
+            else if (!met && failed.Count > 0)
+                result.Add(failed);
+        }
+        return result;
     }
 
     private static bool IsEvaluated(RestrictionEffect restriction) =>
@@ -1412,3 +1453,6 @@ public static partial class CharacterCalculator
         return bounded;
     }
 }
+
+/// <summary>One requirement a sheet does not meet: the field's label, the minimum it needs and what the sheet has.</summary>
+public sealed record PrerequisiteShortfall(string Label, int Minimum, int Actual);

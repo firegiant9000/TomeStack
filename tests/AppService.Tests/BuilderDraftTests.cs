@@ -231,4 +231,273 @@ public class BuilderDraftTests
         var coins = Assert.Throws<AppValidationException>(() => temp.App.CreateCharacter(Create(Draft(), null, new Currency { Gp = -1 })));
         Assert.Contains(coins.Problems, p => p.Code == "character.currency-out-of-range");
     }
+
+    // Wave 3 G10 (D99): the level-up options.
+
+    private static ContentReference ClassRef(TempApp temp, string name) =>
+        temp.App.ListContent(RulesFamilies.Srd521).Single(o => o.Kind == ContentKind.Class && o.Compatible && o.Name == name && !o.Superseded).Reference;
+
+    private static Character Cleric2(TempApp temp, int str = 10, int dex = 12, int intelligence = 8, int wis = 14, Guid? campaign = null) => new()
+    {
+        Id = Guid.NewGuid(),
+        Name = "Level Cleric",
+        RulesFamily = RulesFamilies.Srd521,
+        BaseAbilities = new(str, dex, 14, intelligence, wis, 10),
+        Classes = [new(ClassRef(temp, "Cleric"), 2)],
+        CampaignId = campaign,
+    };
+
+    private static IReadOnlyList<LevelUpOption> Options(TempApp temp, Character character) =>
+        temp.App.LevelUpOptions(temp.App.SaveCharacter(character).Character.Id);
+
+    [Fact]
+    public void LevelUpOptions_lists_the_current_class_first_with_what_the_next_level_gives()
+    {
+        using var temp = new TempApp();
+
+        var options = Options(temp, Cleric2(temp));
+
+        var cleric = options[0];
+        Assert.Equal("Cleric", cleric.Name);
+        Assert.True(cleric.Current);
+        Assert.Equal(3, cleric.NextLevel);
+        Assert.NotEmpty(cleric.Gains);
+        Assert.Empty(cleric.Unmet);
+        Assert.All(options.Skip(1), o => Assert.False(o.Current));
+        Assert.All(options.Skip(1), o => Assert.Equal(1, o.NextLevel));
+        var others = options.Skip(1).Select(o => o.Name).ToList();
+        Assert.Equal([.. others.Order(StringComparer.CurrentCultureIgnoreCase)], others);
+        Assert.DoesNotContain(options.Skip(1), o => o.Name == "Cleric");
+    }
+
+    [Fact]
+    public void LevelUpOptions_says_what_a_new_class_needs_in_the_players_words()
+    {
+        using var temp = new TempApp();
+
+        var options = Options(temp, Cleric2(temp, intelligence: 8));
+
+        Assert.Equal(["Intelligence 13 (you have 8)"], options.Single(o => o.Name == "Wizard").Unmet);
+        Assert.Empty(Options(temp, Cleric2(temp, intelligence: 13)).Single(o => o.Name == "Wizard").Unmet);
+    }
+
+    [Fact]
+    public void LevelUpOptions_gives_one_phrase_for_an_either_or_requirement_and_none_for_a_class_without_one()
+    {
+        using var temp = new TempApp();
+
+        var options = Options(temp, Cleric2(temp, str: 10, dex: 12));
+
+        Assert.Equal(["Strength 13 or Dexterity 13 (you have 10 and 12)"], options.Single(o => o.Name == "Fighter").Unmet);
+        Assert.Empty(Options(temp, Cleric2(temp, str: 13)).Single(o => o.Name == "Fighter").Unmet);
+        // A character who meets everything is told nothing is missing, whatever the class.
+        Assert.All(Options(temp, Cleric2(temp) with { BaseAbilities = new(15, 15, 15, 15, 15, 15) }), o => Assert.Empty(o.Unmet));
+    }
+
+    [Fact]
+    public void LevelUpOptions_adds_what_the_current_class_needs_to_every_new_class()
+    {
+        using var temp = new TempApp();
+
+        var options = Options(temp, Cleric2(temp, intelligence: 14, wis: 12));
+
+        // A Cleric needs Wisdom 13 to multiclass, so any class taken beside it says so.
+        Assert.Equal(["Wisdom 13 (you have 12)"], options.Single(o => o.Name == "Wizard").Unmet);
+        Assert.Empty(options[0].Unmet);
+    }
+
+    [Fact]
+    public void LevelUpOptions_flags_classes_a_campaign_does_not_allow_and_never_the_characters_own()
+    {
+        using var temp = new TempApp();
+        var closed = temp.App.SaveCampaign(new Campaign { Id = Guid.Empty, Name = "Closed table", RulesFamily = RulesFamilies.Srd521, AllowedSources = [] });
+
+        var excluded = Options(temp, Cleric2(temp, campaign: closed.Id));
+
+        Assert.Equal("Cleric", excluded[0].Name);
+        Assert.False(excluded[0].OutsideCampaign);
+        Assert.Contains(excluded, o => o.Name == "Wizard");
+        Assert.All(excluded.Skip(1), o => Assert.True(o.OutsideCampaign));
+
+        // Without a campaign nothing is outside it.
+        Assert.All(Options(temp, Cleric2(temp)), o => Assert.False(o.OutsideCampaign));
+    }
+
+    [Fact]
+    public void LevelUpOptions_flags_only_the_classes_the_campaign_leaves_out()
+    {
+        using var temp = new TempApp();
+        var source = temp.App.CreateHomebrewSource(new("Test Allowed Classes", [RulesFamilies.Srd521]));
+        var homebrew = temp.App.Publish(temp.App.SaveDraft(new ContentRevision
+        {
+            ContentId = Guid.NewGuid(), RevisionId = Guid.Empty, Kind = ContentKind.Class, Name = "Test Allowed Class", RulesFamilies = [RulesFamilies.Srd521],
+            Provenance = new(source.Id), Status = RevisionStatus.Draft, Effects = [new HitDieEffect { Id = "hit-die", Die = 8 }],
+        })).Published;
+        var campaign = temp.App.SaveCampaign(new Campaign { Id = Guid.Empty, Name = "Homebrew table", RulesFamily = RulesFamilies.Srd521, AllowedSources = [source.Id] });
+
+        var options = Options(temp, Cleric2(temp, campaign: campaign.Id));
+
+        Assert.False(options.Single(o => o.ContentId == homebrew.ContentId).OutsideCampaign);
+        Assert.True(options.Single(o => o.Name == "Wizard").OutsideCampaign);
+        Assert.False(options[0].OutsideCampaign); // the character's own class, though its source is not allowed
+    }
+
+    [Fact]
+    public void LevelUpOptions_leaves_out_classes_of_the_other_rules_family()
+    {
+        using var temp = new TempApp();
+        var options = Options(temp, Cleric2(temp));
+        var other = temp.App.ListContent(RulesFamilies.Srd51).Where(o => o.Kind == ContentKind.Class && !o.RulesFamilies.Contains(RulesFamilies.Srd521)).Select(o => o.Reference.ContentId).ToHashSet();
+
+        Assert.DoesNotContain(options, o => other.Contains(o.ContentId));
+    }
+
+    [Fact]
+    public void LevelUpOptions_is_empty_at_level_20_as_the_sheet_offers_no_level_up_there()
+    {
+        using var temp = new TempApp();
+        var character = Cleric2(temp) with { Classes = [new(ClassRef(temp, "Cleric"), 20)] };
+
+        Assert.Empty(Options(temp, character));
+    }
+
+    private static Character Barbarian5(TempApp temp, bool berserker) => new()
+    {
+        Id = Guid.NewGuid(),
+        Name = "Level Barbarian",
+        RulesFamily = RulesFamilies.Srd521,
+        BaseAbilities = new(15, 13, 14, 8, 12, 10),
+        Classes = [new(ClassRef(temp, "Barbarian"), 5)],
+        Choices = berserker ? [new(ClassRef(temp, "Barbarian"), "barbarian-subclass", [BerserkerV12])] : [],
+    };
+
+    // The v12 revision of the Path of the Berserker, which the newest Barbarian offers first and which has the level 6 feature.
+    private static readonly ContentReference BerserkerV12 = new(Berserker.ContentId, Guid.Parse("52e00000-0000-4000-8000-000012000023"));
+
+    [Fact]
+    public void LevelUpOptions_names_what_the_characters_subclass_grants_at_the_next_level()
+    {
+        using var temp = new TempApp();
+
+        // Path of the Berserker grants Mindless Rage at Barbarian level 6.
+        var with = Options(temp, Barbarian5(temp, berserker: true))[0];
+        var without = Options(temp, Barbarian5(temp, berserker: false))[0];
+
+        Assert.Equal(6, with.NextLevel);
+        Assert.Contains("Mindless Rage", with.Gains);
+        Assert.DoesNotContain("Mindless Rage", without.Gains);
+        Assert.Equal(with.Gains.Distinct(), with.Gains);
+    }
+
+    [Fact]
+    public void LevelUpOptions_names_the_choices_the_next_level_presents_after_the_grants()
+    {
+        using var temp = new TempApp();
+
+        var barbarian = Options(temp, Cleric2(temp) with { Classes = [new(ClassRef(temp, "Barbarian"), 2)] })[0];
+
+        // Level 3: Primal Knowledge (a grant) comes before the subclass choice, which the builder labels "{class}: choose 1".
+        Assert.Contains("Primal Knowledge", barbarian.Gains);
+        Assert.Contains("Barbarian: choose 1", barbarian.Gains);
+        Assert.True(barbarian.Gains.ToList().IndexOf("Primal Knowledge") < barbarian.Gains.ToList().IndexOf("Barbarian: choose 1"));
+    }
+
+    [Fact]
+    public void LevelUpOptions_leaves_out_grants_that_are_not_automatic_and_always()
+    {
+        using var temp = new TempApp();
+        var source = temp.App.CreateHomebrewSource(new("Test Level Classes", [RulesFamilies.Srd521]));
+        ContentRevision Draft(ContentKind kind, string name, params Effect[] effects) => new()
+        {
+            ContentId = Guid.NewGuid(), RevisionId = Guid.Empty, Kind = kind, Name = name, RulesFamilies = [RulesFamilies.Srd521],
+            Provenance = new(source.Id), Status = RevisionStatus.Draft, Effects = effects,
+        };
+        ContentReference Feature(string name) => temp.App.Publish(temp.App.SaveDraft(Draft(ContentKind.Feature, name))).Published;
+        GrantEffect Grant(string id, ContentReference feature) => new() { Id = id, Grant = GrantKind.Content, Level = 2, Content = feature };
+        var plain = Feature("Test Plain Feature");
+        var assisted = Feature("Test Assisted Feature");
+        var timed = Feature("Test Timed Feature");
+        var cls = temp.App.Publish(temp.App.SaveDraft(Draft(
+            ContentKind.Class, "Test Gainer", new HitDieEffect { Id = "hit-die", Die = 8 },
+            Grant("plain", plain), Grant("assisted", assisted) with { Automation = AutomationStatus.Assisted },
+            Grant("timed", timed) with { Timing = EffectTiming.OnLongRest }))).Published;
+
+        var gainer = Options(temp, Cleric2(temp) with { Classes = [new(cls, 1)] })[0];
+
+        Assert.Equal("Test Gainer", gainer.Name);
+        Assert.Equal(["Test Plain Feature"], gainer.Gains);
+    }
+
+    [Fact]
+    public void LevelUpOptions_gates_what_any_option_picked_in_a_class_choice_grants_by_the_class_level()
+    {
+        using var temp = new TempApp();
+        var source = temp.App.CreateHomebrewSource(new("Test Option Classes", [RulesFamilies.Srd521]));
+        ContentRevision Draft(ContentKind kind, string name, params Effect[] effects) => new()
+        {
+            ContentId = Guid.NewGuid(), RevisionId = Guid.Empty, Kind = kind, Name = name, RulesFamilies = [RulesFamilies.Srd521],
+            Provenance = new(source.Id), Status = RevisionStatus.Draft, Effects = effects,
+        };
+        ContentReference Feature(string name) => temp.App.Publish(temp.App.SaveDraft(Draft(ContentKind.Feature, name))).Published;
+        GrantEffect Grant(string id, ContentReference feature, int level) => new() { Id = id, Grant = GrantKind.Content, Level = level, Content = feature };
+        var soon = Feature("Test Soon Feature");
+        var later = Feature("Test Later Feature");
+        // A plain feature (not a subclass) offered by the class's choice, which itself grants one thing at class level 2 and another at 3.
+        var style = temp.App.Publish(temp.App.SaveDraft(Draft(ContentKind.Feature, "Test Style", Grant("soon", soon, 2), Grant("later", later, 3)))).Published;
+        var cls = temp.App.Publish(temp.App.SaveDraft(Draft(
+            ContentKind.Class, "Test Styled", new HitDieEffect { Id = "hit-die", Die = 8 },
+            new ChoiceEffect { Id = "style", ChoiceId = "style", Count = 1, Level = 1, Options = [style] }))).Published;
+
+        var options = Options(temp, Cleric2(temp) with { Classes = [new(cls, 1)], Choices = [new(cls, "style", [style])] });
+
+        Assert.Equal(["Test Soon Feature"], options[0].Gains);
+    }
+
+    [Fact]
+    public void LevelUpOptions_labels_a_choice_as_the_builders_legend_does()
+    {
+        using var temp = new TempApp();
+        var source = temp.App.CreateHomebrewSource(new("Test Choice Classes", [RulesFamilies.Srd521]));
+        ContentRevision Draft(ContentKind kind, string name, params Effect[] effects) => new()
+        {
+            ContentId = Guid.NewGuid(), RevisionId = Guid.Empty, Kind = kind, Name = name, RulesFamilies = [RulesFamilies.Srd521],
+            Provenance = new(source.Id), Status = RevisionStatus.Draft, Effects = effects,
+        };
+        ContentReference[] features = [.. new[] { "Test Option A", "Test Option B", "Test Option C" }.Select(n => temp.App.Publish(temp.App.SaveDraft(Draft(ContentKind.Feature, n))).Published)];
+        ChoiceEffect Choice(string id, string? text, int count) => new() { Id = id, ChoiceId = id, Text = text, Count = count, Level = 2, Options = features };
+        var cls = temp.App.Publish(temp.App.SaveDraft(Draft(
+            ContentKind.Class, "Test Chooser", new HitDieEffect { Id = "hit-die", Die = 8 },
+            Choice("said", "Choose 2 skills", 2), Choice("short", "History", 1), Choice("plain", null, 3)))).Published;
+
+        var chooser = Options(temp, Cleric2(temp) with { Classes = [new(cls, 1)] })[0];
+
+        // A short label that already says how many stands alone; one that does not gets ": choose {count}", as the builder's legend does.
+        Assert.Equal(["Choose 2 skills", "History: choose 1", "Test Chooser: choose 3"], chooser.Gains);
+    }
+
+    [Fact]
+    public void LevelUpOptions_still_lists_classes_when_the_characters_campaign_no_longer_exists()
+    {
+        using var temp = new TempApp();
+
+        var options = Options(temp, Cleric2(temp, campaign: Guid.NewGuid()));
+
+        Assert.Equal("Cleric", options[0].Name);
+        Assert.Contains(options, o => o.Name == "Wizard");
+    }
+
+    [Fact]
+    public void LevelUpOptions_is_a_command_and_refuses_an_unknown_character()
+    {
+        using var temp = new TempApp();
+        var saved = temp.App.SaveCharacter(Cleric2(temp));
+
+        var ok = Dispatch(temp, "character.levelUpOptions", new { characterId = saved.Character.Id });
+        var missing = Dispatch(temp, "character.levelUpOptions", new { characterId = Guid.NewGuid() });
+
+        Assert.True(ok.GetProperty("ok").GetBoolean(), ok.ToString());
+        Assert.Equal("Cleric", ok.GetProperty("result")[0].GetProperty("name").GetString());
+        Assert.Equal(3, ok.GetProperty("result")[0].GetProperty("nextLevel").GetInt32());
+        Assert.Contains("character.not-found", Codes(missing));
+    }
 }

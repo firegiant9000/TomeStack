@@ -8,6 +8,7 @@ import type {
   CampaignException,
   Character,
   CharacterView,
+  LevelUpOption,
   ChoiceStatus,
   ClassLevel,
   ContentKind,
@@ -780,23 +781,67 @@ function BackgroundStep(props: PickStepProps) {
   );
 }
 
+/** The "Another class…" radio's value: not a content id. */
+const otherNew = 'other';
+
 /** Level-up: which class gains the level, an existing one or a new one (multiclass). */
 function LevelStep(props: {
   character: Character;
   options: Shown[];
   nameOf: (ref: ContentReference) => string;
+  /** The campaign exception ("Use content from outside the campaign") is ticked / has a reason (R38 d). */
+  exceptionOn: boolean;
+  reasonGiven: boolean;
   onNext: (classes: ClassLevel[]) => void;
   onCancel: () => void;
   onError: (error: unknown) => void;
 }) {
   const { character } = props;
-  const [target, setTarget] = useState<ContentReference | undefined>(character.classes[0]?.class);
+  // D99: the service says what each class gives at its next level and which multiclass prerequisites a new class does not meet.
+  // The picked class is a content id: one of the character's own classes, or (after "Another class…") one from the select.
+  const [picked, setPicked] = useState<string | undefined>(character.classes[0]?.class.contentId);
+  const [otherId, setOtherId] = useState('');
+  const [loaded, setLoaded] = useState<{ characterId: string; list: LevelUpOption[] }>();
   const atMaximum = character.level >= maxLevel;
-  const newClasses = props.options.filter((o) => o.kind === 'class' && visible(o) && !character.classes.some((c) => c.class.contentId === o.reference.contentId));
+  const { onError } = props;
+  useEffect(() => {
+    if (atMaximum) return;
+    let live = true;
+    client.levelUpOptions(character.id).then(
+      (list) => {
+        if (live) setLoaded({ characterId: character.id, list });
+      },
+      (error: unknown) => {
+        if (live) onError(error);
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [atMaximum, character.id, onError]);
+  const list = loaded?.characterId === character.id ? loaded.list : undefined;
+  // Until the list is there (or if it cannot be had), the character's own classes are offered without what they give.
+  const currentOptions: { contentId: string; name: string; nextLevel: number; gains: string[] }[] = list?.some((o) => o.current)
+    ? list.filter((o) => o.current)
+    : character.classes.map((c) => ({ contentId: c.class.contentId, name: props.nameOf(c.class), nextLevel: c.level + 1, gains: [] }));
+  // A new class is the newest revision the content list offers; a class of the character is its own pinned revision.
+  const resolve = (id: string): ContentReference | undefined =>
+    character.classes.find((c) => c.class.contentId === id)?.class ?? props.options.find((o) => o.kind === 'class' && o.reference.contentId === id)?.reference;
+  const otherPicked = picked === otherNew;
+  // R38 d: a class the campaign leaves out is listed only while the campaign exception is on (and while it is the pick, so the
+  // select never shows a value it lacks); only a class the content list resolves is listed, so a visible choice always yields a target.
+  const resolvable = (list ?? []).filter((o) => !o.current && resolve(o.contentId));
+  // A pick the reloaded list no longer holds counts as no pick, so Next never proceeds with a class the select does not show.
+  const otherChosen = resolvable.some((o) => o.contentId === otherId) ? otherId : '';
+  const targetId = otherPicked ? otherChosen : picked;
+  const otherOptions = resolvable.filter((o) => !o.outsideCampaign || props.exceptionOn || o.contentId === otherChosen);
+  const target: ContentReference | undefined = targetId ? resolve(targetId) : undefined;
+  const needsReason = otherPicked && !props.reasonGiven && !!otherOptions.find((o) => o.contentId === otherId)?.outsideCampaign;
+  const unmet = otherPicked ? (otherOptions.find((o) => o.contentId === otherId)?.unmet ?? []) : [];
+  const warning = unmet.length > 0 ? `${otherOptions.find((o) => o.contentId === otherId)!.name} — needs ${unmet.join(' and ')}. You can still take it.` : '';
 
-  // The picked new class can become inert after it was picked (its campaign reason was cleared): Next then says why it waits.
-  const needsReason = !!target && newClasses.some((o) => !o.compatible && sameRef(o.reference, target));
-  // R43: Next is never natively `disabled` and always says why it waits (3.3.2, 4.1.2).
+  // R43: Next is never natively `disabled` and always says why it waits (3.3.2, 4.1.2). A class that needs more than the
+  // character has never blocks it: the warning is advice, not a rule (D99).
   const blocked = atMaximum
     ? `Already at level ${maxLevel}, the highest level.`
     : !target
@@ -832,26 +877,36 @@ function LevelStep(props: {
         {atMaximum ? null : (
           <fieldset>
             <legend>Class to gain a level in</legend>
-            {character.classes.map((c) => (
-              <label key={c.class.revisionId} className="choice">
-                <input type="radio" name="levelClass" checked={!!target && sameRef(target, c.class)} onChange={() => setTarget(c.class)} />
-                {props.nameOf(c.class)} (level {c.level} → {c.level + 1})
+            {currentOptions.map((o) => (
+              <label key={o.contentId} className="choice">
+                <input type="radio" name="levelClass" checked={picked === o.contentId} onChange={() => setPicked(o.contentId)} />
+                {o.gains.length > 0 ? `${o.name} ${o.nextLevel} — what you get: ${o.gains.join(', ')}` : `${o.name} ${o.nextLevel}`}
               </label>
             ))}
-            {newClasses.map((option) => (
-              <label key={option.reference.revisionId} className={`choice${option.compatible ? '' : ' incompatible'}`}>
-                <input
-                  type="radio"
-                  name="levelClass"
-                  aria-disabled={!option.compatible || undefined}
-                  checked={!!target && sameRef(target, option.reference)}
-                  onChange={() => {
-                    if (option.compatible) setTarget(option.reference);
-                  }}
-                />
-                {option.name} (new class, level 1) <SourceLine option={option} />
-              </label>
-            ))}
+            {resolvable.length > 0 && (
+              <>
+                <label className="choice">
+                  <input type="radio" name="levelClass" checked={otherPicked} onChange={() => setPicked(otherNew)} />
+                  Another class…
+                </label>
+                {otherPicked && (
+                  <label className="field">
+                    Class to start
+                    <select value={otherChosen} onChange={(e) => setOtherId(e.target.value)}>
+                      <option value="">Choose a class</option>
+                      {otherOptions.map((o) => (
+                        <option key={o.contentId} value={o.contentId}>
+                          {o.outsideCampaign ? `${o.name} (outside the campaign)` : o.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+              </>
+            )}
+            <p className="hint" aria-live="polite">
+              {warning}
+            </p>
           </fieldset>
         )}
         {!atMaximum && (
@@ -1235,23 +1290,48 @@ function ChoicesStep(props: {
             : `${open.length} choice${open.length === 1 ? '' : 's'} still to make. You can save now; the sheet lists them under "Choices to make".`}
         </p>
       )}
-      {choices.map((choice) => (
-        <ChoicePicker
-          key={`${choice.source.revisionId}-${choice.choiceId}`}
-          choice={choice}
-          siblings={choices}
-          optionOf={props.optionOf}
-          optionsLoaded={props.optionsLoaded}
-          onChange={(ref, add) => props.onChoose(choice, ref, add)}
-          replaceNote={
-            props.choicesMode
-              ? replaceHint(choice)
-              : props.startView && hadPicks(props.startView, choice)
-                ? replaceOffer(choice)
-                : undefined
-          }
-        />
-      ))}
+      {(() => {
+        const picker = (choice: ChoiceStatus) => (
+          <ChoicePicker
+            key={`${choice.source.revisionId}-${choice.choiceId}`}
+            choice={choice}
+            siblings={choices}
+            optionOf={props.optionOf}
+            optionsLoaded={props.optionsLoaded}
+            onChange={(ref, add) => props.onChoose(choice, ref, add)}
+            replaceNote={
+              props.choicesMode
+                ? replaceHint(choice)
+                : props.startView && hadPicks(props.startView, choice)
+                  ? replaceOffer(choice)
+                  : undefined
+            }
+          />
+        );
+        const start = props.startView;
+        if (!start) return choices.map(picker);
+        // Level-up only: earlier = on the saved sheet, resolved now and with no replace offer; everything else (new, still open, or offering a replacement) is new at this level.
+        const existed = (c: ChoiceStatus) => (start.sheet.choices ?? []).some((s) => s.source.contentId === c.source.contentId && s.choiceId === c.choiceId);
+        const isEarlier = (c: ChoiceStatus) => existed(c) && c.resolved && !(hadPicks(start, c) && replaceOffer(c));
+        const earlier = choices.filter(isEarlier);
+        const fresh = choices.filter((c) => !isEarlier(c));
+        return (
+          <>
+            {fresh.length > 0 && (
+              <>
+                <h3>New at level {props.view.character.level}</h3>
+                {fresh.map(picker)}
+              </>
+            )}
+            {earlier.length > 0 && (
+              <details>
+                <summary>Earlier choices</summary>
+                {earlier.map(picker)}
+              </details>
+            )}
+          </>
+        );
+      })()}
       {casters.map((entry) => (
         <SpellPicker
           key={entry.content.revisionId}
@@ -1766,6 +1846,8 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
           character={mode.view.character}
           options={pickable}
           nameOf={nameOf}
+          exceptionOn={outside.allow}
+          reasonGiven={outsideAllowed}
           onNext={(classes) => preview({ ...(view?.character ?? mode.view.character), classes }, 'level')}
           onCancel={cancelPressed}
           onError={fail}

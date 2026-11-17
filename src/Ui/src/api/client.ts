@@ -41,6 +41,7 @@ import type {
   VttExportPreview,
   SourceRecord,
   StudioEntry,
+  LevelUpOption,
   UpdateOffer,
   UpdateReview,
   Character,
@@ -277,6 +278,8 @@ export function createClient(transport: Transport) {
     /** A choice answered on an unsaved draft, checked like `choose`; the result is the next draft. Writes nothing. */
     previewChoice: (draft: Character, source: ContentReference, choiceId: string, selected: ContentReference[]) =>
       call<CharacterView>('character.previewChoice', { draft, source, choiceId, selected }),
+    /** Wave 3 G10 (D99): the classes a saved character can take its next level in, its own first, each with what the level gives and any multiclass prerequisites not met. Empty at level 20. */
+    levelUpOptions: (characterId: string) => call<LevelUpOption[]>('character.levelUpOptions', { characterId }),
     /** One play-state change; `confirm` is always sent because only a deliberate button press calls this (SPEC C-05). */
     play: (characterId: string, action: PlayAction) => call<CharacterView>('character.play', { characterId, ...action, confirm: true }),
     /** D44: puts the play state back to what the last compound change (a form switch) started from. `updatedAt` is the view's stamp. */
