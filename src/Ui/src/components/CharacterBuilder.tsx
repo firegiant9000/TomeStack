@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type Dispatch, type ReactNode, type SetStateAction, type SubmitEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction, type SubmitEvent } from 'react';
 import { client } from '../api/client';
 import { TomeStackError } from '../api/transport';
 import type {
@@ -13,6 +13,9 @@ import type {
   ContentKind,
   ContentOption,
   ContentReference,
+  Currency,
+  EquipmentEntry,
+  GuideView,
   KnownSpell,
   RulesFamilyId,
   RollRecord,
@@ -38,6 +41,7 @@ import { matchesSpell } from '../spellSearch';
 import { useRulesLabel } from '../rulesLabel';
 import { shown } from './SandboxPanel';
 import { SpellSearch } from './sheet/SpellSearch';
+import { GearStep, kitsFor, type GearValue } from './builder/GearStep';
 
 const abilities: { key: Ability; label: string }[] = [
   { key: 'str', label: 'Strength' },
@@ -61,16 +65,19 @@ export type BuilderMode =
   | { kind: 'levelUp'; view: CharacterView }
   | { kind: 'choices'; view: CharacterView };
 
-type Step = 'rules' | 'scores' | 'species' | 'class' | 'background' | 'choices' | 'level';
+type Step = 'rules' | 'scores' | 'species' | 'class' | 'background' | 'gear' | 'choices' | 'level';
 
-/** D32: a new character is built in these six steps; level-up and answering choices use `level` and `choices` alone. */
-const createSteps: Step[] = ['rules', 'scores', 'species', 'class', 'background', 'choices'];
+/** One shared empty list, so "trained in nothing known" never changes identity between renders. */
+const noTraining: string[] = [];
+/** D32, Wave 3 G8: a new character is built in these seven steps (class before scores, gear after background); level-up and answering choices use `level` and `choices` alone. */
+const createSteps: Step[] = ['rules', 'class', 'scores', 'species', 'background', 'gear', 'choices'];
 const stepTitles: Record<Step, string> = {
   rules: 'Rules',
   scores: 'Ability scores',
   species: 'Species',
   class: 'Class',
   background: 'Background',
+  gear: 'Starting gear',
   choices: 'Choices and create',
   level: 'Level',
 };
@@ -90,6 +97,30 @@ interface Basics {
   campaignId?: string;
 }
 
+/** Where a new character starts; a draft that still equals this has no pick in it (confirm before discard). */
+const initialBasics: Basics = {
+  name: '',
+  rulesFamily: 'srd-5.1',
+  scores: { str: 10, dex: 14, con: 12, int: 10, wis: 13, cha: 8 },
+  scoreMethod: 'array',
+  assignment: {},
+  rolled: [],
+  other: [],
+};
+
+/** Structural equality that ignores object key order (and keys whose value is undefined). */
+function sameValue(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((x, i) => sameValue(x, b[i]));
+  }
+  const left = a as Record<string, unknown>;
+  const right = b as Record<string, unknown>;
+  const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
+  return [...keys].every((k) => sameValue(left[k], right[k]));
+}
+
 interface Props {
   mode: BuilderMode;
   rulesFamilies: RulesFamilyPolicy[];
@@ -105,13 +136,13 @@ interface Props {
  */
 type Shown = ContentOption & { outsideCampaign?: boolean; familyOk: boolean };
 
-function SourceLine({ option }: { option: Shown }) {
+function SourceLine({ option, bare }: { option: Shown; bare?: boolean }) {
   const rulesLabel = useRulesLabel();
   return (
     <span className="option-source">
       {option.sourceTitle}
       {option.page ? `, ${option.page}` : ''} · {option.rulesFamilies.map((f) => rulesLabel(f)).join(', ')}
-      {option.outsideCampaign ? ' · not allowed in this campaign' : !option.compatible && ' · not available for these rules'}
+      {!bare && (option.outsideCampaign ? ' · not allowed in this campaign' : !option.compatible && ' · not available for these rules')}
     </span>
   );
 }
@@ -121,6 +152,27 @@ function SourceLine({ option }: { option: Shown }) {
  * character's own family, only campaign-outside content is shown disabled with its reason (P-01).
  */
 const visible = (option: Shown) => option.familyOk && (option.compatible || option.outsideCampaign === true);
+
+/** A choice's own short label ("History", "Choose 2 skills"): a one-line text of at most 40 characters that is not a sentence. */
+function choiceLabel(choice: { text?: string }): string | undefined {
+  const text = choice.text?.trim();
+  return text && text.length <= 40 && !/[.!?]$/.test(text) && !text.includes('\n') ? text : undefined;
+}
+
+/** The picker legend: a label that already says what is picked stands alone; otherwise the source's name leads ("{source}: choose 2"). */
+function choiceLegendName(choice: { text?: string; sourceName: string; count: number }, siblings: { text?: string }[] = []): string {
+  const label = choiceLabel(choice);
+  if (!label) return `${choice.sourceName}: choose ${choice.count}`;
+  const norm = (s?: string) => (s ? choiceLabel({ text: s })?.toLowerCase() : undefined);
+  const mine = label.toLowerCase();
+  // The source's name leads unless the label is unique among the choices on this step (or already is the source's name).
+  const unique = siblings.filter((s) => norm(s.text) === mine).length <= 1;
+  const named = unique || mine === choice.sourceName.trim().toLowerCase() ? label : `${choice.sourceName}: ${label}`;
+  // A label that already says how many is complete only when its number is this choice's count.
+  const said = /\bchoose (\d+)\b/i.exec(label);
+  const complete = said ? Number(said[1]) === choice.count : choice.count === 1 && /\bchoose (a|an|one)\b/i.test(label);
+  return complete ? named : `${named}: choose ${choice.count}`;
+}
 
 /** One origin or class pick: a radio group with "None", so the choice is explicit and keyboard-operable. */
 function SinglePick(props: {
@@ -138,18 +190,28 @@ function SinglePick(props: {
         None
       </label>
       {props.options.map((option) => (
-        <label key={option.reference.revisionId} className={`choice${option.compatible ? '' : ' incompatible'}`}>
-          <input
-            type="radio"
-            name={props.name}
-            aria-disabled={!option.compatible || undefined}
-            checked={!!props.value && sameRef(props.value, option.reference)}
-            onChange={() => {
-              if (option.compatible) props.onChange(option.reference); // inert, not disabled: a reason typed elsewhere can flip this under focus (2.4.3)
-            }}
-          />
-          <span className="option-name">{option.name}</span> <SourceLine option={option} />
-        </label>
+        <div key={option.reference.revisionId}>
+          <label className={`choice${option.compatible ? '' : ' incompatible'}`}>
+            <input
+              type="radio"
+              name={props.name}
+              aria-disabled={!option.compatible || undefined}
+              checked={!!props.value && sameRef(props.value, option.reference)}
+              onChange={() => {
+                if (option.compatible) props.onChange(option.reference); // inert, not disabled: a reason typed elsewhere can flip this under focus (2.4.3)
+              }}
+            />
+            <span className="option-name">{option.name}</span>
+            {option.outsideCampaign && <span className="option-source"> · not allowed in this campaign</span>}
+            {!option.outsideCampaign && !option.compatible && <span className="option-source"> · not available for these rules</span>}
+          </label>
+          {/* Outside the label: the radio's name is the option's name, and opening this never changes the pick. */}
+          <details className="option-gives">
+            <summary>What it gives</summary>
+            {option.summary && <p>{option.summary}</p>}
+            <SourceLine option={option} bare />
+          </details>
+        </div>
       ))}
     </fieldset>
   );
@@ -214,13 +276,12 @@ function RulesStep(props: {
   onCancel: () => void;
 }) {
   const { basics, onChange } = props;
-  const policy = props.rulesFamilies.find((f) => f.id === basics.rulesFamily);
   const rulesLabel = useRulesLabel();
 
   return (
     <StepForm
       label="Rules"
-      next="Next: ability scores"
+      next="Next: class"
       nextDisabled={!basics.name.trim()}
       nextHint={basics.name.trim() ? undefined : 'Enter a name to continue.'}
       onNext={props.onNext}
@@ -266,12 +327,6 @@ function RulesStep(props: {
             {rulesLabel(family.id)}
           </label>
         ))}
-        {policy && (
-          <p className="hint">
-            Ability score increases under these rules come from <strong>{policy.abilityIncreaseSource}</strong> content.
-            Backgrounds {policy.backgroundGrantsFeat ? 'can' : 'cannot'} grant a feat.
-          </p>
-        )}
       </fieldset>
 
     </StepForm>
@@ -283,8 +338,13 @@ function poolOf(basics: Basics, method: ScoreMethod): readonly number[] | undefi
   return method === 'array' ? standardArray : method === 'roll' ? basics.rolled.map((r) => r.total) : undefined;
 }
 
+/** Wave 3 G8: the text beside a score row of one of the class's main abilities; nothing for the others. */
+function MainMark({ text }: { text?: string }) {
+  return text ? <span className="hint">{text}</span> : null;
+}
+
 /** Each pool value goes to one ability: a value already used is shown "(used)" and cannot be picked again. */
-function AssignPool(props: { legend: string; pool: readonly number[]; assignment: Assignment; onChange: (a: Assignment) => void }) {
+function AssignPool(props: { legend: string; pool: readonly number[]; assignment: Assignment; mark: (key: Ability) => string | undefined; onChange: (a: Assignment) => void }) {
   const { pool, assignment } = props;
   const usedCount = (v: number) => abilityKeys.filter((k) => assignment[k] === v).length;
   const poolCount = (v: number) => pool.filter((p) => p === v).length;
@@ -294,28 +354,31 @@ function AssignPool(props: { legend: string; pool: readonly number[]; assignment
       <legend>{props.legend}</legend>
       <div className="assign-grid">
         {abilities.map(({ key, label }) => (
-          <label key={key} className="field">
-            {label}
-            <select
-              value={assignment[key] ?? ''}
-              onChange={(e) => {
-                const v = e.target.value === '' ? undefined : Number(e.target.value);
-                const next = { ...assignment, [key]: v };
-                // A value that is already used (a stale select) resets this one to "Choose" and assigns nothing twice.
-                props.onChange(assignmentValid(next, pool) ? next : { ...assignment, [key]: undefined });
-              }}
-            >
-              <option value="">Choose</option>
-              {values.map((v) => {
-                const free = poolCount(v) - usedCount(v) + (assignment[key] === v ? 1 : 0);
-                return (
-                  <option key={v} value={v} disabled={free <= 0}>
-                    {free <= 0 ? `${v} (used)` : v}
-                  </option>
-                );
-              })}
-            </select>
-          </label>
+          <div key={key}>
+            <label className="field">
+              {label}
+              <select
+                value={assignment[key] ?? ''}
+                onChange={(e) => {
+                  const v = e.target.value === '' ? undefined : Number(e.target.value);
+                  const next = { ...assignment, [key]: v };
+                  // A value that is already used (a stale select) resets this one to "Choose" and assigns nothing twice.
+                  props.onChange(assignmentValid(next, pool) ? next : { ...assignment, [key]: undefined });
+                }}
+              >
+                <option value="">Choose</option>
+                {values.map((v) => {
+                  const free = poolCount(v) - usedCount(v) + (assignment[key] === v ? 1 : 0);
+                  return (
+                    <option key={v} value={v} disabled={free <= 0}>
+                      {free <= 0 ? `${v} (used)` : v}
+                    </option>
+                  );
+                })}
+              </select>
+            </label>
+            <MainMark text={props.mark(key)} />
+          </div>
         ))}
       </div>
       <p className="hint">Assigned: {abilityKeys.filter((k) => assignment[k] !== undefined).length} of 6</p>
@@ -333,6 +396,9 @@ const pointBuyCostOrZero = (score: number) => (Number.isFinite(pointBuyCost(scor
  * complete; Enter by hand keeps the last scores. Next stays disabled until the chosen method gives valid scores.
  */
 function ScoresStep(props: {
+  /** The chosen class's name and its guide's main abilities (ability keys); absent when the class has no guide. */
+  className?: string;
+  primaryAbilities?: string[];
   basics: Basics;
   policy?: RulesFamilyPolicy;
   onChange: Dispatch<SetStateAction<Basics>>;
@@ -410,8 +476,11 @@ function ScoresStep(props: {
   }
 
   const shown = (key: Ability) => (pool ? (basics.assignment[key] ?? '–') : basics.scores[key]);
+  const mains = props.className ? (props.primaryAbilities ?? []).filter((k): k is Ability => abilities.some((a) => a.key === k)) : [];
+  const mark = (key: Ability) => (mains.includes(key) ? `main ability for ${props.className}` : undefined);
   return (
     <StepForm label="Ability scores" next="Next: species" nextDisabled={!complete || rolling} nextHint={nextHint} onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
+      {mains.length > 0 && <p className="hint">{`${props.className}s rely most on: ${mains.map((k) => abilities.find((a) => a.key === k)!.label).join(', ')}`}</p>}
       <fieldset>
         <legend>How are the scores determined?</legend>
         {scoreMethods.map((m) => (
@@ -421,21 +490,24 @@ function ScoresStep(props: {
           </label>
         ))}
       </fieldset>
-      {method === 'array' && <AssignPool legend="Assign the standard array" pool={standardArray} assignment={basics.assignment} onChange={assign} />}
+      {method === 'array' && <AssignPool legend="Assign the standard array" pool={standardArray} assignment={basics.assignment} mark={mark} onChange={assign} />}
       {method === 'pointBuy' && (
         <fieldset className="abilities">
           <legend>Point buy</legend>
           {abilities.map(({ key, label }) => (
-            <label key={key} className="field">
-              {label}
-              <input
-                type="number"
-                min={pointBuyRange.min}
-                max={pointBuyRange.max}
-                value={basics.scores[key]}
-                onChange={(e) => onChange((b) => ({ ...b, scores: { ...b.scores, [key]: Number(e.target.value) } }))}
-              />
-            </label>
+            <div key={key}>
+              <label className="field">
+                {label}
+                <input
+                  type="number"
+                  min={pointBuyRange.min}
+                  max={pointBuyRange.max}
+                  value={basics.scores[key]}
+                  onChange={(e) => onChange((b) => ({ ...b, scores: { ...b.scores, [key]: Number(e.target.value) } }))}
+                />
+              </label>
+              <MainMark text={mark(key)} />
+            </div>
           ))}
         </fieldset>
       )}
@@ -472,7 +544,7 @@ function ScoresStep(props: {
                   </li>
                 ))}
               </ul>
-              <AssignPool legend="Assign the rolled scores" pool={pool!} assignment={basics.assignment} onChange={assign} />
+              <AssignPool legend="Assign the rolled scores" pool={pool!} assignment={basics.assignment} mark={mark} onChange={assign} />
             </>
           )}
         </>
@@ -481,17 +553,20 @@ function ScoresStep(props: {
         <fieldset className="abilities">
           <legend>Base ability scores</legend>
           {abilities.map(({ key, label }) => (
-            <label key={key} className="field">
-              {label}
-              <input
-                type="number"
-                min={1}
-                max={30}
-                required
-                value={basics.scores[key]}
-                onChange={(e) => onChange((b) => ({ ...b, scores: { ...b.scores, [key]: Number(e.target.value) } }))}
-              />
-            </label>
+            <div key={key}>
+              <label className="field">
+                {label}
+                <input
+                  type="number"
+                  min={1}
+                  max={30}
+                  required
+                  value={basics.scores[key]}
+                  onChange={(e) => onChange((b) => ({ ...b, scores: { ...b.scores, [key]: Number(e.target.value) } }))}
+                />
+              </label>
+              <MainMark text={mark(key)} />
+            </div>
           ))}
         </fieldset>
       )}
@@ -550,6 +625,10 @@ interface PickStepProps {
   options: Shown[];
   /** The listing for the current rules family and campaign has arrived. */
   loaded: boolean;
+  /** The listing for the current rules family and campaign was refused: say so instead of loading forever. */
+  loadFailed: boolean;
+  /** Asks for the listing again (same rules family and campaign). */
+  onRetry: () => void;
   /** Item 1: what the builder hides for each kind; draft counts are 0 until they arrive (a failure shows no draft line). */
   missing: (kind: ContentKind) => Missing;
   /** R41: the names among these picks that need a campaign exception reason which is not given (now). */
@@ -560,40 +639,79 @@ interface PickStepProps {
   onCancel: () => void;
 }
 
+/** Shown instead of the options while the listing for the current rules family is still on its way: nothing stale can be picked. */
+function LoadingOptions({ legend, failed, onRetry }: { legend: string; failed?: boolean; onRetry: () => void }) {
+  if (failed) {
+    return (
+      <fieldset>
+        <legend>{legend}</legend>
+        <p className="hint">
+          Couldn't load the options.{' '}
+          <button type="button" onClick={onRetry}>
+            Try again
+          </button>
+        </p>
+      </fieldset>
+    );
+  }
+  return (
+    <fieldset aria-busy="true">
+      <legend>{legend}</legend>
+      <p className="hint" role="status">
+        Loading options…
+      </p>
+    </fieldset>
+  );
+}
+
 function SpeciesStep(props: PickStepProps) {
-  const { basics, options, onChange } = props;
+  const { basics, onChange } = props;
+  const options = props.loaded ? props.options : [];
   const list = ofKind(options, 'species');
   const hint = reasonHint(props.reasonNames([basics.species]));
   return (
-    <StepForm label="Species" next="Next: class" nextDisabled={!!hint} nextHint={hint} onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
-      <p className="hint">Every option shows its source and the rules it is for.</p>
-      <SinglePick legend="Species" name="species" options={list} value={basics.species} onChange={(species) => onChange({ ...basics, species })} />
+    <StepForm label="Species" next="Next: background" nextDisabled={!!hint} nextHint={hint} onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
+      <p className="hint">Open "What it gives" on an option to see what it grants and where it comes from.</p>
+      {props.policy?.abilityIncreaseSource === 'species' && (
+        <p className="hint">Under these rules your species raises your ability scores. Where an option says so, "What it gives" shows how.</p>
+      )}
+      {props.loaded ? (
+        <SinglePick legend="Species" name="species" options={list} value={basics.species} onChange={(species) => onChange({ ...basics, species })} />
+      ) : (
+        <LoadingOptions legend="Species" failed={props.loadFailed} onRetry={props.onRetry} />
+      )}
       {missingHint('species', 'species', list.length, props.missing('species'), props.loaded, props.policy)}
     </StepForm>
   );
 }
 
 function ClassStep(props: PickStepProps) {
-  const { basics, options, onChange } = props;
+  const { basics, onChange } = props;
+  const options = props.loaded ? props.options : [];
   const hint = reasonHint(props.reasonNames([basics.startingClass]));
   const list = ofKind(options, 'class');
   return (
-    <StepForm label="Class" next="Next: background" nextDisabled={!!hint} nextHint={hint} onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
-      <p className="hint">Every option shows its source and the rules it is for.</p>
-      <SinglePick
-        legend="Class (level 1)"
-        name="startingClass"
-        options={list}
-        value={basics.startingClass}
-        onChange={(startingClass) => onChange({ ...basics, startingClass })}
-      />
+    <StepForm label="Class" next="Next: ability scores" nextDisabled={!!hint} nextHint={hint} onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
+      <p className="hint">Open "What it gives" on an option to see what it grants and where it comes from.</p>
+      {props.loaded ? (
+        <SinglePick
+          legend="Class (level 1)"
+          name="startingClass"
+          options={list}
+          value={basics.startingClass}
+          onChange={(startingClass) => onChange({ ...basics, startingClass })}
+        />
+      ) : (
+        <LoadingOptions legend="Class (level 1)" failed={props.loadFailed} onRetry={props.onRetry} />
+      )}
       {missingHint('class', 'classes', list.length, props.missing('class'), props.loaded, props.policy)}
     </StepForm>
   );
 }
 
 function BackgroundStep(props: PickStepProps) {
-  const { basics, options, onChange } = props;
+  const { basics, onChange } = props;
+  const options = props.loaded ? props.options : [];
   const list = ofKind(options, 'background');
   // Spells are picked per caster in the choices step, never pinned as content. Content another revision grants or
   // offers (class features, skill options) arrives through it, so only standalone content is listed here.
@@ -609,15 +727,25 @@ function BackgroundStep(props: PickStepProps) {
 
   const hint = reasonHint(props.reasonNames([basics.background, ...basics.other]));
   return (
-    <StepForm label="Background" next="Next: choices" nextDisabled={!!hint} nextHint={hint} onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
-      <p className="hint">Every option shows its source and the rules it is for.</p>
-      <SinglePick
-        legend="Background"
-        name="background"
-        options={list}
-        value={basics.background}
-        onChange={(background) => onChange({ ...basics, background })}
-      />
+    <StepForm label="Background" next="Next: gear" nextDisabled={!!hint} nextHint={hint} onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
+      <p className="hint">Open "What it gives" on an option to see what it grants and where it comes from.</p>
+      {props.policy && (
+        <p className="hint">
+          {props.policy.abilityIncreaseSource === 'background' ? 'Under these rules your background raises your ability scores. ' : ''}
+          Backgrounds {props.policy.backgroundGrantsFeat ? 'can' : 'cannot'} grant a feat under these rules.
+        </p>
+      )}
+      {props.loaded ? (
+        <SinglePick
+          legend="Background"
+          name="background"
+          options={list}
+          value={basics.background}
+          onChange={(background) => onChange({ ...basics, background })}
+        />
+      ) : (
+        <LoadingOptions legend="Background" failed={props.loadFailed} onRetry={props.onRetry} />
+      )}
       {missingHint('background', 'backgrounds', list.length, props.missing('background'), props.loaded, props.policy)}
 
       <details>
@@ -891,17 +1019,20 @@ function ChoicePicker(props: {
   onChange: (ref: ContentReference, add: boolean) => void;
   /** MECH-X item 2: "You may replace one pick now." (level-up) or the window hint (Make choices); real text in the group. */
   replaceNote?: string;
+  /** Every choice shown on this step, so a label shared by two sources keeps its source's name. */
+  siblings?: { text?: string }[];
 }) {
   const { choice } = props;
   const full = choice.selected.length >= choice.count;
   // R33 (2.4.3): an option ticked when the picker appeared stays rendered for as long as the picker does, so unticking the
   // focused checkbox never removes it; once unticked and not offerable it is aria-disabled, never `disabled` under focus.
   const [atMount] = useState(() => new Set(choice.selected.map((s) => s.revisionId)));
+  const legendName = choiceLegendName(choice, props.siblings);
   if (!props.optionsLoaded) {
     return (
       <fieldset className="choice-picker" aria-busy="true">
         <legend>
-          {choice.sourceName}: choose {choice.count}
+          {legendName}
         </legend>
         <p className="hint">Loading the options…</p>
         {props.replaceNote && <p className="hint">{props.replaceNote}</p>}
@@ -911,10 +1042,10 @@ function ChoicePicker(props: {
   return (
     <fieldset className="choice-picker">
       <legend>
-        {choice.sourceName}: choose {choice.count}{' '}
+        {legendName}{' '}
         <span className={choice.resolved ? 'hint' : 'warn'}>{choice.resolved ? '(done)' : `(to do: ${choice.selected.length} of ${choice.count} chosen)`}</span>
       </legend>
-      {choice.text && <p className="hint">{choice.text}</p>}
+      {choice.text && choice.text !== choiceLabel(choice) && <p className="hint">{choice.text}</p>}
       {props.replaceNote && <p className="hint">{props.replaceNote}</p>}
       <ul className="options">
         {choice.options.map((ref) => {
@@ -1108,6 +1239,7 @@ function ChoicesStep(props: {
         <ChoicePicker
           key={`${choice.source.revisionId}-${choice.choiceId}`}
           choice={choice}
+          siblings={choices}
           optionOf={props.optionOf}
           optionsLoaded={props.optionsLoaded}
           onChange={(ref, add) => props.onChoose(choice, ref, add)}
@@ -1176,20 +1308,23 @@ function draftOf(basics: Basics, id: string, previous?: Character): Character {
 export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, onError }: Props) {
   const rulesLabel = useRulesLabel();
   const [step, setStep] = useState<Step>(mode.kind === 'create' ? 'rules' : mode.kind === 'levelUp' ? 'level' : 'choices');
-  const [basics, setBasics] = useState<Basics>({
-    name: '',
-    rulesFamily: 'srd-5.1',
-    scores: { str: 10, dex: 14, con: 12, int: 10, wis: 13, cha: 8 },
-    scoreMethod: 'array',
-    assignment: {},
-    rolled: [],
-    other: [],
-  });
+  const [basics, setBasics] = useState<Basics>(initialBasics);
   const [draftId] = useState(() => crypto.randomUUID());
+  const [passedLevel, setPassedLevel] = useState(false);
   const [view, setView] = useState<CharacterView | undefined>(mode.kind === 'create' ? undefined : mode.view);
+  const [guides, setGuides] = useState<GuideView[]>([]);
+  const [gear, setGear] = useState<GearValue>({ skipped: false, choices: {} });
+  // What the draft is trained in, as the service last said (the gear step's preview); none until the first preview answers.
+  // It belongs to the draft it was asked for: another class, background or pick makes a new draft, and a list for an old one is never used.
+  const [trainedFor, setTrained] = useState<{ draft: Character; list: string[] }>();
+  const trainedSeq = useRef(0);
+  /** What the gear step gave when the player pressed Next: sent with the new character; undefined when skipped or nothing was given. */
+  const [kitGiven, setKitGiven] = useState<{ equipment: EquipmentEntry[]; coins: Currency }>();
   const [listed, setListed] = useState<ContentOption[]>([]);
-  // Which rules family and campaign `listed` belongs to; until it matches, options are still loading.
-  const [listedFor, setListedFor] = useState<string>();
+  // How the last listing request settled, and for which request key (family|campaign|retry). While the current key has no settled status, options are still loading.
+  const [listStatus, setListStatus] = useState<{ key: string; ok: boolean }>();
+  // "Try again" bumps this, which is part of the request key, so the same family and campaign are asked for again.
+  const [listRetry, setListRetry] = useState(0);
   // Item 1: how many entries per kind are still drafts, and the family they were counted for. A failure leaves it unset: the counts are only a hint.
   const [drafts, setDrafts] = useState<{ family: string; counts: Partial<Record<ContentKind, number>> }>();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -1221,10 +1356,13 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
     },
   });
   const committing = useRef(false);
+  const gearing = useRef(false);
 
   const family = mode.kind === 'create' ? basics.rulesFamily : mode.view.character.rulesFamily;
   const campaignId = mode.kind === 'create' ? basics.campaignId : mode.view.character.campaignId;
   const campaign = campaigns.find((c) => c.id === campaignId);
+  const creating = mode.kind === 'create';
+  const listKey = `${family}|${campaignId ?? ''}|${listRetry}`;
 
   useEffect(() => {
     client
@@ -1242,12 +1380,13 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
 
   useEffect(() => {
     let current = true;
+    const key = listKey;
     client
       .listContent(family, campaignId)
       .then((result) => {
         if (!current) return;
         setListed(result);
-        setListedFor(`${family}|${campaignId ?? ''}`);
+        setListStatus({ key, ok: true });
         // A pick that does not fit the (new) rules family is dropped, not left checked but disabled (SPEC S-02).
         const fits = (ref?: ContentReference) => !!ref && result.some((o) => o.compatible && sameRef(o.reference, ref));
         setBasics((b) => {
@@ -1262,7 +1401,19 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
           };
         });
       })
-      .catch(fail);
+      .catch((error) => {
+        if (current) setListStatus({ key, ok: false });
+        fail(error);
+      });
+    // Only the create flow shows guides: a guides failure must not put an error on the level-up or choices screens.
+    if (creating) {
+      client
+        .listGuides(family, campaignId)
+        .then((result) => {
+          if (current) setGuides(result);
+        })
+        .catch(fail);
+    }
     client
       .draftCounts(family)
       .then((counts) => {
@@ -1272,7 +1423,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
     return () => {
       current = false;
     };
-  }, [family, campaignId, fail]);
+  }, [family, campaignId, creating, fail, listKey]);
 
   // SPEC P-01: content outside the campaign is unavailable until the player says why they use it (a recorded exception).
   const outsideAllowed = outside.allow && outside.reason.trim().length > 0;
@@ -1309,6 +1460,10 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
   useEffect(() => {
     previewSeq.current.next();
   }, [draftName, draftFamily, draftScores, draftSpecies, draftBackground, draftClass, draftOther, draftCampaign]);
+  // A gear pick changed while the kit is pending likewise makes that reply stale.
+  useEffect(() => {
+    previewSeq.current.next();
+  }, [gear]);
 
   // SPEC I-06: new picks get the newest revision of each content; older ones only name what saved characters pin.
   const pickable = options.filter((o) => !o.superseded);
@@ -1355,13 +1510,14 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
    * Previews the draft and moves to the choices. The reply applies only if it is the latest request and the player is still
    * on the step that asked: Back while it is pending cancels the jump, so a late reply never carries an old class forward.
    */
-  async function preview(draft: Character, from: 'background' | 'level') {
+  async function preview(draft: Character, from: 'gear' | 'level') {
     const request = previewSeq.current.next();
     const current = () => mounted.current && request === previewSeq.current.n && stepNow.current === from;
     try {
       const result = await client.preview(draft);
       if (!current()) return;
       setView(result);
+      if (from === 'level') setPassedLevel(true); // Next from the level step counts as a pick (ruling), even if the player goes Back
       setStep('choices');
     } catch (error) {
       if (current()) onError(error);
@@ -1432,6 +1588,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
               campaignId: draft.campaignId,
               campaignExceptions: draft.campaignExceptions,
               spells: draft.spells,
+              ...(kitGiven ? { equipment: kitGiven.equipment, coins: kitGiven.coins } : {}),
             })
           : await client.saveCharacter(draft);
       // Always: the save happened, so the app says so even if the player has left (R36). The app switches the screen before it
@@ -1448,11 +1605,49 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
     }
   }
 
+  const classGuide = guides.find((g) => g.targetContentId === basics.startingClass?.contentId);
+  const backgroundGuide = guides.find((g) => g.targetContentId === basics.background?.contentId);
+  const className = basics.startingClass ? nameOf(basics.startingClass) : '';
+  const backgroundName = basics.background ? nameOf(basics.background) : '';
+  // GearStep asks for a new preview whenever this draft changes identity, so it is rebuilt only when what it is built from changes.
+  const gearDraft = useMemo(() => draftOf(basics, draftId, view?.character), [basics, draftId, view?.character]);
+  const trainedFresh = trainedFor?.draft === gearDraft;
+  const trained = trainedFresh ? trainedFor.list : noTraining;
+  // Kits are asked for with the training of this very draft, so Next waits for its reply (a failed preview counts as an answer: none).
+  const gearWaiting = !gear.skipped && !trainedFresh && (classGuide !== undefined || backgroundGuide !== undefined);
+
+  /** Gear's Next: ask the service what the kits give (nothing when skipped), keep it for the save, then preview the draft. */
+  async function gearNext() {
+    if (gearing.current || gearWaiting) return; // a second press while the kit is pending does nothing
+    gearing.current = true;
+    try {
+      const kits = kitsFor([classGuide, backgroundGuide], gear, trained);
+      // A pick changed (or the step left) while the kit is pending bumps previewSeq: the old reply is dropped, never saved.
+      const request = previewSeq.current.next();
+      try {
+        if (!gear.skipped && kits.length > 0) {
+          const given = await client.kit(gearDraft, kits);
+          if (!mounted.current || stepNow.current !== 'gear' || request !== previewSeq.current.n) return;
+          setKitGiven(given.equipment.length > 0 || Object.values(given.coins).some((n) => n > 0) ? { equipment: given.equipment, coins: given.coins } : undefined);
+        } else setKitGiven(undefined);
+      } catch {
+        if (mounted.current && stepNow.current === 'gear' && request === previewSeq.current.n) {
+          fail(new Error('The starting kit could not be worked out. You can press Skip and add gear later on the Gear tab.'));
+        }
+        return;
+      }
+      await preview(gearDraft, 'gear');
+    } finally {
+      gearing.current = false;
+    }
+  }
+
   const at = createSteps.indexOf(step);
   const back = () => setStep(createSteps[Math.max(at - 1, 0)]!);
   const next = () => setStep(createSteps[Math.min(at + 1, createSteps.length - 1)]!);
   const policy = rulesFamilies.find((f) => f.id === basics.rulesFamily);
-  const optionsLoaded = listedFor === `${family}|${campaignId ?? ''}`;
+  const optionsLoaded = listStatus?.key === listKey && listStatus.ok;
+  const optionsFailed = listStatus?.key === listKey && !listStatus.ok;
   const otherFamily = rulesFamilies.find((f) => f.id !== family);
   const missing = (kind: ContentKind): Missing => ({
     drafts: drafts?.family === family ? (drafts.counts[kind] ?? 0) : 0,
@@ -1461,12 +1656,43 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
     otherFamilyName: otherFamily ? rulesLabel(otherFamily.id) : 'the other rules',
     familyName: rulesLabel(family),
   });
-  const pickProps = { basics, policy, options: pickable, loaded: optionsLoaded, missing, reasonNames, onChange: setBasics, onBack: back, onCancel };
+  // Confirm before discard: "any pick made" is computed from state (a step value that differs from where the builder started).
+  const pickMade =
+    mode.kind === 'create'
+      ? !sameValue(basics, initialBasics) ||
+        gear.skipped ||
+        Object.keys(gear.choices).length > 0 ||
+        (view?.character.choices?.length ?? 0) > 0 ||
+        (view?.character.spells?.length ?? 0) > 0
+      : !!view &&
+        ((mode.kind === 'levelUp' && passedLevel) ||
+          !sameValue(view.character.choices, mode.view.character.choices) ||
+          !sameValue(view.character.spells, mode.view.character.spells));
+  const [confirming, setConfirming] = useState<Step | undefined>(undefined);
+  // The question closes when a save starts or the step changes (adjusted while rendering, not in an effect).
+  if (confirming !== undefined && (busy || confirming !== step)) setConfirming(undefined);
+  const panel = useRef<HTMLElement>(null);
+  const keepEditing = useRef<HTMLButtonElement>(null);
+  const cancelPressed = useCallback(() => {
+    if (busy) return; // a save in flight cannot be discarded; the button says so with aria-disabled
+    if (pickMade) setConfirming(step);
+    else onCancel();
+  }, [busy, pickMade, onCancel, step]);
+  useEffect(() => {
+    if (confirming) keepEditing.current?.focus();
+  }, [confirming]);
+  function keepGoing() {
+    setConfirming(undefined);
+    // The step's own Cancel button gets the focus back, so the player is where they were.
+    const cancel = [...(panel.current?.querySelectorAll('.actions button') ?? [])].find((b) => b.textContent.trim() === 'Cancel');
+    if (cancel instanceof HTMLElement) cancel.focus();
+  }
+  const pickProps = { basics, policy, options: pickable, loaded: optionsLoaded, loadFailed: optionsFailed, onRetry: () => setListRetry((n) => n + 1), missing, reasonNames, onChange: setBasics, onBack: back, onCancel: cancelPressed };
 
   const title = builderTitle(mode);
 
   return (
-    <section className="panel" aria-labelledby="builder-heading">
+    <section className="panel" aria-labelledby="builder-heading" ref={panel}>
       <h1 id="builder-heading" tabIndex={-1} ref={heading}>
         {title}
       </h1>
@@ -1495,15 +1721,45 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
       )}
 
       {mode.kind === 'create' && step === 'rules' && (
-        <RulesStep basics={basics} rulesFamilies={rulesFamilies} campaigns={campaigns} onChange={setBasics} onNext={next} onCancel={onCancel} />
+        <RulesStep basics={basics} rulesFamilies={rulesFamilies} campaigns={campaigns} onChange={setBasics} onNext={next} onCancel={cancelPressed} />
       )}
       {mode.kind === 'create' && step === 'scores' && (
-        <ScoresStep basics={basics} policy={policy} onChange={setBasics} onNext={next} onBack={back} onCancel={onCancel} onError={onError} />
+        <ScoresStep className={classGuide ? className : undefined} primaryAbilities={classGuide?.primaryAbilities} basics={basics} policy={policy} onChange={setBasics} onNext={next} onBack={back} onCancel={cancelPressed} onError={onError} />
       )}
       {mode.kind === 'create' && step === 'species' && <SpeciesStep {...pickProps} onNext={next} />}
       {mode.kind === 'create' && step === 'class' && <ClassStep {...pickProps} onNext={next} />}
-      {mode.kind === 'create' && step === 'background' && (
-        <BackgroundStep {...pickProps} onNext={() => preview(draftOf(basics, draftId, view?.character), 'background')} />
+      {mode.kind === 'create' && step === 'background' && <BackgroundStep {...pickProps} onNext={next} />}
+      {mode.kind === 'create' && step === 'gear' && (
+        <StepForm label="Starting gear" next="Next: choices" nextDisabled={gearWaiting} onNext={gearNext} onBack={back} onCancel={cancelPressed}>
+          <GearStep
+            draft={gearDraft}
+            classGuide={classGuide}
+            backgroundGuide={backgroundGuide}
+            className={className}
+            backgroundName={backgroundName}
+            trained={trained}
+            value={gear}
+            onChange={setGear}
+            onPreview={async (kits) => {
+              const asked = gearDraft;
+              const seq = ++trainedSeq.current;
+              // Only the latest request may set the training; an older reply arriving late is dropped.
+              const keep = (list: string[]) => {
+                if (seq !== trainedSeq.current || !mounted.current) return;
+                // Keep the same array while the contents are unchanged, so a new reply cannot re-trigger the gear step's preview.
+                setTrained((old) => (old?.draft === asked && old.list.length === list.length && old.list.every((t, i) => t === list[i]) ? old : { draft: asked, list }));
+              };
+              try {
+                const given = await client.kit(asked, kits);
+                keep(given.trained);
+                return given;
+              } catch (error) {
+                keep(noTraining); // no answer: the step stays usable, with no training known
+                throw error;
+              }
+            }}
+          />
+        </StepForm>
       )}
       {step === 'level' && mode.kind === 'levelUp' && (
         <LevelStep
@@ -1511,7 +1767,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
           options={pickable}
           nameOf={nameOf}
           onNext={(classes) => preview({ ...(view?.character ?? mode.view.character), classes }, 'level')}
-          onCancel={onCancel}
+          onCancel={cancelPressed}
           onError={fail}
         />
       )}
@@ -1524,11 +1780,9 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
           spellOptions={pickable.filter((o) => o.kind === 'spell')}
           onChoose={choose}
           onSpells={toggleSpell}
-          onBack={mode.kind === 'create' ? () => setStep('background') : mode.kind === 'levelUp' ? () => setStep('level') : undefined}
+          onBack={mode.kind === 'create' ? () => setStep('gear') : mode.kind === 'levelUp' ? () => setStep('level') : undefined}
           onCommit={commit}
-          onCancel={() => {
-            if (!busy) onCancel(); // a save in flight cannot be discarded; the button says so with aria-disabled
-          }}
+          onCancel={cancelPressed}
           busy={busy}
           startView={mode.kind === 'levelUp' ? mode.view : undefined}
           choicesMode={mode.kind === 'choices'}
@@ -1548,6 +1802,37 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
               : undefined
           }
         />
+      )}
+
+      {confirming && (
+        <div
+          role="alertdialog"
+          aria-labelledby="discard-question"
+          className="panel"
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.stopPropagation();
+              keepGoing();
+            }
+          }}
+        >
+          <p id="discard-question">
+            {mode.kind === 'create' ? 'Discard this character?' : mode.kind === 'levelUp' ? 'Discard this level-up?' : 'Discard these changes?'} Your picks will be lost.
+          </p>
+          <div className="actions">
+            <button type="button" ref={keepEditing} onClick={keepGoing}>
+              Keep editing
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (!busy) onCancel(); // a save in flight cannot be discarded
+              }}
+            >
+              Discard
+            </button>
+          </div>
+        </div>
       )}
     </section>
   );

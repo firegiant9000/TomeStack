@@ -306,6 +306,15 @@ public sealed partial class TomeStackApp : IDisposable
     public CharacterView CreateCharacter(CreateCharacterRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
+        // Published items of this family only. A mod's own fit to its host (and its kind/published state) is checked again by the save
+        // (checkMods); the family of the mod is not, so it is checked here.
+        bool Unusable(ContentReference? reference) =>
+            reference is null || _store.FindRevision(reference) is not { Kind: ContentKind.Item, Status: RevisionStatus.Published } item || !Guides.InFamily(item, request.RulesFamily);
+        var unknown = (request.Equipment ?? [])
+            .SelectMany(IEnumerable<ContentReference?> (e) => e?.Item is null || Unusable(e.Item) ? [e?.Item] : (e.Mods ?? []).Where(m => Unusable(m)).Select(m => (ContentReference?)m))
+            .ToList();
+        if (unknown.Count > 0)
+            throw new AppValidationException([.. unknown.Select(r => new Diagnostic("character.equipment-unknown", "An item or mod is not published content for this rules family.", r))]);
         return SaveCharacter(new Character
         {
             Id = Guid.NewGuid(),
@@ -318,6 +327,8 @@ public sealed partial class TomeStackApp : IDisposable
             CampaignId = request.CampaignId,
             CampaignExceptions = request.CampaignExceptions ?? [],
             Spells = request.Spells ?? [],
+            Equipment = request.Equipment ?? [],
+            Currency = request.Coins ?? new(),
         });
     }
 
@@ -651,6 +662,8 @@ public sealed record ChooseRequest(Guid CharacterId, ContentReference Source, st
 
 /// <param name="Classes">The starting class (and any further levels) from the builder draft (SPEC C-07).</param>
 /// <param name="Choices">Choices answered in the builder draft; the sheet flags any that are no longer valid.</param>
+/// <param name="Equipment">Starting gear from the builder's kit; each item must be a published item in the rules family.</param>
+/// <param name="Coins">Starting coins from the builder's kit.</param>
 public sealed record CreateCharacterRequest(
     string Name,
     string RulesFamily,
@@ -660,7 +673,9 @@ public sealed record CreateCharacterRequest(
     IReadOnlyList<ChoiceSelection>? Choices = null,
     Guid? CampaignId = null,
     IReadOnlyList<CampaignException>? CampaignExceptions = null,
-    IReadOnlyList<KnownSpell>? Spells = null);
+    IReadOnlyList<KnownSpell>? Spells = null,
+    IReadOnlyList<EquipmentEntry>? Equipment = null,
+    Currency? Coins = null);
 
 /// <summary>A choice answered on an unsaved builder draft (<c>character.previewChoice</c>).</summary>
 public sealed record PreviewChoiceRequest(Character Draft, ContentReference Source, string ChoiceId, IReadOnlyList<ContentReference>? Selected);

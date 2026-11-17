@@ -20,10 +20,10 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
 
     public static IReadOnlyList<string> Commands { get; } =
     [
-        "app.info", "content.list", "content.draftCounts","campaign.list", "campaign.save", "campaign.delete","content.validate", "content.saveDraft", "content.publish", "content.publishManyPreview", "content.publishMany", "content.addToSpellList", "content.spellListKeys", "content.revisions", "content.affected",
+        "app.info", "content.list", "content.guides","content.draftCounts","campaign.list", "campaign.save", "campaign.delete","content.validate", "content.saveDraft", "content.publish", "content.publishManyPreview", "content.publishMany", "content.addToSpellList", "content.spellListKeys", "content.revisions", "content.affected",
         "content.bySource", "content.diagnose", "content.sandbox", "content.compare", "content.tree", "content.feedback", "source.list", "source.createHomebrew", "source.setShareable",
         "source.attachment", "source.attachPdf", "source.attachPdfData", "source.detachPreview", "source.detach", "source.openPage", "source.importPages",
-        "character.list", "character.get", "character.create", "character.save", "character.choose", "character.preview", "character.previewChoice",
+        "character.list", "character.get", "character.create", "character.save", "character.choose", "character.preview", "character.previewChoice", "character.kit",
         "character.play", "character.undoPlay", "character.restPreview", "character.rest", "character.turnPreview", "character.turn", "character.damagePreview", "character.reviewUpdate", "character.applyUpdate", "character.updates", "character.mechanics", "roll", "dice.roll",
         "character.archivePreview", "character.archive", "character.unarchive", "character.createSample", "character.deleteSample",
         "character.snapshot", "character.snapshots", "character.restorePreview", "character.restoreSnapshot",
@@ -99,6 +99,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     {
         "app.info" => app.GetInfo(),
         "content.list" => ListContent(Payload<RulesFamilyPayload>(payload)),
+        "content.guides" => ListGuides(Payload<RulesFamilyPayload>(payload)),
         "content.draftCounts" => app.DraftCounts(Payload<RulesFamilyPayload>(payload).RulesFamily),
         "campaign.list" => app.ListCampaigns(),
         "campaign.save" => app.SaveCampaign(Payload<Campaign>(payload)),
@@ -150,6 +151,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "character.choose" => app.Choose(Payload<ChooseRequest>(payload)),
         "character.preview" => app.Preview(Payload<Character>(payload)),
         "character.previewChoice" => app.PreviewChoice(Payload<PreviewChoiceRequest>(payload)),
+        "character.kit" => app.Kit(Payload<KitRequest>(payload)),
         "character.play" => app.Play(Payload<PlayCommand>(payload)),
         "character.undoPlay" => app.UndoPlay(Payload<UndoPlayRequest>(payload)),
         "character.restPreview" => PreviewRest(Payload<RestPreviewPayload>(payload)),
@@ -245,6 +247,8 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         var validation = new { result.Validation.Revision, result.Validation.Errors, result.Validation.Warnings, result.Validation.CanPublish };
         return new { result.View, result.Draft, result.Changes, Validation = validation };
     }
+
+    private IReadOnlyList<GuideView> ListGuides(RulesFamilyPayload payload) => app.ListGuides(payload.RulesFamily, payload.CampaignId);
 
     private IReadOnlyList<ContentOption> ListContent(RulesFamilyPayload payload) => app.ListContent(payload.RulesFamily, payload.CampaignId);
 
