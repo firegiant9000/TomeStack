@@ -32,6 +32,21 @@ public class MulticlassPrerequisiteTests
     }
 
     [Fact]
+    public void Shortfalls_give_the_structured_requirement_and_agree_with_the_diagnostics()
+    {
+        foreach (var family in BothFamilies)
+        {
+            var (low, candidate) = Setup(family, 8);
+            var group = Assert.Single(CharacterCalculator.MulticlassShortfalls(low, candidate));
+            var shortfall = Assert.Single(group);
+            Assert.Equal(new PrerequisiteShortfall("Intelligence score", 13, 8), shortfall);
+
+            var (met, _) = Setup(family, 13);
+            Assert.Empty(CharacterCalculator.MulticlassShortfalls(met, candidate));
+        }
+    }
+
+    [Fact]
     public void Intelligence_13_gives_none()
     {
         foreach (var family in BothFamilies)

@@ -653,6 +653,39 @@ public static partial class CharacterCalculator
         [.. Unmet(candidateClass, candidateClass.Effects.OfType<RestrictionEffect>().Where(IsMulticlassPrerequisite), sheet, "",
             "Multiclassing into or out of it needs it; the class stays applied, so check the character.", "restriction.multiclass-unmet")];
 
+    /// <summary>
+    /// The same multiclass check as <see cref="MulticlassPrerequisites"/>, as data for a caller that words it for the player: one entry
+    /// per unmet requirement group (a group's entries are alternatives, meeting any one is enough). Restrictions that cannot be
+    /// checked (a diagnostic of another code in <see cref="MulticlassPrerequisites"/>) are not listed.
+    /// </summary>
+    public static IReadOnlyList<IReadOnlyList<PrerequisiteShortfall>> MulticlassShortfalls(CharacterSheet sheet, ContentRevision candidateClass)
+    {
+        var result = new List<IReadOnlyList<PrerequisiteShortfall>>();
+        foreach (var group in candidateClass.Effects.OfType<RestrictionEffect>().Where(IsMulticlassPrerequisite).GroupBy(r => r.Group))
+        {
+            var failed = new List<PrerequisiteShortfall>();
+            var met = false;
+            foreach (var restriction in group)
+            {
+                if (!SpecIndex.TryGetValue(restriction.Field, out var index)
+                    || IsCharacterOnlyField(restriction.Field, candidateClass.SchemaVersion)
+                    || IsPlayMechanicsOnlyField(restriction.Field, candidateClass.SchemaVersion)
+                    || (IsV8Field(restriction.Field) && IgnoresV8(candidateClass)))
+                    continue;
+                var actual = sheet.Field(restriction.Field).Value;
+                if (actual >= restriction.Minimum)
+                    met = true;
+                else
+                    failed.Add(new(Specs[index].Label, restriction.Minimum, actual));
+            }
+            if (group.Key is null)
+                result.AddRange(failed.Select(f => (IReadOnlyList<PrerequisiteShortfall>)[f]));
+            else if (!met && failed.Count > 0)
+                result.Add(failed);
+        }
+        return result;
+    }
+
     private static bool IsEvaluated(RestrictionEffect restriction) =>
         restriction.Automation == AutomationStatus.Automatic && restriction.Timing == EffectTiming.Always;
 
@@ -1420,3 +1453,6 @@ public static partial class CharacterCalculator
         return bounded;
     }
 }
+
+/// <summary>One requirement a sheet does not meet: the field's label, the minimum it needs and what the sheet has.</summary>
+public sealed record PrerequisiteShortfall(string Label, int Minimum, int Actual);

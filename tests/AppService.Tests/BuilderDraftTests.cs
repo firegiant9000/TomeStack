@@ -231,4 +231,123 @@ public class BuilderDraftTests
         var coins = Assert.Throws<AppValidationException>(() => temp.App.CreateCharacter(Create(Draft(), null, new Currency { Gp = -1 })));
         Assert.Contains(coins.Problems, p => p.Code == "character.currency-out-of-range");
     }
+
+    // Wave 3 G10 (D99): the level-up options.
+
+    private static ContentReference ClassRef(TempApp temp, string name) =>
+        temp.App.ListContent(RulesFamilies.Srd521).Single(o => o.Kind == ContentKind.Class && o.Compatible && o.Name == name && !o.Superseded).Reference;
+
+    private static Character Cleric2(TempApp temp, int str = 10, int dex = 12, int intelligence = 8, int wis = 14, Guid? campaign = null) => new()
+    {
+        Id = Guid.NewGuid(),
+        Name = "Level Cleric",
+        RulesFamily = RulesFamilies.Srd521,
+        BaseAbilities = new(str, dex, 14, intelligence, wis, 10),
+        Classes = [new(ClassRef(temp, "Cleric"), 2)],
+        CampaignId = campaign,
+    };
+
+    private static IReadOnlyList<LevelUpOption> Options(TempApp temp, Character character) =>
+        temp.App.LevelUpOptions(temp.App.SaveCharacter(character).Character.Id);
+
+    [Fact]
+    public void LevelUpOptions_lists_the_current_class_first_with_what_the_next_level_gives()
+    {
+        using var temp = new TempApp();
+
+        var options = Options(temp, Cleric2(temp));
+
+        var cleric = options[0];
+        Assert.Equal("Cleric", cleric.Name);
+        Assert.True(cleric.Current);
+        Assert.Equal(3, cleric.NextLevel);
+        Assert.NotEmpty(cleric.Gains);
+        Assert.Empty(cleric.Unmet);
+        Assert.All(options.Skip(1), o => Assert.False(o.Current));
+        Assert.All(options.Skip(1), o => Assert.Equal(1, o.NextLevel));
+        var others = options.Skip(1).Select(o => o.Name).ToList();
+        Assert.Equal([.. others.Order(StringComparer.CurrentCultureIgnoreCase)], others);
+        Assert.DoesNotContain(options.Skip(1), o => o.Name == "Cleric");
+    }
+
+    [Fact]
+    public void LevelUpOptions_says_what_a_new_class_needs_in_the_players_words()
+    {
+        using var temp = new TempApp();
+
+        var options = Options(temp, Cleric2(temp, intelligence: 8));
+
+        Assert.Equal(["Intelligence 13 (you have 8)"], options.Single(o => o.Name == "Wizard").Unmet);
+        Assert.Empty(Options(temp, Cleric2(temp, intelligence: 13)).Single(o => o.Name == "Wizard").Unmet);
+    }
+
+    [Fact]
+    public void LevelUpOptions_gives_one_phrase_for_an_either_or_requirement_and_none_for_a_class_without_one()
+    {
+        using var temp = new TempApp();
+
+        var options = Options(temp, Cleric2(temp, str: 10, dex: 12));
+
+        Assert.Equal(["Strength 13 or Dexterity 13 (you have 10 and 12)"], options.Single(o => o.Name == "Fighter").Unmet);
+        Assert.Empty(Options(temp, Cleric2(temp, str: 13)).Single(o => o.Name == "Fighter").Unmet);
+        // A character who meets everything is told nothing is missing, whatever the class.
+        Assert.All(Options(temp, Cleric2(temp) with { BaseAbilities = new(15, 15, 15, 15, 15, 15) }), o => Assert.Empty(o.Unmet));
+    }
+
+    [Fact]
+    public void LevelUpOptions_adds_what_the_current_class_needs_to_every_new_class()
+    {
+        using var temp = new TempApp();
+
+        var options = Options(temp, Cleric2(temp, intelligence: 14, wis: 12));
+
+        // A Cleric needs Wisdom 13 to multiclass, so any class taken beside it says so.
+        Assert.Equal(["Wisdom 13 (you have 12)"], options.Single(o => o.Name == "Wizard").Unmet);
+        Assert.Empty(options[0].Unmet);
+    }
+
+    [Fact]
+    public void LevelUpOptions_leaves_out_classes_a_campaign_does_not_allow_but_keeps_the_characters_own()
+    {
+        using var temp = new TempApp();
+        var campaign = temp.App.SaveCampaign(new Campaign { Id = Guid.Empty, Name = "Closed table", RulesFamily = RulesFamilies.Srd521, AllowedSources = [] });
+
+        var options = Options(temp, Cleric2(temp, campaign: campaign.Id));
+
+        Assert.Equal(["Cleric"], options.Select(o => o.Name));
+    }
+
+    [Fact]
+    public void LevelUpOptions_leaves_out_classes_of_the_other_rules_family()
+    {
+        using var temp = new TempApp();
+        var options = Options(temp, Cleric2(temp));
+        var other = temp.App.ListContent(RulesFamilies.Srd51).Where(o => o.Kind == ContentKind.Class && !o.RulesFamilies.Contains(RulesFamilies.Srd521)).Select(o => o.Reference.ContentId).ToHashSet();
+
+        Assert.DoesNotContain(options, o => other.Contains(o.ContentId));
+    }
+
+    [Fact]
+    public void LevelUpOptions_is_empty_at_level_20_as_the_sheet_offers_no_level_up_there()
+    {
+        using var temp = new TempApp();
+        var character = Cleric2(temp) with { Classes = [new(ClassRef(temp, "Cleric"), 20)] };
+
+        Assert.Empty(Options(temp, character));
+    }
+
+    [Fact]
+    public void LevelUpOptions_is_a_command_and_refuses_an_unknown_character()
+    {
+        using var temp = new TempApp();
+        var saved = temp.App.SaveCharacter(Cleric2(temp));
+
+        var ok = Dispatch(temp, "character.levelUpOptions", new { characterId = saved.Character.Id });
+        var missing = Dispatch(temp, "character.levelUpOptions", new { characterId = Guid.NewGuid() });
+
+        Assert.True(ok.GetProperty("ok").GetBoolean(), ok.ToString());
+        Assert.Equal("Cleric", ok.GetProperty("result")[0].GetProperty("name").GetString());
+        Assert.Equal(3, ok.GetProperty("result")[0].GetProperty("nextLevel").GetInt32());
+        Assert.Contains("character.not-found", Codes(missing));
+    }
 }

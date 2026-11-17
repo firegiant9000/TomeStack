@@ -134,4 +134,71 @@ public sealed partial class TomeStackApp
             throw new AppValidationException(problems);
         return character;
     }
+
+    /// <summary>
+    /// <c>character.levelUpOptions</c> (D99): the classes a saved character can take its next level in. Its own classes come first, in
+    /// the order it has them; the others follow by name. Another rules family's classes and those a campaign does not allow
+    /// (<see cref="ContentOption.AllowedInCampaign"/>, as <see cref="ListContent"/> marks them) are left out; the character's own classes
+    /// stay. A character at level 20 has no next level, so the list is empty (the sheet offers no level-up there either).
+    /// A class the character already has uses its pinned revision, a new one the newest published revision.
+    /// </summary>
+    public IReadOnlyList<LevelUpOption> LevelUpOptions(Guid characterId)
+    {
+        var character = _store.FindCharacter(characterId)
+            ?? throw new AppValidationException([new("character.not-found", $"Character {characterId} does not exist.")]);
+        if (character.Classes.Sum(c => c.Level) >= Character.MaxLevel)
+            return [];
+
+        var sheet = CharacterCalculator.Calculate(character, _store);
+        var owned = character.Classes
+            .Select(c => (Entry: c, Revision: _store.FindRevision(c.Class)))
+            .Where(c => c.Revision is { Kind: ContentKind.Class })
+            .ToList();
+        // The multiclass rule applies into and out of a class: what the classes the character has need counts against a new one.
+        var outgoing = owned.SelectMany(c => ShortfallPhrases(sheet, c.Revision!)).ToList();
+
+        var options = owned
+            .Select(c => new LevelUpOption(
+                c.Revision!.ContentId, c.Revision.Name, true, c.Entry.Level + 1,
+                GainsAt(c.Revision, c.Entry.Level + 1, c.Entry.Class == character.Classes[0].Class), []))
+            .ToList();
+        var have = owned.Select(c => c.Revision!.ContentId).ToHashSet();
+        var others = ListContent(character.RulesFamily, character.CampaignId)
+            .Where(o => o.Kind == ContentKind.Class && o.Compatible && !o.Superseded && o.AllowedInCampaign != false && !have.Contains(o.Reference.ContentId))
+            .Select(o => _store.FindRevision(o.Reference))
+            .OfType<ContentRevision>()
+            .OrderBy(r => r.Name, StringComparer.CurrentCultureIgnoreCase)
+            .Select(r => new LevelUpOption(
+                r.ContentId, r.Name, false, 1, GainsAt(r, 1, startingClass: owned.Count == 0),
+                [.. ShortfallPhrases(sheet, r).Concat(outgoing).Distinct(StringComparer.Ordinal)]));
+        return [.. options, .. others];
+    }
+
+    /// <summary>The names of the content <paramref name="revision"/> grants at class level <paramref name="level"/>; a grant with no level is a level 1 one.</summary>
+    private IReadOnlyList<string> GainsAt(ContentRevision revision, int level, bool startingClass) =>
+    [
+        .. revision.Effects.OfType<GrantEffect>()
+            .Where(g => g.Grant == GrantKind.Content && g.Content is not null && (g.Level ?? 1) == level
+                && (g.OnlyAs is null || (g.OnlyAs == ClassEntry.StartingClass) == startingClass))
+            .Select(g => _store.FindRevision(g.Content!)?.Name)
+            .OfType<string>(),
+    ];
+
+    /// <summary>
+    /// The unmet multiclass prerequisites of <paramref name="revision"/>, one phrase each: "Intelligence 13 (you have 8)", or for an
+    /// either/or group "Strength 13 or Dexterity 13 (you have 10 and 12)".
+    /// </summary>
+    private static IEnumerable<string> ShortfallPhrases(CharacterSheet sheet, ContentRevision revision) =>
+        CharacterCalculator.MulticlassShortfalls(sheet, revision).Select(group =>
+            $"{string.Join(" or ", group.Select(s => $"{AbilityLabel(s.Label)} {s.Minimum}"))} (you have {string.Join(" and ", group.Select(s => s.Actual))})");
+
+    /// <summary>The sheet labels an ability's score field "Strength score"; the player is told "Strength".</summary>
+    private static string AbilityLabel(string fieldLabel) =>
+        fieldLabel.EndsWith(" score", StringComparison.Ordinal) ? fieldLabel[..^" score".Length] : fieldLabel;
 }
+
+/// <summary>
+/// One class a character can take its next level in (D99). <see cref="Gains"/> names what that level gives; <see cref="Unmet"/> is
+/// player-ready wording for the multiclass prerequisites not met (empty for a class the character already has).
+/// </summary>
+public sealed record LevelUpOption(Guid ContentId, string Name, bool Current, int NextLevel, IReadOnlyList<string> Gains, IReadOnlyList<string> Unmet);

@@ -33,6 +33,14 @@ describe('client: creation guides and kit (Wave 3 G8)', () => {
   });
 });
 
+describe('client: level-up options (Wave 3 G10)', () => {
+  it('levelUpOptions dispatches character.levelUpOptions with the character id', async () => {
+    const { client, calls } = recorder();
+    await client.levelUpOptions('c1');
+    expect(calls).toStrictEqual([{ command: 'character.levelUpOptions', payload: { characterId: 'c1' } }]);
+  });
+});
+
 describe('client: down-conversion target and changesHash', () => {
   it('packageTargets dispatches package.targets with an empty payload', async () => {
     const { client, calls } = recorder();
