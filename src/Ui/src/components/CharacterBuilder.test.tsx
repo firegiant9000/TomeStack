@@ -893,6 +893,16 @@ it('does not ask for guides outside the create flow (8.6)', async () => {
   expect(vi.mocked(client.listGuides)).not.toHaveBeenCalled();
 });
 
+it('asks for the guides of the chosen campaign, so item choices leave out what it does not allow (G8)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listGuides).mockClear();
+  vi.mocked(client.listCampaigns).mockResolvedValue([{ id: 'fixture-camp', name: 'Fixture Campaign', rulesFamily: 'srd-5.1', allowedSources: ['fixture-source'] }]);
+  vi.mocked(client.listContent).mockResolvedValue(stepContent());
+  render(<CharacterBuilder mode={{ kind: 'create' }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+  await user.selectOptions(await screen.findByRole('combobox', { name: 'Campaign' }), 'fixture-camp');
+  await waitFor(() => expect(vi.mocked(client.listGuides)).toHaveBeenCalledWith(expect.any(String), 'fixture-camp'));
+});
+
 it('moves focus to the heading when Back returns to the Rules step (R5, 2.4.3)', async () => {
   const user = userEvent.setup();
   vi.mocked(client.listContent).mockResolvedValue(stepContent());

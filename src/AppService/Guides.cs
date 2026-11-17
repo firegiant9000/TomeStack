@@ -45,6 +45,9 @@ public sealed partial class TomeStackApp
     /// <summary>A kit gives an item that is not in the draft's rules family; the item is left out (it would block the save).</summary>
     public const string KitItemWrongRules = "kit.item-wrong-rules";
 
+    /// <summary>An item chosen for an "any of" line comes from a source the draft's campaign does not allow; the choice is left out.</summary>
+    public const string KitItemNotInCampaign = "kit.item-not-in-campaign";
+
     /// <summary>The player's wording for a RulesCore kit problem (the code is kept); the RulesCore text carries ids and category keys.</summary>
     private Diagnostic PlayerKitProblem(Diagnostic problem, string? guideName)
     {
@@ -83,6 +86,8 @@ public sealed partial class TomeStackApp
         var seen = new HashSet<Guid>();
         // The same effects the calculation uses decide what the draft is trained in; the UI only reflects this list.
         var trained = CharacterCalculator.TrainedCategories(draft, _store);
+        // A draft in a campaign: item choices from a source it does not allow are not given (fixed lines stay; the sheet flags those).
+        var allowedSources = draft.CampaignId is { } campaignId ? _store.FindCampaign(campaignId)?.AllowedSources.ToHashSet() : null;
         foreach (var kit in request.Kits ?? [])
         {
             if (kit is not null && !seen.Add(kit.GuideContentId))
@@ -100,7 +105,8 @@ public sealed partial class TomeStackApp
                 continue;
             }
             resolved++;
-            var result = KitExpansion.Expand(WithoutUntrained(effect, kit!.Choices ?? [], trained, problems), kit.Choices ?? [], _store);
+            var choices = WithoutDisallowed(kit!.Choices ?? [], allowedSources, problems);
+            var result = KitExpansion.Expand(WithoutUntrained(effect, choices, trained, problems), choices, _store);
             var kept = new List<EquipmentEntry>();
             var kitProblems = new List<Diagnostic>(result.Problems.Select(p => PlayerKitProblem(p, guide.Name)));
             foreach (var entry in result.Equipment)
@@ -108,16 +114,23 @@ public sealed partial class TomeStackApp
                 // The same family check as ListGuides (Usable) and CreateCharacter (Unusable): an item of another family would block the save.
                 var item = _store.FindRevision(entry.Item);
                 if (item is null || !Guides.InFamily(item, draft.RulesFamily))
+                {
                     kitProblems.Add(new(KitItemWrongRules, $"{item?.Name ?? "An item"} isn't available for these rules, so it was left out.", entry.Item));
+                    kitProblems.RemoveAll(p => p.Code == KitExpansion.QuantityCapped && p.Content == entry.Item); // a cap on an item that is left out is no news
+                }
                 else
+                {
                     kept.Add(entry);
+                }
             }
             parts.Add(new KitResult(kept, result.Coins, kitProblems));
         }
 
         // Equal items merge and both sums are capped (quantity and coins), with a problem for each cap, so the final preview cannot throw on size.
         var merged = KitExpansion.Merge([.. parts]);
-        problems.AddRange(merged.Problems.Select(p => p.Code is KitExpansion.QuantityCapped or KitExpansion.CoinsCapped ? PlayerKitProblem(p, null) : p));
+        // A part already capped in Expand carries its own coins problem and Merge adds another: the player is told once.
+        problems.AddRange(merged.Problems.Where(p => p.Code != KitExpansion.CoinsCapped || !problems.Any(q => q.Code == KitExpansion.CoinsCapped))
+            .Select(p => p.Code is KitExpansion.QuantityCapped or KitExpansion.CoinsCapped ? PlayerKitProblem(p, null) : p));
         var entries = merged.Equipment.ToList();
         var coins = merged.Coins;
 
@@ -131,6 +144,33 @@ public sealed partial class TomeStackApp
         }
         var equipped = Equip(draft, entries, coins);
         return new(equipped, coins, problems, Preview(draft with { Equipment = equipped, Currency = coins }), trained);
+    }
+
+    /// <summary>The choices with every item picked for an "any of" line left out when its source is not one the campaign allows (a problem for each).</summary>
+    private IReadOnlyList<KitChoice> WithoutDisallowed(IReadOnlyList<KitChoice> choices, HashSet<Guid>? allowedSources, List<Diagnostic> problems)
+    {
+        if (allowedSources is null)
+            return choices;
+        var result = new List<KitChoice>();
+        foreach (var choice in choices)
+        {
+            if (choice?.AnyOf is null)
+            {
+                result.Add(choice!);
+                continue;
+            }
+            var kept = new Dictionary<int, Guid>();
+            foreach (var (line, id) in choice.AnyOf)
+            {
+                var item = _store.NewestPublished(id);
+                if (item is { Kind: ContentKind.Item } && !allowedSources.Contains(item.Provenance.SourceId))
+                    problems.Add(new(KitItemNotInCampaign, $"{item.Name} isn't allowed in this campaign, so it was left out.", item.Reference));
+                else
+                    kept[line] = id;
+            }
+            result.Add(choice with { AnyOf = kept });
+        }
+        return result;
     }
 
     /// <summary>The kit's picks with the lines of a chosen option the draft is not trained for taken out (and a problem for each); the other picks are untouched.</summary>
@@ -211,7 +251,7 @@ public sealed partial class TomeStackApp
     {
         if (!RulesFamilies.IsKnown(rulesFamily))
             return [];
-        var options = ListContent(rulesFamily, campaignId).Where(o => o.Kind == ContentKind.Item && o.Compatible && !o.Superseded).ToList();
+        var options = ListContent(rulesFamily, campaignId).Where(o => o.Kind == ContentKind.Item && o.Compatible && !o.Superseded && o.AllowedInCampaign != false).ToList();
         var published = _store.ListRevisionsInOrder().Where(r => r.Status == RevisionStatus.Published).ToList();
         var items = published.Where(r => r.Kind == ContentKind.Item).ToLookup(r => r.RevisionId);
         var guides = published

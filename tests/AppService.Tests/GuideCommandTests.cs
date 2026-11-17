@@ -551,6 +551,79 @@ public class GuideCommandTests
     }
 
     [Fact]
+    public void Coins_that_are_capped_in_each_kit_and_again_in_the_merge_are_reported_once()
+    {
+        using var temp = new TempApp();
+        var first = FixtureGuide(temp, "Class guide", [RulesFamilies.Srd51], Pick("a", new KitLine(Coins: new KitCoins { Gp = 2_000_000 })));
+        var second = FixtureGuide(temp, "Background guide", [RulesFamilies.Srd51], Pick("b", new KitLine(Coins: new KitCoins { Gp = 2_000_000 })));
+
+        var view = temp.App.Kit(new(Draft("Cleric"), [new(first.ContentId, [new("a", "a")]), new(second.ContentId, [new("b", "a")])]));
+
+        Assert.Equal(Currency.MaxCoins, view.Coins.Gp);
+        Assert.Single(view.Problems, p => p.Code == KitExpansion.CoinsCapped);
+    }
+
+    [Fact]
+    public void A_quantity_cap_on_an_item_that_is_left_out_as_wrong_family_is_not_reported()
+    {
+        using var temp = new TempApp();
+        var mace = FixtureItem(temp, "Fixture Mace", RulesFamilies.Srd51);
+        var axe = FixtureItem(temp, "Fixture Battleaxe", RulesFamilies.Srd521);
+        var guide = FixtureGuide(temp, "Both rules guide", [RulesFamilies.Srd51, RulesFamilies.Srd521], Pick("a", Of(mace), Of(axe, 10_000)));
+
+        var view = temp.App.Kit(new(Draft("Cleric"), [new(guide.ContentId, [new("a", "a")])]));
+
+        Assert.Equal([mace.Reference], view.Equipment.Select(e => e.Item));
+        Assert.Single(view.Problems, p => p.Code == TomeStackApp.KitItemWrongRules);
+        Assert.DoesNotContain(view.Problems, p => p.Code == KitExpansion.QuantityCapped);
+    }
+
+    /// <summary>A weapon of the catalogue's own source, and a copy of it from a source the campaign will not allow.</summary>
+    private static (ContentRevision Allowed, ContentRevision Blocked, Guid Source) CampaignWeapons(TempApp temp)
+    {
+        var mace = temp.App.Store.FindRevision(temp.App.ListContent(RulesFamilies.Srd51).First(o => o.Name == "Mace").Reference)!;
+        var blocked = mace with
+        {
+            ContentId = Guid.NewGuid(), RevisionId = Guid.NewGuid(), Name = "Fixture Blocked Club",
+            Provenance = mace.Provenance with { SourceId = Guid.NewGuid() },
+        };
+        temp.App.Store.AddRevision(blocked);
+        return (mace, blocked, mace.Provenance.SourceId);
+    }
+
+    [Fact]
+    public void A_campaign_leaves_items_of_sources_it_does_not_allow_out_of_the_anyOf_choices()
+    {
+        using var temp = new TempApp();
+        var (allowed, blocked, source) = CampaignWeapons(temp);
+        var campaign = temp.App.SaveCampaign(new() { Id = Guid.Empty, Name = "Fixture Table", RulesFamily = RulesFamilies.Srd51, AllowedSources = [source] });
+        IEnumerable<string> Names(Guid? id) => Cleric(temp, id).Picks.Single(p => p.Id == "ranged").Options.Single(o => o.Id == "b").Lines.Single().Choices!.Select(c => c.Name);
+
+        Assert.Contains(blocked.Name, Names(null));
+        Assert.DoesNotContain(blocked.Name, Names(campaign.Id));
+        Assert.Contains(allowed.Name, Names(campaign.Id));
+    }
+
+    [Fact]
+    public void A_campaign_draft_drops_a_sent_anyOf_choice_from_a_disallowed_source_with_a_problem()
+    {
+        using var temp = new TempApp();
+        var (allowed, blocked, source) = CampaignWeapons(temp);
+        var campaign = temp.App.SaveCampaign(new() { Id = Guid.Empty, Name = "Fixture Table", RulesFamily = RulesFamilies.Srd51, AllowedSources = [source] });
+        var guide = FixtureGuide(temp, "Weapon guide", [RulesFamilies.Srd51], Pick("any", new KitLine(AnyOf: "weapon.simple")));
+        var draft = Draft("Cleric") with { CampaignId = campaign.Id };
+        KitRequest Request(Guid chosen) => new(draft, [new(guide.ContentId, [new("any", "a", new Dictionary<int, Guid> { [0] = chosen })])]);
+
+        var refused = temp.App.Kit(Request(blocked.ContentId));
+        var given = temp.App.Kit(Request(allowed.ContentId));
+
+        Assert.Contains(refused.Problems, p => p.Code == TomeStackApp.KitItemNotInCampaign && p.Message.Contains("Fixture Blocked Club") && !Ids.IsMatch(p.Message));
+        Assert.DoesNotContain(refused.Equipment, e => e.Item == blocked.Reference);
+        Assert.Equal([allowed.Reference], given.Equipment.Select(e => e.Item));
+        Assert.DoesNotContain(given.Problems, p => p.Code == TomeStackApp.KitItemNotInCampaign);
+    }
+
+    [Fact]
     public void Class_and_background_kits_that_together_pass_the_caps_are_capped_with_problems_and_do_not_throw()
     {
         using var temp = new TempApp();
