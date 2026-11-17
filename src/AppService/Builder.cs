@@ -143,7 +143,9 @@ public sealed partial class TomeStackApp
     /// does not allow (<see cref="ContentOption.AllowedInCampaign"/>, as <see cref="ListContent"/> marks it) is listed with
     /// <see cref="LevelUpOption.OutsideCampaign"/> set, for the player to take with a campaign exception (R38 d); the character's own
     /// classes are never flagged. A character at level 20 has no next level, so the list is empty (the sheet offers no level-up there either).
-    /// A class the character already has uses its pinned revision, a new one the newest published revision.
+    /// A class the character already has uses its pinned revision, a new one the newest published revision. An own class the sheet does
+    /// not admit (a draft, missing or otherwise unusable pinned revision) is still listed as the character's, with no gains and no
+    /// multiclass restrictions, and is never offered as a new class.
     /// </summary>
     public IReadOnlyList<LevelUpOption> LevelUpOptions(Guid characterId)
     {
@@ -156,10 +158,11 @@ public sealed partial class TomeStackApp
         // A pinned class counts as resolved only if the sheet admitted it (published, readable, known source): what the sheet
         // ignores gives no gains and no multiclass restrictions here either. It is still the character's class, so it is listed.
         var active = (sheet.Active ?? []).ToHashSet();
-        var allContent = ListContent(character.RulesFamily, null);
         var owned = character.Classes
             .Select(c => (Entry: c, Revision: active.Contains(c.Class) && _store.FindRevision(c.Class) is { Kind: ContentKind.Class } r ? r : null))
             .ToList();
+        // Only an unresolved own class needs the whole list (for its newest published name); the usual case skips that pass.
+        var allContent = owned.Any(c => c.Revision is null) ? ListContent(character.RulesFamily, null) : [];
         // The multiclass rule applies into and out of a class: what the classes the character has need counts against a new one.
         var outgoing = owned.Where(c => c.Revision is not null).SelectMany(c => ShortfallPhrases(sheet, c.Revision!)).ToList();
 

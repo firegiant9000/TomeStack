@@ -525,8 +525,12 @@ public class BuilderDraftTests
             Provenance = new(source.Id), Status = RevisionStatus.Draft, Effects = effects,
         };
         var draftFeature = temp.App.SaveDraft(Draft(ContentKind.Feature, "Test Draft Gain"));
+        var publishedFeature = temp.App.Publish(temp.App.SaveDraft(Draft(ContentKind.Feature, "Test Published Gain"))).Published;
+        // The draft pick grants a published feature and offers its own choice: neither may surface, so the owners filter itself is tested.
         var draftStyle = temp.App.SaveDraft(Draft(ContentKind.Feature, "Test Draft Style",
-            new GrantEffect { Id = "g", Grant = GrantKind.Content, Level = 2, Content = draftFeature }));
+            new GrantEffect { Id = "g", Grant = GrantKind.Content, Level = 2, Content = draftFeature },
+            new GrantEffect { Id = "p", Grant = GrantKind.Content, Level = 2, Content = publishedFeature },
+            new ChoiceEffect { Id = "inner", ChoiceId = "inner", Text = "Test Draft Choice", Count = 1, Level = 2, Options = [publishedFeature] }));
         var cls = temp.App.Publish(temp.App.SaveDraft(Draft(
             ContentKind.Class, "Test Pick Class", new HitDieEffect { Id = "hit-die", Die = 8 },
             new GrantEffect { Id = "own", Grant = GrantKind.Content, Level = 2, Content = draftFeature },
@@ -535,6 +539,8 @@ public class BuilderDraftTests
         var gains = Options(temp, Cleric2(temp) with { Classes = [new(cls, 1)], Choices = [new(cls, "style", [draftStyle])] })[0].Gains;
 
         Assert.DoesNotContain("Test Draft Gain", gains);
+        Assert.DoesNotContain("Test Published Gain", gains);
+        Assert.DoesNotContain(gains, g => g.StartsWith("Test Draft Choice", StringComparison.Ordinal));
     }
 
     [Fact]
