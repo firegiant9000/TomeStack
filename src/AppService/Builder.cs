@@ -153,19 +153,28 @@ public sealed partial class TomeStackApp
             return [];
 
         var sheet = CharacterCalculator.Calculate(character, _store);
+        // A pinned class counts as resolved only if the sheet admitted it (published, readable, known source): what the sheet
+        // ignores gives no gains and no multiclass restrictions here either. It is still the character's class, so it is listed.
+        var active = (sheet.Active ?? []).ToHashSet();
+        var allContent = ListContent(character.RulesFamily, null);
         var owned = character.Classes
-            .Select(c => (Entry: c, Revision: _store.FindRevision(c.Class)))
-            .Where(c => c.Revision is { Kind: ContentKind.Class })
+            .Select(c => (Entry: c, Revision: active.Contains(c.Class) && _store.FindRevision(c.Class) is { Kind: ContentKind.Class } r ? r : null))
             .ToList();
         // The multiclass rule applies into and out of a class: what the classes the character has need counts against a new one.
-        var outgoing = owned.SelectMany(c => ShortfallPhrases(sheet, c.Revision!)).ToList();
+        var outgoing = owned.Where(c => c.Revision is not null).SelectMany(c => ShortfallPhrases(sheet, c.Revision!)).ToList();
 
         var options = owned
-            .Select(c => new LevelUpOption(
-                c.Revision!.ContentId, c.Revision.Name, true, c.Entry.Level + 1,
-                GainsAt(c.Revision, c.Entry.Level + 1, c.Entry.Class == character.Classes[0].Class, sheet), []))
+            .Select(c => c.Revision is { } rev
+                ? new LevelUpOption(
+                    rev.ContentId, rev.Name, true, c.Entry.Level + 1,
+                    GainsAt(rev, c.Entry.Level + 1, c.Entry.Class == character.Classes[0].Class, sheet), [])
+                : new LevelUpOption(
+                    c.Entry.Class.ContentId,
+                    allContent.FirstOrDefault(o => o.Kind == ContentKind.Class && o.Reference.ContentId == c.Entry.Class.ContentId && !o.Superseded)?.Name
+                        ?? _store.FindRevision(c.Entry.Class)?.Name ?? c.Entry.Class.ContentId.ToString(),
+                    true, c.Entry.Level + 1, [], []))
             .ToList();
-        var have = owned.Select(c => c.Revision!.ContentId).ToHashSet();
+        var have = character.Classes.Select(c => c.Class.ContentId).ToHashSet();
         // A campaign deleted since the character was saved no longer restricts anything.
         var campaignId = character.CampaignId is { } id && _store.FindCampaign(id) is not null ? id : (Guid?)null;
         var others = ListContent(character.RulesFamily, campaignId)
@@ -174,7 +183,7 @@ public sealed partial class TomeStackApp
             .Where(o => o.Revision is not null)
             .OrderBy(o => o.Revision!.Name, StringComparer.CurrentCultureIgnoreCase)
             .Select(o => new LevelUpOption(
-                o.Revision!.ContentId, o.Revision.Name, false, 1, GainsAt(o.Revision, 1, startingClass: owned.Count == 0, sheet),
+                o.Revision!.ContentId, o.Revision.Name, false, 1, GainsAt(o.Revision, 1, startingClass: character.Classes.Count == 0, sheet),
                 [.. ShortfallPhrases(sheet, o.Revision).Concat(outgoing).Distinct(StringComparer.Ordinal)], o.Outside));
         return [.. options, .. others];
     }
@@ -191,13 +200,14 @@ public sealed partial class TomeStackApp
         owners.AddRange((sheet.Choices ?? []).Where(c => c.Source == revision.Reference)
             .SelectMany(c => c.Selected)
             .Select(_store.FindRevision)
-            .OfType<ContentRevision>());
+            .OfType<ContentRevision>()
+            .Where(r => r.Status == RevisionStatus.Published));
         bool Applies(ClassEntry? onlyAs) => onlyAs is null || (onlyAs == ClassEntry.StartingClass) == startingClass;
 
         var grants = owners.SelectMany(o => o.Effects.OfType<GrantEffect>())
             .Where(g => g.Grant == GrantKind.Content && g.Content is not null && g.Automation == AutomationStatus.Automatic && g.Timing == EffectTiming.Always
                 && (g.Level ?? 1) == level && Applies(g.OnlyAs))
-            .Select(g => _store.FindRevision(g.Content!)?.Name)
+            .Select(g => _store.FindRevision(g.Content!) is { Status: RevisionStatus.Published } granted ? granted.Name : null)
             .OfType<string>();
         var choices = owners.SelectMany(o => o.Effects.OfType<ChoiceEffect>().Select(c => (Owner: o, Choice: c)))
             .Where(x => (x.Choice.Level ?? 1) == level && Applies(x.Choice.OnlyAs))

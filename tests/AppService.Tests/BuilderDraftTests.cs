@@ -487,6 +487,76 @@ public class BuilderDraftTests
     }
 
     [Fact]
+    public void LevelUpOptions_gives_a_draft_pinned_class_no_gains_and_no_multiclass_restrictions()
+    {
+        using var temp = new TempApp();
+        var source = temp.App.CreateHomebrewSource(new("Test Draft Pin Classes", [RulesFamilies.Srd521]));
+        ContentRevision Draft(ContentKind kind, string name, params Effect[] effects) => new()
+        {
+            ContentId = Guid.NewGuid(), RevisionId = Guid.Empty, Kind = kind, Name = name, RulesFamilies = [RulesFamilies.Srd521],
+            Provenance = new(source.Id), Status = RevisionStatus.Draft, Effects = effects,
+        };
+        var feature = temp.App.SaveDraft(Draft(ContentKind.Feature, "Test Draft Feature"));
+        var draftClass = temp.App.SaveDraft(Draft(
+            ContentKind.Class, "Test Draft Class", new HitDieEffect { Id = "hit-die", Die = 8 },
+            new RestrictionEffect { Id = "multiclass-int", Field = "ability.int.score", Minimum = 20, Multiclass = true },
+            new GrantEffect { Id = "grant", Grant = GrantKind.Content, Level = 2, Content = feature }));
+        var character = Cleric2(temp, intelligence: 14, wis: 14) with { Classes = [new(ClassRef(temp, "Cleric"), 2), new(draftClass, 1)] };
+
+        var options = Options(temp, character);
+
+        var draft = options.Single(o => o.Name == "Test Draft Class");
+        Assert.True(draft.Current);
+        Assert.Empty(draft.Gains);
+        Assert.Empty(draft.Unmet);
+        // Never offered as a new class, and its restriction counts against nothing the sheet would not count.
+        Assert.Single(options, o => o.ContentId == draftClass.ContentId);
+        Assert.Empty(options.Single(o => o.Name == "Wizard").Unmet);
+    }
+
+    [Fact]
+    public void LevelUpOptions_does_not_name_a_draft_subclass_pick_or_draft_feature_as_a_gain()
+    {
+        using var temp = new TempApp();
+        var source = temp.App.CreateHomebrewSource(new("Test Draft Pick Classes", [RulesFamilies.Srd521]));
+        ContentRevision Draft(ContentKind kind, string name, params Effect[] effects) => new()
+        {
+            ContentId = Guid.NewGuid(), RevisionId = Guid.Empty, Kind = kind, Name = name, RulesFamilies = [RulesFamilies.Srd521],
+            Provenance = new(source.Id), Status = RevisionStatus.Draft, Effects = effects,
+        };
+        var draftFeature = temp.App.SaveDraft(Draft(ContentKind.Feature, "Test Draft Gain"));
+        var draftStyle = temp.App.SaveDraft(Draft(ContentKind.Feature, "Test Draft Style",
+            new GrantEffect { Id = "g", Grant = GrantKind.Content, Level = 2, Content = draftFeature }));
+        var cls = temp.App.Publish(temp.App.SaveDraft(Draft(
+            ContentKind.Class, "Test Pick Class", new HitDieEffect { Id = "hit-die", Die = 8 },
+            new GrantEffect { Id = "own", Grant = GrantKind.Content, Level = 2, Content = draftFeature },
+            new ChoiceEffect { Id = "style", ChoiceId = "style", Count = 1, Level = 1, Options = [draftStyle] }))).Published;
+
+        var gains = Options(temp, Cleric2(temp) with { Classes = [new(cls, 1)], Choices = [new(cls, "style", [draftStyle])] })[0].Gains;
+
+        Assert.DoesNotContain("Test Draft Gain", gains);
+    }
+
+    [Fact]
+    public void LevelUpOptions_lists_a_class_whose_pinned_revision_is_missing_once_as_current()
+    {
+        using var temp = new TempApp();
+        var cleric = ClassRef(temp, "Cleric");
+        var missing = new ContentReference(cleric.ContentId, Guid.NewGuid());
+
+        var options = Options(temp, Cleric2(temp) with { Classes = [new(missing, 2)] });
+
+        var listed = options.Where(o => o.ContentId == cleric.ContentId).ToList();
+        var only = Assert.Single(listed);
+        Assert.True(only.Current);
+        Assert.Equal("Cleric", only.Name);
+        Assert.Equal(3, only.NextLevel);
+        Assert.Empty(only.Gains);
+        Assert.Equal(options[0], only);
+        Assert.Contains(options, o => o.Name == "Wizard" && !o.Current);
+    }
+
+    [Fact]
     public void LevelUpOptions_is_a_command_and_refuses_an_unknown_character()
     {
         using var temp = new TempApp();
