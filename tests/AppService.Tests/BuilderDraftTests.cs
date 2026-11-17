@@ -336,6 +336,84 @@ public class BuilderDraftTests
         Assert.Empty(Options(temp, character));
     }
 
+    private static Character Barbarian5(TempApp temp, bool berserker) => new()
+    {
+        Id = Guid.NewGuid(),
+        Name = "Level Barbarian",
+        RulesFamily = RulesFamilies.Srd521,
+        BaseAbilities = new(15, 13, 14, 8, 12, 10),
+        Classes = [new(ClassRef(temp, "Barbarian"), 5)],
+        Choices = berserker ? [new(ClassRef(temp, "Barbarian"), "barbarian-subclass", [BerserkerV12])] : [],
+    };
+
+    // The v12 revision of the Path of the Berserker, which the newest Barbarian offers first and which has the level 6 feature.
+    private static readonly ContentReference BerserkerV12 = new(Berserker.ContentId, Guid.Parse("52e00000-0000-4000-8000-000012000023"));
+
+    [Fact]
+    public void LevelUpOptions_names_what_the_characters_subclass_grants_at_the_next_level()
+    {
+        using var temp = new TempApp();
+
+        // Path of the Berserker grants Mindless Rage at Barbarian level 6.
+        var with = Options(temp, Barbarian5(temp, berserker: true))[0];
+        var without = Options(temp, Barbarian5(temp, berserker: false))[0];
+
+        Assert.Equal(6, with.NextLevel);
+        Assert.Contains("Mindless Rage", with.Gains);
+        Assert.DoesNotContain("Mindless Rage", without.Gains);
+        Assert.Equal(with.Gains.Distinct(), with.Gains);
+    }
+
+    [Fact]
+    public void LevelUpOptions_names_the_choices_the_next_level_presents_after_the_grants()
+    {
+        using var temp = new TempApp();
+
+        var barbarian = Options(temp, Cleric2(temp) with { Classes = [new(ClassRef(temp, "Barbarian"), 2)] })[0];
+
+        // Level 3: Primal Knowledge (a grant) comes before the subclass choice, which the builder labels "{class}: choose 1".
+        Assert.Contains("Primal Knowledge", barbarian.Gains);
+        Assert.Contains("Barbarian: choose 1", barbarian.Gains);
+        Assert.True(barbarian.Gains.ToList().IndexOf("Primal Knowledge") < barbarian.Gains.ToList().IndexOf("Barbarian: choose 1"));
+    }
+
+    [Fact]
+    public void LevelUpOptions_leaves_out_grants_that_are_not_automatic_and_always()
+    {
+        using var temp = new TempApp();
+        var source = temp.App.CreateHomebrewSource(new("Test Level Classes", [RulesFamilies.Srd521]));
+        ContentRevision Draft(ContentKind kind, string name, params Effect[] effects) => new()
+        {
+            ContentId = Guid.NewGuid(), RevisionId = Guid.Empty, Kind = kind, Name = name, RulesFamilies = [RulesFamilies.Srd521],
+            Provenance = new(source.Id), Status = RevisionStatus.Draft, Effects = effects,
+        };
+        ContentReference Feature(string name) => temp.App.Publish(temp.App.SaveDraft(Draft(ContentKind.Feature, name))).Published;
+        GrantEffect Grant(string id, ContentReference feature) => new() { Id = id, Grant = GrantKind.Content, Level = 2, Content = feature };
+        var plain = Feature("Test Plain Feature");
+        var assisted = Feature("Test Assisted Feature");
+        var timed = Feature("Test Timed Feature");
+        var cls = temp.App.Publish(temp.App.SaveDraft(Draft(
+            ContentKind.Class, "Test Gainer", new HitDieEffect { Id = "hit-die", Die = 8 },
+            Grant("plain", plain), Grant("assisted", assisted) with { Automation = AutomationStatus.Assisted },
+            Grant("timed", timed) with { Timing = EffectTiming.OnLongRest }))).Published;
+
+        var gainer = Options(temp, Cleric2(temp) with { Classes = [new(cls, 1)] })[0];
+
+        Assert.Equal("Test Gainer", gainer.Name);
+        Assert.Equal(["Test Plain Feature"], gainer.Gains);
+    }
+
+    [Fact]
+    public void LevelUpOptions_still_lists_classes_when_the_characters_campaign_no_longer_exists()
+    {
+        using var temp = new TempApp();
+
+        var options = Options(temp, Cleric2(temp, campaign: Guid.NewGuid()));
+
+        Assert.Equal("Cleric", options[0].Name);
+        Assert.Contains(options, o => o.Name == "Wizard");
+    }
+
     [Fact]
     public void LevelUpOptions_is_a_command_and_refuses_an_unknown_character()
     {

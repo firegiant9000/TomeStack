@@ -160,29 +160,57 @@ public sealed partial class TomeStackApp
         var options = owned
             .Select(c => new LevelUpOption(
                 c.Revision!.ContentId, c.Revision.Name, true, c.Entry.Level + 1,
-                GainsAt(c.Revision, c.Entry.Level + 1, c.Entry.Class == character.Classes[0].Class), []))
+                GainsAt(c.Revision, c.Entry.Level + 1, c.Entry.Class == character.Classes[0].Class, sheet), []))
             .ToList();
         var have = owned.Select(c => c.Revision!.ContentId).ToHashSet();
-        var others = ListContent(character.RulesFamily, character.CampaignId)
+        // A campaign deleted since the character was saved no longer restricts anything.
+        var campaignId = character.CampaignId is { } id && _store.FindCampaign(id) is not null ? id : (Guid?)null;
+        var others = ListContent(character.RulesFamily, campaignId)
             .Where(o => o.Kind == ContentKind.Class && o.Compatible && !o.Superseded && o.AllowedInCampaign != false && !have.Contains(o.Reference.ContentId))
             .Select(o => _store.FindRevision(o.Reference))
             .OfType<ContentRevision>()
             .OrderBy(r => r.Name, StringComparer.CurrentCultureIgnoreCase)
             .Select(r => new LevelUpOption(
-                r.ContentId, r.Name, false, 1, GainsAt(r, 1, startingClass: owned.Count == 0),
+                r.ContentId, r.Name, false, 1, GainsAt(r, 1, startingClass: owned.Count == 0, sheet),
                 [.. ShortfallPhrases(sheet, r).Concat(outgoing).Distinct(StringComparer.Ordinal)]));
         return [.. options, .. others];
     }
 
-    /// <summary>The names of the content <paramref name="revision"/> grants at class level <paramref name="level"/>; a grant with no level is a level 1 one.</summary>
-    private IReadOnlyList<string> GainsAt(ContentRevision revision, int level, bool startingClass) =>
-    [
-        .. revision.Effects.OfType<GrantEffect>()
-            .Where(g => g.Grant == GrantKind.Content && g.Content is not null && (g.Level ?? 1) == level
-                && (g.OnlyAs is null || (g.OnlyAs == ClassEntry.StartingClass) == startingClass))
+    /// <summary>
+    /// What class level <paramref name="level"/> of <paramref name="revision"/> gives, by name: the content the class grants, then
+    /// what the subclass(es) the character has picked for it grant (the engine gates them by the class's level), then the choices the
+    /// class or a subclass presents at that level, labelled as the builder labels them. Only grants that apply on their own
+    /// (automatic, always) count, as the engine's. A grant or choice with no level is a level 1 one.
+    /// </summary>
+    private IReadOnlyList<string> GainsAt(ContentRevision revision, int level, bool startingClass, CharacterSheet sheet)
+    {
+        var owners = new List<ContentRevision> { revision };
+        owners.AddRange((sheet.Choices ?? []).Where(c => c.Source == revision.Reference)
+            .SelectMany(c => c.Selected)
+            .Select(_store.FindRevision)
+            .OfType<ContentRevision>()
+            .Where(r => r.Kind == ContentKind.Subclass));
+        bool Applies(ClassEntry? onlyAs) => onlyAs is null || (onlyAs == ClassEntry.StartingClass) == startingClass;
+
+        var grants = owners.SelectMany(o => o.Effects.OfType<GrantEffect>())
+            .Where(g => g.Grant == GrantKind.Content && g.Content is not null && g.Automation == AutomationStatus.Automatic && g.Timing == EffectTiming.Always
+                && (g.Level ?? 1) == level && Applies(g.OnlyAs))
             .Select(g => _store.FindRevision(g.Content!)?.Name)
-            .OfType<string>(),
-    ];
+            .OfType<string>();
+        var choices = owners.SelectMany(o => o.Effects.OfType<ChoiceEffect>().Select(c => (Owner: o, Choice: c)))
+            .Where(x => (x.Choice.Level ?? 1) == level && Applies(x.Choice.OnlyAs))
+            .Select(x => ChoiceLabel(x.Owner.Name, x.Choice));
+        return [.. grants.Concat(choices).Distinct(StringComparer.Ordinal)];
+    }
+
+    /// <summary>The label the builder shows for a choice: its own short text, else "{source}: choose {count}".</summary>
+    private static string ChoiceLabel(string sourceName, ChoiceEffect choice)
+    {
+        var text = choice.Text?.Trim();
+        return text is { Length: > 0 and <= 40 } && !".!?".Contains(text[^1]) && !text.Contains('\n')
+            ? text
+            : $"{sourceName}: choose {choice.Count}";
+    }
 
     /// <summary>
     /// The unmet multiclass prerequisites of <paramref name="revision"/>, one phrase each: "Intelligence 13 (you have 8)", or for an
