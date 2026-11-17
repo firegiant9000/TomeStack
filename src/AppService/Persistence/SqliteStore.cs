@@ -1079,7 +1079,12 @@ public sealed partial class SqliteStore : IContentCatalog, IDisposable
             var backupPath = BackupPath(databasePath, version, time.GetUtcNow());
             // Written beside the final name and renamed, so an interrupted backup never leaves a truncated copy that counts.
             var temp = backupPath + ".tmp";
-            File.Delete(temp);
+            // Sweep leftover temps from interrupted copies, this one's included. Best effort, like pruning.
+            foreach (var stale in Directory.EnumerateFiles(Path.GetDirectoryName(Path.GetFullPath(databasePath))!, $"{Path.GetFileName(databasePath)}.v*.bak.tmp").ToList())
+            {
+                try { File.Delete(stale); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* left in place */ }
+            }
             try
             {
                 using (var backup = new SqliteConnection($"Data Source={temp};Pooling=False"))

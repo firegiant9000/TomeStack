@@ -187,7 +187,7 @@ public class UpgradeTests
     }
 
     [Fact]
-    public void A_leftover_temp_file_is_not_a_copy_and_a_stale_one_is_replaced()
+    public void Leftover_temp_files_are_removed_and_never_counted()
     {
         var database = NewDatabase();
         Upgrade(database, 2, Start);
@@ -201,8 +201,44 @@ public class UpgradeTests
 
         var copy = Assert.Single(SqliteStore.PreUpgradeCopies(database));
         Assert.Equal(2, Scalar(copy, "PRAGMA user_version;"));
-        Assert.True(File.Exists(leftover));
+        Assert.False(File.Exists(leftover));
         Assert.False(File.Exists(stale));
+    }
+
+    [Fact]
+    public void A_failed_copy_stops_the_upgrade_and_leaves_no_temp()
+    {
+        var database = NewDatabase();
+        Upgrade(database, 2, Start);
+        // A directory at the final name makes the rename fail after the copy has been written.
+        var final = SqliteStore.BackupPath(database, 2, Start);
+        Directory.CreateDirectory(final);
+
+        var ex = Assert.ThrowsAny<Exception>(() => Upgrade(database, 3, Start));
+
+        Assert.True(ex is IOException or UnauthorizedAccessException, ex.GetType().FullName);
+        Assert.False(File.Exists(final + ".tmp"));
+        Assert.Equal(2, Scalar(database, "PRAGMA user_version;"));
+    }
+
+    [Fact]
+    public void A_read_only_stale_temp_does_not_stop_the_upgrade()
+    {
+        var database = NewDatabase();
+        Upgrade(database, 2, Start);
+        var leftover = Path.Combine(Path.GetDirectoryName(database)!, "tomestack.db.v9-20260101T000000Z.bak.tmp");
+        File.WriteAllText(leftover, "partial");
+        File.SetAttributes(leftover, FileAttributes.ReadOnly);
+        try
+        {
+            Upgrade(database, 3, Start);
+
+            Assert.True(File.Exists(SqliteStore.BackupPath(database, 2, Start)));
+        }
+        finally
+        {
+            File.SetAttributes(leftover, FileAttributes.Normal);
+        }
     }
 
     [Fact]
