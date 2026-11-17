@@ -828,11 +828,13 @@ function LevelStep(props: {
   const resolve = (id: string): ContentReference | undefined =>
     character.classes.find((c) => c.class.contentId === id)?.class ?? props.options.find((o) => o.kind === 'class' && o.reference.contentId === id)?.reference;
   const otherPicked = picked === otherNew;
-  const targetId = otherPicked ? otherId : picked;
   // R38 d: a class the campaign leaves out is listed only while the campaign exception is on (and while it is the pick, so the
   // select never shows a value it lacks); only a class the content list resolves is listed, so a visible choice always yields a target.
   const resolvable = (list ?? []).filter((o) => !o.current && resolve(o.contentId));
-  const otherOptions = resolvable.filter((o) => !o.outsideCampaign || props.exceptionOn || o.contentId === otherId);
+  // A pick the reloaded list no longer holds counts as no pick, so Next never proceeds with a class the select does not show.
+  const otherChosen = resolvable.some((o) => o.contentId === otherId) ? otherId : '';
+  const targetId = otherPicked ? otherChosen : picked;
+  const otherOptions = resolvable.filter((o) => !o.outsideCampaign || props.exceptionOn || o.contentId === otherChosen);
   const target: ContentReference | undefined = targetId ? resolve(targetId) : undefined;
   const needsReason = otherPicked && !props.reasonGiven && !!otherOptions.find((o) => o.contentId === otherId)?.outsideCampaign;
   const unmet = otherPicked ? (otherOptions.find((o) => o.contentId === otherId)?.unmet ?? []) : [];
@@ -890,7 +892,7 @@ function LevelStep(props: {
                 {otherPicked && (
                   <label className="field">
                     Class to start
-                    <select value={otherId} onChange={(e) => setOtherId(e.target.value)}>
+                    <select value={otherChosen} onChange={(e) => setOtherId(e.target.value)}>
                       <option value="">Choose a class</option>
                       {otherOptions.map((o) => (
                         <option key={o.contentId} value={o.contentId}>
@@ -1288,23 +1290,47 @@ function ChoicesStep(props: {
             : `${open.length} choice${open.length === 1 ? '' : 's'} still to make. You can save now; the sheet lists them under "Choices to make".`}
         </p>
       )}
-      {choices.map((choice) => (
-        <ChoicePicker
-          key={`${choice.source.revisionId}-${choice.choiceId}`}
-          choice={choice}
-          siblings={choices}
-          optionOf={props.optionOf}
-          optionsLoaded={props.optionsLoaded}
-          onChange={(ref, add) => props.onChoose(choice, ref, add)}
-          replaceNote={
-            props.choicesMode
-              ? replaceHint(choice)
-              : props.startView && hadPicks(props.startView, choice)
-                ? replaceOffer(choice)
-                : undefined
-          }
-        />
-      ))}
+      {(() => {
+        const picker = (choice: ChoiceStatus) => (
+          <ChoicePicker
+            key={`${choice.source.revisionId}-${choice.choiceId}`}
+            choice={choice}
+            siblings={choices}
+            optionOf={props.optionOf}
+            optionsLoaded={props.optionsLoaded}
+            onChange={(ref, add) => props.onChoose(choice, ref, add)}
+            replaceNote={
+              props.choicesMode
+                ? replaceHint(choice)
+                : props.startView && hadPicks(props.startView, choice)
+                  ? replaceOffer(choice)
+                  : undefined
+            }
+          />
+        );
+        const start = props.startView;
+        if (!start) return choices.map(picker);
+        // Level-up only: a choice the saved sheet did not have is new at this level; the rest wait in a closed disclosure.
+        const existed = (c: ChoiceStatus) => (start.sheet.choices ?? []).some((s) => s.source.contentId === c.source.contentId && s.choiceId === c.choiceId);
+        const earlier = choices.filter(existed);
+        const fresh = choices.filter((c) => !existed(c));
+        return (
+          <>
+            {fresh.length > 0 && (
+              <>
+                <h3>New at level {props.view.character.level}</h3>
+                {fresh.map(picker)}
+              </>
+            )}
+            {earlier.length > 0 && (
+              <details>
+                <summary>Earlier choices</summary>
+                {earlier.map(picker)}
+              </details>
+            )}
+          </>
+        );
+      })()}
       {casters.map((entry) => (
         <SpellPicker
           key={entry.content.revisionId}
