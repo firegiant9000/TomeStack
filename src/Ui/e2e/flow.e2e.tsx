@@ -299,7 +299,7 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
 
   // A cancelled level-up draft changes nothing.
   await user.click(within(sheet).getByRole('button', { name: 'Level up' }));
-  await user.click(await screen.findByRole('radio', { name: /Barbarian \(level 1 → 2\)/ }));
+  await user.click(await screen.findByRole('radio', { name: /^Barbarian 2\b/ }));
   await user.click(screen.getByRole('button', { name: 'Next: choices' }));
   expect(await screen.findByText('All choices are made.')).toBeTruthy(); // level 2 offers no new choice
   await user.click(screen.getByRole('button', { name: 'Cancel' }));
@@ -311,7 +311,7 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   // Level 2, then 3: the subclass and Primal Knowledge choices appear at level 3.
   for (const next of [2, 3]) {
     await user.click(within(await screen.findByRole('article', { name: 'E2E Brenna' })).getByRole('button', { name: 'Level up' }));
-    await user.click(await screen.findByRole('radio', { name: new RegExp(`Barbarian \\(level ${next - 1} → ${next}\\)`) }));
+    await user.click(await screen.findByRole('radio', { name: new RegExp(`^Barbarian ${next}\\b`) }));
     await user.click(screen.getByRole('button', { name: 'Next: choices' }));
     if (next === 3) {
       await pick(user, /^Barbarian: choose 1/, /^Path of the Berserker/);
@@ -3749,6 +3749,40 @@ it('previews a Fighter 3 at level 5 from the level-up step: Extra Attack shows a
   const after = (await client.getCharacter(created.character.id)).character;
   expect(after.level).toBe(3);
   expect(after).toEqual(before); // the store received no write
+});
+
+it('levels a Cleric into Wizard: what each class gives, the prerequisite warning that never blocks, and the new class on the sheet (D99)', async () => {
+  const user = userEvent.setup();
+  const listed = await client.listContent('srd-5.2.1');
+  const named = (kind: string, name: RegExp) => listed.find((o) => o.kind === kind && name.test(o.name))!.reference;
+  const wizard = named('class', /^Wizard/);
+  const created = await client.createCharacter({
+    name: 'E2E Multiclasser',
+    rulesFamily: 'srd-5.2.1',
+    baseAbilities: { str: 10, dex: 12, con: 14, int: 8, wis: 15, cha: 10 },
+    pins: [named('species', /^Dwarf/), named('background', /^Soldier/)],
+    classes: [{ class: named('class', /^Cleric/), level: 1 }],
+  });
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: /^E2E Multiclasser/ }));
+  await user.click(within(await screen.findByRole('article', { name: 'E2E Multiclasser' })).getByRole('button', { name: 'Level up' }));
+
+  // The character's own class says what it gives at its next level; the new class waits behind "Another class…".
+  expect(await screen.findByRole('radio', { name: /^Cleric 2 — what you get: / })).toBeTruthy();
+  await user.click(await screen.findByRole('radio', { name: 'Another class…' }));
+  const select = await screen.findByRole('combobox', { name: 'Class to start' });
+  await user.selectOptions(select, await within(select).findByRole('option', { name: 'Wizard' }));
+  expect(await screen.findByText('Wizard — needs Intelligence 13 (you have 8). You can still take it.')).toBeTruthy();
+
+  const next = screen.getByRole('button', { name: 'Next: choices' });
+  expect(next.getAttribute('aria-disabled')).toBeNull(); // advice, never a block
+  await user.click(next);
+  await user.click(await screen.findByRole('button', { name: 'Save level-up' }));
+
+  const sheet = await screen.findByRole('article', { name: 'E2E Multiclasser' });
+  expect(within(sheet).getByText('Level 2')).toBeTruthy();
+  const saved = (await client.getCharacter(created.character.id)).character;
+  expect(saved.classes.map((c) => [c.class.contentId, c.level])).toContainEqual([wizard.contentId, 1]);
 });
 
 it('tries the sample from the chooser, plays it and removes it (D95)', async () => {

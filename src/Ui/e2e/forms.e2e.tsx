@@ -877,7 +877,7 @@ it('a replaceable choice offers a swap at level-up and notes one made outside it
 
   // Level up: the Choices step offers the swap; replacing the one pick is inside the window, so there is no notice.
   await user.click(within(sheet).getByRole('button', { name: 'Level up' }));
-  await user.click(await screen.findByRole('radio', { name: /Fighter \(level 1 → 2\)/ }));
+  await user.click(await screen.findByRole('radio', { name: /^Fighter 2\b/ }));
   await user.click(screen.getByRole('button', { name: 'Next: choices' }));
   const upGroup = await screen.findByRole('group', { name: /^E2E Swap Feature: choose 1/ });
   expect(within(upGroup).getByText('You may replace one pick now.')).toBeTruthy();
