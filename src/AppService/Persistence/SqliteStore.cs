@@ -1077,11 +1077,32 @@ public sealed partial class SqliteStore : IContentCatalog, IDisposable
         if (version is > 0 && version < latestVersion)
         {
             var backupPath = BackupPath(databasePath, version, time.GetUtcNow());
-            File.Delete(backupPath);
-            using (var backup = new SqliteConnection($"Data Source={backupPath};Pooling=False"))
-                probe.BackupDatabase(backup);
-            foreach (var surplus in PreUpgradeCopies(databasePath).Skip(PreUpgradeCopiesKept))
-                File.Delete(surplus);
+            // Written beside the final name and renamed, so an interrupted backup never leaves a truncated copy that counts.
+            var temp = backupPath + ".tmp";
+            File.Delete(temp);
+            try
+            {
+                using (var backup = new SqliteConnection($"Data Source={temp};Pooling=False"))
+                    probe.BackupDatabase(backup);
+                File.Move(temp, backupPath, overwrite: true);
+            }
+            catch
+            {
+                try { File.Delete(temp); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* best effort */ }
+                throw;
+            }
+            // Keep the new copy plus the newest others; the new copy is never pruned, whatever the older stamps say.
+            var written = Path.GetFullPath(backupPath);
+            var surplus = PreUpgradeCopies(databasePath)
+                .Where(copy => !string.Equals(Path.GetFullPath(copy), written, StringComparison.OrdinalIgnoreCase))
+                .Skip(PreUpgradeCopiesKept - 1);
+            foreach (var copy in surplus)
+            {
+                // Best effort: a copy that cannot be removed is left, and the upgrade goes on.
+                try { File.Delete(copy); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* left in place */ }
+            }
         }
     }
 

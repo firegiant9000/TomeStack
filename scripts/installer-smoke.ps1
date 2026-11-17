@@ -15,7 +15,7 @@
   Checks:
     1. The old build installs and passes the smoke on a fresh data folder (it creates one character).
     2. The new build installs over it and passes the smoke, and the character from step 1 is still there.
-    3. If the database schema version changed, tomestack.db.v<old>.bak exists (backup before migration).
+    3. If the database schema version changed, tomestack.db.v<old>-<UTC stamp>.bak exists (backup before migration).
     4. After uninstall, the data folder and database still exist, and so does %LOCALAPPDATA%\TomeStack if it existed
        before (it is only checked, never written).
     5. (Velopack) The installed folder carries LICENSE, NOTICE and ATTRIBUTION.md (ADR-008 R6), and the app version
@@ -129,9 +129,10 @@ Write-Output "PASS 2: new build v$($new.appVersion) (schema $($new.schemaVersion
 
 $database = Join-Path $DataDir 'tomestack.db'
 if ($new.schemaVersion -ne $old.schemaVersion) {
-  $backup = "$database.v$($old.schemaVersion).bak"
-  if (-not (Test-Path $backup)) { throw "schema changed $($old.schemaVersion) -> $($new.schemaVersion) but $backup is missing" }
-  Write-Output "PASS 3: schema $($old.schemaVersion) -> $($new.schemaVersion); backup-before-migration present: $(Split-Path $backup -Leaf)"
+  $pattern = "$(Split-Path $database -Leaf).v$($old.schemaVersion)-*.bak"
+  $backups = @(Get-ChildItem -Path (Split-Path $database -Parent) -Filter $pattern -File -ErrorAction SilentlyContinue)
+  if ($backups.Count -lt 1) { throw "schema changed $($old.schemaVersion) -> $($new.schemaVersion) but no $pattern copy is beside $database" }
+  Write-Output "PASS 3: schema $($old.schemaVersion) -> $($new.schemaVersion); backup-before-migration present: $($backups[0].Name)"
 } else {
   Write-Output "SKIP 3: schema unchanged ($($new.schemaVersion)); no backup expected"
 }

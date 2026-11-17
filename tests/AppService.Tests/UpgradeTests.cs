@@ -142,6 +142,84 @@ public class UpgradeTests
     }
 
     [Fact]
+    public void The_new_copy_is_never_pruned_even_when_older_copies_carry_later_stamps()
+    {
+        var database = NewDatabase();
+        Upgrade(database, 2, Start);
+        var directory = Path.GetDirectoryName(database)!;
+        foreach (var minutes in new[] { 10, 20, 30 })
+            File.Copy(database, SqliteStore.BackupPath(database, 1, Start.AddDays(1).AddMinutes(minutes)));
+
+        Upgrade(database, 3, Start);
+
+        var created = SqliteStore.BackupPath(database, 2, Start);
+        Assert.True(File.Exists(created));
+        Assert.Equal(3, Directory.GetFiles(directory, "*.bak").Length);
+        Assert.True(File.Exists(SqliteStore.BackupPath(database, 1, Start.AddDays(1).AddMinutes(30))));
+        Assert.True(File.Exists(SqliteStore.BackupPath(database, 1, Start.AddDays(1).AddMinutes(20))));
+        Assert.False(File.Exists(SqliteStore.BackupPath(database, 1, Start.AddDays(1).AddMinutes(10))));
+    }
+
+    [Fact]
+    public void A_surplus_copy_that_cannot_be_deleted_does_not_stop_the_upgrade()
+    {
+        var database = NewDatabase();
+        Upgrade(database, 2, Start);
+        var directory = Path.GetDirectoryName(database)!;
+        var locked = SqliteStore.BackupPath(database, 1, Start.AddMinutes(-30));
+        File.Copy(database, locked);
+        foreach (var minutes in new[] { -20, -10 })
+            File.Copy(database, SqliteStore.BackupPath(database, 1, Start.AddMinutes(minutes)));
+        File.SetAttributes(locked, FileAttributes.ReadOnly);
+        try
+        {
+            using (var store = new SqliteStore(database, SqliteStore.Migrations[..3], new FixedTime(Start)))
+                Assert.Equal(3, store.SchemaVersion);
+
+            Assert.True(File.Exists(locked));
+            Assert.True(File.Exists(SqliteStore.BackupPath(database, 2, Start)));
+        }
+        finally
+        {
+            File.SetAttributes(locked, FileAttributes.Normal);
+        }
+        Assert.NotEmpty(Directory.GetFiles(directory, "*.bak"));
+    }
+
+    [Fact]
+    public void A_leftover_temp_file_is_not_a_copy_and_a_stale_one_is_replaced()
+    {
+        var database = NewDatabase();
+        Upgrade(database, 2, Start);
+        var directory = Path.GetDirectoryName(database)!;
+        var leftover = Path.Combine(directory, "tomestack.db.v9-20260101T000000Z.bak.tmp");
+        File.WriteAllText(leftover, "partial");
+        var stale = SqliteStore.BackupPath(database, 2, Start) + ".tmp";
+        File.WriteAllText(stale, "partial");
+
+        Upgrade(database, 3, Start);
+
+        var copy = Assert.Single(SqliteStore.PreUpgradeCopies(database));
+        Assert.Equal(2, Scalar(copy, "PRAGMA user_version;"));
+        Assert.True(File.Exists(leftover));
+        Assert.False(File.Exists(stale));
+    }
+
+    [Fact]
+    public void An_unrelated_database_copy_survives_four_upgrades()
+    {
+        var database = NewDatabase();
+        Upgrade(database, 2, Start);
+        var other = Path.Combine(Path.GetDirectoryName(database)!, "other.db.v1.bak");
+        File.WriteAllText(other, "someone else's");
+
+        for (var step = 0; step < 4; step++)
+            Upgrade(database, 3 + step, Start.AddMinutes(step + 1));
+
+        Assert.Equal("someone else's", File.ReadAllText(other));
+    }
+
+    [Fact]
     public void Database_10_changes_no_table_so_a_folder_that_may_hold_import_notes_is_refused_by_a_version_9_build()
     {
         // Import gap notes (gap-note v2) are stored like any note; a build that knows only v1 notes would open the folder
