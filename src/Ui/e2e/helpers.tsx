@@ -124,8 +124,6 @@ export async function createCharacter(
   await user.click(screen.getByRole('button', { name: 'Next: choices' }));
 }
 
-// The longest flow in the suite (create, two level-ups, play, rests): ~58 s alone locally (2026-10-29), so the 60 s
-
 export const srd = (n: number) => ({
   contentId: `52c00000-0000-4000-8000-${String(n).padStart(12, '0')}`,
   revisionId: `52e00000-0000-4000-8000-${String(n).padStart(12, '0')}`,

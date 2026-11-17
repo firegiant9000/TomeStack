@@ -119,7 +119,7 @@ Two additions to the Play tab, both worked out in the page from what the sheet a
 - **The quickbar never pays hit points or slots (MECH-X item 1, R37).** A roll or feature attack that pays hit points or a spell slot ([play-mechanics.md](play-mechanics.md)) is pinned as a plain roll: its press only rolls, never says "and spend", and the Last roll's Pay button is the deliberate press that pays. A switch that pays hit points or a slot cannot be pinned, and neither can a paying roll with no dice (its press would only pay), so one tap never pays; a stored pin of one is hidden. A paying roll or attack that cannot be paid now (too few hit points, no slot at or above its level) is blocked on the quickbar with the reason, like a pinned action that cannot be used. The Actions panel Roll still rolls, as with a pool shortage, because rolling pays nothing.
 - **Pins survive.** They are kept per character in the page's own storage (`tomestack.quickbar.<characterId>`; in no package, share or backup) and so survive closing and reopening the app. A pin that does not resolve on the current sheet (a removed feature, an unequipped weapon, a form that is off) is hidden, not deleted: storage keeps the visible pins first, then the hidden ones, up to 16.
 
-See accessibility checklist row 90 and the e2e flows in `src/Ui/e2e/forms.e2e.tsx`.
+See accessibility checklist row 90 and the e2e flows in `src/Ui/e2e/forms-play.e2e.tsx`.
 
 ## Details, languages and tools (item 17, D36)
 

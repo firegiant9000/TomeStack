@@ -46,5 +46,5 @@ The engine is built in slices. Each slice is complete and tested before the next
 
 ## Evidence
 
-- `tests/RulesCore.Tests/ToggleGroupTests.cs`, `ToggleGroupValidationTests.cs` and `Properties/ToggleGroupProperties.cs` (resolution, calculation, validation), `tests/AppService.Tests/ToggleGroupCommandTests.cs` (atomic switch, cost, refusals) and `SourcePackTests.cs` (references), `src/Ui/src/components/FormGroups.test.tsx`, `src/Ui/src/undo.test.ts`, and the e2e flow in `src/Ui/e2e/forms.e2e.tsx`. Fixture: `tests/RulesFixtures/fixture-pack-forms.json`.
+- `tests/RulesCore.Tests/ToggleGroupTests.cs`, `ToggleGroupValidationTests.cs` and `Properties/ToggleGroupProperties.cs` (resolution, calculation, validation), `tests/AppService.Tests/ToggleGroupCommandTests.cs` (atomic switch, cost, refusals) and `SourcePackTests.cs` (references), `src/Ui/src/components/FormGroups.test.tsx`, `src/Ui/src/undo.test.ts`, and the e2e flows in `src/Ui/e2e/forms.e2e.tsx` and `forms-play.e2e.tsx`. Fixture: `tests/RulesFixtures/fixture-pack-forms.json`.
 - [play-mechanics.md](../features/play-mechanics.md) lists the fields, codes and actions.

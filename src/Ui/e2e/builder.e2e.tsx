@@ -29,6 +29,8 @@ afterEach(() => {
   for (const key of Object.keys(document.documentElement.dataset)) delete document.documentElement.dataset[key];
 });
 
+// The longest flow in the suite (create, two level-ups, play, rests): ~58 s alone locally (2026-10-29), so the 60 s
+// default timed it out on a loaded machine; it gets 180 s, three times the suite's per-test budget.
 it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to 3 with a subclass', async () => {
   const user = userEvent.setup();
   render(<App />);
