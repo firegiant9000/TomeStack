@@ -86,8 +86,10 @@
     <NoWarn>$(NoWarn);CA1859</NoWarn>
   </PropertyGroup>
 
-  <!-- Cap xUnit parallelism for the test projects (tests/xunit.runner.json); override with the xUnit.MaxParallelThreads=n runsettings argument -->
-  <ItemGroup Condition="$(MSBuildProjectName.EndsWith('.Tests'))">
+  <!-- Cap xUnit parallelism for local test runs (tests/xunit.runner.json); override with the xUnit.MaxParallelThreads=n runsettings argument.
+       xUnit v2 treats the value as the thread count, so the file is copied only where it lowers the default:
+       not on CI, and only on machines with more logical cores than the cap. Keep the 8 below equal to maxParallelThreads. -->
+  <ItemGroup Condition="$(MSBuildProjectName.EndsWith('.Tests')) and ('$(CI)' == '' or '$(CI)' == 'false') and $([System.Environment]::ProcessorCount) &gt; 8">
     <Content Include="$(MSBuildThisFileDirectory)tests/xunit.runner.json" Link="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
