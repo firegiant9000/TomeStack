@@ -158,16 +158,16 @@ jobs:
         shell: pwsh
         run: scripts/single-instance-check.ps1 -Exe src/DesktopShell/bin/Release/net10.0-windows/TomeStack.exe
 
-      # After the smoke steps so an axe failure does not skip their evidence.
-      - name: Accessibility in Edge (axe, colour contrast on)
-        working-directory: src/Ui
-        run: npm run test:a11y
-
       # Uses the smoke-only --simulate-missing-webview2 flag; the loader env override was ignored on this runner.
       - name: Missing WebView2 runtime path (non-blocking)
         continue-on-error: true
         shell: pwsh
         run: scripts/offline-check.ps1 -Mode MissingRuntime
+
+      # After the smoke and WebView2 steps so an axe failure does not skip their evidence.
+      - name: Accessibility in Edge (axe, colour contrast on)
+        working-directory: src/Ui
+        run: npm run test:a11y
 
       - name: Upload smoke report
         if: always()
