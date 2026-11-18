@@ -174,6 +174,9 @@ if (-not $SkipCpuCheck) {
 if ($DryRun) { exit 0 }
 
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
+# Both are restored in the finally block, so running the script with & from an open shell leaves that shell as it was.
+$originalWorkers = $env:TOMESTACK_TEST_WORKERS
+$originalPriority = [Diagnostics.Process]::GetCurrentProcess().PriorityClass
 if ($UiWorkers -gt 0) { $env:TOMESTACK_TEST_WORKERS = [string]$UiWorkers }
 if ($LowPriority) {
     # Lowering this process first means every step inherits BelowNormal from creation; the per-step set below is a fallback.
@@ -231,6 +234,8 @@ try {
 }
 finally {
     Stop-DevHost
+    $env:TOMESTACK_TEST_WORKERS = $originalWorkers
+    if ($LowPriority) { try { [Diagnostics.Process]::GetCurrentProcess().PriorityClass = $originalPriority } catch { Write-Warning 'Could not restore priority.' } }
     $lines = @('{0,-14} {1,5} {2,9}  {3}' -f 'id', 'exit', 'seconds', '')
     foreach ($r in $results) { $lines += ('{0,-14} {1,5} {2,9}  {3}' -f $r.id, $r.exit, $r.seconds, $r.note) }
     $lines | ForEach-Object { Write-Host $_ }
