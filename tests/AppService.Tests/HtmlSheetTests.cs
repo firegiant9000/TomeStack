@@ -85,6 +85,9 @@ public sealed class HtmlSheetTests
     [InlineData("<SCRIPT>x</SCRIPT>")]
     [InlineData("<p/onclick=x>a</p>")]
     [InlineData("<script")]
+    [InlineData("<p title=\">\" onclick=x>a</p>")]
+    [InlineData("<p a=\"1\"onclick=x>a</p>")]
+    [InlineData("<p title=\"unclosed onclick=x>a</p>")]
     public void Validate_rejects_each_forbidden_construct(string fragment)
     {
         Assert.NotEmpty(HtmlSheet.Validate(Wrap(fragment)));

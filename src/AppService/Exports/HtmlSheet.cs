@@ -152,13 +152,14 @@ public static partial class HtmlSheet
         return reasons;
     }
 
-    [GeneratedRegex("<[^<>]*>", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    // Quote-aware like the HTML tokenizer: a ">" inside a quoted value does not end the tag. An unmatched quote leaves the "<" unmatched, which Validate rejects.
+    [GeneratedRegex("""<(?:[^<>"']|"[^"]*"|'[^']*')*>""", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial Regex TagRegex();
 
     [GeneratedRegex(@"^<\s*/?\s*([^\s/>]*)", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial Regex TagNameRegex();
 
-    [GeneratedRegex(@"[\s/]([^\s=/>""']+)(?:\s*=\s*(?:""([^""]*)""|'([^']*)'|([^\s>""']+)))?", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    [GeneratedRegex(@"(?<=[\s/""'])([^\s=/>""']+)(?:\s*=\s*(?:""([^""]*)""|'([^']*)'|([^\s>""']+)))?", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial Regex AttributeRegex();
 
     [GeneratedRegex(@"(<style[^<>]*>)(.*?)(</style\s*>)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Singleline, matchTimeoutMilliseconds: 1000)]
