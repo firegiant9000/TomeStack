@@ -3051,12 +3051,22 @@ describe('level-up class picker (D99)', () => {
     expect(document.getElementById('next-hint')!.textContent).toBe('Already at level 20, the highest level.');
   });
 
-  it('reports a failed listing and still offers the character\'s own class', async () => {
+  it('reports a failed listing and still offers the character\'s own class and the other classes from the content list', async () => {
+    const user = userEvent.setup();
     const onError = vi.fn();
     vi.mocked(client.levelUpOptions).mockRejectedValue(new Error('fixture failure'));
+    vi.mocked(client.preview).mockClear();
     render(<CharacterBuilder mode={{ kind: 'levelUp', view: fighter3() }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={onError} />);
     await waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
     expect(screen.getByRole('radio', { name: /^Fixture Fighter 4/ })).toBeTruthy();
-    expect(screen.queryByRole('radio', { name: 'Another class…' })).toBeNull();
+    await user.click(await screen.findByRole('radio', { name: 'Another class…' }));
+    const select = screen.getByRole('combobox', { name: 'Class to start' });
+    expect(within(select).getAllByRole('option').map((o) => o.textContent)).toEqual(['Choose a class', 'Fixture Warden', 'Fixture Sage']);
+    await user.selectOptions(select, 'fixture-c3');
+    await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+    expect(vi.mocked(client.preview).mock.calls.at(-1)![0].classes).toEqual([
+      { class: fighterRef, level: 3 },
+      { class: { contentId: 'fixture-c3', revisionId: 'fixture-r3' }, level: 1 },
+    ]);
   });
 });
