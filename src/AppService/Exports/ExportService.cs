@@ -96,6 +96,7 @@ namespace TomeStack.AppService
             IReadOnlyList<string> differences = [];
             var baseName = SafeName(sheet.Character.Name);
             var htmlNotes = 0;
+            string? rawNotes = null;
             if (target == FoundryDnd5e.Target)
             {
                 var actor = FoundryDnd5e.Map(sheet);
@@ -111,6 +112,8 @@ namespace TomeStack.AppService
                 var character = _store.FindCharacter(characterId)
                     ?? throw new AppValidationException([new("character.not-found", $"Character {characterId} does not exist.")]);
                 htmlNotes = purpose == SheetPurpose.Personal ? character.Notes.Count : 0;
+                if (htmlNotes > 0)
+                    rawNotes = string.Join("\n", character.Notes.Select(n => n.Text));
                 text = HtmlSheet.Render(sheet, new(purpose == SheetPurpose.Personal ? character.Notes : [], character.Play.DeathSaves));
                 if (HtmlSheet.Validate(text) is { Count: > 0 } problems)
                     throw new AppValidationException([new("export.invalid-output", $"The HTML sheet would not be safe to open ({problems[0]}), so nothing was written.")]);
@@ -130,6 +133,9 @@ namespace TomeStack.AppService
             // holds HTML-encoded text (an accented or quoted name is written as an entity), so the sheet it came from, whose
             // strings are the same but not encoded, is scanned too (review fix).
             var scanned = target == FoundryDnd5e.Target || target == HtmlSheet.Target ? [text, SheetJson.Map(sheet).ToJsonString(FileJson)] : new[] { text };
+            // The HTML sheet also encodes its session notes, which the sheet model does not hold: scan their raw text too.
+            if (rawNotes is not null)
+                scanned = [.. scanned, rawNotes];
             if (scanned.Any(t => OutputScan.Leaks(t, SensitivePaths(), [ScanIdentity().UserName])))
                 throw new AppValidationException([new("export.output-refused", "The file would contain a local path or your Windows user name, so nothing was written.")]);
             var bytes = Encoding.UTF8.GetBytes(text);

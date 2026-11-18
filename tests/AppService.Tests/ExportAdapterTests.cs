@@ -412,6 +412,16 @@ public class ExportAdapterTests
     }
 
     [Fact]
+    public void A_note_holding_a_path_with_an_encoded_character_refuses_the_html_export()
+    {
+        // The HTML writes the apostrophe and the accented letter as entities, so only the raw note text can match the path.
+        using var temp = new TempApp(folder: "Zoë's data");
+        var character = temp.App.SaveCharacter(CasterWithNotes(temp, "Saved it under " + Path.GetFullPath(temp.App.DataDirectory))).Character;
+        var thrown = Assert.Throws<AppValidationException>(() => temp.App.PreviewVttExport(character.Id, HtmlSheet.Target, SheetPurpose.Personal));
+        Assert.Contains(thrown.Problems, d => d.Code == "export.output-refused");
+    }
+
+    [Fact]
     public void A_note_holding_a_local_path_refuses_the_html_export()
     {
         using var temp = new TempApp();
