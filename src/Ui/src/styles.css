@@ -128,8 +128,10 @@ body { margin: 0; background: var(--bg); color: var(--fg); }
 /* Skip link: off-screen until it takes focus, then top left in the existing theme tokens. */
 .skip-link { position: absolute; left: -10000px; top: 0; z-index: 100; }
 .skip-link:focus { left: var(--space-2); top: var(--space-2); background: var(--bg); color: var(--accent); padding: var(--space-1) var(--space-2); border-radius: var(--radius); }
-/* The skip target is a non-interactive region: focus lands on it, so the global outline around all of main is noise. */
-main[tabindex='-1']:focus { outline: none; }
+/* The skip target is a non-interactive region: focus lands on it, so the global outline around all of main is noise.
+   The html[data-focus] selector outranks "Always show focus" (html[data-focus='always'] :focus, above). */
+main[tabindex='-1']:focus,
+html[data-focus] main[tabindex='-1']:focus { outline: none; }
 
 /* ADR-015: a named grid. `main` and the sheet article use subgrid, so the sheet's own header and summary land in the
    shell's rows (across the window) while staying direct children of the article: print and the e2e queries are unchanged.
