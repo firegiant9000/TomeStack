@@ -258,7 +258,7 @@ it('exports a character for Foundry VTT and as sheet JSON after a preview, with 
   await user.click(await screen.findByRole('button', { name: /^E2E VTT Hero/ }));
   const sheet = await screen.findByRole('article', { name: 'E2E VTT Hero' });
   await openMore(user, sheet, 'Export…');
-  const panel = within(sheet).getByRole('region', { name: 'Export for a virtual tabletop' });
+  const panel = within(sheet).getByRole('region', { name: 'Export to another tool or device' });
   const dataDir = inject('devHost').dataDir.toLowerCase().replaceAll('\\', '/');
 
   // Foundry VTT (dnd5e): the preview names the pinned release, then DevHost downloads the file.

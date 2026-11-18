@@ -51,7 +51,7 @@ export function VttExportPanel({ characterId, onError, onStatus }: Props) {
       // Browser development (DevHost) has no native dialog: fall back to a download.
       try {
         const file = await client.downloadVttExport(preview.token);
-        downloadBase64(file.fileName, file.base64, 'application/json');
+        downloadBase64(file.fileName, file.base64, preview.target === 'html-sheet' ? 'text/html' : 'application/json');
         onStatus(`Downloaded ${file.fileName}.`);
         setPreview(undefined);
       } catch (inner) {
@@ -62,7 +62,7 @@ export function VttExportPanel({ characterId, onError, onStatus }: Props) {
 
   return (
     <section aria-labelledby="vtt-export-heading" className="export-panel">
-      <h2 id="vtt-export-heading">Export for a virtual tabletop</h2>
+      <h2 id="vtt-export-heading">Export to another tool or device</h2>
       <fieldset>
         <legend>Format</legend>
         <label>
@@ -72,6 +72,10 @@ export function VttExportPanel({ characterId, onError, onStatus }: Props) {
         <label>
           <input type="radio" name="vtt-target" checked={target === 'sheet-json'} onChange={() => (setTarget('sheet-json'), setPreview(undefined))} />
           TomeStack sheet (JSON), for any tool that reads it
+        </label>
+        <label>
+          <input type="radio" name="vtt-target" checked={target === 'html-sheet'} onChange={() => (setTarget('html-sheet'), setPreview(undefined))} />
+          Sheet for a phone or tablet (HTML page, no internet needed)
         </label>
       </fieldset>
       <fieldset>
