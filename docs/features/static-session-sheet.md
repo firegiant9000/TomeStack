@@ -38,7 +38,8 @@ It follows the phone's light or dark setting. Printing it shows summaries only.
 ## Tests
 
 - `tests/AppService.Tests/HtmlSheetTests.cs`: the content of each section, encoding of hostile text, and the self-check refusing each forbidden construct.
-- `tests/AppService.Tests/ExportAdapterTests.cs`: the golden file `Golden/multiclass-caster.tomestack-sheet.html` (open it in any browser to see the result), notes only in a personal copy, a local path refused, and the Save dialog filter.
+- `tests/AppService.Tests/ExportAdapterTests.cs`: the golden file `Golden/multiclass-caster.tomestack-sheet.html` (open it in any browser to see the result), notes only in a personal copy, and a local path refused.
+- `tests/AppService.Tests/HostServicesTests.cs`: the Save dialog filter ("HTML page", `.html`).
 - `src/Ui/src/components/VttExportPanel.test.tsx`: the choice in the export panel.
 - `src/Ui/a11y/static-sheet.a11y.tsx`: axe in Edge, light and dark.
 
