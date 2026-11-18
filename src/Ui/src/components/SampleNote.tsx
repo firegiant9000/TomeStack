@@ -114,6 +114,7 @@ export function SampleNote({ characterId, name, onError, onStatus, onRemoved, on
   }
 
   return (
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- Escape from the confirm buttons inside bubbles here; the section itself is not a control.
     <section
       className="sample-note"
       aria-label="Sample character"

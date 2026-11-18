@@ -47,6 +47,7 @@ function Grid({ view, onEditFeature }: { view: ClassTableView; onEditFeature: (c
   const pact = anyPact(view.rows);
   const choices = anyChoices(view.rows);
   return (
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a scrollable region must be focusable so keyboard users can scroll it (WCAG 2.1.1).
     <div role="region" aria-label="Class progression, scrollable" tabIndex={0} className="class-table">
       <table>
         <caption>Class progression</caption>

@@ -1,6 +1,7 @@
 import js from '@eslint/js';
 import { defineConfig, globalIgnores } from 'eslint/config';
 import globals from 'globals';
+import jsxA11y from 'eslint-plugin-jsx-a11y';
 import reactHooks from 'eslint-plugin-react-hooks';
 import tseslint from 'typescript-eslint';
 
@@ -24,6 +25,11 @@ export default defineConfig([
         ),
       ],
     },
+  },
+  {
+    // 4.1: accessibility lint for every component and e2e harness component.
+    files: ['src/**/*.tsx', 'e2e/**/*.tsx'],
+    extends: [jsxA11y.flatConfigs.recommended],
   },
   {
     // The transport, and the e2e harness that health-checks DevHost from Node, are the only fetch and bridge users.

@@ -100,6 +100,8 @@ export function TreeView(props: { root: TreeNode; label: string; onActivate?: (n
         aria-posinset={position}
         aria-setsize={size}
         aria-expanded={hasChildren ? open : undefined}
+        // Single selection follows the roving focus (the one tab stop).
+        aria-selected={node.id === current.node.id}
         tabIndex={node.id === current.node.id ? 0 : -1}
         onKeyDown={onKeyDown}
         onFocus={(e) => {

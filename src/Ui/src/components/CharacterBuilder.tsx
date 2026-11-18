@@ -290,6 +290,7 @@ function RulesStep(props: {
     >
       <label className="field">
         Name
+        {/* eslint-disable-next-line jsx-a11y/no-autofocus -- the first field of the first step takes focus when the builder opens, so keyboard users start typing at once. */}
         <input required value={basics.name} onChange={(e) => onChange({ ...basics, name: e.target.value })} autoFocus />
       </label>
 
@@ -1898,6 +1899,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
       )}
 
       {confirming && (
+        // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- Escape from any button inside the dialog bubbles here; the dialog itself is not a control.
         <div
           role="alertdialog"
           aria-labelledby="discard-question"

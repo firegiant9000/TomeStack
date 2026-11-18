@@ -32,12 +32,14 @@ export function MoreMenu({ items, triggerRef }: { items: MoreMenuItem[]; trigger
   }
 
   return (
+    // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- a disclosure wrapper: it only observes Escape and focus-leave bubbling from the real buttons inside.
     <div className="more-menu" onKeyDown={onKeyDown} onBlur={onBlur}>
       <button ref={trigger} type="button" aria-expanded={open} aria-controls={listId} onClick={() => setOpen((o) => !o)}>
         More
       </button>
       {/* A mousedown anywhere in the list (its gaps and padding, and the item buttons, since it bubbles) keeps focus where it is, so
           it never blurs the disclosure and closes it (onBlur). The click still runs: an item's onClick focuses More, then onSelect. */}
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- pointer-only focus keeper; the buttons inside carry the keyboard and screen-reader interaction. */}
       <ul id={listId} className="more-menu-list" hidden={!open} onMouseDown={(e) => e.preventDefault()}>
         {open &&
           items.map((item) => (

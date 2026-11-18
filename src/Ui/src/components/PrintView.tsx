@@ -249,7 +249,7 @@ export function PrintView({ view, onError, onClose }: Props) {
   const printedDetails = detailRows(character.details);
 
   return (
-    <section className={options.largePrint ? 'print-sheet print-large' : 'print-sheet'} role="region" aria-label="Print preview" id="print-preview" ref={section}>
+    <section className={options.largePrint ? 'print-sheet print-large' : 'print-sheet'} aria-label="Print preview" id="print-preview" ref={section}>
       <div className="print-controls">
         <h2 id="print-heading" tabIndex={-1} ref={heading}>Print character</h2>
         <p className="hint">A printable backup of this sheet. It prints from this computer; nothing is sent anywhere.</p>
