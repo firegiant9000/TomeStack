@@ -1,12 +1,13 @@
 <#
 .SYNOPSIS
-Runs the TomeStack gate steps 1-7 (CONTRIBUTING.md, "The gate") in order, with logs, a summary and an e2e watchdog.
+Runs the TomeStack gate steps 1-8 (CONTRIBUTING.md, "The gate") in order, with logs, a summary and a watchdog on the DevHost steps.
 
 .DESCRIPTION
 Optional helper: the commands in CONTRIBUTING.md stay authoritative. Runs on Windows PowerShell 5.1.
-Step ids, in order: npm-ci, lint, ui-test, ui-build, dotnet-build, dotnet-test, e2e.
+Step ids, in order: npm-ci, lint, ui-test, ui-build, dotnet-build, dotnet-test, e2e, a11y.
+The GUI steps (scripts/smoke.ps1 and scripts/single-instance-check.ps1) need the built desktop exe and are left to the owner; they are not in this table.
 The run stops at the first failing step; the summary is still printed and written to <LogDir>\summary.txt.
-Exit codes: 0 all passed, the failing step's exit code, 124 watchdog timeout (e2e), 2 bad arguments or a CPU check failure under -RequireQuiet.
+Exit codes: 0 all passed, the failing step's exit code, 124 watchdog timeout (e2e or a11y), 2 bad arguments or a CPU check failure under -RequireQuiet.
 
 .PARAMETER From
 Start at this step id and run the later steps.
@@ -14,8 +15,8 @@ Start at this step id and run the later steps.
 Run only these step ids (comma separated).
 .PARAMETER LogDir
 Where the per-step logs and summary.txt go. Default: a time-stamped folder under the temp directory.
-.PARAMETER E2eTimeoutMinutes
-Watchdog for the e2e step only; the whole process tree is killed on expiry.
+.PARAMETER DevHostStepTimeoutMinutes
+Watchdog for the e2e and a11y steps (both use the DevHost); the whole process tree is killed on expiry. Old name: -E2eTimeoutMinutes.
 .PARAMETER UiWorkers
 Sets TOMESTACK_TEST_WORKERS for the children when greater than 0.
 .PARAMETER XunitThreads
@@ -34,7 +35,8 @@ param(
     [string]$From,
     [string[]]$Only,
     [string]$LogDir = (Join-Path (Join-Path $env:TEMP 'tomestack-gate') (Get-Date -Format 'yyyyMMdd-HHmmss')),
-    [double]$E2eTimeoutMinutes = 15,
+    [Alias('E2eTimeoutMinutes')]
+    [double]$DevHostStepTimeoutMinutes = 15,
     [int]$UiWorkers,
     [int]$XunitThreads,
     [int]$ProjectParallelism,
@@ -67,7 +69,8 @@ else {
         [pscustomobject]@{ id = 'ui-build'; exe = 'npm.cmd'; args = @('run', 'build', '--prefix', 'src/Ui') },
         [pscustomobject]@{ id = 'dotnet-build'; exe = 'dotnet'; args = @('build', 'TomeStack.slnx', '-c', 'Release') },
         [pscustomobject]@{ id = 'dotnet-test'; exe = 'dotnet'; args = $testArgs },
-        [pscustomobject]@{ id = 'e2e'; exe = 'npm.cmd'; args = @('run', 'test:e2e', '--prefix', 'src/Ui') }
+        [pscustomobject]@{ id = 'e2e'; exe = 'npm.cmd'; args = @('run', 'test:e2e', '--prefix', 'src/Ui') },
+        [pscustomobject]@{ id = 'a11y'; exe = 'npm.cmd'; args = @('run', 'test:a11y', '--prefix', 'src/Ui') }
     )
 }
 $validIds = @($steps | ForEach-Object { $_.id })
@@ -165,13 +168,13 @@ try {
 
         $code = 0
         $note = ''
-        if ($s.id -eq 'e2e') {
-            if (-not $proc.WaitForExit([int]($E2eTimeoutMinutes * 60000))) {
+        if ($s.id -eq 'e2e' -or $s.id -eq 'a11y') {
+            if (-not $proc.WaitForExit([int]($DevHostStepTimeoutMinutes * 60000))) {
                 & taskkill.exe /T /F /PID $proc.Id 2>&1 | Out-Null
                 $proc.WaitForExit()
                 $code = 124
                 $note = 'timed out'
-                Write-Host ("[{0}] timed out after {1} min; process tree killed." -f $s.id, $E2eTimeoutMinutes)
+                Write-Host ("[{0}] timed out after {1} min; process tree killed." -f $s.id, $DevHostStepTimeoutMinutes)
             }
             else { $code = $proc.ExitCode }
         }

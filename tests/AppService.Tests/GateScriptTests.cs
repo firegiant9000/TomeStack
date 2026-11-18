@@ -62,13 +62,13 @@ public sealed class GateScriptTests
         JsonSerializer.Serialize(steps.Select(s => new { id = s.Id, exe = "powershell", args = new[] { "-NoProfile", "-Command", s.Command } }));
 
     [Fact]
-    public void Dry_run_lists_the_seven_steps_in_order()
+    public void Dry_run_lists_the_eight_steps_in_order()
     {
         var (exitCode, output, _) = Run(null, "-DryRun", "-SkipCpuCheck");
 
         Assert.Equal(0, exitCode);
         var position = -1;
-        foreach (var id in new[] { "npm-ci", "lint", "ui-test", "ui-build", "dotnet-build", "dotnet-test", "e2e" })
+        foreach (var id in new[] { "npm-ci", "lint", "ui-test", "ui-build", "dotnet-build", "dotnet-test", "e2e", "a11y" })
         {
             var next = output.IndexOf(id, position + 1, StringComparison.Ordinal);
             Assert.True(next > position, $"Step '{id}' is missing or out of order in:\n{output}");
@@ -84,6 +84,7 @@ public sealed class GateScriptTests
         Assert.Equal(0, exitCode);
         Assert.Contains("dotnet-test", output);
         Assert.Contains("e2e", output);
+        Assert.Contains("a11y", output);
         Assert.DoesNotContain("ui-test", output);
     }
 
@@ -125,10 +126,12 @@ public sealed class GateScriptTests
         }
     }
 
-    [Fact]
-    public void Hung_e2e_is_killed_by_the_watchdog()
+    [Theory]
+    [InlineData("e2e")]
+    [InlineData("a11y")]
+    public void Hung_devhost_step_is_killed_by_the_watchdog(string id)
     {
-        var (exitCode, output, elapsed) = Run(null, "-SkipCpuCheck", "-E2eTimeoutMinutes", "0.05", "-StepsJson", Steps(("e2e", "Start-Sleep 60")));
+        var (exitCode, output, elapsed) = Run(null, "-SkipCpuCheck", "-DevHostStepTimeoutMinutes", "0.05", "-StepsJson", Steps((id, "Start-Sleep 60")));
 
         Assert.Equal(124, exitCode);
         Assert.Contains("timed out", output);
