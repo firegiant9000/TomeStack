@@ -238,6 +238,17 @@ function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (in
 
   return (
     <div className="app" data-sidebar={hidden ? 'collapsed' : undefined}>
+      {/* First in the DOM so the first Tab lands on it. The fragment is handled here: WebView2 must not change the URL hash. */}
+      <a
+        className="skip-link"
+        href="#main-content"
+        onClick={(event) => {
+          event.preventDefault();
+          document.getElementById('main-content')?.focus();
+        }}
+      >
+        Skip to main content
+      </a>
       <header className="app-header">
         <button
           type="button"
@@ -307,7 +318,7 @@ function AppContent({ info, setInfo }: { info: AppInfo | undefined; setInfo: (in
         </ul>
       </nav>
 
-      <main className="content">
+      <main id="main-content" className="content" tabIndex={-1}>
         <div className="messages">
           {info?.warnings.map((w) => (
             <p key={w.code} role="note" className="warn">
