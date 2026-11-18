@@ -178,7 +178,7 @@ it('pins the status bar sticky, static when short or narrow, with no fixed roll-
   expect(media).toContain('.status-bar { position: static; }');
   expect(media).toContain('html { scroll-padding-top: 0; }');
   expect(flat).toContain('.status-bar[data-tall] { position: static; }');
-  expect(flat).toContain('.status-bar button { min-width: 24px; min-height: 24px; }');
+  expect(flat).toContain('.status-bar button { min-width: 24px; min-height: 24px; background: var(--bg); }');
   const stripRule = flat.match(/\.roll-strip \{[^}]*\}/g) ?? [];
   expect(stripRule.length).toBeGreaterThan(0);
   expect(stripRule.join(' ')).not.toContain('11rem');

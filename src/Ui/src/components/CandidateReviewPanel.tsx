@@ -1079,6 +1079,7 @@ function SpanReview({
         {fits && blocks && span && effect ? (
           <>
             <figcaption>Page text from {pageText({ start: span.page })}</figcaption>
+            {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a scrollable region must be focusable so keyboard users can scroll it (WCAG 2.1.1). */}
             <div role="region" aria-labelledby={buttonId(effect.id)} className="excerpt span-text" tabIndex={0}>
               <p className="hint">{lines}</p>
               {blocks.map((b, i) => (
@@ -1127,6 +1128,7 @@ function SlotTable({ casting, page, onOpenPage }: { casting: Record<string, unkn
           Open page {page}
         </button>
       </div>
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a scrollable region must be focusable so keyboard users can scroll it (WCAG 2.1.1). */}
       <div role="region" aria-label="Spell slot table, scrollable" tabIndex={0}>
         <table>
           <caption>Spell slots by class level, as read from the page</caption>

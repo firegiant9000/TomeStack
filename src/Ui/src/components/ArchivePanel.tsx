@@ -95,6 +95,7 @@ export function ArchivePanel({ character, onError, onStatus, onChanged }: Props)
         Archive…
       </button>
       {preview && (
+        // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- Escape from any button inside the dialog bubbles here; the dialog itself is not a control.
         <div role="alertdialog" aria-label={`Archive ${preview.name}?`} className="play-panel" onKeyDown={onDialogKey}>
           <p>
             {preview.name} moves to &quot;Archived&quot; in the character list. Nothing is deleted: its play state

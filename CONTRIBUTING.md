@@ -17,6 +17,7 @@ npm run build --prefix src/Ui      # must precede the .NET build; the shell copi
 dotnet build TomeStack.slnx -c Release
 dotnet test TomeStack.slnx -c Release
 npm run test:e2e --prefix src/Ui   # after the .NET build: UI flow (Vitest + Testing Library) against the real DevHost
+npm run test:a11y --prefix src/Ui  # after the .NET build: axe with colour contrast in Edge against the DevHost (4.1)
 scripts/smoke.ps1 -Exe src/DesktopShell/bin/Release/net10.0-windows/TomeStack.exe   # Windows GUI smoke (checks the report)
 scripts/single-instance-check.ps1 -Exe src/DesktopShell/bin/Release/net10.0-windows/TomeStack.exe   # two processes on one data folder (M2.1)
 ```

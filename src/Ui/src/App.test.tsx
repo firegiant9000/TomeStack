@@ -923,3 +923,39 @@ it('the chooser offers Try the sample only while no sample exists, archived or n
   await screen.findByRole('radio', { name: 'Make a new one' });
   expect(screen.queryByRole('radio', { name: 'Try the sample' })).toBeNull();
 });
+
+it('the first Tab reaches "Skip to main content"', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  await screen.findByRole('navigation', { name: 'Main' });
+  await user.tab();
+  expect(document.activeElement).toBe(screen.getByRole('link', { name: 'Skip to main content' }));
+});
+
+it('the skip link moves focus to main', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  await screen.findByRole('navigation', { name: 'Main' });
+  await user.tab();
+  await user.keyboard('{Enter}');
+  expect(document.activeElement).toBe(screen.getByRole('main'));
+  expect(window.location.hash).toBe('');
+});
+
+it('the skip link stays first with the sidebar hidden', async () => {
+  const user = userEvent.setup();
+  const original = window.matchMedia;
+  window.matchMedia = ((query: string) => ({ matches: true, media: query, addEventListener() {}, removeEventListener() {} })) as never;
+  try {
+    render(<App />);
+    const nav = await screen.findByRole('navigation', { name: 'Main' });
+    await user.click(await within(nav).findByRole('button', { name: /Fixture Avery/ }));
+    await screen.findByRole('article', { name: 'Fixture Avery' });
+    await waitFor(() => expect(nav.hidden).toBe(true));
+    (document.activeElement as HTMLElement | null)?.blur();
+    await user.tab();
+    expect(document.activeElement).toBe(screen.getByRole('link', { name: 'Skip to main content' }));
+  } finally {
+    window.matchMedia = original;
+  }
+});

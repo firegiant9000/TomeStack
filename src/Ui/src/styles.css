@@ -125,6 +125,14 @@ body { margin: 0; background: var(--bg); color: var(--fg); }
 
 :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 
+/* Skip link: off-screen until it takes focus, then top left in the existing theme tokens. */
+.skip-link { position: absolute; left: -10000px; top: 0; z-index: 100; }
+.skip-link:focus { left: var(--space-2); top: var(--space-2); background: var(--bg); color: var(--accent); padding: var(--space-1) var(--space-2); border-radius: var(--radius); }
+/* The skip target is a non-interactive region: focus lands on it, so the global outline around all of main is noise.
+   The html[data-focus] selector outranks "Always show focus" (html[data-focus='always'] :focus, above). */
+main[tabindex='-1']:focus,
+html[data-focus] main[tabindex='-1']:focus { outline: none; }
+
 /* ADR-015: a named grid. `main` and the sheet article use subgrid, so the sheet's own header and summary land in the
    shell's rows (across the window) while staying direct children of the article: print and the e2e queries are unchanged.
    minmax(0, 1fr), not 1fr (= minmax(auto, 1fr)): a wide table or pre in main must not widen the track, or the header,
@@ -268,6 +276,7 @@ button.link[aria-current='page'] { font-weight: 700; }
   border: 1px solid var(--line);
   border-radius: 4px;
   color: var(--muted);
+  background: var(--bg); /* muted text on the page colour (the tinted header made it 4.09:1) */
 }
 .character-list, .options { list-style: none; padding: 0; margin: 0.75rem 0 0; }
 /* Characters home screen (D25): a card per active character; plain 1px box, no shadow (SPEC P-03). */
@@ -403,7 +412,7 @@ html[data-compact-play='on'] #sheet-panel-play .play-panel { padding-top: var(--
    query below), or when its own height is over a third of the viewport (SheetSummary sets data-tall from a ResizeObserver). */
 .status-bar { position: sticky; top: 0; z-index: 2; }
 .status-bar[data-tall] { position: static; }
-.status-bar button { min-width: 24px; min-height: 24px; }
+.status-bar button { min-width: 24px; min-height: 24px; background: var(--bg); } /* not the browser's face (#6b6b6b in dark): the muted label needs the page colour */
 .status-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); flex: 1 1 100%; min-width: 0; }
 .status-hp { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); }
 .status-label { font-weight: 600; font-size: var(--text-sm); color: var(--muted); }
@@ -591,6 +600,7 @@ dl.review-list dd { overflow-wrap: anywhere; }
      P14: PrintView sets --print-font-size (150% to 200%) on the root while Large print is on; otherwise the print stays 100%. */
   :root, html[data-appearance], html[data-text-size], html[data-theme] { color-scheme: light; font-size: var(--print-font-size, 100%); --bg: Canvas; --surface: Canvas; --header-bg: Canvas; }
   .app { display: block; min-height: 0; }
+  .skip-link { display: none !important; }
   .content, article.sheet { display: block; }
   article.sheet > .print-sheet, article.sheet > .sheet-body { margin-right: 0; }
   .app[data-sidebar='collapsed'] :is(.content > .messages, .content > :not(.messages, .sheet), article.sheet > .sheet-body, article.sheet > .print-sheet) { margin-left: 0; }

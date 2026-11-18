@@ -60,6 +60,10 @@ export default async function setup(project: TestProject) {
     throw error;
   }
   const token = readFileSync(join(dataDir, 'devhost.token'), 'utf8').trim();
+  // For the a11y run's Vite middleware (a11y/devhostProxy.ts), which lives in this same Node process.
+  // globalSetup runs once per project, so the a11y run's projects (one per colour scheme) also get their own keyed pair.
+  process.env[`TOMESTACK_E2E_DEVHOST_URL_${project.name}`] = `http://127.0.0.1:${port}`;
+  process.env[`TOMESTACK_E2E_DEVHOST_TOKEN_${project.name}`] = token;
   project.provide('devHost', { endpoint: `http://127.0.0.1:${port}/api/command`, token, dataDir });
 
   return () => {
