@@ -938,7 +938,7 @@ describe('the More list (Wave 3 3.5)', () => {
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'More' }));
   });
 
-  it('shows the plain Export panel and the virtual tabletop export together', async () => {
+  it('shows the plain Export panel and the export to another tool or device together', async () => {
     const user = userEvent.setup();
     renderSheet(view());
     await openMore(user, 'Export…');

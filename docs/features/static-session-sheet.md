@@ -24,7 +24,7 @@ It follows the phone's light or dark setting. Printing it shows summaries only.
 ## What it does not do
 
 - **Ticks are not saved.** They are plain checkboxes. Close the page or reload it and everything goes back to the export. Nothing writes back to TomeStack.
-- **No script, no network.** The page loads nothing from anywhere and has no link that leaves it (links go only to places inside the page).
+- **No script, no network.** The page loads nothing from anywhere and has no links at all.
 - It does not recalculate. Change the character in TomeStack and export again.
 - The sheet export model v1 is unchanged; this target only reads it.
 
