@@ -276,6 +276,7 @@ button.link[aria-current='page'] { font-weight: 700; }
   border: 1px solid var(--line);
   border-radius: 4px;
   color: var(--muted);
+  background: var(--bg); /* muted text on the page colour (the tinted header made it 4.09:1) */
 }
 .character-list, .options { list-style: none; padding: 0; margin: 0.75rem 0 0; }
 /* Characters home screen (D25): a card per active character; plain 1px box, no shadow (SPEC P-03). */
@@ -411,7 +412,7 @@ html[data-compact-play='on'] #sheet-panel-play .play-panel { padding-top: var(--
    query below), or when its own height is over a third of the viewport (SheetSummary sets data-tall from a ResizeObserver). */
 .status-bar { position: sticky; top: 0; z-index: 2; }
 .status-bar[data-tall] { position: static; }
-.status-bar button { min-width: 24px; min-height: 24px; }
+.status-bar button { min-width: 24px; min-height: 24px; background: var(--bg); } /* not the browser's face (#6b6b6b in dark): the muted label needs the page colour */
 .status-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); flex: 1 1 100%; min-width: 0; }
 .status-hp { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); }
 .status-label { font-weight: 600; font-size: var(--text-sm); color: var(--muted); }

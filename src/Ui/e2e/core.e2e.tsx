@@ -197,6 +197,8 @@ it('reaches the primary actions by keyboard alone', async () => {
   const addCharacter = await screen.findByRole<HTMLButtonElement>('button', { name: '+ Add a character' });
 
   await user.tab();
+  expect(document.activeElement).toBe(screen.getByRole('link', { name: 'Skip to main content' })); // the first tab stop (4.1)
+  await user.tab();
   expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Hide sidebar' })); // the shell's first header control
   // Owner (2026-10-12): no second close control inside the sidebar; the header's "Hide sidebar" is the only one.
   expect(screen.queryByRole('button', { name: 'Close sidebar' })).toBeNull();
