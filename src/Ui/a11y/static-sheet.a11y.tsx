@@ -33,8 +33,28 @@ describe('static session sheet', () => {
     expect(parsed.querySelectorAll('script').length).toBe(0);
   });
 
+  it('is a page with a language, one title and one h1', () => {
+    const parsed = new DOMParser().parseFromString(html, 'text/html');
+    expect(parsed.documentElement.lang).toBe('en');
+    expect(parsed.title.trim()).not.toBe('');
+    expect(parsed.querySelectorAll('h1').length).toBe(1);
+  });
+
+  it('applies the colour scheme of this project', () => {
+    mount();
+    // The project's scheme is set in vitest.a11y.config.ts (contextOptions.colorScheme), so the media query tells which one
+    // this run is; the page's own --bg must then be that scheme's value (HtmlSheet.cs :root and its dark media block).
+    const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim().toLowerCase();
+    expect(bg).toBe(dark ? '#121212' : '#ffffff');
+  });
+
   it('has no serious axe violations', async () => {
-    await expectNoSeriousAxe(mount(), 'static sheet');
+    const container = mount();
+    // Guard against judging an empty page: axe passes trivially on nothing.
+    expect(container.querySelectorAll('h2').length).toBeGreaterThan(0);
+    expect(container.querySelectorAll('input').length).toBeGreaterThan(0);
+    await expectNoSeriousAxe(container, 'static sheet');
   });
 
   it('has no serious axe violations with every details open', async () => {
