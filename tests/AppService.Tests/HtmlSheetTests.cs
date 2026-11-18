@@ -18,19 +18,19 @@ public sealed class HtmlSheetTests
         t ??= s => s;
         return new SheetExport(
             SheetExport.FormatName, SheetExport.CurrentFormatVersion, SheetPurpose.Personal, new DateTimeOffset(2026, 11, 19, 8, 0, 0, TimeSpan.Zero),
-            new SheetCharacter(t("Mira Vale"), "srd-5.2.1", 3, [new SheetClass(t("Wayfarer"), 3, 8, t("Lantern Path"), Ref, "Homebrew", Ref)]),
-            [new SheetAbility("str", 10, 0, 0, SheetProficiency.None), new SheetAbility("dex", 16, 3, 5, SheetProficiency.Proficient)],
-            [new SheetSkill("stealth", t("Stealth"), "dex", 5, SheetProficiency.Expertise)],
+            new SheetCharacter(t("Mira Vale"), t("srd-5.2.1"), 3, [new SheetClass(t("Wayfarer"), 3, 8, t("Lantern Path"), Ref, t("Homebrew"), Ref)]),
+            [new SheetAbility(t("str"), 10, 0, 0, SheetProficiency.None), new SheetAbility(t("dex"), 16, 3, 5, SheetProficiency.Proficient)],
+            [new SheetSkill("stealth", t("Stealth"), t("dex"), 5, SheetProficiency.Expertise)],
             [new SheetField(FieldIds.ArmorClass, t("Armor Class"), 15, AutomationStatus.Automatic, false), new SheetField(FieldIds.Initiative, t("Initiative"), 3, AutomationStatus.Automatic, false)],
             new SheetHitPoints(24, 20, 2),
             [new SheetHitDice(8, 3, 1)],
             [new SheetSlots(1, 4, 1)],
             null,
-            [new SheetCaster(t("Wayfarer"), "int", 5, 13, 3, "prepared", "spellSlots",
-                [new SheetSpell(t("Lantern Spark"), 1, true, t("evocation"), "1 action", "60 feet", "V, S", "Instant", false, false, t("A small flare."), t("The flare lights the way."), Ref, t("Homebrew"))],
+            [new SheetCaster(t("Wayfarer"), t("int"), 5, 13, 3, "prepared", "spellSlots",
+                [new SheetSpell(t("Lantern Spark"), 1, true, t("evocation"), t("1 action"), t("60 feet"), t("V, S"), t("Instant"), false, false, t("A small flare."), t("The flare lights the way."), Ref, t("Homebrew"))],
                 Ref, t("Homebrew"))],
             [new SheetResource(t("Trail Sense"), t("Trailcraft"), 3, 1, [t("long rest: all")], Ref, t("Homebrew"))],
-            [new SheetAttack(t("Walking Staff"), 5, "1d6+3", "1d8+3", t("bludgeoning"), [t("versatile")], t("5 ft"), true, Ref, t("Homebrew"))],
+            [new SheetAttack(t("Walking Staff"), 5, t("1d6+3"), t("1d8+3"), t("bludgeoning"), [t("versatile")], t("5 ft"), true, Ref, t("Homebrew"))],
             [new SheetFeature(t("Map Reader"), t("class"), t("Reads maps."), AutomationStatus.Reference, [t("You always know north.")], Ref, t("Homebrew"))],
             [new SheetToggle(t("Lantern lit"), t("Lantern Path"), true, Ref, t("Homebrew"))],
             [new SheetScale(t("Trail dice"), t("Wayfarer"), 2, Ref, t("Homebrew"))],
@@ -115,8 +115,8 @@ public sealed class HtmlSheetTests
     {
         var html = HtmlSheet.Render(Sample(s => Evil + s), Extras(Note("2026-11-01", Evil)));
 
-        Assert.DoesNotContain("<img", html, StringComparison.Ordinal);
-        Assert.DoesNotContain("<script", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<img", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("<script", html, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(Evil, html, StringComparison.Ordinal);
         Assert.Contains("&lt;script&gt;", html, StringComparison.Ordinal);
         Assert.Empty(HtmlSheet.Validate(html));
@@ -168,6 +168,24 @@ public sealed class HtmlSheetTests
         var unbounded = Resources(null, 4);
         Assert.Contains("no fixed maximum", unbounded, StringComparison.Ordinal);
         Assert.Equal(0, Count(unbounded, "<input"));
+    }
+
+    [Fact]
+    public void Negative_spent_is_shown_as_zero()
+    {
+        string Resources(int? maximum)
+        {
+            var html = HtmlSheet.Render(Sample() with { Resources = [new SheetResource("Pool", "Pool", maximum, -1, [], Ref, "S")], HitDice = [] }, Extras());
+            var at = html.IndexOf(">Resources</h2>", StringComparison.Ordinal);
+            return html[at..html.IndexOf("</section>", at, StringComparison.Ordinal)];
+        }
+
+        var unbounded = Resources(null);
+        Assert.Contains("Spent 0", unbounded, StringComparison.Ordinal);
+        Assert.DoesNotContain("-1", unbounded, StringComparison.Ordinal);
+        var big = Resources(21);
+        Assert.Contains("Spent 0 of 21", big, StringComparison.Ordinal);
+        Assert.DoesNotContain("-1", big, StringComparison.Ordinal);
     }
 
     [Fact]

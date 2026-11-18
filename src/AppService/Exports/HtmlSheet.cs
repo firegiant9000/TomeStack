@@ -273,6 +273,7 @@ public static class HtmlSheet
     /// <summary>A pool of spendable things: tick boxes when small, a number when large, text when unbounded.</summary>
     private static void Pool(StringBuilder sb, string label, string boxLabel, int? maximum, int spent)
     {
+        spent = Math.Max(0, spent);
         sb.Append("<div class=\"pool\"><strong>").Append(Text(label)).Append("</strong>\n");
         if (maximum is null)
             sb.Append("<p>Spent ").Append(N(spent)).Append(" (no fixed maximum)</p>\n");
