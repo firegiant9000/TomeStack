@@ -22,6 +22,10 @@ scripts/smoke.ps1 -Exe src/DesktopShell/bin/Release/net10.0-windows/TomeStack.ex
 scripts/single-instance-check.ps1 -Exe src/DesktopShell/bin/Release/net10.0-windows/TomeStack.exe   # two processes on one data folder (M2.1)
 ```
 
+`scripts/gate.ps1` runs steps 1–8 in this order under Windows PowerShell, with one log per step and a summary (`summary.txt`) in `-LogDir`. It stops at the first failure, kills a hung e2e or a11y run after `-DevHostStepTimeoutMinutes` (15 by default), and stops this checkout's DevHost before and after the run. `-LowPriority` runs the steps below normal priority, and a CPU check warns when the machine is already busy (`-RequireQuiet` fails instead). It is a convenience: the commands above stay the gate, and smoke and single-instance still run by hand.
+
+Local test runs are capped so a full run doesn't saturate a many-core machine. Vitest uses at most 8 workers (never more than the core count), and xUnit at most 8 threads per project on machines with more than 8 cores. CI keeps the defaults. Override with `TOMESTACK_TEST_WORKERS=<n>` for Vitest, or `dotnet test ... -- xUnit.MaxParallelThreads=<n>` (`gate.ps1 -UiWorkers`, `-XunitThreads`, `-ProjectParallelism`).
+
 When changing a package version, run `dotnet restore TomeStack.slnx` and commit the updated `packages.lock.json` files (CI restores in locked mode).
 
 ## Invariants
