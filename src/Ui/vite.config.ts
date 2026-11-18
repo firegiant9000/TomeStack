@@ -4,6 +4,9 @@ import { join } from 'node:path';
 import type { Plugin } from 'vite';
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
+import { resolveMaxWorkers } from './vitest.workers.ts';
+
+const maxWorkers = resolveMaxWorkers(process.env);
 
 const devHostPort = process.env.TOMESTACK_DEV_PORT ?? '5178';
 const devDataDir =
@@ -43,7 +46,8 @@ function contentSecurityPolicy(): Plugin {
 export default defineConfig({
   plugins: [react(), contentSecurityPolicy()],
   base: './',
-  test: { setupFiles: ['src/test/setup.ts'] },
+  // Capped locally because an uncapped run on a 24-thread machine saturates the CPU and flakes timing tests.
+  test: { setupFiles: ['src/test/setup.ts'], ...(maxWorkers === undefined ? {} : { maxWorkers }) },
   build: { outDir: 'dist', emptyOutDir: true, sourcemap: false },
   server: {
     host: '127.0.0.1',

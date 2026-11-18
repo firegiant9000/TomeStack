@@ -85,4 +85,9 @@
   <PropertyGroup Condition="'$(MSBuildProjectName)' == 'TomeStack.DesktopShell.Tests'">
     <NoWarn>$(NoWarn);CA1859</NoWarn>
   </PropertyGroup>
+
+  <!-- Cap xUnit parallelism for the test projects (tests/xunit.runner.json); override with the xUnit.MaxParallelThreads=n runsettings argument -->
+  <ItemGroup Condition="$(MSBuildProjectName.EndsWith('.Tests'))">
+    <Content Include="$(MSBuildThisFileDirectory)tests/xunit.runner.json" Link="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
