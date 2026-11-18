@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// The D&D Beyond import steps against a mocked client (the real flow runs in e2e/flow.e2e.tsx). Every value is invented.
+// The D&D Beyond import steps against a mocked client (the real flow runs in e2e/character-import.e2e.tsx). Every value is invented.
 import { cleanup, render as renderPlain, screen, waitFor, within } from '@testing-library/react';
 import type { ReactElement, ReactNode } from 'react';
 import userEvent from '@testing-library/user-event';

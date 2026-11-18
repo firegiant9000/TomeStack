@@ -287,7 +287,7 @@ Dispatcher (`tests/AppService.Tests/PersistenceAndDispatchTests.cs`, extend): `d
 - `falls back to a file input when the host has no dialog`
 - `every table has a caption and row headers` (axe-style assertions as the existing component tests do; check `src/Ui/src/components/*.test.tsx` for the pattern)
 
-`src/Ui/e2e/flow.e2e.tsx` (extend): `it('imports a D&D Beyond sheet, resolves a choice, keeps one sheet number as an override and creates the character', …)` reading `tests/RulesFixtures/pdf/fixture-ddb-sheet.pdf` through `ddb.readData` (the DevHost has no dialog), plus `it('cancelling the D&D Beyond import at each step leaves the character list unchanged', …)`.
+`src/Ui/e2e/character-import.e2e.tsx` (extend): `it('imports a D&D Beyond sheet, resolves a choice, keeps one sheet number as an override and creates the character', …)` reading `tests/RulesFixtures/pdf/fixture-ddb-sheet.pdf` through `ddb.readData` (the DevHost has no dialog), plus `it('cancelling the D&D Beyond import at each step leaves the character list unchanged', …)`.
 
 **Doc updates.** Spec: status to "built, awaiting owner checks"; `docs/features/gap-notes.md` "A note" gains the `import` kind and the refusal in `gap.add`; `docs/schemas/README.md`; `docs/features/accessibility-checklist.md` gains an item for the step view; `docs/CHANGELOG.md` "Unreleased / Added"; LIVING_SPECS change history (built; gap-note v2; no DB or package change). The companion edits below are listed for the owner, not made here.
 

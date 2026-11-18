@@ -314,7 +314,7 @@ public class SrdOrigins521Tests
     [Fact]
     public void New_names_are_unique_and_never_start_like_the_M1_species_or_background()
     {
-        // The e2e flow picks the Dwarf and the Soldier by a name prefix (flow.e2e.tsx), and tests look content up by name.
+        // The e2e flow picks the Dwarf and the Soldier by a name prefix (src/Ui/e2e/*.e2e.tsx), and tests look content up by name.
         // The feat "Ability Score Improvement" shares its SRD name with the class feature; imports match by kind.
         var names = Origins.Revisions.Concat(Feats.Revisions).Select(r => r.Name).ToList();
 

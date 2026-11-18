@@ -2,7 +2,7 @@
 
 SPEC P-03 · ADR-014 · LIVING_SPECS D17 (owner, 2026-10-03) · status: **implemented** (slices 1 to 4, 2026-10-04) · ADR-015, D18 (2026-10-05) · D96 (status bar, six tabs and More, Wave 3 Groups 3 and 4).
 
-UI: `src/Ui/src/App.tsx`, `src/Ui/src/components/CharacterSheet.tsx`, `src/Ui/src/components/sheet/TabList.tsx`, `src/Ui/src/components/sheet/MoreMenu.tsx`, `src/Ui/src/components/SheetSummary.tsx`, `src/Ui/src/sheetTab.ts`. Tests: `TabList.test.tsx`, `MoreMenu.test.tsx`, `SheetSummary.test.tsx`, `sheetTab.test.ts`, `CharacterSheet.test.tsx` and every sheet test in `src/Ui/e2e/flow.e2e.tsx` (helpers `openTab` and `summaryValue`).
+UI: `src/Ui/src/App.tsx`, `src/Ui/src/components/CharacterSheet.tsx`, `src/Ui/src/components/sheet/TabList.tsx`, `src/Ui/src/components/sheet/MoreMenu.tsx`, `src/Ui/src/components/SheetSummary.tsx`, `src/Ui/src/sheetTab.ts`. Tests: `TabList.test.tsx`, `MoreMenu.test.tsx`, `SheetSummary.test.tsx`, `sheetTab.test.ts`, `CharacterSheet.test.tsx` and every sheet test in `src/Ui/e2e/*.e2e.tsx` (helpers `openTab` and `summaryValue` in `src/Ui/e2e/helpers.tsx`).
 
 ## Layout
 

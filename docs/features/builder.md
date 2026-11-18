@@ -2,7 +2,7 @@
 
 SPEC C-01, C-07, S-02 · ROADMAP M2 · MVP "Builder" · status: implemented (M2 item 1).
 
-`src/Ui/src/components/CharacterBuilder.tsx` over `src/AppService/Builder.cs`. Acceptance: `tests/AppService.Tests/BuilderDraftTests.cs` and the e2e test "builds an SRD 5.2.1 Barbarian as drafts" in `src/Ui/e2e/flow.e2e.tsx`.
+`src/Ui/src/components/CharacterBuilder.tsx` over `src/AppService/Builder.cs`. Acceptance: `tests/AppService.Tests/BuilderDraftTests.cs` and the e2e test "builds an SRD 5.2.1 Barbarian as drafts" in `src/Ui/e2e/builder.e2e.tsx`.
 
 ## Drafts (SPEC C-07)
 
@@ -76,7 +76,7 @@ In the choices step each caster's picker has a search by name ([spellcasting.md]
 
 ### Tests
 
-Vitest: `CharacterBuilder.test.tsx` (steps, methods, review). e2e: the `createCharacter(user, { name, family?, scores?, species?, cls?, background?, other? })` helper in `src/Ui/e2e/flow.e2e.tsx` walks the seven steps (it skips Gear unless `kit` is set). With `scores` it uses "Enter by hand"; without, it assigns the standard array in order.
+Vitest: `CharacterBuilder.test.tsx` (steps, methods, review). e2e: the `createCharacter(user, { name, family?, scores?, species?, cls?, background?, other? })` helper in `src/Ui/e2e/helpers.tsx` walks the seven steps (it skips Gear unless `kit` is set). With `scores` it uses "Enter by hand"; without, it assigns the standard array in order.
 
 ## Accessibility (WCAG 2.2 AA, D05)
 

@@ -9,6 +9,9 @@ export default defineConfig({
   server: { fs: { allow: ['.', '../../docs/guides'] } },
   test: {
     include: ['e2e/**/*.e2e.tsx'],
+    // One shared DevHost serves every file: sources sort by GUID and a test may rely on what an earlier test in its file
+    // created. Files run one after another, as the single flow file did, so no new cross-file load or ordering appears.
+    fileParallelism: false,
     environment: 'jsdom',
     globalSetup: ['e2e/devhost.setup.ts'],
     setupFiles: ['e2e/timeouts.setup.ts'],
