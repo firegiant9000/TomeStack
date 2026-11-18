@@ -88,7 +88,8 @@ namespace TomeStack.AppService
         {
             if (!ExportTargets.Contains(target))
                 throw new AppValidationException([new("export.target-unknown", $"'{(target?.Length > 40 ? target[..40] : target)}' is not an export target this TomeStack has ({string.Join(", ", ExportTargets)}).")]);
-            var sheet = SheetExportFor(characterId, purpose);
+            var character = LoadCharacter(characterId);
+            var sheet = SheetExportFor(character, purpose);
             string text;
             string fileName;
             string adapterVersion;
@@ -109,8 +110,6 @@ namespace TomeStack.AppService
             }
             else if (target == HtmlSheet.Target)
             {
-                var character = _store.FindCharacter(characterId)
-                    ?? throw new AppValidationException([new("character.not-found", $"Character {characterId} does not exist.")]);
                 htmlNotes = purpose == SheetPurpose.Personal ? character.Notes.Count : 0;
                 if (htmlNotes > 0)
                     rawNotes = string.Join("\n", character.Notes.Select(n => n.Text));

@@ -535,10 +535,16 @@ namespace TomeStack.AppService
         }
 
         /// <summary>The sheet export model v1 of a character (ADR-011, ADR-007 item 11), for extensions and adapters.</summary>
-        internal SheetExport SheetExportFor(Guid characterId, SheetPurpose purpose)
-        {
-            var character = _store.FindCharacter(characterId)
+        internal SheetExport SheetExportFor(Guid characterId, SheetPurpose purpose) => SheetExportFor(LoadCharacter(characterId), purpose);
+
+        /// <summary>The character as stored, or <c>character.not-found</c>.</summary>
+        internal Character LoadCharacter(Guid characterId) =>
+            _store.FindCharacter(characterId)
                 ?? throw new AppValidationException([new("character.not-found", $"Character {characterId} does not exist.")]);
+
+        /// <summary>The same export for a character already read, so one request reads the character once.</summary>
+        internal SheetExport SheetExportFor(Character character, SheetPurpose purpose)
+        {
             var sheet = CharacterCalculator.Calculate(character, _store);
             return SheetExportBuilder.Build(character, sheet, _store, purpose, _bundledSources, _time.GetUtcNow());
         }

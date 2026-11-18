@@ -412,6 +412,14 @@ public class ExportAdapterTests
     }
 
     [Fact]
+    public void Html_preview_of_an_unknown_character_is_not_found()
+    {
+        using var temp = new TempApp();
+        var thrown = Assert.Throws<AppValidationException>(() => temp.App.PreviewVttExport(Guid.NewGuid(), HtmlSheet.Target, SheetPurpose.Personal));
+        Assert.Contains(thrown.Problems, d => d.Code == "character.not-found");
+    }
+
+    [Fact]
     public void A_note_holding_a_path_with_an_encoded_character_refuses_the_html_export()
     {
         // The HTML writes the apostrophe and the accented letter as entities, so only the raw note text can match the path.
