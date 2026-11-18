@@ -48,6 +48,20 @@ it('offers a phone or tablet sheet and previews it as html-sheet', async () => {
   expect(client.previewVttExport).toHaveBeenCalledWith('c1', 'html-sheet', 'share');
 });
 
+it('drops a slow preview that no longer matches the selected purpose', async () => {
+  const user = userEvent.setup();
+  let resolve: (value: VttExportPreview) => void = () => undefined;
+  vi.mocked(client.previewVttExport).mockReturnValue(new Promise<VttExportPreview>((r) => (resolve = r)));
+  render(<VttExportPanel characterId="c1" onError={vi.fn()} onStatus={vi.fn()} />);
+  await user.click(screen.getByRole('radio', { name: /Personal copy/ }));
+  await user.click(screen.getByRole('button', { name: 'Preview export' }));
+  await user.click(screen.getByRole('radio', { name: /For a shared game/ }));
+  resolve({ ...preview('foundry-dnd5e', 'x.json'), purpose: 'personal' });
+  await new Promise((r) => setTimeout(r, 20));
+  expect(screen.queryByRole('region', { name: 'Export preview' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Save export file…' })).toBeNull();
+});
+
 it('heading names other tools and devices', () => {
   render(<VttExportPanel characterId="c1" onError={vi.fn()} onStatus={vi.fn()} />);
   expect(screen.getByRole('heading', { name: 'Export to another tool or device' })).toBeTruthy();
