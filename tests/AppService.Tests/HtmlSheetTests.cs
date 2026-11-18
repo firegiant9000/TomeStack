@@ -88,6 +88,13 @@ public sealed class HtmlSheetTests
     [InlineData("<p title=\">\" onclick=x>a</p>")]
     [InlineData("<p a=\"1\"onclick=x>a</p>")]
     [InlineData("<p title=\"unclosed onclick=x>a</p>")]
+    [InlineData("<p\"><script>alert(1)</script>\">a</p>")]
+    [InlineData("<p a\"b><script>alert(1)</script>\"c>")]
+    [InlineData("<p a=x\"onclick=y>a</p>")]
+    [InlineData("<p a='1'onclick=x>a</p>")]
+    [InlineData("< script>x</script>")]
+    [InlineData("<!-- x -->")]
+    [InlineData("<p a=\"unterminated>a</p>")]
     public void Validate_rejects_each_forbidden_construct(string fragment)
     {
         Assert.NotEmpty(HtmlSheet.Validate(Wrap(fragment)));
@@ -98,6 +105,9 @@ public sealed class HtmlSheetTests
     {
         Assert.Empty(HtmlSheet.Validate(Wrap("<p>javascript:alert(1) onerror=1 &lt;script&gt;</p>")));
         Assert.Empty(HtmlSheet.Validate(Wrap("<a href=\"#s1\">a</a>")));
+        Assert.Empty(HtmlSheet.Validate(Wrap("<p aria-label=\"Once per long rest 1\">x</p>")));
+        Assert.Empty(HtmlSheet.Validate(Wrap("<input type=\"checkbox\" checked aria-label=\"Level 1 slot 2\">")));
+        Assert.Empty(HtmlSheet.Validate(Wrap("<p>on=1 &lt;script&gt; a > b</p>")));
     }
 
     [Fact]
@@ -220,6 +230,8 @@ public sealed class HtmlSheetTests
     [Fact]
     public void Output_is_deterministic()
     {
+        Assert.Empty(HtmlSheet.Validate(HtmlSheet.Render(Sample(), Extras(Note("2026-11-01", "n")))));
+        Assert.Empty(HtmlSheet.Validate(HtmlSheet.Render(Sample() with { Resources = [new SheetResource("Big", "Big", 30, 2, [], Ref, "S")] }, NoExtras)));
         Assert.Equal(HtmlSheet.Render(Sample(), Extras(Note("2026-11-01", "n"))), HtmlSheet.Render(Sample(), Extras(Note("2026-11-01", "n"))));
     }
 }

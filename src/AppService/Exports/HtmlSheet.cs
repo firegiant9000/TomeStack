@@ -2,7 +2,6 @@ using System.Globalization;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.RegularExpressions;
 using TomeStack.RulesCore;
 
 namespace TomeStack.AppService.Exports;
@@ -17,7 +16,7 @@ public sealed record HtmlSheetExtras(IReadOnlyList<SessionNote> Notes, DeathSave
 /// tablet. Every model string goes through <see cref="Text"/>; ids are generated, never derived from names.
 /// <see cref="Validate"/> is the adapter's tag-level self-check before anything is written.
 /// </summary>
-public static partial class HtmlSheet
+public static class HtmlSheet
 {
     public const string Target = "html-sheet";
     public const string AdapterVersion = "1.0.0";
@@ -89,8 +88,9 @@ public static partial class HtmlSheet
     }
 
     /// <summary>
-    /// The self-check: empty when the page holds none of the forbidden constructs. Runs on tags only: encoded text can
-    /// never hold a raw <c>&lt;</c>, so a name such as "javascript:" is text and passes.
+    /// The self-check: empty when the page holds none of the forbidden constructs. A single-pass tokenizer that follows the
+    /// HTML start-tag states (no regex), so it reads tags the way a browser does. Encoded text never holds a raw
+    /// <c>&lt;</c>, so any <c>&lt;</c> outside the doctype must start a tag, and text such as "javascript:" passes.
     /// </summary>
     public static IReadOnlyList<string> Validate(string html)
     {
@@ -102,68 +102,142 @@ public static partial class HtmlSheet
                 reasons.Add(reason);
         }
 
-        foreach (Match style in StyleRegex().Matches(html))
+        const string doctype = "<!doctype html>";
+        var n = html.Length;
+        var i = 0;
+        while (true)
         {
-            var body = style.Groups[2].Value;
-            if (body.Contains("@import", StringComparison.OrdinalIgnoreCase))
-                Add("style: @import");
-            if (body.Contains("url(", StringComparison.OrdinalIgnoreCase))
-                Add("style: url(");
-            if (body.Contains('\\', StringComparison.Ordinal))
-                Add("style: backslash escape");
-        }
-
-        var rest = StyleRegex().Replace(html, "$1$3");
-        foreach (Match tag in TagRegex().Matches(rest))
-        {
-            var text = tag.Value;
-            var name = TagNameRegex().Match(text).Groups[1].Value.ToLowerInvariant();
-            if (name.Length == 0)
+            var lt = html.IndexOf('<', i);
+            if (lt < 0)
+                break;
+            i = lt + 1;
+            if (html.AsSpan(lt).StartsWith(doctype, StringComparison.OrdinalIgnoreCase))
             {
-                Add("malformed tag");
+                i = lt + doctype.Length;
                 continue;
             }
-            if (name[0] is '!' or '?')
+            if (i >= n || !(IsLetter(html[i]) || (html[i] == '/' && i + 1 < n && IsLetter(html[i + 1]))))
             {
-                if (name != "!doctype")
-                    Add($"markup declaration {name}");
+                Add(i < n && html[i] is '!' or '?' ? "markup declaration" : "stray <");
+                continue;
+            }
+            var endTag = html[i] == '/';
+            if (endTag)
+                i++;
+            var nameStart = i;
+            while (i < n && !IsSpace(html[i]) && html[i] is not ('/' or '>'))
+            {
+                if (html[i] is '"' or '\'' or '<' or '=')
+                    Add("malformed tag name");
+                i++;
+            }
+            var name = html[nameStart..i].ToLowerInvariant();
+            if (endTag)
+            {
+                while (i < n && html[i] is not ('>' or '<'))
+                    i++;
+                if (i >= n || html[i] == '<')
+                    Add("unterminated tag");
+                else
+                    i++;
                 continue;
             }
             if (Array.IndexOf(ForbiddenTags, name) >= 0)
                 Add($"tag <{name}>");
-            var isMeta = name == "meta";
-            foreach (Match attribute in AttributeRegex().Matches(text[TagNameRegex().Match(text).Length..]))
+
+            var closed = false;
+            while (i < n)
             {
-                var attributeName = attribute.Groups[1].Value.ToLowerInvariant();
-                var value = attribute.Groups[2].Success ? attribute.Groups[2].Value : attribute.Groups[3].Success ? attribute.Groups[3].Value : attribute.Groups[4].Value;
+                while (i < n && (IsSpace(html[i]) || html[i] == '/'))
+                    i++;
+                if (i >= n)
+                    break;
+                if (html[i] == '>')
+                {
+                    i++;
+                    closed = true;
+                    break;
+                }
+                var attributeStart = i;
+                if (html[i] == '=')
+                    i++;
+                while (i < n && !IsSpace(html[i]) && html[i] is not ('/' or '>' or '='))
+                {
+                    if (html[i] is '"' or '\'' or '<')
+                        Add("malformed attribute name");
+                    i++;
+                }
+                var attributeName = html[attributeStart..i].ToLowerInvariant();
+                while (i < n && IsSpace(html[i]))
+                    i++;
+                var value = "";
+                if (i < n && html[i] == '=')
+                {
+                    i++;
+                    while (i < n && IsSpace(html[i]))
+                        i++;
+                    if (i < n && html[i] is '"' or '\'')
+                    {
+                        var close = html.IndexOf(html[i], i + 1);
+                        if (close < 0)
+                        {
+                            Add("unterminated quoted value");
+                            i = n;
+                            break;
+                        }
+                        value = html[(i + 1)..close];
+                        i = close + 1;
+                    }
+                    else
+                    {
+                        var valueStart = i;
+                        while (i < n && !IsSpace(html[i]) && html[i] != '>')
+                        {
+                            if (html[i] is '"' or '\'' or '<' or '=' or '`')
+                                Add("malformed unquoted value");
+                            i++;
+                        }
+                        value = html[valueStart..i];
+                    }
+                }
                 if (attributeName.StartsWith("on", StringComparison.Ordinal))
                     Add($"event attribute {attributeName}");
                 else if (Array.IndexOf(ForbiddenAttributes, attributeName) >= 0)
                     Add($"attribute {attributeName}");
                 else if (attributeName == "href" && !value.StartsWith('#'))
                     Add("href that is not an in-page anchor");
-                else if (isMeta && attributeName == "http-equiv" && !value.Equals("Content-Security-Policy", StringComparison.OrdinalIgnoreCase))
+                else if (name == "meta" && attributeName == "http-equiv" && !value.Equals("Content-Security-Policy", StringComparison.OrdinalIgnoreCase))
                     Add($"meta http-equiv {value}");
             }
+            if (!closed)
+            {
+                Add("unterminated tag");
+                break;
+            }
+            if (name == "style")
+            {
+                var end = html.IndexOf("</style", i, StringComparison.OrdinalIgnoreCase);
+                if (end < 0)
+                {
+                    Add("unterminated style");
+                    break;
+                }
+                var body = html[i..end];
+                if (body.Contains("@import", StringComparison.OrdinalIgnoreCase))
+                    Add("style: @import");
+                if (body.Contains("url(", StringComparison.OrdinalIgnoreCase))
+                    Add("style: url(");
+                if (body.Contains('\\', StringComparison.Ordinal))
+                    Add("style: backslash escape");
+                i = end;
+            }
         }
-
-        if (TagRegex().Replace(rest, "").Contains('<', StringComparison.Ordinal))
-            Add("unterminated tag");
         return reasons;
     }
 
-    // Quote-aware like the HTML tokenizer: a ">" inside a quoted value does not end the tag. An unmatched quote leaves the "<" unmatched, which Validate rejects.
-    [GeneratedRegex("""<(?:[^<>"']|"[^"]*"|'[^']*')*>""", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
-    private static partial Regex TagRegex();
+    private static bool IsLetter(char c) => c is (>= 'a' and <= 'z') or (>= 'A' and <= 'Z');
 
-    [GeneratedRegex(@"^<\s*/?\s*([^\s/>]*)", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
-    private static partial Regex TagNameRegex();
-
-    [GeneratedRegex(@"(?<=[\s/""'])([^\s=/>""']+)(?:\s*=\s*(?:""([^""]*)""|'([^']*)'|([^\s>""']+)))?", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
-    private static partial Regex AttributeRegex();
-
-    [GeneratedRegex(@"(<style[^<>]*>)(.*?)(</style\s*>)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Singleline, matchTimeoutMilliseconds: 1000)]
-    private static partial Regex StyleRegex();
+    private static bool IsSpace(char c) => c is ' ' or '\t' or '\n' or '\f' or '\r';
 
     // The one place model strings are encoded, for text and for attribute values alike.
     private static string Text(string? value) => WebUtility.HtmlEncode(value ?? "");
