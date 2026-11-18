@@ -129,10 +129,6 @@ jobs:
         working-directory: src/Ui
         run: npm run test:e2e
 
-      - name: Accessibility in Edge (axe, colour contrast on)
-        working-directory: src/Ui
-        run: npm run test:a11y
-
       # Evidence for ADR-006/ADR-008: the runner image lists Edge but not the WebView2 Runtime, and whether a
       # desktop session is available is unproven. Record what is there before trying the GUI smoke.
       - name: Probe WebView2 Runtime (evidence)
@@ -161,6 +157,11 @@ jobs:
       - name: Two instances on one data folder
         shell: pwsh
         run: scripts/single-instance-check.ps1 -Exe src/DesktopShell/bin/Release/net10.0-windows/TomeStack.exe
+
+      # After the smoke steps so an axe failure does not skip their evidence.
+      - name: Accessibility in Edge (axe, colour contrast on)
+        working-directory: src/Ui
+        run: npm run test:a11y
 
       # Uses the smoke-only --simulate-missing-webview2 flag; the loader env override was ignored on this runner.
       - name: Missing WebView2 runtime path (non-blocking)

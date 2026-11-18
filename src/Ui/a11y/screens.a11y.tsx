@@ -66,10 +66,31 @@ async function seedCharacter(user: ReturnType<typeof userEvent.setup>, name: str
   await screen.findByRole('article', { name });
 }
 
+/** Tabs from the top of the page, as a keyboard user does, so :focus-visible matches without a heuristic. */
+async function focusSkipLink(user: ReturnType<typeof userEvent.setup>): Promise<HTMLAnchorElement> {
+  await user.tab();
+  const link = document.querySelector<HTMLAnchorElement>('a.skip-link');
+  expect(link).not.toBeNull();
+  expect(document.activeElement).toBe(link);
+  return link!;
+}
+
+/** Off-screen, axe skips the skip link, so it is checked while focused (and so on screen). */
+async function axeFocusedSkipLink(user: ReturnType<typeof userEvent.setup>, label: string): Promise<void> {
+  const link = await focusSkipLink(user);
+  try {
+    await expectNoSeriousAxe(link, `${scheme()} / ${label}`);
+  } catch (error) {
+    violations.push(error instanceof Error ? error.message : String(error));
+  }
+}
+
 describe('every screen, default theme', () => {
   it('home with no characters', async () => {
+    const user = userEvent.setup();
     render(<App />);
     await axeScreen('home with no characters');
+    await axeFocusedSkipLink(user, 'skip link (default)');
   });
 
   it('builder, each step', async () => {
@@ -131,27 +152,33 @@ describe('every screen, default theme', () => {
 
 describe('home in each named theme', () => {
   it.each(['cool', 'violet', 'ember', 'rose', 'tide'])('%s', async (theme) => {
-    document.documentElement.dataset.theme = theme;
+    localStorage.setItem('tomestack.theme', theme); // the key settings.ts reads; App's mount effect applies it
+    const user = userEvent.setup();
     render(<App />);
+    await settled();
+    expect(document.documentElement.dataset.theme).toBe(theme);
     await axeScreen(`home, theme ${theme}`);
+    await axeFocusedSkipLink(user, `skip link (${theme})`);
   });
 });
 
 describe('focus styles in a real browser', () => {
   it('the skip link shows an outline when focused', async () => {
+    const user = userEvent.setup();
     render(<App />);
     await settled();
-    const link = document.querySelector<HTMLAnchorElement>('a.skip-link');
-    expect(link).not.toBeNull();
-    link!.focus();
-    expect(document.activeElement).toBe(link);
-    expect(getComputedStyle(link!).outlineStyle).not.toBe('none');
+    const link = await focusSkipLink(user);
+    expect(getComputedStyle(link).outlineStyle).not.toBe('none');
   });
 
   it('main takes focus with no outline, even with "always show focus"', async () => {
-    document.documentElement.dataset.focus = 'always';
+    localStorage.setItem('tomestack.focus', 'always'); // the key settings.ts reads
+    const user = userEvent.setup();
     render(<App />);
     await settled();
+    expect(document.documentElement.dataset.focus).toBe('always');
+    const link = await focusSkipLink(user);
+    expect(getComputedStyle(link).outlineStyle).not.toBe('none');
     const main = document.querySelector<HTMLElement>('main#main-content');
     expect(main).not.toBeNull();
     main!.focus();

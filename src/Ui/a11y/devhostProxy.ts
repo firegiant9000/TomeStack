@@ -12,17 +12,25 @@ function readBody(req: IncomingMessage): Promise<Buffer> {
   return new Promise((done, fail) => {
     const chunks: Buffer[] = [];
     let size = 0;
+    let settled = false;
+    const settle = (action: () => void): void => {
+      if (settled) return;
+      settled = true;
+      action();
+    };
     req.on('data', (chunk: Buffer) => {
+      if (settled) return; // over the cap: the rest is read and dropped, never buffered
       size += chunk.length;
       if (size > maxBody) {
-        fail(new TooLarge());
-        req.destroy();
+        chunks.length = 0;
+        settle(() => fail(new TooLarge()));
         return;
       }
       chunks.push(chunk);
     });
-    req.on('end', () => done(Buffer.concat(chunks)));
-    req.on('error', fail);
+    req.on('end', () => settle(() => done(Buffer.concat(chunks))));
+    req.on('error', (error) => settle(() => fail(error)));
+    req.on('close', () => settle(() => fail(new Error('Request closed before its body ended.'))));
   });
 }
 
@@ -46,6 +54,10 @@ export function devhostProxy(projectName: string): Plugin {
             reply(res, 503, JSON.stringify({ error: `DevHost for project ${projectName} is not running: its TOMESTACK_E2E_DEVHOST_* variables are unset (run through vitest.a11y.config.ts).` }));
             return;
           }
+          if (!/^application\/json\s*(;|$)/i.test(req.headers['content-type'] ?? '')) {
+            reply(res, 415, JSON.stringify({ error: 'Content-Type must be application/json.' }));
+            return;
+          }
           try {
             const body = await readBody(req);
             const upstream = await fetch(`${base}/api/command`, {
@@ -55,7 +67,12 @@ export function devhostProxy(projectName: string): Plugin {
             });
             reply(res, upstream.status, await upstream.text());
           } catch (error) {
-            if (error instanceof TooLarge) reply(res, 413, JSON.stringify({ error: 'Request body over 1 MB.' }));
+            if (error instanceof TooLarge) {
+              // Reply first, then close once the reply is flushed, so the client sees the 413 and not a reset.
+              res.setHeader('Connection', 'close');
+              res.once('finish', () => req.destroy());
+              reply(res, 413, JSON.stringify({ error: 'Request body over 1 MB.' }));
+            }
             else reply(res, 502, JSON.stringify({ error: `DevHost proxy failed: ${error instanceof Error ? error.message : String(error)}` }));
           }
         })();
