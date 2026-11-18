@@ -45,11 +45,64 @@ param(
     [switch]$RequireQuiet,
     [switch]$SkipCpuCheck,
     [switch]$DryRun,
-    [string]$StepsJson
+    [switch]$SkipDevHostCleanup,
+    [string]$StepsJson,
+    [string]$SelfTestMatch
 )
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
+# -StepsJson (tests) never touches real processes, so it implies -SkipDevHostCleanup.
+$skipCleanup = $SkipDevHostCleanup -or [bool]$StepsJson
+
+# --- Helpers ---
+function Format-Arg([string]$a) {
+    if ($a.Length -eq 0) { return '""' }
+    if ($a -notmatch '[\s"]') { return $a }
+    $q = $a -replace '(\\*)"', '$1$1\"'   # backslashes before a quote are doubled, then the quote is escaped
+    $q = $q -replace '(\\+)$', '$1$1'      # trailing backslashes are doubled so they do not escape the closing quote
+    return '"' + $q + '"'
+}
+
+function Test-RepoDevHost([string]$Name, [string]$ExecutablePath, [string]$CommandLine, [string]$Root) {
+    # The e2e/a11y harness runs `dotnet <repo>\src\DevHost\bin\...\TomeStack.DevHost.dll`; an apphost TomeStack.DevHost.exe is covered too.
+    # Both matches are anchored on the repo root plus a trailing backslash, so a sibling folder such as <root>2 never matches.
+    $prefix = $Root.TrimEnd('\') + '\'
+    if ($Name -like 'TomeStack.DevHost*.exe' -and $ExecutablePath -and $ExecutablePath.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) { return $true }
+    if ($Name -ieq 'dotnet.exe' -and $CommandLine -and
+        $CommandLine.IndexOf($prefix + 'src\DevHost\', [StringComparison]::OrdinalIgnoreCase) -ge 0 -and
+        $CommandLine.IndexOf('TomeStack.DevHost', [StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
+    return $false
+}
+
+function Stop-DevHost {
+    if ($skipCleanup) { return }
+    $count = 0
+    try {
+        $found = Get-CimInstance Win32_Process | Where-Object { Test-RepoDevHost $_.Name $_.ExecutablePath $_.CommandLine $repoRoot }
+        foreach ($p in $found) {
+            try { Stop-Process -Id $p.ProcessId -Force -ErrorAction Stop; $count++ } catch { }
+        }
+    }
+    catch { Write-Warning 'DevHost cleanup unavailable.' }
+    Write-Host "DevHost cleanup: stopped $count process(es)."
+}
+
+function Write-EarlySummary([string]$Reason) {
+    # Bad arguments and a failed CPU check end the run before any step; the reason still goes to summary.txt.
+    try {
+        New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
+        $Reason | Out-File -FilePath (Join-Path $LogDir 'summary.txt') -Encoding ascii
+    }
+    catch { Write-Warning 'Could not write summary.txt.' }
+}
+
+if ($SelfTestMatch) {
+    # Tests only: {name, exe, cmd, root} -> prints "match: True|False" without looking at any real process.
+    $probe = ConvertFrom-Json -InputObject $SelfTestMatch
+    Write-Host ('match: {0}' -f (Test-RepoDevHost ([string]$probe.name) ([string]$probe.exe) ([string]$probe.cmd) ([string]$probe.root)))
+    exit 0
+}
 
 # --- Step table ---
 if ($StepsJson) {
@@ -82,7 +135,9 @@ $bad = @()
 if ($From -and ($validIds -notcontains $From)) { $bad += $From }
 foreach ($o in $onlyIds) { if ($validIds -notcontains $o) { $bad += $o } }
 if ($bad.Count -gt 0) {
-    Write-Host ("Unknown step id: {0}. Valid ids: {1}" -f ($bad -join ', '), ($validIds -join ', '))
+    $reason = "Unknown step id: {0}. Valid ids: {1}" -f ($bad -join ', '), ($validIds -join ', ')
+    Write-Host $reason
+    Write-EarlySummary $reason
     exit 2
 }
 $selected = @($steps)
@@ -91,11 +146,6 @@ if ($From) {
     $selected = @($steps | Select-Object -Skip $index)
 }
 if ($onlyIds.Count -gt 0) { $selected = @($selected | Where-Object { $onlyIds -contains $_.id }) }
-
-function Format-Arg([string]$a) {
-    if ($a -match '[\s"]') { return '"' + ($a -replace '"', '\"') + '"' }
-    return $a
-}
 
 if ($DryRun) {
     # The CPU check below still runs under -DryRun so that -RequireQuiet can be exercised.
@@ -110,41 +160,25 @@ if (-not $SkipCpuCheck) {
         $average = ($samples | ForEach-Object { $_.CounterSamples[0].CookedValue } | Measure-Object -Average).Average
         $line = 'Average {0} was {1:N0}% over 3 s (threshold {2}%).' -f $counter, $average, $CpuWarnPercent
         if ($average -ge $CpuWarnPercent) {
-            if ($RequireQuiet) { Write-Host "Machine is not quiet. $line"; exit 2 }
+            if ($RequireQuiet) { Write-Host "Machine is not quiet. $line"; Write-EarlySummary "Machine is not quiet. $line"; exit 2 }
             Write-Warning "Machine is busy; timings and flakes may not be representative. $line"
         }
         else { Write-Host $line }
     }
     catch {
-        if ($RequireQuiet) { Write-Host 'CPU check unavailable and -RequireQuiet was given.'; exit 2 }
+        if ($RequireQuiet) { Write-Host 'CPU check unavailable and -RequireQuiet was given.'; Write-EarlySummary 'CPU check unavailable and -RequireQuiet was given.'; exit 2 }
         Write-Warning 'CPU check unavailable.'
     }
 }
 
 if ($DryRun) { exit 0 }
 
-# --- Helpers ---
-function Stop-DevHost {
-    # The e2e harness runs `dotnet <repo>\src\DevHost\bin\...\TomeStack.DevHost.dll`; an apphost TomeStack.DevHost.exe is covered too.
-    # Only processes belonging to this repo root are touched.
-    $count = 0
-    try {
-        $devHostDir = Join-Path $repoRoot 'src\DevHost'
-        $found = Get-CimInstance Win32_Process | Where-Object {
-            ($_.Name -like 'TomeStack.DevHost*.exe' -and $_.ExecutablePath -and $_.ExecutablePath.StartsWith($repoRoot, [StringComparison]::OrdinalIgnoreCase)) -or
-            ($_.Name -ieq 'dotnet.exe' -and $_.CommandLine -and $_.CommandLine.IndexOf($devHostDir, [StringComparison]::OrdinalIgnoreCase) -ge 0 -and $_.CommandLine -like '*TomeStack.DevHost*')
-        }
-        foreach ($p in $found) {
-            Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue
-            $count++
-        }
-    }
-    catch { Write-Warning 'DevHost cleanup unavailable.' }
-    Write-Host "DevHost cleanup: stopped $count process(es)."
-}
-
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 if ($UiWorkers -gt 0) { $env:TOMESTACK_TEST_WORKERS = [string]$UiWorkers }
+if ($LowPriority) {
+    # Lowering this process first means every step inherits BelowNormal from creation; the per-step set below is a fallback.
+    try { [Diagnostics.Process]::GetCurrentProcess().PriorityClass = 'BelowNormal' } catch { Write-Warning 'Could not lower priority.' }
+}
 
 $results = @()
 $exitCode = 0
@@ -162,7 +196,14 @@ try {
             RedirectStandardError  = (Join-Path $LogDir ($s.id + '.err.log'))
         }
         if ($s.args.Count -gt 0) { $startArgs.ArgumentList = @($s.args | ForEach-Object { Format-Arg $_ }) }
-        $proc = Start-Process @startArgs
+        try { $proc = Start-Process @startArgs }
+        catch {
+            $clock.Stop()
+            Write-Host ("[{0}] failed to start: {1}" -f $s.id, $_.Exception.Message)
+            $results += [pscustomobject]@{ id = $s.id; exit = 1; seconds = [math]::Round($clock.Elapsed.TotalSeconds, 1); note = 'failed to start' }
+            $exitCode = 1
+            break
+        }
         $null = $proc.Handle   # keeps the handle so ExitCode is readable (PS 5.1)
         if ($LowPriority) { try { $proc.PriorityClass = 'BelowNormal' } catch { Write-Warning 'Could not lower priority.' } }
 
@@ -182,6 +223,7 @@ try {
             $proc.WaitForExit()
             $code = $proc.ExitCode
         }
+        if ($null -eq $code) { $code = 1 }   # an unreadable exit code is a failure, not a pass
         $clock.Stop()
         $results += [pscustomobject]@{ id = $s.id; exit = $code; seconds = [math]::Round($clock.Elapsed.TotalSeconds, 1); note = $note }
         if ($code -ne 0) { $exitCode = $code; break }

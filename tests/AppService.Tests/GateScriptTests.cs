@@ -91,10 +91,12 @@ public sealed class GateScriptTests
     [Fact]
     public void Unknown_step_id_fails_fast()
     {
-        var (exitCode, output, _) = Run(null, "-SkipCpuCheck", "-Only", "nope");
+        string summary = "";
+        var (exitCode, output, _) = Run(logDir => summary = File.ReadAllText(Path.Combine(logDir, "summary.txt")), "-SkipCpuCheck", "-Only", "nope");
 
         Assert.Equal(2, exitCode);
         Assert.Contains("npm-ci", output);
+        Assert.Contains("nope", summary);
     }
 
     [Fact]
@@ -105,7 +107,7 @@ public sealed class GateScriptTests
         var logExists = false;
         try
         {
-            var (exitCode, _, _) = Run(
+            var (exitCode, output, _) = Run(
                 logDir =>
                 {
                     summary = File.ReadAllText(Path.Combine(logDir, "summary.txt"));
@@ -119,6 +121,7 @@ public sealed class GateScriptTests
             Assert.Contains("b", summary);
             Assert.Contains("3", summary);
             Assert.True(logExists);
+            Assert.DoesNotContain("DevHost cleanup", output);   // -StepsJson implies -SkipDevHostCleanup: tests never touch real processes
         }
         finally
         {
@@ -141,9 +144,29 @@ public sealed class GateScriptTests
     [Fact]
     public void Require_quiet_fails_when_over_threshold()
     {
-        var (exitCode, output, _) = Run(null, "-CpuWarnPercent", "0", "-RequireQuiet", "-DryRun");
+        string summary = "";
+        var (exitCode, output, _) = Run(logDir => summary = File.ReadAllText(Path.Combine(logDir, "summary.txt")), "-CpuWarnPercent", "0", "-RequireQuiet", "-DryRun");
 
+        // Exit 2 is the real assertion; the message depends on whether the machine has the English performance counters.
         Assert.Equal(2, exitCode);
-        Assert.Contains("% Processor Time", output);
+        Assert.True(output.Contains("% Processor Time", StringComparison.Ordinal) || output.Contains("CPU check unavailable", StringComparison.Ordinal), output);
+        Assert.False(string.IsNullOrWhiteSpace(summary));
+    }
+
+    [Theory]
+    [InlineData("TomeStack.DevHost.exe", @"C:\dev\ts-w4c\src\DevHost\bin\Release\net10.0\TomeStack.DevHost.exe", "", true)]
+    [InlineData("TomeStack.DevHost.exe", @"C:\dev\ts-w4c2\src\DevHost\bin\Release\net10.0\TomeStack.DevHost.exe", "", false)]
+    [InlineData("dotnet.exe", @"C:\Program Files\dotnet\dotnet.exe", @"dotnet C:\dev\ts-w4c\src\DevHost\bin\Release\net10.0\TomeStack.DevHost.dll", true)]
+    [InlineData("dotnet.exe", @"C:\Program Files\dotnet\dotnet.exe", @"dotnet C:\dev\ts-w4c2\src\DevHost\bin\Release\net10.0\TomeStack.DevHost.dll", false)]
+    [InlineData("dotnet.exe", @"C:\Program Files\dotnet\dotnet.exe", @"dotnet C:\dev\ts-w4c\src\DevHostTools\TomeStack.DevHost.dll", false)]
+    [InlineData("node.exe", @"C:\dev\ts-w4c\node.exe", @"node C:\dev\ts-w4c\src\DevHost\TomeStack.DevHost.dll", false)]
+    public void Devhost_match_is_anchored_on_the_repo_root(string name, string exe, string commandLine, bool expected)
+    {
+        var probe = System.Text.Json.JsonSerializer.Serialize(new { name, exe, cmd = commandLine, root = @"C:\dev\ts-w4c" });
+
+        var (exitCode, output, _) = Run(null, "-SelfTestMatch", probe);
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains(expected ? "match: True" : "match: False", output);
     }
 }
