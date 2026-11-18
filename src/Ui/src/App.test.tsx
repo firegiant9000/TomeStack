@@ -939,6 +939,7 @@ it('the skip link moves focus to main', async () => {
   await user.tab();
   await user.keyboard('{Enter}');
   expect(document.activeElement).toBe(screen.getByRole('main'));
+  expect(window.location.hash).toBe('');
 });
 
 it('the skip link stays first with the sidebar hidden', async () => {

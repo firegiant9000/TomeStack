@@ -128,6 +128,8 @@ body { margin: 0; background: var(--bg); color: var(--fg); }
 /* Skip link: off-screen until it takes focus, then top left in the existing theme tokens. */
 .skip-link { position: absolute; left: -10000px; top: 0; z-index: 100; }
 .skip-link:focus { left: var(--space-2); top: var(--space-2); background: var(--bg); color: var(--accent); padding: var(--space-1) var(--space-2); border-radius: var(--radius); }
+/* The skip target is a non-interactive region: focus lands on it, so the global outline around all of main is noise. */
+main[tabindex='-1']:focus { outline: none; }
 
 /* ADR-015: a named grid. `main` and the sheet article use subgrid, so the sheet's own header and summary land in the
    shell's rows (across the window) while staying direct children of the article: print and the e2e queries are unchanged.
@@ -595,6 +597,7 @@ dl.review-list dd { overflow-wrap: anywhere; }
      P14: PrintView sets --print-font-size (150% to 200%) on the root while Large print is on; otherwise the print stays 100%. */
   :root, html[data-appearance], html[data-text-size], html[data-theme] { color-scheme: light; font-size: var(--print-font-size, 100%); --bg: Canvas; --surface: Canvas; --header-bg: Canvas; }
   .app { display: block; min-height: 0; }
+  .skip-link { display: none !important; }
   .content, article.sheet { display: block; }
   article.sheet > .print-sheet, article.sheet > .sheet-body { margin-right: 0; }
   .app[data-sidebar='collapsed'] :is(.content > .messages, .content > :not(.messages, .sheet), article.sheet > .sheet-body, article.sheet > .print-sheet) { margin-left: 0; }
