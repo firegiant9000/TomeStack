@@ -119,7 +119,12 @@ describe('every screen, default theme', () => {
   });
 
   it('home with one character', async () => {
+    const user = userEvent.setup();
     render(<App />);
+    await seedCharacter(user, 'A11y Home');
+    await user.click(screen.getByRole('button', { name: 'TomeStack, your characters' }));
+    await waitFor(() => expect(screen.queryAllByRole('tab')).toHaveLength(0));
+    await screen.findByRole('button', { name: 'Open A11y Home' });
     await axeScreen('home with characters');
   });
 });
