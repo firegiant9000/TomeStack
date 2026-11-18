@@ -68,7 +68,7 @@ namespace TomeStack.AppService
     /// </summary>
     public sealed partial class TomeStackApp
     {
-        public static IReadOnlyList<string> ExportTargets { get; } = [FoundryDnd5e.Target, SheetJson.Target];
+        public static IReadOnlyList<string> ExportTargets { get; } = [FoundryDnd5e.Target, SheetJson.Target, HtmlSheet.Target];
 
         /// <summary>
         /// Export files are indented, and readable: HTML in a description is written as it is, not as < escapes. The
@@ -95,6 +95,7 @@ namespace TomeStack.AppService
             string? targetVersion;
             IReadOnlyList<string> differences = [];
             var baseName = SafeName(sheet.Character.Name);
+            var htmlNotes = 0;
             if (target == FoundryDnd5e.Target)
             {
                 var actor = FoundryDnd5e.Map(sheet);
@@ -104,6 +105,17 @@ namespace TomeStack.AppService
                 fileName = baseName + FoundryDnd5e.FileSuffix;
                 (adapterVersion, targetVersion) = (FoundryDnd5e.AdapterVersion, $"Foundry VTT {FoundryDnd5e.CoreVersion} with dnd5e {FoundryDnd5e.SystemVersion}");
                 differences = FoundryDifferences(sheet);
+            }
+            else if (target == HtmlSheet.Target)
+            {
+                var character = _store.FindCharacter(characterId)
+                    ?? throw new AppValidationException([new("character.not-found", $"Character {characterId} does not exist.")]);
+                htmlNotes = purpose == SheetPurpose.Personal ? character.Notes.Count : 0;
+                text = HtmlSheet.Render(sheet, new(purpose == SheetPurpose.Personal ? character.Notes : [], character.Play.DeathSaves));
+                if (HtmlSheet.Validate(text) is { Count: > 0 } problems)
+                    throw new AppValidationException([new("export.invalid-output", $"The HTML sheet would not be safe to open ({problems[0]}), so nothing was written.")]);
+                fileName = baseName + HtmlSheet.FileSuffix;
+                (adapterVersion, targetVersion) = (HtmlSheet.AdapterVersion, "HTML page, no script");
             }
             else
             {
@@ -117,7 +129,7 @@ namespace TomeStack.AppService
             // The model is an allowlist with no path field; the scan is the second line (ADR-012 "Privacy"). The Foundry file
             // holds HTML-encoded text (an accented or quoted name is written as an entity), so the sheet it came from, whose
             // strings are the same but not encoded, is scanned too (review fix).
-            var scanned = target == FoundryDnd5e.Target ? [text, SheetJson.Map(sheet).ToJsonString(FileJson)] : new[] { text };
+            var scanned = target == FoundryDnd5e.Target || target == HtmlSheet.Target ? [text, SheetJson.Map(sheet).ToJsonString(FileJson)] : new[] { text };
             if (scanned.Any(t => OutputScan.Leaks(t, SensitivePaths(), [ScanIdentity().UserName])))
                 throw new AppValidationException([new("export.output-refused", "The file would contain a local path or your Windows user name, so nothing was written.")]);
             var bytes = Encoding.UTF8.GetBytes(text);
@@ -129,6 +141,10 @@ namespace TomeStack.AppService
                 warnings.Add(new("export.personal", "Personal copy: includes your own homebrew. Do not share it."));
             if (target == FoundryDnd5e.Target)
                 warnings.Add(new("export.experimental", "Experimental: the Foundry file is checked against the dnd5e data model, but no import into a real Foundry world has been recorded yet."));
+            if (htmlNotes > 0)
+                warnings.Add(new("export.html-notes", htmlNotes == 1 ? "Includes 1 session note." : $"Includes {htmlNotes} session notes."));
+            if (target == HtmlSheet.Target)
+                warnings.Add(new("export.html-static", "Ticks on the phone are not saved: reopening the file starts from this export."));
             return new(token, target, fileName, bytes.LongLength, adapterVersion, targetVersion, purpose, sheet.Dropped, sheet.Notices, differences, warnings);
         }
 

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using TomeStack.AppService.Exports;
 using TomeStack.ImportWorker.Tests;
 using TomeStack.RulesCore;
 
@@ -38,6 +39,33 @@ public class HostServicesTests
         Assert.Equal("Pell--2014-fixture-personal-backup.tomestack.zip", host.Suggested); // default purpose: backup (ADR-007)
         Assert.True(temp.App.PreviewImport(File.ReadAllBytes(target)).CanApply);
         Assert.False(File.Exists(target + ".partial"));
+    }
+
+    private sealed class FilterHost : IHostServices
+    {
+        public (string Description, string Extension)? Filter { get; private set; }
+
+        public string? ChooseSaveLocation(string suggestedFileName, string filterDescription, string extension)
+        {
+            Filter = (filterDescription, extension);
+            return null;
+        }
+    }
+
+    [Theory]
+    [InlineData("html-sheet", "HTML page", ".html")]
+    [InlineData("sheet-json", "Export file", ".json")]
+    public void Html_export_saves_with_the_html_filter(string target, string description, string extension)
+    {
+        using var temp = new TempApp();
+        var saved = temp.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json"));
+        var preview = temp.App.PreviewVttExport(saved.Character.Id, target, SheetPurpose.Share);
+        var host = new FilterHost();
+
+        var response = Dispatch(new CommandDispatcher(temp.App, host: host), "export.saveAs", new { token = preview.Token });
+
+        Assert.True(response.GetProperty("ok").GetBoolean(), response.ToString());
+        Assert.Equal((description, extension), host.Filter);
     }
 
     [Fact]

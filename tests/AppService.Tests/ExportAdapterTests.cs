@@ -356,4 +356,67 @@ public class ExportAdapterTests
         Assert.Contains("\"export.expired\"", Send("export.download", new { token }), StringComparison.Ordinal);
         Assert.Contains("\"export.target-unknown\"", Send("export.preview", new { characterId = character.Id, target = "roll20" }), StringComparison.Ordinal);
     }
+
+    private const string NoteOne = "Met the ferryman at the north dock.";
+    private const string NoteTwo = "The lamp in the cellar was still warm.";
+
+    private static Character CasterWithNotes(TempApp temp, string? extraNote = null)
+    {
+        var caster = Golden(temp, "multiclass-caster");
+        var created = new DateTimeOffset(2026, 9, 1, 12, 0, 0, TimeSpan.Zero);
+        var notes = new List<SessionNote>
+        {
+            new(Guid.Parse("6f4e0000-0000-4000-8000-0000000000a1"), new DateOnly(2026, 9, 1), NoteOne, created),
+            new(Guid.Parse("6f4e0000-0000-4000-8000-0000000000a2"), new DateOnly(2026, 9, 8), extraNote ?? NoteTwo, created),
+        };
+        return caster with { Notes = notes, Play = caster.Play with { DeathSaves = new(1, 1) } };
+    }
+
+    [Fact]
+    public void The_html_sheet_golden_is_stable()
+    {
+        using var temp = new TempApp();
+        var character = temp.App.SaveCharacter(CasterWithNotes(temp)).Character;
+        var text = Export(temp, character.Id, HtmlSheet.Target, SheetPurpose.Personal);
+        Assert.Equal(text, Export(temp, character.Id, HtmlSheet.Target, SheetPurpose.Personal));
+        var name = "multiclass-caster" + HtmlSheet.FileSuffix;
+        if (Environment.GetEnvironmentVariable("TOMESTACK_WRITE_GOLDEN") is { Length: > 0 } folder)
+            File.WriteAllText(Path.Combine(folder, name), text.ReplaceLineEndings("\n").TrimEnd('\n') + "\n");
+        else
+            Assert.Equal(File.ReadAllText(Path.Combine(GoldenFolder, name)).ReplaceLineEndings("\n").TrimEnd('\n'), text.ReplaceLineEndings("\n").TrimEnd('\n'));
+        Assert.Empty(HtmlSheet.Validate(text));
+        Assert.DoesNotContain("System Reference Document", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Share_html_has_no_session_notes()
+    {
+        using var temp = new TempApp();
+        var character = temp.App.SaveCharacter(CasterWithNotes(temp)).Character;
+        var text = Export(temp, character.Id, HtmlSheet.Target, SheetPurpose.Share);
+        Assert.DoesNotContain("Session notes", text, StringComparison.Ordinal);
+        Assert.DoesNotContain(NoteOne, text, StringComparison.Ordinal);
+        Assert.DoesNotContain(NoteTwo, text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Personal_html_preview_warns_about_notes_and_unsaved_ticks()
+    {
+        using var temp = new TempApp();
+        var character = temp.App.SaveCharacter(CasterWithNotes(temp)).Character;
+        var preview = temp.App.PreviewVttExport(character.Id, HtmlSheet.Target, SheetPurpose.Personal);
+        Assert.Contains(preview.Warnings, w => w.Message == "Includes 2 session notes.");
+        Assert.Contains(preview.Warnings, w => w.Message.StartsWith("Ticks on the phone are not saved", StringComparison.Ordinal));
+        Assert.EndsWith(HtmlSheet.FileSuffix, preview.FileName, StringComparison.Ordinal);
+        Assert.Equal("1.0.0", preview.AdapterVersion);
+    }
+
+    [Fact]
+    public void A_note_holding_a_local_path_refuses_the_html_export()
+    {
+        using var temp = new TempApp();
+        var character = temp.App.SaveCharacter(CasterWithNotes(temp, "Saved it under " + Path.GetFullPath(temp.App.DataDirectory))).Character;
+        var thrown = Assert.Throws<AppValidationException>(() => temp.App.PreviewVttExport(character.Id, HtmlSheet.Target, SheetPurpose.Personal));
+        Assert.Contains(thrown.Problems, d => d.Code == "export.output-refused");
+    }
 }

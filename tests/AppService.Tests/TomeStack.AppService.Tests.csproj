@@ -56,6 +56,7 @@
     <None Include="..\..\docs\authoring\*.md" LinkBase="authoring" CopyToOutputDirectory="PreserveNewest" />
     <!-- M6 slice 4: golden export files (original fixture characters only). -->
     <None Include="Golden\*.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Golden\*.html" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
