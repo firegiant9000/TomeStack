@@ -416,6 +416,8 @@ public class ExportAdapterTests
     {
         // The HTML writes the apostrophe and the accented letter as entities, so only the raw note text can match the path.
         using var temp = new TempApp(folder: "Zoë's data");
+        // Point the profile and user name elsewhere, so the data folder is the only needle the note can match.
+        temp.App.ScanIdentity = () => ("Q:\\NoSuchProfileRoot", "NoSuchUserQq");
         var character = temp.App.SaveCharacter(CasterWithNotes(temp, "Saved it under " + Path.GetFullPath(temp.App.DataDirectory))).Character;
         var thrown = Assert.Throws<AppValidationException>(() => temp.App.PreviewVttExport(character.Id, HtmlSheet.Target, SheetPurpose.Personal));
         Assert.Contains(thrown.Problems, d => d.Code == "export.output-refused");
