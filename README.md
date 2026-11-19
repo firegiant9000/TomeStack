@@ -16,7 +16,7 @@ Every calculated value on the sheet expands into its trace: each step, the amoun
 - **Experimental:** reading a PDF's text and proposing candidates (M4). Nothing becomes a rule until you review and publish it, and it has not yet been proven on a real third-party book.
 - **Evidence:** checks are either fixture-verified (automated tests), Windows-install verified (the CI desktop smoke, or an owner check on an installed build), or accepted in real play. Nothing is accepted in real play yet (that is the M3 gate). See [features/m2-acceptance.md](docs/features/m2-acceptance.md#evidence-levels-m21-2026-09-28).
 
-New to TomeStack? Start with the [getting started guide](docs/guides/getting-started.md); what it does not do yet is in [known gaps](docs/guides/known-gaps.md).
+New to TomeStack? Start with the [getting started guide](docs/guides/getting-started.md); what it does not do yet is in [known gaps](docs/guides/known-gaps.md). Want to help? See [start here](docs/contributing/start-here.md).
 
 The bundled content is a small, attributed slice of both SRDs (CC-BY-4.0; see [ATTRIBUTION.md](ATTRIBUTION.md)). You can also build from source (below). Milestone evidence is in [ROADMAP](docs/ROADMAP.md) and [`docs/features/*-acceptance.md`](docs/features/).
 
