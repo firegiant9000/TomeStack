@@ -2,6 +2,8 @@
 
 TomeStack is a local-first Windows desktop app: a WPF + WebView2 shell, a React/TypeScript UI, a .NET 10 service and SQLite. Setup and the everyday build are in the [README](README.md#build-and-test).
 
+New here? [Start here](docs/contributing/start-here.md): reporting bugs, writing homebrew, or a first UI fix.
+
 The specs in [`docs/`](docs/) are authoritative: [SPEC](docs/SPEC.md) is behavior, [MVP](docs/MVP.md) is the release boundary and [ROADMAP](docs/ROADMAP.md) is the milestones. Changes follow [LIVING_SPECS](docs/LIVING_SPECS.md#change-workflow): update the specs or ADRs and [CHANGELOG](docs/CHANGELOG.md) in the same change as the code.
 
 ## The gate
