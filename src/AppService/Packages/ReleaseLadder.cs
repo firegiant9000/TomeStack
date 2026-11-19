@@ -41,6 +41,7 @@ public static class ReleaseLadder
         ("0.6.0", 9, 10, 2, 9, 11, false),
         ("0.7.0", 10, 11, 2, 9, 11, false),
         ("0.8.0", 11, 12, 2, 9, 11, true),
+        ("0.9.0", 11, 13, 2, 9, 13, false),
     ];
 
     private static readonly Lazy<IReadOnlyList<LadderRow>> LazyRows = new(() =>

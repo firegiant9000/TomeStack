@@ -9,8 +9,15 @@ namespace TomeStack.AppService.Tests;
 /// <summary>D85 part 1, lane C1: <c>package.targets</c> and <c>target</c> on the export commands, through the dispatcher.</summary>
 public class DownConversionExportTests
 {
-    // This build is stamped 0.8.1, so no row is older than its minor and nothing is listed (D103).
-    private static string UnknownSentence(string target) => $"TomeStack {target} is not a version this export can be made for. This TomeStack has no older version to save for.";
+    // A 0.9.x build offers 0.8.0 only (D103).
+    private static string UnknownSentence(string target) => $"TomeStack {target} is not a version this export can be made for. Choose one of: 0.8.0.";
+
+    [Fact]
+    public void Target_advice_says_there_is_no_older_version_when_nothing_is_offered()
+    {
+        Assert.Equal("This TomeStack has no older version to save for.", CommandDispatcher.TargetAdvice([]));
+        Assert.Equal("Choose one of: 0.8.0.", CommandDispatcher.TargetAdvice([ReleaseLadder.Row("0.8.0")!]));
+    }
 
     private static LadderRow Offered(string release) => ReleaseLadder.Row(release)!;
 
@@ -297,16 +304,16 @@ public class DownConversionExportTests
         var result = Result(Send(new CommandDispatcher(app.App), "package.targets", "{}"));
 
         Assert.Equal(AppVersionStamp.CurrentVersion, result.GetProperty("current").GetString());
-        Assert.Equal("0.8.0", result.GetProperty("currentRow").GetString());
-        Assert.Equal("0.7.0", result.GetProperty("previousMinor").GetString());
-        // The build is 0.8.x, so its own minor's row is not listed; a 0.9.0 build lists [0.8.0] (ReleaseLadderTests).
-        Assert.Empty(result.GetProperty("targets").EnumerateArray());
+        Assert.Equal("0.9.0", result.GetProperty("currentRow").GetString());
+        Assert.Equal("0.8.0", result.GetProperty("previousMinor").GetString());
+        // The build is 0.9.x, so its own minor's row is not listed; 0.8.0 is the one offered row (D103).
+        Assert.Equal(["0.8.0"], result.GetProperty("targets").EnumerateArray().Select(t => t.GetProperty("release").GetString()));
     }
 
     [Fact]
     public void The_previous_minor_row_still_resolves_through_the_dispatcher_in_a_patch_build()
     {
-        // The 0.8.0 goldens drive the commands with target "0.8.0" while the build is stamped 0.8.1 (D103).
+        // The 0.8.0 goldens drive the commands with target "0.8.0", the previous minor of this build (D103).
         using var app = new TempApp();
         var id = SaveCharacter(app);
 
@@ -328,13 +335,13 @@ public class DownConversionExportTests
 
         Assert.Equal("package.target-unknown", code);
         Assert.Equal(UnknownSentence(target), message);
-        Assert.DoesNotContain("Choose one of", message, StringComparison.Ordinal);
     }
 
     [Theory]
     [InlineData("0.4.0")]
     [InlineData("0.7.1")]
     [InlineData("0.8.1")]
+    [InlineData("0.9.0")]
     [InlineData("0.6")]
     public void Preview_with_unknown_target_fails(string target)
     {

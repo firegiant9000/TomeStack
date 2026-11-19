@@ -351,6 +351,13 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
 
     private static IEnumerable<LadderRow> OfferedTargets() => ReleaseLadder.OfferedFor(AppVersionStamp.CurrentVersion);
 
+    /// <summary>The second sentence of <c>package.target-unknown</c>: the offered releases, or that there is none (a patch build of the first minor to offer nothing).</summary>
+    internal static string TargetAdvice(IEnumerable<LadderRow> offered)
+    {
+        var choices = string.Join(", ", offered.Select(r => r.Release.ToString(3)));
+        return choices.Length == 0 ? "This TomeStack has no older version to save for." : $"Choose one of: {choices}.";
+    }
+
     /// <summary>The offered row for <paramref name="target"/>; null when there is no target; an error for any other string.</summary>
     private static LadderRow? ResolveTarget(string? target)
     {
@@ -358,8 +365,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
             return null;
         if (ReleaseLadder.Target(target) is { } row)
             return row;
-        var choices = string.Join(", ", OfferedTargets().Select(r => r.Release.ToString(3)));
-        var advice = choices.Length == 0 ? "This TomeStack has no older version to save for." : $"Choose one of: {choices}.";
+        var advice = TargetAdvice(OfferedTargets());
         // A caller's string is echoed only as letters, digits, dots and hyphens (no control characters or split pairs), cut at 16 with "…" when it was cut.
         var safe = new string([.. target.Where(c => c is (>= '0' and <= '9') or (>= 'A' and <= 'Z') or (>= 'a' and <= 'z') or '.' or '-')]);
         var shown = safe.Length > 16 ? safe[..16] + "…" : safe.Length == 0 ? "(none)" : safe;

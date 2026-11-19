@@ -4,18 +4,18 @@
 
 ## Now, next, later
 
-**Status:** 0.8.1 (published 2026-11-12) is the current release. The dated revision notes that used to sit at the top of this file are in the [CHANGELOG](CHANGELOG.md#roadmap-revision-history-moved-from-roadmapmd).
+**Status:** 0.9.0 is the current release. The dated revision notes that used to sit at the top of this file are in the [CHANGELOG](CHANGELOG.md#roadmap-revision-history-moved-from-roadmapmd).
 
 ### Now
 
-- **0.8.1, just shipped.** The "Save for an older TomeStack" target 0.7.0, the Foundry export pinned to dnd5e 6.0.6, dependency updates and CI hardening. No schema, package format or database change. The list is in the CHANGELOG `## 0.8.1` section.
-- **Wave 2 evidence.** Built work still needs owner checks on an installed build. The rows are in "Owed owner checks" below. Passed on 0.8.0 on 2026-11-11: the accessibility rows 6, 15, 16, 17 and 68. Passed on 2026-11-12: the populated upgrade to 0.8.0 and then 0.8.1, on a copy of a library ([m2-acceptance.md](features/m2-acceptance.md)). Still owed: the restore drill on a second machine (to be re-run on 0.8.1), the Foundry real-world import (Foundry 14, dnd5e 6.0.6) and the M3 played session.
+- **0.9.0, just shipped (Waves 3 and 4).** Starting gear and creation guides in the builder (content schema 13), the first-run sample, the status bar, six sheet tabs and a regrouped sidebar, plainer words, a sheet for a phone or tablet, an accessibility check in CI, and insert-only content in the database (database 13). "Save for an older TomeStack" now offers only the previous minor (0.8.0). Still unsigned: SignPath Foundation has not answered. The list is in the CHANGELOG `## 0.9.0` section.
+- **Wave 2 evidence.** Built work still needs owner checks on an installed build. The rows are in "Owed owner checks" below. Passed on 0.8.0 on 2026-11-11: the accessibility rows 6, 15, 16, 17 and 68. Passed on 2026-11-12: the populated upgrade to 0.8.0 and then 0.8.1, on a copy of a library ([m2-acceptance.md](features/m2-acceptance.md)). Still owed: the restore drill on a second machine (to be run on 0.9.0), the Foundry real-world import (Foundry 14, dnd5e 6.0.6) and the M3 played session.
 
-### Next: 0.9.0
+### Next
 
-- **Wave 3: first run, navigation and help.** A first-run sample, a clearer way around the app, and in-app help.
-- **Wave 4: engineering.** Down-conversion ("Save for an older TomeStack") keeps to the previous minor release only, from 0.9.0 on (the older targets are dropped). The weekly job and the old-release harness keep proving it.
-- **First signing attempt.** If SignPath Foundation accepts the project, the first signed installer ships in 0.9.0 ([ADR-025](decisions/ADR-025-code-signing.md)). If it has not answered or declines, 0.9.0 ships unsigned.
+- **Tester feedback (Wave 4 item 4.9).** Left out of 0.9.0: no tester has reported back yet.
+- **1.0 evidence.** The M3 played session and a restore drill on record (see "Later" below).
+- **Signing.** If SignPath Foundation accepts the project, the next release is the first signed one ([ADR-025](decisions/ADR-025-code-signing.md)).
 
 ### Later: 1.0 and beyond
 
@@ -23,7 +23,7 @@
 
 1. M3 accepted: the played session is recorded.
 2. A restore drill is on record.
-3. The first-run sample is shipped.
+3. The first-run sample is shipped (done in 0.9.0).
 4. A signed installer, **if SignPath Foundation accepts the project**.
 
 If SignPath declines, 1.0 may ship unsigned. The Microsoft Store (MSIX) route is evaluated separately, as ADR-025 describes. Signing is not a 1.0 blocker.
@@ -221,7 +221,7 @@ As of 2026-10-20 no row had an owner record. On 2026-11-11 the owner recorded th
 | Check | Where it's defined | Evidence recorded (2026-10-20) | Status |
 |---|---|---|---|
 | T2 played session and gap report | T2 above; [features/gap-notes.md](features/gap-notes.md) | Built: gap notes. No session or report recorded | owed (the M3 played session; part of the 1.0 definition) |
-| T6 restore drill on the current published release | T6 above; [features/restore-drill-procedure.md](features/restore-drill-procedure.md) | Built and automated: the DevHost drill report and compare, `RestoreDrillTests`. No drill record on a second machine | owed (second machine; to be re-run on 0.8.1) |
+| T6 restore drill on the current published release | T6 above; [features/restore-drill-procedure.md](features/restore-drill-procedure.md) | Built and automated: the DevHost drill report and compare, `RestoreDrillTests`. No drill record on a second machine | owed (second machine; to be run on 0.9.0) |
 | First paint (cold start, by hand) | T4 above; [performance.md](performance.md) | Method only. The smoke script's start-to-ready time is not first paint | owed (0.6.0 release candidate) |
 | Narrator, 200 %/400 % zoom and High Contrast checks (D17/D18) | [features/accessibility-checklist.md](features/accessibility-checklist.md) | Automated: keyboard flows and 400 % reflow. Owner record: checklist items 6 (200 %/400 % zoom), 15 and 17 (Narrator), 16 (High Contrast) and 68 (print preview: full sheet, combat card, large print) | **passed on 0.8.0, 2026-11-11, by the owner.** Item 21 and the later panel items stay as the checklist records them |
 | Populated upgrade, published to published | T5 above; [features/m2-acceptance.md](features/m2-acceptance.md); [features/release-0.4.0-verification.md](features/release-0.4.0-verification.md) | Automated: `UpgradeTests` and the installer smoke. No populated upgrade recorded | **passed 2026-11-12**: a populated copy, database v9 → published 0.8.0 → published 0.8.1, `--drill-compare` MATCH with the `sheets` digest equal; accepted by the owner ([m2-acceptance.md](features/m2-acceptance.md)) |
