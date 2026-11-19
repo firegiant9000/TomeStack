@@ -46,6 +46,7 @@
 - **Save for an older TomeStack** now offers only the version before this one (0.8); for an older TomeStack, update it first.
 - **Development only:** the 0.8.1 upgrade fixture was made again by 0.8.1 with a third character stored at character schema 11 (an equipped homebrew weapon carrying an item mod), and a test checks that every import path keeps it at 11 with its mod. A malformed build version stamp now stops the export target list with an error naming the stamp, instead of a bare parse error. No app change.
 - **Tests only:** the e2e test "a roll from any tab shows in the status bar" now waits for the Play tab's attacks panel, which appears only once the equip save lands; under CI load it had looked too early and failed. No app change.
+- **Tests only:** the accessibility check (`npm run test:a11y`) now waits up to 10 s for each screen, as the UI flow tests do; at Testing Library's 1 s default, "builder, each step" failed locally before the choices step loaded. No app change.
 
 ### Migration
 - **Migration note (database 13, D104):** the database moves to version 13, forward-only. The first start adds triggers that make content revisions insert-only; no stored data changes. Before the upgrade the data folder is copied to `tomestack.db.v12-<UTC time>.bak` (for example `tomestack.db.v12-20261117T090503Z.bak`), and the newest 3 copies are kept. After this version opens a data folder, 0.8.x and older refuse to open it. To go back, restore that copy. Character, content and package formats do not change.

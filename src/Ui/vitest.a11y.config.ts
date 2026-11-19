@@ -14,6 +14,8 @@ const scheme = (colorScheme: 'light' | 'dark') => ({
     name: colorScheme,
     include: ['a11y/**/*.a11y.tsx'],
     globalSetup: ['e2e/devhost.setup.ts'],
+    // Same 10 s Testing Library wait as e2e: each builder step waits on a real DevHost command, and 1 s was too short locally.
+    setupFiles: ['e2e/timeouts.setup.ts'],
     fileParallelism: false,
     testTimeout: 60_000,
     hookTimeout: 60_000,
