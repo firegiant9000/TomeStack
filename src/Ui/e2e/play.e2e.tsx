@@ -244,8 +244,10 @@ it('a roll from any tab shows in the status bar', async () => {
   const lastRoll = () => bar().getByRole('status', { name: 'Last roll' });
 
   await openTab(user, sheet, 'Play');
+  // The panel is absent until the equip save lands and the sheet has an attack, so retry the whole lookup, not just the button.
   const actions = () => screen.getByRole('region', { name: 'Attacks and actions' });
-  await user.click(await within(actions()).findByRole('button', { name: 'Roll Fixture Needle attack' }));
+  await waitFor(() => expect(within(actions()).getByRole('button', { name: 'Roll Fixture Needle attack' })).toBeTruthy());
+  await user.click(within(actions()).getByRole('button', { name: 'Roll Fixture Needle attack' }));
   await waitFor(() => expect(lastRoll().textContent).toMatch(/Fixture Needle attack: \d+ \(1d20\)/));
 
   await openTab(user, sheet, 'Spells');
