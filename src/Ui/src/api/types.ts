@@ -1551,7 +1551,7 @@ export interface ExtensionRunPreview {
 }
 
 /** M6 slice 4 (ADR-012): export targets. */
-export type ExportTarget = 'foundry-dnd5e' | 'sheet-json';
+export type ExportTarget = 'foundry-dnd5e' | 'sheet-json' | 'html-sheet';
 
 export interface VttExportPreview {
   token: string;
