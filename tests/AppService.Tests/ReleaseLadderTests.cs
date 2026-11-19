@@ -12,10 +12,19 @@ public class ReleaseLadderTests
     {
         var rows = ReleaseLadder.Rows;
 
-        Assert.Equal([new Version(0, 4, 0), new Version(0, 5, 0), new Version(0, 6, 0), new Version(0, 7, 0), new Version(0, 8, 0)], rows.Select(r => r.Release));
-        Assert.Equal([(7, 9, 1, 9, 9), (8, 9, 2, 9, 10), (9, 10, 2, 9, 11), (10, 11, 2, 9, 11), (11, 12, 2, 9, 11)],
+        Assert.Equal([new Version(0, 4, 0), new Version(0, 5, 0), new Version(0, 6, 0), new Version(0, 7, 0), new Version(0, 8, 0), new Version(0, 9, 0)], rows.Select(r => r.Release));
+        Assert.Equal([(7, 9, 1, 9, 9), (8, 9, 2, 9, 10), (9, 10, 2, 9, 11), (10, 11, 2, 9, 11), (11, 12, 2, 9, 11), (11, 13, 2, 9, 13)],
             rows.Select(r => (r.CharacterSchema, r.ContentSchema, r.GapNoteSchema, r.FormatVersion, r.DatabaseSchema)));
-        Assert.Equal([false, false, false, false, true], rows.Select(r => r.OfferedAsTarget));
+        Assert.Equal([false, false, false, false, true, false], rows.Select(r => r.OfferedAsTarget));
+    }
+
+    [Fact]
+    public void Each_bundled_set_keeps_every_id_of_the_one_before()
+    {
+        // Published revisions are insert-only, so a newer minor never drops a bundled revision id.
+        for (var i = 1; i < ReleaseLadder.Rows.Count; i++)
+            Assert.True(ReleaseLadder.Rows[i - 1].BundledRevisionIds.IsSubsetOf(ReleaseLadder.Rows[i].BundledRevisionIds),
+                $"{ReleaseLadder.Rows[i].Release} drops a bundled revision {ReleaseLadder.Rows[i - 1].Release} had");
     }
 
     [Fact]
@@ -27,7 +36,7 @@ public class ReleaseLadderTests
     [Fact]
     public void PreviousMinor_is_the_row_before_current()
     {
-        Assert.Equal(new Version(0, 7, 0), ReleaseLadder.PreviousMinor?.Release);
+        Assert.Equal(new Version(0, 8, 0), ReleaseLadder.PreviousMinor?.Release);
     }
 
     [Fact]
@@ -110,6 +119,12 @@ public class ReleaseLadderTests
     }
 
     [Fact]
+    public void OpensIn_is_0_9_0_for_v13_content()
+    {
+        Assert.Equal(Row("0.9.0"), ReleaseLadder.OpensIn([Revision("Compat Tide Stance", 13)], [V11(Hero())], 0, []));
+    }
+
+    [Fact]
     public void OpensIn_is_null_above_every_row()
     {
         Assert.Null(ReleaseLadder.OpensIn([Revision("Compat Tide Stance", ContentRevision.CurrentSchemaVersion + 1)], [Hero()], 0, []));
@@ -136,37 +151,49 @@ public class ReleaseLadderTests
     [Fact]
     public void Evaluate_warns_only_above_previous_minor()
     {
-        var quiet = NewerBuild.Evaluate([Revision("Compat Tide Stance", 11)], [V10(Hero())], 0, [], _ => "");
-        Assert.Equal("0.7.0", quiet.OpensIn);
+        var quiet = NewerBuild.Evaluate([Revision("Compat Tide Stance", 12)], [V11(Hero())], 0, [], _ => "");
+        Assert.Equal("0.8.0", quiet.OpensIn);
         Assert.Empty(quiet.Warnings);
         Assert.Empty(quiet.Causes);
 
-        var hero = V11(Hero());
-        var one = NewerBuild.Evaluate([], [hero], 0, [], _ => "");
-        Assert.Equal("0.8.0", one.OpensIn);
+        var stance = Revision("Compat Tide Stance", 13);
+        var one = NewerBuild.Evaluate([stance], [V11(Hero())], 0, [], _ => "");
+        Assert.Equal("0.9.0", one.OpensIn);
         var warning = Assert.Single(one.Warnings);
         Assert.Equal(NewerBuild.Code, warning.Code);
-        Assert.Equal($"Opening this needs TomeStack 0.8.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Compat Hero' is a character at file version 11. Older versions refuse the file.", warning.Message);
+        Assert.Equal($"Opening this needs TomeStack 0.9.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Compat Tide Stance' is content at file version 13. Older versions refuse the file.", warning.Message);
         var cause = Assert.Single(one.Causes);
-        Assert.Equal(new OpensInCause($"characters/{hero.Id:D}.json", "character", hero.Id, "Compat Hero", 11, null, "'Compat Hero' is a character at file version 11"), cause);
+        Assert.Equal(new OpensInCause($"content/{stance.RevisionId:D}.json", "content", stance.RevisionId, "Compat Tide Stance", 13, null, "'Compat Tide Stance' is content at file version 13"), cause);
     }
 
     [Fact]
     public void Evaluate_joins_causes_in_the_order_characters_content_gap_notes()
     {
-        var hero = V11(Hero());
-        var stance = Revision("Compat Tide Stance", 12);
+        // 0.9.0 reads the same character and gap note versions as 0.8.0, so a character or gap note cause means no released row opens the file.
+        var hero = Hero() with { SchemaVersion = 12 };
+        var stance = Revision("Compat Tide Stance", 13);
 
-        var result = NewerBuild.Evaluate([stance], [hero], 0, [], _ => "");
+        var result = NewerBuild.Evaluate([stance], [hero], ReleaseLadder.PreviousMinor!.GapNoteSchema + 1, [], _ => "");
 
-        Assert.Equal($"Opening this needs TomeStack 0.8.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Compat Hero' is a character at file version 11, and 'Compat Tide Stance' is content at file version 12. Older versions refuse the file.",
-            Assert.Single(result.Warnings).Message);
-        Assert.Equal(["character", "content"], result.Causes.Select(c => c.Kind));
+        Assert.Null(result.OpensIn);
+        Assert.Equal(["character", "content", "gapNote"], result.Causes.Select(c => c.Kind));
         Assert.Equal($"content/{stance.RevisionId:D}.json", result.Causes[1].Entry);
+        Assert.Equal(new OpensInCause("gaps/", "gapNote", Guid.Empty, "gap notes", 3, null, "the gap notes are at file version 3"), result.Causes[2]);
+    }
 
-        var gap = NewerBuild.Evaluate([], [], ReleaseLadder.PreviousMinor!.GapNoteSchema + 1, [], _ => "");
-        var gapCause = Assert.Single(gap.Causes);
-        Assert.Equal(new OpensInCause("gaps/", "gapNote", Guid.Empty, "gap notes", 3, null, "the gap notes are at file version 3"), gapCause);
+    [Fact]
+    public void Evaluate_joins_a_content_cause_and_a_bundled_cause_when_the_newest_row_opens_the_file()
+    {
+        var newInThisMinor = Row("0.9.0").BundledRevisionIds.Except(Row("0.8.0").BundledRevisionIds).First();
+        var species = Revision("Example Species", 3, newInThisMinor);
+        var hero = Hero() with { Pins = [species.Reference] };
+        var stance = Revision("Compat Tide Stance", 13);
+
+        var result = NewerBuild.Evaluate([stance, species], [hero], 0, [newInThisMinor], _ => "SRD 5.2.1");
+
+        Assert.Equal("0.9.0", result.OpensIn);
+        Assert.Equal($"Opening this needs TomeStack 0.9.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Compat Tide Stance' is content at file version 13, and 'Compat Hero' uses 'Example Species' from the bundled SRD 5.2.1 content, which TomeStack 0.8.0 does not have. Older versions refuse the file.",
+            Assert.Single(result.Warnings).Message);
     }
 
     [Fact]
@@ -180,31 +207,31 @@ public class ReleaseLadderTests
 
         var cause = Assert.Single(result.Causes);
         Assert.Equal(new OpensInCause($"content/{species.RevisionId:D}.json", "content", species.RevisionId, "Example Species", null, "SRD 5.2.1",
-            "'Compat Hero' uses 'Example Species' from the bundled SRD 5.2.1 content, which TomeStack 0.7.0 does not have"), cause);
+            "'Compat Hero' uses 'Example Species' from the bundled SRD 5.2.1 content, which TomeStack 0.8.0 does not have"), cause);
         Assert.Null(result.OpensIn);
-        Assert.Equal("Opening this needs a TomeStack version newer than 0.8.0: it holds bundled SRD content that released versions do not have.", Assert.Single(result.Warnings).Message);
+        Assert.Equal("Opening this needs a TomeStack version newer than 0.9.0: it holds bundled SRD content that released versions do not have.", Assert.Single(result.Warnings).Message);
     }
 
     [Fact]
     public void Evaluate_caps_the_warning_at_three_distinct_messages()
     {
-        var heroes = new[] { "Ann", "Bo", "Cy", "Di", "Di" }.Select(n => V11(Hero(n))).ToList();
+        var revisions = new[] { "Ann", "Bo", "Cy", "Di", "Di" }.Select(n => Revision(n, 13)).ToList();
 
-        var result = NewerBuild.Evaluate([], heroes, 0, [], _ => "");
+        var result = NewerBuild.Evaluate(revisions, [], 0, [], _ => "");
 
         Assert.Equal(5, result.Causes.Count);
-        Assert.Equal($"Opening this needs TomeStack 0.8.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Ann' is a character at file version 11, 'Bo' is a character at file version 11, 'Cy' is a character at file version 11, and 1 more. Older versions refuse the file.",
+        Assert.Equal($"Opening this needs TomeStack 0.9.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Ann' is content at file version 13, 'Bo' is content at file version 13, 'Cy' is content at file version 13, and 1 more. Older versions refuse the file.",
             Assert.Single(result.Warnings).Message);
     }
 
     [Fact]
     public void Evaluate_keeps_the_joined_form_for_exactly_three_messages()
     {
-        var heroes = new[] { "Ann", "Bo", "Cy" }.Select(n => V11(Hero(n))).ToList();
+        var revisions = new[] { "Ann", "Bo", "Cy" }.Select(n => Revision(n, 13)).ToList();
 
-        var result = NewerBuild.Evaluate([], heroes, 0, [], _ => "");
+        var result = NewerBuild.Evaluate(revisions, [], 0, [], _ => "");
 
-        Assert.Equal($"Opening this needs TomeStack 0.8.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Ann' is a character at file version 11, and 'Bo' is a character at file version 11, and 'Cy' is a character at file version 11. Older versions refuse the file.",
+        Assert.Equal($"Opening this needs TomeStack 0.9.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Ann' is content at file version 13, and 'Bo' is content at file version 13, and 'Cy' is content at file version 13. Older versions refuse the file.",
             Assert.Single(result.Warnings).Message);
     }
 
@@ -215,7 +242,7 @@ public class ReleaseLadderTests
 
         var result = NewerBuild.Evaluate([species], [Hero("One"), Hero("Two")], 0, [species.RevisionId], _ => "SRD 5.2.1");
 
-        Assert.Equal("'Example Species' is from the bundled SRD 5.2.1 content, which TomeStack 0.7.0 does not have", Assert.Single(result.Causes).Message);
+        Assert.Equal("'Example Species' is from the bundled SRD 5.2.1 content, which TomeStack 0.8.0 does not have", Assert.Single(result.Causes).Message);
     }
 
     [Fact]
@@ -234,6 +261,7 @@ public class ReleaseLadderTests
     {
         Assert.False(ReleaseLadder.Row("0.4.0")!.OfferedAsTarget);
         Assert.NotNull(ReleaseLadder.Row("0.8.0"));
+        Assert.False(ReleaseLadder.Row("0.9.0")!.OfferedAsTarget);
         Assert.Null(ReleaseLadder.Row("0.8.1"));
         Assert.Null(ReleaseLadder.Row("9.9.9"));
     }
@@ -256,8 +284,8 @@ public class ReleaseLadderTests
     [Fact]
     public void CurrentRowOrLast_falls_back_to_the_last_row_for_a_version_with_no_row()
     {
-        Assert.Equal(ReleaseLadder.Rows[^1], ReleaseLadder.CurrentRowOrLast("0.9.0"));
-        Assert.Equal(ReleaseLadder.Rows[^2], ReleaseLadder.PreviousMinorFor("0.9.0"));
+        Assert.Equal(ReleaseLadder.Rows[^1], ReleaseLadder.CurrentRowOrLast("0.10.0"));
+        Assert.Equal(ReleaseLadder.Rows[^2], ReleaseLadder.PreviousMinorFor("0.10.0"));
         Assert.Equal(Row("0.6.0"), ReleaseLadder.CurrentRowOrLast("0.6.2"));
     }
 
@@ -285,12 +313,12 @@ public class ReleaseLadderTests
     [Fact]
     public void Evaluate_gives_a_bundled_revision_that_is_also_new_content_one_cause()
     {
-        var revision = Revision("Example Species", 12);
+        var revision = Revision("Example Species", 13);
 
         var result = NewerBuild.Evaluate([revision], [Hero()], 0, [revision.RevisionId], _ => "SRD 5.2.1");
 
         var cause = Assert.Single(result.Causes);
-        Assert.Equal(12, cause.SchemaVersion);
+        Assert.Equal(13, cause.SchemaVersion);
         Assert.Equal($"content/{revision.RevisionId:D}.json", cause.Entry);
     }
 
@@ -306,9 +334,9 @@ public class ReleaseLadderTests
     [Fact]
     public void Evaluate_uses_the_unreleased_sentence_when_opensIn_is_null()
     {
-        var content = NewerBuild.Evaluate([Revision("Compat Tide Stance", 13)], [], 0, [], _ => "");
+        var content = NewerBuild.Evaluate([Revision("Compat Tide Stance", 14)], [], 0, [], _ => "");
         Assert.Null(content.OpensIn);
-        Assert.Equal("Opening this needs a TomeStack version that reads content file version 13 or later: it holds content that older versions refuse.", Assert.Single(content.Warnings).Message);
+        Assert.Equal("Opening this needs a TomeStack version that reads content file version 14 or later: it holds content that older versions refuse.", Assert.Single(content.Warnings).Message);
 
         var character = NewerBuild.Evaluate([], [Hero() with { SchemaVersion = 12 }], 0, [], _ => "");
         Assert.Equal("Opening this needs a TomeStack version that reads character file version 12 or later: it holds a character that older versions refuse.", Assert.Single(character.Warnings).Message);
@@ -321,6 +349,7 @@ public class ReleaseLadderTests
     [InlineData("0.7.0", false)]
     [InlineData("0.7.1", false)]
     [InlineData("0.8.0", true)]
+    [InlineData("0.9.0", false)]
     [InlineData("", false)]
     [InlineData(null, false)]
     [InlineData("0.6", false)]

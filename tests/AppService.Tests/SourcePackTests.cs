@@ -431,37 +431,37 @@ public class SourcePackTests
     }
 
     [Fact]
-    public void A_source_pack_preview_warns_once_when_a_revision_is_at_schema_v12_and_not_for_older_content()
+    public void A_source_pack_preview_warns_once_when_a_revision_is_at_schema_v13_and_not_for_older_content()
     {
         using var temp = new TempApp();
         var (old, _, _) = SharedWithTwoRevisions(temp);
         Assert.DoesNotContain(temp.App.PreviewSourcePack([old.Id]).Warnings, w => w.Code == "package.needs-newer-build");
 
         var newer = Shared(temp, "Test Newer Source");
-        temp.App.Store.AddRevision(Feat(newer.Id, "Test Newer One", Guid.NewGuid(), Guid.NewGuid()) with { Status = RevisionStatus.Published, SchemaVersion = 12 });
-        temp.App.Store.AddRevision(Feat(newer.Id, "Test Newer Two", Guid.NewGuid(), Guid.NewGuid()) with { Status = RevisionStatus.Published, SchemaVersion = 12 });
+        temp.App.Store.AddRevision(Feat(newer.Id, "Test Newer One", Guid.NewGuid(), Guid.NewGuid()) with { Status = RevisionStatus.Published, SchemaVersion = 13 });
+        temp.App.Store.AddRevision(Feat(newer.Id, "Test Newer Two", Guid.NewGuid(), Guid.NewGuid()) with { Status = RevisionStatus.Published, SchemaVersion = 13 });
         var warning = Assert.Single(temp.App.PreviewSourcePack([newer.Id]).Warnings, w => w.Code == "package.needs-newer-build");
         Assert.Equal(PackageWarningText, warning.Message);
-        Assert.Equal("0.8.0", temp.App.PreviewSourcePack([newer.Id]).OpensIn);
+        Assert.Equal("0.9.0", temp.App.PreviewSourcePack([newer.Id]).OpensIn);
         Assert.Single(temp.App.PreviewSourcePack([old.Id, newer.Id]).Warnings, w => w.Code == "package.needs-newer-build");
     }
 
     [Fact]
-    public void A_source_pack_preview_names_only_the_v12_content_when_v11_content_sits_beside_it()
+    public void A_source_pack_preview_names_only_the_v13_content_when_v12_content_sits_beside_it()
     {
         using var temp = new TempApp();
         var source = Shared(temp, "Test Blade Source");
-        temp.App.Store.AddRevision(Feat(source.Id, "Test Eleven", Guid.NewGuid(), Guid.NewGuid()) with { Status = RevisionStatus.Published, SchemaVersion = 11 });
-        Assert.Equal("0.7.0", temp.App.PreviewSourcePack([source.Id]).OpensIn); // the previous minor opens v11: no warning
+        temp.App.Store.AddRevision(Feat(source.Id, "Test Twelve", Guid.NewGuid(), Guid.NewGuid()) with { Status = RevisionStatus.Published, SchemaVersion = 12 });
+        Assert.Equal("0.8.0", temp.App.PreviewSourcePack([source.Id]).OpensIn); // the previous minor opens v12: no warning
         Assert.DoesNotContain(temp.App.PreviewSourcePack([source.Id]).Warnings, w => w.Code == "package.needs-newer-build");
 
-        // Any published revision at v12 counts (R26); source packs carry published revisions only.
-        temp.App.Store.AddRevision(Feat(source.Id, "Test Twelve", Guid.NewGuid(), Guid.NewGuid()) with { Status = RevisionStatus.Published, SchemaVersion = 12 });
+        // Any published revision at v13 counts (R26); source packs carry published revisions only.
+        temp.App.Store.AddRevision(Feat(source.Id, "Test Thirteen", Guid.NewGuid(), Guid.NewGuid()) with { Status = RevisionStatus.Published, SchemaVersion = 13 });
         var warning = Assert.Single(temp.App.PreviewSourcePack([source.Id]).Warnings, w => w.Code == "package.needs-newer-build");
-        Assert.Equal($"Opening this needs TomeStack 0.8.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Test Twelve' is content at file version 12. Older versions refuse the file.", warning.Message);
+        Assert.Equal($"Opening this needs TomeStack 0.9.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Test Thirteen' is content at file version 13. Older versions refuse the file.", warning.Message);
     }
 
-    private static readonly string PackageWarningText = $"Opening this needs TomeStack 0.8.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Test Newer One' is content at file version 12, and 'Test Newer Two' is content at file version 12. Older versions refuse the file.";
+    private static readonly string PackageWarningText = $"Opening this needs TomeStack 0.9.0 or newer (this is TomeStack {AppVersionStamp.CurrentVersion}): 'Test Newer One' is content at file version 13, and 'Test Newer Two' is content at file version 13. Older versions refuse the file.";
 
     [Fact]
     public void A_toggle_that_names_content_in_another_source_gives_a_reference_outside_warning()
