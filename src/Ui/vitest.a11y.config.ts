@@ -9,7 +9,7 @@ import { devhostProxy } from './a11y/devhostProxy.ts';
 const scheme = (colorScheme: 'light' | 'dark') => ({
   plugins: [react(), devhostProxy(colorScheme)],
   // The Help screen imports docs/guides/*.md?raw, as in vite.config.ts.
-  server: { fs: { allow: ['.', '../../docs/guides'] } },
+  server: { fs: { allow: ['.', '../../docs/guides', '../../tests/AppService.Tests/Golden'] } },
   test: {
     name: colorScheme,
     include: ['a11y/**/*.a11y.tsx'],

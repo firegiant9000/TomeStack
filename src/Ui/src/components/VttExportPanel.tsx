@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { client } from '../api/client';
 import { TomeStackError } from '../api/transport';
 import type { ExportTarget, PreflightReport, SheetPurpose, VttExportPreview } from '../api/types';
@@ -13,7 +13,8 @@ interface Props {
 }
 
 /**
- * M6 slice 4 (ADR-012): export the character for a virtual tabletop, or as TomeStack's own sheet JSON. The file is saved
+ * M6 slice 4 (ADR-012): export the character for a virtual tabletop, as TomeStack's own sheet JSON, or as an HTML sheet for
+ * a phone or tablet (no internet needed). The file is saved
  * where you choose and imported by hand; nothing is uploaded. A share export keeps only totals from content that may not
  * be shared (ADR-007 item 11); the preview says what is left out and where Foundry may calculate differently.
  */
@@ -26,12 +27,24 @@ export function VttExportPanel({ characterId, onError, onStatus }: Props) {
   // Each click on Preview asks the rule again, so a library that changed in between never leaves a stale answer.
   const [previews, setPreviews] = useState(0);
 
+  // A preview reply that arrives after the selection changed is dropped, so a slow personal preview never sits under Share.
+  const requests = useRef(0);
+
+  function choose(change: () => void) {
+    requests.current += 1;
+    change();
+    setPreview(undefined);
+  }
+
   async function show() {
+    const request = ++requests.current;
     try {
-      setPreview(await client.previewVttExport(characterId, target, purpose));
+      const reply = await client.previewVttExport(characterId, target, purpose);
+      if (request !== requests.current) return;
+      setPreview(reply);
       setPreviews((n) => n + 1);
     } catch (error) {
-      onError(error);
+      if (request === requests.current) onError(error);
     }
   }
 
@@ -51,7 +64,7 @@ export function VttExportPanel({ characterId, onError, onStatus }: Props) {
       // Browser development (DevHost) has no native dialog: fall back to a download.
       try {
         const file = await client.downloadVttExport(preview.token);
-        downloadBase64(file.fileName, file.base64, 'application/json');
+        downloadBase64(file.fileName, file.base64, preview.target === 'html-sheet' ? 'text/html' : 'application/json');
         onStatus(`Downloaded ${file.fileName}.`);
         setPreview(undefined);
       } catch (inner) {
@@ -62,26 +75,30 @@ export function VttExportPanel({ characterId, onError, onStatus }: Props) {
 
   return (
     <section aria-labelledby="vtt-export-heading" className="export-panel">
-      <h2 id="vtt-export-heading">Export for a virtual tabletop</h2>
+      <h2 id="vtt-export-heading">Export to another tool or device</h2>
       <fieldset>
         <legend>Format</legend>
         <label>
-          <input type="radio" name="vtt-target" checked={target === 'foundry-dnd5e'} onChange={() => (setTarget('foundry-dnd5e'), setPreview(undefined))} />
+          <input type="radio" name="vtt-target" checked={target === 'foundry-dnd5e'} onChange={() => choose(() => setTarget('foundry-dnd5e'))} />
           Foundry VTT (dnd5e system) <span className="tag">Experimental</span>
         </label>
         <label>
-          <input type="radio" name="vtt-target" checked={target === 'sheet-json'} onChange={() => (setTarget('sheet-json'), setPreview(undefined))} />
+          <input type="radio" name="vtt-target" checked={target === 'sheet-json'} onChange={() => choose(() => setTarget('sheet-json'))} />
           TomeStack sheet (JSON), for any tool that reads it
+        </label>
+        <label>
+          <input type="radio" name="vtt-target" checked={target === 'html-sheet'} onChange={() => choose(() => setTarget('html-sheet'))} />
+          Sheet for a phone or tablet (HTML page, no internet needed)
         </label>
       </fieldset>
       <fieldset>
         <legend>What the file may hold</legend>
         <label>
-          <input type="radio" name="vtt-purpose" checked={purpose === 'share'} onChange={() => (setPurpose('share'), setPreview(undefined))} />
+          <input type="radio" name="vtt-purpose" checked={purpose === 'share'} onChange={() => choose(() => setPurpose('share'))} />
           For a shared game: content that may not be shared is left out; its totals stay
         </label>
         <label>
-          <input type="radio" name="vtt-purpose" checked={purpose === 'personal'} onChange={() => (setPurpose('personal'), setPreview(undefined))} />
+          <input type="radio" name="vtt-purpose" checked={purpose === 'personal'} onChange={() => choose(() => setPurpose('personal'))} />
           Personal copy: also includes your own homebrew. Do not share it.
         </label>
       </fieldset>
@@ -125,7 +142,7 @@ export function VttExportPanel({ characterId, onError, onStatus }: Props) {
             </ul>
           )}
           <p className="hint">TomeStack is not affiliated with Foundry Gaming LLC, Roll20 or Wizards of the Coast.</p>
-          <button type="button" onClick={save} disabled={preview.purpose === 'share' && !canSaveAfter(report)}>
+          <button type="button" onClick={save} disabled={preview.purpose !== purpose || preview.target !== target || (preview.purpose === 'share' && !canSaveAfter(report))}>
             Save export file…
           </button>
         </div>

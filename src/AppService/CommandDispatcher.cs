@@ -538,7 +538,9 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         if (host is null)
             throw new AppValidationException([new("host.unsupported", "This host has no native Save dialog.")], "unsupported");
         var (fileName, bytes) = app.PeekVttExport(payload.Token);
-        var outcome = SaveBytes(fileName, bytes, "Export file", ".json");
+        var outcome = fileName.EndsWith(".html", StringComparison.OrdinalIgnoreCase)
+            ? SaveBytes(fileName, bytes, "HTML page", ".html")
+            : SaveBytes(fileName, bytes, "Export file", ".json");
         if (outcome.Saved)
             app.CompleteVttExport(payload.Token);
         return outcome;
