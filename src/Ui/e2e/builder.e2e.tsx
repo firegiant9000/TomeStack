@@ -347,9 +347,13 @@ it('drops picks that do not fit when the rules family changes, in the builder an
   await user.click(screen.getByRole('button', { name: 'Next: class' }));
   await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
   await user.click(screen.getByRole('button', { name: 'Next: species' }));
-  // D31: the 5.1 species leaves the list altogether, and the pick is cleared.
-  await waitFor(() => expect(within(screen.getByRole('group', { name: 'Species' })).queryByRole('radio', { name: /^Half-Orc/ })).toBeNull());
-  expect(within(screen.getByRole('group', { name: 'Species' })).getByRole<HTMLInputElement>('radio', { name: 'None' }).checked).toBe(true);
+  // D31: the 5.1 species leaves the list altogether, and the pick is cleared. Wait for the loaded list ("None" present):
+  // while the options are still loading there are no radios at all, so "no Half-Orc" alone passes too early.
+  await waitFor(() => {
+    const list = within(screen.getByRole('group', { name: 'Species' }));
+    expect(list.getByRole<HTMLInputElement>('radio', { name: 'None' }).checked).toBe(true);
+    expect(list.queryByRole('radio', { name: /^Half-Orc/ })).toBeNull();
+  });
   await user.click(screen.getByRole('button', { name: 'Cancel' }));
   await user.click(await screen.findByRole('button', { name: 'Discard' })); // the rules family was changed: Cancel asks first
 
