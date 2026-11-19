@@ -137,7 +137,7 @@ gh attestation verify .\TomeStack.App-win-Setup.exe --repo firegiant9000/TomeSta
 
 ## Code signing policy
 
-Releases up to 0.9.x are unsigned. The project applied to [SignPath Foundation](https://signpath.org) for free code signing for open source projects on 2026-11-12 and is waiting for their answer. If the application is accepted, the next release after that is the first signed one. The plan and the alternatives are in [ADR-025](docs/decisions/ADR-025-code-signing.md). If the application is declined, releases stay unsigned.
+Releases up to 0.9.0 are unsigned. The project applied to [SignPath Foundation](https://signpath.org) for free code signing for open source projects on 2026-11-12 and is waiting for their answer. If the application is accepted, the next release after that is the first signed one. The plan and the alternatives are in [ADR-025](docs/decisions/ADR-025-code-signing.md). If the application is declined, releases stay unsigned.
 
 Once accepted, signed releases carry this line:
 

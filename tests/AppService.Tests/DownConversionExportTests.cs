@@ -9,8 +9,15 @@ namespace TomeStack.AppService.Tests;
 /// <summary>D85 part 1, lane C1: <c>package.targets</c> and <c>target</c> on the export commands, through the dispatcher.</summary>
 public class DownConversionExportTests
 {
-    // This build is stamped 0.8.1, so no row is older than its minor and nothing is listed (D103).
+    // A 0.9.x build offers 0.8.0 only (D103).
     private static string UnknownSentence(string target) => $"TomeStack {target} is not a version this export can be made for. Choose one of: 0.8.0.";
+
+    [Fact]
+    public void Target_advice_says_there_is_no_older_version_when_nothing_is_offered()
+    {
+        Assert.Equal("This TomeStack has no older version to save for.", CommandDispatcher.TargetAdvice([]));
+        Assert.Equal("Choose one of: 0.8.0.", CommandDispatcher.TargetAdvice([ReleaseLadder.Row("0.8.0")!]));
+    }
 
     private static LadderRow Offered(string release) => ReleaseLadder.Row(release)!;
 

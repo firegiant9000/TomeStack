@@ -9,7 +9,7 @@ A player on the current TomeStack sends a character, a source pack or a campaign
 
 What the investigation found:
 
-- **The package format never moved.** Every release from 0.4.0 on writes format 5, 7, 8 or 9 and reads up to 9, so `package.unsupported-format` cannot fire between them. The whole problem is two schema ladders: character (v7 to v11) and content (v9 to v12).
+- **The package format never moved.** Every release from 0.4.0 on writes format 5, 7, 8 or 9 and reads up to 9, so `package.unsupported-format` cannot fire between them. The whole problem is two schema ladders: character (v7 to v11) and content (v9 to v13).
 - **There are six rungs for packages:** 0.4.0 (character ≤ 7, content ≤ 9, gap note v1), 0.5.0 (character ≤ 8, content ≤ 9), 0.6.0 (character ≤ 9, content ≤ 10), 0.7.x (character ≤ 10, content ≤ 11), 0.8.x (character ≤ 11, content ≤ 12; added by the 0.8.0 release PR) and 0.9.x (character ≤ 11, content ≤ 13; added by the 0.9.0 release PR, not offered as a target). Patch releases share their minor's rung. Gap notes are v2 from 0.5.0 on, so no target needs a gap-note step.
 - **Bundled SRD content is part of the rung.** An older build refuses any revision it did not ship under a bundled source (`package.bundled-source-content`), and character packages carry the bundled revisions they pin.
 - **Published revisions are insert-only.** A lowered revision cannot keep its id (`package.revision-conflict`), and a copy with a new id is refused on the maker's own machine (`package.own-source`) unless something maps it back.
