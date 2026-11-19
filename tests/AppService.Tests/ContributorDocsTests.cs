@@ -21,7 +21,7 @@ public sealed partial class ContributorDocsTests
 
     private static string StartHerePath => Path.Combine(RepoRoot, "docs", "contributing", "start-here.md");
 
-    [GeneratedRegex(@"\]\(([^)#\s]+)(#[^)]*)?\)", RegexOptions.None, 1000)]
+    [GeneratedRegex(@"\]\(([^)#\s]+)(#[^)]*)?\)", RegexOptions.CultureInvariant, 1000)]
     private static partial Regex MarkdownLink();
 
     [Fact]
@@ -37,19 +37,74 @@ public sealed partial class ContributorDocsTests
     [Fact]
     public void StartHere_relative_links_resolve()
     {
-        var folder = Path.GetDirectoryName(StartHerePath)!;
-        var targets = MarkdownLink().Matches(File.ReadAllText(StartHerePath))
-            .Select(m => m.Groups[1].Value)
-            .Where(t => !t.StartsWith("http", StringComparison.OrdinalIgnoreCase) && !t.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase))
-            .ToList();
-        Assert.NotEmpty(targets);
-        var broken = targets.Where(t =>
-        {
-            var full = Path.GetFullPath(Path.Combine(folder, t.Replace('/', Path.DirectorySeparatorChar)));
-            return !File.Exists(full) && !Directory.Exists(full);
-        }).ToList();
+        var (checkedCount, broken) = BrokenLinks(StartHerePath);
+        Assert.True(checkedCount > 0, "No relative links were found to check.");
         Assert.Empty(broken);
     }
+
+    [Fact]
+    public void BrokenLinks_catches_wrong_case_missing_anchor_and_missing_file()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "ts-docs-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            File.WriteAllText(Path.Combine(folder, "Real.md"), "# Real\n\n## Some Heading (x/y)\n");
+            var page = Path.Combine(folder, "page.md");
+            File.WriteAllText(page, "[a](real.md) [b](Real.md#missing) [c](Real.md#some-heading-xy) [d](httpd.md) [e](https://example.com/x) [f](#local)\n");
+            var (checkedCount, broken) = BrokenLinks(page);
+            Assert.Equal(4, checkedCount);
+            Assert.Equal(["real.md", "Real.md#missing", "httpd.md"], broken);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// The relative links in <paramref name="markdownPath"/> that would 404 on GitHub: a missing file or folder, a name whose case differs from
+    /// the file on disk (GitHub paths are case-sensitive, Windows is not), or an <c>#anchor</c> that matches no heading of a Markdown target.
+    /// Skips <c>http://</c>, <c>https://</c>, <c>mailto:</c> and same-page <c>#anchor</c> links.
+    /// </summary>
+    internal static (int Checked, List<string> Broken) BrokenLinks(string markdownPath)
+    {
+        var folder = Path.GetDirectoryName(markdownPath)!;
+        var count = 0;
+        var broken = new List<string>();
+        foreach (Match match in MarkdownLink().Matches(File.ReadAllText(markdownPath)))
+        {
+            var target = match.Groups[1].Value;
+            if (target.StartsWith("http://", StringComparison.Ordinal) || target.StartsWith("https://", StringComparison.Ordinal) || target.StartsWith("mailto:", StringComparison.Ordinal))
+                continue;
+            count++;
+            var anchor = match.Groups[2].Success ? match.Groups[2].Value[1..] : null;
+            var full = Path.GetFullPath(Path.Combine(folder, target.Replace('/', Path.DirectorySeparatorChar)));
+            var ok = ExistsWithExactCase(full)
+                && (anchor is null || !File.Exists(full) || !full.EndsWith(".md", StringComparison.OrdinalIgnoreCase) || HeadingSlugs(full).Contains(anchor));
+            if (!ok) broken.Add(match.Groups[1].Value + match.Groups[2].Value);
+        }
+        return (count, broken);
+    }
+
+    private static bool ExistsWithExactCase(string fullPath)
+    {
+        var trimmed = fullPath.TrimEnd(Path.DirectorySeparatorChar);
+        var parent = Path.GetDirectoryName(trimmed);
+        if (parent is null) return Directory.Exists(trimmed);
+        if (!Directory.Exists(parent)) return false;
+        var name = Path.GetFileName(trimmed);
+        return Directory.EnumerateFileSystemEntries(parent).Any(e => string.Equals(Path.GetFileName(e), name, StringComparison.Ordinal))
+            && ExistsWithExactCase(parent);
+    }
+
+    /// <summary>GitHub's heading anchors: lower case, punctuation other than hyphens and underscores dropped, spaces to hyphens.</summary>
+    private static HashSet<string> HeadingSlugs(string markdownFile) =>
+        File.ReadLines(markdownFile)
+            .Where(l => l.StartsWith('#'))
+            .Select(l => l.TrimStart('#').Trim().ToLowerInvariant())
+            .Select(h => new string(h.Where(c => char.IsLetterOrDigit(c) || c is ' ' or '-' or '_').ToArray()).Replace(' ', '-'))
+            .ToHashSet(StringComparer.Ordinal);
 
     [Theory]
     [InlineData("CONTRIBUTING.md")]

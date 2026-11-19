@@ -39,9 +39,9 @@ npm test
 
 The UI flow tests (`npm run test:e2e`) also need the .NET build; [Build and test](../../README.md#build-and-test) in the README has the order.
 
-A few rules the checks enforce:
+Rules for UI changes:
 
-- Components talk to the app only through [`src/Ui/src/api/client.ts`](../../src/Ui/src/api/client.ts); lint rejects `fetch` anywhere else.
+- Components talk to the app only through [`src/Ui/src/api/client.ts`](../../src/Ui/src/api/client.ts). Lint rejects `fetch` and other network calls outside `src/Ui/src/api/transport.ts`.
 - Each change adds a line to the [CHANGELOG](../CHANGELOG.md) under Unreleased.
 - Keep the change small and add or update a test for it.
 
