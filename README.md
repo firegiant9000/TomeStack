@@ -2,7 +2,7 @@
 
 **Every number explains itself.** A local-first Windows character sheet for 5E-compatible play and homebrew: tap any value to see the rule, the source page and the choice behind it. It works offline, with no account.
 
-> **Status: v0.8.1**, an unsigned installer on the [Releases page](https://github.com/firegiant9000/TomeStack/releases) (Windows asks you to confirm the first run). What each release added is in the [CHANGELOG](docs/CHANGELOG.md); `main` is ahead of that release (see Unreleased there).
+> **Status: v0.9.0**, an unsigned installer on the [Releases page](https://github.com/firegiant9000/TomeStack/releases) (Windows asks you to confirm the first run). What each release added is in the [CHANGELOG](docs/CHANGELOG.md); `main` is ahead of that release (see Unreleased there).
 >
 > **Stack:** .NET 10 (WPF shell hosting WebView2), a React 19 and TypeScript UI, SQLite through `Microsoft.Data.Sqlite`. The rules engine ([`src/RulesCore`](src/RulesCore)) is plain C# with no persistence, UI or Windows references.
 
@@ -137,7 +137,7 @@ gh attestation verify .\TomeStack.App-win-Setup.exe --repo firegiant9000/TomeSta
 
 ## Code signing policy
 
-Releases up to 0.8.x are unsigned. The project applied to [SignPath Foundation](https://signpath.org) for free code signing for open source projects on 2026-11-12 and is waiting for their answer. The first signed release is targeted for 0.9.0 if the application is accepted. The plan and the alternatives are in [ADR-025](docs/decisions/ADR-025-code-signing.md). If the application is declined, releases stay unsigned.
+Releases up to 0.9.x are unsigned. The project applied to [SignPath Foundation](https://signpath.org) for free code signing for open source projects on 2026-11-12 and is waiting for their answer. If the application is accepted, the next release after that is the first signed one. The plan and the alternatives are in [ADR-025](docs/decisions/ADR-025-code-signing.md). If the application is declined, releases stay unsigned.
 
 Once accepted, signed releases carry this line:
 

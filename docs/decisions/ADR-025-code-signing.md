@@ -90,6 +90,8 @@ First step: submit the SignPath application (`signpath.org`, Apply), after addin
 
 **Applied 2026-11-12** (the owner submitted the SignPath Foundation application after the README "Code signing policy" section went live). The status stays "proposed" until SignPath answers; the decision is then recorded here and in [release-checklist.md](../licensing/release-checklist.md#4-code-signing) section 4.
 
+**0.9.0 ships unsigned** (owner, 2026-11-19): SignPath had not answered by the release cut, so the target in ruling 4 moves to the first release after an acceptance.
+
 ## Sources (read 2026-11-11)
 
 - https://signpath.org/terms.html
