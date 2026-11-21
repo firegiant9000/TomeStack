@@ -68,7 +68,7 @@ npm run test:e2e --prefix src/Ui       # UI flow against the real DevHost (needs
 
 CI runs these steps as parallel jobs on `windows-latest` (`ui-build`, `ui-test`, `dotnet`, `gui`); the required `build-test` check is an aggregate job on `ubuntu-latest` that passes only if all four succeed ([.github/workflows/ci.yml](.github/workflows/ci.yml)).
 
-On `main` at `d9e5c49` (2026-11-16) that run passed 6,196 xUnit tests across four test projects (11 more skipped), 1,968 Vitest UI tests and 79 UI flow tests against the DevHost.
+On `main` at `6804705` (2026-11-19) that run passed 6,380 xUnit tests across four test projects (11 more skipped), 2,075 Vitest UI tests and 82 UI flow tests against the DevHost.
 
 Performance: the measured baseline (a level-20 multiclass sheet, a 500-revision pack import, every SRD formula, update reviews across 100 characters) and how to run the benchmarks are in [docs/performance.md](docs/performance.md).
 
