@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using TomeStack.ImportWorker.Detection;
 using TomeStack.ImportWorker.Extraction;
 using TomeStack.RulesCore;
@@ -146,14 +145,23 @@ public class ClassSplitBoundsTests
     }
 
     [Fact]
-    public void A_page_with_many_headings_is_read_in_bounded_time()
+    public void A_page_with_many_headings_is_not_split_and_reads_no_window()
     {
+        // R127, without a clock: a stalled build agent once took 12 s over the 7 ms this page needs, so elapsed time is no proof.
+        // The token is already cancelled, and the split checks it before every window it reads (three titles throw, below).
+        // Sixty titles returning null, not throwing, is therefore the proof that the split gave up before reading any window.
         var blocks = Page(60, i => i == 0, fillerPerClass: 40);
-        var watch = Stopwatch.StartNew();
+        var page = new DetectionPage(1, "", blocks, false);
+        var lines = blocks.Select(b => (1, new TextLine(b.Text, b.X, b.Y, b.Width, b.Height))).ToList();
+        var units = blocks.Select((b, i) => new CandidateDetector.Unit(1, i, b, [b.Text], false)).Where(u => u.Lines[0].EndsWith("Features", StringComparison.Ordinal) && u.Lines[0] != "Features").ToList();
+        Assert.Equal(60, units.Count);
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
 
-        var found = Detect(blocks);
+        Assert.Null(CandidateDetector.SplitClasses(page, lines, units, "Fixture Alpha", "Fixture Alpha Features", cts.Token));
+        Assert.Throws<OperationCanceledException>(() => CandidateDetector.SplitClasses(page, lines, units.Take(3).ToList(), "Fixture Alpha", "Fixture Alpha Features", cts.Token));
 
-        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(10), $"took {watch.Elapsed.TotalSeconds:F1}s");
-        Assert.True(found.Count(c => c.ProposedKind == ContentKind.Class) <= 1);
+        // The whole page is then read as one class at most.
+        Assert.True(Detect(blocks).Count(c => c.ProposedKind == ContentKind.Class) <= 1);
     }
 }
